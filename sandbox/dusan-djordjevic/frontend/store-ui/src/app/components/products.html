@@ -1,0 +1,54 @@
+<h2>Products</h2>
+
+<h3>Add Product</h3>
+
+<input [(ngModel)]="newProduct.name" placeholder="Name">
+
+<input [(ngModel)]="newProduct.price" type="number" placeholder="Price">
+
+<input [(ngModel)]="newProduct.category" placeholder="Category">
+
+<button (click)="addProduct()">Add Product</button>
+
+<hr>
+
+<div *ngIf="editingProduct">
+
+<h3>Edit Product</h3>
+
+<input [(ngModel)]="editingProduct.name">
+
+<input [(ngModel)]="editingProduct.price" type="number">
+
+<input [(ngModel)]="editingProduct.category">
+
+<button (click)="updateProduct()">Save</button>
+<button (click)="editingProduct = null">Cancel</button>
+
+<hr>
+
+</div>
+
+<table border="1">
+
+<tr>
+<th>Name</th>
+<th>Price</th>
+<th>Category</th>
+<th>Actions</th>
+</tr>
+
+<tr *ngFor="let p of products">
+
+<td>{{p.name}}</td>
+<td>{{p.price}}</td>
+<td>{{p.category}}</td>
+
+<td>
+<button (click)="editProduct(p)">Edit</button>
+<button (click)="deleteProduct(p.id!)">Delete</button>
+</td>
+
+</tr>
+
+</table>
