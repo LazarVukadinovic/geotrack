@@ -2,13 +2,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sandbox", "sandbox", "{3D40F055-384E-DE04-BB81-B7972E166B19}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DusanDjordjevic_39_2020", "DusanDjordjevic_39_2020", "{BDB970CC-2C37-D6A4-64F9-88B3E980DD96}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dusan-djordjevic", "dusan-djordjevic", "{5BD65F48-B51B-9CB1-DA81-C1708B3AEBE9}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{067507A1-A816-3699-2AB9-F73735807708}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{065DDC30-4094-D4CE-D157-5E14ABF9FC8A}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "storeAPI", "sandbox\dusan-djordjevic\backend\storeAPI\storeAPI.csproj", "{39EB1D1C-7091-DBB4-7B67-587504E899DF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "storeAPI", "DusanDjordjevic_39_2020\backend\storeAPI\storeAPI.csproj", "{D19E17DA-C517-353F-239B-569714A1C426}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -16,20 +14,19 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{39EB1D1C-7091-DBB4-7B67-587504E899DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{39EB1D1C-7091-DBB4-7B67-587504E899DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{39EB1D1C-7091-DBB4-7B67-587504E899DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{39EB1D1C-7091-DBB4-7B67-587504E899DF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D19E17DA-C517-353F-239B-569714A1C426}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D19E17DA-C517-353F-239B-569714A1C426}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D19E17DA-C517-353F-239B-569714A1C426}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D19E17DA-C517-353F-239B-569714A1C426}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{5BD65F48-B51B-9CB1-DA81-C1708B3AEBE9} = {3D40F055-384E-DE04-BB81-B7972E166B19}
-		{065DDC30-4094-D4CE-D157-5E14ABF9FC8A} = {5BD65F48-B51B-9CB1-DA81-C1708B3AEBE9}
-		{39EB1D1C-7091-DBB4-7B67-587504E899DF} = {065DDC30-4094-D4CE-D157-5E14ABF9FC8A}
+		{067507A1-A816-3699-2AB9-F73735807708} = {BDB970CC-2C37-D6A4-64F9-88B3E980DD96}
+		{D19E17DA-C517-353F-239B-569714A1C426} = {067507A1-A816-3699-2AB9-F73735807708}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {9427592E-AC3E-4AF1-80EB-6688935C9DB7}
+		SolutionGuid = {AB14CB03-7A35-45AA-ABD6-1F2358FAABE6}
 	EndGlobalSection
 EndGlobal
