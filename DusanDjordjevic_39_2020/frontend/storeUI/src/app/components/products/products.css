@@ -38,6 +38,11 @@ cursor:pointer;
 background:#218838;
 }
 
+.form-box button:disabled{
+background:#cccccc;
+cursor:not-allowed;
+}
+
 table{
 width:100%;
 border-collapse:collapse;
@@ -74,4 +79,12 @@ color:white;
 border:none;
 padding:6px 10px;
 cursor:pointer;
+}
+
+.edit:hover{
+background:#0069d9;
+}
+
+.delete:hover{
+background:#c82333;
 }

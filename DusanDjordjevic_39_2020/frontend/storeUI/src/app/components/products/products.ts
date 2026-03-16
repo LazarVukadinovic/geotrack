@@ -36,11 +36,29 @@ export class ProductsComponent implements OnInit {
   }
 
   addProduct() {
+
+    if (!this.newProduct.name.trim() ||
+        !this.newProduct.category.trim() ||
+        this.newProduct.price <= 0) {
+
+      alert("Morate popuniti sva polja proizvoda!");
+      return;
+    }
+
     this.productService.addProduct(this.newProduct)
       .subscribe(() => {
+
         this.loadProducts();
-        this.newProduct = { id: 0, name: '', price: 0, category: '' };
+
+        this.newProduct = {
+          id: 0,
+          name: '',
+          price: 0,
+          category: ''
+        };
+
       });
+
   }
 
   deleteProduct(id: number) {
@@ -53,17 +71,30 @@ export class ProductsComponent implements OnInit {
   }
 
   updateProduct() {
+
     if (!this.editingProduct) return;
+
+    if (!this.editingProduct.name.trim() ||
+        !this.editingProduct.category.trim() ||
+        this.editingProduct.price <= 0) {
+
+      alert("Sva polja moraju biti popunjena!");
+      return;
+    }
 
     this.productService.updateProduct(this.editingProduct)
       .subscribe(() => {
+
         const index = this.products.findIndex(p => p.id === this.editingProduct!.id);
+
         if (index !== -1) {
           this.products[index] = this.editingProduct!;
         }
 
         this.editingProduct = null;
+
       });
+
   }
 
 }
