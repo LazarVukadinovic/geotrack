@@ -76,8 +76,9 @@ ng new frontend
 
 Opcije:
 
-* Routing: YES
-* Style: CSS
+* Which stylesheet system would you like to use?: CSS
+* Do you want to enable Server-Side Rendering (SSR) and Static Site Generation (SSG/Prerendering)?: YES
+* Which AI tools do you want to configure with Angular best practices? https://angular.dev/ai/develop-with-ai -> None
 
 ---
 
@@ -98,28 +99,4 @@ Ako vidiš Angular stranicu → radi
 
 ---
 
-# 8. Zaključak (najbitnije)
 
-* `node -v` → proverava Node
-* `npm` → upravlja paketima
-* `ng new` → pravi Angular app
-* `ng serve` → pokreće Angular
-
----
-
-# Minimalni workflow
-
-1. Instaliraš Node
-2. Instaliraš Angular CLI
-3. Kreiraš projekat
-4. Pokreneš aplikaciju
-
----
-
-# To je to
-
-Ovo je minimum koji ti treba da pokažeš da:
-
-* Node.js radi
-* Angular radi
-* znaš kako da pokreneš projekat
