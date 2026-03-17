@@ -1,0 +1,37 @@
+<h1>{{ title() }}</h1>
+
+<div class="todo-container">
+
+  <input
+    type="text"
+    [(ngModel)]="newTodo"
+    placeholder="Unesi zadatak"
+    (keyup.enter)="addTodo()"
+  />
+  <button (click)="addTodo()">Add</button>
+
+  <ul>
+    @for (todo of todos; track todo.id) {
+      <li>
+
+        @if (todo.editing) {
+          
+          <input [(ngModel)]="todo.editText" (keyup.enter)="updateTodo(todo)" (keyup.escape)="cancelEdit(todo)" />
+          <button (click)="updateTodo(todo)">Save</button>
+          <button (click)="cancelEdit(todo)">Cancel</button>
+        } @else {
+          
+          <span (dblclick)="startEdit(todo)">{{ todo.text }}</span>
+          <div>
+            <button (click)="startEdit(todo)">Edit</button>
+            <button (click)="deleteTodo(todo.id)">X</button>
+          </div>
+        }
+
+      </li>
+    }
+  </ul>
+
+</div>
+
+<router-outlet />
