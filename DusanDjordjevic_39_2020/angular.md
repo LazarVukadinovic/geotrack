@@ -15,14 +15,14 @@
 2. Preuzeti **LTS verziju**
 3. Pokrenuti instalaciju (Next → Install → Finish)
 
-## ✅ Provera
+## Provera
 
 ```bash
 node -v
 npm -v
 ```
 
-Ako ispiše verzije → Node radi ✔️
+Ako ispiše verzije → Node radi 
 
 ---
 
