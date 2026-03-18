@@ -1,6 +1,6 @@
 <h2>Products</h2>
 
-<form (ngSubmit)="save()">
+<form>
   <div>
     <input
       type="text"
@@ -32,7 +32,7 @@
 
   <br />
 
-  <button type="submit">
+  <button type="button" (click)="save()">
     {{ editMode ? 'Update' : 'Add' }}
   </button>
 
@@ -42,11 +42,3 @@
 </form>
 
 <hr />
-
-<ul>
-  <li *ngFor="let product of products">
-    {{ product.name }} - {{ product.price }} - {{ product.description }}
-    <button (click)="edit(product)">Edit</button>
-    <button (click)="remove(product.id)">Delete</button>
-  </li>
-</ul>
