@@ -1,7 +1,20 @@
 <div class="container">
-  <div class="row">
+  <div class="row mt-3">
+    <div class="col-8 offset-2 d-flex justify-content-between align-items-center">
+      <div class="btn-group" role="group">
+        <a routerLink="/payments" routerLinkActive="active" class="btn btn-outline-primary">
+          Payments
+        </a>
+        <a routerLink="/about" routerLinkActive="active" class="btn btn-outline-secondary">
+          About
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt-4">
     <div class="col-8 offset-2">
-      <app-payment-details></app-payment-details>
+      <router-outlet></router-outlet>
     </div>
   </div>
 </div>
