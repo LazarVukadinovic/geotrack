@@ -1,0 +1,102 @@
+# =========================
+# .NET
+# =========================
+bin/
+obj/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+artifacts/
+TestResults/
+BenchmarkDotNet.Artifacts/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.code-workspace
+
+# Logs / temp
+*.log
+logs/
+tmp/
+temp/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+!**/packages/build/
+.nuget/
+*.nuget.props
+*.nuget.targets
+
+# Coverage
+coverage/
+coverage*.json
+coverage*.xml
+*.coverage
+*.coveragexml
+
+# =========================
+# Angular / Node
+# =========================
+node_modules/
+dist/
+.angular/
+.cache/
+out-tsc/
+.eslintcache
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json.*
+yarn.lock.*
+pnpm-lock.yaml.*
+
+# Environment files
+src/environments/*.local.ts
+src/environments/environment.*.local.ts
+.env
+.env.*
+!.env.example
+
+# =========================
+# PostgreSQL / database related
+# =========================
+*.sql
+*.dump
+*.backup
+*.bak
+
+# If you keep local database data folders in project
+postgres-data/
+.pgdata/
+db-data/
+
+# Docker local volumes / overrides
+docker-data/
+docker-compose.override.yml
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
