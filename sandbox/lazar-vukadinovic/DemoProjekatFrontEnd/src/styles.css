@@ -1,0 +1,118 @@
+/* You can add global styles to this file, and also import other style files */
+
+.mouse-hover {
+  cursor: pointer;
+}
+
+form label {
+  text-transform: uppercase;
+  color: grey;
+}
+
+form input {
+  font-weight: 500;
+}
+
+form input::placeholder {
+  color: #c0bdbd;
+  font-weight: 300;
+}
+
+form.submitted input.ng-invalid{
+  border-color: red;
+}
+
+/* ===== TOAST CONTAINER ===== */
+.toast-container .ngx-toastr {
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  padding: 14px 16px 14px 18px;
+  font-family: Arial, sans-serif;
+  min-width: 320px;
+  max-width: 380px;
+  opacity: 1;
+}
+
+/* ===== TITLE ===== */
+.toast-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+/* ===== MESSAGE ===== */
+.toast-message {
+  font-size: 14px;
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+/* ===== CLOSE BUTTON ===== */
+.toast-close-button {
+  font-size: 18px !important;
+  font-weight: 700;
+  text-shadow: none !important;
+  opacity: 0.8 !important;
+}
+
+.toast-close-button:hover {
+  opacity: 1 !important;
+}
+
+/* =========================
+   SUCCESS
+========================= */
+.toast-success {
+  background-image: none !important;
+  background-color: #e8f8ee !important;
+  color: #14532d !important;
+  border-left: 6px solid #22c55e !important;
+}
+
+.toast-success .toast-title,
+.toast-success .toast-message,
+.toast-success .toast-close-button {
+  color: #14532d !important;
+}
+
+/* =========================
+   INFO
+========================= */
+.toast-info {
+  background-image: none !important;
+  background-color: #eaf4ff !important;
+  color: #1e3a8a !important;
+  border-left: 6px solid #3b82f6 !important;
+}
+
+.toast-info .toast-title,
+.toast-info .toast-message,
+.toast-info .toast-close-button {
+  color: #1e3a8a !important;
+}
+
+/* =========================
+   ERROR
+========================= */
+.toast-error {
+  background-image: none !important;
+  background-color: #fdecec !important;
+  color: #991b1b !important;
+  border-left: 6px solid #ef4444 !important;
+}
+
+.toast-error .toast-title,
+.toast-error .toast-message,
+.toast-error .toast-close-button {
+  color: #991b1b !important;
+}
+
+.toast-top-right {
+  top: 12px !important;
+  right: 12px !important;
+}
+
+.toast-container.toast-top-right {
+  top: 12px !important;
+  right: 12px !important;
+}
