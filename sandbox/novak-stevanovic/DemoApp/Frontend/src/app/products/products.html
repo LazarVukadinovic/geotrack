@@ -1,0 +1,52 @@
+<h2>Products</h2>
+
+<form (ngSubmit)="save()">
+  <div>
+    <input
+      type="text"
+      name="name"
+      [(ngModel)]="form.name"
+      placeholder="Name"
+      required
+    />
+  </div>
+
+  <div>
+    <input
+      type="number"
+      name="price"
+      [(ngModel)]="form.price"
+      placeholder="Price"
+      required
+    />
+  </div>
+
+  <div>
+    <input
+      type="text"
+      name="description"
+      [(ngModel)]="form.description"
+      placeholder="Description"
+    />
+  </div>
+
+  <br />
+
+  <button type="submit">
+    {{ editMode ? 'Update' : 'Add' }}
+  </button>
+
+  <button type="button" (click)="resetForm()">
+    Cancel
+  </button>
+</form>
+
+<hr />
+
+<ul>
+  <li *ngFor="let product of products">
+    {{ product.name }} - {{ product.price }} - {{ product.description }}
+    <button (click)="edit(product)">Edit</button>
+    <button (click)="remove(product.id)">Delete</button>
+  </li>
+</ul>
