@@ -7,7 +7,7 @@ import { Injectable } from '@angular/core';
 export class TodoService {
 
   api = "http://localhost:5151/api/todo";
-
+  todos: any[] = [];
   constructor(private http: HttpClient) {}
 
   getTodos(){
