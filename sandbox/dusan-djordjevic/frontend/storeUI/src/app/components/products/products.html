@@ -1,6 +1,6 @@
 <div class="container">
 
-<h2>Products</h2>
+<h2>Products ({{ products().length }})</h2>
 
 <div class="form-box">
 
@@ -35,7 +35,7 @@ Add Product
 <th>Actions</th>
 </tr>
 
-<tr *ngFor="let product of products">
+<tr *ngFor="let product of products()">
 
 <td>{{product.name}}</td>
 <td>{{product.price}}</td>

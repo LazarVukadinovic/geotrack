@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { ProductService } from '../../services/product.service';
 import { Product } from '../../models/product';
 import { CommonModule } from '@angular/common';
@@ -13,7 +13,7 @@ import { FormsModule } from '@angular/forms';
 })
 export class ProductsComponent implements OnInit {
 
-  products: Product[] = [];
+  products = signal<Product[]>([]);
 
   newProduct: Product = {
     id: 0,
@@ -32,7 +32,7 @@ export class ProductsComponent implements OnInit {
 
   loadProducts() {
     this.productService.getProducts()
-      .subscribe(data => this.products = data);
+      .subscribe(data => this.products.set(data));
   }
 
   addProduct() {
@@ -85,11 +85,11 @@ export class ProductsComponent implements OnInit {
     this.productService.updateProduct(this.editingProduct)
       .subscribe(() => {
 
-        const index = this.products.findIndex(p => p.id === this.editingProduct!.id);
+        const updated = this.products().map(p =>
+          p.id === this.editingProduct!.id ? this.editingProduct! : p
+        );
 
-        if (index !== -1) {
-          this.products[index] = this.editingProduct!;
-        }
+        this.products.set(updated);
 
         this.editingProduct = null;
 
