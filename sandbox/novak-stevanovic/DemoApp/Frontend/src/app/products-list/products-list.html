@@ -1,0 +1,33 @@
+<h2>Products</h2>
+
+<p>
+  <a routerLink="/products/new">Add new product</a>
+</p>
+
+<table *ngIf="products.length > 0; else emptyState">
+  <thead>
+    <tr>
+      <th>Id</th>
+      <th>Name</th>
+      <th>Price</th>
+      <th>Description</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let product of products">
+      <td>{{ product.id }}</td>
+      <td>{{ product.name }}</td>
+      <td>{{ product.price }}</td>
+      <td>{{ product.description }}</td>
+      <td>
+        <a [routerLink]="['/products', product.id, 'edit']">Edit</a>
+        <button type="button" (click)="remove(product.id)">Delete</button>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<ng-template #emptyState>
+  <p>No products found.</p>
+</ng-template>
