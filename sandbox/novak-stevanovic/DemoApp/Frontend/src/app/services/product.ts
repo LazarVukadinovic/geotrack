@@ -7,12 +7,16 @@ import { Product } from '../models/product';
   providedIn: 'root'
 })
 export class ProductService {
-  private apiUrl = 'https://localhost:7095/api/Products'; // promeni port ako treba
+  private apiUrl = 'https://localhost:7095/api/Products';
 
   constructor(private http: HttpClient) {}
 
   getAll(): Observable<Product[]> {
     return this.http.get<Product[]>(this.apiUrl);
+  }
+
+  getById(id: number): Observable<Product> {
+    return this.http.get<Product>(`${this.apiUrl}/${id}`);
   }
 
   create(product: Product): Observable<Product> {

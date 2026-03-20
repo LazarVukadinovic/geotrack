@@ -1,6 +1,6 @@
-<h2>Products</h2>
+<h2>{{ editMode ? 'Edit product' : 'Add product' }}</h2>
 
-<form>
+<form (ngSubmit)="save()">
   <div>
     <input
       type="text"
@@ -32,13 +32,9 @@
 
   <br />
 
-  <button type="button" (click)="save()">
-    {{ editMode ? 'Update' : 'Add' }}
+  <button type="submit">
+    {{ editMode ? 'Update' : 'Create' }}
   </button>
 
-  <button type="button" (click)="resetForm()">
-    Cancel
-  </button>
+  <a routerLink="/products">Cancel</a>
 </form>
-
-<hr />
