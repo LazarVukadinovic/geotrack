@@ -1,0 +1,6 @@
+@Geotrack.Server_HostAddress = http://localhost:5003
+
+GET {{Geotrack.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
