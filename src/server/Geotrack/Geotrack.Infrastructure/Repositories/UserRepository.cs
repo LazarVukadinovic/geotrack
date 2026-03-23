@@ -16,14 +16,14 @@ public class UserRepository : IUserRepository
     public async Task<List<User>> GetAllAsync()
     {
         return await _dbContext.Users
-            .Include(u => u.Role)
+            .Include(u => u.Roles)
             .ToListAsync();
     }
 
     public async Task<User?> GetByIdAsync(int id)
     {
         return await _dbContext.Users
-            .Include(u => u.Role)
+            .Include(u => u.Roles)
             .FirstOrDefaultAsync(u => u.Id == id);
     }
 
@@ -35,6 +35,13 @@ public class UserRepository : IUserRepository
     public void Delete(User user)
     {
         _dbContext.Users.Remove(user);
+    }
+
+    public async Task<List<Role>> GetRolesByIdsAsync(List<int> ids)
+    {
+        return await _dbContext.Roles
+            .Where(r => ids.Contains(r.Id))
+            .ToListAsync();
     }
 
     public async Task SaveChangesAsync()
