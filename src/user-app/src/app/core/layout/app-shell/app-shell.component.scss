@@ -1,0 +1,15 @@
+.app-shell {
+  --shell-bottom-pad: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0));
+
+  &--no-nav {
+    --shell-bottom-pad: env(safe-area-inset-bottom, 0);
+  }
+}
+
+.app-shell__viewport {
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--shell-bottom-pad);
+}
