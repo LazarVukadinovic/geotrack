@@ -1,0 +1,72 @@
+<div
+  class="destination-card"
+  role="button"
+  tabindex="0"
+  [attr.aria-label]="'Open ' + item().title"
+  (click)="open()"
+  (keydown.enter)="open()"
+  (keydown.space)="$event.preventDefault(); open()"
+>
+  <img
+    class="destination-card__img"
+    [src]="imgSrc()"
+    [alt]="''"
+    width="168"
+    height="236"
+    loading="lazy"
+    decoding="async"
+    (error)="onImageError()"
+  />
+  <div class="destination-card__overlay"></div>
+
+  @if (item().rating != null) {
+    <span class="destination-card__rating">
+      <svg class="destination-card__star" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"
+        />
+      </svg>
+      {{ item().rating!.toFixed(1) }}
+    </span>
+  }
+
+  <div class="destination-card__bookmark" (click)="$event.stopPropagation()">
+    <app-icon-button
+      variant="on-media"
+      [compact]="true"
+      [ariaLabel]="item().isSaved ? 'Remove from saved' : 'Save'"
+      [pressed]="item().isSaved"
+      (clicked)="toggleBookmark()"
+    >
+      <svg
+        class="destination-card__icon"
+        [class.destination-card__icon--saved]="item().isSaved"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          [attr.fill]="item().isSaved ? 'currentColor' : 'none'"
+          [attr.stroke]="item().isSaved ? 'none' : 'currentColor'"
+          [attr.stroke-width]="item().isSaved ? null : 2"
+          stroke-linejoin="round"
+          d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16l-7-4-7 4V4Z"
+        />
+      </svg>
+    </app-icon-button>
+  </div>
+
+  <div class="destination-card__content">
+    <h3 class="destination-card__title">{{ item().title }}</h3>
+    <p class="destination-card__subtitle">{{ item().subtitle }}</p>
+    @if (item().openingHours) {
+      <p class="destination-card__hours">
+        <svg class="destination-card__clock" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.75" />
+          <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M12 8v4l3 2" />
+        </svg>
+        {{ item().openingHours }}
+      </p>
+    }
+  </div>
+</div>

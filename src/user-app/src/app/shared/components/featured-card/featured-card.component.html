@@ -1,0 +1,60 @@
+<article class="featured-card">
+  <div class="featured-card__media">
+    <img
+      class="featured-card__img"
+      [src]="imgSrc()"
+      [alt]="''"
+      width="280"
+      height="160"
+      loading="eager"
+      decoding="async"
+      (error)="onImageError()"
+    />
+    <div class="featured-card__media-actions">
+      <app-icon-button
+        variant="on-media"
+        [ariaLabel]="item().isSaved ? 'Remove from saved' : 'Save'"
+        [pressed]="item().isSaved"
+        (clicked)="toggleBookmark()"
+      >
+        <svg
+          class="featured-card__icon"
+          [class.featured-card__icon--saved]="item().isSaved"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            [attr.fill]="item().isSaved ? 'currentColor' : 'none'"
+            [attr.stroke]="item().isSaved ? 'none' : 'currentColor'"
+            [attr.stroke-width]="item().isSaved ? null : 2"
+            stroke-linejoin="round"
+            d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16l-7-4-7 4V4Z"
+          />
+        </svg>
+      </app-icon-button>
+    </div>
+  </div>
+  <div class="featured-card__body">
+    <h3 class="featured-card__title">{{ item().title }}</h3>
+    <p class="featured-card__subtitle">{{ item().subtitle }}</p>
+    <div class="featured-card__footer">
+      <span class="featured-card__tag">
+        <svg class="featured-card__pin" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 21s7-4.35 7-10a7 7 0 1 0-14 0c0 5.65 7 10 7 10Zm0-8.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"
+          />
+        </svg>
+        {{ badgeFor(item().category) }}
+      </span>
+      <button type="button" class="featured-card__more" (click)="more($event)">
+        More
+        <span aria-hidden="true">›</span>
+      </button>
+    </div>
+  </div>
+</article>
