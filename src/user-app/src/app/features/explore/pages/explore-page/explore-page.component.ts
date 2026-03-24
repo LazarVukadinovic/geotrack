@@ -1,0 +1,79 @@
+import { Component, computed, inject, signal, viewChild } from '@angular/core';
+import type { ExploreCategoryFilter } from '../../../../core/models/explore-item.model';
+import { EXPLORE_CATEGORY_FILTERS } from '../../../../core/constants/explore-ui.constants';
+import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
+import { SearchBarComponent } from '../../../../shared/components/search-bar/search-bar.component';
+import { FilterPillsComponent } from '../../../../shared/components/filter-pills/filter-pills.component';
+import { WelcomeHeroComponent } from '../../components/welcome-hero/welcome-hero.component';
+import { RecommendedSliderComponent } from '../../components/recommended-slider/recommended-slider.component';
+import { LocalFavoritesListComponent } from '../../components/local-favorites-list/local-favorites-list.component';
+import { ExploreService } from '../../services/explore.service';
+import { itemMatchesExploreFilters } from '../../utils/explore-filter';
+
+@Component({
+  selector: 'app-explore-page',
+  standalone: true,
+  imports: [
+    AppHeaderComponent,
+    SearchBarComponent,
+    FilterPillsComponent,
+    WelcomeHeroComponent,
+    RecommendedSliderComponent,
+    LocalFavoritesListComponent,
+  ],
+  templateUrl: './explore-page.component.html',
+  styleUrl: './explore-page.component.scss',
+})
+export class ExplorePageComponent {
+  private readonly explore = inject(ExploreService);
+  private readonly searchBar = viewChild(SearchBarComponent);
+
+  /** Mock hero location — later replace with user / geo service. */
+  protected readonly heroCity = signal('Dubrovnik');
+  protected readonly heroCountry = signal('Croatia');
+
+  protected readonly categoryOptions = EXPLORE_CATEGORY_FILTERS;
+  protected readonly searchQuery = signal('');
+  protected readonly activeCategory = signal<ExploreCategoryFilter>('all');
+
+  protected readonly filteredRecommended = computed(() => {
+    const q = this.searchQuery();
+    const cat = this.activeCategory();
+    return this.explore.recommended().filter((item) => itemMatchesExploreFilters(item, q, cat));
+  });
+
+  protected readonly filteredLocalFavorites = computed(() => {
+    const q = this.searchQuery();
+    const cat = this.activeCategory();
+    return this.explore.localFavorites().filter((item) => itemMatchesExploreFilters(item, q, cat));
+  });
+
+  protected onSearchChange(value: string): void {
+    this.searchQuery.set(value);
+  }
+
+  protected onCategoryChange(id: ExploreCategoryFilter): void {
+    this.activeCategory.set(id);
+  }
+
+  protected onHeaderSearch(): void {
+    this.searchBar()?.focusInput();
+  }
+
+  protected toggleRecommendedSaved(id: string): void {
+    this.explore.toggleSaved(id, 'recommended');
+  }
+
+  protected toggleLocalSaved(id: string): void {
+    this.explore.toggleSaved(id, 'localFavorites');
+  }
+
+  /** Future: router.navigate(['/places', id]) */
+  protected onFeaturedMore(_id: string): void {
+    /* intentionally empty */
+  }
+
+  protected onLocalCard(_id: string): void {
+    /* intentionally empty */
+  }
+}

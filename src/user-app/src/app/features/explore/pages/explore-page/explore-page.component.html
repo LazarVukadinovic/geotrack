@@ -1,0 +1,34 @@
+<div class="explore-page">
+  <app-header title="Explore" [showNotificationDot]="true" (search)="onHeaderSearch()" />
+
+  <div class="explore-page__main">
+    <app-welcome-hero [city]="heroCity()" [country]="heroCountry()" />
+
+    <div class="explore-page__search">
+      <app-search-bar
+        [value]="searchQuery()"
+        (valueChange)="onSearchChange($event)"
+      />
+    </div>
+
+    <div class="explore-page__filters">
+      <app-filter-pills
+        [options]="categoryOptions"
+        [activeId]="activeCategory()"
+        (activeIdChange)="onCategoryChange($event)"
+      />
+    </div>
+
+    <app-recommended-slider
+      [items]="filteredRecommended()"
+      (bookmarkToggled)="toggleRecommendedSaved($event)"
+      (moreClicked)="onFeaturedMore($event)"
+    />
+
+    <app-local-favorites-list
+      [items]="filteredLocalFavorites()"
+      (bookmarkToggled)="toggleLocalSaved($event)"
+      (cardActivated)="onLocalCard($event)"
+    />
+  </div>
+</div>
