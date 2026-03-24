@@ -1,0 +1,25 @@
+<section class="recommended-slider" aria-label="Recommended">
+  <app-section-header
+    title="Recommended"
+    actionLabel="More"
+    (action)="sectionMore.emit()"
+  />
+
+  @if (items().length === 0) {
+    <app-empty-state title="No matches" message="Try another search or category." />
+  } @else {
+    <div class="recommended-slider__viewport">
+      <div class="recommended-slider__track" role="list">
+        @for (item of items(); track item.id) {
+          <div class="recommended-slider__cell" role="listitem">
+            <app-featured-card
+              [item]="item"
+              (bookmarkToggled)="bookmarkToggled.emit($event)"
+              (moreClicked)="moreClicked.emit($event)"
+            />
+          </div>
+        }
+      </div>
+    </div>
+  }
+</section>

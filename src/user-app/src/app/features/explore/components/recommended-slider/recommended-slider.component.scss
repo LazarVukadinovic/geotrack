@@ -1,0 +1,36 @@
+.recommended-slider {
+  margin-bottom: var(--space-10);
+}
+
+.recommended-slider__viewport {
+  margin-inline: calc(-1 * var(--page-gutter));
+  overflow: hidden;
+}
+
+.recommended-slider__track {
+  display: flex;
+  gap: var(--space-3);
+  padding-inline: var(--page-gutter);
+  padding-bottom: var(--space-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--page-gutter);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  &::after {
+    content: '';
+    flex: 0 0 var(--space-2);
+  }
+}
+
+.recommended-slider__cell {
+  display: flex;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
