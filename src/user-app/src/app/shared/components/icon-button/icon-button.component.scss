@@ -1,0 +1,44 @@
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-primary-navy);
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent-orange);
+    outline-offset: 2px;
+  }
+
+  &:active {
+    background: rgba(26, 43, 76, 0.06);
+  }
+}
+
+.icon-button--on-media {
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.12),
+    0 8px 20px rgba(0, 0, 0, 0.18);
+  color: var(--color-primary-navy);
+  backdrop-filter: blur(8px);
+
+  &:active {
+    background: rgba(255, 255, 255, 0.88);
+  }
+
+  &.icon-button--compact {
+    width: 36px;
+    height: 36px;
+  }
+}
