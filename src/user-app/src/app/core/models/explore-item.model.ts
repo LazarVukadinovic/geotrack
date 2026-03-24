@@ -1,0 +1,19 @@
+export type ExploreCategory = 'attraction' | 'restaurant' | 'hotel' | 'activity';
+
+export type ExploreCategoryFilter = 'all' | ExploreCategory;
+
+/** Domain model for explore / discover content; aligns with future API payload. */
+export interface ExploreItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  category: ExploreCategory;
+  type: string;
+  location: string;
+  image: string;
+  rating?: number;
+  isSaved: boolean;
+  openingHours?: string;
+  isRecommended?: boolean;
+}
