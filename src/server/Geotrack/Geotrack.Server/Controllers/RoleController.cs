@@ -5,11 +5,11 @@ namespace Geotrack.API.Controllers;
 
 [ApiController]
 [Route("api/roles")]
-public class RolesController : ControllerBase
+public class RoleController : ControllerBase
 {
     private readonly RoleService _roleService;
 
-    public RolesController(RoleService roleService)
+    public RoleController(RoleService roleService)
     {
         _roleService = roleService;
     }

@@ -15,12 +15,16 @@ public class RoleRepository : IRoleRepository
 
     public async Task<List<Role>> GetAllAsync()
     {
-        return await _dbContext.Roles.ToListAsync();
+        return await _dbContext.Roles
+            .Include(r => r.Users)
+            .ToListAsync();
     }
 
     public async Task<Role?> GetByIdAsync(int id)
     {
-        return await _dbContext.Roles.FindAsync(id);
+        return await _dbContext.Roles
+            .Include(r => r.Users)
+            .FirstOrDefaultAsync(r => r.Id == id);
     }
 
     public async Task AddAsync(Role role)

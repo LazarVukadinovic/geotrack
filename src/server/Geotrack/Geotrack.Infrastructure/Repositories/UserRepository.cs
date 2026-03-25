@@ -37,13 +37,6 @@ public class UserRepository : IUserRepository
         _dbContext.Users.Remove(user);
     }
 
-    public async Task<List<Role>> GetRolesByIdsAsync(List<int> ids)
-    {
-        return await _dbContext.Roles
-            .Where(r => ids.Contains(r.Id))
-            .ToListAsync();
-    }
-
     public async Task SaveChangesAsync()
     {
         await _dbContext.SaveChangesAsync();

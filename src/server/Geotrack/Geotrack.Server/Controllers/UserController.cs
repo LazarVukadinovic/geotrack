@@ -36,10 +36,9 @@ public class UsersController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(CreateUserRequest request)
     {
-        var user = await _userService.CreateAsync(
+        var user = await _userService.AddAsync(
             request.Username,
-            request.Email,
-            request.RoleIds
+            request.Email
         );
 
         return CreatedAtAction(
