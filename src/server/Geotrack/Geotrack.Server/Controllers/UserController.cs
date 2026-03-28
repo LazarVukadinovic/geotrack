@@ -6,11 +6,11 @@ namespace Geotrack.API.Controllers;
 
 [ApiController]
 [Route("api/users")]
-public class UsersController : ControllerBase
+public class UserController : ControllerBase
 {
     private readonly UserService _userService;
 
-    public UsersController(UserService userService)
+    public UserController(UserService userService)
     {
         _userService = userService;
     }
@@ -38,7 +38,8 @@ public class UsersController : ControllerBase
     {
         var user = await _userService.AddAsync(
             request.Username,
-            request.Email
+            request.Email,
+            request.RoleIds
         );
 
         return CreatedAtAction(

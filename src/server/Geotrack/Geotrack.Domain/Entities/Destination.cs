@@ -9,9 +9,12 @@ namespace Geotrack.Domain.Entities
 {
     public class Destination
     {
-        public int Id { get; set; }
+        public int Id { get; set; } // PRIMARY KEY
         public string Name { get; set; } = string.Empty;
 
-        public ICollection<Location> Locations { get; set; } = new List<Location>();
+        public int DestinationTypeId { get; set; } // FOREIGN KEY
+        public DestinationType DestinationType { get; set; } = null!; // NAVIGATIONAL
+
+        public ICollection<Location> Locations { get; set; } = new List<Location>(); // NAVIGATIONAL
     }
 }

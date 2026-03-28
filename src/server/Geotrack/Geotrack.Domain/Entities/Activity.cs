@@ -8,9 +8,16 @@ namespace Geotrack.Domain.Entities
 {
     public class Activity
     {
-        public int Id { get; set; }
+        public int Id { get; set; } // PRIMARY KEY
         public string Name { get; set; } = string.Empty;
 
-        public ICollection<Location> Locations { get; set; } = new List<Location>();
+        public int ActivityTypeId {  get; set; } // FOREIGN KEY
+        public ActivityType ActivityType { get; set; } = null!; // NAVIGATIONAL
+
+        public int LocationId { get; set; } // FOREIGN KEY
+        public Location Location { get; set; } = null!; // NAVIGATIONAL
+
+        public int? PlaceId { get; set; } // FOREIGN KEY
+        public Place? Place { get; set; } // NAVIGATIONAL
     }
 }

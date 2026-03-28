@@ -22,14 +22,26 @@ public class UserService
         return await _userRepository.GetByIdAsync(id);
     }
 
-    public async Task<User> AddAsync(string username, string email)
+    public async Task<User> AddAsync(string username, string email, List<int>? roleIds = null)
     {
         var user = new User
         {
             Username = username,
             Email = email,
-            Roles = new List<Role>()
+            UserRoles = new List<UserRole>()
         };
+
+        if (roleIds is not null)
+        {
+            foreach (var roleId in roleIds.Distinct())
+            {
+                user.UserRoles.Add(new UserRole
+                {
+                    User = user,
+                    RoleId = roleId
+                });
+            }
+        }
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();

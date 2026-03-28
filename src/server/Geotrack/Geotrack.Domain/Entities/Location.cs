@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -9,13 +10,17 @@ namespace Geotrack.Domain.Entities
 {
     public class Location
     {
-        public int Id { get; set; }
+        public int Id { get; set; } // PRIMARY KEY
         public string Name { get; set; } = string.Empty;
 
-        public int DestinationId { get; set; }
-        public Destination Destination { get; set; } = null!;
+        public int DestinationId { get; set; } // FOREIGN KEY
+        public Destination Destination { get; set; } = null!; // NAVIGATIONAL
 
-        public ICollection<Activity> Activities { get; set; } = new List<Activity>();
-        public ICollection<Event> Events { get; set; } = new List<Event>();
+        public int LocationTypeId { get; set; } // FOREIGN KEY
+        public LocationType LocationType { get; set; } = null!; // NAVIGATIONAL
+
+        public ICollection<Place> Places { get; set; } = new List<Place>(); // NAVIGATIONAL
+        public ICollection<Activity> Activities { get; set; } = new List<Activity>(); // NAVIGATIONAL
+        public ICollection<Event> Events { get; set; } = new List<Event>(); // NAVIGATIONAL
     }
 }

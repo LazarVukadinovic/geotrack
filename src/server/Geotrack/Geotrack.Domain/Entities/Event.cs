@@ -8,10 +8,16 @@ namespace Geotrack.Domain.Entities
 {
     public class Event
     {
-        public int Id { get; set; }
+        public int Id { get; set; } // PRIMARY KEY
         public string Name { get; set; } = string.Empty;
 
-        public int LocationId { get; set; }
-        public Location Location { get; set; } = null!;
+        public int EventTypeId { get; set; } // FOREIGN KEY
+        public EventType EventType { get; set; } = null!; // NAVIGATIONAL
+
+        public int LocationId { get; set; } // FOREIGN KEY
+        public Location Location { get; set; } = null!; // NAVIGATIONAL
+
+        public int? PlaceId { get; set; } // FOREIGN KEY
+        public Place? Place { get; set; } // NAVIGATIONAL
     }
 }
