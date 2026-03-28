@@ -8,8 +8,8 @@ namespace Geotrack.Domain.Entities
 {
     public class Role
     {
-        public int Id { get; set; }
+        public int Id { get; set; } // PRIMARY KEY
         public string Name { get; set; } = string.Empty;
-        public ICollection<User> Users { get; set; } = new List<User>();
+        public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>(); // NAVIGATIONAL
     }
 }

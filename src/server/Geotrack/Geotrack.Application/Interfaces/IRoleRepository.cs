@@ -1,12 +1,7 @@
-using Geotrack.Domain.Entities;
+﻿using Geotrack.Domain.Entities;
 
 namespace Geotrack.Application.Interfaces;
 
-public interface IRoleRepository
+public interface IRoleRepository : IRepository<Role>
 {
-    Task<List<Role>> GetAllAsync();
-    Task<Role?> GetByIdAsync(int id);
-    Task AddAsync(Role role);
-    void Delete(Role role);
-    Task SaveChangesAsync();
 }
