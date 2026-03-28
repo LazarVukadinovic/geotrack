@@ -19,5 +19,7 @@ namespace Geotrack.Domain.Entities
 
         public int? PlaceId { get; set; } // FOREIGN KEY
         public Place? Place { get; set; } // NAVIGATIONAL
+
+        public ICollection<EventTag> EventTags { get; set; } = new List<EventTag>(); // NAVIGATIONAL
     }
 }

@@ -5,8 +5,6 @@ namespace Geotrack.Infrastructure;
 
 public class AppDbContext : DbContext
 {
-    public DbSet<Activity> Activities => Set<Activity>();
-    public DbSet<ActivityType> ActivityTypes => Set<ActivityType>();
 
     public DbSet<Destination> Destinations => Set<Destination>();
     public DbSet<DestinationType> DestinationTypes => Set<DestinationType>();
@@ -29,6 +27,11 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
 
+    public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<DestinationTag> DestinationTags => Set<DestinationTag>();
+    public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
+    public DbSet<EventTag> EventTags => Set<EventTag>();
+
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
     {
@@ -37,54 +40,6 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<Activity>(entity =>
-        {
-            entity.ToTable("Activities");
-
-            entity.HasKey(e => e.Id);
-
-            entity.Property(e => e.Name)
-                .IsRequired()
-                .HasMaxLength(200);
-
-            entity.Property(e => e.ActivityTypeId).IsRequired();
-            entity.Property(e => e.LocationId).IsRequired();
-            entity.Property(e => e.PlaceId).IsRequired(false);
-
-            entity.HasOne(e => e.ActivityType)
-                .WithMany(e => e.Activities)
-                .HasForeignKey(e => e.ActivityTypeId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Location)
-                .WithMany(e => e.Activities)
-                .HasForeignKey(e => e.LocationId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Place)
-                .WithMany(e => e.Activities)
-                .HasForeignKey(e => e.PlaceId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasIndex(e => e.ActivityTypeId);
-            entity.HasIndex(e => e.LocationId);
-            entity.HasIndex(e => e.PlaceId);
-        });
-
-        modelBuilder.Entity<ActivityType>(entity =>
-        {
-            entity.ToTable("ActivityTypes");
-
-            entity.HasKey(e => e.Id);
-
-            entity.Property(e => e.Name)
-                .IsRequired()
-                .HasMaxLength(100);
-
-            entity.HasIndex(e => e.Name)
-                .IsUnique();
-        });
 
         modelBuilder.Entity<Destination>(entity =>
         {
@@ -358,6 +313,72 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Role)
                 .WithMany(e => e.UserRoles)
                 .HasForeignKey(e => e.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.ToTable("Tags");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.HasIndex(x => x.Name)
+                .IsUnique();
+
+        });
+
+        modelBuilder.Entity<DestinationTag>(entity =>
+        {
+            entity.ToTable("DestinationTags");
+
+            entity.HasKey(x => new { x.DestinationId, x.TagId });
+
+            entity.HasOne(x => x.Destination)
+                .WithMany(x => x.DestinationTags)
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany(x => x.DestinationTags)
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlaceTag>(entity =>
+        {
+            entity.ToTable("PlaceTags");
+
+            entity.HasKey(x => new { x.PlaceId, x.TagId });
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.PlaceTags)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany(x => x.PlaceTags)
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EventTag>(entity =>
+        {
+            entity.ToTable("EventTags");
+
+            entity.HasKey(x => new { x.EventId, x.TagId });
+
+            entity.HasOne(x => x.Event)
+                .WithMany(x => x.EventTags)
+                .HasForeignKey(x => x.EventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany(x => x.EventTags)
+                .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

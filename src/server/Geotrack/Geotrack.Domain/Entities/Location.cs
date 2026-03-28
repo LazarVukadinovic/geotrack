@@ -20,7 +20,6 @@ namespace Geotrack.Domain.Entities
         public LocationType LocationType { get; set; } = null!; // NAVIGATIONAL
 
         public ICollection<Place> Places { get; set; } = new List<Place>(); // NAVIGATIONAL
-        public ICollection<Activity> Activities { get; set; } = new List<Activity>(); // NAVIGATIONAL
         public ICollection<Event> Events { get; set; } = new List<Event>(); // NAVIGATIONAL
     }
 }

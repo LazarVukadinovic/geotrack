@@ -1,5 +1,3 @@
-using Geotrack.Application.Interfaces;
-using Geotrack.Application.Services;
 using Geotrack.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 

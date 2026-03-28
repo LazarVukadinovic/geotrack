@@ -17,8 +17,9 @@ namespace Geotrack.Domain.Entities
         public int LocationId { get; set; } // FOREIGN KEY
         public Location Location { get; set; } = null!; // NAVIGATIONAL
 
-        public ICollection<Activity> Activities { get; set; } = new List<Activity>(); // NAVIGATIONAL
         public ICollection<Event> Events { get; set; } = new List<Event>(); // NAVIGATIONAL
+
+        public ICollection<PlaceTag> PlaceTags { get; set; } = new List<PlaceTag>(); // NAVIGATIONAL
 
     }
 }

@@ -16,5 +16,6 @@ namespace Geotrack.Domain.Entities
         public DestinationType DestinationType { get; set; } = null!; // NAVIGATIONAL
 
         public ICollection<Location> Locations { get; set; } = new List<Location>(); // NAVIGATIONAL
+        public ICollection<DestinationTag> DestinationTags { get; set; } = new List<DestinationTag>(); // NAVIGATIONAL
     }
 }
