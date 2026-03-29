@@ -1,0 +1,31 @@
+.nearby-status {
+  margin: var(--space-3) 0 var(--space-5);
+}
+
+.nearby-status__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: rgba(26, 43, 76, 0.06);
+  color: var(--color-primary-navy);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.nearby-status__pin {
+  width: 16px;
+  height: 16px;
+  color: var(--color-muted);
+}
+
+.nearby-status__label {
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.nearby-status__value {
+  color: var(--color-primary-navy);
+}
+

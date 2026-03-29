@@ -1,0 +1,39 @@
+<section class="events-slider" aria-label="Events this week">
+  <app-section-header title="Events This Week" actionLabel="More" (action)="sectionMore.emit()" />
+
+  <div class="events-slider__viewport">
+    <div class="events-slider__track" role="list">
+      @for (ev of items(); track ev.id) {
+        <button
+          type="button"
+          class="events-slider__card"
+          role="listitem"
+          (click)="open(ev.id)"
+        >
+          <img
+            class="events-slider__img"
+            [src]="imgSrcById()[ev.id]"
+            [alt]="''"
+            width="140"
+            height="96"
+            loading="lazy"
+            decoding="async"
+            (error)="onImgError(ev.id)"
+          />
+          <div class="events-slider__meta">
+            <p class="events-slider__title">{{ ev.title }}</p>
+            <p class="events-slider__sub">{{ ev.subtitle }}</p>
+            <p class="events-slider__date">
+              <svg class="events-slider__clock" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.75" />
+                <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M12 8v4l3 2" />
+              </svg>
+              {{ ev.dateLabel }}
+            </p>
+          </div>
+        </button>
+      }
+    </div>
+  </div>
+</section>
+

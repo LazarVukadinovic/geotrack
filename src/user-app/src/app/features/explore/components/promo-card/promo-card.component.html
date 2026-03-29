@@ -1,0 +1,10 @@
+<section class="promo-card" aria-label="Personalization">
+  <div class="promo-card__body">
+    <h3 class="promo-card__title">{{ promo().title }}</h3>
+    <p class="promo-card__msg">{{ promo().message }}</p>
+  </div>
+  <button type="button" class="promo-card__cta" (click)="cta.emit()">
+    {{ promo().ctaLabel }}
+  </button>
+</section>
+
