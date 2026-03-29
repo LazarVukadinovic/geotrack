@@ -1,4 +1,5 @@
 import type { ExploreItem } from '../../../core/models/explore-item.model';
+import type { ExploreEvent, ExplorePromoCard, NearbyStatus } from '../models/explore-extras.model';
 
 /** Stable Unsplash URLs (format + moderate width) to reduce hotlink / 404 issues. */
 const u = (id: string, w = 640) =>
@@ -118,5 +119,40 @@ export const MOCK_LOCAL_FAVORITES: ExploreItem[] = [
     isSaved: false,
     openingHours: '6 AM – 8 PM',
     isRecommended: false,
+  },
+];
+
+export const MOCK_NEARBY_STATUS: NearbyStatus = {
+  label: 'Near',
+  value: 'Old Town · 2.5 km',
+};
+
+export const MOCK_PROMO_CARD: ExplorePromoCard = {
+  title: 'Personalize your stay',
+  message: 'Sign up to get tailored local tips and smart recommendations.',
+  ctaLabel: 'Sign up',
+};
+
+export const MOCK_EVENTS_THIS_WEEK: ExploreEvent[] = [
+  {
+    id: 'ev-1',
+    title: 'Jazz Night',
+    subtitle: 'Sunset stage · Old Town',
+    dateLabel: 'Fri · 7:30 PM',
+    image: u('photo-1485872299829-c673f5194813', 560),
+  },
+  {
+    id: 'ev-2',
+    title: 'Summer Festival',
+    subtitle: 'City walls · Live',
+    dateLabel: 'Sat · 9:00 PM',
+    image: u('photo-1520975958225-9a3d0f3b7d2a', 560),
+  },
+  {
+    id: 'ev-3',
+    title: 'Food Market',
+    subtitle: 'Local bites · Harbor',
+    dateLabel: 'Sun · 11:00 AM',
+    image: u('photo-1514512364185-4c2b2db318b5', 560),
   },
 ];
