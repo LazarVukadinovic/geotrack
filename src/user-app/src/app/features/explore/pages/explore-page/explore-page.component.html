@@ -12,25 +12,70 @@
       />
     </div>
 
-    <div class="explore-page__filters">
-      <app-filter-pills
-        [options]="categoryOptions"
-        [activeId]="activeCategory()"
-        (activeIdChange)="onCategoryChange($event)"
-      />
+    <!-- ── Filter bar: fixed Near me button | divider | scrollable chips ── -->
+    <div class="filter-bar">
+      <button
+        type="button"
+        class="filter-bar__near-me"
+        aria-label="Open Near me settings"
+        (click)="openNearMePopup()"
+      >
+        <!-- Location pin icon -->
+        <svg class="filter-bar__near-me-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
+          />
+        </svg>
+        <span>Near me</span>
+        <!-- Sliders / settings icon -->
+        <svg class="filter-bar__near-me-sliders" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M7 12h10M10 18h4" />
+        </svg>
+      </button>
+
+      <!-- Fixed vertical separator -->
+      <div class="filter-bar__divider" aria-hidden="true"></div>
+
+      <!-- Scrollable chip area — chips clip behind the left boundary -->
+      <div class="filter-bar__chips" aria-label="Category filters">
+        <app-filter-pills
+          [options]="categoryOptions"
+          [activeId]="activeCategory()"
+          (activeIdChange)="onCategoryChange($event)"
+        />
+      </div>
     </div>
+    <!-- ──────────────────────────────────────────────────────────────────── -->
 
     <app-promo-card [promo]="promo()" (cta)="onPromoCta()" />
 
     <app-events-slider
-      [items]="filteredEventsThisWeek()"
+      [items]="eventsThisWeek()"
       (eventActivated)="onEvent($event)"
     />
 
-    <app-recommended-slider
-      [items]="filteredRecommended()"
-      (bookmarkToggled)="toggleRecommendedSaved($event)"
-      (moreClicked)="onFeaturedMore($event)"
+    <app-popular-nearby-slider
+      [items]="popularNearby()"
+      (bookmarkToggled)="toggleNearbySaved($event)"
+    />
+
+    <app-top-stays-slider
+      [items]="topStays()"
+      (bookmarkToggled)="toggleStaySaved($event)"
+    />
+
+    <app-must-see-slider
+      [items]="mustSeeAttractions()"
+    />
+
+    <app-landmarks-slider
+      [items]="landmarkCategories()"
+      (tileActivated)="onLandmarkTile($event)"
     />
 
     <app-local-favorites-list

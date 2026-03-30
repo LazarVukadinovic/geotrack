@@ -1,17 +1,5 @@
 <div class="nearby-status" aria-label="Nearby status">
-  <span class="nearby-status__chip">
-    <svg class="nearby-status__pin" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.75"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        d="M12 21s7-4.35 7-10a7 7 0 1 0-14 0c0 5.65 7 10 7 10Zm0-8.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"
-      />
-    </svg>
-    <span class="nearby-status__label">{{ status().label }}</span>
-    <span class="nearby-status__value">{{ status().value }}</span>
-  </span>
+  <span class="nearby-status__dot" aria-hidden="true"></span>
+  <span class="nearby-status__label">{{ status().label }}:</span>
+  <span class="nearby-status__value">{{ status().value }} radius</span>
 </div>
-

@@ -5,13 +5,75 @@
 .explore-page__main {
   padding-inline: var(--page-gutter);
   padding-top: calc(var(--app-header-offset) + var(--space-3));
-  padding-bottom: var(--space-4);
+  padding-bottom: calc(var(--bottom-nav-height) + var(--space-6));
 }
 
 .explore-page__search {
   margin-bottom: var(--space-4);
 }
 
-.explore-page__filters {
-  margin-bottom: var(--space-2);
+// ─── Filter bar: Near me button + divider + scrollable chips ─────────────────
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--space-6);
+  // Only the chip area extends to the right screen edge; the near-me button
+  // stays within the normal page gutter.
+  margin-right: calc(-1 * var(--page-gutter));
+}
+
+.filter-bar__near-me {
+  flex-shrink: 0;
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+
+  // Compact, uniform padding → proper pill shape matching the reference.
+  padding: 8px var(--space-4);
+
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-navy);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent-orange);
+    outline-offset: 2px;
+  }
+}
+
+.filter-bar__near-me-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.filter-bar__near-me-sliders {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.filter-bar__divider {
+  // Thin vertical separator between Near me and the chip row.
+  flex-shrink: 0;
+  width: 1px;
+  height: 34px;
+  background: rgba(26, 43, 76, 0.15);
+  margin-inline: var(--space-3);
+}
+
+.filter-bar__chips {
+  flex: 1;
+  min-width: 0;
+
+  // Clip chips that scroll back past the left boundary (behind the divider).
+  overflow: hidden;
 }

@@ -1,5 +1,10 @@
 <section class="events-slider" aria-label="Events this week">
-  <app-section-header title="Events This Week" actionLabel="More" (action)="sectionMore.emit()" />
+  <app-section-header
+    title="Events This Week"
+    subtitle="What's happening around town"
+    actionLabel="More"
+    (action)="sectionMore.emit()"
+  />
 
   <div class="events-slider__viewport">
     <div class="events-slider__track" role="list">
@@ -14,21 +19,27 @@
             class="events-slider__img"
             [src]="imgSrcById()[ev.id]"
             [alt]="''"
-            width="140"
-            height="96"
+            width="80"
+            height="80"
             loading="lazy"
             decoding="async"
             (error)="onImgError(ev.id)"
           />
           <div class="events-slider__meta">
+            <p class="events-slider__date">{{ ev.dateLabel }}</p>
             <p class="events-slider__title">{{ ev.title }}</p>
-            <p class="events-slider__sub">{{ ev.subtitle }}</p>
-            <p class="events-slider__date">
-              <svg class="events-slider__clock" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.75" />
-                <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M12 8v4l3 2" />
+            <p class="events-slider__sub">
+              <svg class="events-slider__pin" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 21s7-4.35 7-10a7 7 0 1 0-14 0c0 5.65 7 10 7 10Zm0-8.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"
+                />
               </svg>
-              {{ ev.dateLabel }}
+              {{ ev.subtitle }}
             </p>
           </div>
         </button>
@@ -36,4 +47,3 @@
     </div>
   </div>
 </section>
-

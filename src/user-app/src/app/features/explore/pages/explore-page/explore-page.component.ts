@@ -8,7 +8,10 @@ import { WelcomeHeroComponent } from '../../components/welcome-hero/welcome-hero
 import { NearbyStatusRowComponent } from '../../components/nearby-status-row/nearby-status-row.component';
 import { PromoCardComponent } from '../../components/promo-card/promo-card.component';
 import { EventsSliderComponent } from '../../components/events-slider/events-slider.component';
-import { RecommendedSliderComponent } from '../../components/recommended-slider/recommended-slider.component';
+import { PopularNearbySliderComponent } from '../../components/popular-nearby-slider/popular-nearby-slider.component';
+import { TopStaysSliderComponent } from '../../components/top-stays-slider/top-stays-slider.component';
+import { MustSeeSliderComponent } from '../../components/must-see-slider/must-see-slider.component';
+import { LandmarksSliderComponent } from '../../components/landmarks-slider/landmarks-slider.component';
 import { LocalFavoritesListComponent } from '../../components/local-favorites-list/local-favorites-list.component';
 import { ExploreService } from '../../services/explore.service';
 import { itemMatchesExploreFilters } from '../../utils/explore-filter';
@@ -24,7 +27,10 @@ import { itemMatchesExploreFilters } from '../../utils/explore-filter';
     NearbyStatusRowComponent,
     PromoCardComponent,
     EventsSliderComponent,
-    RecommendedSliderComponent,
+    PopularNearbySliderComponent,
+    TopStaysSliderComponent,
+    MustSeeSliderComponent,
+    LandmarksSliderComponent,
     LocalFavoritesListComponent,
   ],
   templateUrl: './explore-page.component.html',
@@ -41,29 +47,27 @@ export class ExplorePageComponent {
   protected readonly categoryOptions = EXPLORE_CATEGORY_FILTERS;
   protected readonly searchQuery = signal('');
   protected readonly activeCategory = signal<ExploreCategoryFilter>('all');
+
   protected readonly nearbyStatus = computed(() => this.explore.nearbyStatus());
   protected readonly promo = computed(() => this.explore.promo());
 
-  protected readonly filteredRecommended = computed(() => {
-    const q = this.searchQuery();
-    const cat = this.activeCategory();
-    return this.explore.recommended().filter((item) => itemMatchesExploreFilters(item, q, cat));
+  protected readonly eventsThisWeek = computed(() => {
+    const q = this.searchQuery().trim().toLowerCase();
+    if (!q) return this.explore.eventsThisWeek();
+    return this.explore.eventsThisWeek().filter((ev) =>
+      [ev.title, ev.subtitle, ev.dateLabel].join(' ').toLowerCase().includes(q),
+    );
   });
+
+  protected readonly popularNearby = computed(() => this.explore.popularNearby());
+  protected readonly topStays = computed(() => this.explore.topStays());
+  protected readonly mustSeeAttractions = computed(() => this.explore.mustSeeAttractions());
+  protected readonly landmarkCategories = computed(() => this.explore.landmarkCategories());
 
   protected readonly filteredLocalFavorites = computed(() => {
     const q = this.searchQuery();
     const cat = this.activeCategory();
     return this.explore.localFavorites().filter((item) => itemMatchesExploreFilters(item, q, cat));
-  });
-
-  protected readonly filteredEventsThisWeek = computed(() => {
-    const q = this.searchQuery().trim().toLowerCase();
-    if (!q) {
-      return this.explore.eventsThisWeek();
-    }
-    return this.explore.eventsThisWeek().filter((ev) =>
-      [ev.title, ev.subtitle, ev.dateLabel].join(' ').toLowerCase().includes(q),
-    );
   });
 
   protected onSearchChange(value: string): void {
@@ -78,21 +82,20 @@ export class ExplorePageComponent {
     this.searchBar()?.focusInput();
   }
 
-  protected toggleRecommendedSaved(id: string): void {
-    this.explore.toggleSaved(id, 'recommended');
+  protected toggleNearbySaved(id: string): void {
+    this.explore.toggleSaved(id, 'popularNearby');
+  }
+
+  protected toggleStaySaved(id: string): void {
+    this.explore.toggleSaved(id, 'topStays');
   }
 
   protected toggleLocalSaved(id: string): void {
     this.explore.toggleSaved(id, 'localFavorites');
   }
 
-  /** Future: router.navigate(['/places', id]) */
-  protected onFeaturedMore(_id: string): void {
-    /* intentionally empty */
-  }
-
   protected onLocalCard(_id: string): void {
-    /* intentionally empty */
+    /* future: router.navigate(['/places', id]) */
   }
 
   protected onPromoCta(): void {
@@ -101,5 +104,14 @@ export class ExplorePageComponent {
 
   protected onEvent(_id: string): void {
     /* future: open event detail */
+  }
+
+  protected onLandmarkTile(_id: string): void {
+    /* future: router.navigate(['/places/category', id]) */
+  }
+
+  /** Placeholder — replace with real bottom sheet / modal when the popup design is ready. */
+  protected openNearMePopup(): void {
+    /* future: open Near Me proximity settings popup */
   }
 }

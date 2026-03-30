@@ -1,109 +1,61 @@
 import type { ExploreItem } from '../../../core/models/explore-item.model';
-import type { ExploreEvent, ExplorePromoCard, NearbyStatus } from '../models/explore-extras.model';
+import type {
+  ExploreAttraction,
+  ExploreEvent,
+  ExploreLandmarkCategory,
+  ExploreNearbyItem,
+  ExplorePromoCard,
+  ExploreStay,
+  NearbyStatus,
+} from '../models/explore-extras.model';
 
 /** Stable Unsplash URLs (format + moderate width) to reduce hotlink / 404 issues. */
 const u = (id: string, w = 640) =>
   `https://images.unsplash.com/${id}?ixlib=rb-4.0.3&auto=format&fit=crop&w=${w}&q=75`;
 
-export const MOCK_RECOMMENDED_ITEMS: ExploreItem[] = [
-  {
-    id: 'rec-1',
-    title: 'City Tour',
-    subtitle: 'Stunning views, historic streets.',
-    description: 'Guided walk through Old Town walls and limestone lanes.',
-    category: 'attraction',
-    type: 'attraction',
-    location: 'Old Town',
-    image: u('photo-1526481280695-3c469172d3b8'),
-    rating: 4.8,
-    isSaved: false,
-    openingHours: '8 AM – 6 PM',
-    isRecommended: true,
-  },
-  {
-    id: 'rec-2',
-    title: 'Harbor Sunset',
-    subtitle: 'Waterfront dining & golden hour.',
-    description: 'Best tables for seafood with Adriatic views.',
-    category: 'restaurant',
-    type: 'restaurant',
-    location: 'Port',
-    image: u('photo-1507525428034-b723cf961d3e'),
-    rating: 4.7,
-    isSaved: false,
-    openingHours: '12 PM – 11 PM',
-    isRecommended: true,
-  },
-  {
-    id: 'rec-3',
-    title: 'Boutique Stay',
-    subtitle: 'Rooftop pool, quiet nights.',
-    description: 'Boutique hotel steps from Stradun.',
-    category: 'hotel',
-    type: 'hotel',
-    location: 'Ploče',
-    image: u('photo-1566073771259-6a8506099945'),
-    rating: 4.9,
-    isSaved: false,
-    isRecommended: true,
-  },
-  {
-    id: 'rec-4',
-    title: 'Sea Kayaking',
-    subtitle: 'Crystal coves & hidden caves.',
-    description: 'Half-day paddle along Lokrum and cliffs.',
-    category: 'activity',
-    type: 'activity',
-    location: 'Pile Bay',
-    image: u('photo-1540946485063-a40040818724'),
-    rating: 4.8,
-    isSaved: false,
-    openingHours: '9 AM – 4 PM',
-    isRecommended: true,
-  },
-];
+// ─── Kept for compatibility (used by LocalFavoritesList) ─────────────────────
 
 export const MOCK_LOCAL_FAVORITES: ExploreItem[] = [
   {
     id: 'loc-1',
-    title: 'Lago di Braies',
-    subtitle: 'South Tyrol',
-    description: 'Alpine lake framed by pine and peaks.',
-    category: 'attraction',
-    type: 'attraction',
-    location: 'South Tyrol',
-    image: u('photo-1506905925346-21bda4d32df4', 560),
-    rating: 4.9,
+    title: 'Buža Bar',
+    subtitle: 'Cliffside Drinks',
+    description: 'Iconic cliff bar with Adriatic views.',
+    category: 'restaurant',
+    type: 'restaurant',
+    location: 'Old Town walls',
+    image: u('photo-1485872299829-c673f5194813', 560),
+    rating: 4.8,
     isSaved: false,
-    openingHours: '8 AM – 6 PM',
+    openingHours: 'Closes 12 AM',
     isRecommended: false,
   },
   {
     id: 'loc-2',
-    title: 'Paris',
-    subtitle: 'Top Choice',
-    description: 'Evening lights along the Seine.',
-    category: 'attraction',
-    type: 'attraction',
-    location: 'Île de la Cité',
-    image: u('photo-1502602898657-3e91760cbb34', 560),
-    rating: 4.8,
+    title: 'Nautika Restaurant',
+    subtitle: 'Dining',
+    description: 'Fine dining on the waterfront terrace.',
+    category: 'restaurant',
+    type: 'restaurant',
+    location: 'Pile Gate',
+    image: u('photo-1517248135467-4c7edcad34c4', 560),
+    rating: 4.9,
     isSaved: false,
-    openingHours: 'Always Open',
+    openingHours: 'Closes 11 PM',
     isRecommended: false,
   },
   {
     id: 'loc-3',
-    title: 'Coastal Tavern',
-    subtitle: 'Dubrovnik',
-    description: 'Grilled catch and local wine.',
-    category: 'restaurant',
-    type: 'restaurant',
-    location: 'Lapad',
-    image: u('photo-1517248135467-4c7edcad34c4', 560),
+    title: 'Cogito',
+    subtitle: 'Specialty Coffee',
+    description: 'Specialty roasts and cozy corners.',
+    category: 'activity',
+    type: 'cafe',
+    location: 'Stradun',
+    image: u('photo-1509042239860-f550ce710b93', 560),
     rating: 4.7,
     isSaved: false,
-    openingHours: '5 PM – 12 AM',
+    openingHours: 'Closes 9 PM',
     isRecommended: false,
   },
   {
@@ -122,37 +74,174 @@ export const MOCK_LOCAL_FAVORITES: ExploreItem[] = [
   },
 ];
 
+// ─── Nearby Status ────────────────────────────────────────────────────────────
+
 export const MOCK_NEARBY_STATUS: NearbyStatus = {
   label: 'Near',
   value: 'Old Town · 2.5 km',
 };
 
+// ─── Promo Card ───────────────────────────────────────────────────────────────
+
 export const MOCK_PROMO_CARD: ExplorePromoCard = {
   title: 'Personalize your stay',
-  message: 'Sign up to get tailored local tips and smart recommendations.',
-  ctaLabel: 'Sign up',
+  message: 'Sign up to get tailored local secrets and bespoke recommendations delivered to you.',
+  ctaLabel: 'Sign Up →',
 };
+
+// ─── Events This Week ─────────────────────────────────────────────────────────
 
 export const MOCK_EVENTS_THIS_WEEK: ExploreEvent[] = [
   {
     id: 'ev-1',
+    title: 'Summer Festival',
+    subtitle: 'Old Town Square',
+    dateLabel: 'Jul 10 · 8:00 PM',
+    image: u('photo-1514512364185-4c2b2db318b5', 560),
+  },
+  {
+    id: 'ev-2',
     title: 'Jazz Night',
-    subtitle: 'Sunset stage · Old Town',
+    subtitle: 'Sunset Stage · Old Town',
     dateLabel: 'Fri · 7:30 PM',
     image: u('photo-1485872299829-c673f5194813', 560),
   },
   {
-    id: 'ev-2',
-    title: 'Summer Festival',
-    subtitle: 'City walls · Live',
-    dateLabel: 'Sat · 9:00 PM',
-    image: u('photo-1520975958225-9a3d0f3b7d2a', 560),
-  },
-  {
     id: 'ev-3',
     title: 'Food Market',
-    subtitle: 'Local bites · Harbor',
+    subtitle: 'Harbor · Local Bites',
     dateLabel: 'Sun · 11:00 AM',
-    image: u('photo-1514512364185-4c2b2db318b5', 560),
+    image: u('photo-1539571696357-5a69c17a67c6', 560),
+  },
+];
+
+// ─── Popular Nearby ───────────────────────────────────────────────────────────
+
+export const MOCK_POPULAR_NEARBY: ExploreNearbyItem[] = [
+  {
+    id: 'nb-1',
+    title: 'Old Town Walls',
+    categoryLabel: 'Historic Site',
+    image: u('photo-1558618666-fcd25c85cd64', 560),
+    rating: 4.9,
+    reviewCount: '12k',
+    distance: '0.5 km away',
+    isSaved: false,
+  },
+  {
+    id: 'nb-2',
+    title: 'Banje Beach',
+    categoryLabel: 'Beach',
+    image: u('photo-1507525428034-b723cf961d3e', 560),
+    rating: 4.7,
+    reviewCount: '8.5k',
+    distance: '1.2 km away',
+    isSaved: false,
+  },
+  {
+    id: 'nb-3',
+    title: 'Stradun',
+    categoryLabel: 'Landmark',
+    image: u('photo-1526481280695-3c469172d3b8', 560),
+    rating: 4.8,
+    reviewCount: '20k',
+    distance: '0.3 km away',
+    isSaved: false,
+  },
+  {
+    id: 'nb-4',
+    title: 'Lokrum Island',
+    categoryLabel: 'Nature',
+    image: u('photo-1506905925346-21bda4d32df4', 560),
+    rating: 4.6,
+    reviewCount: '6k',
+    distance: '1.8 km away',
+    isSaved: false,
+  },
+];
+
+// ─── Top Stays Near You ───────────────────────────────────────────────────────
+
+export const MOCK_TOP_STAYS: ExploreStay[] = [
+  {
+    id: 'stay-1',
+    title: 'Grand Hotel 1',
+    image: u('photo-1566073771259-6a8506099945', 560),
+    rating: 4.9,
+    distance: '0.2 km away',
+    pricePerNight: 121,
+    isSaved: false,
+  },
+  {
+    id: 'stay-2',
+    title: 'Grand Hotel 2',
+    image: u('photo-1520250497591-112f2f40a3f4', 560),
+    rating: 4.8,
+    distance: '0.4 km away',
+    pricePerNight: 122,
+    isSaved: false,
+  },
+  {
+    id: 'stay-3',
+    title: 'Villa Adriatic',
+    image: u('photo-1582719508461-905c673771fd', 560),
+    rating: 4.7,
+    distance: '0.9 km away',
+    pricePerNight: 98,
+    isSaved: false,
+  },
+];
+
+// ─── Must-See Attractions ─────────────────────────────────────────────────────
+
+export const MOCK_MUST_SEE_ATTRACTIONS: ExploreAttraction[] = [
+  {
+    id: 'attr-1',
+    title: 'Fort Lovrijenac',
+    type: 'Historic Fortress',
+    image: u('photo-1558618666-fcd25c85cd64', 560),
+  },
+  {
+    id: 'attr-2',
+    title: 'Dubrovnik Cable Car',
+    type: 'Panoramic Views',
+    image: u('photo-1580137189272-c9379f8864fd', 560),
+  },
+  {
+    id: 'attr-3',
+    title: 'Lokrum Island',
+    type: 'Nature Reserve',
+    image: u('photo-1467269204594-9661b134dd2b', 560),
+  },
+  {
+    id: 'attr-4',
+    title: 'Rector\'s Palace',
+    type: 'Museum',
+    image: u('photo-1543783207-ec64e4d3c671', 560),
+  },
+];
+
+// ─── Local Places & Landmarks ─────────────────────────────────────────────────
+
+export const MOCK_LANDMARK_CATEGORIES: ExploreLandmarkCategory[] = [
+  {
+    id: 'lm-1',
+    title: 'Beaches',
+    image: u('photo-1507525428034-b723cf961d3e', 400),
+  },
+  {
+    id: 'lm-2',
+    title: 'Museums',
+    image: u('photo-1543783207-ec64e4d3c671', 400),
+  },
+  {
+    id: 'lm-3',
+    title: 'Parks',
+    image: u('photo-1519331379826-f10be5486c6f', 400),
+  },
+  {
+    id: 'lm-4',
+    title: 'Markets',
+    image: u('photo-1488459716781-31db52582fe9', 400),
   },
 ];
