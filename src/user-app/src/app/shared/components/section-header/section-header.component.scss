@@ -1,9 +1,13 @@
 .section-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
   margin-bottom: var(--space-4);
+}
+
+.section-header__text {
+  min-width: 0;
 }
 
 .section-header__title {
@@ -12,6 +16,13 @@
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--color-primary-navy);
+}
+
+.section-header__subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  line-height: 1.4;
 }
 
 .section-header__action {
@@ -26,6 +37,8 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  flex-shrink: 0;
+  padding-top: 2px;
 
   &:focus-visible {
     outline: 2px solid var(--color-accent-orange);

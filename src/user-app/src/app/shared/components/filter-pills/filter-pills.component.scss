@@ -3,7 +3,6 @@
 }
 
 .filter-pills__viewport {
-  margin-inline: calc(-1 * var(--page-gutter));
   overflow: hidden;
 }
 
@@ -13,13 +12,13 @@
   gap: var(--space-2);
   margin: 0;
   padding: 0;
-  padding-inline: var(--page-gutter);
+  padding-left: var(--space-2);
+  padding-right: 0;
   padding-bottom: var(--space-1);
   list-style: none;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x proximity;
-  scroll-padding-inline: var(--page-gutter);
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 
@@ -29,7 +28,7 @@
 
   &::after {
     content: '';
-    flex: 0 0 var(--space-2);
+    flex: 0 0 var(--page-gutter);
   }
 }
 
@@ -40,9 +39,9 @@
 
 .filter-pills__pill {
   margin: 0;
-  padding: var(--space-2) var(--space-5);
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-pill);
-  border: 1.5px solid var(--color-primary-navy);
+  border: 1.5px solid rgba(26, 43, 76, 0.2);
   background: var(--color-card-bg);
   color: var(--color-primary-navy);
   font-size: var(--text-sm);
@@ -55,9 +54,9 @@
     border-color 0.15s ease;
 
   &--active {
-    background: var(--color-primary-navy);
+    background: var(--color-accent-orange);
     color: #fff;
-    border-color: var(--color-primary-navy);
+    border-color: var(--color-accent-orange);
   }
 
   &:focus-visible {

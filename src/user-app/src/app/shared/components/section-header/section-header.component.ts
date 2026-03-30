@@ -8,6 +8,7 @@ import { Component, input, output } from '@angular/core';
 })
 export class SectionHeaderComponent {
   readonly title = input.required<string>();
+  readonly subtitle = input<string>('');
   readonly actionLabel = input('More');
 
   readonly action = output<void>();
