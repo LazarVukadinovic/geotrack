@@ -1,0 +1,34 @@
+<section class="landmarks-slider" aria-label="Local places and landmarks">
+  <app-section-header
+    title="Local Places & Landmarks"
+    subtitle="Dive into the area's rich history"
+    actionLabel="More"
+    (action)="sectionMore.emit()"
+  />
+
+  <div class="landmarks-slider__viewport">
+    <div class="landmarks-slider__track" role="list">
+      @for (item of items(); track item.id) {
+        <button
+          type="button"
+          class="landmarks-slider__tile"
+          role="listitem"
+          (click)="tileActivated.emit(item.id)"
+        >
+          <img
+            class="landmarks-slider__img"
+            [src]="imgSrcById()[item.id]"
+            [alt]="''"
+            width="110"
+            height="110"
+            loading="lazy"
+            decoding="async"
+            (error)="onImgError(item.id)"
+          />
+          <div class="landmarks-slider__overlay"></div>
+          <span class="landmarks-slider__label">{{ item.title }}</span>
+        </button>
+      }
+    </div>
+  </div>
+</section>

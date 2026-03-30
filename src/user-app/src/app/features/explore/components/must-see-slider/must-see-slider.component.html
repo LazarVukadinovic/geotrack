@@ -1,0 +1,32 @@
+<section class="mustsee-slider" aria-label="Must-see attractions">
+  <app-section-header
+    title="Must-See Attractions"
+    subtitle="Iconic landmarks you can't miss"
+    actionLabel="More"
+    (action)="sectionMore.emit()"
+  />
+
+  <div class="mustsee-slider__viewport">
+    <div class="mustsee-slider__track" role="list">
+      @for (item of items(); track item.id) {
+        <article class="mustsee-slider__card" role="listitem">
+          <img
+            class="mustsee-slider__img"
+            [src]="imgSrcById()[item.id]"
+            [alt]="''"
+            width="180"
+            height="220"
+            loading="lazy"
+            decoding="async"
+            (error)="onImgError(item.id)"
+          />
+          <div class="mustsee-slider__overlay"></div>
+          <div class="mustsee-slider__content">
+            <h3 class="mustsee-slider__title">{{ item.title }}</h3>
+            <p class="mustsee-slider__type">{{ item.type }}</p>
+          </div>
+        </article>
+      }
+    </div>
+  </div>
+</section>

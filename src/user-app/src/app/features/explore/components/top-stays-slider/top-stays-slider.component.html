@@ -1,0 +1,60 @@
+<section class="stays-slider" aria-label="Top stays near you">
+  <app-section-header
+    title="Top Stays Near You"
+    subtitle="Highly rated accommodations for your trip"
+    actionLabel="More"
+    (action)="sectionMore.emit()"
+  />
+
+  <div class="stays-slider__viewport">
+    <div class="stays-slider__track" role="list">
+      @for (item of items(); track item.id) {
+        <article class="stays-slider__card" role="listitem">
+          <div class="stays-slider__media">
+            <img
+              class="stays-slider__img"
+              [src]="imgSrcById()[item.id]"
+              [alt]="''"
+              width="200"
+              height="130"
+              loading="lazy"
+              decoding="async"
+              (error)="onImgError(item.id)"
+            />
+            <button
+              type="button"
+              class="stays-slider__save"
+              [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+              (click)="toggleBookmark($event, item.id)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="stays-slider__heart">
+                <path
+                  [attr.fill]="item.isSaved ? 'var(--color-accent-orange)' : 'none'"
+                  [attr.stroke]="item.isSaved ? 'none' : 'currentColor'"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div class="stays-slider__body">
+            <h3 class="stays-slider__title">{{ item.title }}</h3>
+            <div class="stays-slider__row">
+              <span class="stays-slider__rating">
+                <svg class="stays-slider__star" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                </svg>
+                {{ item.rating.toFixed(1) }}
+              </span>
+              <span class="stays-slider__distance">{{ item.distance }}</span>
+            </div>
+            <p class="stays-slider__price">from ${{ item.pricePerNight }}/night</p>
+          </div>
+        </article>
+      }
+    </div>
+  </div>
+</section>
