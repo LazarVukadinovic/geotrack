@@ -2,6 +2,6 @@
 
 namespace Geotrack.Application.Interfaces;
 
-public interface ITravelAgencyRepository : IRepository<TravelAgency>
+public interface ITravelAgencyRepository
 {
 }

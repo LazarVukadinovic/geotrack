@@ -1,7 +1,0 @@
-﻿using Geotrack.Domain.Entities;
-
-namespace Geotrack.Application.Interfaces;
-
-public interface IRoleRepository : IRepository<Role>
-{
-}

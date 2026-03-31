@@ -2,6 +2,7 @@
 
 namespace Geotrack.Application.Interfaces;
 
-public interface ITagRepository : IRepository<Tag>
+public interface IDestinationRepository
 {
+
 }
