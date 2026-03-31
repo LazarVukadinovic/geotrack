@@ -9,10 +9,10 @@ namespace Geotrack.Domain.Entities
 {
     public class User
     {
-        public int Id { get; set; }
+        public int Id { get; set; } // PRIMARY KEY
         public string Username { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
 
-        public ICollection<Role> Roles { get; set; } = new List<Role>();
+        public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>(); // NAVIGATIONAL
     }
 }

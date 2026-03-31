@@ -1,7 +1,4 @@
-using Geotrack.Application.Interfaces;
-using Geotrack.Application.Services;
 using Geotrack.Infrastructure;
-using Geotrack.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,8 +11,15 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddScoped<IDestinationRepository, DestinationRepository>();
-builder.Services.AddScoped<DestinationService>();
+
+
+// builder.Services.AddScoped<IDestinationRepository, DestinationRepository>();
+// builder.Services.AddScoped<IUserRepository, UserRepository>();
+// builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+
+// builder.Services.AddScoped<UserService>();
+// builder.Services.AddScoped<RoleService>();
+// builder.Services.AddScoped<DestinationService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
