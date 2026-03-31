@@ -13,7 +13,7 @@ namespace Geotrack.Domain.Entities
 
         public ICollection<Location> Locations { get; set; } = new List<Location>(); // NAVIGATIONAL
 
-        public string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
 
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
