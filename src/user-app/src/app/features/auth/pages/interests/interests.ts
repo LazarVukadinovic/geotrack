@@ -9,7 +9,6 @@ import { Router } from '@angular/router';
   styleUrl: './interests.css',
 })
 export class Interests {
-  maxSelections = 5;
   selectedInterests: string[] = [];
 
   interests = [
@@ -21,8 +20,10 @@ export class Interests {
     'Local Events',
     'Nightlife',
     'Scenic Walks',
-    'Culture',
+    'Festivals',
     'Adventure',
+    'Shopping',
+    'Culture',
   ];
 
   constructor(private router: Router) {}
@@ -30,7 +31,7 @@ export class Interests {
   toggleInterest(interest: string): void {
     if (this.isSelected(interest)) {
       this.selectedInterests = this.selectedInterests.filter((i) => i !== interest);
-    } else if (this.selectedInterests.length < this.maxSelections) {
+    } else {
       this.selectedInterests = [...this.selectedInterests, interest];
     }
   }
@@ -41,7 +42,6 @@ export class Interests {
 
   onFinish(): void {
     if (this.selectedInterests.length === 0) return;
-    // Save interests and navigate to main app
     this.router.navigate(['/']);
   }
 
