@@ -2,6 +2,6 @@
 
 namespace Geotrack.Application.Interfaces;
 
-public interface IEventRepository : IRepository<Event>
+public interface IEventRepository
 {
 }
