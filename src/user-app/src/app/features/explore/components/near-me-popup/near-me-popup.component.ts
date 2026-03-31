@@ -14,7 +14,7 @@ export interface NearMeSettings {
 export class NearMePopupComponent {
   readonly initialRadius = input<number>(2.5);
   readonly initialEnabled = input<boolean>(true);
-  readonly bottom = input<string>('0px');
+  readonly top = input<string>('0px');
   readonly left = input<string>('0px');
 
   readonly closed = output<void>();
@@ -23,8 +23,8 @@ export class NearMePopupComponent {
   protected tempRadius = signal(2.5);
   protected tempEnabled = signal(true);
 
-  @HostBinding('style.bottom') get styleBottom() { return this.bottom(); }
-  @HostBinding('style.left')   get styleLeft()   { return this.left(); }
+  @HostBinding('style.top')  get styleTop()  { return this.top(); }
+  @HostBinding('style.left') get styleLeft() { return this.left(); }
 
   constructor() {
     effect(() => {

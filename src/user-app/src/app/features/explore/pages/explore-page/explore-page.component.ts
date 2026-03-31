@@ -117,8 +117,8 @@ export class ExplorePageComponent {
   protected readonly nearMePopupOpen   = signal(false);
   protected readonly nearMeRadius      = signal(2.5);
   protected readonly nearMeEnabled     = signal(true);
-  protected readonly nearMePopupBottom = signal('0px');
-  protected readonly nearMePopupLeft   = signal('0px');
+  protected readonly nearMePopupTop  = signal('0px');
+  protected readonly nearMePopupLeft = signal('0px');
 
   protected openNearMePopup(event: MouseEvent): void {
     if (this.nearMePopupOpen()) {
@@ -128,7 +128,7 @@ export class ExplorePageComponent {
     const btn  = event.currentTarget as HTMLElement;
     const rect = btn.getBoundingClientRect();
     const gap  = 12;
-    this.nearMePopupBottom.set(`${window.innerHeight - rect.top + gap}px`);
+    this.nearMePopupTop.set(`${rect.bottom + gap}px`);
     this.nearMePopupLeft.set(`${rect.left}px`);
     this.nearMePopupOpen.set(true);
   }
