@@ -1,0 +1,82 @@
+<div class="popup" role="dialog" aria-modal="false" aria-label="Adjust nearby range">
+
+  <!-- ▼ Triangular arrow pointing down toward the Near me button -->
+  <div class="popup__arrow" aria-hidden="true"></div>
+
+  <!-- Header -->
+  <div class="popup__header">
+    <h2 class="popup__title">Adjust nearby range</h2>
+    <button type="button" class="popup__close" aria-label="Close popup" (click)="close()">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+              d="M18 6L6 18M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Description -->
+  <p class="popup__desc">
+    Discover stays, food, and attractions within a specific distance from your current location.
+  </p>
+
+  <!-- Slider card -->
+  <div class="popup__slider-card">
+    <div class="popup__value-display">
+      <span class="popup__value-num">{{ displayValue }}</span>
+      <span class="popup__value-unit">{{ displayUnit }}</span>
+    </div>
+
+    <div class="popup__slider-wrap">
+      <input
+        type="range"
+        class="popup__slider"
+        min="0.5"
+        max="25"
+        step="0.5"
+        [value]="tempRadius()"
+        [style.--fill-pct]="sliderPercent + '%'"
+        (input)="onSliderInput($event)"
+        aria-label="Nearby range in kilometres"
+      />
+    </div>
+
+    <div class="popup__slider-labels">
+      <span>500 m</span>
+      <span>25 km</span>
+    </div>
+  </div>
+
+  <!-- Divider -->
+  <div class="popup__divider" aria-hidden="true"></div>
+
+  <!-- Toggle row -->
+  <div class="popup__toggle-row">
+    <label class="popup__toggle-switch" [attr.aria-label]="tempEnabled() ? 'Turn off Near me' : 'Turn on Near me'">
+      <input
+        type="checkbox"
+        class="popup__toggle-input"
+        [checked]="tempEnabled()"
+        (change)="onToggleChange($event)"
+      />
+      <span class="popup__toggle-track" [class.popup__toggle-track--on]="tempEnabled()">
+        <span class="popup__toggle-thumb"></span>
+      </span>
+    </label>
+
+    <div class="popup__toggle-text">
+      <span class="popup__toggle-label">
+        {{ tempEnabled() ? 'Turn off Near me' : 'Turn on Near me' }}
+      </span>
+      <span class="popup__toggle-sublabel">
+        {{ tempEnabled() ? 'Browsing a wider nearby region (50 km)' : 'Using your set radius only' }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="popup__actions">
+    <button type="button" class="popup__btn popup__btn--reset" (click)="reset()">Reset</button>
+    <button type="button" class="popup__btn popup__btn--apply" (click)="apply()">Apply</button>
+  </div>
+
+</div>
