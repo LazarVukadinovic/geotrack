@@ -15,6 +15,7 @@ import { LandmarksSliderComponent } from '../../components/landmarks-slider/land
 import { LocalFavoritesListComponent } from '../../components/local-favorites-list/local-favorites-list.component';
 import { ExploreService } from '../../services/explore.service';
 import { itemMatchesExploreFilters } from '../../utils/explore-filter';
+import { NearMePopupComponent, type NearMeSettings } from '../../components/near-me-popup/near-me-popup.component';
 
 @Component({
   selector: 'app-explore-page',
@@ -32,6 +33,7 @@ import { itemMatchesExploreFilters } from '../../utils/explore-filter';
     MustSeeSliderComponent,
     LandmarksSliderComponent,
     LocalFavoritesListComponent,
+    NearMePopupComponent,
   ],
   templateUrl: './explore-page.component.html',
   styleUrl: './explore-page.component.scss',
@@ -110,8 +112,34 @@ export class ExplorePageComponent {
     /* future: router.navigate(['/places/category', id]) */
   }
 
-  /** Placeholder — replace with real bottom sheet / modal when the popup design is ready. */
-  protected openNearMePopup(): void {
-    /* future: open Near Me proximity settings popup */
+  // ─── Near me popup state ───────────────────────────────────────────────────
+
+  protected readonly nearMePopupOpen   = signal(false);
+  protected readonly nearMeRadius      = signal(2.5);
+  protected readonly nearMeEnabled     = signal(true);
+  protected readonly nearMePopupBottom = signal('0px');
+  protected readonly nearMePopupLeft   = signal('0px');
+
+  protected openNearMePopup(event: MouseEvent): void {
+    if (this.nearMePopupOpen()) {
+      this.nearMePopupOpen.set(false);
+      return;
+    }
+    const btn  = event.currentTarget as HTMLElement;
+    const rect = btn.getBoundingClientRect();
+    const gap  = 12;
+    this.nearMePopupBottom.set(`${window.innerHeight - rect.top + gap}px`);
+    this.nearMePopupLeft.set(`${rect.left}px`);
+    this.nearMePopupOpen.set(true);
+  }
+
+  protected closeNearMePopup(): void {
+    this.nearMePopupOpen.set(false);
+  }
+
+  protected onNearMeApply(settings: NearMeSettings): void {
+    this.nearMeRadius.set(settings.radius);
+    this.nearMeEnabled.set(settings.enabled);
+    this.nearMePopupOpen.set(false);
   }
 }

@@ -1,6 +1,25 @@
 <div class="explore-page">
   <app-header title="Explore" [showNotificationDot]="true" (search)="onHeaderSearch()" />
 
+  <!-- Transparent backdrop catches outside clicks when popup is open -->
+  @if (nearMePopupOpen()) {
+    <div
+      class="near-me-backdrop"
+      aria-hidden="true"
+      (click)="closeNearMePopup()"
+    ></div>
+
+    <!-- Near me floating popup anchored to the Near me button -->
+    <app-near-me-popup
+      [initialRadius]="nearMeRadius()"
+      [initialEnabled]="nearMeEnabled()"
+      [bottom]="nearMePopupBottom()"
+      [left]="nearMePopupLeft()"
+      (closed)="closeNearMePopup()"
+      (applied)="onNearMeApply($event)"
+    />
+  }
+
   <div class="explore-page__main">
     <app-welcome-hero [city]="heroCity()" [country]="heroCountry()" />
     <app-nearby-status-row [status]="nearbyStatus()" />
@@ -18,7 +37,8 @@
         type="button"
         class="filter-bar__near-me"
         aria-label="Open Near me settings"
-        (click)="openNearMePopup()"
+        [class.filter-bar__near-me--active]="nearMePopupOpen()"
+        (click)="openNearMePopup($event)"
       >
         <!-- Location pin icon -->
         <svg class="filter-bar__near-me-icon" viewBox="0 0 24 24" aria-hidden="true">
