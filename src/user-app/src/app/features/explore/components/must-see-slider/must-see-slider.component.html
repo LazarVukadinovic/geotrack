@@ -9,7 +9,15 @@
   <div class="mustsee-slider__viewport">
     <div class="mustsee-slider__track" role="list">
       @for (item of items(); track item.id) {
-        <article class="mustsee-slider__card" role="listitem">
+        <article
+          class="mustsee-slider__card"
+          role="button"
+          tabindex="0"
+          [attr.aria-label]="item.title"
+          (click)="onCardClick(item.id)"
+          (keydown.enter)="onCardClick(item.id)"
+          (keydown.space)="$event.preventDefault(); onCardClick(item.id)"
+        >
           <img
             class="mustsee-slider__img"
             [src]="imgSrcById()[item.id]"

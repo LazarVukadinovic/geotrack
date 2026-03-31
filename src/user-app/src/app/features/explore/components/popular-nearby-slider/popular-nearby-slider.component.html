@@ -9,7 +9,15 @@
   <div class="nearby-slider__viewport">
     <div class="nearby-slider__track" role="list">
       @for (item of items(); track item.id) {
-        <article class="nearby-slider__card" role="listitem">
+        <article
+          class="nearby-slider__card"
+          role="button"
+          tabindex="0"
+          [attr.aria-label]="item.title"
+          (click)="onCardClick(item.id)"
+          (keydown.enter)="onCardClick(item.id)"
+          (keydown.space)="$event.preventDefault(); onCardClick(item.id)"
+        >
           <div class="nearby-slider__media">
             <img
               class="nearby-slider__img"

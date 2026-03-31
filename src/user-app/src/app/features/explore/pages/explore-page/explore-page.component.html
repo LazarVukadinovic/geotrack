@@ -82,6 +82,7 @@
     <app-popular-nearby-slider
       [items]="popularNearby()"
       (bookmarkToggled)="toggleNearbySaved($event)"
+      (cardActivated)="onNearbyCard($event)"
     />
 
     <app-top-stays-slider
@@ -91,6 +92,7 @@
 
     <app-must-see-slider
       [items]="mustSeeAttractions()"
+      (cardActivated)="onAttractionCard($event)"
     />
 
     <app-landmarks-slider

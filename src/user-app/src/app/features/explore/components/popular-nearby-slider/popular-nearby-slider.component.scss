@@ -38,6 +38,15 @@
   box-shadow: var(--shadow-card);
   overflow: hidden;
   border: 1px solid rgba(26, 43, 76, 0.06);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+
+  &:active { transform: scale(0.97); }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent-orange);
+    outline-offset: 2px;
+  }
 }
 
 .nearby-slider__media {

@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal, viewChild } from '@angular/core';
+import { Router } from '@angular/router';
 import type { ExploreCategoryFilter } from '../../../../core/models/explore-item.model';
 import { EXPLORE_CATEGORY_FILTERS } from '../../../../core/constants/explore-ui.constants';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
@@ -39,7 +40,8 @@ import { NearMePopupComponent, type NearMeSettings } from '../../components/near
   styleUrl: './explore-page.component.scss',
 })
 export class ExplorePageComponent {
-  private readonly explore = inject(ExploreService);
+  private readonly explore   = inject(ExploreService);
+  private readonly router    = inject(Router);
   private readonly searchBar = viewChild(SearchBarComponent);
 
   /** Mock hero location — later replace with user / geo service. */
@@ -96,21 +98,40 @@ export class ExplorePageComponent {
     this.explore.toggleSaved(id, 'localFavorites');
   }
 
-  protected onLocalCard(_id: string): void {
-    /* future: router.navigate(['/places', id]) */
+  /** Navigate to Place Detail for non-hotel local favorites. */
+  protected onLocalCard(id: string): void {
+    const item = this.explore.localFavorites().find((i) => i.id === id);
+    if (!item || item.category === 'hotel') return;
+    this.router.navigate(['/places', id]);
+  }
+
+  /** Navigate to Place Detail for popular-nearby cards (all are places). */
+  protected onNearbyCard(id: string): void {
+    this.router.navigate(['/places', id]);
+  }
+
+  /** Navigate to Place Detail for must-see attraction cards. */
+  protected onAttractionCard(id: string): void {
+    this.router.navigate(['/places', id]);
   }
 
   protected onPromoCta(): void {
     /* future: router.navigate(['/auth/register']) */
   }
 
-  protected onEvent(_id: string): void {
-    /* future: open event detail */
-  }
+  /**
+   * Events are time-bound occurrences, not place entities.
+   * They do not navigate to Place Detail.
+   * future: router.navigate(['/events', id]) when event detail is implemented.
+   */
+  protected onEvent(_id: string): void {}
 
-  protected onLandmarkTile(_id: string): void {
-    /* future: router.navigate(['/places/category', id]) */
-  }
+  /**
+   * Landmark tiles are category browse entries (Beaches, Museums, Parks, Markets).
+   * They are not individual place entries and do not navigate to Place Detail.
+   * future: router.navigate(['/explore/category', id]) for category browsing.
+   */
+  protected onLandmarkTile(_id: string): void {}
 
   // ─── Near me popup state ───────────────────────────────────────────────────
 

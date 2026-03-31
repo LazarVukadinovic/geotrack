@@ -14,7 +14,8 @@ export class PopularNearbySliderComponent {
   readonly items = input.required<ExploreNearbyItem[]>();
 
   readonly bookmarkToggled = output<string>();
-  readonly sectionMore = output<void>();
+  readonly cardActivated   = output<string>();
+  readonly sectionMore     = output<void>();
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -34,6 +35,10 @@ export class PopularNearbySliderComponent {
     if (this.fallbackUsed.has(id)) return;
     this.fallbackUsed.add(id);
     this.imgSrcById.update((m) => ({ ...m, [id]: EXPLORE_IMAGE_FALLBACK }));
+  }
+
+  protected onCardClick(id: string): void {
+    this.cardActivated.emit(id);
   }
 
   protected toggleBookmark(event: Event, id: string): void {

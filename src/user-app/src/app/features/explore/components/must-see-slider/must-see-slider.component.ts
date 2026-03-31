@@ -13,7 +13,8 @@ import { SectionHeaderComponent } from '../../../../shared/components/section-he
 export class MustSeeSliderComponent {
   readonly items = input.required<ExploreAttraction[]>();
 
-  readonly sectionMore = output<void>();
+  readonly cardActivated = output<string>();
+  readonly sectionMore   = output<void>();
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -27,6 +28,10 @@ export class MustSeeSliderComponent {
       this.imgSrcById.set(next);
       this.fallbackUsed.clear();
     });
+  }
+
+  protected onCardClick(id: string): void {
+    this.cardActivated.emit(id);
   }
 
   protected onImgError(id: string): void {
