@@ -14,5 +14,11 @@ namespace Geotrack.Domain.Entities
         public ICollection<DestinationTag> DestinationTags { get; set; } = new List<DestinationTag>();
         public ICollection<PlaceTag> PlaceTags { get; set; } = new List<PlaceTag>();
         public ICollection<EventTag> EventTags { get; set; } = new List<EventTag>();
+
+        public string Description { get; set; } = string.Empty;
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public bool IsActive { get; set; }
     }
 }
