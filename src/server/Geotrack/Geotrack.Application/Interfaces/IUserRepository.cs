@@ -2,6 +2,6 @@
 
 namespace Geotrack.Application.Interfaces;
 
-public interface IUserRepository
+public interface IUserRepository : IRepository<User>
 {
 }

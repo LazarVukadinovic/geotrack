@@ -2,7 +2,7 @@
 
 namespace Geotrack.Application.Interfaces;
 
-public interface IDestinationRepository
+public interface IDestinationRepository : IRepository<Destination>
 {
 
 }

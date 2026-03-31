@@ -2,6 +2,6 @@
 
 namespace Geotrack.Application.Interfaces;
 
-public interface IPlaceRepository
+public interface IPlaceRepository : IRepository<Place>
 {
 }
