@@ -18,7 +18,7 @@
     </div>
 
     <h1 class="text-2xl font-bold text-[#0f172a] tracking-tight mb-1.5">Create your account</h1>
-    <p class="text-base text-slate-600 leading-relaxed">
+    <p class="text-base text-slate-700 leading-relaxed">
       Join our premium guide to unlock personalized recommendations and itineraries.
     </p>
   </div>
@@ -27,12 +27,12 @@
 
     <!-- Email -->
     <div class="mb-4">
-      <label class="ml-2 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Email Address
       </label>
       <div class="relative">
         <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-          <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
           </svg>
@@ -41,19 +41,19 @@
           type="email"
           [(ngModel)]="email"
           placeholder="name@example.com"
-          class="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-3xl text-sm text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8722a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
+          class="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8722a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
         />
       </div>
     </div>
 
     <!-- Create Password -->
     <div class="mb-3">
-      <label class="ml-2 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Create Password
       </label>
       <div class="relative">
         <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-          <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
           </svg>
@@ -64,7 +64,7 @@
           placeholder="Enter your password"
           autocomplete="new-password"
           (ngModelChange)="checkPasswordRequirements()"
-          class="w-full pl-10 pr-12 py-3.5 bg-white border border-slate-200 rounded-3xl text-sm text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8722a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
+          class="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8722a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
         />
         <button
           *ngIf="password.length > 0"
@@ -84,7 +84,7 @@
 
       <!-- Password requirements -->
       <div class="mt-4 bg-white border border-slate-100 rounded-2xl px-4 py-3 space-y-2">
-        <p class="text-xs font-bold text-slate-500 mb-2">Password requirements:</p>
+        <p class="text-sm font-bold text-slate-500 mb-2">Password requirements:</p>
         <div class="flex items-center gap-2">
           <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-none transition-colors duration-200"
             [class.border-[#e8722a]]="req.minLength"
@@ -94,7 +94,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
             </svg>
           </div>
-          <span class="text-xs" [class.text-slate-400]="!req.minLength" [class.text-[#e8722a]]="req.minLength">
+          <span class="text-xs" [class.text-slate-500]="!req.minLength" [class.text-[#e8722a]]="req.minLength">
             At least 8 characters long
           </span>
         </div>
@@ -107,7 +107,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
             </svg>
           </div>
-          <span class="text-xs" [class.text-slate-400]="!req.hasNumber" [class.text-[#e8722a]]="req.hasNumber">
+          <span class="text-xs" [class.text-slate-500]="!req.hasNumber" [class.text-[#e8722a]]="req.hasNumber">
             Contains a number
           </span>
         </div>
@@ -120,7 +120,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
             </svg>
           </div>
-          <span class="text-xs" [class.text-slate-400]="!req.hasSpecial" [class.text-[#e8722a]]="req.hasSpecial">
+          <span class="text-xs" [class.text-slate-500]="!req.hasSpecial" [class.text-[#e8722a]]="req.hasSpecial">
             Contains a special character
           </span>
         </div>
@@ -129,12 +129,12 @@
 
     <!-- Repeat Password -->
     <div class="mt-4 mb-10">
-      <label class="ml-2 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Repeat Password
       </label>
       <div class="relative">
         <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-          <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
           </svg>
@@ -144,7 +144,7 @@
           [(ngModel)]="repeatPassword"
           placeholder="Repeat your password"
           autocomplete="new-password"
-          class="w-full pl-10 pr-12 py-3.5 bg-white border border-slate-200 rounded-3xl text-sm text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8722a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
+          class="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8722a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
           [class.border-red-300]="repeatPassword && password !== repeatPassword"
         />
         <button
@@ -174,7 +174,7 @@
       </svg>
     </button>
 
-    <p class="text-center text-xs text-slate-400 mt-4">
+    <p class="text-center text-sm text-slate-400 mt-4">
       By continuing you agree to our
       <button class="text-slate-500 underline">Terms</button>
       &
@@ -183,7 +183,7 @@
 
     <div class="flex-1"></div>
 
-    <p class="text-center text-sm text-slate-500 mt-6">
+    <p class="text-center text-base text-slate-500 mt-6">
       Already have an account?
       <button (click)="goToLogin()" class="font-bold text-[#e8722a] ml-1">Sign in</button>
     </p>

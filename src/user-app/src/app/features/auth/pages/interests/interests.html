@@ -19,28 +19,28 @@
     </div>
 
     <h1 class="text-2xl font-bold text-[#0f172a] tracking-tight mb-1.5">Choose your interests</h1>
-    <p class="text-base text-slate-600 leading-relaxed">
+    <p class="text-base text-slate-700 leading-relaxed">
       Selecting interests helps personalize your recommendations and tailor your experience.
     </p>
   </div>
 
   <!-- Content -->
-  <div class="flex-1 px-6 pt-5 pb-6 flex flex-col bg-[#fafaf9] justify-center">
+  <div class="flex-1 px-6 pt-5 pb-28 flex flex-col bg-[#fafaf9]">
 
     <!-- Topics label + selected count -->
     <div class="flex items-center justify-between mb-5">
-      <span class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase">Suggested Topics</span>
-      <span class="text-[12px] font-bold text-slate-400">
+      <span class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase">Suggested Topics</span>
+      <span class="text-[12px] font-bold text-slate-600">
         {{ selectedInterests.length }} selected
       </span>
     </div>
 
     <!-- Interest chips -->
-    <div class="flex flex-wrap justify-center gap-5 mt-6 mb-10 max-w-md mx-auto">
+    <div class="flex flex-wrap justify-center gap-3 mt-6 mb-10 max-w-md mx-auto">
       <button
         *ngFor="let interest of interests"
         (click)="toggleInterest(interest)"
-        class="flex items-center gap-1.5 px-4 py-2.5 rounded-full border text-sm font-medium transition-all duration-200 active:scale-95"
+        class="flex items-center gap-1.5 px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-200"
         [class.bg-[#1a2b4a]]="isSelected(interest)"
         [class.border-[#1a2b4a]]="isSelected(interest)"
         [class.text-white]="isSelected(interest)"
@@ -48,7 +48,10 @@
         [class.border-slate-200]="!isSelected(interest)"
         [class.text-slate-600]="!isSelected(interest)">
         {{ interest }}
-        <svg *ngIf="isSelected(interest)" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-3.5 h-3.5 flex-none transition-opacity duration-200"
+          [class.opacity-100]="isSelected(interest)"
+          [class.opacity-0]="!isSelected(interest)"
+          fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
         </svg>
       </button>
@@ -70,17 +73,17 @@
       </svg>
     </button>
 
-    <button (click)="onSkip()" class="text-center text-sm text-slate-400 font-medium mt-4">
+    <button (click)="onSkip()" class="text-center text-base text-slate-500 font-medium mt-4">
       Skip for now
     </button>
 
-    <p class="text-center text-xs text-slate-300 mt-3 leading-relaxed">
+    <p class="text-center text-sm text-slate-400 mt-3 leading-relaxed">
       Don't worry, our AI will continually learn what<br/>you like based on your activity over time.
     </p>
   </div>
 
   <!-- Bottom nav -->
-  <div class="sticky bottom-0 bg-white border-t border-slate-100 px-2 py-2 flex justify-around items-center">
+  <div class="fixed bottom-0 left-0 w-full bg-white border-t border-slate-100 px-2 py-2 flex justify-around items-center">
     <button class="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-400">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9" stroke-width="1.5"/>
