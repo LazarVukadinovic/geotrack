@@ -21,5 +21,14 @@ namespace Geotrack.Domain.Entities
         public Place? Place { get; set; } // NAVIGATIONAL
 
         public ICollection<EventTag> EventTags { get; set; } = new List<EventTag>(); // NAVIGATIONAL
+
+        public string Description { get; set; } = string.Empty;
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public string Organizer { get; set; } = string.Empty;
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public bool IsActive { get; set; }
     }
 }

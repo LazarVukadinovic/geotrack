@@ -12,5 +12,11 @@ namespace Geotrack.Domain.Entities
         public string Name { get; set; } = string.Empty;
 
         public ICollection<Place> Places { get; set;} = new List<Place>(); // NAVIGATIONAL
+
+        public string Description { get; set; } = string.Empty;
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public bool IsActive { get; set; }
     }
 }
