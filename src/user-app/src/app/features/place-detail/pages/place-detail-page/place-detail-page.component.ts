@@ -29,8 +29,17 @@ export class PlaceDetailPageComponent {
     this.service.getPlaceDetailPageData(this.placeId()),
   );
 
+  /** 0 = transparent top bar, 1 = full navy + visible title. Driven by pd__scroll. */
+  protected readonly scrollProgress = signal(0);
+
   /** Local saved state for similar-place cards (transient, not persisted). */
   private readonly _similarSaved = signal<Record<string, boolean>>({});
+
+  /** Called by (scroll) on .pd__scroll — the page's own scroll container. */
+  protected onScroll(event: Event): void {
+    const scrollTop = (event.currentTarget as Element).scrollTop;
+    this.scrollProgress.set(Math.min(scrollTop / 200, 1));
+  }
 
   protected isSimilarSaved(id: string): boolean {
     return this._similarSaved()[id] ?? false;

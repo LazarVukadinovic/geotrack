@@ -1,39 +1,68 @@
 // ─── Host ─────────────────────────────────────────────────────────────────────
+// height: 100dvh + overflow: hidden make this page its own sealed viewport.
+// The app-shell__viewport (min-height: 100dvh, overflow-y: auto) never needs to
+// scroll — all scrolling happens inside .pd__scroll below.
 
 :host {
   display: block;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--color-page-bg, #f8f9fa);
 }
 
-// ─── Hero ─────────────────────────────────────────────────────────────────────
+// ─── Page root ────────────────────────────────────────────────────────────────
 
-.pd__hero {
+.pd {
   position: relative;
-  height: 248px;
-  overflow: hidden;
-  background: #dde0e7;
-}
-
-.pd__hero-img {
-  width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center;
-  display: block;
 }
 
-.pd__hero-overlay {
+// ─── Top bar ──────────────────────────────────────────────────────────────────
+// position: absolute within .pd (which fills the sealed viewport).
+// z-index: 200 keeps it above .pd__scroll (z-index: 1) and .pd__hero (z-index: 0).
+// pointer-events: none on the container lets scroll gestures pass through to
+// .pd__scroll; only the actual buttons re-enable interaction.
+
+.pd__top-bar {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  pointer-events: none;
+
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  padding: calc(env(safe-area-inset-top, 0px) + 48px) 16px 0;
+
+  // 20px below safe area — a balanced placement on the hero image.
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 16px 16px;
+
+  // Background fades from fully transparent to navy as --progress goes 0 → 1.
+  background: rgba(26, 43, 76, var(--progress, 0));
+  border-radius: 0 0 18px 18px;
+
+  > * { pointer-events: auto; }
+}
+
+.pd__top-bar-title {
+  position: absolute;
+  left: 50%;
+  // transform: translateX(-50%) translateY(calc((1 - var(--progress, 0)) * 10px));
+    transform: translateX(-50%) translateY(calc(0) * 10px);
+  opacity: var(--progress, 0);
+
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
   pointer-events: none;
 }
 
+// ─── Action buttons ───────────────────────────────────────────────────────────
+
 .pd__hero-btn {
-  pointer-events: all;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -54,33 +83,74 @@
     height: 18px;
   }
 
-  &:hover {
-    background: rgba(255, 255, 255, 0.98);
-  }
+  &:hover { background: rgba(255, 255, 255, 0.98); }
+  &:active { transform: scale(0.94); }
 
-  &:active {
-    transform: scale(0.94);
-  }
-
-  &--saved {
-    color: #e8570a;
-  }
+  &--saved { color: #e8570a; }
 }
 
 .pd__hero-actions {
-  pointer-events: all;
   display: flex;
   gap: 8px;
 }
 
-// ─── Floating content card ────────────────────────────────────────────────────
+// ─── Hero image ───────────────────────────────────────────────────────────────
+// Absolutely positioned — it never moves. The scroll container overlays it at
+// z-index: 1 and the spacer inside the scroll container creates a transparent
+// window that reveals the hero until the card scrolls up over it.
+
+.pd__hero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 300px;
+  overflow: hidden;
+  background: #dde0e7;
+  z-index: 0;
+}
+
+.pd__hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+// ─── Scroll container ─────────────────────────────────────────────────────────
+// Covers the full .pd area (inset: 0) and is the only element that scrolls.
+// z-index: 1 places it above the hero image.
+// Its background is transparent — the hero shows through the spacer at the top.
+
+.pd__scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  z-index: 1;
+}
+
+// ─── Spacer ───────────────────────────────────────────────────────────────────
+// Height = hero height (300px) minus the card's top overlap (32px).
+// This transparent gap reveals the hero image before the card starts.
+// As the user scrolls, the gap shrinks and the card covers more of the hero.
+
+.pd__scroll-spacer {
+  height: 268px;
+  flex-shrink: 0;
+}
+
+// ─── Content card ─────────────────────────────────────────────────────────────
+// No margin-top needed — the spacer above handles the 32px overlap into the hero.
 
 .pd__card {
+  position: relative;
   background: #ffffff;
   border-radius: 24px 24px 0 0;
-  margin-top: -24px;
   padding: 22px 20px calc(env(safe-area-inset-bottom, 0px) + 32px);
-  position: relative;
+  min-height: calc(100dvh - 200px);
 }
 
 // ─── Category tags ────────────────────────────────────────────────────────────
@@ -170,9 +240,7 @@
   font-weight: 600;
   color: #1a2b4c;
 
-  &--open {
-    color: #0d9488;
-  }
+  &--open { color: #0d9488; }
 }
 
 .pd__stat-sub {
@@ -254,9 +322,7 @@
 .pd__section {
   margin-bottom: 8px;
 
-  &--last {
-    margin-bottom: 0;
-  }
+  &--last { margin-bottom: 0; }
 }
 
 .pd__section-title {
