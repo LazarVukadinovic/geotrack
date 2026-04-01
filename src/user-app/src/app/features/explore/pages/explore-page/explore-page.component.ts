@@ -6,7 +6,6 @@ import { AppHeaderComponent } from '../../../../shared/components/app-header/app
 import { SearchBarComponent } from '../../../../shared/components/search-bar/search-bar.component';
 import { FilterPillsComponent } from '../../../../shared/components/filter-pills/filter-pills.component';
 import { WelcomeHeroComponent } from '../../components/welcome-hero/welcome-hero.component';
-import { NearbyStatusRowComponent } from '../../components/nearby-status-row/nearby-status-row.component';
 import { PromoCardComponent } from '../../components/promo-card/promo-card.component';
 import { EventsSliderComponent } from '../../components/events-slider/events-slider.component';
 import { PopularNearbySliderComponent } from '../../components/popular-nearby-slider/popular-nearby-slider.component';
@@ -26,7 +25,6 @@ import { NearMePopupComponent, type NearMeSettings } from '../../components/near
     SearchBarComponent,
     FilterPillsComponent,
     WelcomeHeroComponent,
-    NearbyStatusRowComponent,
     PromoCardComponent,
     EventsSliderComponent,
     PopularNearbySliderComponent,
@@ -52,7 +50,6 @@ export class ExplorePageComponent {
   protected readonly searchQuery = signal('');
   protected readonly activeCategory = signal<ExploreCategoryFilter>('all');
 
-  protected readonly nearbyStatus = computed(() => this.explore.nearbyStatus());
   protected readonly promo = computed(() => this.explore.promo());
 
   protected readonly eventsThisWeek = computed(() => {
