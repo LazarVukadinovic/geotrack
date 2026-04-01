@@ -23,10 +23,7 @@ namespace Geotrack.Domain.Entities
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
 
-        public int MaxPeople { get; set; }
-
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
-        public bool IsActive { get; set; }
     }
 }

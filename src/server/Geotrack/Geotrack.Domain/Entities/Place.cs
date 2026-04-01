@@ -22,17 +22,13 @@ namespace Geotrack.Domain.Entities
         public ICollection<PlaceTag> PlaceTags { get; set; } = new List<PlaceTag>(); // NAVIGATIONAL
 
         public string Description { get; set; } = string.Empty;
-        public string Address { get; set; } = string.Empty;
-
         public double Latitude { get; set; }
         public double Longitude { get; set; }
 
-        public string ContactEmail { get; set; } = string.Empty;
-        public string Number { get; set; } = string.Empty;
+        public string? ContactEmail { get; set; } = string.Empty;
+        public string? Number { get; set; } = string.Empty;
 
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
-        public bool IsActive { get; set; }
-
-    }
+    } 
 }

@@ -5,7 +5,6 @@ namespace Geotrack.Infrastructure;
 
 public class AppDbContext : DbContext
 {
-
     public DbSet<Destination> Destinations => Set<Destination>();
     public DbSet<DestinationType> DestinationTypes => Set<DestinationType>();
 
@@ -45,82 +44,55 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("Destinations");
 
-            entity.HasKey(e => e.Id);
+            entity.HasKey(x => x.Id);
 
-            entity.Property(e => e.Name)
+            entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(200);
 
-            entity.Property(e => e.DestinationTypeId)
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Latitude)
                 .IsRequired();
 
-            entity.HasOne(e => e.DestinationType)
-                .WithMany(e => e.Destinations)
-                .HasForeignKey(e => e.DestinationTypeId)
+            entity.Property(x => x.Longitude)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(x => x.DestinationType)
+                .WithMany(x => x.Destinations)
+                .HasForeignKey(x => x.DestinationTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(e => e.DestinationTypeId);
+            entity.HasIndex(x => x.DestinationTypeId);
         });
 
         modelBuilder.Entity<DestinationType>(entity =>
         {
             entity.ToTable("DestinationTypes");
 
-            entity.HasKey(e => e.Id);
+            entity.HasKey(x => x.Id);
 
-            entity.Property(e => e.Name)
+            entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(100);
 
-            entity.HasIndex(e => e.Name)
-                .IsUnique();
-        });
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
 
-        modelBuilder.Entity<Event>(entity =>
-        {
-            entity.ToTable("Events");
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
 
-            entity.HasKey(e => e.Id);
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
 
-            entity.Property(e => e.Name)
-                .IsRequired()
-                .HasMaxLength(200);
-
-            entity.Property(e => e.EventTypeId).IsRequired();
-            entity.Property(e => e.LocationId).IsRequired();
-            entity.Property(e => e.PlaceId).IsRequired(false);
-
-            entity.HasOne(e => e.EventType)
-                .WithMany(e => e.Events)
-                .HasForeignKey(e => e.EventTypeId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Location)
-                .WithMany(e => e.Events)
-                .HasForeignKey(e => e.LocationId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Place)
-                .WithMany(e => e.Events)
-                .HasForeignKey(e => e.PlaceId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasIndex(e => e.EventTypeId);
-            entity.HasIndex(e => e.LocationId);
-            entity.HasIndex(e => e.PlaceId);
-        });
-
-        modelBuilder.Entity<EventType>(entity =>
-        {
-            entity.ToTable("EventTypes");
-
-            entity.HasKey(e => e.Id);
-
-            entity.Property(e => e.Name)
-                .IsRequired()
-                .HasMaxLength(100);
-
-            entity.HasIndex(e => e.Name)
+            entity.HasIndex(x => x.Name)
                 .IsUnique();
         });
 
@@ -128,139 +100,196 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("Locations");
 
-            entity.HasKey(e => e.Id);
+            entity.HasKey(x => x.Id);
 
-            entity.Property(e => e.Name)
+            entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(200);
 
-            entity.Property(e => e.DestinationId).IsRequired();
-            entity.Property(e => e.LocationTypeId).IsRequired();
+            entity.Property(x => x.Latitude)
+                .IsRequired();
 
-            entity.HasOne(e => e.Destination)
-                .WithMany(e => e.Locations)
-                .HasForeignKey(e => e.DestinationId)
+            entity.Property(x => x.Longitude)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(x => x.Destination)
+                .WithMany(x => x.Locations)
+                .HasForeignKey(x => x.DestinationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(e => e.LocationType)
-                .WithMany(e => e.Locations)
-                .HasForeignKey(e => e.LocationTypeId)
+            entity.HasOne(x => x.LocationType)
+                .WithMany(x => x.Locations)
+                .HasForeignKey(x => x.LocationTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(e => e.DestinationId);
-            entity.HasIndex(e => e.LocationTypeId);
+            entity.HasIndex(x => x.DestinationId);
+            entity.HasIndex(x => x.LocationTypeId);
         });
 
         modelBuilder.Entity<LocationType>(entity =>
         {
             entity.ToTable("LocationTypes");
 
-            entity.HasKey(e => e.Id);
+            entity.HasKey(x => x.Id);
 
-            entity.Property(e => e.Name)
+            entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(100);
 
-            entity.HasIndex(e => e.Name)
-                .IsUnique();
-        });
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
 
-        modelBuilder.Entity<Offer>(entity =>
-        {
-            entity.ToTable("Offers");
-
-            entity.HasKey(e => e.Id);
-
-            entity.Property(e => e.Name)
-                .IsRequired()
-                .HasMaxLength(200);
-
-            entity.Property(e => e.TravelAgencyId)
+            entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
-            entity.HasOne(e => e.Agency)
-                .WithMany(e => e.Offers)
-                .HasForeignKey(e => e.TravelAgencyId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
 
-            entity.HasIndex(e => e.TravelAgencyId);
-        });
-
-        modelBuilder.Entity<OfferDestination>(entity =>
-        {
-            entity.ToTable("OfferDestinations");
-
-            entity.HasKey(e => new { e.OfferId, e.DestinationId });
-
-            entity.Property(e => e.OfferId).IsRequired();
-            entity.Property(e => e.DestinationId).IsRequired();
-
-            entity.HasOne(e => e.Offer)
-                .WithMany(e => e.OfferDestinations)
-                .HasForeignKey(e => e.OfferId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Destination)
-                .WithMany()
-                .HasForeignKey(e => e.DestinationId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => e.OfferId);
-            entity.HasIndex(e => e.DestinationId);
+            entity.HasIndex(x => x.Name)
+                .IsUnique();
         });
 
         modelBuilder.Entity<Place>(entity =>
         {
             entity.ToTable("Places");
 
-            entity.HasKey(e => e.Id);
+            entity.HasKey(x => x.Id);
 
-            entity.Property(e => e.Name)
+            entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(200);
 
-            entity.Property(e => e.PlaceTypeId).IsRequired();
-            entity.Property(e => e.LocationId).IsRequired();
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
 
-            entity.HasOne(e => e.PlaceType)
-                .WithMany(e => e.Places)
-                .HasForeignKey(e => e.PlaceTypeId)
+            entity.Property(x => x.Latitude)
+                .IsRequired();
+
+            entity.Property(x => x.Longitude)
+                .IsRequired();
+
+            entity.Property(x => x.ContactEmail)
+                .HasMaxLength(200)
+                .IsRequired(false);
+
+            entity.Property(x => x.Number)
+                .HasMaxLength(50)
+                .IsRequired(false);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(x => x.PlaceType)
+                .WithMany(x => x.Places)
+                .HasForeignKey(x => x.PlaceTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(e => e.Location)
-                .WithMany(e => e.Places)
-                .HasForeignKey(e => e.LocationId)
+            entity.HasOne(x => x.Location)
+                .WithMany(x => x.Places)
+                .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(e => e.PlaceTypeId);
-            entity.HasIndex(e => e.LocationId);
+            entity.HasIndex(x => x.PlaceTypeId);
+            entity.HasIndex(x => x.LocationId);
         });
 
         modelBuilder.Entity<PlaceType>(entity =>
         {
             entity.ToTable("PlaceTypes");
 
-            entity.HasKey(e => e.Id);
+            entity.HasKey(x => x.Id);
 
-            entity.Property(e => e.Name)
+            entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(100);
 
-            entity.HasIndex(e => e.Name)
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasIndex(x => x.Name)
                 .IsUnique();
         });
 
-        modelBuilder.Entity<Role>(entity =>
+        modelBuilder.Entity<Event>(entity =>
         {
-            entity.ToTable("Roles");
+            entity.ToTable("Events");
 
-            entity.HasKey(e => e.Id);
+            entity.HasKey(x => x.Id);
 
-            entity.Property(e => e.Name)
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.StartDate)
+                .IsRequired();
+
+            entity.Property(x => x.EndDate)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(x => x.EventType)
+                .WithMany(x => x.Events)
+                .HasForeignKey(x => x.EventTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Location)
+                .WithMany(x => x.Events)
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.Events)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.EventTypeId);
+            entity.HasIndex(x => x.LocationId);
+            entity.HasIndex(x => x.PlaceId);
+        });
+
+        modelBuilder.Entity<EventType>(entity =>
+        {
+            entity.ToTable("EventTypes");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(100);
 
-            entity.HasIndex(e => e.Name)
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasIndex(x => x.Name)
                 .IsUnique();
         });
 
@@ -268,34 +297,157 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("TravelAgencies");
 
-            entity.HasKey(e => e.Id);
+            entity.HasKey(x => x.Id);
 
-            entity.Property(e => e.Name)
+            entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(200);
 
-            entity.HasIndex(e => e.Name)
+            entity.Property(x => x.Email)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.PhoneNumber)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.Address)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.Website)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.Property(x => x.IsActive)
+                .IsRequired();
+
+            entity.HasIndex(x => x.Name)
                 .IsUnique();
+
+            entity.HasIndex(x => x.Email)
+                .IsUnique(false);
+        });
+
+        modelBuilder.Entity<Offer>(entity =>
+        {
+            entity.ToTable("Offers");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Price)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.StartDate)
+                .IsRequired();
+
+            entity.Property(x => x.EndDate)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasOne(x => x.Agency)
+                .WithMany(x => x.Offers)
+                .HasForeignKey(x => x.TravelAgencyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TravelAgencyId);
+        });
+
+        modelBuilder.Entity<OfferDestination>(entity =>
+        {
+            entity.ToTable("OfferDestinations");
+
+            entity.HasKey(x => new { x.OfferId, x.DestinationId });
+
+            entity.HasOne(x => x.Offer)
+                .WithMany(x => x.OfferDestinations)
+                .HasForeignKey(x => x.OfferId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Destination)
+                .WithMany()
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.DestinationId);
         });
 
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("Users");
 
-            entity.HasKey(e => e.Id);
+            entity.HasKey(x => x.Id);
 
-            entity.Property(e => e.Username)
+            entity.Property(x => x.Username)
                 .IsRequired()
                 .HasMaxLength(100);
 
-            entity.Property(e => e.Email)
+            entity.Property(x => x.Email)
                 .IsRequired()
                 .HasMaxLength(200);
 
-            entity.HasIndex(e => e.Username)
+            entity.Property(x => x.FirstName)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.LastName)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.PasswordHash)
+                .IsRequired()
+                .HasMaxLength(500);
+
+            entity.Property(x => x.PhoneNumber)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasIndex(x => x.Username)
                 .IsUnique();
 
-            entity.HasIndex(e => e.Email)
+            entity.HasIndex(x => x.Email)
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<Role>(entity =>
+        {
+            entity.ToTable("Roles");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
+            entity.HasIndex(x => x.Name)
                 .IsUnique();
         });
 
@@ -303,17 +455,19 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("UserRoles");
 
-            entity.HasKey(e => new { e.UserId, e.RoleId });
+            entity.HasKey(x => new { x.UserId, x.RoleId });
 
-            entity.HasOne(e => e.User)
-                .WithMany(e => e.UserRoles)
-                .HasForeignKey(e => e.UserId)
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.UserRoles)
+                .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(e => e.Role)
-                .WithMany(e => e.UserRoles)
-                .HasForeignKey(e => e.RoleId)
+            entity.HasOne(x => x.Role)
+                .WithMany(x => x.UserRoles)
+                .HasForeignKey(x => x.RoleId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.RoleId);
         });
 
         modelBuilder.Entity<Tag>(entity =>
@@ -326,9 +480,17 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(100);
 
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired(false);
+
             entity.HasIndex(x => x.Name)
                 .IsUnique();
-
         });
 
         modelBuilder.Entity<DestinationTag>(entity =>
@@ -346,6 +508,8 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.DestinationTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TagId);
         });
 
         modelBuilder.Entity<PlaceTag>(entity =>
@@ -363,6 +527,8 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.PlaceTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TagId);
         });
 
         modelBuilder.Entity<EventTag>(entity =>
@@ -380,6 +546,8 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.EventTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TagId);
         });
     }
 }
