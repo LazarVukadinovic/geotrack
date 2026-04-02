@@ -21,6 +21,7 @@ builder.Services.AddScoped<ILocationRepository, LocationRepository>();
 builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<ITravelAgencyRepository, TravelAgencyRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRegionRepository, RegionRepository>();
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 
 // builder.Services.AddScoped<UserService>();
