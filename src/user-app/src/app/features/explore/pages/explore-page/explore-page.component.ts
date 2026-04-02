@@ -1,6 +1,7 @@
-import { Component, computed, inject, signal, viewChild } from '@angular/core';
+import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import type { ExploreCategoryFilter } from '../../../../core/models/explore-item.model';
+import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { EXPLORE_CATEGORY_FILTERS } from '../../../../core/constants/explore-ui.constants';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
 import { SearchBarComponent } from '../../../../shared/components/search-bar/search-bar.component';
@@ -37,10 +38,12 @@ import { NearMePopupComponent, type NearMeSettings } from '../../components/near
   templateUrl: './explore-page.component.html',
   styleUrl: './explore-page.component.scss',
 })
-export class ExplorePageComponent {
-  private readonly explore   = inject(ExploreService);
-  private readonly router    = inject(Router);
-  private readonly searchBar = viewChild(SearchBarComponent);
+export class ExplorePageComponent implements AfterViewInit, OnDestroy {
+  private readonly explore      = inject(ExploreService);
+  private readonly router       = inject(Router);
+  private readonly elRef        = inject(ElementRef<HTMLElement>);
+  private readonly scrollState  = inject(ExploreScrollStateService);
+  private readonly searchBar    = viewChild(SearchBarComponent);
 
   /** Mock hero location — later replace with user / geo service. */
   protected readonly heroCity = signal('Dubrovnik');
@@ -99,16 +102,19 @@ export class ExplorePageComponent {
   protected onLocalCard(id: string): void {
     const item = this.explore.localFavorites().find((i) => i.id === id);
     if (!item || item.category === 'hotel') return;
+    this.scrollState.markClickedItem('local-favorites', id);
     this.router.navigate(['/places', id]);
   }
 
   /** Navigate to Place Detail for popular-nearby cards (all are places). */
   protected onNearbyCard(id: string): void {
+    this.scrollState.markClickedItem('nearby', id);
     this.router.navigate(['/places', id]);
   }
 
   /** Navigate to Place Detail for must-see attraction cards. */
   protected onAttractionCard(id: string): void {
+    this.scrollState.markClickedItem('must-see', id);
     this.router.navigate(['/places', id]);
   }
 
@@ -129,6 +135,61 @@ export class ExplorePageComponent {
    * future: router.navigate(['/explore/category', id]) for category browsing.
    */
   protected onLandmarkTile(_id: string): void {}
+
+  // ─── Scroll state preservation ────────────────────────────────────────────
+
+  ngAfterViewInit(): void {
+    const state = this.scrollState.pop();
+    if (!state) return;
+
+    const host = this.elRef.nativeElement as HTMLElement;
+    const viewport = host.closest<HTMLElement>('.app-shell__viewport');
+
+    // Restore vertical scroll immediately (first rAF — pre-paint).
+    if (viewport && state.scrollTop > 0) {
+      requestAnimationFrame(() => {
+        viewport.scrollTop = state.scrollTop;
+      });
+    }
+
+    // Slider effects (imgSrcById) fire asynchronously after view init and can
+    // reset DOM state. We wait for two animation frames so those effects have
+    // fully settled before we write scrollLeft or invoke scrollIntoView.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // 1. Restore all slider scrollLeft values from the saved snapshot.
+        for (const [id, left] of Object.entries(state.sliders)) {
+          const track = host.querySelector<HTMLElement>(`[data-slider-id="${id}"]`);
+          if (track) track.scrollLeft = left;
+        }
+
+        // 2. If a specific card was clicked, use it as the authoritative anchor.
+        //    scrollIntoView with nearest/center keeps it visible and overrides
+        //    any remaining imprecision from the raw scrollLeft restore above.
+        if (state.clickedItem) {
+          const { sliderId, itemId } = state.clickedItem;
+          const track = host.querySelector<HTMLElement>(`[data-slider-id="${sliderId}"]`);
+          const card  = track?.querySelector<HTMLElement>(`[data-item-id="${itemId}"]`);
+          card?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+        }
+      });
+    });
+  }
+
+  ngOnDestroy(): void {
+    const host = this.elRef.nativeElement as HTMLElement;
+    const viewport = host.closest<HTMLElement>('.app-shell__viewport');
+    const scrollTop = viewport?.scrollTop ?? 0;
+
+    const tracks = host.querySelectorAll<HTMLElement>('[data-slider-id]');
+    const sliders: Record<string, number> = {};
+    tracks.forEach((track) => {
+      const id = track.dataset['sliderId'];
+      if (id) sliders[id] = track.scrollLeft;
+    });
+
+    this.scrollState.save(scrollTop, sliders);
+  }
 
   // ─── Near me popup state ───────────────────────────────────────────────────
 

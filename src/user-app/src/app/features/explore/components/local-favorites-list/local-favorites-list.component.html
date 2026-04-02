@@ -10,9 +10,9 @@
     <app-empty-state title="No matches" message="Try another search or category." />
   } @else {
     <div class="local-favorites__viewport">
-      <div class="local-favorites__track" role="list">
+      <div class="local-favorites__track" data-slider-id="local-favorites" role="list">
         @for (item of items(); track item.id) {
-          <div class="local-favorites__cell" role="listitem">
+          <div class="local-favorites__cell" role="listitem" [attr.data-item-id]="item.id">
             <app-destination-card
               [item]="item"
               (bookmarkToggled)="bookmarkToggled.emit($event)"
