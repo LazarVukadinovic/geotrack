@@ -52,12 +52,17 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
                     b.HasIndex("DestinationTypeId");
+
+                    b.HasIndex("RegionId");
 
                     b.ToTable("Destinations", (string)null);
                 });
@@ -436,6 +441,64 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("PlaceTypes", (string)null);
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Region", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Regions", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.RegionalOrganization", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("RegionalOrganizations", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.RegionalOrganizationRegion", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "RegionId");
+
+                    b.HasIndex("RegionId");
+
+                    b.ToTable("RegionalOrganizationRegions", (string)null);
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Role", b =>
                 {
                     b.Property<int>("Id")
@@ -544,8 +607,6 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Email");
-
                     b.HasIndex("Name")
                         .IsUnique();
 
@@ -630,7 +691,15 @@ namespace Geotrack.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Geotrack.Domain.Entities.Region", "Region")
+                        .WithMany("Destinations")
+                        .HasForeignKey("RegionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("DestinationType");
+
+                    b.Navigation("Region");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.DestinationTag", b =>
@@ -784,6 +853,36 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.RegionalOrganization", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.User", "User")
+                        .WithOne("RegionalOrganization")
+                        .HasForeignKey("Geotrack.Domain.Entities.RegionalOrganization", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.RegionalOrganizationRegion", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Region", "Region")
+                        .WithMany("RegionalOrganizationRegions")
+                        .HasForeignKey("RegionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Geotrack.Domain.Entities.RegionalOrganization", "RegionalOrganization")
+                        .WithMany("RegionalOrganizationRegions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Region");
+
+                    b.Navigation("RegionalOrganization");
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.UserRole", b =>
                 {
                     b.HasOne("Geotrack.Domain.Entities.Role", "Role")
@@ -854,6 +953,18 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("Places");
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Region", b =>
+                {
+                    b.Navigation("Destinations");
+
+                    b.Navigation("RegionalOrganizationRegions");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.RegionalOrganization", b =>
+                {
+                    b.Navigation("RegionalOrganizationRegions");
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Role", b =>
                 {
                     b.Navigation("UserRoles");
@@ -875,6 +986,8 @@ namespace Geotrack.Infrastructure.Migrations
 
             modelBuilder.Entity("Geotrack.Domain.Entities.User", b =>
                 {
+                    b.Navigation("RegionalOrganization");
+
                     b.Navigation("UserRoles");
                 });
 #pragma warning restore 612, 618

@@ -127,7 +127,7 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("Roles");
                 });
 
-            modelBuilder.Entity("Geotrack.Domain.Entities.User", b =>
+            modelBuilder.Entity("Geotrack.Domain.Entities.RegionalOrganization", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -228,7 +228,7 @@ namespace Geotrack.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Geotrack.Domain.Entities.User", null)
+                    b.HasOne("Geotrack.Domain.Entities.RegionalOrganization", null)
                         .WithMany()
                         .HasForeignKey("UsersId")
                         .OnDelete(DeleteBehavior.Cascade)

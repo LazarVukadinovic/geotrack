@@ -18,6 +18,9 @@ namespace Geotrack.Domain.Entities
         public ICollection<Location> Locations { get; set; } = new List<Location>(); // NAVIGATIONAL
         public ICollection<DestinationTag> DestinationTags { get; set; } = new List<DestinationTag>(); // NAVIGATIONAL
 
+        public int RegionId { get; set; } // FOREIGN KEY
+        public Region Region { get; set; } = null!; // NAVIGATIONAL
+
         public string Description { get; set; } = string.Empty;
         public double Latitude { get; set; }
         public double Longitude { get; set; }
