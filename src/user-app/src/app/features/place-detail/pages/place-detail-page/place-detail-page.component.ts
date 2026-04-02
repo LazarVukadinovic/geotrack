@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -31,6 +31,20 @@ export class PlaceDetailPageComponent {
 
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by pd__scroll. */
   protected readonly scrollProgress = signal(0);
+
+  private readonly pdScroll = viewChild<ElementRef<HTMLElement>>('pdScroll');
+
+  constructor() {
+    // When the route param changes (Similar Places card clicked), the same
+    // component instance is reused by Angular's RouteReuseStrategy. The scroll
+    // container keeps its current scrollTop unless we explicitly reset it.
+    effect(() => {
+      this.placeId(); // subscribe — runs on every id change
+      this.scrollProgress.set(0);
+      const el = this.pdScroll()?.nativeElement;
+      if (el) el.scrollTop = 0;
+    });
+  }
 
   /** Local saved state for similar-place cards (transient, not persisted). */
   private readonly _similarSaved = signal<Record<string, boolean>>({});

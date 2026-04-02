@@ -64,7 +64,7 @@
     <!-- ── Scroll container: owns all scrolling for this page ────────────── -->
     <!-- The spacer reveals the hero behind; the card slides over it as the  -->
     <!-- user scrolls. Scroll events here drive the top-bar progress signal. -->
-    <div class="pd__scroll" (scroll)="onScroll($event)">
+    <div class="pd__scroll" #pdScroll (scroll)="onScroll($event)">
       <div class="pd__scroll-spacer" aria-hidden="true"></div>
 
       <div class="pd__card">
