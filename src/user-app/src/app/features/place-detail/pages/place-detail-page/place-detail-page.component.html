@@ -159,64 +159,54 @@
             (action)="onSeeAllReviews()"
           />
 
-          <!-- Write a review row -->
-          <div class="pd__write-review">
-            <div class="pd__user-avatar" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="8" r="4" fill="#d1d5db"/>
-                <path d="M4 20c0-4 3.58-7 8-7s8 3 8 7" fill="#d1d5db"/>
-              </svg>
+          <!-- Login / review CTA -->
+          <div class="pd__review-cta">
+            <div class="pd__review-cta-text">
+              <span class="pd__review-cta-title">Share your experience</span>
+              <span class="pd__review-cta-sub">Log in to leave a review</span>
             </div>
-            <div class="pd__write-body">
-              <span class="pd__write-label">Write a Review</span>
-              <div class="pd__write-stars" aria-label="Tap to rate">
-                @for (i of [1, 2, 3, 4, 5]; track i) {
-                  <svg class="pd__write-star" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke="#d1d5db" fill="none" stroke-width="1.5"
-                          d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
-                  </svg>
-                }
-              </div>
-            </div>
+            <button type="button" class="pd__review-cta-btn">Log In</button>
           </div>
 
           <!-- Review cards -->
-          @for (review of p.reviews; track review.id) {
-            <div class="pd__review">
-              <div class="pd__review-top">
-                <img
-                  class="pd__review-avatar"
-                  [src]="review.avatarUrl"
-                  [alt]="review.authorName"
-                  width="40"
-                  height="40"
-                  loading="lazy"
-                  decoding="async"
-                />
-                <div class="pd__review-meta">
-                  <span class="pd__review-name">{{ review.authorName }}</span>
-                  <span class="pd__review-time">{{ review.timeAgo }}</span>
+          <div class="pd__reviews-list">
+            @for (review of p.reviews; track review.id) {
+              <div class="pd__review">
+                <div class="pd__review-top">
+                  <img
+                    class="pd__review-avatar"
+                    [src]="review.avatarUrl"
+                    [alt]="review.authorName"
+                    width="44"
+                    height="44"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <div class="pd__review-meta">
+                    <span class="pd__review-name">{{ review.authorName }}</span>
+                    <span class="pd__review-time">{{ review.timeAgo }}</span>
+                  </div>
+                  <div class="pd__review-rating">
+                    <svg class="pd__review-star" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="currentColor"
+                            d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                    </svg>
+                    <span>{{ review.rating.toFixed(1) }}</span>
+                  </div>
                 </div>
-                <div class="pd__review-rating">
-                  <svg class="pd__review-star" viewBox="0 0 24 24" aria-hidden="true">
+
+                <p class="pd__review-body">{{ review.body }}</p>
+
+                <button type="button" class="pd__review-helpful">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path fill="currentColor"
-                          d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                          d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
                   </svg>
-                  <span>{{ review.rating.toFixed(1) }}</span>
-                </div>
+                  Helpful ({{ review.helpfulCount }})
+                </button>
               </div>
-
-              <p class="pd__review-body">{{ review.body }}</p>
-
-              <button type="button" class="pd__review-helpful">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="currentColor"
-                        d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
-                </svg>
-                Helpful ({{ review.helpfulCount }})
-              </button>
-            </div>
-          }
+            }
+          </div>
         </section>
 
         <!-- ── Similar Places ─────────────────────────────────────────── -->
