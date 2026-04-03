@@ -2,6 +2,11 @@ using Geotrack.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Geotrack.Application.Interfaces;
 using Geotrack.Infrastructure.Repositories;
+using Geotrack.Application.Services;
+using Geotrack.Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,9 +29,31 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRegionRepository, RegionRepository>();
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IJwtService, JwtService>();
+
 // builder.Services.AddScoped<UserService>();
 // builder.Services.AddScoped<RoleService>();
 // builder.Services.AddScoped<DestinationService>();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]);
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(key)
+        };
+    });
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -38,6 +65,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
