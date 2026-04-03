@@ -357,7 +357,7 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("TravelAgencies", (string)null);
                 });
 
-            modelBuilder.Entity("Geotrack.Domain.Entities.User", b =>
+            modelBuilder.Entity("Geotrack.Domain.Entities.RegionalOrganization", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -540,7 +540,7 @@ namespace Geotrack.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Geotrack.Domain.Entities.User", "User")
+                    b.HasOne("Geotrack.Domain.Entities.RegionalOrganization", "RegionalOrganization")
                         .WithMany("UserRoles")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -548,7 +548,7 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Navigation("Role");
 
-                    b.Navigation("User");
+                    b.Navigation("RegionalOrganization");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.ActivityType", b =>
@@ -612,7 +612,7 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("Offers");
                 });
 
-            modelBuilder.Entity("Geotrack.Domain.Entities.User", b =>
+            modelBuilder.Entity("Geotrack.Domain.Entities.RegionalOrganization", b =>
                 {
                     b.Navigation("UserRoles");
                 });

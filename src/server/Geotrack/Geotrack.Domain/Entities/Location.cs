@@ -21,5 +21,11 @@ namespace Geotrack.Domain.Entities
 
         public ICollection<Place> Places { get; set; } = new List<Place>(); // NAVIGATIONAL
         public ICollection<Event> Events { get; set; } = new List<Event>(); // NAVIGATIONAL
+
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
 }

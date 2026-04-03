@@ -16,5 +16,14 @@ namespace Geotrack.Domain.Entities
         public TravelAgency Agency { get; set; } = null!; // NAVIGATIONAL
 
         public ICollection<OfferDestination> OfferDestinations { get; set; } = new List<OfferDestination>(); // NAVIGATIONAL
+
+        public string Description { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
 }
