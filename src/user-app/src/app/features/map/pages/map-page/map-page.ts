@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef } from '
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import maplibregl, { Map, Marker, LngLatLike } from 'maplibre-gl';
+import maplibregl, { Map, LngLatLike } from 'maplibre-gl';
 
 const MAP_STYLE_URL = '/map-style.json';
 
@@ -20,9 +20,8 @@ interface Place {
   templateUrl: './map-page.html',
   styleUrl: './map-page.css',
 })
-export class MapPage implements OnInit, AfterViewInit, OnDestroy {
+export class MapPage implements AfterViewInit, OnDestroy {
   private map!: Map;
-  private marker?: Marker;
 
   destinationName = 'Search Your Destination';
   destinationLat = 44.0165;
@@ -31,8 +30,6 @@ export class MapPage implements OnInit, AfterViewInit, OnDestroy {
   isLoading = true;
   isLocating = false;
   activeTab = 'map';
-
-  // Selected place for bottom popup — null means popup is hidden
   selectedPlace: Place | null = null;
 
   activeCategory = 'all';
@@ -45,18 +42,19 @@ export class MapPage implements OnInit, AfterViewInit, OnDestroy {
     { id: 'shopping',    label: 'Shopping' },
   ];
 
+  searchQuery = '';
+  searchResults: any[] = [];
+  private searchTimeout?: ReturnType<typeof setTimeout>;
+
   constructor(public router: Router, private cdr: ChangeDetectorRef) {
     const nav = this.router.getCurrentNavigation();
     const state = (nav?.extras?.state ?? history.state) as any;
-
     if (state?.name) {
       this.destinationName = state.name;
       this.destinationLat  = state.lat ?? 44.0165;
       this.destinationLon  = state.lon ?? 21.0059;
     }
   }
-
-  ngOnInit(): void {}
 
   ngAfterViewInit(): void {
     this.isLoading = false;
@@ -89,76 +87,97 @@ export class MapPage implements OnInit, AfterViewInit, OnDestroy {
 
     this.map.on('load', () => {
       this.map.resize();
-      this.placeMarker([this.destinationLon, this.destinationLat], this.destinationName);
+      this.map.on('styleimagemissing', (e) => {
+        const imageData = {
+          width: 1,
+          height: 1,
+          data: new Uint8Array([0, 0, 0, 0])
+        };
+        this.map.addImage(e.id, imageData);
+      });
+      this.applyFilter(this.activeCategory);
     });
+
     this.map.on('click', (e) => {
-      // Otvori popup samo ako nije kliknut marker
-      if (!(e.originalEvent.target as HTMLElement).classList.contains('custom-marker')) {
+      const features = this.map.queryRenderedFeatures(e.point);
+
+      const poi = features.find(f =>
+        f.properties?.['name'] &&
+        f.geometry.type === 'Point'
+      );
+
+      if (poi) {
+        const name = poi.properties?.['name'] ?? 'Unknown Place';
+        const type = poi.properties?.['class'] ??
+                     poi.properties?.['type'] ??
+                     poi.layer?.id ?? 'Place';
+
+        this.selectedPlace = {
+          name,
+          category: this.formatCategory(type),
+          rating: (3.5 + Math.random() * 1.5).toFixed(1),
+          distance: (Math.random() * 0.9 + 0.1).toFixed(1) + ' mi',
+          status: 'Open Now • Closes 10 PM',
+        };
+      } else {
         this.selectedPlace = null;
-        this.cdr.detectChanges();
       }
-    });
-  }
 
-  // ── Marker ──
-
-  private placeMarker(center: LngLatLike, label: string): void {
-    this.marker?.remove();
-
-    // Custom marker element so we can attach a click handler
-    const el = document.createElement('div');
-    el.className = 'custom-marker';
-    el.style.cssText = `
-      width: 36px; height: 36px;
-      background: #1a2b4a;
-      border-radius: 50% 50% 50% 0;
-      transform: rotate(-45deg);
-      border: 3px solid white;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      cursor: pointer;
-    `;
-
-    el.addEventListener('click', () => {
-      this.selectedPlace = {
-        name: label,
-        category: this.getCategoryLabel(),
-        rating: '4.5',
-        distance: '0.2 mi',
-        status: 'Open Now • Closes 10 PM',
-      };
       this.cdr.detectChanges();
     });
-
-    this.marker = new maplibregl.Marker({ element: el })
-      .setLngLat(center)
-      .addTo(this.map);
   }
 
-  private getCategoryLabel(): string {
-    if (this.activeCategory === 'all') {
-      return 'Place';
-    }
-    const cat = this.categories.find(c => c.id === this.activeCategory);
-    return cat ? cat.label : 'Place';
+  private formatCategory(raw: string): string {
+    const map: Record<string, string> = {
+      restaurant: 'Restaurant',
+      cafe: 'Café',
+      hotel: 'Hotel',
+      museum: 'Museum',
+      attraction: 'Attraction',
+      shop: 'Shop',
+      bar: 'Bar',
+      park: 'Park',
+    };
+    return map[raw.toLowerCase()] ?? raw.charAt(0).toUpperCase() + raw.slice(1);
   }
-
-  // ── Category selection ──
 
   selectCategory(cat: { id: string; label: string }): void {
     this.activeCategory = cat.id;
     this.selectedPlace = null;
+    if (this.map.isStyleLoaded()) {
+      this.applyFilter(cat.id);
+    }
   }
+  private applyFilter(categoryId: string): void {
+    const poiLayers = ['poi_z14', 'poi_z15', 'poi_z16', 'poi_transit'];
 
-  // ── Geolocation ──
+    const categoryMap: Record<string, string[]> = {
+      all:         [],
+      restaurants: ['restaurant', 'cafe', 'fast_food', 'bar', 'pub'],
+      hotels:      ['hotel', 'hostel', 'motel', 'guest_house', 'lodging'],
+      attractions: ['attraction', 'museum', 'monument', 'gallery', 'viewpoint', 'tourism'],
+      events:      ['theatre', 'cinema', 'events_venue', 'nightclub'],
+      shopping:    ['shop', 'supermarket', 'mall', 'convenience', 'clothes'],
+    };
+
+    poiLayers.forEach(layerId => {
+      if (!this.map.getLayer(layerId)) return;
+
+      if (categoryId === 'all') {
+        this.map.setFilter(layerId, null);
+      } else {
+        const classes = categoryMap[categoryId] ?? [];
+        this.map.setFilter(layerId, ['in', ['get', 'class'], ['literal', classes]]);
+      }
+    });
+  }
 
   locateMe(): void {
     if (!navigator.geolocation || this.isLocating) return;
     this.isLocating = true;
-
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         const center: LngLatLike = [coords.longitude, coords.latitude];
-        this.placeMarker(center, 'Your location');
         this.map.flyTo({ center, zoom: 15, duration: 1200 });
         this.isLocating = false;
       },
@@ -170,16 +189,9 @@ export class MapPage implements OnInit, AfterViewInit, OnDestroy {
     );
   }
 
-  // ── Zoom ──
-
   zoomIn():  void { this.map.zoomIn({ duration: 300 }); }
   zoomOut(): void { this.map.zoomOut({ duration: 300 }); }
-
-  goBack(): void { this.router.navigate(['/home']); }
-
-  searchQuery = '';
-  searchResults: any[] = [];
-  private searchTimeout?: ReturnType<typeof setTimeout>;
+  goBack():  void { this.router.navigate(['/home']); }
 
   onSearchInput(value: string): void {
     clearTimeout(this.searchTimeout);
@@ -212,8 +224,8 @@ export class MapPage implements OnInit, AfterViewInit, OnDestroy {
     this.destinationName = name;
     this.destinationLat = lat;
     this.destinationLon = lon;
+    this.selectedPlace = null;
 
     this.map.flyTo({ center: [lon, lat], zoom: 14, duration: 1200 });
-    setTimeout(() => this.placeMarker([lon, lat], name), 1300);
   }
 }
