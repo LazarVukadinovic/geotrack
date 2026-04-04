@@ -38,6 +38,13 @@
   box-shadow: var(--shadow-card);
   overflow: hidden;
   border: 1px solid rgba(26, 43, 76, 0.06);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:active {
+    transform: scale(0.97);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.09);
+  }
 }
 
 .stays-slider__media {

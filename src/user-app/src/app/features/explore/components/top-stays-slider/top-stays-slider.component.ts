@@ -14,6 +14,7 @@ export class TopStaysSliderComponent {
   readonly items = input.required<ExploreStay[]>();
 
   readonly bookmarkToggled = output<string>();
+  readonly cardActivated = output<string>();
   readonly sectionMore = output<void>();
 
   protected readonly imgSrcById = signal<Record<string, string>>({});

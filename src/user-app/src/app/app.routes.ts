@@ -63,6 +63,14 @@ export const routes: Routes = [
           ),
         data: { hideBottomNav: true },
       },
+      {
+        path: 'stays/:id',
+        loadComponent: () =>
+          import('./features/hotel-detail/pages/hotel-detail-page/hotel-detail-page.component').then(
+            (m) => m.HotelDetailPageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
     ],
   },
   {

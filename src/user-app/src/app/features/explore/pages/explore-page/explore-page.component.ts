@@ -118,6 +118,12 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.router.navigate(['/places', id]);
   }
 
+  /** Navigate to Hotel/Apartment Detail for top-stays cards. */
+  protected onStayCard(id: string): void {
+    this.scrollState.markClickedItem('stays', id);
+    this.router.navigate(['/stays', id]);
+  }
+
   protected onPromoCta(): void {
     /* future: router.navigate(['/auth/register']) */
   }

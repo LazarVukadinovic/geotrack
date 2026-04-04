@@ -9,7 +9,12 @@
   <div class="stays-slider__viewport">
     <div class="stays-slider__track" data-slider-id="stays" role="list">
       @for (item of items(); track item.id) {
-        <article class="stays-slider__card" role="listitem">
+        <article
+          class="stays-slider__card"
+          role="listitem"
+          [attr.data-item-id]="item.id"
+          (click)="cardActivated.emit(item.id)"
+        >
           <div class="stays-slider__media">
             <img
               class="stays-slider__img"

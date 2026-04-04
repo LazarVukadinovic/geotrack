@@ -87,6 +87,7 @@
     <app-top-stays-slider
       [items]="topStays()"
       (bookmarkToggled)="toggleStaySaved($event)"
+      (cardActivated)="onStayCard($event)"
     />
 
     <app-must-see-slider
