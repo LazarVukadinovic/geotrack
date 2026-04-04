@@ -19,7 +19,7 @@ export class Home implements OnInit, OnDestroy {
   searchQuery = '';
   searchResults: any[] = [];
 
-  constructor(private router: Router) {}
+  constructor(public router: Router) {}
 
   ngOnInit(): void {
     this.initBgMap();

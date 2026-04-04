@@ -24,7 +24,7 @@ export class MapPage implements OnInit, AfterViewInit, OnDestroy {
   private map!: Map;
   private marker?: Marker;
 
-  destinationName = 'Your Destination';
+  destinationName = 'Search Your Destination';
   destinationLat = 44.0165;
   destinationLon = 21.0059;
 
@@ -45,7 +45,7 @@ export class MapPage implements OnInit, AfterViewInit, OnDestroy {
     { id: 'shopping',    label: 'Shopping' },
   ];
 
-  constructor(private router: Router, private cdr: ChangeDetectorRef) {
+  constructor(public router: Router, private cdr: ChangeDetectorRef) {
     const nav = this.router.getCurrentNavigation();
     const state = (nav?.extras?.state ?? history.state) as any;
 
@@ -90,6 +90,13 @@ export class MapPage implements OnInit, AfterViewInit, OnDestroy {
     this.map.on('load', () => {
       this.map.resize();
       this.placeMarker([this.destinationLon, this.destinationLat], this.destinationName);
+    });
+    this.map.on('click', (e) => {
+      // Otvori popup samo ako nije kliknut marker
+      if (!(e.originalEvent.target as HTMLElement).classList.contains('custom-marker')) {
+        this.selectedPlace = null;
+        this.cdr.detectChanges();
+      }
     });
   }
 
@@ -169,4 +176,44 @@ export class MapPage implements OnInit, AfterViewInit, OnDestroy {
   zoomOut(): void { this.map.zoomOut({ duration: 300 }); }
 
   goBack(): void { this.router.navigate(['/home']); }
+
+  searchQuery = '';
+  searchResults: any[] = [];
+  private searchTimeout?: ReturnType<typeof setTimeout>;
+
+  onSearchInput(value: string): void {
+    clearTimeout(this.searchTimeout);
+    if (value.trim().length < 2) {
+      this.searchResults = [];
+      return;
+    }
+    this.searchTimeout = setTimeout(() => this.geocode(value), 250);
+  }
+
+  private geocode(query: string): void {
+    const url = `https://nominatim.openstreetmap.org/search` +
+      `?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en`;
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        this.searchResults = data;
+        this.cdr.detectChanges();
+      })
+      .catch(() => this.searchResults = []);
+  }
+
+  selectSearchResult(result: any): void {
+    const lat = parseFloat(result.lat);
+    const lon = parseFloat(result.lon);
+    const name = result.display_name?.split(',')[0] ?? '';
+
+    this.searchResults = [];
+    this.searchQuery = name;
+    this.destinationName = name;
+    this.destinationLat = lat;
+    this.destinationLon = lon;
+
+    this.map.flyTo({ center: [lon, lat], zoom: 14, duration: 1200 });
+    setTimeout(() => this.placeMarker([lon, lat], name), 1300);
+  }
 }
