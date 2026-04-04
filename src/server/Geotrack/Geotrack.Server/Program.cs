@@ -1,7 +1,8 @@
-using Geotrack.Infrastructure;
-using Microsoft.EntityFrameworkCore;
 using Geotrack.Application.Interfaces;
+using Geotrack.Application.Services;
+using Geotrack.Infrastructure;
 using Geotrack.Infrastructure.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +23,7 @@ builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<ITravelAgencyRepository, TravelAgencyRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRegionRepository, RegionRepository>();
+builder.Services.AddScoped<DestinationService>();
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 
 // builder.Services.AddScoped<UserService>();
