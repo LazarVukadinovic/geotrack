@@ -1,0 +1,561 @@
+// ─── Host ─────────────────────────────────────────────────────────────────────
+
+:host {
+  display: block;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--color-page-bg, #f8f9fa);
+}
+
+// ─── Page root ────────────────────────────────────────────────────────────────
+
+.ed {
+  position: relative;
+  height: 100%;
+}
+
+// ─── Top bar ──────────────────────────────────────────────────────────────────
+
+.ed__top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  pointer-events: none;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 16px 16px;
+
+  background: rgba(26, 43, 76, var(--progress, 0));
+  border-radius: 0 0 18px 18px;
+
+  > * { pointer-events: auto; }
+}
+
+.ed__top-bar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: var(--progress, 0);
+
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+  pointer-events: none;
+}
+
+// ─── Action buttons ───────────────────────────────────────────────────────────
+
+.ed__hero-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #1a2b4c;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.1s ease;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover { background: rgba(255, 255, 255, 0.98); }
+  &:active { transform: scale(0.94); }
+
+  &--saved { color: #e8570a; }
+}
+
+.ed__hero-actions {
+  display: flex;
+  gap: 8px;
+}
+
+// ─── Hero image ───────────────────────────────────────────────────────────────
+
+.ed__hero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 300px;
+  overflow: hidden;
+  background: #dde0e7;
+  z-index: 0;
+}
+
+.ed__hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+// ─── Scroll container ─────────────────────────────────────────────────────────
+
+.ed__scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  z-index: 1;
+}
+
+// ─── Spacer ───────────────────────────────────────────────────────────────────
+
+.ed__scroll-spacer {
+  height: 268px;
+  flex-shrink: 0;
+}
+
+// ─── Content card ─────────────────────────────────────────────────────────────
+
+.ed__card {
+  position: relative;
+  background: #ffffff;
+  border-radius: 24px 24px 0 0;
+  padding: 22px 20px calc(env(safe-area-inset-bottom, 0px) + 32px);
+  min-height: calc(100dvh - 200px);
+}
+
+// ─── Category tags ────────────────────────────────────────────────────────────
+
+.ed__tags {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-bottom: 14px;
+
+  &::-webkit-scrollbar { display: none; }
+}
+
+.ed__tag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: #f0f1f5;
+  color: #1a2b4c;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+
+  &:first-child {
+    background: #e8570a;
+    color: #ffffff;
+  }
+}
+
+// ─── Location ─────────────────────────────────────────────────────────────────
+
+.ed__location {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  color: #e8570a;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ed__location-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+// ─── Title ────────────────────────────────────────────────────────────────────
+
+.ed__title {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1a2b4c;
+  line-height: 1.2;
+  margin: 0 0 10px;
+  letter-spacing: -0.3px;
+}
+
+// ─── Distance ─────────────────────────────────────────────────────────────────
+
+.ed__distance {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 20px;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ed__distance-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+// ─── CTA buttons ──────────────────────────────────────────────────────────────
+
+.ed__ctas {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.ed__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  padding: 13px 0;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  &:active { transform: scale(0.97); }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+
+  &--primary {
+    flex: 0 0 58%;
+    background: #e8570a;
+    color: #ffffff;
+
+    &:hover { opacity: 0.9; }
+  }
+
+  &--outline {
+    flex: 1;
+    background: transparent;
+    color: #1a2b4c;
+    border: 2px solid rgba(26, 43, 76, 0.18);
+
+    &:hover { background: #f0f1f5; }
+  }
+}
+
+// ─── Divider ──────────────────────────────────────────────────────────────────
+
+.ed__divider {
+  height: 1px;
+  background: #edeef2;
+  margin: 0 -20px 24px;
+}
+
+// ─── Sections ─────────────────────────────────────────────────────────────────
+
+.ed__section {
+  margin-bottom: 8px;
+
+  &--last { margin-bottom: 0; }
+}
+
+.ed__section-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1a2b4c;
+  margin: 0 0 12px;
+  line-height: 1.3;
+}
+
+// ─── About ────────────────────────────────────────────────────────────────────
+
+.ed__about {
+  font-size: 14px;
+  color: #4b5563;
+  line-height: 1.65;
+  margin: 0 0 8px;
+}
+
+// ─── Event Details info card ──────────────────────────────────────────────────
+
+.ed__info-card {
+  background: #ffffff;
+  border: 1px solid #edeef2;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.ed__info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0f1f5;
+
+  &--last { border-bottom: none; }
+}
+
+.ed__info-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #fff5f0;
+  flex-shrink: 0;
+  color: #e8570a;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.ed__info-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+}
+
+.ed__info-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #9ca3af;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.ed__info-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2b4c;
+  line-height: 1.4;
+}
+
+// ─── Venue Info card ──────────────────────────────────────────────────────────
+
+.ed__venue-card {
+  background: #f8f9fa;
+  border: 1px solid #edeef2;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.ed__venue-desc {
+  font-size: 14px;
+  color: #4b5563;
+  line-height: 1.65;
+  margin: 0 0 16px;
+}
+
+.ed__venue-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+
+  &:last-child { margin-bottom: 0; }
+}
+
+.ed__venue-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #edeef2;
+  flex-shrink: 0;
+  color: #1a2b4c;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.ed__venue-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 3px;
+}
+
+.ed__venue-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a2b4c;
+}
+
+.ed__venue-value {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.55;
+}
+
+// ─── You May Also Like slider ─────────────────────────────────────────────────
+
+.ed__similar-viewport {
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+  margin: 0 -20px;
+  padding: 0 20px 4px;
+
+  &::-webkit-scrollbar { display: none; }
+}
+
+.ed__similar-track {
+  display: flex;
+  gap: 12px;
+  width: max-content;
+  padding-right: 20px;
+}
+
+.ed__similar-card {
+  width: 172px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
+}
+
+.ed__similar-media {
+  position: relative;
+  height: 110px;
+  overflow: hidden;
+}
+
+.ed__similar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ed__similar-fav {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #6b7280;
+  transition: background 0.15s ease;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  &:hover { background: rgba(255, 255, 255, 1); }
+
+  &--saved { color: #e8570a; }
+}
+
+.ed__similar-body {
+  padding: 10px 12px 12px;
+}
+
+.ed__similar-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1a2b4c;
+  margin: 0 0 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ed__similar-sub {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0 0 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ed__similar-cta {
+  display: block;
+  width: 100%;
+  background: #e8570a;
+  color: #ffffff;
+  border: none;
+  border-radius: 50px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 9px 0;
+  cursor: pointer;
+  text-align: center;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+
+  &:hover { opacity: 0.9; }
+  &:active { transform: scale(0.97); }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}
+
+// ─── Not found state ──────────────────────────────────────────────────────────
+
+.ed__not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  gap: 16px;
+  color: #6b7280;
+  font-size: 15px;
+}
+
+.ed__not-found-back {
+  border: none;
+  background: #e8570a;
+  color: #ffffff;
+  border-radius: 50px;
+  padding: 12px 28px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
