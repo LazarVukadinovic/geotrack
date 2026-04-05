@@ -85,8 +85,8 @@ export const MOCK_NEARBY_STATUS: NearbyStatus = {
 
 export const MOCK_PROMO_CARD: ExplorePromoCard = {
   title: 'Personalize your stay',
-  message: 'Sign up to get tailored local secrets and bespoke recommendations delivered to you.',
-  ctaLabel: 'Sign Up →',
+  message: 'Sign in to get tailored local secrets and bespoke recommendations delivered to you.',
+  ctaLabel: 'Sign In →',
 };
 
 // ─── Events This Week ─────────────────────────────────────────────────────────
@@ -94,9 +94,9 @@ export const MOCK_PROMO_CARD: ExplorePromoCard = {
 export const MOCK_EVENTS_THIS_WEEK: ExploreEvent[] = [
   {
     id: 'ev-1',
-    title: 'Summer Festival',
-    subtitle: 'Old Town Square',
-    dateLabel: 'Jul 10 · 8:00 PM',
+    title: 'Dubrovnik Summer Festival',
+    subtitle: 'Lovrijenac',
+    dateLabel: 'Jul 15 · 9:00 PM',
     image: u('photo-1514512364185-4c2b2db318b5', 560),
   },
   {
@@ -119,13 +119,23 @@ export const MOCK_EVENTS_THIS_WEEK: ExploreEvent[] = [
 
 export const MOCK_POPULAR_NEARBY: ExploreNearbyItem[] = [
   {
-    id: 'nb-1',
-    title: 'Old Town Walls',
-    categoryLabel: 'Historic Site',
-    image: u('photo-1558618666-fcd25c85cd64', 560),
-    rating: 4.9,
-    reviewCount: '12k',
-    distance: '0.5 km away',
+    id: 'nb-4',
+    title: 'Lokrum Island',
+    categoryLabel: 'Nature Reserve',
+    image: u('photo-1506905925346-21bda4d32df4', 560),
+    rating: 4.6,
+    reviewCount: '6k',
+    distance: '1.8 km away',
+    isSaved: false,
+  },
+  {
+    id: 'nb-5',
+    title: 'Mljet National Park',
+    categoryLabel: 'Pristine Lakes',
+    image: u('photo-1467269204594-9661b134dd2b', 560),
+    rating: 4.8,
+    reviewCount: '4.1k',
+    distance: '2.4 km away',
     isSaved: false,
   },
   {
@@ -139,23 +149,13 @@ export const MOCK_POPULAR_NEARBY: ExploreNearbyItem[] = [
     isSaved: false,
   },
   {
-    id: 'nb-3',
-    title: 'Stradun',
-    categoryLabel: 'Landmark',
-    image: u('photo-1526481280695-3c469172d3b8', 560),
-    rating: 4.8,
-    reviewCount: '20k',
-    distance: '0.3 km away',
-    isSaved: false,
-  },
-  {
-    id: 'nb-4',
-    title: 'Lokrum Island',
-    categoryLabel: 'Nature',
-    image: u('photo-1506905925346-21bda4d32df4', 560),
-    rating: 4.6,
-    reviewCount: '6k',
-    distance: '1.8 km away',
+    id: 'nb-1',
+    title: 'Old Town Walls',
+    categoryLabel: 'Historic Site',
+    image: u('photo-1558618666-fcd25c85cd64', 560),
+    rating: 4.9,
+    reviewCount: '12k',
+    distance: '0.5 km away',
     isSaved: false,
   },
 ];
@@ -165,27 +165,29 @@ export const MOCK_POPULAR_NEARBY: ExploreNearbyItem[] = [
 export const MOCK_TOP_STAYS: ExploreStay[] = [
   {
     id: 'stay-1',
-    title: 'Grand Hotel 1',
+    title: 'Grand Villa Argentina',
     image: u('photo-1566073771259-6a8506099945', 560),
     rating: 4.9,
+    reviewCount: '12k',
     distance: '0.2 km away',
     pricePerNight: 121,
     isSaved: false,
   },
   {
     id: 'stay-2',
-    title: 'Grand Hotel 2',
+    title: 'Rixos Premium',
     image: u('photo-1520250497591-112f2f40a3f4', 560),
     rating: 4.8,
-    distance: '0.4 km away',
-    pricePerNight: 122,
+    distance: '0.5 km away',
+    pricePerNight: 155,
     isSaved: false,
   },
   {
     id: 'stay-3',
-    title: 'Villa Adriatic',
+    title: 'Hotel Excelsior',
     image: u('photo-1582719508461-905c673771fd', 560),
     rating: 4.7,
+    reviewCount: '4.2k',
     distance: '0.9 km away',
     pricePerNight: 98,
     isSaved: false,
@@ -197,27 +199,27 @@ export const MOCK_TOP_STAYS: ExploreStay[] = [
 export const MOCK_MUST_SEE_ATTRACTIONS: ExploreAttraction[] = [
   {
     id: 'attr-1',
-    title: 'Fort Lovrijenac',
-    type: 'Historic Fortress',
+    title: 'Old Town District',
+    type: 'Historic Core',
     image: u('photo-1558618666-fcd25c85cd64', 560),
   },
   {
     id: 'attr-2',
-    title: 'Dubrovnik Cable Car',
-    type: 'Panoramic Views',
+    title: 'Maritime Museum',
+    type: 'Exhibitions',
     image: u('photo-1580137189272-c9379f8864fd', 560),
   },
   {
     id: 'attr-3',
-    title: 'Lokrum Island',
-    type: 'Nature Reserve',
-    image: u('photo-1467269204594-9661b134dd2b', 560),
+    title: 'Fort Lovrijenac',
+    type: 'Historic Fortress',
+    image: u('photo-1543783207-ec64e4d3c671', 560),
   },
   {
     id: 'attr-4',
     title: 'Rector\'s Palace',
     type: 'Museum',
-    image: u('photo-1543783207-ec64e4d3c671', 560),
+    image: u('photo-1467269204594-9661b134dd2b', 560),
   },
 ];
 

@@ -33,6 +33,7 @@ export interface ExploreStay {
   title: string;
   image: string;
   rating: number;
+  reviewCount?: string;
   distance: string;
   pricePerNight: number;
   isSaved: boolean;
