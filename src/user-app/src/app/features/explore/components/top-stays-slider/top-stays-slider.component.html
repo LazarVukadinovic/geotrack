@@ -1,6 +1,6 @@
 <section class="stays-slider" aria-label="Top stays near you">
   <app-section-header
-    title="Top Stays Near You"
+    title="Top Stays"
     subtitle="Highly rated accommodations for your trip"
     actionLabel="More"
     (action)="sectionMore.emit()"
@@ -54,9 +54,11 @@
                 </svg>
                 {{ item.rating.toFixed(1) }}
               </span>
-              <span class="stays-slider__distance">{{ item.distance }}</span>
+              @if (item.reviewCount) {
+                <span class="stays-slider__reviews">({{ item.reviewCount }})</span>
+              }
             </div>
-            <p class="stays-slider__price">from ${{ item.pricePerNight }}/night</p>
+            <p class="stays-slider__distance">{{ item.distance }}</p>
           </div>
         </article>
       }

@@ -58,16 +58,33 @@
   height: 12px;
 }
 
-.destination-card__bookmark {
+.destination-card__save {
   position: absolute;
   top: var(--space-2);
   right: var(--space-2);
   z-index: 2;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent-orange);
+    outline-offset: 2px;
+  }
 }
 
-.destination-card__icon {
-  width: 16px;
-  height: 16px;
+.destination-card__heart {
+  width: 15px;
+  height: 15px;
   color: var(--color-primary-navy);
 
   &--saved {

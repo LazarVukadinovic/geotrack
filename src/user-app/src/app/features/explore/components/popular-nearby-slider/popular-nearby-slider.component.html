@@ -1,7 +1,7 @@
-<section class="nearby-slider" aria-label="Popular nearby">
+<section class="nearby-slider" aria-label="Nature">
   <app-section-header
-    title="Popular Nearby"
-    subtitle="Trending spots within walking distance"
+    title="Nature"
+    subtitle="Scenic spots and natural areas"
     actionLabel="More"
     (action)="sectionMore.emit()"
   />
@@ -24,8 +24,8 @@
               class="nearby-slider__img"
               [src]="imgSrcById()[item.id]"
               [alt]="''"
-              width="160"
-              height="110"
+              width="182"
+              height="121"
               loading="lazy"
               decoding="async"
               (error)="onImgError(item.id)"

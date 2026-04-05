@@ -1,10 +1,17 @@
 <section class="promo-card" aria-label="Personalization">
   <div class="promo-card__body">
-    <h3 class="promo-card__title">{{ promo().title }}</h3>
+    <h3 class="promo-card__title">
+      <svg class="promo-card__sparkle" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M12 2l2.09 7.91L22 12l-7.91 2.09L12 22l-2.09-7.91L2 12l7.91-2.09L12 2z"
+        />
+      </svg>
+      {{ promo().title }}
+    </h3>
     <p class="promo-card__msg">{{ promo().message }}</p>
   </div>
   <button type="button" class="promo-card__cta" (click)="cta.emit()">
     {{ promo().ctaLabel }}
   </button>
 </section>
-

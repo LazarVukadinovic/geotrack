@@ -1,17 +1,6 @@
 <header class="app-header">
   <h1 class="app-header__title">{{ title() }}</h1>
   <div class="app-header__actions">
-    <app-icon-button ariaLabel="Open search" (clicked)="search.emit()">
-      <svg class="app-header__icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.75"
-          stroke-linecap="round"
-          d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0 0L16 21"
-        />
-      </svg>
-    </app-icon-button>
     <span class="app-header__notify-wrap">
       <app-icon-button ariaLabel="Notifications" (clicked)="notifications.emit()">
         <svg class="app-header__icon" viewBox="0 0 24 24" aria-hidden="true">

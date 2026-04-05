@@ -32,7 +32,7 @@
 .nearby-slider__card {
   flex: 0 0 auto;
   scroll-snap-align: start;
-  width: clamp(150px, 42vw, 172px);
+  width: clamp(155px, 46vw, 182px);
   border-radius: var(--radius-lg);
   background: var(--color-card-bg);
   box-shadow: var(--shadow-card);
@@ -52,7 +52,7 @@
 .nearby-slider__media {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 2;
   background: rgba(26, 43, 76, 0.08);
 }
 

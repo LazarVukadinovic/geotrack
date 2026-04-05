@@ -12,6 +12,5 @@ export class AppHeaderComponent {
   readonly title = input.required<string>();
   readonly showNotificationDot = input(true);
 
-  readonly search = output<void>();
   readonly notifications = output<void>();
 }
