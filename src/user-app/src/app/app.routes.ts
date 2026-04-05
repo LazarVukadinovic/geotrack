@@ -71,6 +71,14 @@ export const routes: Routes = [
           ),
         data: { hideBottomNav: true },
       },
+      {
+        path: 'events/:id',
+        loadComponent: () =>
+          import('./features/event-detail/pages/event-detail-page/event-detail-page.component').then(
+            (m) => m.EventDetailPageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
     ],
   },
   {

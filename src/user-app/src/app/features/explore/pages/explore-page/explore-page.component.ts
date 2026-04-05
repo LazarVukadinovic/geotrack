@@ -112,11 +112,10 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     /* future: router.navigate(['/auth/login']) */
   }
 
-  /**
-   * Events are time-bound occurrences, not place entities.
-   * future: router.navigate(['/events', id]) when event detail is implemented.
-   */
-  protected onEvent(_id: string): void {}
+  protected onEvent(id: string): void {
+    this.scrollState.markClickedItem('events', id);
+    this.router.navigate(['/events', id]);
+  }
 
   /**
    * Landmark tiles are category browse entries (Beaches, Museums, Parks, Markets).

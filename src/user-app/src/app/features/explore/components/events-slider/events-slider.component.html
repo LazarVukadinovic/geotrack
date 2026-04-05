@@ -13,6 +13,7 @@
           type="button"
           class="events-slider__card"
           role="listitem"
+          [attr.data-item-id]="ev.id"
           (click)="open(ev.id)"
         >
           <img
