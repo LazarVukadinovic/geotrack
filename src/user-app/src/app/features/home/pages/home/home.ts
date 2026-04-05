@@ -121,4 +121,29 @@ export class Home implements OnInit, OnDestroy {
     const parts = result.display_name?.split(',') ?? [];
     return parts.slice(1, 3).join(',').trim();
   }
+  showLocationDialog = false;
+
+  requestLocation(): void {
+    this.showLocationDialog = true;
+  }
+
+  confirmLocation(): void {
+    this.showLocationDialog = false;
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        this.router.navigate(['/map'], {
+          state: {
+            name: 'My Location',
+            lat: coords.latitude,
+            lon: coords.longitude,
+            isUserLocation: true,
+          },
+        });
+      },
+      (err) => console.warn('Location denied:', err.message),
+      { timeout: 10000 }
+    );
+  }
 }

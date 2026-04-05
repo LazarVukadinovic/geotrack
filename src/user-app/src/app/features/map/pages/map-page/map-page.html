@@ -59,7 +59,7 @@
       </div>
 
       <!-- Category chips -->
-      <div class="flex gap-3 overflow-x-auto scrollbar-hide mt-4">
+      <div class="flex gap-3 overflow-x-auto scrollbar-hide mt-4 pb-2">
         <button
           *ngFor="let cat of categories"
           (click)="selectCategory(cat)"
@@ -71,6 +71,13 @@
           [class.border-slate-200]="activeCategory !== cat.id"
           [class.text-slate-600]="activeCategory !== cat.id">
           {{ cat.label }}
+        </button>
+        <button (click)="router.navigate(['/filters'])"
+          class="flex-none px-5 py-2 rounded-full border text-sm font-semibold whitespace-nowrap shadow-sm bg-white border-slate-200 text-slate-600 flex items-center gap-1">
+          More
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
         </button>
       </div>
     </div>
@@ -92,13 +99,13 @@
   </div>
 
   <!-- Filter button -->
-  <button
+  <!-- <button
     class="w-10 h-10 bg-white rounded-2xl shadow-md border border-slate-100 flex items-center justify-center text-slate-500 active:scale-95 transition-all">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
         d="M3 4h18M7 12h10M11 20h2"/>
     </svg>
-  </button>
+  </button> -->
 
 </div>
 

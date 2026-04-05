@@ -157,7 +157,7 @@ export class MapPage implements AfterViewInit, OnDestroy {
       hotels:      ['hotel', 'hostel', 'motel', 'guest_house', 'lodging'],
       attractions: ['attraction', 'museum', 'monument', 'gallery', 'viewpoint', 'tourism'],
       events:      ['theatre', 'cinema', 'events_venue', 'nightclub'],
-      shopping:    ['shop', 'supermarket', 'mall', 'convenience', 'clothes'],
+      shopping:    ['shop', 'supermarket', 'mall', 'convenience', 'clothes', 'grocery'],
     };
 
     poiLayers.forEach(layerId => {
