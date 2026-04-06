@@ -36,7 +36,8 @@ namespace Geotrack.Application.Services
                 {
                     Key = "local-places",
                     Title = "Local Places & Landmarks",
-                    Items = nearest.Destination.Locations.Cast<object>()
+                    Items = nearest.Destination.Locations.Select(l => new
+                    {l.Id,l.Name,l.Latitude,l.Longitude}).Cast<object>()
                 });
 
             if (nearest.Destination.DestinationTags?.Any() == true)
@@ -44,10 +45,13 @@ namespace Geotrack.Application.Services
                 {
                     Key = "tags",
                     Title = "Tags",
-                    Items = nearest.Destination.DestinationTags.Cast<object>()
+                    Items = nearest.Destination.DestinationTags
+                        .Where(dt => dt.Tag != null)
+                        .Select(dt => new
+                        {dt.Tag.Id,dt.Tag.Name,dt.Tag.Description}).Cast<object>()
                 });
 
-            
+
             return (dynamic)new
             {
                 SelectedDestination = nearest.Destination,

@@ -21,3 +21,4 @@ namespace Geotrack.Domain.Entities
         public DateTime? UpdatedAt { get; set; }
     }
 }
+                      
