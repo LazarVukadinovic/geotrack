@@ -18,6 +18,8 @@ export class Home implements OnInit, OnDestroy {
 
   searchQuery = '';
   searchResults: any[] = [];
+  showLocationDialog = false;
+  isLocating = false;
 
   constructor(public router: Router) {}
 
@@ -62,7 +64,7 @@ export class Home implements OnInit, OnDestroy {
     let lng = 14.0;
 
     const animate = () => {
-      lng += 0.10; // brzina rotacije
+      lng += 0.10;
 
       if (lng > 180) lng = -180;
 
@@ -121,18 +123,44 @@ export class Home implements OnInit, OnDestroy {
     const parts = result.display_name?.split(',') ?? [];
     return parts.slice(1, 3).join(',').trim();
   }
-  showLocationDialog = false;
 
   requestLocation(): void {
+    const cached = sessionStorage.getItem('mapLocation');
+    if (cached) {
+      const loc = JSON.parse(cached);
+      if (loc.isUserLocation) {
+        this.router.navigate(['/map'], {
+          state: {
+            name: loc.name,
+            lat: loc.lat,
+            lon: loc.lon,
+            isUserLocation: true,
+          },
+        });
+        return;
+      }
+    }
     this.showLocationDialog = true;
   }
 
   confirmLocation(): void {
     this.showLocationDialog = false;
-    if (!navigator.geolocation) return;
+    this.isLocating = true;
+
+    if (!navigator.geolocation) {
+      this.isLocating = false;
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
+        this.isLocating = false;
+        sessionStorage.setItem('mapLocation', JSON.stringify({
+          name: 'My Location',
+          lat: coords.latitude,
+          lon: coords.longitude,
+          isUserLocation: true,
+        }));
         this.router.navigate(['/map'], {
           state: {
             name: 'My Location',
@@ -142,8 +170,18 @@ export class Home implements OnInit, OnDestroy {
           },
         });
       },
-      (err) => console.warn('Location denied:', err.message),
-      { timeout: 10000 }
+      (err) => {
+        console.warn('Location error:', err.code, err.message);
+        this.isLocating = false;
+        if (err.code !== err.PERMISSION_DENIED) {
+          this.router.navigate(['/map']);
+        }
+      },
+      {
+        timeout: 10000,
+        maximumAge: 300000,
+        enableHighAccuracy: false,
+      }
     );
   }
 }

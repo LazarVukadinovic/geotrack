@@ -64,16 +64,22 @@
           *ngFor="let cat of categories"
           (click)="selectCategory(cat)"
           class="flex-none px-5 py-2 rounded-full border text-sm font-semibold transition-colors duration-200 whitespace-nowrap shadow-sm"
-          [class.bg-[#1a2b4a]]="activeCategory === cat.id"
-          [class.border-[#1a2b4a]]="activeCategory === cat.id"
-          [class.text-white]="activeCategory === cat.id"
-          [class.bg-white]="activeCategory !== cat.id"
-          [class.border-slate-200]="activeCategory !== cat.id"
-          [class.text-slate-600]="activeCategory !== cat.id">
+          [class.bg-[#1a2b4a]]="activeCategory === cat.id && !hasActiveFilters"
+          [class.border-[#1a2b4a]]="activeCategory === cat.id && !hasActiveFilters"
+          [class.text-white]="activeCategory === cat.id && !hasActiveFilters"
+          [class.bg-white]="activeCategory !== cat.id || hasActiveFilters"
+          [class.border-slate-200]="activeCategory !== cat.id || hasActiveFilters"
+          [class.text-slate-600]="activeCategory !== cat.id || hasActiveFilters">
           {{ cat.label }}
         </button>
         <button (click)="router.navigate(['/filters'])"
-          class="flex-none px-5 py-2 rounded-full border text-sm font-semibold whitespace-nowrap shadow-sm bg-white border-slate-200 text-slate-600 flex items-center gap-1">
+          [class.bg-[#1a2b4a]]="isMoreActive"
+          [class.border-[#1a2b4a]]="isMoreActive"
+          [class.text-white]="isMoreActive"
+          [class.bg-white]="!isMoreActive"
+          [class.border-slate-200]="!isMoreActive"
+          [class.text-slate-600]="!isMoreActive"
+          class="flex-none px-5 py-2 rounded-full border text-sm font-semibold whitespace-nowrap shadow-sm flex items-center gap-1 transition-colors duration-200">
           More
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
@@ -97,18 +103,7 @@
       −
     </button>
   </div>
-
-  <!-- Filter button -->
-  <!-- <button
-    class="w-10 h-10 bg-white rounded-2xl shadow-md border border-slate-100 flex items-center justify-center text-slate-500 active:scale-95 transition-all">
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-        d="M3 4h18M7 12h10M11 20h2"/>
-    </svg>
-  </button> -->
-
 </div>
-
     <!-- Locate me -->
     <button
       (click)="locateMe()"
@@ -222,7 +217,5 @@
       </svg>
       <span class="text-[9px] font-medium">Profile</span>
     </button>
-
   </div>
-
 </div>

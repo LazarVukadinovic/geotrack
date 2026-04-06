@@ -4,6 +4,7 @@ import { Register } from './features/auth/pages/register/register';
 import { Interests } from './features/auth/pages/interests/interests';
 import { Home } from './features/home/pages/home/home';
 import { MapPage } from './features/map/pages/map-page/map-page';
+import { Filters } from './features/map/pages/filters/filters';
 
 export const routes: Routes = [
     { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -12,4 +13,5 @@ export const routes: Routes = [
     { path: 'interests', component: Interests },
     { path: 'home', component: Home},
     { path: 'map', component: MapPage },
+    { path: 'filters', component: Filters }
 ];

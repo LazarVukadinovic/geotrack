@@ -3,7 +3,7 @@
   <!-- ── BACKGROUND MAP ── -->
   <div id="bg-map" class="absolute inset-0 w-full h-full"></div>
 
-  <!-- Gradient overlay — darker at bottom for nav readability -->
+  <!-- Gradient overlay  -->
   <div class="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/70 z-10"></div>
 
   <!-- ── TOP LOGO ── -->
@@ -63,18 +63,23 @@
         </ul>
       </div>
     </div>
-
     <!-- Use my location -->
     <button (click)="requestLocation()"
-      class="flex items-center gap-1 text-white text-sm font-semibold hover:text-white transition-colors">
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      [disabled]="isLocating"
+      class="flex items-center gap-1.5 text-white text-sm font-semibold transition-opacity"
+      [class.opacity-60]="isLocating">
+      <div *ngIf="isLocating"
+        class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin">
+      </div>
+      <svg *ngIf="!isLocating" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
           d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
       </svg>
-      Use my current location
+      {{ isLocating ? 'Getting location…' : 'Use my current location' }}
     </button>
-
-    <!-- Location permission dialog -->
+  </div>
+  
+  <!-- Location permission dialog -->
     <div *ngIf="showLocationDialog"
       class="fixed inset-0 z-50 flex items-center justify-center px-6"
       style="background: rgba(0,0,0,0.5);">
@@ -87,28 +92,20 @@
         </div>
         <h3 class="text-lg font-bold text-slate-800 text-center mb-2">Use Your Location</h3>
         <p class="text-sm text-slate-400 text-center mb-6 leading-relaxed">
-          We'll show you what's around you on the map. Your location stays on your device.
+          We'll show you what's nearby on the map.<br/>Your location stays on your device.
         </p>
         <div class="flex gap-3">
           <button (click)="showLocationDialog = false"
-            class="flex-1 py-3 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-600">
+            class="flex-1 py-3 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-600 active:scale-[0.98] transition-all">
             Not now
           </button>
           <button (click)="confirmLocation()"
-            class="flex-1 py-3 bg-[#e8722a] rounded-2xl text-sm font-bold text-white">
+            class="flex-1 py-3 bg-[#e8722a] rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all">
             Allow
           </button>
         </div>
       </div>
     </div>
-
-    <!-- Explore hint -->
-    <!-- <div class="flex flex-col items-center gap-1 mt-2">
-      <svg class="w-5 h-5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7"/>
-      </svg>
-    </div> -->
-  </div>
 
   <!-- ── BOTTOM NAV ── -->
   <div class="absolute bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-sm border-t border-slate-100 px-2 py-2 flex justify-around items-center">
