@@ -33,6 +33,8 @@ export class MapPage implements AfterViewInit, OnDestroy {
   selectedPlace: Place | null = null;
   hasActiveFilters = false;
   isUserLocation = false;
+  private userLat: number | null = null;
+  private userLon: number | null = null;
 
   activeCategory = 'all';
   categories = [
@@ -60,6 +62,10 @@ export class MapPage implements AfterViewInit, OnDestroy {
       this.destinationLat  = loc.lat  ?? this.destinationLat;
       this.destinationLon  = loc.lon  ?? this.destinationLon;
       this.isUserLocation  = loc.isUserLocation === true;
+      if (loc.isUserLocation) {
+        this.userLat = loc.lat;
+        this.userLon = loc.lon;
+      }
     }
     if (state?.name) {
       this.destinationName = state.name;
@@ -151,14 +157,24 @@ export class MapPage implements AfterViewInit, OnDestroy {
       if (poi) {
         const name = poi.properties?.['name'] ?? 'Unknown Place';
         const type = poi.properties?.['class'] ??
-                     poi.properties?.['type'] ??
-                     poi.layer?.id ?? 'Place';
+                    poi.properties?.['type'] ??
+                    poi.layer?.id ?? 'Place';
+
+        const coords = (poi.geometry as GeoJSON.Point).coordinates;
+        const poiLon = coords[0];
+        const poiLat = coords[1];
+
+        let distance = '—';
+        if (this.userLat !== null && this.userLon !== null) {
+          const km = this.haversineKm(this.userLat, this.userLon, poiLat, poiLon);
+          distance = this.formatDistance(km);
+        }
 
         this.selectedPlace = {
           name,
           category: this.formatCategory(type),
           rating: (3.5 + Math.random() * 1.5).toFixed(1),
-          distance: (Math.random() * 0.9 + 0.1).toFixed(1) + ' mi',
+          distance,
           status: 'Open Now • Closes 10 PM',
         };
       } else {
@@ -216,6 +232,22 @@ export class MapPage implements AfterViewInit, OnDestroy {
         'circle-stroke-opacity': 1,
       }
     });
+  }
+  private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) *
+      Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  private formatDistance(km: number): string {
+    if (km < 1) return Math.round(km * 1000) + ' m';
+    return km.toFixed(1) + ' km';
   }
 
   private formatCategory(raw: string): string {
@@ -312,6 +344,8 @@ export class MapPage implements AfterViewInit, OnDestroy {
           this.map.once('load', () => this.placeUserMarker(lat, lon));
         }
 
+        this.userLat = lat;
+        this.userLon = lon;
         this.isUserLocation = true;
         sessionStorage.setItem('mapLocation', JSON.stringify({
           name: 'My Location',
