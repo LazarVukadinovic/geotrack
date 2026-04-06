@@ -37,8 +37,4 @@ export class ExploreScrollStateService {
     return state;
   }
 
-  clear(): void {
-    this._state.set(null);
-    this._pendingClick = null;
-  }
 }
