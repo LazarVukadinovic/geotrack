@@ -56,6 +56,22 @@ export const routes: Routes = [
         data: { hideBottomNav: true },
       },
       {
+        path: 'hotels',
+        loadComponent: () =>
+          import('./features/hotels/pages/hotels-listing-page/hotels-listing-page.component').then(
+            (m) => m.HotelsListingPageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'food-and-music',
+        loadComponent: () =>
+          import('./features/food-music/pages/food-music-page/food-music-page.component').then(
+            (m) => m.FoodMusicPageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
+      {
         path: 'places/:id',
         loadComponent: () =>
           import('./features/place-detail/pages/place-detail-page/place-detail-page.component').then(

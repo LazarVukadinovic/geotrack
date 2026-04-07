@@ -108,6 +108,14 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.router.navigate(['/stays', id]);
   }
 
+  protected onStaysMore(): void {
+    this.router.navigate(['/hotels']);
+  }
+
+  protected onLocalMore(): void {
+    this.router.navigate(['/food-and-music']);
+  }
+
   protected onPromoCta(): void {
     /* future: router.navigate(['/auth/login']) */
   }

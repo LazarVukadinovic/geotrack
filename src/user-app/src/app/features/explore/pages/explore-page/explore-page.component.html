@@ -22,6 +22,7 @@
       [items]="topStays()"
       (bookmarkToggled)="toggleStaySaved($event)"
       (cardActivated)="onStayCard($event)"
+      (sectionMore)="onStaysMore()"
     />
 
     <app-events-slider
@@ -33,6 +34,7 @@
       [items]="filteredLocalFavorites()"
       (bookmarkToggled)="toggleLocalSaved($event)"
       (cardActivated)="onLocalCard($event)"
+      (sectionMore)="onLocalMore()"
     />
 
     <app-must-see-slider
