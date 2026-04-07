@@ -12,6 +12,8 @@ interface Place {
   rating: string;
   distance: string;
   status: string;
+  lat: number;
+  lon: number;
 }
 
 @Component({
@@ -176,6 +178,8 @@ export class MapPage implements AfterViewInit, OnDestroy {
           rating: (3.5 + Math.random() * 1.5).toFixed(1),
           distance,
           status: 'Open Now • Closes 10 PM',
+          lat: poiLat,
+          lon: poiLon,
         };
       } else {
         this.selectedPlace = null;
@@ -368,7 +372,26 @@ export class MapPage implements AfterViewInit, OnDestroy {
       }
     );
   }
-    
+
+  openDirections(): void {
+    if (!this.selectedPlace) return;
+    const dest = `${this.selectedPlace.lat},${this.selectedPlace.lon}`;
+    const destName = encodeURIComponent(this.selectedPlace.name);
+
+    if (this.userLat !== null && this.userLon !== null) {
+      const origin = `${this.userLat},${this.userLon}`;
+      window.open(
+        `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=walking`,
+        '_blank'
+      );
+    } else {
+      window.open(
+        `https://www.google.com/maps/search/?api=1&query=${destName}@${dest}`,
+        '_blank'
+      );
+    }
+  }
+  
   zoomIn():  void { this.map.zoomIn({ duration: 300 }); }
   zoomOut(): void { this.map.zoomOut({ duration: 300 }); }
   goBack():  void { this.router.navigate(['/home']); }
