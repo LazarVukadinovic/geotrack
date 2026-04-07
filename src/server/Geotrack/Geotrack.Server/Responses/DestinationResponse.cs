@@ -1,6 +1,6 @@
 ﻿namespace Geotrack.Server.Responses
 {
-    public class DestionationResponse
+    public class DestinationResponse
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;

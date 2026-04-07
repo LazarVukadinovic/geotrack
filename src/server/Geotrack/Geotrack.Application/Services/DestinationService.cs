@@ -1,75 +1,136 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Geotrack.Application.DTOs;
 using Geotrack.Application.Interfaces;
 using Geotrack.Domain.Entities;
 
-namespace Geotrack.Application.Services
+namespace Geotrack.Application.Services;
+
+public class DestinationService
 {
-    public class DestinationService
+    private readonly IDestinationRepository _destinationRepository;
+
+    public DestinationService(IDestinationRepository destinationRepository)
     {
+        _destinationRepository = destinationRepository;
+    }
 
-        private readonly IDestinationRepository destRepo;
+    public async Task<ExploreByLocationResponseDto> ExploreByLocationAsync(ExploreByLocationQueryDto query)
+    {
+        var destinations = await _destinationRepository.GetAllWithDetailsAsync();
 
-        public DestinationService(IDestinationRepository destinationRepository)
-        { 
-            this.destRepo = destinationRepository;
-        }
-
-        public async Task<dynamic> ExploreByLocationAsync(double lat, double lon, double rad, int? userId)
-        {
-            var all = await destRepo.GetAllAsync();
-            var nearest = all.Select(d => new
+        var nearest = destinations
+            .Select(d => new
             {
                 Destination = d,
-                DistanceKm = HaversineDistance(lat, lon, d.Latitude, d.Longitude)
-            }).OrderBy(d => d.DistanceKm).FirstOrDefault();
+                Distance = HaversineDistance(
+                    query.Latitude,
+                    query.Longitude,
+                    d.Latitude,
+                    d.Longitude)
+            })
+            .OrderBy(x => x.Distance)
+            .FirstOrDefault();
 
-            if (nearest == null)
-                return new { SelectedDestination = (object?)null, Sections = new List<object>() };
-
-            var sections = new List<object>();
-            if (nearest.Destination.Locations?.Any() == true)
-                sections.Add(new Section
-                {
-                    Key = "local-places",
-                    Title = "Local Places & Landmarks",
-                    Items = nearest.Destination.Locations.Select(l => new
-                    {l.Id,l.Name,l.Latitude,l.Longitude}).Cast<object>()
-                });
-
-            if (nearest.Destination.DestinationTags?.Any() == true)
-                sections.Add(new Section
-                {
-                    Key = "tags",
-                    Title = "Tags",
-                    Items = nearest.Destination.DestinationTags
-                        .Where(dt => dt.Tag != null)
-                        .Select(dt => new
-                        {dt.Tag.Id,dt.Tag.Name,dt.Tag.Description}).Cast<object>()
-                });
-
-
-            return (dynamic)new
+        if (nearest == null)
+        {
+            return new ExploreByLocationResponseDto
             {
-                SelectedDestination = nearest.Destination,
-                Sections = sections
+                SelectedDestination = null,
+                Sections = new List<ExploreSectionDto>()
             };
         }
 
-        //Haversinova distanca == Vazdusna linija
-        private static double HaversineDistance(double lat1,double lon1, double lat2, double lon2)
+        var destination = nearest.Destination;
+
+        var destinationDto = new ExploreDestinationDto
         {
-            const double R = 6371;
-            var dLat = (lat2 - lat1) * Math.PI / 180;
-            var dLon = (lon2 - lon1) * Math.PI / 180;
+            Id = destination.Id,
+            Name = destination.Name,
+            Latitude = destination.Latitude,
+            Longitude = destination.Longitude
+        };
 
-            var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        var sectionKeys = destination.DestinationTags?
+            .Where(x => x.Tag != null && !string.IsNullOrWhiteSpace(x.Tag.Name))
+            .Select(x => x.Tag!.Name.Trim().ToLower())
+            .Distinct()
+            .Take(3)
+            .ToList() ?? new List<string>();
 
-            return 2 * R * Math.Atan2(Math.Sqrt(a),Math.Sqrt(1 - a));
-
+        if (!sectionKeys.Any())
+        {
+            sectionKeys = new List<string> { "nature", "history", "culture" };
         }
+
+        var allLocations = destination.Locations?.ToList() ?? new List<Location>();
+        var allPlaces = allLocations
+            .SelectMany(l => l.Places ?? new List<Place>())
+            .ToList();
+
+        var sections = new List<ExploreSectionDto>();
+
+        foreach (var key in sectionKeys)
+        {
+            sections.Add(new ExploreSectionDto
+            {
+                Key = key,
+                Title = ToTitle(key),
+                Locations = allLocations
+                    .Take(4)
+                    .Select(l => new ExploreLocationItemDto
+                    {
+                        Id = l.Id,
+                        Name = l.Name,
+                        Latitude = l.Latitude,
+                        Longitude = l.Longitude
+                    })
+                    .ToList(),
+                Places = allPlaces
+                    .Take(6)
+                    .Select(p => new ExplorePlaceItemDto
+                    {
+                        Id = p.Id,
+                        Name = p.Name,
+                        LocationId = p.LocationId
+                    })
+                    .ToList()
+            });
+        }
+
+        return new ExploreByLocationResponseDto
+        {
+            SelectedDestination = destinationDto,
+            Sections = sections
+        };
+    }
+
+    private static string ToTitle(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return "Explore";
+
+        return char.ToUpper(key[0]) + key[1..];
+    }
+
+    private static double HaversineDistance(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double earthRadiusKm = 6371.0;
+
+        var dLat = DegreesToRadians(lat2 - lat1);
+        var dLon = DegreesToRadians(lon2 - lon1);
+
+        var a =
+            Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+            Math.Cos(DegreesToRadians(lat1)) *
+            Math.Cos(DegreesToRadians(lat2)) *
+            Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+
+        return earthRadiusKm * c;
+    }
+
+    private static double DegreesToRadians(double degrees)
+    {
+        return degrees * Math.PI / 180.0;
     }
 }
