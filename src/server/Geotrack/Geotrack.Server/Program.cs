@@ -29,7 +29,7 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRegionRepository, RegionRepository>();
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 
-builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 
 // builder.Services.AddScoped<UserService>();

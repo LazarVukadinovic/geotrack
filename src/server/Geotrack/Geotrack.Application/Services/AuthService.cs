@@ -1,12 +1,12 @@
+using Geotrack.Application.DTOs;
 using Geotrack.Application.Interfaces;
 using Geotrack.Domain.Entities;
-using Geotrack.Server.Requests;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace Geotrack.Application.Services;
 
-public class AuthService
+public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
     private readonly IJwtService _jwtService;
@@ -17,12 +17,12 @@ public class AuthService
         _jwtService = jwtService;
     }
 
-    public async Task Register(RegisterRequest request)
+    public async Task RegisterAsync(RegisterUserDto request)
     {
         var exists = await _userRepository.ExistsAsync(request.Username, request.Email);
 
         if (exists)
-            throw new Exception("User already exists");
+            throw new InvalidOperationException("User already exists");
 
         var user = new User
         {
@@ -30,18 +30,18 @@ public class AuthService
             Email = request.Email,
             PasswordHash = HashPassword(request.Password),
             CreatedAt = DateTime.UtcNow,
-            IsActive = true
         };
 
         await _userRepository.AddAsync(user);
+        await _userRepository.SaveChangesAsync();
     }
 
-    public async Task<string> Login(LoginRequest request)
+    public async Task<string> LoginAsync(LoginUserDto request)
     {
         var user = await _userRepository.GetByUsernameAsync(request.Username);
 
         if (user == null || user.PasswordHash != HashPassword(request.Password))
-            throw new Exception("Invalid credentials");
+            throw new UnauthorizedAccessException("Invalid credentials");
 
         return _jwtService.GenerateToken(user.Id);
     }
