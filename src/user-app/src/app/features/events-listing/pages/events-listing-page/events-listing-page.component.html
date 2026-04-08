@@ -1,0 +1,206 @@
+<div class="ev-page">
+
+  <!-- ── Fixed top bar ────────────────────────────────────────────────────── -->
+  <header class="ev-page__topbar">
+    <button type="button" class="ev-page__back" aria-label="Go back" (click)="goBack()">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 5l-7 7 7 7" />
+      </svg>
+    </button>
+    <span class="ev-page__topbar-title">Events</span>
+    <div class="ev-page__topbar-spacer"></div>
+  </header>
+
+  <!-- ── Scrollable content ───────────────────────────────────────────────── -->
+  <div class="ev-page__scroll">
+
+    <!-- Intro -->
+    <div class="ev-page__intro">
+      <h1 class="ev-page__title">Events</h1>
+      <div class="ev-page__title-accent" aria-hidden="true"></div>
+      <p class="ev-page__subtitle">What's happening around town</p>
+    </div>
+
+    <!-- Filter pills -->
+    <div class="ev-page__filters-viewport">
+      <div class="ev-page__filters" role="list" aria-label="Filter by category">
+        @for (f of filters; track f.id) {
+          <button
+            type="button"
+            class="ev-page__pill"
+            [class.ev-page__pill--active]="activeFilter() === f.id"
+            (click)="setFilter(f.id)"
+            role="listitem"
+          >{{ f.label }}</button>
+        }
+      </div>
+    </div>
+
+    <!-- Event card list -->
+    <div class="ev-page__list" aria-label="Events">
+
+      @for (item of filteredItems(); track item.id) {
+
+        @if (item.variant === 'large') {
+
+          <!-- Large card: image on top -->
+          <article
+            class="evc evc--large"
+            [attr.data-ev-id]="item.id"
+            (click)="onItemCard(item.id)"
+            role="button"
+            tabindex="0"
+            [attr.aria-label]="item.title"
+            (keydown.enter)="onItemCard(item.id)"
+            (keydown.space)="onItemCard(item.id)"
+          >
+            <div class="evc__media">
+              <img
+                class="evc__img"
+                [src]="imgSrcById()[item.id]"
+                [alt]="item.title"
+                loading="lazy"
+                decoding="async"
+                (error)="onImgError(item.id)"
+              />
+              @if (item.subtitle) {
+                <span class="evc__badge">
+                  <svg class="evc__badge-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                  {{ item.subtitle }}
+                </span>
+              }
+            </div>
+
+            <div class="evc__body">
+              <h2 class="evc__name">{{ item.title }}</h2>
+
+              <div class="evc__location">
+                <svg class="evc__pin" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                {{ item.location }}
+              </div>
+
+              <div class="evc__date-row">
+                <svg class="evc__date-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span class="evc__date">{{ item.dateLabel }}</span>
+              </div>
+
+              <p class="evc__desc">{{ item.description }}</p>
+
+              <div class="evc__footer">
+                <button type="button" class="evc__cta" (click)="$event.stopPropagation(); onItemCard(item.id)">
+                  View Event &rarr;
+                </button>
+                <button
+                  type="button"
+                  class="evc__save"
+                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  (click)="toggleSaved($event, item.id)"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      [attr.fill]="item.isSaved ? '#e8570a' : 'none'"
+                      [attr.stroke]="item.isSaved ? 'none' : 'currentColor'"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </article>
+
+        } @else {
+
+          <!-- Compact card: image left, info right -->
+          <article
+            class="evc evc--compact"
+            [attr.data-ev-id]="item.id"
+            (click)="onItemCard(item.id)"
+            role="button"
+            tabindex="0"
+            [attr.aria-label]="item.title"
+            (keydown.enter)="onItemCard(item.id)"
+            (keydown.space)="onItemCard(item.id)"
+          >
+            <div class="evc__media evc__media--compact">
+              <img
+                class="evc__img"
+                [src]="imgSrcById()[item.id]"
+                [alt]="item.title"
+                loading="lazy"
+                decoding="async"
+                (error)="onImgError(item.id)"
+              />
+              @if (item.subtitle) {
+                <span class="evc__badge evc__badge--compact">{{ item.subtitle }}</span>
+              }
+            </div>
+
+            <div class="evc__body evc__body--compact">
+              <h2 class="evc__name evc__name--compact">{{ item.title }}</h2>
+
+              <div class="evc__location evc__location--compact">
+                <svg class="evc__pin" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                {{ item.location }}
+              </div>
+
+              <p class="evc__date-compact">{{ item.dateLabel }}</p>
+
+              <div class="evc__footer evc__footer--compact">
+                <button type="button" class="evc__cta evc__cta--compact" (click)="$event.stopPropagation(); onItemCard(item.id)">
+                  View Event &rarr;
+                </button>
+                <button
+                  type="button"
+                  class="evc__save"
+                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  (click)="toggleSaved($event, item.id)"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      [attr.fill]="item.isSaved ? '#e8570a' : 'none'"
+                      [attr.stroke]="item.isSaved ? 'none' : 'currentColor'"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </article>
+
+        }
+      }
+
+      @if (filteredItems().length === 0) {
+        <div class="ev-page__empty">
+          <p class="ev-page__empty-text">No events match this filter.</p>
+        </div>
+      }
+
+    </div>
+  </div>
+</div>
