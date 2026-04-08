@@ -1,8 +1,8 @@
 using Geotrack.Application.Interfaces;
 using Geotrack.Domain.Entities;
 using Geotrack.Server.Requests;
-using System.Security.Cryptography;
-using System.Text;
+using Microsoft.AspNetCore.Identity;
+using System.Text.RegularExpressions;
 
 namespace Geotrack.Application.Services;
 
@@ -10,6 +10,7 @@ public class AuthService
 {
     private readonly IUserRepository _userRepository;
     private readonly IJwtService _jwtService;
+    private readonly PasswordHasher<User> _passwordHasher = new();
 
     public AuthService(IUserRepository userRepository, IJwtService jwtService)
     {
@@ -19,6 +20,15 @@ public class AuthService
 
     public async Task Register(RegisterRequest request)
     {
+        // VALIDACIJA
+        if (string.IsNullOrWhiteSpace(request.Username) ||
+            string.IsNullOrWhiteSpace(request.Email) ||
+            string.IsNullOrWhiteSpace(request.Password))
+            throw new Exception("All fields are required");
+
+        if (!IsValidEmail(request.Email))
+            throw new Exception("Invalid email format");
+
         var exists = await _userRepository.ExistsAsync(request.Username, request.Email);
 
         if (exists)
@@ -28,28 +38,42 @@ public class AuthService
         {
             Username = request.Username,
             Email = request.Email,
-            PasswordHash = HashPassword(request.Password),
             CreatedAt = DateTime.UtcNow,
             IsActive = true
         };
+
+        // ✅ PASSWORD HASHER
+        user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
 
         await _userRepository.AddAsync(user);
     }
 
     public async Task<string> Login(LoginRequest request)
     {
+        // VALIDACIJA
+        if (string.IsNullOrWhiteSpace(request.Username) ||
+            string.IsNullOrWhiteSpace(request.Password))
+            throw new Exception("Username and password are required");
+
         var user = await _userRepository.GetByUsernameAsync(request.Username);
 
-        if (user == null || user.PasswordHash != HashPassword(request.Password))
+        if (user == null)
+            throw new Exception("Invalid credentials");
+
+        var result = _passwordHasher.VerifyHashedPassword(
+            user,
+            user.PasswordHash,
+            request.Password
+        );
+
+        if (result == PasswordVerificationResult.Failed)
             throw new Exception("Invalid credentials");
 
         return _jwtService.GenerateToken(user.Id);
     }
 
-    private string HashPassword(string password)
+    private bool IsValidEmail(string email)
     {
-        using var sha256 = SHA256.Create();
-        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-        return Convert.ToBase64String(bytes);
+        return Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
     }
 }
