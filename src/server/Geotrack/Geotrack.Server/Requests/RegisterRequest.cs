@@ -1,5 +1,4 @@
 namespace Geotrack.Server.Requests;
-
 public class RegisterRequest
 {
     public string Username { get; set; } = string.Empty;

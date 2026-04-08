@@ -1,7 +1,6 @@
 using Geotrack.Application.DTOs;
 using Geotrack.Application.Interfaces;
 using Geotrack.Domain.Entities;
-using Geotrack.Server.Requests;
 using Microsoft.AspNetCore.Identity;
 using System.Text.RegularExpressions;
 
@@ -39,7 +38,6 @@ public class AuthService : IAuthService
             Username = request.Username,
             Email = request.Email,
             CreatedAt = DateTime.UtcNow,
-            IsActive = true
         };
 
         user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
