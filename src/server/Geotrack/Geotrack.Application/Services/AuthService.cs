@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs;
 using Geotrack.Application.Interfaces;
 using Geotrack.Domain.Entities;
 using Geotrack.Server.Requests;
@@ -6,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace Geotrack.Application.Services;
 
-public class AuthService
+public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
     private readonly IJwtService _jwtService;
@@ -18,9 +19,8 @@ public class AuthService
         _jwtService = jwtService;
     }
 
-    public async Task Register(RegisterRequest request)
+    public async Task RegisterAsync(RegisterUserDto request)
     {
-        // VALIDACIJA
         if (string.IsNullOrWhiteSpace(request.Username) ||
             string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password))
@@ -32,25 +32,23 @@ public class AuthService
         var exists = await _userRepository.ExistsAsync(request.Username, request.Email);
 
         if (exists)
-            throw new Exception("User already exists");
+            throw new InvalidOperationException("User already exists");
 
         var user = new User
         {
             Username = request.Username,
             Email = request.Email,
             CreatedAt = DateTime.UtcNow,
-            IsActive = true
         };
 
-        // ✅ PASSWORD HASHER
         user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
 
         await _userRepository.AddAsync(user);
+        await _userRepository.SaveChangesAsync();
     }
 
-    public async Task<string> Login(LoginRequest request)
+    public async Task<string> LoginAsync(LoginUserDto request)
     {
-        // VALIDACIJA
         if (string.IsNullOrWhiteSpace(request.Username) ||
             string.IsNullOrWhiteSpace(request.Password))
             throw new Exception("Username and password are required");
