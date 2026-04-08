@@ -1,6 +1,6 @@
-using Geotrack.Infrastructure;
-using Microsoft.EntityFrameworkCore;
 using Geotrack.Application.Interfaces;
+using Geotrack.Application.Services;
+using Geotrack.Infrastructure;
 using Geotrack.Infrastructure.Repositories;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Services;
@@ -19,7 +19,6 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-
 builder.Services.AddScoped<IDestinationRepository, DestinationRepository>();
 builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<ILocationRepository, LocationRepository>();
@@ -27,6 +26,13 @@ builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<ITravelAgencyRepository, TravelAgencyRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRegionRepository, RegionRepository>();
+builder.Services.AddScoped<DestinationService>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<PlaceService>();
+builder.Services.AddScoped<TravelAgencyService>();
+builder.Services.AddScoped<EventService>();
+builder.Services.AddScoped<LocationService>();
+
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
