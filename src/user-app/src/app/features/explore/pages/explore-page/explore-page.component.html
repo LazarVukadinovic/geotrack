@@ -16,6 +16,7 @@
     <app-landmarks-slider
       [items]="landmarkCategories()"
       (tileActivated)="onLandmarkTile($event)"
+      (sectionMore)="onLandmarksMore()"
     />
 
     <app-top-stays-slider
@@ -28,6 +29,7 @@
     <app-events-slider
       [items]="eventsThisWeek()"
       (eventActivated)="onEvent($event)"
+      (sectionMore)="onEventsMore()"
     />
 
     <app-local-favorites-list
@@ -40,12 +42,14 @@
     <app-must-see-slider
       [items]="mustSeeAttractions()"
       (cardActivated)="onAttractionCard($event)"
+      (sectionMore)="onAttractionsMore()"
     />
 
     <app-popular-nearby-slider
       [items]="popularNearby()"
       (bookmarkToggled)="toggleNearbySaved($event)"
       (cardActivated)="onNearbyCard($event)"
+      (sectionMore)="onNatureMore()"
     />
   </div>
 </div>

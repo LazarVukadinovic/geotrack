@@ -116,6 +116,18 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.router.navigate(['/food-and-music']);
   }
 
+  protected onAttractionsMore(): void {
+    this.router.navigate(['/culture-and-history']);
+  }
+
+  protected onNatureMore(): void {
+    this.router.navigate(['/nature']);
+  }
+
+  protected onEventsMore(): void {
+    this.router.navigate(['/events']);
+  }
+
   protected onPromoCta(): void {
     /* future: router.navigate(['/auth/login']) */
   }
@@ -125,11 +137,13 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.router.navigate(['/events', id]);
   }
 
-  /**
-   * Landmark tiles are category browse entries (Beaches, Museums, Parks, Markets).
-   * future: router.navigate(['/explore/category', id]) for category browsing.
-   */
-  protected onLandmarkTile(_id: string): void {}
+  protected onLandmarkTile(categoryKey: string): void {
+    this.router.navigate(['/local-places', categoryKey]);
+  }
+
+  protected onLandmarksMore(): void {
+    this.router.navigate(['/local-places']);
+  }
 
   // ─── Scroll state preservation ────────────────────────────────────────────
 

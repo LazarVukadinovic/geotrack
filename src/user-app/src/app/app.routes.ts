@@ -72,6 +72,38 @@ export const routes: Routes = [
         data: { hideBottomNav: true },
       },
       {
+        path: 'culture-and-history',
+        loadComponent: () =>
+          import('./features/culture-history/pages/culture-history-page/culture-history-page.component').then(
+            (m) => m.CultureHistoryPageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'nature',
+        loadComponent: () =>
+          import('./features/nature/pages/nature-page/nature-page.component').then(
+            (m) => m.NaturePageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'local-places',
+        loadComponent: () =>
+          import('./features/local-places/pages/local-places-page/local-places-page.component').then(
+            (m) => m.LocalPlacesPageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'local-places/:category',
+        loadComponent: () =>
+          import('./features/local-places/pages/local-places-category-page/local-places-category-page.component').then(
+            (m) => m.LocalPlacesCategoryPageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
+      {
         path: 'places/:id',
         loadComponent: () =>
           import('./features/place-detail/pages/place-detail-page/place-detail-page.component').then(
@@ -84,6 +116,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/hotel-detail/pages/hotel-detail-page/hotel-detail-page.component').then(
             (m) => m.HotelDetailPageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'events',
+        loadComponent: () =>
+          import('./features/events-listing/pages/events-listing-page/events-listing-page.component').then(
+            (m) => m.EventsListingPageComponent,
           ),
         data: { hideBottomNav: true },
       },

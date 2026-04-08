@@ -50,4 +50,5 @@ export interface ExploreLandmarkCategory {
   id: string;
   title: string;
   image: string;
+  categoryKey: string;
 }

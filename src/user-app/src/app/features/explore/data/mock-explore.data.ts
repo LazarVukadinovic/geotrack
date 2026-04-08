@@ -230,20 +230,24 @@ export const MOCK_LANDMARK_CATEGORIES: ExploreLandmarkCategory[] = [
     id: 'lm-1',
     title: 'Beaches',
     image: u('photo-1507525428034-b723cf961d3e', 400),
+    categoryKey: 'beaches',
   },
   {
     id: 'lm-2',
     title: 'Museums',
     image: u('photo-1543783207-ec64e4d3c671', 400),
+    categoryKey: 'museums',
   },
   {
     id: 'lm-3',
     title: 'Parks',
     image: u('photo-1519331379826-f10be5486c6f', 400),
+    categoryKey: 'parks',
   },
   {
     id: 'lm-4',
     title: 'Markets',
     image: u('photo-1488459716781-31db52582fe9', 400),
+    categoryKey: 'markets',
   },
 ];
