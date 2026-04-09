@@ -1,10 +1,11 @@
-﻿using Geotrack.Application.DTOs;
-using Geotrack.Application.Interfaces;
+﻿using Geotrack.Application.DTOs.Explore;
+using Geotrack.Application.Interfaces.Repository;
+using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities;
 
 namespace Geotrack.Application.Services;
 
-public class DestinationService
+public class DestinationService : IDestinationService
 {
     private readonly IDestinationRepository _destinationRepository;
 

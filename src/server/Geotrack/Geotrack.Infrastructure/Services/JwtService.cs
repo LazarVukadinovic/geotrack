@@ -1,4 +1,4 @@
-using Geotrack.Application.Interfaces;
+using Geotrack.Application.Interfaces.Service;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
