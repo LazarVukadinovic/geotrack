@@ -1,0 +1,207 @@
+<div class="min-h-screen flex flex-col bg-[#fafafa]">
+
+  <!-- Header -->
+  <div class="bg-[#1a2b4a] px-6 pt-12 pb-14 rounded-b-[2.5rem]">
+    <div class="flex items-center justify-between">
+      <button (click)="goBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </button>
+      <span class="text-base font-bold text-white tracking-wide">Settings</span>
+      <div class="w-9"></div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="flex-1 px-5 pb-10 mt-7 flex flex-col gap-5">
+
+    <!-- Account & Security -->
+    <div>
+      <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Account & Security</p>
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+
+        <!-- Profile row -->
+        <button (click)="goToProfile()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
+          <div class="w-10 h-10 rounded-full bg-[#1a2b4a] flex items-center justify-center flex-none">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+            </svg>
+          </div>
+          <div class="flex-1 text-left min-w-0">
+            <p class="text-sm font-semibold text-slate-800 truncate">{{ fullName }}</p>
+            <p class="text-xs text-slate-400 truncate">{{ email }}</p>
+          </div>
+          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+        <!-- Change Password -->
+        <button (click)="changePassword()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-medium text-slate-700">Change Password</span>
+          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+      </div>
+    </div>
+
+    <!-- Preferences -->
+    <div>
+      <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Preferences</p>
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+
+        <!-- Language -->
+        <button (click)="changeLanguage()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
+          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-medium text-slate-700">Language</span>
+          <span class="text-sm text-[#e8722a] font-semibold mr-1">{{ language }}</span>
+          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+        <!-- Notifications -->
+        <button (click)="openNotifications()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-medium text-slate-700">Notifications</span>
+          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+      </div>
+    </div>
+
+    <!-- Privacy & Safety -->
+    <div>
+      <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Privacy & Safety</p>
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+
+        <!-- Privacy Settings -->
+        <button (click)="openPrivacy()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
+          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-medium text-slate-700">Privacy Settings</span>
+          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+        <!-- My Interests -->
+        <button (click)="openInterests()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-medium text-slate-700">My Interests</span>
+          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+      </div>
+    </div>
+
+    <!-- Help & Support -->
+    <div>
+      <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Help & Support</p>
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+
+        <!-- Help Center -->
+        <button (click)="openHelp()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
+          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-medium text-slate-700">Help Center</span>
+          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+        <!-- Contact Support -->
+        <button (click)="contactSupport()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-medium text-slate-700">Contact Support</span>
+          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+      </div>
+    </div>
+
+    <!-- About -->
+    <div>
+      <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">About</p>
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <button (click)="openTerms()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-medium text-slate-700">Terms & Privacy Policy</span>
+          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Log Out -->
+    <div>
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <button (click)="logOut()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-red-50 transition-colors">
+          <div class="w-8 h-8 bg-red-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-semibold text-red-500">Log Out</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="text-center text-[10px] text-slate-400 pb-2">
+      Secured by AppShield Technology
+    </p>
+
+  </div>
+</div>

@@ -3,11 +3,14 @@ import { Login } from './features/auth/pages/login/login';
 import { Register } from './features/auth/pages/register/register';
 import { Interests } from './features/auth/pages/interests/interests';
 import { EditProfile } from './features/profile/pages/edit-profile/edit-profile';
+import { Settings } from './features/settings/pages/settings/settings';
 
 export const routes: Routes = [
-    { path: '', redirectTo: 'edit_profile', pathMatch: 'full' },
+    { path: '', redirectTo: 'settings', pathMatch: 'full' },
     { path: 'login', component: Login },
     { path: 'register', component: Register },
     { path: 'interests', component: Interests },
-    { path: 'edit_profile', component: EditProfile }
+    { path: 'edit_profile', component: EditProfile },
+    { path: 'settings', component: Settings }
+
 ];
