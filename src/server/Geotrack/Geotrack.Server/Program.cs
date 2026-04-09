@@ -1,18 +1,16 @@
-using Geotrack.Application.Interfaces;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure;
 using Geotrack.Infrastructure.Repositories;
-using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-
+using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Interfaces.Repository;
 
 
 var builder = WebApplication.CreateBuilder(args);
-
 
 // Add services to the container.
 
@@ -26,15 +24,13 @@ builder.Services.AddScoped<IDestinationRepository, DestinationRepository>();
 builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<ILocationRepository, LocationRepository>();
 builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
-builder.Services.AddScoped<ITravelAgencyRepository, TravelAgencyRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRegionRepository, RegionRepository>();
-builder.Services.AddScoped<DestinationService>();
-builder.Services.AddScoped<UserService>();
-builder.Services.AddScoped<PlaceService>();
-builder.Services.AddScoped<TravelAgencyService>();
-builder.Services.AddScoped<EventService>();
-builder.Services.AddScoped<LocationService>();
+builder.Services.AddScoped<IDestinationService, DestinationService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IPlaceService, PlaceService>();
+builder.Services.AddScoped<IEventService, EventService>();
+builder.Services.AddScoped<ILocationService, LocationService>();
 
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 

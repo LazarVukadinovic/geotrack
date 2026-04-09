@@ -1,5 +1,6 @@
 using Geotrack.Application.DTOs;
-using Geotrack.Application.Interfaces;
+using Geotrack.Application.DTOs.Auth;
+using Geotrack.Application.Interfaces.Service;
 using Geotrack.Server.Requests;
 using Geotrack.Server.Responses;
 using Microsoft.AspNetCore.Mvc;
@@ -7,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Geotrack.Server.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/auth")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;

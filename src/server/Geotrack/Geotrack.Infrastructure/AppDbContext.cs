@@ -1,4 +1,5 @@
-﻿using Geotrack.Domain.Entities;
+﻿using System;
+using Geotrack.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure;
@@ -18,22 +19,23 @@ public class AppDbContext : DbContext
     public DbSet<Location> Locations => Set<Location>();
     public DbSet<LocationType> LocationTypes => Set<LocationType>();
 
-    public DbSet<Offer> Offers => Set<Offer>();
-    public DbSet<OfferDestination> OfferDestinations => Set<OfferDestination>();
-
     public DbSet<Place> Places => Set<Place>();
     public DbSet<PlaceType> PlaceTypes => Set<PlaceType>();
 
     public DbSet<Role> Roles => Set<Role>();
-    public DbSet<TravelAgency> TravelAgencies => Set<TravelAgency>();
-
     public DbSet<User> Users => Set<User>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
 
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<DestinationTag> DestinationTags => Set<DestinationTag>();
+    public DbSet<LocationTag> LocationTags => Set<LocationTag>();
     public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
     public DbSet<EventTag> EventTags => Set<EventTag>();
+
+    public DbSet<DestinationReview> DestinationReviews => Set<DestinationReview>();
+    public DbSet<LocationReview> LocationReviews => Set<LocationReview>();
+    public DbSet<PlaceReview> PlaceReviews => Set<PlaceReview>();
+    public DbSet<EventReview> EventReviews => Set<EventReview>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -216,48 +218,6 @@ public class AppDbContext : DbContext
                 .IsUnique();
         });
 
-        modelBuilder.Entity<Offer>(entity =>
-        {
-            entity.ToTable("Offers");
-
-            entity.HasKey(x => x.Id);
-
-            entity.Property(x => x.Name)
-                .HasMaxLength(200);
-
-            entity.Property(x => x.Description)
-                .HasMaxLength(2000);
-
-            entity.Property(x => x.Price)
-                .HasColumnType("decimal(18,2)");
-
-            entity.HasOne(x => x.Agency)
-                .WithMany(x => x.Offers)
-                .HasForeignKey(x => x.TravelAgencyId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => x.TravelAgencyId);
-        });
-
-        modelBuilder.Entity<OfferDestination>(entity =>
-        {
-            entity.ToTable("OfferDestinations");
-
-            entity.HasKey(x => new { x.OfferId, x.DestinationId });
-
-            entity.HasOne(x => x.Offer)
-                .WithMany(x => x.OfferDestinations)
-                .HasForeignKey(x => x.OfferId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.Destination)
-                .WithMany()
-                .HasForeignKey(x => x.DestinationId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => x.DestinationId);
-        });
-
         modelBuilder.Entity<Place>(entity =>
         {
             entity.ToTable("Places");
@@ -322,31 +282,6 @@ public class AppDbContext : DbContext
                 .IsUnique();
         });
 
-        modelBuilder.Entity<TravelAgency>(entity =>
-        {
-            entity.ToTable("TravelAgencies");
-
-            entity.HasKey(x => x.Id);
-
-            entity.Property(x => x.Name)
-                .HasMaxLength(200);
-
-            entity.Property(x => x.Email)
-                .HasMaxLength(200);
-
-            entity.Property(x => x.PhoneNumber)
-                .HasMaxLength(50);
-
-            entity.Property(x => x.Address)
-                .HasMaxLength(300);
-
-            entity.Property(x => x.Website)
-                .HasMaxLength(300);
-
-            entity.HasIndex(x => x.Name)
-                .IsUnique();
-        });
-
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("Users");
@@ -406,11 +341,24 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Name)
                 .HasMaxLength(100);
 
+            entity.Property(x => x.Slug)
+                .HasMaxLength(100);
+
             entity.Property(x => x.Description)
                 .HasMaxLength(1000);
 
+            entity.HasOne<PlaceType>()
+                .WithMany()
+                .HasForeignKey(x => x.PlaceTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(x => x.Name)
                 .IsUnique();
+
+            entity.HasIndex(x => x.Slug)
+                .IsUnique();
+
+            entity.HasIndex(x => x.PlaceTypeId);
         });
 
         modelBuilder.Entity<DestinationTag>(entity =>
@@ -426,6 +374,25 @@ public class AppDbContext : DbContext
 
             entity.HasOne(x => x.Tag)
                 .WithMany(x => x.DestinationTags)
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TagId);
+        });
+
+        modelBuilder.Entity<LocationTag>(entity =>
+        {
+            entity.ToTable("LocationTags");
+
+            entity.HasKey(x => new { x.LocationId, x.TagId });
+
+            entity.HasOne(x => x.Location)
+                .WithMany(x => x.LocationTags)
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany(x => x.LocationTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
 
@@ -468,6 +435,110 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(x => x.TagId);
+        });
+
+        modelBuilder.Entity<DestinationReview>(entity =>
+        {
+            entity.ToTable("DestinationReviews");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Comment)
+                .HasMaxLength(2000);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Destination)
+                .WithMany(x => x.DestinationReviews)
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.DestinationId);
+
+            entity.HasIndex(x => new { x.UserId, x.DestinationId })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<LocationReview>(entity =>
+        {
+            entity.ToTable("LocationReviews");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Comment)
+                .HasMaxLength(2000);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Location)
+                .WithMany(x => x.LocationReviews)
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.LocationId);
+
+            entity.HasIndex(x => new { x.UserId, x.LocationId })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<PlaceReview>(entity =>
+        {
+            entity.ToTable("PlaceReviews");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Comment)
+                .HasMaxLength(2000);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.PlaceReviews)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.PlaceId);
+
+            entity.HasIndex(x => new { x.UserId, x.PlaceId })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<EventReview>(entity =>
+        {
+            entity.ToTable("EventReviews");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Comment)
+                .HasMaxLength(2000);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Event)
+                .WithMany(x => x.EventReviews)
+                .HasForeignKey(x => x.EventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.EventId);
+
+            entity.HasIndex(x => new { x.UserId, x.EventId })
+                .IsUnique();
         });
     }
 }
