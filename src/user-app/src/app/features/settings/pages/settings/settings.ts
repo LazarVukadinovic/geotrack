@@ -28,7 +28,7 @@ export class Settings {
   changeLanguage():  void { console.log('Language'); }
   openNotifications(): void { console.log('Notifications'); }
   openPrivacy():     void { console.log('Privacy'); }
-  openInterests():   void { this.router.navigate(['/my-interests']); }
+  openInterests():   void { this.router.navigate(['/my-interests'], { queryParams: { from: 'settings' } }); }
   openHelp():        void { console.log('Help'); }
   contactSupport():  void { console.log('Support'); }
   openTerms():       void { console.log('Terms'); }

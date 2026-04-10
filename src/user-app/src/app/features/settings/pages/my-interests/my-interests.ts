@@ -1,12 +1,12 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 
 export interface Interest {
   id: string;
   label: string;
 }
-
 const ALL_INTERESTS: Interest[] = [
   { id: 'food',        label: 'Food & Drink' },
   { id: 'history',     label: 'History' },
@@ -40,8 +40,11 @@ export class MyInterests {
   isSaving = false;
   readonly maxSelect = 5;
   selectedInterests: Interest[] = [];
-
-  constructor(private router: Router) {
+  private returnTo = '/settings';
+  constructor(private router: Router, private route: ActivatedRoute) {
+    this.route.queryParams.subscribe(p => {
+      if (p['from']) this.returnTo = '/' + p['from'];
+    });
     this.loadSavedInterests();
   }
 
@@ -80,9 +83,10 @@ export class MyInterests {
       this.isSaving = false;
       this.router.navigate(['/profile']);
     }, 800);
+    this.router.navigate([this.returnTo]);
   }
 
   goBack(): void {
-    this.router.navigate(['/settings']);
+    this.router.navigate([this.returnTo]);
   }
 }
