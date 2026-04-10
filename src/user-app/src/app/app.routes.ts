@@ -4,6 +4,7 @@ import { Register } from './features/auth/pages/register/register';
 import { Interests } from './features/auth/pages/interests/interests';
 import { EditProfile } from './features/profile/pages/edit-profile/edit-profile';
 import { Settings } from './features/settings/pages/settings/settings';
+import { MyInterests } from './features/settings/pages/my-interests/my-interests';
 
 export const routes: Routes = [
     { path: '', redirectTo: 'settings', pathMatch: 'full' },
@@ -11,6 +12,6 @@ export const routes: Routes = [
     { path: 'register', component: Register },
     { path: 'interests', component: Interests },
     { path: 'edit_profile', component: EditProfile },
-    { path: 'settings', component: Settings }
-
+    { path: 'settings', component: Settings },
+    { path: 'my-interests', component: MyInterests }
 ];
