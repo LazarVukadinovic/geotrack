@@ -5,13 +5,16 @@ import { Interests } from './features/auth/pages/interests/interests';
 import { EditProfile } from './features/profile/pages/edit-profile/edit-profile';
 import { Settings } from './features/settings/pages/settings/settings';
 import { MyInterests } from './features/settings/pages/my-interests/my-interests';
+import { Profile } from './features/profile/pages/profile/profile';
 
 export const routes: Routes = [
-    { path: '', redirectTo: 'settings', pathMatch: 'full' },
+    { path: '', redirectTo: 'profile', pathMatch: 'full' },
     { path: 'login', component: Login },
     { path: 'register', component: Register },
     { path: 'interests', component: Interests },
-    { path: 'edit_profile', component: EditProfile },
+    { path: 'edit-profile', component: EditProfile },
     { path: 'settings', component: Settings },
-    { path: 'my-interests', component: MyInterests }
+    { path: 'my-interests', component: MyInterests },
+    { path: 'profile', component: Profile }
+
 ];

@@ -1,14 +1,14 @@
 <div class="min-h-screen flex flex-col bg-[#fafafa]">
 
   <!-- Header -->
-  <div class="bg-[#1a2b4a] px-6 pt-12 pb-14 rounded-b-[2.5rem]">
+  <div class="bg-[#1a2b4a] px-6 pt-12 pb-6 rounded-b-[2.5rem]">
     <div class="flex items-center justify-between">
       <button (click)="goBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
-      <span class="text-base font-bold text-white tracking-wide">Settings</span>
+      <span class="text-xl font-medium text-white tracking-wide">Settings</span>
       <div class="w-9"></div>
     </div>
   </div>
@@ -87,7 +87,19 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
-
+        <!-- My Interests -->
+        <button (click)="openInterests()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+            </svg>
+          </div>
+          <span class="flex-1 text-left text-sm font-medium text-slate-700">My Interests</span>
+            <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+        </button>
       </div>
     </div>
 
@@ -109,22 +121,6 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
-
-        <!-- My Interests -->
-        <button (click)="openInterests()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
-            <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-          </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">My Interests</span>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-        </button>
-
       </div>
     </div>
 
@@ -197,11 +193,5 @@
         </button>
       </div>
     </div>
-
-    <!-- Footer -->
-    <p class="text-center text-[10px] text-slate-400 pb-2">
-      Secured by AppShield Technology
-    </p>
-
   </div>
 </div>
