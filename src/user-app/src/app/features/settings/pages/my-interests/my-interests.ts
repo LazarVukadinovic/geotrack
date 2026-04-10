@@ -38,7 +38,6 @@ const ALL_INTERESTS: Interest[] = [
 })
 export class MyInterests {
   isSaving = false;
-  readonly maxSelect = 5;
   selectedInterests: Interest[] = [];
   private returnTo = '/settings';
   constructor(private router: Router, private route: ActivatedRoute) {
@@ -81,9 +80,8 @@ export class MyInterests {
     setTimeout(() => {
       localStorage.setItem('userInterests', JSON.stringify(this.selectedInterests.map(i => i.id)));
       this.isSaving = false;
-      this.router.navigate(['/profile']);
+      this.router.navigate([this.returnTo]);
     }, 800);
-    this.router.navigate([this.returnTo]);
   }
 
   goBack(): void {

@@ -23,7 +23,7 @@ export class Settings {
   }
 
   goBack():          void { this.router.navigate(['/profile']); }
-  goToProfile():     void { this.router.navigate(['/edit-profile']); }
+  goToProfile():     void { this.router.navigate(['/edit-profile'], { queryParams: { from: 'settings' } }); }
   changePassword():  void { this.router.navigate(['/change-password']); }
   changeLanguage():  void { console.log('Language'); }
   openNotifications(): void { console.log('Notifications'); }
