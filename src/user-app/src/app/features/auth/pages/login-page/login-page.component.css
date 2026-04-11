@@ -14,8 +14,8 @@
 :host {
   display: block;
   /* vh fallback for browsers that don't support dvh yet */
-  height: calc(100vh - var(--shell-bottom-pad));
-  height: calc(100dvh - var(--shell-bottom-pad));
+  min-height: calc(100vh - var(--shell-bottom-pad));
+  min-height: calc(100dvh - var(--shell-bottom-pad));
   background: #ffffff;
 }
 

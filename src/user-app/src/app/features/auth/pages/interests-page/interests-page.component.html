@@ -36,21 +36,16 @@
     </div>
 
     <!-- Interest chips -->
-    <div class="flex flex-wrap justify-center gap-3 mt-3 mb-3 max-w-md mx-auto">
+    <div class="flex flex-wrap justify-center gap-2 mt-3 mb-8 max-w-md mx-auto">
       @for (interest of interests; track interest) {
         <button
           type="button"
           (click)="toggleInterest(interest)"
-          class="flex items-center gap-1.5 px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-150"
+          class="flex items-center justify-center px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-150"
           [style.background-color]="isSelected(interest) ? '#1a2b4a' : '#ffffff'"
           [style.border-color]="isSelected(interest) ? '#1a2b4a' : '#e2e8f0'"
           [style.color]="isSelected(interest) ? '#ffffff' : '#4b5563'">
           {{ interest }}
-          <svg class="w-3.5 h-3.5 flex-none transition-opacity duration-150"
-            [style.opacity]="isSelected(interest) ? '1' : '0'"
-            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-          </svg>
         </button>
       }
     </div>

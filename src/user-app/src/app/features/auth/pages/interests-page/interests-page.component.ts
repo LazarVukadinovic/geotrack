@@ -20,11 +20,11 @@ export class InterestsPageComponent {
     'Museums',
     'Local Events',
     'Nightlife',
-    'Scenic Walks',
     'Festivals',
     'Adventure',
-    'Shopping',
+    'Scenic Walks',
     'Culture',
+    'Shopping',
   ];
 
   constructor(private router: Router) {}
