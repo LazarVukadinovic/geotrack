@@ -1,7 +1,4 @@
 import { Routes } from '@angular/router';
-import { Login } from './features/auth/pages/login/login';
-import { Register } from './features/auth/pages/register/register';
-import { Interests } from './features/auth/pages/interests/interests';
 
 export const routes: Routes = [
   {
@@ -38,9 +35,25 @@ export const routes: Routes = [
       {
         path: 'profile',
         loadComponent: () =>
-          import('./features/profile/pages/profile-page/profile-page.component').then(
-            (m) => m.ProfilePageComponent,
+          import('./features/auth/pages/login-page/login-page.component').then(
+            (m) => m.LoginPageComponent,
           ),
+      },
+      {
+        path: 'profile/register',
+        loadComponent: () =>
+          import('./features/auth/pages/register-page/register-page.component').then(
+            (m) => m.RegisterPageComponent,
+          ),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'profile/interests',
+        loadComponent: () =>
+          import('./features/auth/pages/interests-page/interests-page.component').then(
+            (m) => m.InterestsPageComponent,
+          ),
+        data: { hideBottomNav: true },
       },
       {
         path: 'settings',
@@ -137,33 +150,6 @@ export const routes: Routes = [
             (m) => m.EventDetailPageComponent,
           ),
         data: { hideBottomNav: true },
-      },
-    ],
-  },
-  {
-    path: 'auth',
-    loadComponent: () =>
-      import('./features/auth/pages/auth-shell/auth-shell.component').then((m) => m.AuthShellComponent),
-    children: [
-      { path: '', pathMatch: 'full', redirectTo: 'login' },
-      {
-        path: 'login',
-        loadComponent: () =>
-          import('./features/auth/pages/login-page/login-page.component').then((m) => m.LoginPageComponent),
-      },
-      {
-        path: 'register',
-        loadComponent: () =>
-          import('./features/auth/pages/register-page/register-page.component').then(
-            (m) => m.RegisterPageComponent,
-          ),
-      },
-      {
-        path: 'interests',
-        loadComponent: () =>
-          import('./features/auth/pages/interests-page/interests-page.component').then(
-            (m) => m.InterestsPageComponent,
-          ),
       },
     ],
   },
