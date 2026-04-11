@@ -1,62 +1,43 @@
-﻿using Geotrack.Application.Interfaces;
+﻿using Geotrack.Application.DTOs;
+using Geotrack.Application.DTOs.Explore;
+using Geotrack.Application.Interfaces;
 using Geotrack.Application.Services;
 using Geotrack.Server.Requests;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
-namespace Geotrack.API.Controllers;
+namespace Geotrack.Server.Controllers;
 
 [ApiController]
 [Route("api/destinations")]
-public class DestinationsController : ControllerBase
+public class DestinationController : ControllerBase
 {
     private readonly DestinationService _destinationService;
 
-    public DestinationsController(DestinationService destinationService)
+    public DestinationController(DestinationService destinationService)
     {
         _destinationService = destinationService;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
+    [HttpPost("explore-by-location")]
+    public async Task<ActionResult> ExploreByLocation([FromBody] ExploreByLocationRequest request)
     {
-        var destinations = await _destinationService.GetAllAsync();
-        return Ok(destinations);
-    }
+        int? userId = null;
 
-    [HttpGet("{id:int}")]
-    public async Task<IActionResult> GetById(int id)
-    {
-        var destination = await _destinationService.GetByIdAsync(id);
-
-        if (destination is null)
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(userIdClaim, out var parsedUserId))
         {
-            return NotFound();
+            userId = parsedUserId;
         }
 
-        return Ok(destination);
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> Create(CreateDestinationRequest request)
-    {
-        var destination = await _destinationService.CreateAsync(request.Name);
-
-        return CreatedAtAction(
-            nameof(GetById),
-            new { id = destination.Id },
-            destination);
-    }
-
-    [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id)
-    {
-        var deleted = await _destinationService.DeleteAsync(id);
-
-        if (!deleted)
+        var query = new ExploreByLocationQueryDto
         {
-            return NotFound();
-        }
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
+            UserId = userId
+        };
 
-        return NoContent();
+        var result = await _destinationService.ExploreByLocationAsync(query);
+        return Ok(result);
     }
 }

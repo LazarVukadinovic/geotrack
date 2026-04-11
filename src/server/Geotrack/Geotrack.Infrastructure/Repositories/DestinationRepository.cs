@@ -1,44 +1,25 @@
-﻿using Geotrack.Application.Interfaces;
+﻿using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Repositories;
 
-public class DestinationRepository : IDestinationRepository
+public class DestinationRepository : Repository<Destination>, IDestinationRepository
 {
-    private readonly AppDbContext _dbContext;
+    private readonly AppDbContext _context;
 
-    public DestinationRepository(AppDbContext dbContext)
+    public DestinationRepository(AppDbContext context) : base(context)
     {
-        _dbContext = dbContext;
+        _context = context;
     }
 
-    public async Task<List<Destination>> GetAllAsync()
+    public async Task<IEnumerable<Destination>> GetAllWithDetailsAsync()
     {
-        return await _dbContext.Destinations
+        return await _context.Destinations
+            .Include(d => d.DestinationTags)
+                .ThenInclude(dt => dt.Tag)
             .Include(d => d.Locations)
+                .ThenInclude(l => l.Places)
             .ToListAsync();
-    }
-
-    public async Task<Destination?> GetByIdAsync(int id)
-    {
-        return await _dbContext.Destinations
-            .Include(d => d.Locations)
-            .FirstOrDefaultAsync(d => d.Id == id);
-    }
-
-    public async Task AddAsync(Destination destination)
-    {
-        await _dbContext.Destinations.AddAsync(destination);
-    }
-
-    public void Delete(Destination destination)
-    {
-        _dbContext.Destinations.Remove(destination);
-    }
-
-    public async Task SaveChangesAsync()
-    {
-        await _dbContext.SaveChangesAsync();
     }
 }
