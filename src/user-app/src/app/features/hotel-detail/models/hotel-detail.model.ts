@@ -1,0 +1,64 @@
+export interface HotelTag {
+  label: string;
+}
+
+export interface HotelReview {
+  id: string;
+  authorName: string;
+  avatarUrl: string;
+  rating: number;
+  timeAgo: string;
+  body: string;
+  helpfulCount: number;
+}
+
+export interface HotelSimilar {
+  id: string;
+  title: string;
+  image: string;
+  rating: number;
+  distance: string;
+  isSaved: boolean;
+}
+
+export type HotelAmenityIcon =
+  | 'pool'
+  | 'wifi'
+  | 'breakfast'
+  | 'parking'
+  | 'spa'
+  | 'gym'
+  | 'restaurant'
+  | 'ac';
+
+export interface HotelAmenity {
+  id: string;
+  label: string;
+  icon: HotelAmenityIcon;
+}
+
+export type BookingPartnerVariant = 'dark' | 'brand' | 'muted';
+
+export interface HotelBookingPartner {
+  id: string;
+  name: string;
+  variant: BookingPartnerVariant;
+}
+
+export interface HotelDetail {
+  id: string;
+  title: string;
+  location: string;
+  heroImage: string;
+  tags: HotelTag[];
+  rating: number;
+  reviewCount: string;
+  distance: string;
+  pricePerNight: number;
+  about: string;
+  bookingPartners: HotelBookingPartner[];
+  amenities: HotelAmenity[];
+  reviews: HotelReview[];
+  similar: HotelSimilar[];
+  isSaved: boolean;
+}

@@ -1,0 +1,62 @@
+<nav class="bottom-nav" aria-label="Main">
+  @for (tab of tabs; track tab.path) {
+    <a
+      class="bottom-nav__tab"
+      [routerLink]="tab.path"
+      routerLinkActive="bottom-nav__tab--active"
+      [routerLinkActiveOptions]="{ exact: tab.exact ?? false }"
+    >
+      @switch (tab.path) {
+        @case ('/explore') {
+          <svg class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.75" />
+            <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M12 4v3M12 17v3M4 12h3M17 12h3" />
+            <polygon
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linejoin="round"
+              points="12,8 15,15 12,13 9,15"
+            />
+          </svg>
+        }
+        @case ('/map') {
+          <svg class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linejoin="round"
+              d="M4 6 10 4v14l-6 2V6ZM14 4l6 2v14l-6-2V4Z"
+            />
+            <path fill="none" stroke="currentColor" stroke-width="1.75" d="M10 8l4-2M10 12l4-2M10 16l4-2" />
+          </svg>
+        }
+        @case ('/agent') {
+          <svg class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linejoin="round"
+              d="M6 9h12a2 2 0 0 1 2 2v6l-4-2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"
+            />
+          </svg>
+        }
+        @default {
+          <svg class="bottom-nav__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="9" r="3.5" fill="none" stroke="currentColor" stroke-width="1.75" />
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              d="M6.5 20a5.5 5.5 0 0 1 11 0"
+            />
+          </svg>
+        }
+      }
+      <span class="bottom-nav__label">{{ tab.label }}</span>
+    </a>
+  }
+</nav>

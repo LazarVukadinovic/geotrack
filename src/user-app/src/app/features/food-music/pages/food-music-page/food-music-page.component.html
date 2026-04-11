@@ -1,0 +1,224 @@
+<div class="fm-page">
+
+  <!-- ── Fixed top bar ────────────────────────────────────────────────────── -->
+  <header class="fm-page__topbar">
+    <button type="button" class="fm-page__back" aria-label="Go back" (click)="goBack()">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 5l-7 7 7 7" />
+      </svg>
+    </button>
+    <span class="fm-page__topbar-title">Food &amp; Music</span>
+    <div class="fm-page__topbar-spacer"></div>
+  </header>
+
+  <!-- ── Scrollable content ───────────────────────────────────────────────── -->
+  <div class="fm-page__scroll">
+
+    <!-- Intro -->
+    <div class="fm-page__intro">
+      <h1 class="fm-page__title">Food &amp; Music</h1>
+      <div class="fm-page__title-accent" aria-hidden="true"></div>
+      <p class="fm-page__subtitle">Where the locals go to unwind</p>
+    </div>
+
+    <!-- Filter pills -->
+    <div class="fm-page__filters-viewport">
+      <div class="fm-page__filters" role="list" aria-label="Filter by category">
+        @for (f of filters; track f.id) {
+          <button
+            type="button"
+            class="fm-page__pill"
+            [class.fm-page__pill--active]="activeFilter() === f.id"
+            (click)="setFilter(f.id)"
+            role="listitem"
+          >{{ f.label }}</button>
+        }
+      </div>
+    </div>
+
+    <!-- Item card list -->
+    <div class="fm-page__list" aria-label="Food and music spots">
+
+      @for (item of filteredItems(); track item.id) {
+
+        @if (item.variant === 'large') {
+
+          <!-- Large card: image on top -->
+          <article
+            class="fmc fmc--large"
+            [attr.data-fm-id]="item.id"
+            (click)="onItemCard(item.id)"
+            role="button"
+            tabindex="0"
+            [attr.aria-label]="item.title"
+            (keydown.enter)="onItemCard(item.id)"
+            (keydown.space)="onItemCard(item.id)"
+          >
+            <div class="fmc__media">
+              <img
+                class="fmc__img"
+                [src]="imgSrcById()[item.id]"
+                [alt]="item.title"
+                loading="lazy"
+                decoding="async"
+                (error)="onImgError(item.id)"
+              />
+              @if (item.subtitle) {
+                <span class="fmc__badge">
+                  <svg class="fmc__badge-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>
+                  </svg>
+                  {{ item.subtitle }}
+                </span>
+              }
+            </div>
+
+            <div class="fmc__body">
+              <h2 class="fmc__name">{{ item.title }}</h2>
+
+              <div class="fmc__location">
+                <svg class="fmc__pin" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                {{ item.location }}
+              </div>
+
+              <div class="fmc__meta">
+                @if (item.rating != null) {
+                  <svg class="fmc__star" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                  </svg>
+                  <span class="fmc__rating">{{ item.rating.toFixed(1) }}</span>
+                  @if (item.reviewCount) {
+                    <span class="fmc__reviews">&middot; {{ item.reviewCount }} reviews</span>
+                  }
+                }
+                @if (item.openingHours) {
+                  <span class="fmc__hours">{{ item.openingHours }}</span>
+                }
+              </div>
+
+              <p class="fmc__desc">{{ item.description }}</p>
+
+              <div class="fmc__footer">
+                <button type="button" class="fmc__cta" (click)="$event.stopPropagation(); onItemCard(item.id)">
+                  Explore Spot &rarr;
+                </button>
+                <button
+                  type="button"
+                  class="fmc__save"
+                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  (click)="toggleSaved($event, item.id)"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      [attr.fill]="item.isSaved ? '#e8570a' : 'none'"
+                      [attr.stroke]="item.isSaved ? 'none' : 'currentColor'"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </article>
+
+        } @else {
+
+          <!-- Compact card: image left, info right -->
+          <article
+            class="fmc fmc--compact"
+            [attr.data-fm-id]="item.id"
+            (click)="onItemCard(item.id)"
+            role="button"
+            tabindex="0"
+            [attr.aria-label]="item.title"
+            (keydown.enter)="onItemCard(item.id)"
+            (keydown.space)="onItemCard(item.id)"
+          >
+            <div class="fmc__media fmc__media--compact">
+              <img
+                class="fmc__img"
+                [src]="imgSrcById()[item.id]"
+                [alt]="item.title"
+                loading="lazy"
+                decoding="async"
+                (error)="onImgError(item.id)"
+              />
+              @if (item.subtitle) {
+                <span class="fmc__badge fmc__badge--compact">{{ item.subtitle }}</span>
+              }
+            </div>
+
+            <div class="fmc__body fmc__body--compact">
+              <h2 class="fmc__name fmc__name--compact">{{ item.title }}</h2>
+
+              <div class="fmc__location fmc__location--compact">
+                <svg class="fmc__pin" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                {{ item.location }}
+              </div>
+
+              <div class="fmc__meta">
+                @if (item.rating != null) {
+                  <svg class="fmc__star" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                  </svg>
+                  <span class="fmc__rating">{{ item.rating.toFixed(1) }}</span>
+                  @if (item.reviewCount) {
+                    <span class="fmc__reviews">&middot; {{ item.reviewCount }}</span>
+                  }
+                }
+              </div>
+
+              @if (item.openingHours) {
+                <p class="fmc__hours-compact">{{ item.openingHours }}</p>
+              }
+
+              <div class="fmc__footer fmc__footer--compact">
+                <button type="button" class="fmc__cta fmc__cta--compact" (click)="$event.stopPropagation(); onItemCard(item.id)">
+                  Explore &rarr;
+                </button>
+                <button
+                  type="button"
+                  class="fmc__save"
+                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  (click)="toggleSaved($event, item.id)"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      [attr.fill]="item.isSaved ? '#e8570a' : 'none'"
+                      [attr.stroke]="item.isSaved ? 'none' : 'currentColor'"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </article>
+
+        }
+      }
+
+      @if (filteredItems().length === 0) {
+        <div class="fm-page__empty">
+          <p class="fm-page__empty-text">No spots match this filter.</p>
+        </div>
+      }
+
+    </div>
+  </div>
+</div>

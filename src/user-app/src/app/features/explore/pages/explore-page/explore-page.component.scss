@@ -1,0 +1,12 @@
+.explore-page {
+  position: relative;
+}
+
+.explore-page__main {
+  padding-inline: var(--page-gutter);
+  padding-top: calc(var(--app-header-offset) + var(--space-3));
+}
+
+.explore-page__search {
+  margin-bottom: var(--space-4);
+}

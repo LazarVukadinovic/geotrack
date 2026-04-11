@@ -1,0 +1,17 @@
+.empty-state {
+  padding: var(--space-8) var(--page-gutter);
+  text-align: center;
+}
+
+.empty-state__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--color-primary-navy);
+}
+
+.empty-state__msg {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}

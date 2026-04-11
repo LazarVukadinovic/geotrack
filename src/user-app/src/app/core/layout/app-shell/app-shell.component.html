@@ -1,0 +1,8 @@
+<div class="app-shell" [class.app-shell--no-nav]="!showBottomNav()">
+  <div class="app-shell__viewport" #viewport>
+    <router-outlet />
+  </div>
+  @if (showBottomNav()) {
+    <app-bottom-nav />
+  }
+</div>

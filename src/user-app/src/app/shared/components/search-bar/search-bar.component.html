@@ -1,0 +1,21 @@
+<div class="search-bar">
+  <svg class="search-bar__icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.75"
+      stroke-linecap="round"
+      d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0 0L16 21"
+    />
+  </svg>
+  <input
+    #searchField
+    class="search-bar__input"
+    type="search"
+    autocomplete="off"
+    enterkeyhint="search"
+    [attr.placeholder]="placeholder()"
+    [value]="local()"
+    (input)="onInput($event)"
+  />
+</div>

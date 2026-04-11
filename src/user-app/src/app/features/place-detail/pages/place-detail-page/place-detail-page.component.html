@@ -1,0 +1,285 @@
+@if (place(); as p) {
+  <article class="pd">
+
+    <!-- ── Top bar: absolute, above scroll container, transparent → navy ─── -->
+    <header class="pd__top-bar" [style.--progress]="scrollProgress()">
+      <button
+        type="button"
+        class="pd__hero-btn"
+        aria-label="Go back"
+        (click)="goBack()"
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                stroke-linejoin="round" d="M19 12H5M12 5l-7 7 7 7"/>
+        </svg>
+      </button>
+
+      <span class="pd__top-bar-title" aria-hidden="true">Explore</span>
+
+      <div class="pd__hero-actions">
+        <button type="button" class="pd__hero-btn" aria-label="Share this place">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          class="pd__hero-btn"
+          [class.pd__hero-btn--saved]="p.isSaved"
+          [attr.aria-label]="p.isSaved ? 'Remove from saved' : 'Save place'"
+          (click)="toggleSaved()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              [attr.fill]="p.isSaved ? '#e8570a' : 'none'"
+              [attr.stroke]="p.isSaved ? 'none' : 'currentColor'"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+            />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ── Hero image: absolute backdrop, never scrolls ──────────────────── -->
+    <div class="pd__hero" aria-hidden="true">
+      <img
+        class="pd__hero-img"
+        [src]="p.heroImage"
+        alt=""
+        width="800"
+        height="480"
+        loading="eager"
+        decoding="async"
+        (error)="onHeroImgError($event)"
+      />
+    </div>
+
+    <!-- ── Scroll container: owns all scrolling for this page ────────────── -->
+    <!-- The spacer reveals the hero behind; the card slides over it as the  -->
+    <!-- user scrolls. Scroll events here drive the top-bar progress signal. -->
+    <div class="pd__scroll" #pdScroll (scroll)="onScroll($event)">
+      <div class="pd__scroll-spacer" aria-hidden="true"></div>
+
+      <div class="pd__card">
+        <!-- Category tags -->
+        <div class="pd__tags" role="list" aria-label="Categories">
+          @for (tag of p.tags; track tag.label) {
+            <span class="pd__tag" role="listitem">{{ tag.label }}</span>
+          }
+        </div>
+
+        <!-- Location -->
+        <div class="pd__location">
+          <svg class="pd__location-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor"
+                  d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+          <span>{{ p.location }}</span>
+        </div>
+
+        <!-- Title -->
+        <h1 class="pd__title">{{ p.title }}</h1>
+
+        <!-- Stats row -->
+        <div class="pd__stats">
+          <div class="pd__stat">
+            <svg class="pd__stat-icon pd__stat-icon--star" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor"
+                    d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+            </svg>
+            <span class="pd__stat-val">{{ p.rating.toFixed(1) }}</span>
+            <span class="pd__stat-sub">({{ p.reviewCount }} reviews)</span>
+          </div>
+
+          <span class="pd__stat-dot" aria-hidden="true"></span>
+
+          <div class="pd__stat">
+            <svg class="pd__stat-icon pd__stat-icon--dist" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke="currentColor" fill="none" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"
+                    d="M3 18l9-9 9 9"/>
+            </svg>
+            <span class="pd__stat-val">{{ p.distance }}</span>
+          </div>
+
+          <span class="pd__stat-dot" aria-hidden="true"></span>
+
+          <div class="pd__stat">
+            <svg class="pd__stat-icon pd__stat-icon--clock" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" fill="none" stroke-width="2"/>
+              <path stroke="currentColor" fill="none" stroke-width="2"
+                    stroke-linecap="round" d="M12 6v6l4 2"/>
+            </svg>
+            <span class="pd__stat-val pd__stat-val--open">{{ p.openStatus }}</span>
+          </div>
+        </div>
+
+        <!-- CTA buttons -->
+        <div class="pd__ctas">
+          <button type="button" class="pd__cta pd__cta--primary" (click)="onGetDirections()">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor"
+                    d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+            Get Directions
+          </button>
+          <button type="button" class="pd__cta pd__cta--outline" (click)="onViewOnMap()">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke="currentColor" fill="none" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"
+                    d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+            </svg>
+            View on Map
+          </button>
+        </div>
+
+        <!-- ── About ──────────────────────────────────────────────────── -->
+        <div class="pd__divider"></div>
+
+        <section class="pd__section">
+          <h2 class="pd__section-title">About this place</h2>
+          <p class="pd__about">{{ p.about }}</p>
+        </section>
+
+        <!-- ── Reviews ───────────────────────────────────────────────── -->
+        <div class="pd__divider"></div>
+
+        <section class="pd__section">
+          <app-section-header
+            title="Reviews"
+            actionLabel="See all"
+            (action)="onSeeAllReviews()"
+          />
+
+          <!-- Login / review CTA -->
+          <div class="pd__review-cta">
+            <div class="pd__review-cta-text">
+              <span class="pd__review-cta-title">Share your experience</span>
+              <span class="pd__review-cta-sub">Log in to leave a review</span>
+            </div>
+            <button type="button" class="pd__review-cta-btn">Log In</button>
+          </div>
+
+          <!-- Review cards -->
+          <div class="pd__reviews-list">
+            @for (review of p.reviews; track review.id) {
+              <div class="pd__review">
+                <div class="pd__review-top">
+                  <img
+                    class="pd__review-avatar"
+                    [src]="review.avatarUrl"
+                    [alt]="review.authorName"
+                    width="44"
+                    height="44"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <div class="pd__review-meta">
+                    <span class="pd__review-name">{{ review.authorName }}</span>
+                    <span class="pd__review-time">{{ review.timeAgo }}</span>
+                  </div>
+                  <div class="pd__review-rating">
+                    <svg class="pd__review-star" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="currentColor"
+                            d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                    </svg>
+                    <span>{{ review.rating.toFixed(1) }}</span>
+                  </div>
+                </div>
+
+                <p class="pd__review-body">{{ review.body }}</p>
+
+                <button type="button" class="pd__review-helpful">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor"
+                          d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
+                  </svg>
+                  Helpful ({{ review.helpfulCount }})
+                </button>
+              </div>
+            }
+          </div>
+        </section>
+
+        <!-- ── Similar Places ─────────────────────────────────────────── -->
+        <div class="pd__divider"></div>
+
+        <section class="pd__section pd__section--last">
+          <app-section-header
+            title="Similar Places"
+            actionLabel="More"
+          />
+
+          <div class="pd__similar-viewport">
+            <div class="pd__similar-track" role="list">
+              @for (s of p.similar; track s.id) {
+                <article
+                  class="pd__similar-card"
+                  role="listitem"
+                  (click)="navigateToSimilar(s.id)"
+                >
+                  <div class="pd__similar-media">
+                    <img
+                      class="pd__similar-img"
+                      [src]="s.image"
+                      [alt]="s.title"
+                      width="160"
+                      height="110"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                    <button
+                      type="button"
+                      class="pd__similar-fav"
+                      [class.pd__similar-fav--saved]="isSimilarSaved(s.id)"
+                      [attr.aria-label]="isSimilarSaved(s.id) ? 'Remove from saved' : 'Save'"
+                      (click)="toggleSimilarSaved($event, s.id)"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          [attr.fill]="isSimilarSaved(s.id) ? '#e8570a' : 'none'"
+                          [attr.stroke]="isSimilarSaved(s.id) ? 'none' : 'currentColor'"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div class="pd__similar-body">
+                    <h3 class="pd__similar-title">{{ s.title }}</h3>
+                    <div class="pd__similar-meta">
+                      <svg class="pd__similar-star" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor"
+                              d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                      </svg>
+                      <span class="pd__similar-rating">{{ s.rating.toFixed(1) }}</span>
+                      <span class="pd__similar-dist">{{ s.distance }}</span>
+                    </div>
+                  </div>
+                </article>
+              }
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /.pd__card -->
+    </div><!-- /.pd__scroll -->
+
+  </article>
+
+} @else if (placeId()) {
+  <div class="pd__not-found">
+    <p>Place not found.</p>
+    <button type="button" class="pd__not-found-back" (click)="goBack()">Go back</button>
+  </div>
+}

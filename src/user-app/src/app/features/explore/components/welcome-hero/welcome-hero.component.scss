@@ -1,0 +1,25 @@
+.welcome-hero {
+  margin: 0 0 var(--space-6);
+  padding-top: var(--space-2);
+}
+
+.welcome-hero__line {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-hero);
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--color-primary-navy);
+  letter-spacing: -0.03em;
+}
+
+.welcome-hero__city {
+  font-weight: 800;
+}
+
+.welcome-hero__country {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-accent-orange);
+}

@@ -1,0 +1,72 @@
+import { Component, DestroyRef, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, NavigationEnd, NavigationStart, Router, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs/operators';
+import { BottomNavComponent } from '../../../shared/components/bottom-nav/bottom-nav.component';
+
+@Component({
+  selector: 'app-shell',
+  standalone: true,
+  imports: [RouterOutlet, BottomNavComponent],
+  templateUrl: './app-shell.component.html',
+  styleUrl: './app-shell.component.scss',
+})
+export class AppShellComponent implements OnInit {
+  private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly showBottomNav = signal(true);
+
+  private readonly viewport = viewChild<ElementRef<HTMLElement>>('viewport');
+  private currentTrigger: 'imperative' | 'popstate' | 'hashchange' = 'imperative';
+  private readonly scrollHistory = new Map<string, number>();
+
+  ngOnInit(): void {
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationStart | NavigationEnd =>
+          e instanceof NavigationStart || e instanceof NavigationEnd,
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((event) => {
+        if (event instanceof NavigationStart) {
+          this.currentTrigger = event.navigationTrigger ?? 'imperative';
+          const el = this.viewport()?.nativeElement;
+          if (el) {
+            this.scrollHistory.set(this.router.url, el.scrollTop);
+          }
+        } else {
+          this.syncBottomNav();
+          const el = this.viewport()?.nativeElement;
+          if (!el) return;
+          if (this.currentTrigger === 'popstate') {
+            const saved = this.scrollHistory.get(event.urlAfterRedirects) ?? 0;
+            requestAnimationFrame(() => {
+              el.scrollTop = saved;
+            });
+          } else {
+            el.scrollTop = 0;
+          }
+        }
+      });
+
+    // Router tree / snapshots may not be final during the first tick; defer reads slightly.
+    queueMicrotask(() => this.syncBottomNav());
+  }
+
+  private syncBottomNav(): void {
+    const root = this.router.routerState?.root;
+    if (!root) {
+      this.showBottomNav.set(true);
+      return;
+    }
+
+    let route: ActivatedRoute = root;
+    while (route.firstChild) {
+      route = route.firstChild;
+    }
+
+    const hideBottomNav = route.snapshot?.data?.['hideBottomNav'] === true;
+    this.showBottomNav.set(!hideBottomNav);
+  }
+}
