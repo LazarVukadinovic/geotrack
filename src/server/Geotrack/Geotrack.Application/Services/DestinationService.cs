@@ -185,4 +185,48 @@ public class DestinationService : IDestinationService
 
 
     }
+
+    public async Task<GetDestinationSectionResponseDto> GetDestinationSectionAsync(int destinationId, string sectionKey)
+    {
+        var destination = await _destinationRepository.GetWithDetailsAsync(destinationId);
+
+        if (destination == null)
+        {
+            throw new Exception("Destinacija nije pronadjena");
+        }
+
+        var allLocations = destination.Locations?.ToList() ?? new List<Location>();
+        var allPlaces = allLocations.SelectMany(l => l.Places ?? new List<Place>()).ToList();
+
+        var (filteredLocations, filteredPlaces, title) = sectionKey.ToLower() switch
+        {
+            "locations" => (
+                allLocations,
+                allPlaces,
+                "Locations"
+            ),
+            _ => throw new Exception($"Nepoznata sekcija: {sectionKey}")
+        };
+
+
+        return new GetDestinationSectionResponseDto
+        {
+            Id = destinationId,
+            SectionKey = sectionKey,
+            SectionTitle = title,
+            Locations = filteredLocations.Select(l => new DestinationSectionLocationItemDto
+            {
+                Id = l.Id,
+                Name = l.Name,
+                Latitude = l.Latitude,
+                Longitude = l.Longitude
+            }).ToList(),
+            Places = filteredPlaces.Select(p => new DestinationSectionPlaceItemDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                LocationId = p.LocationId
+            }).ToList()
+        };
+    }
 }
