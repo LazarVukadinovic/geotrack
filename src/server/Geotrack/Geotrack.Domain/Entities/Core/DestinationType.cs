@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Geotrack.Domain.Entities;
+namespace Geotrack.Domain.Entities.Core;
 public class DestinationType
 {
     public int Id { get; set; } // PRIMARY KEY

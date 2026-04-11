@@ -5,13 +5,15 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Geotrack.Domain.Entities;
+namespace Geotrack.Domain.Entities.Users;
 
 public class User
 {
     public int Id { get; set; } // PRIMARY KEY
     public string Username { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
+
+    public ICollection<Collection> Collections { get; set; } = new List<Collection>(); // NAVIGATIONAL
 
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>(); // NAVIGATIONAL
 

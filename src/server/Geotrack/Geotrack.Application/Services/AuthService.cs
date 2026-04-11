@@ -1,7 +1,7 @@
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Users;
 using Microsoft.AspNetCore.Identity;
 using System.Text.RegularExpressions;
 

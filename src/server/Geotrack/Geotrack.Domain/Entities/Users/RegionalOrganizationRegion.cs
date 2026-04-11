@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Geotrack.Domain.Entities.Core;
 
-namespace Geotrack.Domain.Entities;
+namespace Geotrack.Domain.Entities.Users;
 
 public class RegionalOrganizationRegion
-    {
+{
     public int UserId { get; set; }
     public RegionalOrganization RegionalOrganization { get; set; } = null!; // NAVIGATIONAL
     public int RegionId { get; set; }

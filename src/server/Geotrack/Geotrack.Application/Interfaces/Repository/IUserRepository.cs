@@ -1,4 +1,4 @@
-﻿using Geotrack.Domain.Entities;
+﻿using Geotrack.Domain.Entities.Users;
 
 namespace Geotrack.Application.Interfaces.Repository;
 

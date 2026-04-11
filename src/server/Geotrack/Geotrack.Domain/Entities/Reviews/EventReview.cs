@@ -1,6 +1,7 @@
-﻿using Geotrack.Domain.Entities;
+﻿using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Users;
 
-namespace Geotrack.Domain.Entities;
+namespace Geotrack.Domain.Entities.Reviews;
 
 public class EventReview
 {
