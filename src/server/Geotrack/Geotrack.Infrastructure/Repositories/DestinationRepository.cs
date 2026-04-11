@@ -1,5 +1,6 @@
 ﻿using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Reviews;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Repositories;
@@ -23,6 +24,12 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
         .Include(d => d.DestinationReviews)
         .ToListAsync();
     }
+
+    public async Task<IEnumerable<DestinationReview>> GetReviewsAsync(int destinationId)
+    {
+        return await _context.DestinationReviews.Where(r => r.DestinationId == destinationId).ToListAsync();
+    }
+
     public async Task<Destination?> GetWithDetailsAsync(int destinationId)
     {
         return await _context.Destinations

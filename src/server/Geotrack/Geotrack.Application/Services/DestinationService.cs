@@ -229,4 +229,29 @@ public class DestinationService : IDestinationService
             }).ToList()
         };
     }
+
+    public async Task<GetDestinationReviewsResponseDto> GetDestinationReviewsAsync(int destinationId)
+    {
+        var reviews = await _destinationRepository.GetReviewsAsync(destinationId);
+
+        var reviewsList = reviews.ToList();
+        var reviewsCount = reviewsList.Count;
+        var averageRating = reviewsCount > 0 ? reviewsList.Average(r => r.Rating) : 0.0;
+
+        return new GetDestinationReviewsResponseDto
+        {
+            DestinationId = destinationId,
+            AverageRating = averageRating,
+            ReviewsCount = reviewsCount,
+            Reviews = reviewsList.Select(r => new DestinationReviewItemDto
+            {
+                DestinationId = r.DestinationId,
+                UserId = r.UserId,
+                Rating = r.Rating,
+                Comment = r.Comment,
+                CreatedAt = r.CreatedAt,
+                UpdatedAt = r.UpdatedAt
+            }).ToList()
+        };
+    }
 }

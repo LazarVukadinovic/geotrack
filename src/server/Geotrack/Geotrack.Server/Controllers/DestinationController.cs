@@ -54,4 +54,12 @@ public class DestinationController : ControllerBase
         var result = await _destinationService.GetDestinationSectionAsync(destinationId, sectionKey);
         return Ok(result);
     }
+
+    [HttpGet("{destinationId}/reviews")]
+    public async Task<ActionResult> GetDestinationReviews(int destinationId)
+    {
+        var result = await _destinationService.GetDestinationReviewsAsync(destinationId);
+        return Ok(result);
+    }
+
 }
