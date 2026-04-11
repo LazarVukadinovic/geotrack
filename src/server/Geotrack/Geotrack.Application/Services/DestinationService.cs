@@ -1,4 +1,5 @@
-﻿using Geotrack.Application.DTOs.Explore;
+﻿using Geotrack.Application.DTOs.Destionation;
+using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
@@ -133,5 +134,55 @@ public class DestinationService : IDestinationService
     private static double DegreesToRadians(double degrees)
     {
         return degrees * Math.PI / 180.0;
+    }
+
+    public async Task<GetDestinationResponseDto> GetDestinationDetailsAsync(int destinationId)
+    {
+        var destination = await _destinationRepository.GetWithDetailsAsync(destinationId);
+
+        if (destination == null)
+            throw new Exception("Destinacija nije pronadjena");
+
+
+        var reviewcount = destination.DestinationReviews?.Count ?? 0;
+        var avgrating = reviewcount > 0 ? destination.DestinationReviews!.Average(r => r.Rating) : 0.0;
+
+
+        var savedCollectionIds = new List<int>();
+
+        var isSaved = false;// ne postoji jos model kolekcija
+
+        var allLocations = destination.Locations?.ToList() ?? new List<Location>();
+
+        var allPlaces = allLocations.SelectMany(l => l.Places ?? new List<Place>()).ToList();
+
+        var locationSection = new DestinationSectionPreviewDto
+        {
+            Key = "locations",
+            Title = "Locations",
+            Locations = allLocations.Take(5).Select(l => new DestinationSectionLocationItemDto { Id = l.Id, Name = l.Name, Latitude = l.Latitude, Longitude = l.Longitude }).ToList(),
+            Places = allPlaces.Take(5).Select(p => new DestinationSectionPlaceItemDto { Id = p.Id, Name = p.Name, LocationId = p.LocationId }).ToList()
+        };
+
+
+        return new GetDestinationResponseDto
+        {
+            Id = destination.Id,
+            Name = destination.Name,
+            Description = destination.Description,
+            Latitude = destination.Latitude, Longitude = destination.Longitude,
+            DestinationTypeId = destination.DestinationTypeId,
+            RegionId = destination.RegionId,
+            CreatedAt = destination.CreatedAt,
+            UpdatedAt = destination.UpdatedAt ?? DateTime.MinValue,
+            AverageRating = avgrating,
+            ReviewsCount = reviewcount,
+            IsSaved = isSaved,
+            SavedCollectionIds = savedCollectionIds,
+            Sections = new List<DestinationSectionPreviewDto> { locationSection }
+
+        };
+
+
     }
 }

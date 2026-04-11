@@ -16,10 +16,21 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
     public async Task<IEnumerable<Destination>> GetAllWithDetailsAsync()
     {
         return await _context.Destinations
+        .Include(d => d.DestinationTags)
+            .ThenInclude(dt => dt.Tag)
+        .Include(d => d.Locations)
+            .ThenInclude(l => l.Places)
+        .Include(d => d.DestinationReviews)
+        .ToListAsync();
+    }
+    public async Task<Destination?> GetWithDetailsAsync(int destinationId)
+    {
+        return await _context.Destinations
             .Include(d => d.DestinationTags)
                 .ThenInclude(dt => dt.Tag)
             .Include(d => d.Locations)
                 .ThenInclude(l => l.Places)
-            .ToListAsync();
+            .Include(d => d.DestinationReviews)
+    .FirstOrDefaultAsync(d => d.Id == destinationId);
     }
 }

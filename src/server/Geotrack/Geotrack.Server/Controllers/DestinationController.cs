@@ -40,4 +40,11 @@ public class DestinationController : ControllerBase
         var result = await _destinationService.ExploreByLocationAsync(query);
         return Ok(result);
     }
+
+    [HttpGet("{destinationId}")]
+    public async Task<ActionResult> GetDestinationDetails(int destinationId)
+    {
+        var result = await _destinationService.GetDestinationDetailsAsync(destinationId);
+        return Ok(result);
+    }
 }
