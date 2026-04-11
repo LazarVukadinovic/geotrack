@@ -1,3 +1,8 @@
+/* Prevent iOS Safari zoom on input focus (same fix as login page). */
+input {
+  font-size: 1rem;
+}
+
 /* Remove browser's built-in password reveal button */
 input[type="password"]::-ms-reveal,
 input[type="password"]::-ms-clear,

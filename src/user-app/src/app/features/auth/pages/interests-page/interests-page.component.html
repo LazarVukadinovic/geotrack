@@ -1,0 +1,82 @@
+<div class="min-h-screen flex flex-col bg-[#fafaf9]">
+
+  <!-- Top ombre -->
+  <div style="background: linear-gradient(to bottom, #2d4a7a 0%, #5b7fa6 40%, #a8c4d8 70%, #fafaf9 100%);"
+    class="px-6 pt-10 pb-10">
+
+    <!-- Step indicator -->
+    <div class="pt-6 flex items-center justify-between mb-6">
+      <button type="button" (click)="goBack()" class="w-8 h-8 flex items-center justify-center text-white/80">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </button>
+      <span class="text-xs font-semibold tracking-[0.15em] text-white/80">STEP 2 OF 2</span>
+      <div class="w-8"></div>
+    </div>
+    <div class="h-1.5 bg-white/20 rounded-full overflow-hidden mb-10">
+      <div class="h-full w-full bg-white rounded-full"></div>
+    </div>
+
+    <h1 class="text-2xl font-bold text-[#0f172a] tracking-tight mb-1.5">Choose your interests</h1>
+    <p class="text-base text-slate-700 leading-relaxed">
+      Selecting interests helps personalize your recommendations and tailor your experience.
+    </p>
+  </div>
+
+  <!-- Content -->
+  <div class="flex-1 px-6 pt-5 pb-8 flex flex-col bg-[#fafaf9]">
+
+    <!-- Topics label + selected count -->
+    <div class="flex items-center justify-between mb-5">
+      <span class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase">Suggested Topics</span>
+      <span class="text-[12px] font-bold text-slate-600">
+        {{ selectedInterests.length }} selected
+      </span>
+    </div>
+
+    <!-- Interest chips -->
+    <div class="flex flex-wrap justify-center gap-3 mt-6 mb-10 max-w-md mx-auto">
+      @for (interest of interests; track interest) {
+        <button
+          type="button"
+          (click)="toggleInterest(interest)"
+          class="flex items-center gap-1.5 px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-150"
+          [style.background-color]="isSelected(interest) ? '#1a2b4a' : '#ffffff'"
+          [style.border-color]="isSelected(interest) ? '#1a2b4a' : '#e2e8f0'"
+          [style.color]="isSelected(interest) ? '#ffffff' : '#4b5563'">
+          {{ interest }}
+          <svg class="w-3.5 h-3.5 flex-none transition-opacity duration-150"
+            [style.opacity]="isSelected(interest) ? '1' : '0'"
+            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+          </svg>
+        </button>
+      }
+    </div>
+
+    <div class="flex-1"></div>
+
+    <!-- Finish button -->
+    <button
+      type="button"
+      (click)="onFinish()"
+      [disabled]="selectedInterests.length === 0"
+      class="w-full py-3.5 rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200 active:scale-[0.98]"
+      [style.background-color]="selectedInterests.length > 0 ? '#e8570a' : '#e2e8f0'">
+      Finish & Go to App
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+      </svg>
+    </button>
+
+    <button type="button" (click)="onSkip()" class="text-center text-base text-slate-500 font-medium mt-4">
+      Skip for now
+    </button>
+
+    <p class="text-center text-sm text-slate-400 mt-3 leading-relaxed">
+      Don't worry, our AI will continually learn what<br/>you like based on your activity over time.
+    </p>
+  </div>
+
+</div>

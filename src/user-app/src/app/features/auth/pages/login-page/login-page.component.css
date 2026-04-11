@@ -1,0 +1,17 @@
+/*
+  iOS Safari zooms in on focus when the input font-size is below 16px.
+  The global `input { font: inherit }` in styles.scss inherits 15px from body
+  (var(--text-base) = 0.9375rem). This component-scoped rule wins via higher
+  specificity (element + attribute selector) and locks inputs to 16px.
+*/
+input {
+  font-size: 1rem;
+}
+
+/* Remove browser's built-in password reveal button */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input::-webkit-credentials-auto-fill-button,
+input::-webkit-strong-password-auto-fill-button {
+  display: none !important;
+}
