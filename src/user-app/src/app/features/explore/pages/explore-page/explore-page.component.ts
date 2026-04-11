@@ -129,7 +129,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   }
 
   protected onPromoCta(): void {
-    /* future: router.navigate(['/auth/login']) */
+    this.router.navigate(['/profile']);
   }
 
   protected onEvent(id: string): void {

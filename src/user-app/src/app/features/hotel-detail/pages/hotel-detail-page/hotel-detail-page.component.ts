@@ -62,6 +62,10 @@ export class HotelDetailPageComponent {
     this.location.back();
   }
 
+  protected goToLogin(): void {
+    this.router.navigate(['/profile']);
+  }
+
   protected toggleSaved(): void {
     const id = this.hotelId();
     if (id) this.service.toggleSaved(id);

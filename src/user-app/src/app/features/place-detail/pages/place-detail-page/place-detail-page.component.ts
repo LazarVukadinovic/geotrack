@@ -68,6 +68,10 @@ export class PlaceDetailPageComponent {
     this.location.back();
   }
 
+  protected goToLogin(): void {
+    this.router.navigate(['/profile']);
+  }
+
   protected toggleSaved(): void {
     const id = this.placeId();
     if (id) this.service.toggleSaved(id);
