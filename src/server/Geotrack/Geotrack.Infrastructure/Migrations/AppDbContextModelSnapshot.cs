@@ -642,6 +642,32 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("Tags", (string)null);
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.UserTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TagId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserTags", (string)null);
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.Collection", b =>
                 {
                     b.Property<int>("Id")
@@ -1096,6 +1122,25 @@ namespace Geotrack.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.UserTag", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Tags.Tag", "Tag")
+                        .WithMany("UserTags")
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
+                        .WithMany("UserTags")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tag");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.Collection", b =>
                 {
                     b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
@@ -1263,6 +1308,8 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("LocationTags");
 
                     b.Navigation("PlaceTags");
+
+                    b.Navigation("UserTags");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.Collection", b =>
@@ -1287,6 +1334,8 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("RegionalOrganization");
 
                     b.Navigation("UserRoles");
+
+                    b.Navigation("UserTags");
                 });
 #pragma warning restore 612, 618
         }

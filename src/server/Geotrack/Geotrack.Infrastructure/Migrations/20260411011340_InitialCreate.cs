@@ -252,6 +252,33 @@ namespace Geotrack.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "UserTags",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<int>(type: "integer", nullable: false),
+                    TagId = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserTags", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_UserTags_Tags_TagId",
+                        column: x => x.TagId,
+                        principalTable: "Tags",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_UserTags_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "DestinationReviews",
                 columns: table => new
                 {
@@ -875,6 +902,16 @@ namespace Geotrack.Infrastructure.Migrations
                 table: "Users",
                 column: "Username",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserTags_TagId",
+                table: "UserTags",
+                column: "TagId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserTags_UserId",
+                table: "UserTags",
+                column: "UserId");
         }
 
         /// <inheritdoc />
@@ -914,19 +951,22 @@ namespace Geotrack.Infrastructure.Migrations
                 name: "UserRoles");
 
             migrationBuilder.DropTable(
+                name: "UserTags");
+
+            migrationBuilder.DropTable(
                 name: "Collections");
 
             migrationBuilder.DropTable(
                 name: "Events");
 
             migrationBuilder.DropTable(
-                name: "Tags");
-
-            migrationBuilder.DropTable(
                 name: "RegionalOrganizations");
 
             migrationBuilder.DropTable(
                 name: "Roles");
+
+            migrationBuilder.DropTable(
+                name: "Tags");
 
             migrationBuilder.DropTable(
                 name: "EventTypes");

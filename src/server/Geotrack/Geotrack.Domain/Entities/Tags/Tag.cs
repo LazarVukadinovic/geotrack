@@ -21,6 +21,7 @@ public class Tag
     public ICollection<PlaceTag> PlaceTags { get; set; } = new List<PlaceTag>(); // NAVIGATIONAL
     public ICollection<EventTag> EventTags { get; set; } = new List<EventTag>(); // NAVIGATIONAL
     public ICollection<LocationTag> LocationTags { get; set; } = new List<LocationTag>(); // NAVIGATIONAL
+    public ICollection<UserTag> UserTags { get; set; } = new List<UserTag>(); // NAVIGATIONAL
 
     public string Description { get; set; } = string.Empty;
 

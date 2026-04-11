@@ -1,4 +1,5 @@
 ﻿using System;
+using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
@@ -28,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<UserTag> UserTags => Set<UserTag>();
 
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<DestinationTag> DestinationTags => Set<DestinationTag>();
@@ -602,6 +604,26 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.PlaceId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<UserTag>(entity =>
+        {
+            entity.ToTable("UserTags");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.UserTags)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany(x => x.UserTags)
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

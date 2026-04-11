@@ -17,6 +17,8 @@ public class User
 
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>(); // NAVIGATIONAL
 
+    public ICollection<UserTag> UserTags { get; set; } = new List<UserTag>(); // NAVIGATIONAL
+
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
 
