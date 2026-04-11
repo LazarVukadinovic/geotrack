@@ -11,3 +11,6 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+.selected-chips { 
+  scrollbar-width: none; 
+}
