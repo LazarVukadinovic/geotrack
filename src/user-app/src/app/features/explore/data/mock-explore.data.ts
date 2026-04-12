@@ -1,6 +1,7 @@
 import type { ExploreItem } from '../../../core/models/explore-item.model';
 import type {
   ExploreAttraction,
+  ExploreCuratedItem,
   ExploreEvent,
   ExploreLandmarkCategory,
   ExploreNearbyItem,
@@ -220,6 +221,43 @@ export const MOCK_MUST_SEE_ATTRACTIONS: ExploreAttraction[] = [
     title: 'Rector\'s Palace',
     type: 'Museum',
     image: u('photo-1467269204594-9661b134dd2b', 560),
+  },
+];
+
+// ─── Curated For You (logged-in personalized section) ────────────────────────
+
+export const MOCK_CURATED_FOR_YOU: ExploreCuratedItem[] = [
+  {
+    id: 'cur-1',
+    title: 'City Tour',
+    subtitle: 'Stunning views, historic streets.',
+    categoryLabel: 'Attraction',
+    image: u('photo-1558618666-fcd25c85cd64', 560),
+    isSaved: false,
+  },
+  {
+    id: 'cur-2',
+    title: 'Lokrum Island',
+    subtitle: 'Lush nature reserve and forest walks.',
+    categoryLabel: 'Nature',
+    image: u('photo-1506905925346-21bda4d32df4', 560),
+    isSaved: false,
+  },
+  {
+    id: 'cur-3',
+    title: 'Maritime Museum',
+    subtitle: 'Naval history and local exhibitions.',
+    categoryLabel: 'Museum',
+    image: u('photo-1580137189272-c9379f8864fd', 560),
+    isSaved: false,
+  },
+  {
+    id: 'cur-4',
+    title: 'Fort Lovrijenac',
+    subtitle: 'Iconic fortress above the Adriatic.',
+    categoryLabel: 'Historic Site',
+    image: u('photo-1543783207-ec64e4d3c671', 560),
+    isSaved: false,
   },
 ];
 

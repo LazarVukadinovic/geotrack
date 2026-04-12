@@ -3,13 +3,15 @@ import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
+import { AuthService } from '../../../../core/services/auth.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
+import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
 import { PlaceDetailService } from '../../services/place-detail.service';
 
 @Component({
   selector: 'app-place-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent],
+  imports: [SectionHeaderComponent, ReviewEntryComponent],
   templateUrl: './place-detail-page.component.html',
   styleUrl: './place-detail-page.component.scss',
 })
@@ -18,6 +20,9 @@ export class PlaceDetailPageComponent {
   private readonly router   = inject(Router);
   private readonly location = inject(Location);
   private readonly service  = inject(PlaceDetailService);
+  private readonly auth     = inject(AuthService);
+
+  protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
   protected readonly placeId = toSignal(
     this.route.paramMap.pipe(map((p) => p.get('id') ?? '')),
@@ -66,6 +71,10 @@ export class PlaceDetailPageComponent {
 
   protected goBack(): void {
     this.location.back();
+  }
+
+  protected goToLogin(): void {
+    this.router.navigate(['/profile']);
   }
 
   protected toggleSaved(): void {

@@ -1,0 +1,322 @@
+// ─── Logged-out CTA card ──────────────────────────────────────────────────────
+
+.re__cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(232, 87, 10, 0.22);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+
+.re__cta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.re__cta-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2b4c;
+}
+
+.re__cta-sub {
+  font-size: 12.5px;
+  color: #9ca3af;
+}
+
+.re__cta-btn {
+  flex-shrink: 0;
+  border: none;
+  background: #e8570a;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 50px;
+  padding: 10px 22px;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+
+  &:hover  { opacity: 0.9; }
+  &:active { transform: scale(0.96); }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 3px;
+  }
+}
+
+// ─── Logged-in "Write a Review" card ─────────────────────────────────────────
+
+.re__write {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(26, 43, 76, 0.1);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover { background: #fafafa; }
+  &:active { background: #f4f5f7; }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}
+
+.re__write-avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #e8f0fe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4a6fa5;
+
+  svg {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+.re__write-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.re__write-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2b4c;
+}
+
+.re__write-stars {
+  display: flex;
+  gap: 3px;
+}
+
+.re__write-star {
+  width: 16px;
+  height: 16px;
+  color: #c5cad8;
+}
+
+// ─── Popup backdrop ───────────────────────────────────────────────────────────
+
+.re__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 9000;
+}
+
+// ─── Review modal (bottom sheet) ──────────────────────────────────────────────
+
+.re__modal {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9001;
+  background: #f8f9fa;
+  border-radius: 24px 24px 0 0;
+  padding: 10px 20px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  max-height: 90dvh;
+  max-height: 90vh; // fallback before dvh
+  max-height: 90dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.18);
+}
+
+.re__handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: #d1d5db;
+  margin: 0 auto 18px;
+}
+
+// ─── Modal header ─────────────────────────────────────────────────────────────
+
+.re__modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.re__modal-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1a2b4c;
+  letter-spacing: -0.3px;
+  margin: 0 0 4px;
+  line-height: 1.2;
+}
+
+.re__modal-entity {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.re__modal-close {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: #edeef2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #1a2b4c;
+  transition: background 0.15s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover { background: #e0e2e8; }
+  &:active { transform: scale(0.94); }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}
+
+// ─── Star rating row ──────────────────────────────────────────────────────────
+
+.re__stars-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.re__star-btn {
+  border: none;
+  background: none;
+  padding: 4px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+
+  &:active { transform: scale(0.9); }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+.re__star-icon {
+  width: 48px;
+  height: 48px;
+  display: block;
+}
+
+// ─── Textarea ─────────────────────────────────────────────────────────────────
+
+.re__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1.5px solid #e0e2e8;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 14px 14px;
+  font-size: 14.5px;
+  font-family: inherit;
+  color: #1a2b4c;
+  line-height: 1.6;
+  resize: none;
+  margin-bottom: 12px;
+  transition: border-color 0.15s ease;
+
+  &::placeholder { color: #9ca3af; }
+
+  &:focus {
+    outline: none;
+    border-color: rgba(232, 87, 10, 0.5);
+  }
+}
+
+// ─── Hint text ────────────────────────────────────────────────────────────────
+
+.re__hint {
+  font-size: 13px;
+  color: #6b7280;
+  text-align: center;
+  margin: 0 0 22px;
+  line-height: 1.5;
+}
+
+// ─── Submit button ────────────────────────────────────────────────────────────
+
+.re__submit-btn {
+  width: 100%;
+  border: none;
+  background: #e8570a;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 50px;
+  padding: 15px 0;
+  cursor: pointer;
+  margin-bottom: 14px;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  font-family: inherit;
+  letter-spacing: -0.01em;
+
+  &:hover  { opacity: 0.9; }
+  &:active { transform: scale(0.98); }
+
+  &:focus-visible {
+    outline: 2px solid #1a2b4c;
+    outline-offset: 2px;
+  }
+}
+
+// ─── Cancel button ────────────────────────────────────────────────────────────
+
+.re__cancel-btn {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  color: #1a2b4c;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 10px 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  transition: color 0.15s ease;
+
+  &:hover { color: #e8570a; }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}

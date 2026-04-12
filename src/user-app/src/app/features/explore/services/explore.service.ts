@@ -3,6 +3,7 @@ import { delay, map, Observable, of } from 'rxjs';
 import type { ExploreItem } from '../../../core/models/explore-item.model';
 import type {
   ExploreAttraction,
+  ExploreCuratedItem,
   ExploreEvent,
   ExploreLandmarkCategory,
   ExploreNearbyItem,
@@ -11,6 +12,7 @@ import type {
   NearbyStatus,
 } from '../models/explore-extras.model';
 import {
+  MOCK_CURATED_FOR_YOU,
   MOCK_EVENTS_THIS_WEEK,
   MOCK_LANDMARK_CATEGORIES,
   MOCK_LOCAL_FAVORITES,
@@ -28,6 +30,7 @@ import {
   providedIn: 'root',
 })
 export class ExploreService {
+  private readonly _curatedForYou = signal<ExploreCuratedItem[]>([...MOCK_CURATED_FOR_YOU]);
   private readonly _localFavorites = signal<ExploreItem[]>([...MOCK_LOCAL_FAVORITES]);
   private readonly _nearbyStatus = signal<NearbyStatus>({ ...MOCK_NEARBY_STATUS });
   private readonly _promo = signal<ExplorePromoCard>({ ...MOCK_PROMO_CARD });
@@ -38,6 +41,7 @@ export class ExploreService {
   private readonly _landmarkCategories = signal<ExploreLandmarkCategory[]>([...MOCK_LANDMARK_CATEGORIES]);
 
   /** Reactive lists for templates that prefer signals. */
+  readonly curatedForYou = computed(() => this._curatedForYou());
   readonly localFavorites = computed(() => this._localFavorites());
   readonly nearbyStatus = computed(() => this._nearbyStatus());
   readonly promo = computed(() => this._promo());
@@ -72,7 +76,13 @@ export class ExploreService {
     return of(this._landmarkCategories()).pipe(delay(0));
   }
 
-  toggleSaved(id: string, list: 'localFavorites' | 'popularNearby' | 'topStays'): void {
+  toggleSaved(id: string, list: 'curatedForYou' | 'localFavorites' | 'popularNearby' | 'topStays'): void {
+    if (list === 'curatedForYou') {
+      this._curatedForYou.update((items) =>
+        items.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item)),
+      );
+      return;
+    }
     if (list === 'localFavorites') {
       this._localFavorites.update((items) =>
         items.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item)),
