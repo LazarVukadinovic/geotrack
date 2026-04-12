@@ -1,0 +1,140 @@
+@if (isLoggedIn()) {
+
+  <!-- ── Logged-in: "Write a Review" card ────────────────────────────────── -->
+  <div
+    class="re__write"
+    role="button"
+    tabindex="0"
+    aria-label="Write a review"
+    (click)="openPopup()"
+    (keydown.enter)="openPopup()"
+    (keydown.space)="$event.preventDefault(); openPopup()"
+  >
+    <div class="re__write-avatar" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
+        <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+              d="M4 20c0-4 3.582-7 8-7s8 3 8 7"/>
+      </svg>
+    </div>
+    <div class="re__write-info">
+      <span class="re__write-label">Write a Review</span>
+      <div class="re__write-stars" aria-label="No rating selected">
+        @for (i of [1,2,3,4,5]; track i) {
+          <svg class="re__write-star" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"
+                  d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+          </svg>
+        }
+      </div>
+    </div>
+  </div>
+
+} @else {
+
+  <!-- ── Logged-out: "Log in" CTA ────────────────────────────────────────── -->
+  <div class="re__cta">
+    <div class="re__cta-text">
+      <span class="re__cta-title">Share your experience</span>
+      <span class="re__cta-sub">Log in to leave a review</span>
+    </div>
+    <button type="button" class="re__cta-btn" (click)="loginRequested.emit()">Log In</button>
+  </div>
+
+}
+
+<!-- ── Write-a-Review popup ─────────────────────────────────────────────────── -->
+@if (popupOpen()) {
+  <!-- Backdrop captures outside-click to close -->
+  <div
+    class="re__backdrop"
+    aria-hidden="true"
+    (click)="closePopup()"
+  ></div>
+
+  <div
+    class="re__modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="re-modal-title"
+  >
+    <!-- Drag handle -->
+    <div class="re__handle" aria-hidden="true"></div>
+
+    <!-- Header -->
+    <div class="re__modal-header">
+      <div>
+        <h2 class="re__modal-title" id="re-modal-title">Write a Review</h2>
+        <p class="re__modal-entity">{{ entityName() }}</p>
+      </div>
+      <button
+        type="button"
+        class="re__modal-close"
+        aria-label="Close review popup"
+        (click)="closePopup()"
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+                d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Star rating -->
+    <div class="re__stars-row" role="group" aria-label="Star rating">
+      @for (i of [1,2,3,4,5]; track i) {
+        <button
+          type="button"
+          class="re__star-btn"
+          [class.re__star-btn--filled]="starFilled(i)"
+          [attr.aria-label]="i + ' star' + (i > 1 ? 's' : '')"
+          [attr.aria-pressed]="draftRating() === i"
+          (click)="onStarClick(i)"
+          (mouseenter)="onStarEnter(i)"
+          (mouseleave)="onStarLeave()"
+          (focusin)="onStarEnter(i)"
+          (focusout)="onStarLeave()"
+        >
+          <svg class="re__star-icon" viewBox="0 0 24 24" aria-hidden="true">
+            @if (starFilled(i)) {
+              <path fill="#e8570a"
+                    d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+            } @else {
+              <path fill="none" stroke="#c5cad8" stroke-width="1.6" stroke-linejoin="round"
+                    d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+            }
+          </svg>
+        </button>
+      }
+    </div>
+
+    <!-- Review text area -->
+    <textarea
+      class="re__textarea"
+      rows="5"
+      placeholder="Share your experience (helpful tips for other travelers)..."
+      [value]="draftBody()"
+      (input)="onBodyInput($event)"
+      aria-label="Review text"
+    ></textarea>
+
+    <p class="re__hint">Your feedback helps others plan their trip.</p>
+
+    <!-- Actions -->
+    <button
+      type="button"
+      class="re__submit-btn"
+      (click)="onSubmit()"
+    >
+      Submit Review
+    </button>
+
+    <button
+      type="button"
+      class="re__cancel-btn"
+      (click)="closePopup()"
+    >
+      Cancel
+    </button>
+  </div>
+}
