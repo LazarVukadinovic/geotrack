@@ -39,60 +39,22 @@
 
           <!-- 1 place -->
           @if (col.placeCount === 1) {
-            <!-- <div class="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center">
-              <svg class="w-7 h-7 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                   stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-            </div> -->
             <img [src]="col.coverImages[0]" class="w-full h-full object-cover" />
           }
 
           <!-- 2 places -->
           @if (col.placeCount === 2) {
-            <!-- <div class="w-1/2 h-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center border-r-2 border-white">
-              <svg class="w-5 h-5 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                   stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-            </div>
-            <div class="w-1/2 h-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center">
-              <svg class="w-5 h-5 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                   stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-            </div> -->
             <img [src]="col.coverImages[0]" class="w-1/2 h-full object-cover border-r-2 border-white" />
-  <img [src]="col.coverImages[1]" class="w-1/2 h-full object-cover" />
+            <img [src]="col.coverImages[1]" class="w-1/2 h-full object-cover" />
           }
 
           <!-- 3+ places -->
           @if (col.placeCount >= 3) {
-            <!-- <div class="w-1/2 h-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center border-r-2 border-white">
-              <svg class="w-5 h-5 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                   stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-            </div>
-            <div class="w-1/2 h-full flex flex-col">
-              <div class="w-full h-1/2 bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center border-b-2 border-white">
-                <svg class="w-4 h-4 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                </svg>
-              </div>
-              <div class="w-full h-1/2 bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center">
-                <svg class="w-4 h-4 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                </svg>
-              </div>
-            </div> -->
             <img [src]="col.coverImages[0]" class="w-1/2 h-full object-cover border-r-2 border-white" />
-  <div class="w-1/2 h-full flex flex-col">
-    <img [src]="col.coverImages[1]" class="w-full h-1/2 object-cover border-b-2 border-white" />
-    <img [src]="col.coverImages[2]" class="w-full h-1/2 object-cover" />
-  </div>
+            <div class="w-1/2 h-full flex flex-col">
+              <img [src]="col.coverImages[1]" class="w-full h-1/2 object-cover border-b-2 border-white" />
+              <img [src]="col.coverImages[2]" class="w-full h-1/2 object-cover" />
+            </div>
           }
 
           <!-- Arrow badge -->
@@ -106,8 +68,8 @@
 
         <!-- Label -->
         <div class="px-3 pt-2.5 pb-3 flex flex-col gap-0.5">
-          <span class="text-[14px] font-semibold text-slate-800 truncate">{{ col.title }}</span>
-          <span class="text-[12px] text-slate-500">{{ col.placeCount }} {{ col.placeCount === 1 ? 'place' : 'places' }}</span>
+          <span class="text-[16px] font-semibold text-slate-800 truncate">{{ col.title }}</span>
+          <span class="text-[12px] text-slate-600">{{ col.placeCount }} {{ col.placeCount === 1 ? 'place' : 'places' }}</span>
         </div>
       </button>
     }
@@ -117,7 +79,7 @@
       type="button"
       class="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col text-left active:bg-slate-50 transition-colors"
       aria-label="Create new collection"
-      (click)="onNewCollection()"
+      (click)="newSheet.open()"
     >
       <div class="w-full aspect-square border-b border-dashed border-slate-200 flex items-center justify-center">
         <svg class="w-7 h-7 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -132,6 +94,11 @@
     </button>
 
   </div>
+  
+  <app-new-collection-sheet
+    #newSheet
+    (created)="onCollectionCreated($event)">
+  </app-new-collection-sheet>
 
   <!-- Empty state -->
   @if (collections().length === 0) {

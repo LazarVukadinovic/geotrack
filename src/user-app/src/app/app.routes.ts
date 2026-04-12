@@ -23,5 +23,10 @@ export const routes: Routes = [
         (m) => m.MyCollectionsPageComponent
         ),
     },
-
+    {
+  path: 'profile/collections/:id',
+    loadComponent: () =>
+        import('./features/profile/pages/collection-detail/collection-detail')
+        .then(m => m.CollectionDetailComponent),
+    },
 ];
