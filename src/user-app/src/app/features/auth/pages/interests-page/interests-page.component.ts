@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-interests-page',
@@ -27,7 +28,7 @@ export class InterestsPageComponent {
     'Shopping',
   ];
 
-  constructor(private router: Router) {}
+  constructor(private router: Router, private authService: AuthService) {}
 
   toggleInterest(interest: string): void {
     if (this.isSelected(interest)) {

@@ -97,15 +97,27 @@
       <button type="button" class="text-base font-bold text-[#e8570a]">Forgot password?</button>
     </div>
 
+    <!-- Error message -->
+    @if (errorMessage) {
+      <div class="mb-3 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 text-center">
+        {{ errorMessage }}
+      </div>
+    }
+
     <!-- Sign in button -->
     <button
       type="button"
       (click)="onSignIn()"
-      class="w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-2 transition-all duration-200">
-      Sign In
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
-      </svg>
+      [disabled]="isLoading"
+      class="w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-60 disabled:pointer-events-none">
+      @if (isLoading) {
+        Signing in…
+      } @else {
+        Sign In
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      }
     </button>
   </div>
 
