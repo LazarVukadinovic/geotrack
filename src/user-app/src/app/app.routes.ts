@@ -15,6 +15,13 @@ export const routes: Routes = [
     { path: 'edit-profile', component: EditProfile },
     { path: 'settings', component: Settings },
     { path: 'my-interests', component: MyInterests },
-    { path: 'profile', component: Profile }
+    { path: 'profile', component: Profile },
+    {
+    path: 'profile/collections',
+    loadComponent: () =>
+        import('./features/profile/pages/my-collections-page/my-collections-page').then(
+        (m) => m.MyCollectionsPageComponent
+        ),
+    },
 
 ];

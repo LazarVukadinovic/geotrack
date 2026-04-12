@@ -88,13 +88,9 @@
 
         <!-- Preview thumbnails -->
         <div class="flex -space-x-2 flex-none">
-          <div *ngFor="let place of col.places.slice(0, 3)"
-            class="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-300 to-slate-400 border-2 border-white flex items-center justify-center">
-            <svg class="w-3.5 h-3.5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-            </svg>
-          </div>
+          <img *ngFor="let place of col.places.slice(0, 3)"
+            [src]="place.image"
+            class="w-8 h-8 rounded-lg object-cover border-2 border-white" />
         </div>
 
         <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
