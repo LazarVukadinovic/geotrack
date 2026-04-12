@@ -1,0 +1,201 @@
+// Sealed-viewport layout — owns its own scroll
+:host {
+  display: block;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+// ── Root container ────────────────────────────────────────────────────────────
+.lp-page {
+  position: relative;
+  height: 100%;
+  background: var(--color-page-bg);
+}
+
+// ── Fixed top bar ─────────────────────────────────────────────────────────────
+.lp-page__topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
+  padding-bottom: 14px;
+  padding-inline: var(--page-gutter);
+  background: #1a2b4c;
+}
+
+.lp-page__back {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.6);
+    outline-offset: 2px;
+  }
+}
+
+.lp-page__topbar-title {
+  flex: 1;
+  text-align: center;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+.lp-page__topbar-spacer {
+  width: 36px;
+  flex-shrink: 0;
+}
+
+// ── Scrollable area ───────────────────────────────────────────────────────────
+.lp-page__scroll {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 64px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-10));
+}
+
+// ── Intro section ─────────────────────────────────────────────────────────────
+.lp-page__intro {
+  padding: var(--space-8) var(--page-gutter) var(--space-6);
+  text-align: center;
+}
+
+.lp-page__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-display);
+  font-weight: 800;
+  color: #1a2b4c;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.lp-page__title-accent {
+  width: 40px;
+  height: 3px;
+  background: #e8570a;
+  border-radius: 2px;
+  margin: 0 auto var(--space-3);
+}
+
+.lp-page__subtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  line-height: 1.5;
+  max-width: 240px;
+  margin-inline: auto;
+}
+
+// ── 2-column category grid ────────────────────────────────────────────────────
+.lp-page__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  padding-inline: var(--page-gutter);
+}
+
+// ── Category tile ─────────────────────────────────────────────────────────────
+.lp-tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: none;
+  cursor: default;
+  padding: 0;
+  box-shadow: var(--shadow-card);
+
+  &--linked {
+    cursor: pointer;
+
+    &:active {
+      transform: scale(0.97);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}
+
+.lp-tile__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lp-tile__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(10, 20, 45, 0.78) 0%,
+    rgba(10, 20, 45, 0.12) 55%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.lp-tile__label {
+  position: absolute;
+  bottom: var(--space-3);
+  left: 0;
+  right: 0;
+  z-index: 1;
+  text-align: center;
+  color: #ffffff;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+  padding: 0 var(--space-2);
+}
+
+.lp-tile__arrow {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+
+  svg {
+    width: 11px;
+    height: 11px;
+    color: #1a2b4c;
+  }
+}

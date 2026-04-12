@@ -1,0 +1,51 @@
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--app-header-height);
+  padding: calc(var(--space-2) + env(safe-area-inset-top, 0)) var(--page-gutter) var(--space-2);
+  background: var(--color-page-bg);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-subtle);
+}
+
+.app-header__title {
+  margin: 0;
+  font-size: var(--text-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-primary-navy);
+}
+
+.app-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.app-header__icon {
+  width: 22px;
+  height: 22px;
+}
+
+.app-header__notify-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.app-header__dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-notify-dot);
+  border: 2px solid var(--color-page-bg);
+  pointer-events: none;
+}

@@ -1,0 +1,17 @@
+.placeholder-view {
+  padding: var(--space-8) var(--page-gutter);
+}
+
+.placeholder-view__title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-primary-navy);
+}
+
+.placeholder-view__hint {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--color-muted);
+}

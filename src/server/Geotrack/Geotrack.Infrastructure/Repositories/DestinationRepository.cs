@@ -1,5 +1,5 @@
 ﻿using Geotrack.Application.Interfaces.Repository;
-using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Core;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Repositories;

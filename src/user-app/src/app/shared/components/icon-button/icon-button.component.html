@@ -1,0 +1,11 @@
+<button
+  type="button"
+  class="icon-button"
+  [class.icon-button--on-media]="variant() === 'on-media'"
+  [class.icon-button--compact]="compact()"
+  [attr.aria-label]="ariaLabel()"
+  [attr.aria-pressed]="pressed() ? true : null"
+  (click)="onClick()"
+>
+  <ng-content />
+</button>

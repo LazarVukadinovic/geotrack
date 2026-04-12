@@ -4,8 +4,10 @@ using System.Data.Common;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Domain.Entities.Tags;
 
-namespace Geotrack.Domain.Entities;
+namespace Geotrack.Domain.Entities.Core;
 public class Destination
 {
     public int Id { get; set; } // PRIMARY KEY

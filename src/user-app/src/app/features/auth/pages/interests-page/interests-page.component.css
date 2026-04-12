@@ -1,0 +1,7 @@
+/* Same sealed-viewport approach as login — see login-page.component.css for explanation. */
+:host {
+  display: block;
+  height: calc(100vh - var(--shell-bottom-pad));
+  height: calc(100dvh - var(--shell-bottom-pad));
+  background: #fafaf9;
+}

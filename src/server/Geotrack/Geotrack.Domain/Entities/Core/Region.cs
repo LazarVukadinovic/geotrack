@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Geotrack.Domain.Entities.Users;
 
-namespace Geotrack.Domain.Entities;
+namespace Geotrack.Domain.Entities.Core;
 
 public class Region
 {

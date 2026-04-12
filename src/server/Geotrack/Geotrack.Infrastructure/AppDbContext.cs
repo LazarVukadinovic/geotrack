@@ -1,5 +1,9 @@
 ﻿using System;
 using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Domain.Entities.Tags;
+using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure;
@@ -25,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<UserTag> UserTags => Set<UserTag>();
 
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<DestinationTag> DestinationTags => Set<DestinationTag>();
@@ -36,6 +41,9 @@ public class AppDbContext : DbContext
     public DbSet<LocationReview> LocationReviews => Set<LocationReview>();
     public DbSet<PlaceReview> PlaceReviews => Set<PlaceReview>();
     public DbSet<EventReview> EventReviews => Set<EventReview>();
+
+    public DbSet<Collection> Collections => Set<Collection>();
+    public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -539,6 +547,83 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => new { x.UserId, x.EventId })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<Collection>(entity =>
+        {
+            entity.ToTable("Collections");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.Collections)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CollectionItem>(entity =>
+        {
+            entity.ToTable("CollectionItems");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.Collection)
+                .WithMany(x => x.CollectionItems)
+                .HasForeignKey(x => x.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Destination)
+                .WithMany()
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(x => x.Event)
+                .WithMany()
+                .HasForeignKey(x => x.EventId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(x => x.Place)
+                .WithMany()
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<UserTag>(entity =>
+        {
+            entity.ToTable("UserTags");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.UserTags)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany(x => x.UserTags)
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

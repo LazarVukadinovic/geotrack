@@ -1,0 +1,133 @@
+import {
+  AfterViewInit,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  signal,
+} from '@angular/core';
+import { Location } from '@angular/common';
+import { Router } from '@angular/router';
+import { HotelsListingService } from '../../services/hotels-listing.service';
+import { HotelsScrollStateService } from '../../services/hotels-scroll-state.service';
+import { HOTEL_FILTERS } from '../../models/hotels-listing.model';
+import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+
+@Component({
+  selector: 'app-hotels-listing-page',
+  standalone: true,
+  imports: [],
+  templateUrl: './hotels-listing-page.component.html',
+  styleUrl: './hotels-listing-page.component.scss',
+})
+export class HotelsListingPageComponent implements AfterViewInit {
+  private readonly service     = inject(HotelsListingService);
+  private readonly location    = inject(Location);
+  private readonly router      = inject(Router);
+  private readonly scrollState = inject(HotelsScrollStateService);
+  private readonly elRef       = inject(ElementRef<HTMLElement>);
+
+  protected readonly filters = HOTEL_FILTERS;
+  protected readonly activeFilter = signal('all');
+
+  protected readonly filteredHotels = computed(() => {
+    const filter = this.activeFilter();
+    const hotels = this.service.hotels();
+    if (filter === 'all') return hotels;
+    return hotels.filter((h) => h.tags.includes(filter));
+  });
+
+  protected readonly imgSrcById = signal<Record<string, string>>({});
+  private readonly fallbackUsed = new Set<string>();
+
+  constructor() {
+    effect(() => {
+      const next: Record<string, string> = {};
+      for (const h of this.service.hotels()) {
+        next[h.id] = h.image;
+      }
+      this.imgSrcById.set(next);
+      this.fallbackUsed.clear();
+    });
+  }
+
+  // ── Scroll restoration ──────────────────────────────────────────────────────
+
+  ngAfterViewInit(): void {
+    const state = this.scrollState.pop();
+    if (!state) return;
+
+    const host = this.elRef.nativeElement as HTMLElement;
+
+    // Double RAF: first frame lets Angular finish any pending change detection
+    // after route activation; second frame ensures layout is fully calculated
+    // before we set scroll positions.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const scrollEl  = host.querySelector<HTMLElement>('.hotels-page__scroll');
+        const filtersEl = host.querySelector<HTMLElement>('.hotels-page__filters');
+
+        if (scrollEl) {
+          // Primary: scroll the clicked card into view so it is definitely visible.
+          if (state.clickedCardId) {
+            const card = scrollEl.querySelector<HTMLElement>(
+              `[data-hotel-id="${state.clickedCardId}"]`,
+            );
+            if (card) {
+              // 'nearest' scrolls the minimum amount needed to make the card visible.
+              card.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+            } else {
+              // Card not in DOM (e.g. filter changed) — fall back to raw position.
+              scrollEl.scrollTop = state.scrollTop;
+            }
+          } else if (state.scrollTop > 0) {
+            scrollEl.scrollTop = state.scrollTop;
+          }
+        }
+
+        if (filtersEl && state.pillsLeft > 0) {
+          filtersEl.scrollLeft = state.pillsLeft;
+        }
+      });
+    });
+  }
+
+  // ── Interactions ────────────────────────────────────────────────────────────
+
+  protected onImgError(id: string): void {
+    if (this.fallbackUsed.has(id)) return;
+    this.fallbackUsed.add(id);
+    this.imgSrcById.update((m) => ({ ...m, [id]: EXPLORE_IMAGE_FALLBACK }));
+  }
+
+  protected setFilter(id: string): void {
+    this.activeFilter.set(id);
+  }
+
+  protected toggleSaved(event: Event, id: string): void {
+    event.stopPropagation();
+    this.service.toggleSaved(id);
+  }
+
+  protected onHotelCard(id: string): void {
+    // Save scroll state NOW — synchronously, before router.navigate() fires.
+    // This is the only safe moment: the component is fully active, the DOM is
+    // stable, and no Angular lifecycle hooks have started yet.
+    const host      = this.elRef.nativeElement as HTMLElement;
+    const scrollEl  = host.querySelector<HTMLElement>('.hotels-page__scroll');
+    const filtersEl = host.querySelector<HTMLElement>('.hotels-page__filters');
+
+    this.scrollState.save(
+      scrollEl?.scrollTop  ?? 0,
+      filtersEl?.scrollLeft ?? 0,
+      id,
+    );
+
+    this.router.navigate(['/stays', id]);
+  }
+
+  protected goBack(): void {
+    this.location.back();
+  }
+}

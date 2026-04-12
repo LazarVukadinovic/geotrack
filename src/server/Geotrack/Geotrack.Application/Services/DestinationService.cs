@@ -1,7 +1,7 @@
 ﻿using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Core;
 
 namespace Geotrack.Application.Services;
 

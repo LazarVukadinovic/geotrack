@@ -1,0 +1,640 @@
+// ─── Host ─────────────────────────────────────────────────────────────────────
+// height: 100dvh + overflow: hidden make this page its own sealed viewport.
+// The app-shell__viewport (min-height: 100dvh, overflow-y: auto) never needs to
+// scroll — all scrolling happens inside .pd__scroll below.
+
+:host {
+  display: block;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--color-page-bg, #f8f9fa);
+}
+
+// ─── Page root ────────────────────────────────────────────────────────────────
+
+.pd {
+  position: relative;
+  height: 100%;
+}
+
+// ─── Top bar ──────────────────────────────────────────────────────────────────
+// position: absolute within .pd (which fills the sealed viewport).
+// z-index: 200 keeps it above .pd__scroll (z-index: 1) and .pd__hero (z-index: 0).
+// pointer-events: none on the container lets scroll gestures pass through to
+// .pd__scroll; only the actual buttons re-enable interaction.
+
+.pd__top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  pointer-events: none;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  // 20px below safe area — a balanced placement on the hero image.
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 16px 16px;
+
+  // Background fades from fully transparent to navy as --progress goes 0 → 1.
+  background: rgba(26, 43, 76, var(--progress, 0));
+  border-radius: 0 0 18px 18px;
+
+  > * { pointer-events: auto; }
+}
+
+.pd__top-bar-title {
+  position: absolute;
+  left: 50%;
+  // transform: translateX(-50%) translateY(calc((1 - var(--progress, 0)) * 10px));
+    transform: translateX(-50%) translateY(calc(0) * 10px);
+  opacity: var(--progress, 0);
+
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+// ─── Action buttons ───────────────────────────────────────────────────────────
+
+.pd__hero-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #1a2b4c;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.1s ease;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover { background: rgba(255, 255, 255, 0.98); }
+  &:active { transform: scale(0.94); }
+
+  &--saved { color: #e8570a; }
+}
+
+.pd__hero-actions {
+  display: flex;
+  gap: 8px;
+}
+
+// ─── Hero image ───────────────────────────────────────────────────────────────
+// Absolutely positioned — it never moves. The scroll container overlays it at
+// z-index: 1 and the spacer inside the scroll container creates a transparent
+// window that reveals the hero until the card scrolls up over it.
+
+.pd__hero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 300px;
+  overflow: hidden;
+  background: #dde0e7;
+  z-index: 0;
+}
+
+.pd__hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+// ─── Scroll container ─────────────────────────────────────────────────────────
+// Covers the full .pd area (inset: 0) and is the only element that scrolls.
+// z-index: 1 places it above the hero image.
+// Its background is transparent — the hero shows through the spacer at the top.
+
+.pd__scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  z-index: 1;
+}
+
+// ─── Spacer ───────────────────────────────────────────────────────────────────
+// Height = hero height (300px) minus the card's top overlap (32px).
+// This transparent gap reveals the hero image before the card starts.
+// As the user scrolls, the gap shrinks and the card covers more of the hero.
+
+.pd__scroll-spacer {
+  height: 268px;
+  flex-shrink: 0;
+}
+
+// ─── Content card ─────────────────────────────────────────────────────────────
+// No margin-top needed — the spacer above handles the 32px overlap into the hero.
+
+.pd__card {
+  position: relative;
+  background: #ffffff;
+  border-radius: 24px 24px 0 0;
+  padding: 22px 20px calc(env(safe-area-inset-bottom, 0px) + 32px);
+  min-height: calc(100dvh - 200px);
+}
+
+// ─── Category tags ────────────────────────────────────────────────────────────
+
+.pd__tags {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-bottom: 14px;
+
+  &::-webkit-scrollbar { display: none; }
+}
+
+.pd__tag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: #f0f1f5;
+  color: #1a2b4c;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+// ─── Location ─────────────────────────────────────────────────────────────────
+
+.pd__location {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  color: #e8570a;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pd__location-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+// ─── Title ────────────────────────────────────────────────────────────────────
+
+.pd__title {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1a2b4c;
+  line-height: 1.2;
+  margin: 0 0 14px;
+  letter-spacing: -0.3px;
+}
+
+// ─── Stats row ────────────────────────────────────────────────────────────────
+
+.pd__stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-bottom: 20px;
+}
+
+.pd__stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pd__stat-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+
+  &--star { color: #e8570a; }
+  &--dist { color: #6b7280; }
+  &--clock { color: #6b7280; }
+}
+
+.pd__stat-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a2b4c;
+
+  &--open { color: #0d9488; }
+}
+
+.pd__stat-sub {
+  font-size: 12px;
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.pd__stat-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #d1d5db;
+  flex-shrink: 0;
+}
+
+// ─── CTA buttons ──────────────────────────────────────────────────────────────
+
+.pd__ctas {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.pd__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  padding: 13px 0;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  &:active { transform: scale(0.97); }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+
+  &--primary {
+    flex: 0 0 58%;
+    background: #e8570a;
+    color: #ffffff;
+
+    &:hover { opacity: 0.9; }
+  }
+
+  &--outline {
+    flex: 1;
+    background: transparent;
+    color: #1a2b4c;
+    border: 2px solid rgba(26, 43, 76, 0.18);
+
+    &:hover { background: #f0f1f5; }
+  }
+}
+
+// ─── Divider ──────────────────────────────────────────────────────────────────
+
+.pd__divider {
+  height: 1px;
+  background: #edeef2;
+  margin: 0 -20px 24px;
+}
+
+// ─── Sections ─────────────────────────────────────────────────────────────────
+
+.pd__section {
+  margin-bottom: 8px;
+
+  &--last { margin-bottom: 0; }
+}
+
+.pd__section-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1a2b4c;
+  margin: 0 0 10px;
+  line-height: 1.3;
+}
+
+// ─── About ────────────────────────────────────────────────────────────────────
+
+.pd__about {
+  font-size: 14px;
+  color: #4b5563;
+  line-height: 1.65;
+  margin: 0 0 8px;
+}
+
+// ─── Reviews ──────────────────────────────────────────────────────────────────
+
+// Login / review CTA banner
+.pd__review-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(232, 87, 10, 0.22);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+
+.pd__review-cta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pd__review-cta-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2b4c;
+}
+
+.pd__review-cta-sub {
+  font-size: 12.5px;
+  color: #9ca3af;
+}
+
+.pd__review-cta-btn {
+  flex-shrink: 0;
+  border: none;
+  background: #e8570a;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 50px;
+  padding: 10px 22px;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+
+  &:hover  { opacity: 0.9; }
+  &:active { transform: scale(0.96); }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 3px;
+  }
+}
+
+// Review card list
+.pd__reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+// ─── Review card ──────────────────────────────────────────────────────────────
+
+.pd__review {
+  background: #ffffff;
+  border: 1px solid #edeef2;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 14px 14px 12px;
+}
+
+.pd__review-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.pd__review-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #e5e7eb;
+}
+
+.pd__review-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pd__review-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1a2b4c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pd__review-time {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+// Rating chip
+.pd__review-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a2b4c;
+  background: #fff5f0;
+  border: 1px solid rgba(232, 87, 10, 0.2);
+  border-radius: 20px;
+  padding: 4px 9px 4px 7px;
+  flex-shrink: 0;
+}
+
+.pd__review-star {
+  width: 13px;
+  height: 13px;
+  color: #e8570a;
+}
+
+.pd__review-body {
+  font-size: 13.5px;
+  color: #4b5563;
+  line-height: 1.65;
+  margin: 0 0 11px;
+}
+
+.pd__review-helpful {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  color: #6b7280;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  &:hover { color: #1a2b4c; }
+}
+
+// ─── Similar Places ───────────────────────────────────────────────────────────
+
+.pd__similar-viewport {
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+  margin: 0 -20px;
+  padding: 0 20px 4px;
+
+  &::-webkit-scrollbar { display: none; }
+}
+
+.pd__similar-track {
+  display: flex;
+  gap: 12px;
+  width: max-content;
+  padding-right: 20px;
+}
+
+.pd__similar-card {
+  width: 148px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:active {
+    transform: scale(0.97);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.09);
+  }
+}
+
+.pd__similar-media {
+  position: relative;
+  height: 100px;
+  overflow: hidden;
+}
+
+.pd__similar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pd__similar-fav {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #6b7280;
+  transition: background 0.15s ease;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  &:hover { background: rgba(255, 255, 255, 1); }
+
+  &--saved { color: #e8570a; }
+}
+
+.pd__similar-body {
+  padding: 9px 10px 10px;
+}
+
+.pd__similar-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a2b4c;
+  margin: 0 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pd__similar-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pd__similar-star {
+  width: 11px;
+  height: 11px;
+  color: #e8570a;
+  flex-shrink: 0;
+}
+
+.pd__similar-rating {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a2b4c;
+}
+
+.pd__similar-dist {
+  font-size: 11.5px;
+  color: #9ca3af;
+  margin-left: auto;
+}
+
+// ─── Not found state ──────────────────────────────────────────────────────────
+
+.pd__not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  gap: 16px;
+  color: #6b7280;
+  font-size: 15px;
+}
+
+.pd__not-found-back {
+  border: none;
+  background: #e8570a;
+  color: #ffffff;
+  border-radius: 50px;
+  padding: 12px 28px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
