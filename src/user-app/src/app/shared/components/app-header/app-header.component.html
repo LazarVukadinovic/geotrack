@@ -1,22 +1,24 @@
 <header class="app-header">
   <h1 class="app-header__title">{{ title() }}</h1>
   <div class="app-header__actions">
-    <span class="app-header__notify-wrap">
-      <app-icon-button ariaLabel="Notifications" (clicked)="notifications.emit()">
-        <svg class="app-header__icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.75"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Zm5 12a2 2 0 0 0 4 0"
-          />
-        </svg>
-      </app-icon-button>
-      @if (showNotificationDot()) {
-        <span class="app-header__dot" aria-hidden="true"></span>
-      }
-    </span>
+    @if (showBell()) {
+      <span class="app-header__notify-wrap">
+        <app-icon-button ariaLabel="Notifications" (clicked)="notifications.emit()">
+          <svg class="app-header__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Zm5 12a2 2 0 0 0 4 0"
+            />
+          </svg>
+        </app-icon-button>
+        @if (showNotificationDot()) {
+          <span class="app-header__dot" aria-hidden="true"></span>
+        }
+      </span>
+    }
   </div>
 </header>

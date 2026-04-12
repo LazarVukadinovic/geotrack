@@ -10,6 +10,7 @@ import { IconButtonComponent } from '../icon-button/icon-button.component';
 })
 export class AppHeaderComponent {
   readonly title = input.required<string>();
+  readonly showBell            = input(true);
   readonly showNotificationDot = input(true);
 
   readonly notifications = output<void>();

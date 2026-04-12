@@ -1,5 +1,5 @@
 <div class="explore-page">
-  <app-header title="Explore" [showNotificationDot]="true" />
+  <app-header title="Explore" [showBell]="isLoggedIn()" [showNotificationDot]="true" />
 
   <div class="explore-page__main">
     <app-welcome-hero [city]="heroCity()" [country]="heroCountry()" />
