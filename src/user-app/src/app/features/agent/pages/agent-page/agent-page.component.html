@@ -1,0 +1,107 @@
+<div class="agent">
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="agent__header">
+    <h1 class="agent__header-title">Ask Agent</h1>
+  </header>
+
+  <!-- ── Messages ───────────────────────────────────────────────────────── -->
+  <div class="agent__messages" #messagesContainer>
+
+    <div class="agent__date-divider">
+      <span class="agent__date-divider-label">TODAY</span>
+    </div>
+
+    @for (msg of agentService.messages(); track msg.id) {
+
+      <!-- Text bubble -->
+      <div class="agent__bubble-row" [class.agent__bubble-row--user]="msg.role === 'user'">
+        <app-agent-message-bubble [message]="msg" />
+      </div>
+
+      <!-- Suggestion pills (shown only before user sends their first message) -->
+      @if (msg.suggestionPills?.length && !agentService.hasSentMessage()) {
+        <div class="agent__pills-row">
+          <app-agent-suggestion-pills
+            [pills]="msg.suggestionPills!"
+            (pillSelected)="onPillSelected($event)"
+          />
+        </div>
+      }
+
+      <!-- Recommendation cards section (for suggestion_cards type messages) -->
+      @if (msg.type === 'suggestion_cards' && msg.cards?.length) {
+        <div class="agent__cards-section">
+          @if (msg.cardsTitle) {
+            <h2 class="agent__cards-title">{{ msg.cardsTitle }}</h2>
+          }
+          @for (card of msg.cards!; track card.id) {
+            <app-agent-recommendation-card [card]="card" />
+          }
+        </div>
+      }
+    }
+
+    <!-- Typing / loading indicator -->
+    @if (agentService.isTyping()) {
+      <div class="agent__bubble-row">
+        <div class="agent__typing">
+          <div class="agent__typing-avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="3" width="18" height="14" rx="2"/>
+              <path stroke-linecap="round" d="M7 8h10M7 11.5h6"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 17l3 4"/>
+            </svg>
+          </div>
+          <div class="agent__typing-bubble" aria-label="Assistant is typing">
+            <span class="agent__typing-dot"></span>
+            <span class="agent__typing-dot"></span>
+            <span class="agent__typing-dot"></span>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Bottom spacer so last message clears the input bar -->
+    <div class="agent__messages-spacer"></div>
+  </div>
+
+  <!-- ── Input area ──────────────────────────────────────────────────────── -->
+  <div class="agent__input-area">
+    <div class="agent__input-row">
+
+      <button type="button" class="agent__mic-btn" aria-label="Voice input (coming soon)" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <rect x="9" y="2" width="6" height="11" rx="3"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 10a7 7 0 01-14 0M12 19v3M9 22h6"/>
+        </svg>
+      </button>
+
+      <input
+        class="agent__input"
+        type="text"
+        placeholder="Ask for recommendations..."
+        [value]="inputValue()"
+        (input)="onInputChange($event)"
+        (keydown)="onInputKeydown($event)"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+      />
+
+      <button
+        type="button"
+        class="agent__send-btn"
+        [class.agent__send-btn--active]="inputValue().trim().length > 0"
+        (click)="onSend()"
+        aria-label="Send message"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2 .01 7z"/>
+        </svg>
+      </button>
+
+    </div>
+  </div>
+
+</div>
