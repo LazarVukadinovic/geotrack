@@ -158,14 +158,11 @@
             (action)="onSeeAllReviews()"
           />
 
-          <!-- Login / review CTA -->
-          <div class="pd__review-cta">
-            <div class="pd__review-cta-text">
-              <span class="pd__review-cta-title">Share your experience</span>
-              <span class="pd__review-cta-sub">Log in to leave a review</span>
-            </div>
-            <button type="button" class="pd__review-cta-btn" (click)="goToLogin()">Log In</button>
-          </div>
+          <app-review-entry
+            [isLoggedIn]="isLoggedIn()"
+            [entityName]="p.title"
+            (loginRequested)="goToLogin()"
+          />
 
           <!-- Review cards -->
           <div class="pd__reviews-list">

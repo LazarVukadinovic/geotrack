@@ -3,14 +3,16 @@ import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
+import { AuthService } from '../../../../core/services/auth.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
+import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
 import { HotelDetailService } from '../../services/hotel-detail.service';
 import type { HotelAmenityIcon } from '../../models/hotel-detail.model';
 
 @Component({
   selector: 'app-hotel-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent],
+  imports: [SectionHeaderComponent, ReviewEntryComponent],
   templateUrl: './hotel-detail-page.component.html',
   styleUrl: './hotel-detail-page.component.scss',
 })
@@ -19,6 +21,9 @@ export class HotelDetailPageComponent {
   private readonly router   = inject(Router);
   private readonly location = inject(Location);
   private readonly service  = inject(HotelDetailService);
+  private readonly auth     = inject(AuthService);
+
+  protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
   protected readonly hotelId = toSignal(
     this.route.paramMap.pipe(map((p) => p.get('id') ?? '')),
