@@ -1,18 +1,18 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { EditProfile } from './edit-profile';
+import { EditProfileComponent } from './edit-profile.component';
 
 describe('EditProfile', () => {
-  let component: EditProfile;
-  let fixture: ComponentFixture<EditProfile>;
+  let component: EditProfileComponent;
+  let fixture: ComponentFixture<EditProfileComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [EditProfile],
+      imports: [EditProfileComponent],
       providers: [provideRouter([])],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(EditProfile);
+    fixture = TestBed.createComponent(EditProfileComponent);
     component = fixture.componentInstance;
     await fixture.whenStable();
   });
@@ -30,7 +30,7 @@ describe('EditProfile', () => {
       bio: 'Hello world',
     }));
 
-    const f2 = TestBed.createComponent(EditProfile);
+    const f2 = TestBed.createComponent(EditProfileComponent);
     const c2 = f2.componentInstance;
 
     expect(c2.fullName).toBe('Test User');

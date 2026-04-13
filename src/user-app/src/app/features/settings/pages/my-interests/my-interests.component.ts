@@ -33,10 +33,10 @@ const ALL_INTERESTS: Interest[] = [
 @Component({
   selector: 'app-my-interests',
   imports: [CommonModule],
-  templateUrl: './my-interests.html',
-  styleUrl: './my-interests.css',
+  templateUrl: './my-interests.component.html',
+  styleUrl: './my-interests.component.css',
 })
-export class MyInterests {
+export class MyInterestsComponent {
   isSaving = false;
   selectedInterests: Interest[] = [];
   private returnTo = '/settings';

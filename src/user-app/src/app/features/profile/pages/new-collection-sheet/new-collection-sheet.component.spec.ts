@@ -1,17 +1,17 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { NewCollectionSheet } from './new-collection-sheet';
+import { NewCollectionSheetComponent } from './new-collection-sheet.component';
 
 describe('NewCollectionSheet', () => {
-  let component: NewCollectionSheet;
-  let fixture: ComponentFixture<NewCollectionSheet>;
+  let component: NewCollectionSheetComponent;
+  let fixture: ComponentFixture<NewCollectionSheetComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [NewCollectionSheet],
+      imports: [NewCollectionSheetComponent],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(NewCollectionSheet);
+    fixture = TestBed.createComponent(NewCollectionSheetComponent);
     component = fixture.componentInstance;
     await fixture.whenStable();
   });

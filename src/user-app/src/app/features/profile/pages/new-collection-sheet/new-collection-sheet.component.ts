@@ -6,7 +6,7 @@ import { CollectionsService } from '../../services/collections';
   selector: 'app-new-collection-sheet',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './new-collection-sheet.html',
+  templateUrl: './new-collection-sheet.component.html',
 })
 export class NewCollectionSheetComponent {
   private readonly collService = inject(CollectionsService);

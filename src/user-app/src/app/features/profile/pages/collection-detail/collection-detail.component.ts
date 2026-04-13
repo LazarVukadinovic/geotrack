@@ -7,7 +7,7 @@ import { CollectionsService } from '../../services/collections';
   selector: 'app-collection-detail',
   standalone: true,
   imports: [],
-  templateUrl: './collection-detail.html',
+  templateUrl: './collection-detail.component.html',
 })
 export class CollectionDetailComponent {
   private readonly location    = inject(Location);

@@ -6,10 +6,10 @@ import { Router, ActivatedRoute } from '@angular/router';
 @Component({
   selector: 'app-edit-profile',
   imports: [CommonModule, FormsModule],
-  templateUrl: './edit-profile.html',
-  styleUrl: './edit-profile.css',
+  templateUrl: './edit-profile.component.html',
+  styleUrl: './edit-profile.component.css',
 })
-export class EditProfile {
+export class EditProfileComponent {
   fullName  = 'Marko Petrović';
   email     = 'marko.p@example.com';
   phone     = '';

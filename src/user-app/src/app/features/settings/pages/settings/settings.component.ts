@@ -5,10 +5,10 @@ import { Router } from '@angular/router';
 @Component({
   selector: 'app-settings',
   imports: [CommonModule],
-  templateUrl: './settings.html',
-  styleUrl: './settings.css',
+  templateUrl: './settings.component.html',
+  styleUrl: './settings.component.css',
 })
-export class Settings {
+export class SettingsComponent {
   fullName = 'Marko Petrović';
   email = 'marko.p@example.com';
   language = 'English (US)';
@@ -23,12 +23,12 @@ export class Settings {
   }
 
   goBack():          void { this.router.navigate(['/profile']); }
-  goToProfile():     void { this.router.navigate(['/edit-profile'], { queryParams: { from: 'settings' } }); }
+  goToProfile():     void { this.router.navigate(['/profile/edit'], { queryParams: { from: 'settings' } }); }
   changePassword():  void { this.router.navigate(['/change-password']); }
   changeLanguage():  void { console.log('Language'); }
   openNotifications(): void { console.log('Notifications'); }
   openPrivacy():     void { console.log('Privacy'); }
-  openInterests():   void { this.router.navigate(['/my-interests'], { queryParams: { from: 'settings' } }); }
+  openInterests():   void { this.router.navigate(['/settings/interests'], { queryParams: { from: 'settings' } }); }
   openHelp():        void { console.log('Help'); }
   contactSupport():  void { console.log('Support'); }
   openTerms():       void { console.log('Terms'); }

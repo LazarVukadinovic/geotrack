@@ -2,14 +2,14 @@ import { Component, computed, inject, ViewChild } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { CollectionsService } from '../../services/collections';
-import { NewCollectionSheetComponent } from '../new-collection-sheet/new-collection-sheet';
+import { NewCollectionSheetComponent } from '../new-collection-sheet/new-collection-sheet.component';
 
 @Component({
   selector: 'app-my-collections-page',
   standalone: true,
   imports: [NewCollectionSheetComponent],
-  templateUrl: './my-collections-page.html',
-  styleUrl: './my-collections-page.css',
+  templateUrl: './my-collections-page.component.html',
+  styleUrl: './my-collections-page.component.css',
 })
 export class MyCollectionsPageComponent {
   private readonly location    = inject(Location);
