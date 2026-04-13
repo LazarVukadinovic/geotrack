@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 
 @Component({
@@ -11,12 +12,15 @@ import { Router } from '@angular/router';
   styleUrl: './register-page.component.css',
 })
 export class RegisterPageComponent {
+  username = '';
   email = '';
   password = '';
   repeatPassword = '';
   showPassword = false;
   showRepeatPassword = false;
   submitted = false;
+  errorMessage = '';
+  isLoading = false;
 
   req = {
     minLength: false,
@@ -24,7 +28,13 @@ export class RegisterPageComponent {
     hasSpecial: false,
   };
 
-  constructor(private router: Router) {}
+  constructor(private router: Router, private http: HttpClient) {}
+
+  get usernameError(): string {
+    if (!this.submitted) return '';
+    if (!this.username.trim()) return 'Name is required.';
+    return '';
+  }
 
   get emailError(): string {
     if (!this.submitted) return '';
@@ -48,6 +58,7 @@ export class RegisterPageComponent {
 
   get isValid(): boolean {
     return (
+      !!this.username.trim() &&
       !!this.email &&
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email) &&
       !!this.password &&
@@ -63,8 +74,34 @@ export class RegisterPageComponent {
 
   onContinue(): void {
     this.submitted = true;
+    this.errorMessage = '';
     if (!this.isValid) return;
-    this.router.navigate(['/profile/interests']);
+
+    this.isLoading = true;
+
+    this.http
+      .post<{ message: string }>('/api/auth/register', {
+        username: this.username.trim(),
+        email: this.email.trim(),
+        password: this.password,
+      })
+      .subscribe({
+        next: () => {
+          this.isLoading = false;
+          this.router.navigate(['/profile/interests']);
+        },
+        error: (err: HttpErrorResponse) => {
+          this.isLoading = false;
+
+          if (err.status === 400) {
+            this.errorMessage = err.error?.message || 'Registration failed. Please check your details.';
+          } else if (err.status === 0) {
+            this.errorMessage = 'Unable to reach the server. Please check your connection.';
+          } else {
+            this.errorMessage = err.error?.message || 'Something went wrong. Please try again.';
+          }
+        },
+      });
   }
 
   goBack(): void {

@@ -25,6 +25,41 @@
 
   <div class="flex-1 px-6 pb-6 flex flex-col bg-[#fafaf9]">
 
+    <!-- Server error -->
+    @if (errorMessage) {
+      <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 text-center">
+        {{ errorMessage }}
+      </div>
+    }
+
+    <!-- Username -->
+    <div class="mb-4">
+      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
+        Name
+      </label>
+      <div class="relative">
+        <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+          </svg>
+        </div>
+        <input
+          type="text"
+          [(ngModel)]="username"
+          placeholder="Enter your name"
+          class="w-full pl-10 pr-4 py-3.5 bg-white border rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:ring-2 focus:ring-orange-100 transition-all duration-200"
+          [class.border-slate-200]="!usernameError"
+          [class.border-red-400]="!!usernameError"
+          [class.focus:border-[#e8570a]]="!usernameError"
+          [class.focus:border-red-400]="!!usernameError"
+        />
+      </div>
+      @if (usernameError) {
+        <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ usernameError }}</p>
+      }
+    </div>
+
     <!-- Email -->
     <div class="mb-4">
       <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
@@ -199,11 +234,16 @@
     <button
       type="button"
       (click)="onContinue()"
-      class="w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200">
-      Continue
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
-      </svg>
+      [disabled]="isLoading"
+      class="w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200 disabled:opacity-60 disabled:pointer-events-none">
+      @if (isLoading) {
+        Creating account…
+      } @else {
+        Continue
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      }
     </button>
 
     <p class="text-center text-sm text-slate-400 mt-4">

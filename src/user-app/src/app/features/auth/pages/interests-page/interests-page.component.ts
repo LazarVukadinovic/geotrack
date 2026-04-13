@@ -1,7 +1,9 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
+import { TagService } from '../../../../core/services/tag.service';
+import { Tag } from '../../../../core/models/tag.model';
 
 @Component({
   selector: 'app-interests-page',
@@ -10,41 +12,54 @@ import { AuthService } from '../../../../core/services/auth.service';
   templateUrl: './interests-page.component.html',
   styleUrl: './interests-page.component.css',
 })
-export class InterestsPageComponent {
-  selectedInterests: string[] = [];
+export class InterestsPageComponent implements OnInit {
+  tags: Tag[] = [];
+  selectedTagIds: Set<number> = new Set();
+  isLoading = false;
 
-  interests = [
-    'Food & Drink',
-    'History',
-    'Beaches',
-    'Nature',
-    'Museums',
-    'Local Events',
-    'Nightlife',
-    'Festivals',
-    'Adventure',
-    'Scenic Walks',
-    'Culture',
-    'Shopping',
-  ];
+  constructor(
+    private router: Router,
+    private authService: AuthService,
+    private tagService: TagService,
+  ) {}
 
-  constructor(private router: Router, private authService: AuthService) {}
+  ngOnInit(): void {
+    this.tagService.loadTags().subscribe(tags => {
+      this.tags = tags;
+    });
+  }
 
-  toggleInterest(interest: string): void {
-    if (this.isSelected(interest)) {
-      this.selectedInterests = this.selectedInterests.filter((i) => i !== interest);
+  toggleTag(tag: Tag): void {
+    if (this.selectedTagIds.has(tag.id)) {
+      this.selectedTagIds.delete(tag.id);
     } else {
-      this.selectedInterests = [...this.selectedInterests, interest];
+      this.selectedTagIds.add(tag.id);
     }
   }
 
-  isSelected(interest: string): boolean {
-    return this.selectedInterests.includes(interest);
+  isSelected(tag: Tag): boolean {
+    return this.selectedTagIds.has(tag.id);
+  }
+
+  get selectedCount(): number {
+    return this.selectedTagIds.size;
   }
 
   onFinish(): void {
-    if (this.selectedInterests.length === 0) return;
-    this.router.navigate(['/']);
+    if (this.selectedCount === 0) return;
+
+    this.isLoading = true;
+
+    this.tagService.saveUserTags([...this.selectedTagIds]).subscribe({
+      next: () => {
+        this.isLoading = false;
+        this.router.navigate(['/']);
+      },
+      error: () => {
+        this.isLoading = false;
+        this.router.navigate(['/']);
+      },
+    });
   }
 
   onSkip(): void {
