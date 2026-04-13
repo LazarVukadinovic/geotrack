@@ -1,0 +1,12 @@
+<div class="bubble" [class.bubble--user]="message().role === 'user'" [class.bubble--assistant]="message().role === 'assistant'">
+  @if (message().role === 'assistant') {
+    <div class="bubble__avatar" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="14" rx="2"/>
+        <path stroke-linecap="round" d="M7 8h10M7 11.5h6"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 17l3 4"/>
+      </svg>
+    </div>
+  }
+  <p class="bubble__text">{{ message().text }}</p>
+</div>

@@ -52,3 +52,12 @@ export interface ExploreLandmarkCategory {
   image: string;
   categoryKey: string;
 }
+
+export interface ExploreCuratedItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  categoryLabel: string;
+  image: string;
+  isSaved: boolean;
+}

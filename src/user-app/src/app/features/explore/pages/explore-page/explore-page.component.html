@@ -1,5 +1,5 @@
 <div class="explore-page">
-  <app-header title="Explore" [showNotificationDot]="true" />
+  <app-header title="Explore" [showBell]="isLoggedIn()" [showNotificationDot]="true" />
 
   <div class="explore-page__main">
     <app-welcome-hero [city]="heroCity()" [country]="heroCountry()" />
@@ -11,7 +11,16 @@
       />
     </div>
 
-    <app-promo-card [promo]="promo()" (cta)="onPromoCta()" />
+    @if (isLoggedIn()) {
+      <app-curated-for-you
+        [items]="curatedItems()"
+        (bookmarkToggled)="toggleCuratedSaved($event)"
+        (cardActivated)="onCuratedCard($event)"
+        (sectionMore)="onCuratedMore()"
+      />
+    } @else {
+      <app-promo-card [promo]="promo()" (cta)="onPromoCta()" />
+    }
 
     <app-landmarks-slider
       [items]="landmarkCategories()"

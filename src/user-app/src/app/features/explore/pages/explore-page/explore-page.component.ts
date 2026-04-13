@@ -1,10 +1,12 @@
 import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { AuthService } from '../../../../core/services/auth.service';
 import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
 import { SearchBarComponent } from '../../../../shared/components/search-bar/search-bar.component';
 import { WelcomeHeroComponent } from '../../components/welcome-hero/welcome-hero.component';
 import { PromoCardComponent } from '../../components/promo-card/promo-card.component';
+import { CuratedForYouComponent } from '../../components/curated-for-you/curated-for-you.component';
 import { EventsSliderComponent } from '../../components/events-slider/events-slider.component';
 import { PopularNearbySliderComponent } from '../../components/popular-nearby-slider/popular-nearby-slider.component';
 import { TopStaysSliderComponent } from '../../components/top-stays-slider/top-stays-slider.component';
@@ -21,6 +23,7 @@ import { ExploreService } from '../../services/explore.service';
     SearchBarComponent,
     WelcomeHeroComponent,
     PromoCardComponent,
+    CuratedForYouComponent,
     EventsSliderComponent,
     PopularNearbySliderComponent,
     TopStaysSliderComponent,
@@ -33,9 +36,12 @@ import { ExploreService } from '../../services/explore.service';
 })
 export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly explore     = inject(ExploreService);
+  private readonly auth        = inject(AuthService);
   private readonly router      = inject(Router);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
+
+  protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
   /** Mock hero location — later replace with user / geo service. */
   protected readonly heroCity    = signal('Dubrovnik');
@@ -43,7 +49,8 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected readonly searchQuery = signal('');
 
-  protected readonly promo = computed(() => this.explore.promo());
+  protected readonly promo        = computed(() => this.explore.promo());
+  protected readonly curatedItems = computed(() => this.explore.curatedForYou());
 
   protected readonly eventsThisWeek = computed(() => {
     const q = this.searchQuery().trim().toLowerCase();
@@ -129,7 +136,20 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   }
 
   protected onPromoCta(): void {
-    /* future: router.navigate(['/auth/login']) */
+    this.router.navigate(['/profile']);
+  }
+
+  protected toggleCuratedSaved(id: string): void {
+    this.explore.toggleSaved(id, 'curatedForYou');
+  }
+
+  protected onCuratedCard(id: string): void {
+    this.scrollState.markClickedItem('curated', id);
+    this.router.navigate(['/places', id]);
+  }
+
+  protected onCuratedMore(): void {
+    this.router.navigate(['/culture-and-history']);
   }
 
   protected onEvent(id: string): void {

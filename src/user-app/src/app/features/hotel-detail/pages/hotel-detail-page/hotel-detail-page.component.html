@@ -215,14 +215,11 @@
             (action)="onSeeAllReviews()"
           />
 
-          <!-- Login / review CTA -->
-          <div class="hd__review-cta">
-            <div class="hd__review-cta-text">
-              <span class="hd__review-cta-title">Share your experience</span>
-              <span class="hd__review-cta-sub">Log in to leave a review</span>
-            </div>
-            <button type="button" class="hd__review-cta-btn">Log In</button>
-          </div>
+          <app-review-entry
+            [isLoggedIn]="isLoggedIn()"
+            [entityName]="h.title"
+            (loginRequested)="goToLogin()"
+          />
 
           <!-- Review cards -->
           <div class="hd__reviews-list">

@@ -1,0 +1,20 @@
+/* Same sealed-viewport approach as login — see login-page.component.css for explanation. */
+:host {
+  display: block;
+  height: calc(100vh - var(--shell-bottom-pad));
+  height: calc(100dvh - var(--shell-bottom-pad));
+  background: #fafaf9;
+}
+
+/* Prevent iOS Safari zoom on input focus (same fix as login page). */
+input {
+  font-size: 1rem;
+}
+
+/* Remove browser's built-in password reveal button */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input::-webkit-credentials-auto-fill-button,
+input::-webkit-strong-password-auto-fill-button {
+  display: none !important;
+}

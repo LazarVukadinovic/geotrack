@@ -1,0 +1,13 @@
+<div class="pills" role="list" aria-label="Suggested topics">
+  @for (pill of pills(); track pill.label) {
+    <button
+      type="button"
+      class="pills__item"
+      [class.pills__item--selected]="selectedLabel() === pill.label"
+      role="listitem"
+      (click)="onPill(pill)"
+    >
+      {{ pill.label }}
+    </button>
+  }
+</div>
