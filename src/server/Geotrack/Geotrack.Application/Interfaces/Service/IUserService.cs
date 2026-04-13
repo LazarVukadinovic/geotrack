@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Geotrack.Application.DTOs.Users;
 
-namespace Geotrack.Application.Interfaces.Service
+namespace Geotrack.Application.Interfaces.Service;
+
+public interface IUserService
 {
-    public interface IUserService
-    {
-    }
+    Task<UserProfileDto?> GetProfileAsync(int userId);
+    Task UpdateProfileAsync(int userId, UpdateUserProfileDto dto);
 }

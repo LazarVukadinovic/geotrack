@@ -31,11 +31,24 @@ public class AuthController : ControllerBase
             };
 
             await _authService.RegisterAsync(dto);
-            return Ok(new { message = "User registered successfully" });
+
+            // Auto-login after registration so the interests page can save tags
+            var loginDto = new LoginUserDto
+            {
+                Email = request.Email,
+                Password = request.Password
+            };
+            var token = await _authService.LoginAsync(loginDto);
+
+            return Ok(new AuthResponse { Token = token });
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
     }
 
@@ -46,7 +59,7 @@ public class AuthController : ControllerBase
         {
             var dto = new LoginUserDto
             {
-                Username = request.Username,
+                Email = request.Email,
                 Password = request.Password
             };
 

@@ -24,10 +24,10 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(request.Username) ||
             string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password))
-            throw new Exception("All fields are required");
+            throw new InvalidOperationException("All fields are required");
 
         if (!IsValidEmail(request.Email))
-            throw new Exception("Invalid email format");
+            throw new InvalidOperationException("Invalid email format");
 
         var exists = await _userRepository.ExistsAsync(request.Username, request.Email);
 
@@ -49,14 +49,14 @@ public class AuthService : IAuthService
 
     public async Task<string> LoginAsync(LoginUserDto request)
     {
-        if (string.IsNullOrWhiteSpace(request.Username) ||
+        if (string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password))
-            throw new Exception("Username and password are required");
+            throw new UnauthorizedAccessException("Email and password are required");
 
-        var user = await _userRepository.GetByUsernameAsync(request.Username);
+        var user = await _userRepository.GetByEmailAsync(request.Email);
 
         if (user == null)
-            throw new Exception("Invalid credentials");
+            throw new UnauthorizedAccessException("Invalid credentials");
 
         var result = _passwordHasher.VerifyHashedPassword(
             user,
@@ -65,7 +65,7 @@ public class AuthService : IAuthService
         );
 
         if (result == PasswordVerificationResult.Failed)
-            throw new Exception("Invalid credentials");
+            throw new UnauthorizedAccessException("Invalid credentials");
 
         return _jwtService.GenerateToken(user.Id);
     }

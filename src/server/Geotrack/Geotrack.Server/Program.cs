@@ -1,13 +1,14 @@
+using Geotrack.Application.Interfaces.Repository;
+using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure;
 using Geotrack.Infrastructure.Repositories;
 using Geotrack.Infrastructure.Services;
+using Geotrack.Server;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Microsoft.EntityFrameworkCore;
-using Geotrack.Application.Interfaces.Service;
-using Geotrack.Application.Interfaces.Repository;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,8 +16,12 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -31,8 +36,11 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IPlaceService, PlaceService>();
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
-
-//builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IFavoriteService, FavoriteService>();
+builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<ITagService, TagService>();
+builder.Services.AddScoped<IAgentService, AgentService>();
+builder.Services.AddScoped<IExploreService, ExploreService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
@@ -70,6 +78,15 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Auto-apply migrations and seed data in development
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+    await SeedData.InitializeAsync(db);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
