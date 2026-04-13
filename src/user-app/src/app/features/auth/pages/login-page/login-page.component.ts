@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { ChangeDetectorRef, Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
@@ -28,6 +28,7 @@ export class LoginPageComponent {
     private router: Router,
     private http: HttpClient,
     private authService: AuthService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   onSignIn(): void {
@@ -42,7 +43,7 @@ export class LoginPageComponent {
 
     this.http
       .post<AuthResponse>('/api/auth/login', {
-        username: this.email.trim(),
+        email: this.email.trim(),
         password: this.password,
       })
       .subscribe({
@@ -55,12 +56,14 @@ export class LoginPageComponent {
           this.isLoading = false;
 
           if (err.status === 401) {
-            this.errorMessage = err.error?.message || 'Invalid username or password.';
+            this.errorMessage = err.error?.message || 'Invalid email or password.';
           } else if (err.status === 0) {
             this.errorMessage = 'Unable to reach the server. Please check your connection.';
           } else {
             this.errorMessage = err.error?.message || 'Something went wrong. Please try again.';
           }
+
+          this.cdr.markForCheck();
         },
       });
   }

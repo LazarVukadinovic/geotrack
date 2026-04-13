@@ -45,8 +45,10 @@ export class LocalPlacesCategoryPageComponent implements AfterViewInit {
 
   constructor() {
     effect(() => {
+      const key = this.categoryKey();
+      if (key) this.catService.loadCategory(key);
       const next: Record<string, string> = {};
-      for (const item of this.catService.itemsFor(this.categoryKey())()) {
+      for (const item of this.catService.itemsFor(key)()) {
         next[item.id] = item.image;
       }
       this.imgSrcById.set(next);

@@ -36,10 +36,11 @@ export class EventDetailPageComponent {
   constructor() {
     // Reset scroll when the route param changes (same component instance reused).
     effect(() => {
-      this.eventId();
+      const id = this.eventId();
       this.scrollProgress.set(0);
       const el = this.edScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
+      if (id) this.service.loadEventDetail(id);
     });
   }
 

@@ -1,6 +1,7 @@
 import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
+import { LocationService } from '../../../../core/services/location.service';
 import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
 import { SearchBarComponent } from '../../../../shared/components/search-bar/search-bar.component';
@@ -37,15 +38,15 @@ import { ExploreService } from '../../services/explore.service';
 export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly explore     = inject(ExploreService);
   private readonly auth        = inject(AuthService);
+  private readonly locationSvc = inject(LocationService);
   private readonly router      = inject(Router);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
-  /** Mock hero location — later replace with user / geo service. */
-  protected readonly heroCity    = signal('Dubrovnik');
-  protected readonly heroCountry = signal('Croatia');
+  protected readonly heroCity    = computed(() => this.locationSvc.displayCity());
+  protected readonly heroCountry = computed(() => this.locationSvc.displayCountry());
 
   protected readonly searchQuery = signal('');
 

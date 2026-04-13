@@ -219,6 +219,7 @@
             [isLoggedIn]="isLoggedIn()"
             [entityName]="h.title"
             (loginRequested)="goToLogin()"
+            (reviewSubmitted)="onReviewSubmitted($event)"
           />
 
           <!-- Review cards -->

@@ -6,7 +6,9 @@ import { map } from 'rxjs/operators';
 import { AuthService } from '../../../../core/services/auth.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
+import { HttpClient } from '@angular/common/http';
 import { HotelDetailService } from '../../services/hotel-detail.service';
+import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { HotelAmenityIcon } from '../../models/hotel-detail.model';
 
 @Component({
@@ -22,6 +24,7 @@ export class HotelDetailPageComponent {
   private readonly location = inject(Location);
   private readonly service  = inject(HotelDetailService);
   private readonly auth     = inject(AuthService);
+  private readonly http     = inject(HttpClient);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
@@ -40,10 +43,11 @@ export class HotelDetailPageComponent {
 
   constructor() {
     effect(() => {
-      this.hotelId();
+      const id = this.hotelId();
       this.scrollProgress.set(0);
       const el = this.hdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
+      if (id) this.service.loadHotelDetail(id);
     });
   }
 
@@ -90,6 +94,15 @@ export class HotelDetailPageComponent {
 
   protected onViewOnMap(): void {
     /* future: navigate to /map with this hotel highlighted */
+  }
+
+  protected onReviewSubmitted(draft: ReviewDraft): void {
+    const id = this.hotelId();
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) return;
+    this.http.post(`/api/reviews/places/${numId}`, { rating: draft.rating, comment: draft.body }).subscribe({
+      next: () => this.service.loadHotelDetail(id),
+    });
   }
 
   protected onSeeAllReviews(): void {

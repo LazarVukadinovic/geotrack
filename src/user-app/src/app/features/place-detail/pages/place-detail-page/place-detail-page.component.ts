@@ -6,7 +6,9 @@ import { map } from 'rxjs/operators';
 import { AuthService } from '../../../../core/services/auth.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
+import { HttpClient } from '@angular/common/http';
 import { PlaceDetailService } from '../../services/place-detail.service';
+import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 
 @Component({
   selector: 'app-place-detail-page',
@@ -21,6 +23,7 @@ export class PlaceDetailPageComponent {
   private readonly location = inject(Location);
   private readonly service  = inject(PlaceDetailService);
   private readonly auth     = inject(AuthService);
+  private readonly http     = inject(HttpClient);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
@@ -44,10 +47,11 @@ export class PlaceDetailPageComponent {
     // component instance is reused by Angular's RouteReuseStrategy. The scroll
     // container keeps its current scrollTop unless we explicitly reset it.
     effect(() => {
-      this.placeId(); // subscribe — runs on every id change
+      const id = this.placeId(); // subscribe — runs on every id change
       this.scrollProgress.set(0);
       const el = this.pdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
+      if (id) this.service.loadPlaceDetail(id);
     });
   }
 
@@ -96,6 +100,15 @@ export class PlaceDetailPageComponent {
 
   protected onViewOnMap(): void {
     /* future: navigate to /map with this place highlighted */
+  }
+
+  protected onReviewSubmitted(draft: ReviewDraft): void {
+    const id = this.placeId();
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) return;
+    this.http.post(`/api/reviews/places/${numId}`, { rating: draft.rating, comment: draft.body }).subscribe({
+      next: () => this.service.loadPlaceDetail(id),
+    });
   }
 
   protected onSeeAllReviews(): void {

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-register-page',
@@ -28,7 +29,7 @@ export class RegisterPageComponent {
     hasSpecial: false,
   };
 
-  constructor(private router: Router, private http: HttpClient) {}
+  constructor(private router: Router, private http: HttpClient, private authService: AuthService) {}
 
   get usernameError(): string {
     if (!this.submitted) return '';
@@ -80,14 +81,17 @@ export class RegisterPageComponent {
     this.isLoading = true;
 
     this.http
-      .post<{ message: string }>('/api/auth/register', {
+      .post<{ token: string }>('/api/auth/register', {
         username: this.username.trim(),
         email: this.email.trim(),
         password: this.password,
       })
       .subscribe({
-        next: () => {
+        next: (res) => {
           this.isLoading = false;
+          if (res.token) {
+            this.authService.login(res.token);
+          }
           this.router.navigate(['/profile/interests']);
         },
         error: (err: HttpErrorResponse) => {
