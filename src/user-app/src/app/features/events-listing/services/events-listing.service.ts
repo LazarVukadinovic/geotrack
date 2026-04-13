@@ -1,18 +1,38 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import type { EventListingItem, EventsFeatured } from '../models/events-listing.model';
 import { MOCK_EVENTS_LISTING, EVENTS_FEATURED } from '../data/mock-events-listing.data';
 
-/**
- * Events listing data access.
- * Replace mock observables with HttpClient calls when the API is ready.
- */
+interface ApiEventsResponse {
+  items: {
+    id: number;
+    title: string;
+    subtitle?: string;
+    description?: string;
+    location?: string;
+    image?: string;
+    dateLabel?: string;
+    tags: string[];
+    variant: string;
+    isSaved: boolean;
+  }[];
+  featured?: {
+    title: string;
+    description?: string;
+    dateRange?: string;
+    locationLine?: string;
+  };
+}
+
 @Injectable({ providedIn: 'root' })
 export class EventsListingService {
-  private readonly _items = signal<EventListingItem[]>([...MOCK_EVENTS_LISTING]);
+  private readonly http = inject(HttpClient);
+  private readonly _items = signal<EventListingItem[]>([]);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
+  private readonly _featured = signal<EventsFeatured>(EVENTS_FEATURED);
 
-  readonly featured: EventsFeatured = EVENTS_FEATURED;
+  readonly featured = computed(() => this._featured());
 
   readonly items = computed(() => {
     const overrides = this._savedOverrides();
@@ -22,18 +42,50 @@ export class EventsListingService {
     }));
   });
 
-  /** API-shaped stream — swap for HttpClient.get<EventListingItem[]>('/api/events') when ready. */
+  constructor() {
+    this.http.get<ApiEventsResponse>('/api/events').subscribe({
+      next: (res) => {
+        this._items.set(res.items.map((dto, i) => ({
+          id: String(dto.id),
+          title: dto.title,
+          subtitle: dto.subtitle ?? '',
+          description: dto.description ?? '',
+          location: dto.location ?? '',
+          image: dto.image ?? '',
+          dateLabel: dto.dateLabel ?? '',
+          tags: dto.tags,
+          variant: (i === 0 ? 'large' : 'compact') as EventListingItem['variant'],
+          isSaved: dto.isSaved,
+        })));
+        if (res.featured) {
+          this._featured.set({
+            title: res.featured.title,
+            description: res.featured.description ?? '',
+            dateRange: res.featured.dateRange ?? '',
+            locationLine: res.featured.locationLine ?? '',
+          });
+        }
+      },
+      error: () => {
+        this._items.set([...MOCK_EVENTS_LISTING]);
+      },
+    });
+  }
+
   getItems$(): Observable<EventListingItem[]> {
     return of(this.items()).pipe(delay(0));
   }
 
-  /** API-shaped stream — swap for HttpClient.get<EventsFeatured>('/api/events/featured') when ready. */
   getFeatured$(): Observable<EventsFeatured> {
-    return of(this.featured).pipe(delay(0));
+    return of(this._featured()).pipe(delay(0));
   }
 
   toggleSaved(id: string): void {
     const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
     this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
+    const numId = parseInt(id, 10);
+    if (!isNaN(numId)) {
+      this.http.post('/api/favorites/toggle', { entityType: 'event', entityId: numId }).subscribe();
+    }
   }
 }

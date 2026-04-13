@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import type { ChatMessage } from '../models/agent.model';
 import {
   AGENT_WELCOME_MESSAGE,
@@ -6,15 +7,29 @@ import {
   MOCK_RESPONSE_ENTRIES,
 } from '../data/mock-agent.data';
 
-/**
- * AgentService — owns all chat state for the Ask Agent feature.
- *
- * Architecture note: mock responses are produced by `buildMockResponse()`.
- * To connect a real MCP / REST backend, replace that method with an HTTP call
- * and pipe the Observable into the same `_messages` / `_isTyping` update flow.
- */
+interface ApiAgentResponse {
+  id: string;
+  role: string;
+  type: string;
+  text?: string;
+  cardsTitle?: string;
+  cards?: {
+    id: number;
+    title: string;
+    description?: string;
+    image?: string;
+    rating: number;
+    durationHours: number;
+    distanceKm: number;
+    isFavorite: boolean;
+  }[];
+  suggestionPills?: { label: string; prompt: string }[];
+  timestamp: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AgentService {
+  private readonly http = inject(HttpClient);
   private readonly _messages = signal<ChatMessage[]>([
     { ...AGENT_WELCOME_MESSAGE, timestamp: new Date() },
   ]);
@@ -23,7 +38,6 @@ export class AgentService {
 
   readonly messages = this._messages.asReadonly();
   readonly isTyping = this._isTyping.asReadonly();
-  /** True after the user has sent at least one message — used to hide suggestion pills. */
   readonly hasSentMessage = this._hasSentMessage.asReadonly();
 
   sendMessage(text: string): void {
@@ -42,17 +56,38 @@ export class AgentService {
     this._hasSentMessage.set(true);
     this._isTyping.set(true);
 
-    // Simulate network latency. Replace setTimeout + buildMockResponse()
-    // with a real HTTP / WebSocket call when connecting the backend.
-    const delay = 1000 + Math.random() * 800;
-    setTimeout(() => {
-      this._isTyping.set(false);
-      const response = this.buildMockResponse(trimmed);
-      this._messages.update(msgs => [...msgs, response]);
-    }, delay);
+    this.http.post<ApiAgentResponse>('/api/agent/message', { text: trimmed }).subscribe({
+      next: (res) => {
+        this._isTyping.set(false);
+        const response: ChatMessage = {
+          id: res.id || crypto.randomUUID(),
+          role: 'assistant',
+          type: (res.type as ChatMessage['type']) || 'text',
+          text: res.text ?? '',
+          cardsTitle: res.cardsTitle,
+          cards: res.cards?.map(c => ({
+            id: String(c.id),
+            title: c.title,
+            description: c.description ?? '',
+            image: c.image ?? '',
+            rating: c.rating,
+            durationHours: c.durationHours,
+            distanceKm: c.distanceKm,
+            isFavorite: c.isFavorite,
+          })),
+          suggestionPills: res.suggestionPills,
+          timestamp: new Date(res.timestamp),
+        };
+        this._messages.update(msgs => [...msgs, response]);
+      },
+      error: () => {
+        this._isTyping.set(false);
+        // Fallback to mock response
+        const response = this.buildMockResponse(trimmed);
+        this._messages.update(msgs => [...msgs, response]);
+      },
+    });
   }
-
-  // ── Mock response logic (swap this for real API adapter) ──────────────────
 
   private buildMockResponse(userText: string): ChatMessage {
     const lower = userText.toLowerCase();
