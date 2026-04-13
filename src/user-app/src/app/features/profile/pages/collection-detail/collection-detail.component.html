@@ -1,7 +1,7 @@
 <div class="min-h-screen flex flex-col bg-[#fafafa] pb-24">
 
   <!-- Header -->
-  <div class="bg-[#1a2b4a] px-6 pt-12 pb-6 rounded-b-[2.5rem]">
+  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem]">
     <div class="flex items-center justify-between">
       <button type="button" (click)="goBack()"
         class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
@@ -9,7 +9,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
-      <span class="text-xl font-medium text-white tracking-wide">{{ collection()?.title }}</span>
+      <span class="text-[16] font-bold text-white tracking-wide">{{ collection()?.title }}</span>
       <button type="button" (click)="onMenuOpen()"
         class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -50,7 +50,7 @@
       }
       <!-- overlay -->
       <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-4 py-3.5 gap-4">
-        <p class="text-white text-base font-medium opacity-80">
+        <p class="text-white text-sm font-medium opacity-80">
           {{ col.places.length }} {{ col.places.length === 1 ? 'place' : 'places' }}
         </p>
       </div>
@@ -101,3 +101,90 @@
   </button>
 
 </div>
+<!-- ── Menu sheet ──────────────────────────────────────────────────────────── -->
+@if (menuOpen()) {
+  <div class="fixed inset-0 bg-black/40 z-[60]" (click)="closeMenu()"></div>
+  <div class="fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-[2rem] px-5 pt-2 shadow-2xl"
+       style="padding-bottom: max(2.5rem, env(safe-area-inset-bottom))"
+       (touchstart)="onMenuTouchStart($event)"
+       [style.transform]="menuDragOffset() > 0 ? 'translateY(' + menuDragOffset() + 'px)' : null"
+       [style.transition]="menuIsDragging() ? 'none' : 'transform 0.28s cubic-bezier(0.32,0.72,0,1)'">
+
+    <div class="w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6 cursor-grab"></div>
+
+    <button type="button" (click)="openRename()"
+      class="w-full flex items-center gap-4 px-2 py-3.5 active:bg-slate-50 rounded-2xl transition-colors">
+      <div class="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+        <svg class="w-5 h-5 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+        </svg>
+      </div>
+      <span class="text-base font-semibold text-slate-800">Rename Collection</span>
+    </button>
+
+    <div class="h-px bg-slate-100 my-1"></div>
+
+    <button type="button" (click)="onDelete()"
+      class="w-full flex items-center gap-4 px-2 py-3.5 active:bg-red-50 rounded-2xl transition-colors">
+      <div class="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center flex-none">
+        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+      </div>
+      <span class="text-base font-semibold text-red-500">Delete Collection</span>
+    </button>
+
+    <button type="button" (click)="closeMenu()"
+      class="w-full py-3 text-base font-bold text-[#1a2b4a] text-center mt-2 active:opacity-60 transition-opacity">
+      Cancel
+    </button>
+  </div>
+}
+
+<!-- ── Rename sheet ────────────────────────────────────────────────────────── -->
+@if (renameOpen()) {
+  <div class="fixed inset-0 bg-black/40 z-[60]" (click)="closeRename()"></div>
+  <div class="fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-[2rem] px-5 pt-2 shadow-2xl"
+       style="padding-bottom: max(2.5rem, env(safe-area-inset-bottom))"
+       (touchstart)="onRenameTouchStart($event)"
+       [style.transform]="renameDragOffset() > 0 ? 'translateY(' + renameDragOffset() + 'px)' : null"
+       [style.transition]="renameIsDragging() ? 'none' : 'transform 0.28s cubic-bezier(0.32,0.72,0,1)'">
+
+    <div class="w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6 cursor-grab"></div>
+
+    <h2 class="text-xl font-bold text-slate-800 mb-1">Rename Collection</h2>
+    <p class="text-sm text-slate-500 mb-5">Enter a new name for this collection.</p>
+
+    <label class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+      Collection Name
+    </label>
+    <div class="bg-slate-50 border border-slate-300 rounded-2xl flex items-center gap-3 px-4 py-3.5 mb-6"
+         [class.border-[#e8722a]]="renameValue().length > 0"
+         [class.bg-orange-50]="renameValue().length > 0">
+      <svg class="w-4 h-4 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 12h12M3 17h8"/>
+      </svg>
+      <input
+        type="text"
+        [value]="renameValue()"
+        (input)="renameValue.set($any($event.target).value)"
+        (keyup.enter)="onRenameSave()"
+        placeholder="Collection name…"
+        maxlength="50"
+        class="flex-1 bg-transparent text-sm text-slate-700 placeholder-slate-400 outline-none"/>
+    </div>
+
+    <button type="button" (click)="onRenameSave()"
+      [disabled]="renameValue().trim().length === 0"
+      class="w-full py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base tracking-wide
+             transition-all duration-200 mb-3 disabled:opacity-45 active:scale-[0.98]">
+      Save
+    </button>
+    <button type="button" (click)="closeRename()"
+      class="w-full py-3 text-base font-bold text-[#1a2b4a] text-center active:opacity-60 transition-opacity">
+      Cancel
+    </button>
+  </div>
+}

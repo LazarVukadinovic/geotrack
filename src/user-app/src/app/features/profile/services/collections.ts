@@ -89,4 +89,9 @@ export class CollectionsService {
   deleteCollection(id: string): void {
     this.collections.update((cols) => cols.filter((c) => c.id !== id));
   }
+  renameCollection(id: string, title: string): void {
+  this.collections.update(cols =>
+    cols.map(c => c.id === id ? { ...c, title } : c)
+  );
+}
 }

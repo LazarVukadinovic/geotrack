@@ -1,13 +1,20 @@
 @if (isOpen()) {
   <!-- Backdrop -->
-  <div class="fixed inset-0 bg-black/40 z-40 transition-opacity"
+  <div class="fixed inset-0 bg-black/40 z-60 transition-opacity"
        (click)="onCancel()"></div>
 
   <!-- Sheet -->
-  <div class="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[2rem] px-5 pt-2 pb-10 shadow-2xl
-              animate-slide-up">
+  <div 
+    class="fixed bottom-0 left-0 right-0 z-70 bg-white rounded-t-[2rem] px-5 pt-2 shadow-2xl animate-slide-up"
+    style="padding-bottom: max(2.5rem, env(safe-area-inset-bottom))"
+    (touchstart)="onTouchStart($event)"
+    (touchmove)="onTouchMove($event)"
+    (touchend)="onTouchEnd()"
+    [style.transform]="dragOffset() > 0 ? 'translateY(' + dragOffset() + 'px)' : null"
+    [style.transition]="isDragging() ? 'none' : 'transform 0.28s cubic-bezier(0.32,0.72,0,1)'"
+  >
     <!-- Handle -->
-    <div class="w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6"></div>
+    <div class="w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6 cursor-grab"></div>
 
     <!-- Icon -->
     <div class="w-11 h-11 bg-orange-50 rounded-full flex items-center justify-center mb-4">
