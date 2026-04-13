@@ -10,8 +10,8 @@ interface Category {
 @Component({
   selector: 'app-filters',
   imports: [CommonModule],
-  templateUrl: './filters.html',
-  styleUrl: './filters.css',
+  templateUrl: './filters.component.html',
+  styleUrl: './filters.component.css',
 })
 export class Filters {
   selectedCategories: string[] = [];

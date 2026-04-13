@@ -1,17 +1,17 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { Filters } from './filters';
+import { MapPageComponent } from './map-page.component';
 
-describe('Filters', () => {
-  let component: Filters;
-  let fixture: ComponentFixture<Filters>;
+describe('MapPage', () => {
+  let component: MapPageComponent;
+  let fixture: ComponentFixture<MapPageComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [Filters],
+      imports: [MapPageComponent],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(Filters);
+    fixture = TestBed.createComponent(MapPageComponent);
     component = fixture.componentInstance;
     await fixture.whenStable();
   });

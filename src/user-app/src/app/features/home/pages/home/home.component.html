@@ -1,4 +1,4 @@
-<div class="relative h-screen w-full overflow-hidden">
+<div class="relative h-[100dvh] w-full overflow-hidden">
 
   <!-- ── BACKGROUND MAP ── -->
   <div id="bg-map" class="absolute inset-0 w-full h-full"></div>
@@ -12,7 +12,7 @@
   </div>
 
   <!-- ── CENTERED CONTENT ── -->
-  <div class="absolute inset-0 z-20 flex flex-col items-center justify-center -translate-y-10 px-6 gap-5">
+  <div class="absolute inset-0 z-10 flex flex-col items-center justify-center -translate-y-10 px-6 gap-5">
 
     <!-- Headline -->
     <div class="text-center">
@@ -106,43 +106,5 @@
         </div>
       </div>
     </div>
-
-  <!-- ── BOTTOM NAV ── -->
-  <div class="absolute bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-sm border-t border-slate-100 px-2 py-2 flex justify-around items-center">
-
-    <button class="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-400">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="9" stroke-width="1.5"/>
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-          d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"/>
-      </svg>
-      <span class="text-[9px] font-bold">Explore</span>
-    </button>
-
-    <button class="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-400" (click)="router.navigate(['/map'])">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-          d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
-      </svg>
-      <span class="text-[9px] font-medium">Map</span>
-    </button>
-
-    <button class="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-400">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <rect x="3" y="3" width="18" height="14" rx="2" stroke-width="1.5"/>
-        <path stroke-linecap="round" stroke-width="1.5" d="M7 8h10M7 11.5h6"/>
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 17l3 4"/>
-      </svg>
-      <span class="text-[9px] font-medium">Ask Agent</span>
-    </button>
-
-    <button class="flex flex-col items-center gap-0.5 px-3 py-1 text-slate-400" (click)="router.navigate(['/login'])">
-      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-      </svg>
-      <span class="text-[9px] font-medium">Profile</span>
-    </button>
-
-  </div>
 
 </div>

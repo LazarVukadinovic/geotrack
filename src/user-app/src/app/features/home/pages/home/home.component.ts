@@ -9,8 +9,8 @@ const MAP_STYLE_URL = '/map-style.json';
 @Component({
   selector: 'app-home',
   imports: [CommonModule, FormsModule],
-  templateUrl: './home.html',
-  styleUrl: './home.css',
+  templateUrl: './home.component.html',
+  styleUrl: './home.component.css',
 })
 export class Home implements OnInit, OnDestroy {
   private bgMap!: Map;
