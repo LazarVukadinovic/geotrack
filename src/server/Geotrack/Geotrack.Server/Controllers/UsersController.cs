@@ -1,9 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Application.DTOs.User;
-using Geotrack.Application.DTOs.Collection;
-using Geotrack.Application.DTOs.Interest;
+using Geotrack.Server.Requests;
+using Geotrack.Server.Responses;
 using System.Security.Claims;
 
 namespace Geotrack.Server.Controllers;
@@ -28,79 +27,152 @@ public class UsersController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetMe()
     {
-        return Ok(await _userService.GetMeAsync(GetUserId()));
+        var result = await _userService.GetMeAsync(GetUserId());
+
+        return Ok(new GetMeResponse
+        {
+            Id = result.Id,
+            Username = result.Username,
+            Email = result.Email,
+            FirstName = result.FirstName,
+            LastName = result.LastName,
+            PhoneNumber = result.PhoneNumber,
+            CreatedAt = result.CreatedAt,
+            UpdatedAt = result.UpdatedAt,
+            Collections = result.Collections.Select(c => new CollectionPreviewResponse
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Description = c.Description,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+                ItemsCount = c.ItemsCount
+            }).ToList()
+        });
     }
 
     [Authorize]
     [HttpPut("me")]
-    public async Task<IActionResult> UpdateMe(UpdateMeRequestDto request)
+    public async Task<IActionResult> UpdateMe(UpdateMeRequest request)
     {
-        return Ok(await _userService.UpdateMeAsync(GetUserId(), request));
+        var dto = new Geotrack.Application.DTOs.User.UpdateMeRequestDto
+        {
+            FirstName = request.FirstName,
+            LastName = request.LastName,
+            PhoneNumber = request.PhoneNumber
+        };
+
+        var result = await _userService.UpdateMeAsync(GetUserId(), dto);
+
+        return Ok(new UpdateMeResponse
+        {
+            Id = result.Id,
+            Username = result.Username,
+            Email = result.Email,
+            FirstName = result.FirstName,
+            LastName = result.LastName,
+            PhoneNumber = result.PhoneNumber,
+            CreatedAt = result.CreatedAt,
+            UpdatedAt = result.UpdatedAt
+        });
     }
 
     [Authorize]
     [HttpGet("me/interests")]
     public async Task<IActionResult> GetInterests()
     {
-        return Ok(await _userService.GetUserInterestsAsync(GetUserId()));
+        var result = await _userService.GetUserInterestsAsync(GetUserId());
+
+        return Ok(new GetUserInterestsResponse
+        {
+            Tags = result.Tags.Select(t => new InterestItemResponse
+            {
+                TagId = t.TagId,
+                Name = t.Name,
+                Slug = t.Slug,
+                Description = t.Description,
+                ForDestination = t.ForDestination,
+                ForLocation = t.ForLocation,
+                ForPlace = t.ForPlace,
+                ForEvent = t.ForEvent,
+                PlaceTypeId = t.PlaceTypeId,
+                CreatedAt = t.CreatedAt,
+                UpdatedAt = t.UpdatedAt
+            }).ToList()
+        });
     }
 
     [Authorize]
     [HttpPut("me/interests")]
-    public async Task<IActionResult> UpdateInterests(UpdateUserInterestsRequestDto request)
+    public async Task<IActionResult> UpdateInterests(UpdateUserInterestsRequest request)
     {
-        return Ok(await _userService.UpdateUserInterestsAsync(GetUserId(), request));
+        var dto = new Geotrack.Application.DTOs.Interest.UpdateUserInterestsRequestDto
+        {
+            TagIds = request.TagIds
+        };
+
+        var result = await _userService.UpdateUserInterestsAsync(GetUserId(), dto);
+
+        return Ok(new UpdateUserInterestsResponse
+        {
+            Tags = result.Tags.Select(t => new InterestItemResponse
+            {
+                TagId = t.TagId,
+                Name = t.Name,
+                Slug = t.Slug,
+                Description = t.Description,
+                ForDestination = t.ForDestination,
+                ForLocation = t.ForLocation,
+                ForPlace = t.ForPlace,
+                ForEvent = t.ForEvent,
+                PlaceTypeId = t.PlaceTypeId,
+                CreatedAt = t.CreatedAt,
+                UpdatedAt = t.UpdatedAt
+            }).ToList()
+        });
     }
 
     [Authorize]
     [HttpGet("me/collections")]
     public async Task<IActionResult> GetCollections()
     {
-        return Ok(await _userService.GetCollectionsAsync(GetUserId()));
+        var result = await _userService.GetCollectionsAsync(GetUserId());
+
+        return Ok(new GetCollectionsResponse
+        {
+            Collections = result.Collections.Select(c => new CollectionListItemResponse
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Description = c.Description,
+                UserId = c.UserId,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+                ItemsCount = c.ItemsCount
+            }).ToList()
+        });
     }
 
     [Authorize]
     [HttpPost("me/collections")]
-    public async Task<IActionResult> CreateCollection(CreateCollectionRequestDto request)
+    public async Task<IActionResult> CreateCollection(CreateCollectionRequest request)
     {
-        return Ok(await _userService.CreateCollectionAsync(GetUserId(), request));
-    }
+        var dto = new Geotrack.Application.DTOs.Collection.CreateCollectionRequestDto
+        {
+            Name = request.Name,
+            Description = request.Description
+        };
 
+        var result = await _userService.CreateCollectionAsync(GetUserId(), dto);
 
-    [Authorize]
-    [HttpGet("me/collections/{id}")]
-    public async Task<IActionResult> GetCollectionDetails(int id)
-    {
-        return Ok(await _userService.GetCollectionDetailsAsync(GetUserId(), id));
-    }
-
-    [Authorize]
-    [HttpPut("me/collections/{id}")]
-    public async Task<IActionResult> UpdateCollection(int id, UpdateCollectionRequestDto request)
-    {
-        return Ok(await _userService.UpdateCollectionAsync(GetUserId(), id, request));
-    }
-
-    [Authorize]
-    [HttpDelete("me/collections/{id}")]
-    public async Task<IActionResult> DeleteCollection(int id)
-    {
-        await _userService.DeleteCollectionAsync(GetUserId(), id);
-        return NoContent();
-    }
-
-    [Authorize]
-    [HttpPost("me/collections/{id}/items")]
-    public async Task<IActionResult> AddItem(int id, AddCollectionItemRequestDto request)
-    {
-        return Ok(await _userService.AddCollectionItemAsync(GetUserId(), id, request));
-    }
-
-    [Authorize]
-    [HttpDelete("me/collections/{id}/items/{itemId}")]
-    public async Task<IActionResult> DeleteItem(int id, int itemId)
-    {
-        await _userService.DeleteCollectionItemAsync(GetUserId(), id, itemId);
-        return NoContent();
+        return Ok(new CreateCollectionResponse
+        {
+            Id = result.Id,
+            Name = result.Name,
+            Description = result.Description,
+            UserId = result.UserId,
+            CreatedAt = result.CreatedAt,
+            UpdatedAt = result.UpdatedAt
+        });
     }
 }
