@@ -24,5 +24,15 @@ namespace Geotrack.Infrastructure.Repositories
             return await _context.Users
                 .FirstOrDefaultAsync(u => u.Username == username);
         }
+
+        public override async Task<User?> GetByIDAsync(int id)
+        {
+            return await _context.Users
+                .Include(u => u.Collections)
+                    .ThenInclude(c => c.CollectionItems)
+                .Include(u => u.UserTags)
+                    .ThenInclude(ut => ut.Tag)
+                .FirstOrDefaultAsync(u => u.Id == id);
+        }
     }
 }

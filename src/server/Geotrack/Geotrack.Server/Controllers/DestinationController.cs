@@ -1,7 +1,6 @@
 ﻿using Geotrack.Application.DTOs;
 using Geotrack.Application.DTOs.Explore;
-using Geotrack.Application.Interfaces;
-using Geotrack.Application.Services;
+using Geotrack.Application.Interfaces.Service;
 using Geotrack.Server.Requests;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -12,9 +11,9 @@ namespace Geotrack.Server.Controllers;
 [Route("api/destinations")]
 public class DestinationController : ControllerBase
 {
-    private readonly DestinationService _destinationService;
+    private readonly IDestinationService _destinationService;
 
-    public DestinationController(DestinationService destinationService)
+    public DestinationController(IDestinationService destinationService)
     {
         _destinationService = destinationService;
     }

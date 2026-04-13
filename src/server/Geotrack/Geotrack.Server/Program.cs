@@ -44,7 +44,7 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]);
+        var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!);
 
         options.TokenValidationParameters = new TokenValidationParameters
         {
