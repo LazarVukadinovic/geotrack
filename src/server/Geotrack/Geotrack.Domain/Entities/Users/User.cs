@@ -25,8 +25,13 @@ public class User
     public string PasswordHash { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
 
+    // Profile fields
+    public string? AvatarUrl { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Location { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    public RegionalOrganization? RegionalOrganization { get; set; } // NAVIGATIONAL
+    public RegionalOrganization? RegionalOrganization { get; set; }
 }

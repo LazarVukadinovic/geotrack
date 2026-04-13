@@ -27,6 +27,7 @@ public class Location
 
     public ICollection<LocationReview> LocationReviews { get; set; } = new List<LocationReview>(); // NAVIGATIONAL
 
+    public string? ImageUrl { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }
 

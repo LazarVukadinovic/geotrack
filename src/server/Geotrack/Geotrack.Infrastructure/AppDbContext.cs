@@ -25,11 +25,16 @@ public class AppDbContext : DbContext
 
     public DbSet<Place> Places => Set<Place>();
     public DbSet<PlaceType> PlaceTypes => Set<PlaceType>();
+    public DbSet<Amenity> Amenities => Set<Amenity>();
+    public DbSet<PlaceAmenity> PlaceAmenities => Set<PlaceAmenity>();
+    public DbSet<BookingPartner> BookingPartners => Set<BookingPartner>();
+    public DbSet<PlaceBookingPartner> PlaceBookingPartners => Set<PlaceBookingPartner>();
 
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<UserTag> UserTags => Set<UserTag>();
+    public DbSet<Favorite> Favorites => Set<Favorite>();
 
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<DestinationTag> DestinationTags => Set<DestinationTag>();
@@ -624,6 +629,119 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.UserTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // New entities for frontend support
+
+        modelBuilder.Entity<Amenity>(entity =>
+        {
+            entity.ToTable("Amenities");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100);
+            entity.Property(x => x.Icon).HasMaxLength(50);
+            entity.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<PlaceAmenity>(entity =>
+        {
+            entity.ToTable("PlaceAmenities");
+            entity.HasKey(x => new { x.PlaceId, x.AmenityId });
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.PlaceAmenities)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Amenity)
+                .WithMany(x => x.PlaceAmenities)
+                .HasForeignKey(x => x.AmenityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BookingPartner>(entity =>
+        {
+            entity.ToTable("BookingPartners");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100);
+            entity.Property(x => x.Variant).HasMaxLength(20);
+            entity.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<PlaceBookingPartner>(entity =>
+        {
+            entity.ToTable("PlaceBookingPartners");
+            entity.HasKey(x => new { x.PlaceId, x.BookingPartnerId });
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.PlaceBookingPartners)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.BookingPartner)
+                .WithMany(x => x.PlaceBookingPartners)
+                .HasForeignKey(x => x.BookingPartnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Favorite>(entity =>
+        {
+            entity.ToTable("Favorites");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EntityType).HasMaxLength(50);
+            entity.Property(x => x.CreatedAt).IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.EntityType, x.EntityId }).IsUnique();
+        });
+
+        // Extended field configurations for Place
+        modelBuilder.Entity<Place>(entity =>
+        {
+            entity.Property(x => x.Subtitle).HasMaxLength(500);
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+            entity.Property(x => x.Address).HasMaxLength(500);
+            entity.Property(x => x.OpeningHours).HasMaxLength(200);
+            entity.Property(x => x.PricePerNight).HasColumnType("decimal(10,2)");
+        });
+
+        // Extended field configurations for Event
+        modelBuilder.Entity<Event>(entity =>
+        {
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+            entity.Property(x => x.TicketPrice).HasMaxLength(100);
+            entity.Property(x => x.Duration).HasMaxLength(100);
+            entity.Property(x => x.HostedBy).HasMaxLength(200);
+            entity.Property(x => x.VenueDescription).HasMaxLength(2000);
+            entity.Property(x => x.ArrivalTips).HasMaxLength(2000);
+            entity.Property(x => x.Accessibility).HasMaxLength(1000);
+        });
+
+        // Extended field configurations for User
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.Property(x => x.AvatarUrl).HasMaxLength(1000);
+            entity.Property(x => x.DisplayName).HasMaxLength(100);
+            entity.Property(x => x.Location).HasMaxLength(200);
+        });
+
+        // ImageUrl fields for other entities
+        modelBuilder.Entity<Destination>(entity =>
+        {
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<Location>(entity =>
+        {
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
         });
     }
 }
