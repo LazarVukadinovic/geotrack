@@ -1,0 +1,38 @@
+/*
+  Auth page layout: fill exactly the viewport content area above the bottom nav /
+  safe-area padding, then let overflow scroll via the app-shell viewport.
+
+  `--shell-bottom-pad` is set on .app-shell and inherited through the DOM:
+    - with nav:    calc(--bottom-nav-height + env(safe-area-inset-bottom, 0))
+    - without nav: env(safe-area-inset-bottom, 0)
+
+  Using `height` (not `min-height`) gives the host a *definite* height so that
+  the inner div's `min-h-full` resolves correctly. `overflow: visible` (default)
+  lets any overflow propagate to the app-shell scroll container, which handles
+  scroll naturally on smaller phones.
+*/
+:host {
+  display: block;
+  /* vh fallback for browsers that don't support dvh yet */
+  min-height: calc(100vh - var(--shell-bottom-pad));
+  min-height: calc(100dvh - var(--shell-bottom-pad));
+  background: #ffffff;
+}
+
+/*
+  iOS Safari zooms in on focus when the input font-size is below 16px.
+  The global `input { font: inherit }` in styles.scss inherits 15px from body
+  (var(--text-base) = 0.9375rem). This component-scoped rule wins via higher
+  specificity (element + attribute selector) and locks inputs to 16px.
+*/
+input {
+  font-size: 1rem;
+}
+
+/* Remove browser's built-in password reveal button */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input::-webkit-credentials-auto-fill-button,
+input::-webkit-strong-password-auto-fill-button {
+  display: none !important;
+}

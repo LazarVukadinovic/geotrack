@@ -1,0 +1,26 @@
+<section class="local-favorites" aria-label="Food and music">
+  <app-section-header
+    title="Food & Music"
+    subtitle="Where the locals go to unwind"
+    actionLabel="More"
+    (action)="sectionMore.emit()"
+  />
+
+  @if (items().length === 0) {
+    <app-empty-state title="No matches" message="Try another search or category." />
+  } @else {
+    <div class="local-favorites__viewport">
+      <div class="local-favorites__track" data-slider-id="local-favorites" role="list">
+        @for (item of items(); track item.id) {
+          <div class="local-favorites__cell" role="listitem" [attr.data-item-id]="item.id">
+            <app-destination-card
+              [item]="item"
+              (bookmarkToggled)="bookmarkToggled.emit($event)"
+              (cardActivated)="cardActivated.emit($event)"
+            />
+          </div>
+        }
+      </div>
+    </div>
+  }
+</section>

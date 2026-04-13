@@ -1,0 +1,46 @@
+// Design tokens — GeoTrack mobile PWA
+:root {
+  --color-primary-navy: #1a2b4c;
+  --color-accent-orange: #d97d54;
+  --color-page-bg: #f8f9fa;
+  --color-card-bg: #ffffff;
+  --color-muted: #6b7280;
+  --color-border: rgba(26, 43, 76, 0.12);
+  --color-rating-badge: #0d9488;
+  --color-rating-badge-text: #ffffff;
+  --color-notify-dot: #ef4444;
+
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-subtle: 0 2px 8px rgba(0, 0, 0, 0.04);
+
+  --radius-pill: 9999px;
+  --radius-lg: 20px;
+  --radius-md: 12px;
+  --radius-sm: 10px;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-md: 1.0625rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-hero: clamp(1.75rem, 6vw, 2.125rem);
+  --text-display: clamp(1.625rem, 5.5vw, 1.875rem);
+
+  --font-sans: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+
+  --app-header-height: 56px;
+  /** Space from top of viewport to start of scroll content below fixed header (notch-safe). */
+  --app-header-offset: calc(var(--app-header-height) + env(safe-area-inset-top, 0px));
+  --bottom-nav-height: 72px;
+  --page-gutter: var(--space-5);
+}

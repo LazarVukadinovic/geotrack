@@ -1,0 +1,39 @@
+<nav class="bottom-nav" aria-label="Main">
+  @for (tab of tabs; track tab.path) {
+    <a
+      class="bottom-nav__tab"
+      [routerLink]="tab.path"
+      routerLinkActive="bottom-nav__tab--active"
+      [routerLinkActiveOptions]="{ exact: tab.exact ?? false }"
+    >
+      @switch (tab.path) {
+        @case ('/explore') {
+          <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke-width="1.5" />
+            <path path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" />
+          </svg>
+        }
+        @case ('/map') {
+          <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+          </svg>
+        }
+        @case ('/agent') {
+          <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="14" rx="2" stroke-width="1.5"/>
+            <path stroke-linecap="round" stroke-width="1.5" d="M7 8h10M7 11.5h6"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 17l3 4"/>
+          </svg>
+        }
+        @default {
+          <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+          </svg>
+        }
+      }
+      <span class="bottom-nav__label">{{ tab.label }}</span>
+    </a>
+  }
+</nav>

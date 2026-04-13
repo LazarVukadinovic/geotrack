@@ -1,0 +1,64 @@
+<div class="explore-page">
+  <app-header title="Explore" [showBell]="isLoggedIn()" [showNotificationDot]="true" />
+
+  <div class="explore-page__main">
+    <app-welcome-hero [city]="heroCity()" [country]="heroCountry()" />
+
+    <div class="explore-page__search">
+      <app-search-bar
+        [value]="searchQuery()"
+        (valueChange)="onSearchChange($event)"
+      />
+    </div>
+
+    @if (isLoggedIn()) {
+      <app-curated-for-you
+        [items]="curatedItems()"
+        (bookmarkToggled)="toggleCuratedSaved($event)"
+        (cardActivated)="onCuratedCard($event)"
+        (sectionMore)="onCuratedMore()"
+      />
+    } @else {
+      <app-promo-card [promo]="promo()" (cta)="onPromoCta()" />
+    }
+
+    <app-landmarks-slider
+      [items]="landmarkCategories()"
+      (tileActivated)="onLandmarkTile($event)"
+      (sectionMore)="onLandmarksMore()"
+    />
+
+    <app-top-stays-slider
+      [items]="topStays()"
+      (bookmarkToggled)="toggleStaySaved($event)"
+      (cardActivated)="onStayCard($event)"
+      (sectionMore)="onStaysMore()"
+    />
+
+    <app-events-slider
+      [items]="eventsThisWeek()"
+      (eventActivated)="onEvent($event)"
+      (sectionMore)="onEventsMore()"
+    />
+
+    <app-local-favorites-list
+      [items]="filteredLocalFavorites()"
+      (bookmarkToggled)="toggleLocalSaved($event)"
+      (cardActivated)="onLocalCard($event)"
+      (sectionMore)="onLocalMore()"
+    />
+
+    <app-must-see-slider
+      [items]="mustSeeAttractions()"
+      (cardActivated)="onAttractionCard($event)"
+      (sectionMore)="onAttractionsMore()"
+    />
+
+    <app-popular-nearby-slider
+      [items]="popularNearby()"
+      (bookmarkToggled)="toggleNearbySaved($event)"
+      (cardActivated)="onNearbyCard($event)"
+      (sectionMore)="onNatureMore()"
+    />
+  </div>
+</div>
