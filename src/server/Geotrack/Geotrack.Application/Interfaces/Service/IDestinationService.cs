@@ -14,5 +14,6 @@ namespace Geotrack.Application.Interfaces.Service
         Task<GetDestinationResponseDto> GetDestinationDetailsAsync(int destinationId);
         Task<GetDestinationSectionResponseDto> GetDestinationSectionAsync(int destinationId, string sectionKey);
         Task<GetDestinationReviewsResponseDto> GetDestinationReviewsAsync(int destinationId);
+        
     }
 }

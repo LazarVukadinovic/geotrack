@@ -1,10 +1,13 @@
-﻿using Geotrack.Application.DTOs;
+﻿using System.Security.Claims;
+using Geotrack.Application.DTOs;
+using Geotrack.Application.DTOs.Destionation;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces;
+using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
 using Geotrack.Server.Requests;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Geotrack.Server.Controllers;
 
@@ -13,10 +16,12 @@ namespace Geotrack.Server.Controllers;
 public class DestinationController : ControllerBase
 {
     private readonly DestinationService _destinationService;
+    private readonly IDestinationReviewService _reviewService;
 
-    public DestinationController(DestinationService destinationService)
+    public DestinationController(DestinationService destinationService, IDestinationReviewService reviewService)
     {
         _destinationService = destinationService;
+        _reviewService = reviewService;
     }
 
     [HttpPost("explore-by-location")]
@@ -60,6 +65,20 @@ public class DestinationController : ControllerBase
     {
         var result = await _destinationService.GetDestinationReviewsAsync(destinationId);
         return Ok(result);
+    }
+
+    [HttpPost("{id}/reviews")]
+    [Authorize]
+    public async Task<IActionResult> CreateReview(
+    [FromRoute] int id,
+    [FromBody] CreateDestinationReviewRequestDto dto)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var result = await _reviewService.CreateReviewAsync(id, userId, dto);
+        return CreatedAtAction(nameof(CreateReview), new { id }, result);
     }
 
 }

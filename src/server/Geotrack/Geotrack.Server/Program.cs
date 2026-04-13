@@ -31,6 +31,8 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IPlaceService, PlaceService>();
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
+builder.Services.AddScoped<IDestinationReviewRepository, DestinationReviewRepository>();
+builder.Services.AddScoped<IDestinationReviewService, DestinationReviewService>();
 
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 
