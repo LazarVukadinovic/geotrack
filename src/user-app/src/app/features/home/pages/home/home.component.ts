@@ -18,25 +18,20 @@ export class Home implements OnInit, OnDestroy {
 
   searchQuery = '';
   searchResults: any[] = [];
-  showLocationDialog = false;
   isLocating = false;
 
   constructor(public router: Router) {}
 
-  ngOnInit(): void {
-    this.initBgMap();
-  }
+  ngOnInit(): void { this.initBgMap(); }
 
-  ngOnDestroy(): void {
-    this.bgMap?.remove();
-  }
+  ngOnDestroy(): void { this.bgMap?.remove(); }
 
   private initBgMap(): void {
     this.bgMap = new maplibregl.Map({
       container: 'bg-map',
       style: MAP_STYLE_URL,
       center: [14.0, 20.0],
-      zoom: 1.8,    
+      zoom: 1.8,
       pitch: 30,
       bearing: 0,
       interactive: false,
@@ -46,12 +41,10 @@ export class Home implements OnInit, OnDestroy {
     this.bgMap.on('load', () => {
       const logo = document.querySelector('.maplibregl-ctrl-logo') as HTMLElement;
       const attrib = document.querySelector('.maplibregl-ctrl-attrib') as HTMLElement;
-
       if (logo) logo.style.display = 'none';
       if (attrib) attrib.style.display = 'none';
-      const layers = this.bgMap.getStyle().layers;
 
-      layers?.forEach((layer) => {
+      this.bgMap.getStyle().layers?.forEach(layer => {
         if (layer.type === 'symbol') {
           this.bgMap.setLayoutProperty(layer.id, 'visibility', 'none');
         }
@@ -62,44 +55,31 @@ export class Home implements OnInit, OnDestroy {
 
   private startCinematicLoop(): void {
     let lng = 14.0;
-
     const animate = () => {
       lng += 0.10;
-
       if (lng > 180) lng = -180;
-
       this.bgMap.setCenter([lng, 20.0]);
-
       requestAnimationFrame(animate);
     };
-
     animate();
   }
 
   onSearch(value: string): void {
     clearTimeout(this.searchTimeout);
-    if (value.trim().length < 2) {
-      this.searchResults = [];
-      return;
-    }
-    this.searchTimeout = setTimeout(() => this.geocode(value), 250);
+    if (value.trim().length < 2) { this.searchResults = []; return; }
+    this.searchTimeout = setTimeout(() => this.geocode(value), 150);
   }
 
   private geocode(query: string): void {
-    const url =
-      `https://nominatim.openstreetmap.org/search` +
-      `?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en`;
-
-    fetch(url)
-      .then((r) => r.json())
-      .then((data) => (this.searchResults = data))
-      .catch(() => (this.searchResults = []));
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en&addressdetails=0&namedetails=0`)
+      .then(r => r.json())
+      .then(data => this.searchResults = data)
+      .catch(() => this.searchResults = []);
   }
 
   selectResult(result: any): void {
     this.searchResults = [];
     this.searchQuery = this.getResultName(result);
-
     this.router.navigate(['/map'], {
       state: {
         name: this.getResultName(result),
@@ -129,59 +109,46 @@ export class Home implements OnInit, OnDestroy {
     if (cached) {
       const loc = JSON.parse(cached);
       if (loc.isUserLocation) {
-        this.router.navigate(['/map'], {
-          state: {
-            name: loc.name,
-            lat: loc.lat,
-            lon: loc.lon,
-            isUserLocation: true,
-          },
-        });
+        this.router.navigate(['/map'], { state: { ...loc, isUserLocation: true } });
         return;
       }
     }
-    this.showLocationDialog = true;
-  }
 
-  confirmLocation(): void {
-    this.showLocationDialog = false;
     this.isLocating = true;
+    if (!navigator.geolocation) { this.isLocating = false; return; }
 
-    if (!navigator.geolocation) {
-      this.isLocating = false;
-      return;
-    }
+    let navigated = false;
 
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
+        if (navigated) return;
+        navigated = true;
         this.isLocating = false;
-        sessionStorage.setItem('mapLocation', JSON.stringify({
-          name: 'My Location',
-          lat: coords.latitude,
-          lon: coords.longitude,
-          isUserLocation: true,
-        }));
-        this.router.navigate(['/map'], {
-          state: {
-            name: 'My Location',
-            lat: coords.latitude,
-            lon: coords.longitude,
-            isUserLocation: true,
+        this.navigateToLocation(coords.latitude, coords.longitude);
+      },
+      () => {
+        if (navigated) return;
+        navigator.geolocation.getCurrentPosition(
+          ({ coords }) => {
+            if (navigated) return;
+            navigated = true;
+            this.isLocating = false;
+            this.navigateToLocation(coords.latitude, coords.longitude);
           },
-        });
+          (err) => {
+            this.isLocating = false;
+            console.warn('Location failed:', err.message);
+          },
+          { timeout: 15000, maximumAge: 0, enableHighAccuracy: true }
+        );
       },
-      (err) => {
-        console.warn('Location error:', err.code, err.message);
-        this.isLocating = false;
-        if (err.code !== err.PERMISSION_DENIED) {
-          this.router.navigate(['/map']);
-        }
-      },
-      {
-        timeout: 10000,
-        maximumAge: 300000,
-        enableHighAccuracy: false,
-      }
+      { timeout: 4000, maximumAge: 300000, enableHighAccuracy: false }
     );
+  }
+
+  private navigateToLocation(lat: number, lon: number): void {
+    const loc = { name: 'My Location', lat, lon, isUserLocation: true };
+    sessionStorage.setItem('mapLocation', JSON.stringify(loc));
+    this.router.navigate(['/map'], { state: loc });
   }
 }

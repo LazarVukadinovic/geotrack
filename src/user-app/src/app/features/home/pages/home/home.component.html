@@ -78,33 +78,4 @@
       {{ isLocating ? 'Getting location…' : 'Use my current location' }}
     </button>
   </div>
-  
-  <!-- Location permission dialog -->
-    <div *ngIf="showLocationDialog"
-      class="fixed inset-0 z-50 flex items-center justify-center px-6"
-      style="background: rgba(0,0,0,0.5);">
-      <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-        <div class="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center mb-4 mx-auto">
-          <svg class="w-6 h-6 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
-          </svg>
-        </div>
-        <h3 class="text-lg font-bold text-slate-800 text-center mb-2">Use Your Location</h3>
-        <p class="text-sm text-slate-400 text-center mb-6 leading-relaxed">
-          We'll show you what's nearby on the map.<br/>Your location stays on your device.
-        </p>
-        <div class="flex gap-3">
-          <button (click)="showLocationDialog = false"
-            class="flex-1 py-3 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-600 active:scale-[0.98] transition-all">
-            Not now
-          </button>
-          <button (click)="confirmLocation()"
-            class="flex-1 py-3 bg-[#e8722a] rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all">
-            Allow
-          </button>
-        </div>
-      </div>
-    </div>
-
 </div>

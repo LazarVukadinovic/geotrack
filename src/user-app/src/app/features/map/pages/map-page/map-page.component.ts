@@ -10,8 +10,6 @@ import maplibregl, {
 } from 'maplibre-gl';
 
 const MAP_STYLE_URL = '/map-style.json';
-
-// OSRM public API
 const OSRM_URL = 'https://router.project-osrm.org/route/v1/foot';
 
 interface Place {
@@ -23,6 +21,14 @@ interface Place {
   lat: number;
   lon: number;
 }
+
+const DISTANCE_RADIUS_KM: Record<string, number> = {
+  'Any': Infinity,
+  '0.5km': 0.5,
+  '1km': 1,
+  '2km': 2,
+  '5km': 5,
+};
 
 @Component({
   selector: 'app-map-page',
@@ -44,6 +50,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   selectedPlace: Place | null = null;
   hasActiveFilters = false;
   isUserLocation = false;
+  activeDistance = 'Any';
 
   private userLat: number | null = null;
   private userLon: number | null = null;
@@ -97,7 +104,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     else { this.hasActiveFilters = !!sessionStorage.getItem('mapFilters'); }
   }
 
-  ngAfterViewInit(): void { setTimeout(() => this.initMap(), 100); }
+  ngAfterViewInit(): void { setTimeout(() => this.initMap(), 0); }
 
   ngOnDestroy(): void {
     this.map?.remove();
@@ -105,8 +112,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private resizeHandler = () => this.map?.resize();
-
-  // ── Map init ─────────────────────────────────────────────────────────────
 
   private initMap(): void {
     const container = document.getElementById('map');
@@ -118,6 +123,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       center: [this.destinationLon, this.destinationLat],
       zoom: 13,
       attributionControl: false,
+      fadeDuration: 0,
+      trackResize: true,
     });
 
     window.addEventListener('resize', this.resizeHandler);
@@ -133,8 +140,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       const savedFilters = sessionStorage.getItem('mapFilters');
       if (savedFilters) {
         const f = JSON.parse(savedFilters);
+        this.activeDistance = f.distance ?? 'Any';
         if (f.categories?.length > 0) this.applyMultipleFilters(f.categories);
-        else this.applyFilter('more');
+        else this.applyFilter('all');
+        this.applyDistanceFilter(this.activeDistance);
       } else {
         this.applyFilter(this.activeCategory);
       }
@@ -171,7 +180,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
           lat: poiLat,
           lon: poiLon,
         };
-        this.clearRoute(); // ukloni staru rutu
+        this.clearRoute();
       } else {
         this.selectedPlace = null;
         this.clearRoute();
@@ -180,12 +189,79 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  // ── Routing (OSRM) ───────────────────────────────────────────────────────
+  // ── Distance filter ───────────────────────────────────────────────────────
+
+  private applyDistanceFilter(distance: string): void {
+    const radiusKm = DISTANCE_RADIUS_KM[distance] ?? Infinity;
+    const poiLayers = ['poi_z14', 'poi_z15', 'poi_z16', 'poi_transit'];
+    const centerLat = this.userLat ?? this.destinationLat;
+    const centerLon = this.userLon ?? this.destinationLon;
+
+    if (radiusKm === Infinity) {
+      poiLayers.forEach(id => {
+        if (!this.map.getLayer(id)) return;
+        const savedFilters = sessionStorage.getItem('mapFilters');
+        if (savedFilters) {
+          const f = JSON.parse(savedFilters);
+          if (f.categories?.length > 0) this.applyMultipleFilters(f.categories);
+          else this.map.setFilter(id, null);
+        } else {
+          this.map.setFilter(id, null);
+        }
+      });
+      return;
+    }
+
+    const circleGeoJSON = this.makeCirclePolygon(centerLat, centerLon, radiusKm);
+    const RADIUS_SOURCE = 'distance-radius-source';
+
+    if (this.map.getSource(RADIUS_SOURCE)) {
+      (this.map.getSource(RADIUS_SOURCE) as GeoJSONSource).setData(circleGeoJSON);
+    } else {
+      this.map.addSource(RADIUS_SOURCE, { type: 'geojson', data: circleGeoJSON });
+    }
+
+    const withinFilter: maplibregl.FilterSpecification = ['within', circleGeoJSON];
+    poiLayers.forEach(id => {
+      if (!this.map.getLayer(id)) return;
+      const currentFilter = this.map.getFilter(id);
+      if (currentFilter && (currentFilter as any[])[0] !== 'within') {
+        this.map.setFilter(id, ['all', currentFilter, withinFilter] as any);
+      } else {
+        this.map.setFilter(id, withinFilter as any);
+      }
+    });
+
+    const degPerKm = 1 / 111;
+    const latDelta = radiusKm * degPerKm;
+    const lonDelta = radiusKm * degPerKm / Math.cos(centerLat * Math.PI / 180);
+    this.map.fitBounds(
+      [[centerLon - lonDelta, centerLat - latDelta], [centerLon + lonDelta, centerLat + latDelta]],
+      { padding: 40, duration: 800 }
+    );
+  }
+
+  private makeCirclePolygon(lat: number, lon: number, radiusKm: number): GeoJSON.Feature<GeoJSON.Polygon> {
+    const points = 64;
+    const coords: [number, number][] = [];
+    for (let i = 0; i <= points; i++) {
+      const angle = (i / points) * 2 * Math.PI;
+      const dLat = (radiusKm / 111) * Math.cos(angle);
+      const dLon = (radiusKm / 111) * Math.sin(angle) / Math.cos(lat * Math.PI / 180);
+      coords.push([lon + dLon, lat + dLat]);
+    }
+    return {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [coords] },
+      properties: {}
+    };
+  }
+
+  // ── Routing (OSRM) ────────────────────────────────────────────────────────
 
   openDirections(): void {
     if (!this.selectedPlace) return;
 
-    // Nema korisnikove lokacije → fallback Google Maps
     if (this.userLat === null || this.userLon === null) {
       const dest = `${this.selectedPlace.lat},${this.selectedPlace.lon}`;
       const name = encodeURIComponent(this.selectedPlace.name);
@@ -196,7 +272,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.isLoadingRoute = true;
     this.cdr.detectChanges();
 
-    // OSRM: koordinate su lon,lat
     const origin = `${this.userLon},${this.userLat}`;
     const dest   = `${this.selectedPlace.lon},${this.selectedPlace.lat}`;
     const url    = `${OSRM_URL}/${origin};${dest}?overview=full&geometries=geojson`;
@@ -205,29 +280,19 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       .then(r => r.json())
       .then(data => {
         if (data.code !== 'Ok' || !data.routes?.length) {
-          console.warn('OSRM: nema rute', data);
-          this.isLoadingRoute = false;
-          this.cdr.detectChanges();
-          return;
+          this.isLoadingRoute = false; this.cdr.detectChanges(); return;
         }
         const geometry: GeoJSON.LineString = data.routes[0].geometry;
         this.drawRoute(geometry);
-
         const coords = geometry.coordinates as [number, number][];
         const bounds = coords.reduce(
           (b, c) => b.extend(c as maplibregl.LngLatLike),
           new maplibregl.LngLatBounds(coords[0], coords[0])
         );
         this.map.fitBounds(bounds, { padding: 70, duration: 900 });
-
-        this.isLoadingRoute = false;
-        this.cdr.detectChanges();
+        this.isLoadingRoute = false; this.cdr.detectChanges();
       })
-      .catch(err => {
-        console.warn('OSRM greška:', err);
-        this.isLoadingRoute = false;
-        this.cdr.detectChanges();
-      });
+      .catch(() => { this.isLoadingRoute = false; this.cdr.detectChanges(); });
   }
 
   private drawRoute(geometry: GeoJSON.LineString): void {
@@ -235,26 +300,18 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       type: 'FeatureCollection',
       features: [{ type: 'Feature', geometry, properties: {} }],
     };
-
     if (this.map.getSource(this.ROUTE_SOURCE)) {
       (this.map.getSource(this.ROUTE_SOURCE) as GeoJSONSource).setData(data);
       return;
     }
-
     this.map.addSource(this.ROUTE_SOURCE, { type: 'geojson', data });
-
     this.map.addLayer({
-      id: this.ROUTE_OUTLINE,
-      type: 'line',
-      source: this.ROUTE_SOURCE,
+      id: this.ROUTE_OUTLINE, type: 'line', source: this.ROUTE_SOURCE,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.85 },
     });
-
     this.map.addLayer({
-      id: this.ROUTE_LAYER,
-      type: 'line',
-      source: this.ROUTE_SOURCE,
+      id: this.ROUTE_LAYER, type: 'line', source: this.ROUTE_SOURCE,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: { 'line-color': '#e8722a', 'line-width': 5, 'line-opacity': 1 },
     });
@@ -265,11 +322,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     if (this.map?.getLayer(this.ROUTE_OUTLINE)) this.map.removeLayer(this.ROUTE_OUTLINE);
     if (this.map?.getSource(this.ROUTE_SOURCE)) this.map.removeSource(this.ROUTE_SOURCE);
   }
-  closePlace(): void {
-    this.selectedPlace = null;
-    this.clearRoute();
-  }
-  // ── User marker ──────────────────────────────────────────────────────────
+
+  closePlace(): void { this.selectedPlace = null; this.clearRoute(); }
+
+  // ── User marker ───────────────────────────────────────────────────────────
 
   private placeUserMarker(lat: number, lon: number): void {
     const geojson: GeoJSON.FeatureCollection = {
@@ -293,12 +349,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  // ── Locate me ────────────────────────────────────────────────────────────
+  // ── Locate me ─────────────────────────────────────────────────────────────
 
   locateMe(): void {
     if (!navigator.geolocation || this.isLocating) return;
     const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
-    if (!isSecure) { console.warn('Geolocation requires HTTPS.'); return; }
+    if (!isSecure) return;
 
     this.isLocating = true;
     this.cdr.detectChanges();
@@ -320,20 +376,20 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private handleLocationSuccess(lat: number, lon: number): void {
-    this.map.flyTo({ center: [lon, lat], zoom: 15, duration: 1200 });
+    this.map.flyTo({ center: [lon, lat], zoom: 15, duration: 1000 });
     if (this.map.isStyleLoaded()) this.placeUserMarker(lat, lon);
     else this.map.once('load', () => this.placeUserMarker(lat, lon));
-
     this.userLat = lat; this.userLon = lon; this.isUserLocation = true;
     sessionStorage.setItem('mapLocation', JSON.stringify({ name: 'My Location', lat, lon, isUserLocation: true }));
     this.isLocating = false;
     this.cdr.detectChanges();
   }
 
-  // ── Filters ──────────────────────────────────────────────────────────────
+  // ── Filters ───────────────────────────────────────────────────────────────
 
   selectCategory(cat: { id: string; label: string }): void {
     this.activeCategory = cat.id;
+    this.activeDistance = 'Any';
     this.selectedPlace = null;
     this.clearRoute();
     sessionStorage.removeItem('mapFilters');
@@ -344,7 +400,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private applyFilter(categoryId: string): void {
     const poiLayers = ['poi_z14', 'poi_z15', 'poi_z16', 'poi_transit'];
     const categoryMap: Record<string, string[]> = {
-      all: [], restaurants: ['restaurant','cafe','fast_food','bar','pub'],
+      all: [],
+      restaurants: ['restaurant','cafe','fast_food','bar','pub'],
       hotels: ['hotel','hostel','motel','guest_house','lodging'],
       attractions: ['attraction','museum','monument','gallery','viewpoint','tourism'],
       events: ['theatre','cinema','events_venue','nightclub'],
@@ -377,7 +434,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
@@ -404,11 +461,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   onSearchInput(value: string): void {
     clearTimeout(this.searchTimeout);
     if (value.trim().length < 2) { this.searchResults = []; return; }
-    this.searchTimeout = setTimeout(() => this.geocode(value), 250);
+    this.searchTimeout = setTimeout(() => this.geocode(value), 150);
   }
 
   private geocode(query: string): void {
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en`)
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en&addressdetails=0&namedetails=0`)
       .then(r => r.json())
       .then(data => { this.searchResults = data; this.cdr.detectChanges(); })
       .catch(() => this.searchResults = []);
