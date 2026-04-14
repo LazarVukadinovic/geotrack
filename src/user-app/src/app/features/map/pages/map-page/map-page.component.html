@@ -6,9 +6,12 @@
 
     <!-- Loading -->
     <div *ngIf="isLoading"
-      class="absolute inset-0 flex items-center justify-center bg-white/60"
-      style="z-index: 5;">
-      <div class="w-7 h-7 border-2 border-[#e8722a] border-t-transparent rounded-full animate-spin"></div>
+      class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20
+            bg-[#1a2b4a]/90 text-white text-xs font-semibold
+            px-4 py-2 rounded-full flex items-center gap-2 shadow-lg
+            pointer-events-none">
+      <div class="w-1.5 h-1.5 rounded-full bg-[#e8722a] animate-pulse"></div>
+      Loading {{ destinationName }}…
     </div>
 
     <!-- ── SEARCH BAR + CHIPS ── -->

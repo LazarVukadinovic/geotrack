@@ -474,12 +474,26 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   selectSearchResult(result: any): void {
     const lat = parseFloat(result.lat), lon = parseFloat(result.lon);
     const name = result.display_name?.split(',')[0] ?? '';
-    this.searchResults = []; this.searchQuery = name;
-    this.destinationName = name; this.destinationLat = lat; this.destinationLon = lon;
-    this.selectedPlace = null; this.clearRoute();
+
+    this.searchResults = [];
+    this.searchQuery = name;
+    this.destinationName = name;
+    this.destinationLat = lat;
+    this.destinationLon = lon;
+    this.selectedPlace = null;
+    this.clearRoute();
     sessionStorage.setItem('mapLocation', JSON.stringify({ name, lat, lon }));
-    this.map.flyTo({ center: [lon, lat], zoom: 14, duration: 1200 });
     this.hasActiveFilters = !!sessionStorage.getItem('mapFilters');
+
+    this.map.jumpTo({ center: [lon, lat], zoom: 14 });
+
+    this.isLoading = true;
+    this.cdr.detectChanges();
+
+    this.map.once('idle', () => {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    });
   }
 
   get isMoreActive(): boolean { return this.hasActiveFilters; }
