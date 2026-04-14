@@ -39,7 +39,7 @@ export const routes: Routes = [
       {
         path: 'profile',
         loadComponent: () =>
-          import('./features/profile/pages/profile/profile.component').then(m => m.ProfileComponent),
+          import('./features/profile/pages/profile-tab/profile-tab.component').then(m => m.ProfileTabComponent),
       },
       {
         path: 'profile/edit',

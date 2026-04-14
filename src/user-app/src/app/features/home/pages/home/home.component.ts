@@ -1,8 +1,10 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, { Map } from 'maplibre-gl';
+import { LocationService } from '../../../../core/services/location.service';
+import { ExploreService } from '../../../explore/services/explore.service';
 
 const MAP_STYLE_URL = '/map-style.json';
 
@@ -13,6 +15,10 @@ const MAP_STYLE_URL = '/map-style.json';
   styleUrl: './home.component.css',
 })
 export class Home implements OnInit, OnDestroy {
+  private readonly router = inject(Router);
+  private readonly locationSvc = inject(LocationService);
+  private readonly exploreSvc = inject(ExploreService);
+
   private bgMap!: Map;
   private searchTimeout?: ReturnType<typeof setTimeout>;
 
@@ -20,9 +26,14 @@ export class Home implements OnInit, OnDestroy {
   searchResults: any[] = [];
   isLocating = false;
 
-  constructor(public router: Router) {}
-
-  ngOnInit(): void { this.initBgMap(); }
+  ngOnInit(): void {
+    // Returning users who already completed location entry → skip to Explore
+    if (this.locationSvc.hasCompletedLocationEntry()) {
+      this.router.navigate(['/explore'], { replaceUrl: true });
+      return;
+    }
+    this.initBgMap();
+  }
 
   ngOnDestroy(): void { this.bgMap?.remove(); }
 
@@ -64,6 +75,8 @@ export class Home implements OnInit, OnDestroy {
     animate();
   }
 
+  /* ── Search / manual destination ───────────────────────────────────── */
+
   onSearch(value: string): void {
     clearTimeout(this.searchTimeout);
     if (value.trim().length < 2) { this.searchResults = []; return; }
@@ -77,16 +90,27 @@ export class Home implements OnInit, OnDestroy {
       .catch(() => this.searchResults = []);
   }
 
+  /**
+   * Manual destination flow — no GPS permission needed.
+   * Sets the destination in LocationService, preloads Explore data, then navigates.
+   */
   selectResult(result: any): void {
     this.searchResults = [];
-    this.searchQuery = this.getResultName(result);
-    this.router.navigate(['/map'], {
-      state: {
-        name: this.getResultName(result),
-        lat: parseFloat(result.lat),
-        lon: parseFloat(result.lon),
-        displayName: result.display_name,
-      },
+    const name = this.getResultName(result);
+    const lat = parseFloat(result.lat);
+    const lon = parseFloat(result.lon);
+
+    this.searchQuery = name;
+    this.isLocating = true;
+
+    // Set manual destination in LocationService (IP fallback handles general context)
+    this.locationSvc.setManualDestination(lat, lon, name);
+
+    // Preload explore data, then navigate
+    this.exploreSvc.loadForLocation(lat, lon).then(() => {
+      this.isLocating = false;
+      this.locationSvc.markLocationEntryComplete();
+      this.router.navigate(['/explore'], { replaceUrl: true });
     });
   }
 
@@ -104,51 +128,40 @@ export class Home implements OnInit, OnDestroy {
     return parts.slice(1, 3).join(',').trim();
   }
 
-  requestLocation(): void {
-    const cached = sessionStorage.getItem('mapLocation');
-    if (cached) {
-      const loc = JSON.parse(cached);
-      if (loc.isUserLocation) {
-        this.router.navigate(['/map'], { state: { ...loc, isUserLocation: true } });
-        return;
-      }
-    }
+  /* ── Use my current location ───────────────────────────────────────── */
 
+  /**
+   * GPS flow:
+   * 1. Triggers browser permission popup via LocationService.requestGps()
+   * 2. On success: preloads Explore data with real coords, marks entry complete, navigates
+   * 3. On denial: falls back to IP-based location, marks entry complete, navigates
+   */
+  async requestLocation(): Promise<void> {
     this.isLocating = true;
-    if (!navigator.geolocation) { this.isLocating = false; return; }
 
-    let navigated = false;
+    try {
+      // Request GPS — triggers browser permission popup
+      const coords = await this.locationSvc.requestGps();
 
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        if (navigated) return;
-        navigated = true;
-        this.isLocating = false;
-        this.navigateToLocation(coords.latitude, coords.longitude);
-      },
-      () => {
-        if (navigated) return;
-        navigator.geolocation.getCurrentPosition(
-          ({ coords }) => {
-            if (navigated) return;
-            navigated = true;
-            this.isLocating = false;
-            this.navigateToLocation(coords.latitude, coords.longitude);
-          },
-          (err) => {
-            this.isLocating = false;
-            console.warn('Location failed:', err.message);
-          },
-          { timeout: 15000, maximumAge: 0, enableHighAccuracy: true }
-        );
-      },
-      { timeout: 4000, maximumAge: 300000, enableHighAccuracy: false }
-    );
-  }
+      // Preload explore data with real GPS coordinates BEFORE navigating
+      await this.exploreSvc.loadForLocation(coords.latitude, coords.longitude);
 
-  private navigateToLocation(lat: number, lon: number): void {
-    const loc = { name: 'My Location', lat, lon, isUserLocation: true };
-    sessionStorage.setItem('mapLocation', JSON.stringify(loc));
-    this.router.navigate(['/map'], { state: loc });
+      this.isLocating = false;
+      this.locationSvc.markLocationEntryComplete();
+      this.router.navigate(['/explore'], { replaceUrl: true });
+
+    } catch {
+      // GPS denied or failed → fall back to IP-based location
+      const ipLoc = await this.locationSvc.ensureIpFallback();
+
+      this.isLocating = false;
+      this.locationSvc.markLocationEntryComplete();
+
+      if (ipLoc) {
+        await this.exploreSvc.loadForLocation(ipLoc.latitude, ipLoc.longitude);
+      }
+
+      this.router.navigate(['/explore'], { replaceUrl: true });
+    }
   }
 }
