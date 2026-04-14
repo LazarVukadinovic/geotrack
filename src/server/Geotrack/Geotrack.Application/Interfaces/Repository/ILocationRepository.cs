@@ -4,4 +4,5 @@ namespace Geotrack.Application.Interfaces.Repository;
 
 public interface ILocationRepository : IRepository<Location>
 {
+    Task<Location?> GetWithDetailsAsync(int locationId);
 }

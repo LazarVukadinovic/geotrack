@@ -5,11 +5,20 @@ using System.Text;
 using System.Threading.Tasks;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
+using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Repositories
 {
     public class LocationRepository : Repository<Location>, ILocationRepository
     {
-        public LocationRepository(AppDbContext context) : base(context) { }
+
+        private readonly AppDbContext _context;
+
+        public LocationRepository(AppDbContext context) : base(context)
+        {
+            _context = context;
+        }
+
+        public async Task<Location?> GetWithDetailsAsync(int locationId) => await _context.Locations.Include(l => l.Places).Include(l => l.Events).Include(l => l.LocationReviews).Include(l => l.LocationTags).FirstOrDefaultAsync(l => l.Id == locationId);
     }
 }

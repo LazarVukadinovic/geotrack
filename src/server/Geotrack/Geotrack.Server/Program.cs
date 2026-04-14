@@ -33,7 +33,7 @@ builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<IDestinationReviewRepository, DestinationReviewRepository>();
 builder.Services.AddScoped<IDestinationReviewService, DestinationReviewService>();
-
+builder.Services.AddScoped<ILocationService, LocationService>();
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
