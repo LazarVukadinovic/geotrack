@@ -6,6 +6,8 @@ import { ResolvedLocation } from '../models/location.model';
 const MIN_DISTANCE_METRES = 500;
 /** Minimum milliseconds between reverse-geocode calls. */
 const MIN_GEOCODE_INTERVAL_MS = 30_000;
+const LOCATION_KEY = 'geotrack_location';
+const ENTRY_COMPLETE_KEY = 'geotrack_location_entry_complete';
 
 @Injectable({ providedIn: 'root' })
 export class LocationService implements OnDestroy {
@@ -16,6 +18,7 @@ export class LocationService implements OnDestroy {
   private lastGeocodedLat = 0;
   private lastGeocodedLng = 0;
   private lastGeocodeTime = 0;
+  private ipFallbackStarted = false;
 
   /* ── Public reactive state ─────────────────────────────────────────── */
 
@@ -27,10 +30,18 @@ export class LocationService implements OnDestroy {
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
 
+  /** True once we have *any* resolved location (session cache, IP, or GPS). */
+  readonly ready = computed(() => this._location() !== null);
+
+  /** True after the user has completed the initial location-entry flow at least once. */
+  readonly hasCompletedLocationEntry = computed(() => {
+    try { return localStorage.getItem(ENTRY_COMPLETE_KEY) === 'true'; } catch { return false; }
+  });
+
   readonly displayLabel = computed(() => {
     const loc = this._location();
     if (loc) return loc.displayLabel;
-    if (this._loading()) return 'Locating...';
+    if (this._loading()) return 'Locating…';
     return 'Explore';
   });
 
@@ -40,35 +51,168 @@ export class LocationService implements OnDestroy {
   /* ── Lifecycle ─────────────────────────────────────────────────────── */
 
   constructor() {
-    this.init();
+    // Restore from local cache — instant, no flicker
+    const cached = this.restoreFromStorage();
+    if (cached) {
+      this._location.set(cached);
+      this._loading.set(false);
+      this.lastGeocodedLat = cached.latitude;
+      this.lastGeocodedLng = cached.longitude;
+      this.lastGeocodeTime = Date.now();
+    } else {
+      // No cache → silent IP fallback (no GPS popup)
+      this.fallbackToIp();
+    }
   }
 
   ngOnDestroy(): void {
     this.stopWatching();
   }
 
-  /* ── Init: try GPS first, fall back to IP ──────────────────────────── */
+  /**
+   * Mark the initial location-entry flow as completed.
+   * After this, returning users skip the landing page.
+   */
+  markLocationEntryComplete(): void {
+    try { localStorage.setItem(ENTRY_COMPLETE_KEY, 'true'); } catch { /* quota */ }
+  }
 
-  private init(): void {
-    if (!('geolocation' in navigator)) {
-      this.fallbackToIp();
-      return;
-    }
+  /**
+   * Attempt a background GPS refresh without blocking the user.
+   * Used on Explore for returning users — silently upgrades location if GPS is available.
+   */
+  tryBackgroundGpsRefresh(): void {
+    if (!('geolocation' in navigator)) return;
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => this.handlePosition(pos, true),
-      (err) => {
-        if (err.code === err.PERMISSION_DENIED) {
-          this.fallbackToIp();
-        } else {
-          this.fallbackToIp();
-        }
+      (pos) => {
+        this.zone.run(() => {
+          const { latitude, longitude } = pos.coords;
+          const current = this._location();
+          // Only update if meaningfully different from cached location
+          if (current) {
+            const dist = this.haversineMetres(current.latitude, current.longitude, latitude, longitude);
+            if (dist < MIN_DISTANCE_METRES) return;
+          }
+          this._location.set({
+            latitude,
+            longitude,
+            city: current?.city ?? '',
+            region: current?.region ?? '',
+            country: current?.country ?? '',
+            displayLabel: current?.displayLabel ?? 'Explore',
+            source: 'gps',
+          });
+          this._loading.set(false);
+          this.saveToStorage(this._location()!);
+          this.reverseGeocode(latitude, longitude, 'gps');
+          this.startWatching();
+        });
       },
+      () => { /* GPS unavailable — no action, keep cached location */ },
       { enableHighAccuracy: false, timeout: 10_000 },
     );
   }
 
-  /* ── GPS handling ──────────────────────────────────────────────────── */
+  /* ── Explicit GPS request (called only from landing page) ──────────── */
+
+  /**
+   * Requests browser geolocation permission and resolves GPS coordinates.
+   * Does NOT trigger automatically — only when user explicitly asks.
+   * Returns coordinates immediately; reverse-geocode runs in background.
+   */
+  requestGps(): Promise<{ latitude: number; longitude: number }> {
+    return new Promise((resolve, reject) => {
+      if (!('geolocation' in navigator)) {
+        reject(new Error('Geolocation not supported'));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+
+          // Set a minimal location immediately (coords known, city pending)
+          const current = this._location();
+          if (!current || current.source !== 'gps') {
+            this._location.set({
+              latitude,
+              longitude,
+              city: current?.city ?? '',
+              region: current?.region ?? '',
+              country: current?.country ?? '',
+              displayLabel: current?.displayLabel ?? 'Explore',
+              source: 'gps',
+            });
+            this._loading.set(false);
+            this.saveToStorage(this._location()!);
+          }
+
+          // Reverse-geocode in background to get city/country
+          this.reverseGeocode(latitude, longitude, 'gps');
+
+          // Start watching for position updates
+          this.startWatching();
+
+          resolve({ latitude, longitude });
+        },
+        (err) => {
+          reject(err);
+        },
+        { enableHighAccuracy: false, timeout: 10_000 },
+      );
+    });
+  }
+
+  /**
+   * Ensures IP fallback has been triggered if no location is available yet.
+   * Safe to call multiple times — only runs once.
+   * Returns a promise that resolves when IP location is available
+   * (or immediately if we already have a location).
+   */
+  ensureIpFallback(): Promise<ResolvedLocation | null> {
+    if (this._location()) {
+      return Promise.resolve(this._location());
+    }
+    return new Promise((resolve) => {
+      if (!this.ipFallbackStarted) {
+        this.fallbackToIp(() => resolve(this._location()));
+      } else {
+        // Already in-flight — poll until resolved
+        const check = () => {
+          if (this._location()) { resolve(this._location()); return; }
+          if (!this._loading()) { resolve(null); return; }
+          setTimeout(check, 100);
+        };
+        check();
+      }
+    });
+  }
+
+  /**
+   * Set a manually selected destination as the active location.
+   * Used when user picks a destination from search on the landing page.
+   */
+  setManualDestination(lat: number, lng: number, name: string): void {
+    const loc: ResolvedLocation = {
+      latitude: lat,
+      longitude: lng,
+      city: name,
+      region: '',
+      country: '',
+      displayLabel: name,
+      source: 'manual',
+    };
+    this._location.set(loc);
+    this._loading.set(false);
+    this._error.set(null);
+    this.saveToStorage(loc);
+
+    // Reverse-geocode in background to fill in region/country
+    this.reverseGeocode(lat, lng, 'manual');
+  }
+
+  /* ── GPS watch (continuous updates after initial fix) ───────────────── */
 
   private handlePosition(pos: GeolocationPosition, startWatching: boolean): void {
     const { latitude, longitude } = pos.coords;
@@ -131,7 +275,7 @@ export class LocationService implements OnDestroy {
 
   /* ── Reverse geocoding (OpenStreetMap Nominatim) ───────────────────── */
 
-  private reverseGeocode(lat: number, lng: number, source: 'gps' | 'ip'): void {
+  private reverseGeocode(lat: number, lng: number, source: 'gps' | 'ip' | 'manual'): void {
     this.lastGeocodedLat = lat;
     this.lastGeocodedLng = lng;
     this.lastGeocodeTime = Date.now();
@@ -147,7 +291,7 @@ export class LocationService implements OnDestroy {
         const country = addr.country ?? '';
         const displayLabel = this.buildDisplayLabel(city, region, country);
 
-        this._location.set({
+        const loc: ResolvedLocation = {
           latitude: lat,
           longitude: lng,
           city,
@@ -155,21 +299,25 @@ export class LocationService implements OnDestroy {
           country,
           displayLabel,
           source,
-        });
+        };
+        this._location.set(loc);
         this._loading.set(false);
         this._error.set(null);
+        this.saveToStorage(loc);
       },
       error: () => {
         // Geocode failed but we still have coords
-        this._location.set({
-          latitude: lat,
-          longitude: lng,
-          city: '',
-          region: '',
-          country: '',
-          displayLabel: 'Explore',
-          source,
-        });
+        if (!this._location()) {
+          this._location.set({
+            latitude: lat,
+            longitude: lng,
+            city: '',
+            region: '',
+            country: '',
+            displayLabel: 'Explore',
+            source,
+          });
+        }
         this._loading.set(false);
       },
     });
@@ -199,7 +347,8 @@ export class LocationService implements OnDestroy {
 
   /* ── IP-based fallback ─────────────────────────────────────────────── */
 
-  private fallbackToIp(): void {
+  private fallbackToIp(onComplete?: () => void): void {
+    this.ipFallbackStarted = true;
     // ip-api.com free tier — no key needed, returns city/region/country
     this.http
       .get<IpApiResponse>('http://ip-api.com/json/?fields=status,city,regionName,country,lat,lon')
@@ -211,7 +360,7 @@ export class LocationService implements OnDestroy {
             const country = res.country ?? '';
             const displayLabel = this.buildDisplayLabel(city, region, country);
 
-            this._location.set({
+            const loc: ResolvedLocation = {
               latitude: res.lat ?? 0,
               longitude: res.lon ?? 0,
               city,
@@ -219,15 +368,40 @@ export class LocationService implements OnDestroy {
               country,
               displayLabel,
               source: 'ip',
-            });
+            };
+            this._location.set(loc);
+            this.saveToStorage(loc);
           }
           this._loading.set(false);
+          onComplete?.();
         },
         error: () => {
           this._loading.set(false);
           this._error.set('Unable to determine location');
+          onComplete?.();
         },
       });
+  }
+
+  /* ── Local persistence ─────────────────────────────────────────────── */
+
+  private saveToStorage(loc: ResolvedLocation): void {
+    try {
+      localStorage.setItem(LOCATION_KEY, JSON.stringify(loc));
+    } catch { /* quota exceeded — ignore */ }
+  }
+
+  private restoreFromStorage(): ResolvedLocation | null {
+    try {
+      // Check localStorage first, fall back to sessionStorage for migration
+      const raw = localStorage.getItem(LOCATION_KEY) ?? sessionStorage.getItem(LOCATION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.latitude === 'number' && typeof parsed.longitude === 'number') {
+        return parsed as ResolvedLocation;
+      }
+    } catch { /* corrupt data — ignore */ }
+    return null;
   }
 }
 

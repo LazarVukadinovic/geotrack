@@ -107,7 +107,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void { setTimeout(() => this.initMap(), 0); }
 
   ngOnDestroy(): void {
-    this.map?.remove();
+    if (this.map) {
+      const center = this.map.getCenter();
+      const zoom = this.map.getZoom();
+      sessionStorage.setItem('mapViewState', JSON.stringify({
+        center: [center.lng, center.lat],
+        zoom,
+      }));
+      this.map.remove();
+    }
     window.removeEventListener('resize', this.resizeHandler);
   }
 
@@ -117,11 +125,22 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const container = document.getElementById('map');
     if (!container) return;
 
+    let initCenter: [number, number] = [this.destinationLon, this.destinationLat];
+    let initZoom = 13;
+
+    const savedView = sessionStorage.getItem('mapViewState');
+    if (savedView) {
+      const vs = JSON.parse(savedView);
+      initCenter = vs.center;
+      initZoom = vs.zoom;
+      sessionStorage.removeItem('mapViewState');
+    }
+
     this.map = new maplibregl.Map({
       container,
       style: MAP_STYLE_URL,
-      center: [this.destinationLon, this.destinationLat],
-      zoom: 13,
+      center: initCenter,
+      zoom: initZoom,
       attributionControl: false,
       fadeDuration: 0,
       trackResize: true,

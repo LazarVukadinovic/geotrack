@@ -5,5 +5,5 @@ export interface ResolvedLocation {
   region: string;
   country: string;
   displayLabel: string;
-  source: 'gps' | 'ip';
+  source: 'gps' | 'ip' | 'manual';
 }

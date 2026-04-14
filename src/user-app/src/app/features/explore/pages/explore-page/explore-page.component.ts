@@ -45,6 +45,12 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
+  constructor() {
+    // For returning users, silently attempt to upgrade location via GPS in background.
+    // This handles "allow once" and re-granted permissions without blocking.
+    this.locationSvc.tryBackgroundGpsRefresh();
+  }
+
   protected readonly heroCity    = computed(() => this.locationSvc.displayCity());
   protected readonly heroCountry = computed(() => this.locationSvc.displayCountry());
 

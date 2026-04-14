@@ -1,6 +1,7 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
+import { LocationService } from '../../../core/services/location.service';
 import type { ExploreItem } from '../../../core/models/explore-item.model';
 import type {
   ExploreAttraction,
@@ -35,11 +36,15 @@ interface ExploreApiResponse {
   localFavorites: { id: number; title: string; subtitle?: string; description?: string; category?: string; type?: string; location?: string; image?: string; rating?: number; isSaved: boolean; openingHours?: string; isRecommended: boolean }[];
 }
 
+/** Minimum distance in km to consider a location "meaningfully different" for reloading. */
+const RELOAD_THRESHOLD_KM = 5;
+
 @Injectable({
   providedIn: 'root',
 })
 export class ExploreService {
   private readonly http = inject(HttpClient);
+  private readonly locationSvc = inject(LocationService);
 
   private readonly _curatedForYou = signal<ExploreCuratedItem[]>([]);
   private readonly _localFavorites = signal<ExploreItem[]>([]);
@@ -52,6 +57,10 @@ export class ExploreService {
   private readonly _landmarkCategories = signal<ExploreLandmarkCategory[]>([]);
   private readonly _loaded = signal(false);
 
+  /** Coordinates used for the last successful load. */
+  private loadedLat = 0;
+  private loadedLng = 0;
+
   /** Reactive lists for templates that prefer signals. */
   readonly curatedForYou = computed(() => this._curatedForYou());
   readonly localFavorites = computed(() => this._localFavorites());
@@ -62,96 +71,145 @@ export class ExploreService {
   readonly topStays = computed(() => this._topStays());
   readonly mustSeeAttractions = computed(() => this._mustSeeAttractions());
   readonly landmarkCategories = computed(() => this._landmarkCategories());
+  readonly loaded = computed(() => this._loaded());
 
   constructor() {
-    this.loadFromApi();
+    // React to location changes — reload explore data when city meaningfully changes
+    effect(() => {
+      const loc = this.locationSvc.location();
+      if (!loc) return;
+
+      const dist = this.haversineKm(this.loadedLat, this.loadedLng, loc.latitude, loc.longitude);
+      // First load (0,0 → real) always triggers; subsequent need RELOAD_THRESHOLD_KM
+      if (this._loaded() && dist < RELOAD_THRESHOLD_KM) return;
+
+      this.loadFromApi(loc.latitude, loc.longitude);
+    });
   }
 
-  private loadFromApi(): void {
-    // Default to Dubrovnik coordinates
-    this.http.get<ExploreApiResponse>('/api/explore?latitude=42.6507&longitude=18.0944').subscribe({
+  /**
+   * Explicitly load explore data for given coordinates.
+   * Returns a Promise that resolves when the load finishes.
+   * Used by the landing page for preloading before navigation.
+   */
+  loadForLocation(lat: number, lng: number): Promise<void> {
+    const dist = this.haversineKm(this.loadedLat, this.loadedLng, lat, lng);
+    if (this._loaded() && dist < RELOAD_THRESHOLD_KM) {
+      return Promise.resolve(); // already loaded for a nearby location
+    }
+    return new Promise((resolve) => {
+      this.loadFromApi(lat, lng, resolve);
+    });
+  }
+
+  private loadFromApi(lat: number, lng: number, onComplete?: () => void): void {
+    this.http.get<ExploreApiResponse>(`/api/explore?latitude=${lat}&longitude=${lng}`).subscribe({
       next: (res) => {
-        this._eventsThisWeek.set(res.eventsThisWeek.map(e => ({
-          id: String(e.id),
-          title: e.title,
-          subtitle: e.subtitle ?? '',
-          dateLabel: e.dateLabel ?? '',
-          image: e.image ?? '',
-        })));
-        this._topStays.set(res.topStays.map(s => ({
-          id: String(s.id),
-          title: s.title,
-          image: s.image ?? '',
-          rating: s.rating,
-          reviewCount: s.reviewCount,
-          distance: s.distance ?? '',
-          pricePerNight: s.pricePerNight,
-          isSaved: s.isSaved,
-        })));
-        this._popularNearby.set(res.popularNearby.map(p => ({
-          id: String(p.id),
-          title: p.title,
-          categoryLabel: p.categoryLabel ?? '',
-          image: p.image ?? '',
-          rating: p.rating,
-          reviewCount: p.reviewCount ?? '',
-          distance: p.distance ?? '',
-          isSaved: p.isSaved,
-        })));
-        this._mustSeeAttractions.set(res.mustSeeAttractions.map(a => ({
-          id: String(a.id),
-          title: a.title,
-          type: a.type ?? '',
-          image: a.image ?? '',
-        })));
-        this._landmarkCategories.set(res.landmarkCategories.map(c => ({
-          id: String(c.id),
-          title: c.title,
-          image: c.image ?? '',
-          categoryKey: c.categoryKey ?? '',
-        })));
-        this._curatedForYou.set(res.curatedForYou.map(c => ({
-          id: String(c.id),
-          title: c.title,
-          subtitle: c.subtitle ?? '',
-          categoryLabel: c.categoryLabel ?? '',
-          image: c.image ?? '',
-          isSaved: c.isSaved,
-        })));
-        this._localFavorites.set(res.localFavorites.map(f => ({
-          id: String(f.id),
-          title: f.title,
-          subtitle: f.subtitle ?? '',
-          description: f.description ?? '',
-          category: (f.category ?? 'attraction') as ExploreItem['category'],
-          type: f.type ?? '',
-          location: f.location ?? '',
-          image: f.image ?? '',
-          rating: f.rating,
-          isSaved: f.isSaved,
-          openingHours: f.openingHours,
-          isRecommended: f.isRecommended,
-        })));
-        if (res.selectedDestination) {
-          this._nearbyStatus.set({
-            label: 'Near',
-            value: res.selectedDestination.name,
-          });
-        }
+        this.applyResponse(res);
+        this.loadedLat = lat;
+        this.loadedLng = lng;
         this._loaded.set(true);
+        onComplete?.();
       },
       error: () => {
-        // Fallback to mock data
-        this._curatedForYou.set([...MOCK_CURATED_FOR_YOU]);
-        this._localFavorites.set([...MOCK_LOCAL_FAVORITES]);
-        this._eventsThisWeek.set([...MOCK_EVENTS_THIS_WEEK]);
-        this._popularNearby.set([...MOCK_POPULAR_NEARBY]);
-        this._topStays.set([...MOCK_TOP_STAYS]);
-        this._mustSeeAttractions.set([...MOCK_MUST_SEE_ATTRACTIONS]);
-        this._landmarkCategories.set([...MOCK_LANDMARK_CATEGORIES]);
+        this.applyMockFallback();
+        this.loadedLat = lat;
+        this.loadedLng = lng;
         this._loaded.set(true);
+        onComplete?.();
       },
     });
+  }
+
+  private applyResponse(res: ExploreApiResponse): void {
+    this._eventsThisWeek.set(res.eventsThisWeek.map(e => ({
+      id: String(e.id),
+      title: e.title,
+      subtitle: e.subtitle ?? '',
+      dateLabel: e.dateLabel ?? '',
+      image: e.image ?? '',
+    })));
+    this._topStays.set(res.topStays.map(s => ({
+      id: String(s.id),
+      title: s.title,
+      image: s.image ?? '',
+      rating: s.rating,
+      reviewCount: s.reviewCount,
+      distance: s.distance ?? '',
+      pricePerNight: s.pricePerNight,
+      isSaved: s.isSaved,
+    })));
+    this._popularNearby.set(res.popularNearby.map(p => ({
+      id: String(p.id),
+      title: p.title,
+      categoryLabel: p.categoryLabel ?? '',
+      image: p.image ?? '',
+      rating: p.rating,
+      reviewCount: p.reviewCount ?? '',
+      distance: p.distance ?? '',
+      isSaved: p.isSaved,
+    })));
+    this._mustSeeAttractions.set(res.mustSeeAttractions.map(a => ({
+      id: String(a.id),
+      title: a.title,
+      type: a.type ?? '',
+      image: a.image ?? '',
+    })));
+    this._landmarkCategories.set(res.landmarkCategories.map(c => ({
+      id: String(c.id),
+      title: c.title,
+      image: c.image ?? '',
+      categoryKey: c.categoryKey ?? '',
+    })));
+    this._curatedForYou.set(res.curatedForYou.map(c => ({
+      id: String(c.id),
+      title: c.title,
+      subtitle: c.subtitle ?? '',
+      categoryLabel: c.categoryLabel ?? '',
+      image: c.image ?? '',
+      isSaved: c.isSaved,
+    })));
+    this._localFavorites.set(res.localFavorites.map(f => ({
+      id: String(f.id),
+      title: f.title,
+      subtitle: f.subtitle ?? '',
+      description: f.description ?? '',
+      category: (f.category ?? 'attraction') as ExploreItem['category'],
+      type: f.type ?? '',
+      location: f.location ?? '',
+      image: f.image ?? '',
+      rating: f.rating,
+      isSaved: f.isSaved,
+      openingHours: f.openingHours,
+      isRecommended: f.isRecommended,
+    })));
+    if (res.selectedDestination) {
+      this._nearbyStatus.set({
+        label: 'Near',
+        value: res.selectedDestination.name,
+      });
+    }
+  }
+
+  private applyMockFallback(): void {
+    this._curatedForYou.set([...MOCK_CURATED_FOR_YOU]);
+    this._localFavorites.set([...MOCK_LOCAL_FAVORITES]);
+    this._eventsThisWeek.set([...MOCK_EVENTS_THIS_WEEK]);
+    this._popularNearby.set([...MOCK_POPULAR_NEARBY]);
+    this._topStays.set([...MOCK_TOP_STAYS]);
+    this._mustSeeAttractions.set([...MOCK_MUST_SEE_ATTRACTIONS]);
+    this._landmarkCategories.set([...MOCK_LANDMARK_CATEGORIES]);
+  }
+
+  private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371;
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   /** Example API-shaped streams — swap implementation for HttpClient.get. */
