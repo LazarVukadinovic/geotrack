@@ -1,9 +1,6 @@
-﻿using Geotrack.Application.DTOs;
-using Geotrack.Application.DTOs.Explore;
+﻿using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Server.Requests;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Geotrack.Server.Controllers;
 
@@ -19,11 +16,12 @@ public class DestinationController : ControllerBase
     }
 
     [HttpPost("explore-by-location")]
-    public async Task<ActionResult> ExploreByLocation([FromBody] ExploreByLocationRequest request)
+    public async Task<ActionResult<ExploreByLocationResponseDto>> ExploreByLocation(
+        [FromBody] ExploreByLocationRequestDto request)
     {
         int? userId = null;
 
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userIdClaim = User.FindFirst("userId")?.Value;
         if (int.TryParse(userIdClaim, out var parsedUserId))
         {
             userId = parsedUserId;
