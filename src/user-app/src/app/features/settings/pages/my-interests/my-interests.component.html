@@ -1,0 +1,99 @@
+<div class="min-h-screen flex flex-col bg-[#fafafa]">
+
+  <!-- Header -->
+  <div class="px-5 pt-10 pb-2">
+    <button (click)="goBack()" class="w-9 h-9 flex items-center justify-center text-slate-800">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Title block -->
+  <div class="px-5 pb-4 mb-4 mt-4">
+    <h1 class="text-3xl font-bold text-slate-800 mb-4">Your Interests</h1>
+    <p class="text-base text-slate-500 leading-relaxed">
+      Select what you love, and we'll personalize your recommendations for the perfect trip.
+    </p>
+  </div>
+
+  <!-- Content -->
+  <div class="flex-1 px-5 pb-10 flex flex-col gap-6">
+
+    <!-- Selected Section -->
+    <div>
+      <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Selected</p>
+
+      <!-- Empty state -->
+      <div *ngIf="selectedInterests.length === 0"
+        class="bg-white rounded-2xl shadow-sm px-5 py-8 flex flex-col items-center gap-2">
+        <svg class="w-8 h-8 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+        </svg>
+        <p class="text-base text-slate-400 text-center">No interests selected yet.<br/>Pick some below!</p>
+      </div>
+
+      <!-- Selected chips -->
+      <div *ngIf="selectedInterests.length > 0"
+        class="bg-white rounded-2xl shadow-sm px-4 py-4 flex flex-wrap gap-2 justify-center content-start overflow-y-auto max-h-36">
+        <div
+          *ngFor="let interest of selectedInterests"
+          style="flex: 0 0 auto;"
+          class="flex items-center gap-2 pl-3 pr-2 py-2 bg-[#1a2b4a] rounded-full">
+          <span class="text-sm font-medium text-white whitespace-nowrap">{{ interest.label }}</span>
+          <button
+            (click)="removeInterest(interest)"
+            class="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center active:bg-white/30 transition-colors flex-none">
+            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Discover More Section -->
+    <div>
+      <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Discover More</p>
+
+      <div class="flex flex-wrap gap-2 justify-center">
+        <button
+          *ngFor="let interest of availableInterests"
+          (click)="addInterest(interest)"
+          class="flex items-center px-4 py-2.5 bg-white border border-slate-200 rounded-full shadow-sm active:bg-slate-50 transition-colors">
+          <span class="text-sm font-medium text-slate-700">{{ interest.label }}</span>
+        </button>
+
+        <div *ngIf="availableInterests.length === 0"
+          class="w-full bg-white rounded-2xl shadow-sm px-5 py-16 flex flex-col items-center gap-2">
+          <svg class="w-8 h-8 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 13l4 4L19 7"/>
+          </svg>
+          <p class="text-base text-slate-500 text-center">You've selected all interests!</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex-1"></div>
+
+    <!-- Save button -->
+    <button
+      (click)="saveChanges()"
+      [disabled]="isSaving"
+      class="w-full py-4 bg-[#e8722a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200 shadow-lg"
+      [class.opacity-70]="isSaving">
+      <div *ngIf="isSaving" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+      <span>{{ isSaving ? 'Saving…' : 'Save & Continue' }}</span>
+    </button>
+
+    <p class="text-center text-[12px] text-slate-400 leading-relaxed pb-2">
+      <svg class="w-3.5 h-3.5 inline-block mr-1 mb-0.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+      </svg>
+      AI will learn your preferences over time
+    </p>
+
+  </div>
+</div>

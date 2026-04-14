@@ -43,7 +43,27 @@ export class InterestsPageComponent {
 
   onFinish(): void {
     if (this.selectedInterests.length === 0) return;
-    this.router.navigate(['/']);
+    const labelToId: Record<string, string> = {
+      'Food & Drink': 'food',
+      'History': 'history',
+      'Beaches': 'beaches',
+      'Nature': 'nature',
+      'Museums': 'museums',
+      'Local Events': 'events',
+      'Nightlife': 'nightlife',
+      'Scenic Walks': 'walks',
+      'Festivals': 'festivals',
+      'Adventure': 'adventure',
+      'Shopping': 'shopping',
+      'Culture': 'culture',
+    };
+
+    const ids = this.selectedInterests
+      .map(label => labelToId[label])
+      .filter(Boolean);
+
+    localStorage.setItem('userInterests', JSON.stringify(ids));
+    this.router.navigate(['/home']);
   }
 
   onSkip(): void {
