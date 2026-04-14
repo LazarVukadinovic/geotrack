@@ -1,13 +1,16 @@
 import { Routes } from '@angular/router';
-
 export const routes: Routes = [
   {
     path: '',
     loadComponent: () =>
       import('./core/layout/app-shell/app-shell.component').then(m => m.AppShellComponent),
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'explore' },
-
+      { path: '', pathMatch: 'full', redirectTo: 'home' },
+      {
+        path: 'home',
+        loadComponent: () =>
+          import('./features/home/pages/home/home.component').then((m) => m.Home),
+      },
       {
         path: 'explore',
         loadComponent: () =>
@@ -17,6 +20,14 @@ export const routes: Routes = [
         path: 'map',
         loadComponent: () =>
           import('./features/map/pages/map-page/map-page.component').then(m => m.MapPageComponent),
+      },
+      {
+      path: 'filters',
+        loadComponent: () =>
+          import('./features/map/pages/filters/filters.component').then(
+            (m) => m.Filters
+          ),
+        data: { hideBottomNav: true },
       },
       {
         path: 'agent',

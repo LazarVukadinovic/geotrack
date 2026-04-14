@@ -1,0 +1,81 @@
+<div class="relative h-[100dvh] w-full overflow-hidden">
+
+  <!-- ── BACKGROUND MAP ── -->
+  <div id="bg-map" class="absolute inset-0 w-full h-full"></div>
+
+  <!-- Gradient overlay  -->
+  <div class="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/70 z-10"></div>
+
+  <!-- ── TOP LOGO ── -->
+  <div class="absolute top-6 left-6 z-20">
+    <img src="images/logo.png" alt="Logo" class="w-16 h-16 object-contain drop-shadow-lg" />
+  </div>
+
+  <!-- ── CENTERED CONTENT ── -->
+  <div class="absolute inset-0 z-10 flex flex-col items-center justify-center -translate-y-10 px-6 gap-5">
+
+    <!-- Headline -->
+    <div class="text-center">
+      <p class="text-white/60 text-xs font-semibold tracking-[0.25em] uppercase mb-3">Discover the world</p>
+      <h1 class="text-white text-[2.2rem] font-bold leading-tight tracking-tight drop-shadow-lg">
+        Find Your Next<br/>Adventure
+      </h1>
+    </div>
+
+    <!-- Search bar -->
+    <div class="w-full max-w-sm mt-2">
+      <div class="relative">
+        <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+          </svg>
+        </div>
+        <input
+          #searchInput
+          type="text"
+          placeholder="Where do you want to go?"
+          [(ngModel)]="searchQuery"
+          (input)="onSearch($any($event.target).value)"
+          (keydown.escape)="clearSearch()"
+          class="w-full pl-10 pr-4 py-4 bg-white rounded-2xl text-sm text-slate-800 placeholder-slate-400 outline-none shadow-2xl focus:ring-2 focus:ring-[#e8722a] transition-all duration-200"
+        />
+      </div>
+
+      <!-- Search results dropdown -->
+      <div *ngIf="searchResults.length > 0"
+        class="mt-2 bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <ul>
+          <li
+            *ngFor="let result of searchResults"
+            (click)="selectResult(result)"
+            class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 active:bg-slate-100 cursor-pointer border-b border-slate-50 last:border-0 transition-colors duration-150">
+            <div class="flex-none w-7 h-7 bg-orange-50 rounded-full flex items-center justify-center">
+              <svg class="w-3.5 h-3.5 text-[#e8722a]" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5z"/>
+              </svg>
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-slate-800 truncate">{{ getResultName(result) }}</p>
+              <p class="text-xs text-slate-400 truncate">{{ getResultSubtitle(result) }}</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <!-- Use my location -->
+    <button (click)="requestLocation()"
+      [disabled]="isLocating"
+      class="flex items-center gap-1.5 text-white text-sm font-semibold transition-opacity"
+      [class.opacity-60]="isLocating">
+      <div *ngIf="isLocating"
+        class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin">
+      </div>
+      <svg *ngIf="!isLocating" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+      </svg>
+      {{ isLocating ? 'Getting location…' : 'Use my current location' }}
+    </button>
+  </div>
+</div>

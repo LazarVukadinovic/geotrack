@@ -12,5 +12,5 @@
   "include": [
     "src/**/*.d.ts",
     "src/**/*.spec.ts"
-  ]
+, "src/app/features/map/pages/map-page/map-page.spec.component.ts"  ]
 }
