@@ -67,6 +67,6 @@ export class InterestsPageComponent implements OnInit {
   }
 
   goBack(): void {
-    this.router.navigate(['/profile/register']);
+    this.router.navigate(['/register']);
   }
 }

@@ -49,7 +49,7 @@ export class LoginPageComponent {
       .subscribe({
         next: (response) => {
           this.isLoading = false;
-          this.authService.login(response.token);
+          this.authService.login(response.token, this.rememberMe);
           this.router.navigate(['/explore']);
         },
         error: (err: HttpErrorResponse) => {
@@ -69,6 +69,6 @@ export class LoginPageComponent {
   }
 
   goToRegister(): void {
-    this.router.navigate(['/profile/register']);
+    this.router.navigate(['/register']);
   }
 }

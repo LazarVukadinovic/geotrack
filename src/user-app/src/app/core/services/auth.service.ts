@@ -7,8 +7,8 @@ export class AuthService {
 
   readonly isLoggedIn = computed(() => this.tokenStorage.hasToken());
 
-  login(token: string): void {
-    this.tokenStorage.setToken(token);
+  login(token: string, rememberMe = true): void {
+    this.tokenStorage.setToken(token, rememberMe);
   }
 
   logout(): void {

@@ -92,7 +92,7 @@ export class RegisterPageComponent {
           if (res.token) {
             this.authService.login(res.token);
           }
-          this.router.navigate(['/profile/interests']);
+          this.router.navigate(['/register/interests']);
         },
         error: (err: HttpErrorResponse) => {
           this.isLoading = false;
