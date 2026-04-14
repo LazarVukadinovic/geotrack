@@ -21,5 +21,20 @@ namespace Geotrack.Infrastructure.Repositories
         {
             return await _context.Places.Where(p => p.LocationId == locationId).ToListAsync();
         }
+
+        public async Task<List<int>> GetSavedCollectionIdsByUserAsync(int placeId, int userId)
+        {
+            return await _context.CollectionItems.Where(ci => ci.PlaceId == placeId && ci.Collection.UserId == userId).Select(ci => ci.CollectionId).ToListAsync();
+        }
+
+        public async Task<Place?> GetWithDetailsAsync(int placeId)
+        {
+            return await _context.Places.Include(p => p.PlaceType).Include(p => p.Location).Include(p => p.Events).Include(p => p.PlaceReviews).FirstOrDefaultAsync(p => p.Id == placeId);
+        }
+
+        public async Task<bool> IsPlaceSavedByUserAsync(int placeId, int userId)
+        {
+            return await _context.CollectionItems.AnyAsync(ci => ci.PlaceId == placeId && ci.Collection.UserId == userId);
+        }
     }
 }

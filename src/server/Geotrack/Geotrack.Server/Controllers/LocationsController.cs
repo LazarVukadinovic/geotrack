@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Geotrack.Server.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/locations")]
     [ApiController]
     public class LocationsController : ControllerBase
     {
