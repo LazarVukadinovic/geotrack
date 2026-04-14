@@ -10,5 +10,6 @@ namespace Geotrack.Application.Interfaces.Service
     public interface IPlaceService
     {
         Task<GetPlaceDetailsResponseDto> GetPlaceDetailsAsync(int placeId, int? userId);
+        public Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId);
     }
 }

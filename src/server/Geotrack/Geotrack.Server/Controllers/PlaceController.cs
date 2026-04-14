@@ -1,4 +1,5 @@
 ﻿using System.Security.Claims;
+using Geotrack.Application.DTOs.Place;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -27,6 +28,19 @@ namespace Geotrack.Server.Controllers
 
             var result = await _placeService.GetPlaceDetailsAsync(id, userId);
             return Ok(result);
+        }
+
+        [HttpGet("{id}/events")]
+        public async Task<ActionResult<GetPlaceEventsResponseDto>> GetPlaceEvents(int id)
+        {
+            var response = await _placeService.GetPlaceEventsAsync(id);
+
+            if (response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
         }
     }
 }

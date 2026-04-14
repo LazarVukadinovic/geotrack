@@ -8,4 +8,5 @@ public interface IPlaceRepository : IRepository<Place>
     Task<Place?> GetWithDetailsAsync(int placeId);
     Task<bool> IsPlaceSavedByUserAsync(int placeId, int userId);
     Task<List<int>> GetSavedCollectionIdsByUserAsync(int placeId, int userId);
+    Task<List<Event>> GetEventsByPlaceIdAsync(int placeId);
 }

@@ -68,6 +68,28 @@ namespace Geotrack.Application.Services
                 }).ToList()
             };
         }
+
+        public async Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId)
+        {
+            var events = await _placeRepository.GetEventsByPlaceIdAsync(placeId);
+
+            return new GetPlaceEventsResponseDto
+            {
+                PlaceId = placeId,
+                Events = events.Select(e => new PlaceEventItemDto
+                {
+                    Id = e.Id,
+                    Name = e.Name,
+                    LocationId = e.LocationId,
+                    PlaceId = e.PlaceId ?? 0, // Sigurnost zbog nullable tipa
+                    Description = e.Description ?? string.Empty,
+                    StartDate = e.StartDate,
+                    EndDate = e.EndDate,
+                    CreatedAt = e.CreatedAt,
+                    UpdatedAt = e.UpdatedAt
+                }).ToList()
+            };
+        }
     }
 }
 
