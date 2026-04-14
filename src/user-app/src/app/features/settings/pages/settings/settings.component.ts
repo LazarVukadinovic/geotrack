@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-settings',
@@ -13,7 +14,7 @@ export class SettingsComponent {
   email = 'marko.p@example.com';
   language = 'English (US)';
 
-  constructor(private router: Router) {
+  constructor(private router: Router, private authService: AuthService) {
     const saved = localStorage.getItem('userProfile');
     if (saved) {
       const p = JSON.parse(saved);
@@ -34,7 +35,7 @@ export class SettingsComponent {
   openTerms():       void { console.log('Terms'); }
 
   logOut(): void {
-    localStorage.clear();
-    this.router.navigate(['/login']);
+    this.authService.logout();
+    this.router.navigate(['/profile']);
   }
 }
