@@ -1,5 +1,7 @@
 ﻿using System.Security.Claims;
+using Geotrack.Application.DTOs.Location;
 using Geotrack.Application.Interfaces.Service;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -33,6 +35,30 @@ namespace Geotrack.Server.Controllers
         {
             var result = await _locationService.GetLocationSectionAsync(id, sectionKey);
             return Ok(result);
+        }
+
+        [HttpGet("{id}/reviews")]
+        public async Task<IActionResult> GetLocationReviews(int id)
+        {
+            var result = await _locationService.GetLocationReviewsAsync(id);
+            return Ok(result);
+        }
+
+        [HttpPost("{id}/reviews")]
+        [Authorize]
+        public async Task<IActionResult> CreateLocationReview(int id, [FromBody] CreateLocationReviewRequestDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim == null)
+                return Unauthorized();
+
+            var userId = int.Parse(userIdClaim);
+
+            var result = await _locationService.CreateLocationReviewAsync(id, userId, dto);
+            return CreatedAtAction(nameof(GetLocationReviews), new { id = result.LocationId }, result);
         }
     }
 }

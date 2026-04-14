@@ -135,8 +135,67 @@ namespace Geotrack.Application.Services
             };
         }
 
+        public async Task<GetLocationReviewsResponseDto> GetLocationReviewsAsync(int locationId)
+        {
+            var location = await _locationRepository.GetByIDAsync(locationId);
+            if (location == null)throw new KeyNotFoundException($"Lokacija sa id-em {locationId} nije pronadjena.");
 
+            var reviews = await _locationRepository.GetReviewsByLocationIdAsync(locationId);
+            var reviewList = reviews.ToList();
 
+            var averageRating = reviewList.Any() ? reviewList.Average(r => r.Rating) : 0;
+
+            return new GetLocationReviewsResponseDto
+            {
+                LocationId = locationId,
+                AverageRating = Math.Round(averageRating, 1),
+                ReviewsCount = reviewList.Count,
+                Reviews = reviewList.Select(r => new LocationReviewItemDto
+                {
+                    Id = r.Id,
+                    UserId = r.UserId,
+                    Rating = r.Rating,
+                    Comment = r.Comment,
+                    CreatedAt = r.CreatedAt,
+                    UpdatedAt = r.UpdatedAt
+                }).ToList()
+            };
+        }
+
+        public async Task<CreateLocationReviewResponseDto> CreateLocationReviewAsync(int locationId, int userId, CreateLocationReviewRequestDto dto)
+        {
+            var location = await _locationRepository.GetByIDAsync(locationId);
+            if (location == null)
+                throw new KeyNotFoundException($"Lokacija sa id-em {locationId} nije pronadjena.");
+
+            // Provjeri jedan korisnik - jedan review
+            var alreadyReviewed = await _locationRepository.HasUserReviewedLocationAsync(locationId, userId);
+            if (alreadyReviewed)
+                throw new InvalidOperationException("Već ste ostavili review za ovu lokaciju.");
+
+            var review = new LocationReview
+            {
+                LocationId = locationId,
+                UserId = userId,
+                Rating = dto.Rating,
+                Comment = dto.Comment ?? string.Empty,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            var created = await _locationRepository.CreateReviewAsync(review);
+
+            return new CreateLocationReviewResponseDto
+            {
+                Id = created.Id,
+                UserId = created.UserId,
+                LocationId = created.LocationId,
+                Rating = created.Rating,
+                Comment = created.Comment,
+                CreatedAt = created.CreatedAt,
+                UpdatedAt = created.UpdatedAt
+            };
+        }
     }
 }
 
