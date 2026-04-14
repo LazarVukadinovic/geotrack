@@ -11,4 +11,5 @@ public interface IPlaceRepository : IRepository<Place>
     Task<List<int>> GetSavedCollectionIdsByUserAsync(int placeId, int userId);
     Task<List<Event>> GetEventsByPlaceIdAsync(int placeId);
     Task<List<PlaceReview>> GetReviewsByPlaceIdAsync(int placeId);
+    Task AddReviewAsync(PlaceReview review);
 }

@@ -19,6 +19,7 @@ namespace Geotrack.Application.Services
         {
             _placeRepository = placeRepository;
         }
+
         public async Task<GetPlaceDetailsResponseDto> GetPlaceDetailsAsync(int placeId, int? userId)
         {
             var place = await _placeRepository.GetWithDetailsAsync(placeId);
@@ -111,6 +112,40 @@ namespace Geotrack.Application.Services
                     CreatedAt = r.CreatedAt,
                     UpdatedAt = r.UpdatedAt
                 }).ToList()
+            };
+        }
+
+        public async Task<CreatePlaceReviewResponseDto> CreateReviewAsync(int placeId, int userId, CreatePlaceReviewRequestDto request)
+        {
+            var place = await _placeRepository.GetByIDAsync(placeId);
+            if (place == null)
+                throw new KeyNotFoundException($"Place sa id-em {placeId} nije pronađen.");
+
+            var reviews = await _placeRepository.GetReviewsByPlaceIdAsync(placeId);
+            if (reviews.Any(r => r.UserId == userId))
+                throw new InvalidOperationException("Već ste ostavili recenziju za ovo mesto.");
+
+            var review = new PlaceReview
+            {
+                PlaceId = placeId,
+                UserId = userId,
+                Rating = request.Rating,
+                Comment = request.Comment ?? string.Empty,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            await _placeRepository.AddReviewAsync(review);
+
+            return new CreatePlaceReviewResponseDto
+            {
+                Id = review.Id,
+                UserId = review.UserId,
+                PlaceId = review.PlaceId,
+                Rating = review.Rating,
+                Comment = review.Comment,
+                CreatedAt = review.CreatedAt,
+                UpdatedAt = review.UpdatedAt
             };
         }
     }

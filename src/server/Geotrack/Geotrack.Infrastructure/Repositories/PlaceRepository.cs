@@ -18,6 +18,7 @@ namespace Geotrack.Infrastructure.Repositories
         { 
             _context = context;
         }
+
         public async Task<IEnumerable<Place>> GetByLocationIdAsync(int locationId)
         {
             return await _context.Places.Where(p => p.LocationId == locationId).ToListAsync();
@@ -46,6 +47,12 @@ namespace Geotrack.Infrastructure.Repositories
         public async Task<bool> IsPlaceSavedByUserAsync(int placeId, int userId)
         {
             return await _context.CollectionItems.AnyAsync(ci => ci.PlaceId == placeId && ci.Collection.UserId == userId);
+        }
+
+        public async Task AddReviewAsync(PlaceReview review)
+        {
+            _context.PlaceReviews.Add(review);
+            await _context.SaveChangesAsync();
         }
     }
 }

@@ -12,5 +12,6 @@ namespace Geotrack.Application.Interfaces.Service
         Task<GetPlaceDetailsResponseDto> GetPlaceDetailsAsync(int placeId, int? userId);
         Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId);
         Task<GetPlaceReviewsresponseDto> GetPlaceReviewsAsync(int placeId);
+        Task<CreatePlaceReviewResponseDto> CreateReviewAsync(int placeId, int userId, CreatePlaceReviewRequestDto request);
     }
 }
