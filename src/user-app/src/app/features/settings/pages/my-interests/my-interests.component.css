@@ -1,0 +1,16 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.selected-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.selected-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.selected-chips { 
+  scrollbar-width: none; 
+}

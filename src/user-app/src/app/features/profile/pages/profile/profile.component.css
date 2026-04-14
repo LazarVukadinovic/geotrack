@@ -1,0 +1,13 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.favorites-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.favorites-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
