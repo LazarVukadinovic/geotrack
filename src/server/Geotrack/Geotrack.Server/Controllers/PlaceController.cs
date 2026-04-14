@@ -42,5 +42,12 @@ namespace Geotrack.Server.Controllers
 
             return Ok(response);
         }
+
+        [HttpGet("{id}/reviews")]
+        public async Task<ActionResult<GetPlaceReviewsresponseDto>> GetPlaceReviews(int id)
+        {
+            var response = await _placeService.GetPlaceReviewsAsync(id);
+            return Ok(response);
+        }
     }
 }

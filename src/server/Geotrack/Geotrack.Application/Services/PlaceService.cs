@@ -90,6 +90,29 @@ namespace Geotrack.Application.Services
                 }).ToList()
             };
         }
+
+        public async Task<GetPlaceReviewsresponseDto> GetPlaceReviewsAsync(int placeId)
+        {
+            var reviews = await _placeRepository.GetReviewsByPlaceIdAsync(placeId);
+
+            var averageRating = reviews.Any() ? reviews.Average(r => r.Rating) : 0;
+
+            return new GetPlaceReviewsresponseDto
+            {
+                PlaceId = placeId,
+                AverageRating = Math.Round(averageRating, 1),
+                ReviewsCount = reviews.Count,
+                Reviews = reviews.Select(r => new PlaceReviewItemDto
+                {
+                    Id = r.Id,
+                    UserId = r.UserId,
+                    Rating = r.Rating,
+                    Comment = r.Comment ?? string.Empty,
+                    CreatedAt = r.CreatedAt,
+                    UpdatedAt = r.UpdatedAt
+                }).ToList()
+            };
+        }
     }
 }
 

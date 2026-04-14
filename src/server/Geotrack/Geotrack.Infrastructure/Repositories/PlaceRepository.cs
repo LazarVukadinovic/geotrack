@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Reviews;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Repositories
@@ -25,6 +26,11 @@ namespace Geotrack.Infrastructure.Repositories
         public async Task<List<Event>> GetEventsByPlaceIdAsync(int placeId)
         {
             return await _context.Events.Where(e => e.PlaceId == placeId).OrderBy(e => e.StartDate).ToListAsync();
+        }
+
+        public async Task<List<PlaceReview>> GetReviewsByPlaceIdAsync(int placeId)
+        {
+            return await _context.PlaceReviews.Where(r => r.PlaceId == placeId).OrderByDescending(r => r.CreatedAt).ToListAsync();
         }
 
         public async Task<List<int>> GetSavedCollectionIdsByUserAsync(int placeId, int userId)
