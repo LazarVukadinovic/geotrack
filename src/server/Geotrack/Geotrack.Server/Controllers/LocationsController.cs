@@ -27,5 +27,12 @@ namespace Geotrack.Server.Controllers
             var result = await _locationService.GetLocationDetailsAsync(id, userId);
             return Ok(result);
         }
+
+        [HttpGet("{id}/sections/{sectionKey}")]
+        public async Task<IActionResult> GetLocationSection(int id, string sectionKey)
+        {
+            var result = await _locationService.GetLocationSectionAsync(id, sectionKey);
+            return Ok(result);
+        }
     }
 }

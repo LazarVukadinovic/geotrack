@@ -14,11 +14,14 @@ namespace Geotrack.Application.Services
     public class LocationService : ILocationService
     {
         private readonly ILocationRepository _locationRepository;
-       
+        private readonly IPlaceRepository _placeRepository;
+        private readonly IEventRepository _eventRepository;
 
-        public LocationService(ILocationRepository locationRepository)
+        public LocationService(ILocationRepository locationRepository,IPlaceRepository placeRepository,IEventRepository eventRepository)
         {
             _locationRepository = locationRepository;
+            _placeRepository = placeRepository;
+            _eventRepository = eventRepository;
         }
 
         public async Task<GetLocationDetailsResponseDto> GetLocationDetailsAsync(int locationId, int? userId)
@@ -93,6 +96,45 @@ namespace Geotrack.Application.Services
 
             return sections;
         }
+
+        public async Task<GetLocationSectionResponseDto> GetLocationSectionAsync(int locationId, string sectionKey)
+        {
+            var location = await _locationRepository.GetByIDAsync(locationId);
+            if(location == null) throw new KeyNotFoundException($"Lokacija sa id-em {locationId} nije pronadjen.");
+
+            var sectionTitle = sectionKey switch
+            {
+                "places" => "Places",
+                "events" => "Events",
+                _ => throw new KeyNotFoundException($"Nepoznati SectionKey: {sectionKey}")
+            };
+
+            var places = new List<LocationSectionPlaceItemDto>();
+            var events = new List<LocationSectionEventItemDto>();
+
+
+            if (sectionKey == "places" || sectionKey == "events")
+            {
+                var allPlaces = await _placeRepository.GetByLocationIdAsync(locationId);
+                places = allPlaces.Select(p => new LocationSectionPlaceItemDto
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    LocationId = p.LocationId
+                }).ToList();
+            }
+
+            return new GetLocationSectionResponseDto
+            {
+                
+                Id = locationId,
+                SectionKey = sectionKey,
+                SectionTitle = sectionTitle,
+                Places = places,
+                Events = events
+            };
+        }
+
 
 
     }
