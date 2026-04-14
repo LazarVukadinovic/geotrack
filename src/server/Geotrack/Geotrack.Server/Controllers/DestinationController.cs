@@ -17,7 +17,8 @@ public class DestinationController : ControllerBase
     }
 
     [HttpPost("explore-by-location")]
-    public async Task<ActionResult> ExploreByLocation([FromBody] ExploreByLocationRequest request)
+    public async Task<ActionResult<ExploreByLocationResponseDto>> ExploreByLocation(
+        [FromBody] ExploreByLocationRequestDto request)
     {
         int? userId = null;
         var userIdClaim = User.FindFirst("userId")?.Value;

@@ -1,8 +1,5 @@
-using Geotrack.Application.DTOs;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Server.Requests;
-using Geotrack.Server.Responses;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Geotrack.Server.Controllers;
@@ -19,7 +16,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult> Register([FromBody] RegisterRequest request)
+    public async Task<ActionResult<RegisterResponseDto>> Register([FromBody] RegisterRequestDto request)
     {
         try
         {
@@ -53,7 +50,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
+    public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginRequestDto request)
     {
         try
         {

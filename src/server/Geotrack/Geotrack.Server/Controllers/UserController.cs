@@ -12,55 +12,175 @@ namespace Geotrack.Server.Controllers;
 public class UserController : ControllerBase
 {
     private readonly IUserService _userService;
-    private readonly ITagService _tagService;
 
-    public UserController(IUserService userService, ITagService tagService)
+    public UserController(IUserService userService)
     {
         _userService = userService;
-        _tagService = tagService;
     }
 
     [HttpGet("me")]
-    public async Task<ActionResult> GetProfile()
+    public async Task<ActionResult<GetMeResponseDto>> GetMe()
     {
-        var userId = GetRequiredUserId();
-        if (userId == null) return Unauthorized();
-
-        var profile = await _userService.GetProfileAsync(userId.Value);
-        if (profile == null) return NotFound();
-        return Ok(profile);
-    }
-
-    [HttpPut("me")]
-    public async Task<ActionResult> UpdateProfile([FromBody] UpdateUserProfileDto dto)
-    {
-        var userId = GetRequiredUserId();
-        if (userId == null) return Unauthorized();
-
         try
         {
-            await _userService.UpdateProfileAsync(userId.Value, dto);
-            return Ok(new { message = "Profile updated successfully" });
+            return Ok(await _userService.GetMeAsync(GetUserId()));
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return HandleException(ex);
         }
     }
 
-    [HttpPost("tags")]
-    public async Task<ActionResult> SaveTags([FromBody] SaveUserTagsDto dto)
+    [HttpPut("me")]
+    public async Task<ActionResult<UpdateMeResponseDto>> UpdateMe([FromBody] UpdateMeRequestDto request)
     {
-        var userId = GetRequiredUserId();
-        if (userId == null) return Unauthorized();
-
-        await _tagService.SaveUserTagsAsync(userId.Value, dto.TagIds);
-        return Ok(new { message = "Tags saved successfully" });
+        try
+        {
+            return Ok(await _userService.UpdateMeAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
     }
 
-    private int? GetRequiredUserId()
+    [HttpGet("me/interests")]
+    public async Task<ActionResult<GetUserInterestsResponseDto>> GetUserInterests()
     {
-        var claim = User.FindFirst("userId")?.Value;
-        return int.TryParse(claim, out var id) ? id : null;
+        try
+        {
+            return Ok(await _userService.GetUserInterestsAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("me/interests")]
+    public async Task<ActionResult<UpdateUserInterestsResponseDto>> UpdateUserInterests([FromBody] UpdateUserInterestsRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.UpdateUserInterestsAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("me/collections")]
+    public async Task<ActionResult<GetCollectionsResponseDto>> GetCollections()
+    {
+        try
+        {
+            return Ok(await _userService.GetCollectionsAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("me/collections")]
+    public async Task<ActionResult<CreateCollectionResponseDto>> CreateCollection([FromBody] CreateCollectionRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.CreateCollectionAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("me/collections/{id:int}")]
+    public async Task<ActionResult<GetCollectionDetailsResponseDto>> GetCollectionDetails([FromRoute] int id)
+    {
+        try
+        {
+            return Ok(await _userService.GetCollectionDetailsAsync(GetUserId(), id));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("me/collections/{id:int}")]
+    public async Task<ActionResult<UpdateCollectionResponseDto>> UpdateCollection([FromRoute] int id, [FromBody] UpdateCollectionRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.UpdateCollectionAsync(GetUserId(), id, request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("me/collections/{id:int}")]
+    public async Task<ActionResult> DeleteCollection([FromRoute] int id)
+    {
+        try
+        {
+            await _userService.DeleteCollectionAsync(GetUserId(), id);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("me/collections/{id:int}/items")]
+    public async Task<ActionResult<AddCollectionItemResponseDto>> AddCollectionItem([FromRoute] int id, [FromBody] AddCollectionItemRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.AddCollectionItemAsync(GetUserId(), id, request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("me/collections/{id:int}/items/{itemId:int}")]
+    public async Task<ActionResult> DeleteCollectionItem([FromRoute] int id, [FromRoute] int itemId)
+    {
+        try
+        {
+            await _userService.DeleteCollectionItemAsync(GetUserId(), id, itemId);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    private int GetUserId()
+    {
+        var userIdClaim = User.FindFirst("userId")?.Value;
+
+        if (!int.TryParse(userIdClaim, out var userId))
+            throw new UnauthorizedAccessException("Invalid user token");
+
+        return userId;
+    }
+
+    private ActionResult HandleException(Exception ex)
+    {
+        return ex switch
+        {
+            UnauthorizedAccessException => Unauthorized(new { message = ex.Message }),
+            KeyNotFoundException => NotFound(new { message = ex.Message }),
+            InvalidOperationException => BadRequest(new { message = ex.Message }),
+            _ => BadRequest(new { message = ex.Message })
+        };
     }
 }
