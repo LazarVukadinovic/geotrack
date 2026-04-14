@@ -8,6 +8,7 @@ using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Domain.Entities.Tags;
 
 namespace Geotrack.Application.Services
 {
@@ -84,6 +85,57 @@ namespace Geotrack.Application.Services
 
             return sections;
         }
+
+        public async Task<GetEventSectionResponseDto> GetEventSectionAsync(int eventId, string sectionKey)
+        {
+            var ev = await _eventRepository.GetByIDAsync(eventId);
+            if (ev == null)
+                throw new KeyNotFoundException($"Event sa id-em {eventId} nije pronađen.");
+
+            var sectionTitle = sectionKey switch
+            {
+                "reviews" => "Reviews",
+                "tags" => "Tags",
+                _ => throw new KeyNotFoundException($"Nepoznati sectionKey: {sectionKey}")
+            };
+
+            var reviews = new List<EventReviewItemDto>();
+            var tags = new List<EventTagItemDto>();
+
+            if (sectionKey == "reviews")
+            {
+                reviews = (ev.EventReviews ?? new List<EventReview>())
+                    .Select(r => new EventReviewItemDto
+                    {
+                        Id = r.Id,
+                        UserId = r.UserId,
+                        Rating = r.Rating,
+                        Comment = r.Comment ?? string.Empty,
+                        CreatedAt = r.CreatedAt,
+                        UpdatedAt = r.UpdatedAt
+                    }).ToList();
+            }
+
+            if (sectionKey == "tags")
+            {
+                tags = (ev.EventTags ?? new List<EventTag>())
+                    .Select(t => new EventTagItemDto
+                    {
+                        Id = t.EventId,
+                        
+                    }).ToList();
+            }
+
+            return new GetEventSectionResponseDto
+            {
+                EventId = eventId,
+                SectionKey = sectionKey,
+                SectionTitle = sectionTitle,
+                Reviews = reviews,
+                Tags = tags
+            };
+        }
+
     }
 }
 

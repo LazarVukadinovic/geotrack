@@ -10,5 +10,6 @@ namespace Geotrack.Application.Interfaces.Service
     public interface IEventService
     {
         Task<GetEventDetailsResponseDto> GetEventDetailsAsync(int eventId, int? userId);
+        Task<GetEventSectionResponseDto> GetEventSectionAsync(int eventId, string sectionKey);
     }
 }

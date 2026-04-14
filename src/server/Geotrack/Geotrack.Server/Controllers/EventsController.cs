@@ -27,5 +27,12 @@ namespace Geotrack.Server.Controllers
             var result = await _eventService.GetEventDetailsAsync(id, userId);
             return Ok(result);
         }
+
+        [HttpGet("{id}/sections/{sectionKey}")]
+        public async Task<IActionResult> GetEventSection(int id, string sectionKey)
+        {
+            var result = await _eventService.GetEventSectionAsync(id, sectionKey);
+            return Ok(result);
+        }
     }
 }
