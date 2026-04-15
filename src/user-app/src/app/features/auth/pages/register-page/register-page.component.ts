@@ -13,7 +13,7 @@ import { AuthService } from '../../../../core/services/auth.service';
   styleUrl: './register-page.component.css',
 })
 export class RegisterPageComponent {
-  username = '';
+  fullName = '';
   email = '';
   password = '';
   repeatPassword = '';
@@ -31,9 +31,9 @@ export class RegisterPageComponent {
 
   constructor(private router: Router, private http: HttpClient, private authService: AuthService) {}
 
-  get usernameError(): string {
+  get fullNameError(): string {
     if (!this.submitted) return '';
-    if (!this.username.trim()) return 'Name is required.';
+    if (!this.fullName.trim()) return 'Name is required.';
     return '';
   }
 
@@ -59,7 +59,7 @@ export class RegisterPageComponent {
 
   get isValid(): boolean {
     return (
-      !!this.username.trim() &&
+      !!this.fullName.trim() &&
       !!this.email &&
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email) &&
       !!this.password &&
@@ -82,7 +82,7 @@ export class RegisterPageComponent {
 
     this.http
       .post<{ token: string }>('/api/auth/register', {
-        username: this.username.trim(),
+        fullName: this.fullName.trim(),
         email: this.email.trim(),
         password: this.password,
       })

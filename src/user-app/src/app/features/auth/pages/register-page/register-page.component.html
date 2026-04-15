@@ -32,7 +32,7 @@
       </div>
     }
 
-    <!-- Username -->
+    <!-- Full Name -->
     <div class="mb-4">
       <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Name
@@ -46,17 +46,17 @@
         </div>
         <input
           type="text"
-          [(ngModel)]="username"
+          [(ngModel)]="fullName"
           placeholder="Enter your name"
           class="w-full pl-10 pr-4 py-3.5 bg-white border rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:ring-2 focus:ring-orange-100 transition-all duration-200"
-          [class.border-slate-200]="!usernameError"
-          [class.border-red-400]="!!usernameError"
-          [class.focus:border-[#e8570a]]="!usernameError"
-          [class.focus:border-red-400]="!!usernameError"
+          [class.border-slate-200]="!fullNameError"
+          [class.border-red-400]="!!fullNameError"
+          [class.focus:border-[#e8570a]]="!fullNameError"
+          [class.focus:border-red-400]="!!fullNameError"
         />
       </div>
-      @if (usernameError) {
-        <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ usernameError }}</p>
+      @if (fullNameError) {
+        <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ fullNameError }}</p>
       }
     </div>
 
