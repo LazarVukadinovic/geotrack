@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Geotrack.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260413201259_ExtendEntitiesForFrontend")]
+    [Migration("20260415002000_ExtendEntitiesForFrontend")]
     partial class ExtendEntitiesForFrontend
     {
         /// <inheritdoc />
