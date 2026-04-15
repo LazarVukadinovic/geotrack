@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { AuthService } from '../../../../core/services/auth.service';
 import { TagService } from '../../../../core/services/tag.service';
 import { Tag } from '../../../../core/models/tag.model';
 
@@ -19,7 +18,6 @@ export class InterestsPageComponent implements OnInit {
 
   constructor(
     private router: Router,
-    private authService: AuthService,
     private tagService: TagService,
   ) {}
 
@@ -50,12 +48,16 @@ export class InterestsPageComponent implements OnInit {
 
     this.isLoading = true;
 
-    this.tagService.saveUserTags([...this.selectedTagIds]).subscribe({
+    const tagIds = [...this.selectedTagIds];
+
+    this.tagService.saveUserTags(tagIds).subscribe({
       next: () => {
+        localStorage.setItem('userInterests', JSON.stringify(tagIds));
         this.isLoading = false;
         this.router.navigate(['/']);
       },
       error: () => {
+        localStorage.setItem('userInterests', JSON.stringify(tagIds));
         this.isLoading = false;
         this.router.navigate(['/']);
       },

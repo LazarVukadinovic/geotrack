@@ -1,34 +1,8 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
-import { ActivatedRoute } from '@angular/router';
-
-export interface Interest {
-  id: string;
-  label: string;
-}
-const ALL_INTERESTS: Interest[] = [
-  { id: 'food',        label: 'Food & Drink' },
-  { id: 'history',     label: 'History' },
-  { id: 'beaches',     label: 'Beaches' },
-  { id: 'nature',      label: 'Nature' },
-  { id: 'museums',     label: 'Museums' },
-  { id: 'events',      label: 'Local Events' },
-  { id: 'nightlife',   label: 'Nightlife' },
-  { id: 'walks',       label: 'Scenic Walks' },
-  { id: 'festivals',   label: 'Festivals' },
-  { id: 'adventure',   label: 'Adventure' },
-  { id: 'shopping',    label: 'Shopping' },
-  { id: 'culture',     label: 'Culture' },
-  { id: 'wellness',    label: 'Wellness & Spa' },
-  { id: 'sports',      label: 'Sports' },
-  { id: 'photography', label: 'Photography' },
-  { id: 'architecture',label: 'Architecture' },
-  { id: 'roadtrips',   label: 'Road Trips' },
-  { id: 'wine',        label: 'Wine & Tasting' },
-  { id: 'art',         label: 'Art & Galleries' },
-  { id: 'hiking',      label: 'Hiking' },
-];
+import { Router, ActivatedRoute } from '@angular/router';
+import { TagService } from '../../../../core/services/tag.service';
+import { Tag } from '../../../../core/models/tag.model';
 
 @Component({
   selector: 'app-my-interests',
@@ -38,50 +12,70 @@ const ALL_INTERESTS: Interest[] = [
 })
 export class MyInterestsComponent {
   isSaving = false;
-  selectedInterests: Interest[] = [];
+  tags: Tag[] = [];
+  selectedTags: Tag[] = [];
   private returnTo = '/settings';
-  constructor(private router: Router, private route: ActivatedRoute) {
+
+  constructor(
+    private router: Router,
+    private route: ActivatedRoute,
+    private tagService: TagService,
+  ) {
     this.route.queryParams.subscribe(p => {
       if (p['from']) this.returnTo = '/' + p['from'];
     });
-    this.loadSavedInterests();
+
+    this.tagService.loadTags().subscribe(tags => {
+      this.tags = tags;
+      this.loadSavedInterests();
+    });
   }
 
   private loadSavedInterests(): void {
     const saved = localStorage.getItem('userInterests');
     if (saved) {
-      const ids: string[] = JSON.parse(saved);
-      this.selectedInterests = ALL_INTERESTS.filter(i => ids.includes(i.id));
+      const ids: number[] = JSON.parse(saved);
+      this.selectedTags = this.tags.filter(t => ids.includes(t.id));
     }
   }
 
-  get availableInterests(): Interest[] {
-    const selectedIds = this.selectedInterests.map(i => i.id);
-    return ALL_INTERESTS.filter(i => !selectedIds.includes(i.id));
+  get availableTags(): Tag[] {
+    const selectedIds = this.selectedTags.map(t => t.id);
+    return this.tags.filter(t => !selectedIds.includes(t.id));
   }
 
-  addInterest(interest: Interest): void {
-    if (!this.isSelected(interest)) {
-      this.selectedInterests = [...this.selectedInterests, interest];
+  addTag(tag: Tag): void {
+    if (!this.isSelected(tag)) {
+      this.selectedTags = [...this.selectedTags, tag];
     }
   }
 
-  removeInterest(interest: Interest): void {
-    this.selectedInterests = this.selectedInterests.filter(i => i.id !== interest.id);
+  removeTag(tag: Tag): void {
+    this.selectedTags = this.selectedTags.filter(t => t.id !== tag.id);
   }
 
-  isSelected(interest: Interest): boolean {
-    return this.selectedInterests.some(i => i.id === interest.id);
+  isSelected(tag: Tag): boolean {
+    return this.selectedTags.some(t => t.id === tag.id);
   }
 
   saveChanges(): void {
     if (this.isSaving) return;
     this.isSaving = true;
-    setTimeout(() => {
-      localStorage.setItem('userInterests', JSON.stringify(this.selectedInterests.map(i => i.id)));
-      this.isSaving = false;
-      this.router.navigate([this.returnTo]);
-    }, 800);
+
+    const tagIds = this.selectedTags.map(t => t.id);
+
+    this.tagService.saveUserTags(tagIds).subscribe({
+      next: () => {
+        localStorage.setItem('userInterests', JSON.stringify(tagIds));
+        this.isSaving = false;
+        this.router.navigate([this.returnTo]);
+      },
+      error: () => {
+        localStorage.setItem('userInterests', JSON.stringify(tagIds));
+        this.isSaving = false;
+        this.router.navigate([this.returnTo]);
+      },
+    });
   }
 
   goBack(): void {
