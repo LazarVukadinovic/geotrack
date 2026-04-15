@@ -57,6 +57,8 @@ public class UserService : IUserService
             FirstName = user.FirstName,
             LastName = user.LastName,
             PhoneNumber = user.PhoneNumber,
+            AvatarUrl = user.AvatarUrl,
+            Location = user.Location,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt,
             Collections = collections
@@ -73,6 +75,7 @@ public class UserService : IUserService
         user.FirstName = request.FirstName?.Trim() ?? string.Empty;
         user.LastName = request.LastName?.Trim() ?? string.Empty;
         user.PhoneNumber = request.PhoneNumber?.Trim() ?? string.Empty;
+        user.Location = request.Location?.Trim();
         user.UpdatedAt = DateTime.UtcNow;
 
         await _userRepository.SaveChangesAsync();
@@ -85,6 +88,8 @@ public class UserService : IUserService
             FirstName = user.FirstName,
             LastName = user.LastName,
             PhoneNumber = user.PhoneNumber,
+            AvatarUrl = user.AvatarUrl,
+            Location = user.Location,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt
         };
