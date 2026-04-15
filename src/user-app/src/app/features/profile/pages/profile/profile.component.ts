@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -29,8 +29,9 @@ export class ProfileComponent implements OnInit {
 
   @ViewChild('newSheet') newSheet!: NewCollectionSheetComponent;
 
-  fullName = '';
-  email    = '';
+  readonly fullName = signal('');
+  readonly email    = signal('');
+  readonly loadError = signal('');
 
   get collections() {
     return this.collService.collections();
@@ -40,16 +41,17 @@ export class ProfileComponent implements OnInit {
     this.http.get<MeResponse>('/api/user/me').subscribe({
       next: (res) => {
         const name = `${res.firstName} ${res.lastName}`.trim();
-        this.fullName = name || res.username;
-        this.email = res.email;
+        this.fullName.set(name || res.email);
+        this.email.set(res.email);
       },
       error: () => {
-        // Fallback to localStorage if API fails
         const saved = localStorage.getItem('userProfile');
         if (saved) {
           const p = JSON.parse(saved);
-          this.fullName = p.fullName ?? '';
-          this.email = p.email ?? '';
+          this.fullName.set(p.fullName ?? '');
+          this.email.set(p.email ?? '');
+        } else {
+          this.loadError.set('Could not load profile data.');
         }
       },
     });
