@@ -16,28 +16,21 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<RegisterResponseDto>> Register([FromBody] RegisterRequestDto request)
+    public async Task<ActionResult<LoginResponseDto>> Register([FromBody] RegisterRequestDto request)
     {
         try
         {
-            var dto = new RegisterUserDto
-            {
-                Username = request.Username,
-                Email = request.Email,
-                Password = request.Password
-            };
-
-            await _authService.RegisterAsync(dto);
+            await _authService.RegisterAsync(request);
 
             // Auto-login after registration so the interests page can save tags
-            var loginDto = new LoginUserDto
+            var loginDto = new LoginRequestDto
             {
                 Email = request.Email,
                 Password = request.Password
             };
-            var token = await _authService.LoginAsync(loginDto);
+            var loginResponse = await _authService.LoginAsync(loginDto);
 
-            return Ok(new AuthResponse { Token = token });
+            return Ok(loginResponse);
         }
         catch (InvalidOperationException ex)
         {
@@ -54,18 +47,8 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var dto = new LoginUserDto
-            {
-                Email = request.Email,
-                Password = request.Password
-            };
-
-            var token = await _authService.LoginAsync(dto);
-
-            return Ok(new AuthResponse
-            {
-                Token = token
-            });
+            var response = await _authService.LoginAsync(request);
+            return Ok(response);
         }
         catch (UnauthorizedAccessException ex)
         {

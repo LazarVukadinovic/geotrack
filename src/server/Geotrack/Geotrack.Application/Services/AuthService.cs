@@ -29,8 +29,6 @@ public class AuthService : IAuthService
         if (!IsValidEmail(request.Email))
             throw new InvalidOperationException("Invalid email format");
 
-        var exists = await _userRepository.ExistsAsync(request.Username, request.Email);
-
         var exists = await _userRepository.ExistsAsync(request.Username.Trim(), request.Email.Trim());
         if (exists)
             throw new InvalidOperationException("User already exists");
@@ -62,17 +60,9 @@ public class AuthService : IAuthService
             string.IsNullOrWhiteSpace(request.Password))
             throw new UnauthorizedAccessException("Email and password are required");
 
-        var user = await _userRepository.GetByEmailAsync(request.Email);
-
-        var user = await _userRepository.GetByUsernameAsync(request.Username.Trim());
+        var user = await _userRepository.GetByEmailAsync(request.Email.Trim());
         if (user == null)
             throw new UnauthorizedAccessException("Invalid credentials");
-
-        var result = _passwordHasher.VerifyHashedPassword(
-            user,
-            user.PasswordHash,
-            request.Password
-        );
 
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
         if (result == PasswordVerificationResult.Failed)
