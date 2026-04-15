@@ -1,15 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Geotrack.Application.DTOs.Event;
-
-namespace Geotrack.Application.Interfaces.Service
+﻿using Geotrack.Application.DTOs.Events;
+namespace Geotrack.Application.Interfaces.Service;
+public interface IEventService
 {
-    public interface IEventService
-    {
-        Task<GetEventDetailsResponseDto> GetEventDetailsAsync(int eventId, int? userId);
-        Task<GetEventSectionResponseDto> GetEventSectionAsync(int eventId, string sectionKey);
-    }
+    Task<GetEventDetailsResponseDto> GetEventDetailsAsync(int eventId, int? userId);
+    Task<GetEventSectionResponseDto> GetEventSectionAsync(int eventId, string sectionKey);
+    Task<GetEventReviewsResponseDto> GetEventReviewsAsync(int eventId);
+    Task<CreateEventReviewResponseDto> CreateEventReviewAsync(int eventId, int userId, CreateEventReviewRequestDto request);
 }

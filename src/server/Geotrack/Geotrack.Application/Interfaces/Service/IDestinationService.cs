@@ -1,19 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Explore;
-using Geotrack.Application.DTOs.Destionation; 
-
-namespace Geotrack.Application.Interfaces.Service
+namespace Geotrack.Application.Interfaces.Service;
+public interface IDestinationService
 {
-    public interface IDestinationService
-    {
-        Task<ExploreByLocationResponseDto> ExploreByLocationAsync(ExploreByLocationQueryDto query);
-        Task<GetDestinationResponseDto> GetDestinationDetailsAsync(int destinationId);
-        Task<GetDestinationSectionResponseDto> GetDestinationSectionAsync(int destinationId, string sectionKey);
-        Task<GetDestinationReviewsResponseDto> GetDestinationReviewsAsync(int destinationId);
-        
-    }
+    Task<ExploreByLocationResponseDto> ExploreByLocationAsync(ExploreByLocationQueryDto query);
+    Task<GetDestinationDetailsResponseDto> GetDestinationDetailsAsync(int destinationId, int? userId);
+    Task<GetDestinationSectionResponseDto> GetDestinationSectionAsync(int destinationId, string sectionKey);
+    Task<GetDestinationReviewsResponseDto> GetDestinationReviewsAsync(int destinationId);
+    Task<CreateDestinationReviewResponseDto> CreateDestinationReviewAsync(int destinationId, int userId, CreateDestinationReviewRequestDto request);
 }

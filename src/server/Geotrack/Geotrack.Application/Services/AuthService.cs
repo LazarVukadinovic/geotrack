@@ -1,9 +1,9 @@
+using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.AspNetCore.Identity;
-using System.Text.RegularExpressions;
 
 namespace Geotrack.Application.Services;
 
@@ -19,58 +19,75 @@ public class AuthService : IAuthService
         _jwtService = jwtService;
     }
 
-    public async Task RegisterAsync(RegisterUserDto request)
+    public async Task<RegisterResponseDto> RegisterAsync(RegisterRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Username) ||
             string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password))
-            throw new Exception("All fields are required");
+        {
+            throw new InvalidOperationException("All fields are required");
+        }
+
+        if (request.Username.Length > 100)
+            throw new InvalidOperationException("Username is too long");
+
+        if (request.Email.Length > 200)
+            throw new InvalidOperationException("Email is too long");
+
+        if (request.Password.Length > 200)
+            throw new InvalidOperationException("Password is too long");
 
         if (!IsValidEmail(request.Email))
-            throw new Exception("Invalid email format");
+            throw new InvalidOperationException("Invalid email format");
 
-        var exists = await _userRepository.ExistsAsync(request.Username, request.Email);
-
+        var exists = await _userRepository.ExistsAsync(request.Username.Trim(), request.Email.Trim());
         if (exists)
             throw new InvalidOperationException("User already exists");
 
         var user = new User
         {
-            Username = request.Username,
-            Email = request.Email,
-            CreatedAt = DateTime.UtcNow,
+            Username = request.Username.Trim(),
+            Email = request.Email.Trim(),
+            FirstName = string.Empty,
+            LastName = string.Empty,
+            PhoneNumber = string.Empty,
+            CreatedAt = DateTime.UtcNow
         };
 
         user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
+
+        return new RegisterResponseDto
+        {
+            Message = "User registered successfully"
+        };
     }
 
-    public async Task<string> LoginAsync(LoginUserDto request)
+    public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Username) ||
             string.IsNullOrWhiteSpace(request.Password))
-            throw new Exception("Username and password are required");
+        {
+            throw new UnauthorizedAccessException("Username and password are required");
+        }
 
-        var user = await _userRepository.GetByUsernameAsync(request.Username);
-
+        var user = await _userRepository.GetByUsernameAsync(request.Username.Trim());
         if (user == null)
-            throw new Exception("Invalid credentials");
+            throw new UnauthorizedAccessException("Invalid credentials");
 
-        var result = _passwordHasher.VerifyHashedPassword(
-            user,
-            user.PasswordHash,
-            request.Password
-        );
-
+        var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
         if (result == PasswordVerificationResult.Failed)
-            throw new Exception("Invalid credentials");
+            throw new UnauthorizedAccessException("Invalid credentials");
 
-        return _jwtService.GenerateToken(user.Id);
+        return new LoginResponseDto
+        {
+            Token = _jwtService.GenerateToken(user.Id)
+        };
     }
 
-    private bool IsValidEmail(string email)
+    private static bool IsValidEmail(string email)
     {
         return Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
     }

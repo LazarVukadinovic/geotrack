@@ -1,8 +1,5 @@
-using Geotrack.Application.DTOs;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Server.Requests;
-using Geotrack.Server.Responses;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Geotrack.Server.Controllers;
@@ -19,19 +16,12 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult> Register([FromBody] RegisterRequest request)
+    public async Task<ActionResult<RegisterResponseDto>> Register([FromBody] RegisterRequestDto request)
     {
         try
         {
-            var dto = new RegisterUserDto
-            {
-                Username = request.Username,
-                Email = request.Email,
-                Password = request.Password
-            };
-
-            await _authService.RegisterAsync(dto);
-            return Ok(new { message = "User registered successfully" });
+            var result = await _authService.RegisterAsync(request);
+            return Ok(result);
         }
         catch (InvalidOperationException ex)
         {
@@ -40,22 +30,12 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
+    public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginRequestDto request)
     {
         try
         {
-            var dto = new LoginUserDto
-            {
-                Username = request.Username,
-                Password = request.Password
-            };
-
-            var token = await _authService.LoginAsync(dto);
-
-            return Ok(new AuthResponse
-            {
-                Token = token
-            });
+            var result = await _authService.LoginAsync(request);
+            return Ok(result);
         }
         catch (UnauthorizedAccessException ex)
         {

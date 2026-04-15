@@ -31,13 +31,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IPlaceService, PlaceService>();
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
-builder.Services.AddScoped<IDestinationReviewRepository, DestinationReviewRepository>();
-builder.Services.AddScoped<IDestinationReviewService, DestinationReviewService>();
-builder.Services.AddScoped<ILocationService, LocationService>();
-builder.Services.AddScoped<IPlaceService, PlaceService>();
-builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
-builder.Services.AddScoped<IEventService, EventService>();
-builder.Services.AddScoped<IEventRepository, EventRepository>();
+
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -46,24 +40,6 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 // builder.Services.AddScoped<UserService>();
 // builder.Services.AddScoped<RoleService>();
 // builder.Services.AddScoped<DestinationService>();
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]);
-
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(key)
-        };
-    });
 
 var app = builder.Build();
 

@@ -6,7 +6,10 @@ namespace Geotrack.Application.Interfaces.Repository;
 public interface ILocationRepository : IRepository<Location>
 {
     Task<Location?> GetWithDetailsAsync(int locationId);
-    Task<IEnumerable<LocationReview>> GetReviewsByLocationIdAsync(int locationId);
+    Task<bool> IsLocationSavedByUserAsync(int locationId, int userId);
+    Task<List<int>> GetSavedCollectionIdsByUserAsync(int locationId, int
+    userId);
+    Task<List<LocationReview>> GetReviewsByLocationIdAsync(int locationId);
     Task<bool> HasUserReviewedLocationAsync(int locationId, int userId);
-    Task<LocationReview> CreateReviewAsync(LocationReview review);
+    Task AddReviewAsync(LocationReview review);
 }

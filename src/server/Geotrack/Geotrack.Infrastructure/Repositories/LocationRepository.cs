@@ -1,42 +1,65 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Geotrack.Application.Interfaces.Repository;
+﻿using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Microsoft.EntityFrameworkCore;
 
-namespace Geotrack.Infrastructure.Repositories
+namespace Geotrack.Infrastructure.Repositories;
+
+public class LocationRepository : Repository<Location>, ILocationRepository
 {
-    public class LocationRepository : Repository<Location>, ILocationRepository
+    private readonly AppDbContext _context;
+
+    public LocationRepository(AppDbContext context) : base(context)
     {
+        _context = context;
+    }
 
-        private readonly AppDbContext _context;
+    public async Task<Location?> GetWithDetailsAsync(int locationId)
+    {
+        return await _context.Locations
+            .Include(l => l.Places)
+                .ThenInclude(p => p.PlaceTags)
+                    .ThenInclude(pt => pt.Tag)
+            .Include(l => l.Events)
+                .ThenInclude(e => e.EventTags)
+                    .ThenInclude(et => et.Tag)
+            .Include(l => l.LocationReviews)
+            .Include(l => l.LocationTags)
+                .ThenInclude(lt => lt.Tag)
+            .FirstOrDefaultAsync(l => l.Id == locationId);
+    }
 
-        public LocationRepository(AppDbContext context) : base(context)
-        {
-            _context = context;
-        }
+    public async Task<bool> IsLocationSavedByUserAsync(int locationId, int userId)
+    {
+        return await _context.CollectionItems
+            .AnyAsync(ci => ci.LocationId == locationId && ci.Collection.UserId == userId);
+    }
 
-        public async Task<Location?> GetWithDetailsAsync(int locationId) => await _context.Locations.Include(l => l.Places).Include(l => l.Events).Include(l => l.LocationReviews).Include(l => l.LocationTags).FirstOrDefaultAsync(l => l.Id == locationId);
+    public async Task<List<int>> GetSavedCollectionIdsByUserAsync(int locationId, int userId)
+    {
+        return await _context.CollectionItems
+            .Where(ci => ci.LocationId == locationId && ci.Collection.UserId == userId)
+            .Select(ci => ci.CollectionId)
+            .Distinct()
+            .ToListAsync();
+    }
 
-        public async Task<IEnumerable<LocationReview>> GetReviewsByLocationIdAsync(int locationId)
-        {
-            return await _context.LocationReviews.Where(r => r.LocationId == locationId).OrderByDescending(r => r.CreatedAt).ToListAsync();
-        }
+    public async Task<List<LocationReview>> GetReviewsByLocationIdAsync(int locationId)
+    {
+        return await _context.LocationReviews
+            .Where(r => r.LocationId == locationId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+    }
 
-        public async Task<bool> HasUserReviewedLocationAsync(int locationId, int userId)
-        {
-            return await _context.LocationReviews.AnyAsync(r => r.LocationId == locationId && r.UserId == userId);
-        }
+    public async Task<bool> HasUserReviewedLocationAsync(int locationId, int userId)
+    {
+        return await _context.LocationReviews
+            .AnyAsync(r => r.LocationId == locationId && r.UserId == userId);
+    }
 
-        public async Task<LocationReview> CreateReviewAsync(LocationReview review)
-        {
-            _context.LocationReviews.Add(review);
-            await _context.SaveChangesAsync();
-            return review;
-        }
+    public async Task AddReviewAsync(LocationReview review)
+    {
+        await _context.LocationReviews.AddAsync(review);
     }
 }

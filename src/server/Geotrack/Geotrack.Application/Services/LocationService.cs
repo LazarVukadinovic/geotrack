@@ -1,201 +1,273 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Geotrack.Application.DTOs.Location;
+﻿using Geotrack.Application.DTOs.Locations;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Domain.Entities.Tags;
 
-namespace Geotrack.Application.Services
+namespace Geotrack.Application.Services;
+
+public class LocationService : ILocationService
 {
-    public class LocationService : ILocationService
+    private const int SectionPreviewLimit = 5;
+
+    private readonly ILocationRepository _locationRepository;
+
+    public LocationService(ILocationRepository locationRepository)
     {
-        private readonly ILocationRepository _locationRepository;
-        private readonly IPlaceRepository _placeRepository;
-        private readonly IEventRepository _eventRepository;
+        _locationRepository = locationRepository;
+    }
 
-        public LocationService(ILocationRepository locationRepository,IPlaceRepository placeRepository,IEventRepository eventRepository)
+    public async Task<GetLocationDetailsResponseDto> GetLocationDetailsAsync(int locationId, int? userId)
+    {
+        var location = await _locationRepository.GetWithDetailsAsync(locationId)
+            ?? throw new KeyNotFoundException("Locations not found");
+
+        var reviews = location.LocationReviews.ToList();
+        var averageRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
+        var reviewsCount = reviews.Count;
+
+        var isSaved = false;
+        var savedCollectionIds = new List<int>();
+
+        if (userId.HasValue)
         {
-            _locationRepository = locationRepository;
-            _placeRepository = placeRepository;
-            _eventRepository = eventRepository;
+            isSaved = await _locationRepository.IsLocationSavedByUserAsync(locationId, userId.Value);
+            savedCollectionIds = await _locationRepository.GetSavedCollectionIdsByUserAsync(locationId, userId.Value);
         }
 
-        public async Task<GetLocationDetailsResponseDto> GetLocationDetailsAsync(int locationId, int? userId)
+        return new GetLocationDetailsResponseDto
         {
-            var location = await _locationRepository.GetWithDetailsAsync(locationId);
+            Id = location.Id,
+            Name = location.Name,
+            DestinationId = location.DestinationId,
+            LocationTypeId = location.LocationTypeId,
+            Latitude = location.Latitude,
+            Longitude = location.Longitude,
+            CreatedAt = location.CreatedAt,
+            UpdatedAt = location.UpdatedAt,
+            AverageRating = averageRating,
+            ReviewsCount = reviewsCount,
+            IsSaved = isSaved,
+            SavedCollectionIds = savedCollectionIds,
+            Sections = BuildLocationPreviewSections(location)
+        };
+    }
 
-            if (location == null) throw new KeyNotFoundException($"Lokacija sa ID-em {locationId} nije pronadjena.");
+    public async Task<GetLocationSectionResponseDto> GetLocationSectionAsync(int locationId, string sectionKey)
+    {
+        var location = await _locationRepository.GetWithDetailsAsync(locationId)
+            ?? throw new KeyNotFoundException("Locations not found");
 
-            var reviews = location.LocationReviews ?? new List<LocationReview>();
-            var averageRating = reviews.Any() ? reviews.Average(r => r.Rating) : 0;
-            var reviewsCount = reviews.Count;
+        var normalizedKey = sectionKey.Trim().ToLowerInvariant();
 
-            var sections = BuildSections(location);
+        var tag = location.LocationTags
+            .Where(x => x.Tag != null)
+            .Select(x => x.Tag)
+            .FirstOrDefault(t => t.Slug.ToLower() == normalizedKey);
 
-            return new GetLocationDetailsResponseDto
+        List<Place> places;
+        List<Event> events;
+        string title;
+
+        if (tag != null)
+        {
+            places = location.Places
+                .Where(p => p.PlaceTags.Any(pt => pt.TagId == tag.Id))
+                .OrderBy(p => p.Name)
+                .ToList();
+
+            events = location.Events
+                .Where(e => e.EventTags.Any(et => et.TagId == tag.Id))
+                .OrderBy(e => e.StartDate)
+                .ToList();
+
+            title = tag.Name;
+        }
+        else if (normalizedKey == "places")
+        {
+            places = location.Places.OrderBy(p => p.Name).ToList();
+            events = new List<Event>();
+            title = "Places";
+        }
+        else if (normalizedKey == "events")
+        {
+            places = new List<Place>();
+            events = location.Events.OrderBy(e => e.StartDate).ToList();
+            title = "Events";
+        }
+        else
+        {
+            throw new KeyNotFoundException("Section not found");
+        }
+
+        return new GetLocationSectionResponseDto
+        {
+            LocationId = locationId,
+            SectionKey = normalizedKey,
+            SectionTitle = title,
+            Places = places.Select(MapPlaceItem).ToList(),
+            Events = events.Select(MapEventItem).ToList()
+        };
+    }
+
+    public async Task<GetLocationReviewsResponseDto> GetLocationReviewsAsync(int locationId)
+    {
+        var location = await _locationRepository.GetByIDAsync(locationId);
+        if (location == null)
+            throw new KeyNotFoundException("Locations not found");
+
+        var reviews = await _locationRepository.GetReviewsByLocationIdAsync(locationId);
+        var averageRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
+
+        return new GetLocationReviewsResponseDto
+        {
+            LocationId = locationId,
+            AverageRating = averageRating,
+            ReviewsCount = reviews.Count,
+            Reviews = reviews.Select(r => new LocationReviewItemDto
             {
-                Id = location.Id,
-                Name = location.Name,
-                DestinationId = location.DestinationId,
-                LocationTypeId = location.LocationTypeId,
-                Latitude = location.Latitude,
-                Longitude = location.Longitude,
-                CreatedAt = location.CreatedAt,
-                UpdatedAt = location.UpdatedAt,
-                AverageRating = Math.Round(averageRating, 1),
-                ReviewsCount = reviewsCount,
-                IsSaved = false,
-                SavedCollectionIds = new List<int>(),
-                Sections = sections
-            };
-        }
+                Id = r.Id,
+                UserId = r.UserId,
+                Rating = r.Rating,
+                Comment = r.Comment,
+                CreatedAt = r.CreatedAt,
+                UpdatedAt = r.UpdatedAt
+            }).ToList()
+        };
+    }
 
-        private List<LocationSectionPreviewDto> BuildSections(Location location)
+    public async Task<CreateLocationReviewResponseDto> CreateLocationReviewAsync(int locationId, int userId, CreateLocationReviewRequestDto request)
+    {
+        if (request.Rating < 1 || request.Rating > 5)
+            throw new InvalidOperationException("Rating must be between 1 and 5");
+
+        if ((request.Comment ?? string.Empty).Length > 1000)
+            throw new InvalidOperationException("Comment is too long");
+
+        var location = await _locationRepository.GetByIDAsync(locationId);
+        if (location == null)
+            throw new KeyNotFoundException("Locations not found");
+
+        var alreadyReviewed = await _locationRepository.HasUserReviewedLocationAsync(locationId, userId);
+        if (alreadyReviewed)
+            throw new InvalidOperationException("User has already reviewed this location");
+
+        var review = new LocationReview
         {
-            var sections = new List<LocationSectionPreviewDto>();
+            UserId = userId,
+            LocationId = locationId,
+            Rating = request.Rating,
+            Comment = request.Comment?.Trim() ?? string.Empty,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
 
-            var places = location.Places ?? new List<Place>();
-            var events = location.Events ?? new List<Event>();
+        await _locationRepository.AddReviewAsync(review);
+        await _locationRepository.SaveChangesAsync();
 
-            if(places.Any())
+        return new CreateLocationReviewResponseDto
+        {
+            Id = review.Id,
+            UserId = review.UserId,
+            LocationId = review.LocationId,
+            Rating = review.Rating,
+            Comment = review.Comment,
+            CreatedAt = review.CreatedAt,
+            UpdatedAt = review.UpdatedAt
+        };
+    }
+
+    private List<LocationSectionPreviewDto> BuildLocationPreviewSections(Location location)
+    {
+        var sections = new List<LocationSectionPreviewDto>();
+
+        var tags = location.LocationTags
+            .Where(x => x.Tag != null)
+            .Select(x => x.Tag)
+            .GroupBy(x => x.Id)
+            .Select(g => g.First())
+            .OrderBy(t => t.Name)
+            .ToList();
+
+        foreach (var tag in tags)
+        {
+            var places = location.Places
+                .Where(p => p.PlaceTags.Any(pt => pt.TagId == tag.Id))
+                .OrderBy(p => p.Name)
+                .Take(SectionPreviewLimit)
+                .Select(MapPlaceItem)
+                .ToList();
+
+            var events = location.Events
+                .Where(e => e.EventTags.Any(et => et.TagId == tag.Id))
+                .OrderBy(e => e.StartDate)
+                .Take(SectionPreviewLimit)
+                .Select(MapEventItem)
+                .ToList();
+
+            if (places.Any() || events.Any())
             {
                 sections.Add(new LocationSectionPreviewDto
                 {
-                    Key = "places",
-                    Title = "Places",
-                    Places = places.Take(5).Select(p =>new LocationSectionPlaceItemDto
-                    { 
-                        Id=p.Id,
-                        Name=p.Name,
-                        LocationId = p.LocationId
-                    }).ToList(),Events = new()
+                    Key = tag.Slug,
+                    Title = tag.Name,
+                    Places = places,
+                    Events = events
                 });
             }
-
-            if (events.Any()) 
-            {
-                sections.Add(new LocationSectionPreviewDto
-                {
-                    Key = "events",
-                    Title = "Events",
-                    Places = new(),
-                    Events = events.Take(5).Select(e => new LocationSectionEventItemDto
-                    {
-                        Id = e.Id,
-                        LocationId = e.LocationId,
-                        PlaceId = e.PlaceId,
-                        StartDate = e.StartDate,
-                        EndDate = e.EndDate
-                    }).ToList()
-                });
-            }
-
-            return sections;
         }
 
-        public async Task<GetLocationSectionResponseDto> GetLocationSectionAsync(int locationId, string sectionKey)
+        if (!sections.Any())
         {
-            var location = await _locationRepository.GetByIDAsync(locationId);
-            if(location == null) throw new KeyNotFoundException($"Lokacija sa id-em {locationId} nije pronadjen.");
-
-            var sectionTitle = sectionKey switch
+            sections.Add(new LocationSectionPreviewDto
             {
-                "places" => "Places",
-                "events" => "Events",
-                _ => throw new KeyNotFoundException($"Nepoznati SectionKey: {sectionKey}")
-            };
+                Key = "places",
+                Title = "Places",
+                Places = location.Places
+                    .OrderBy(p => p.Name)
+                    .Take(SectionPreviewLimit)
+                    .Select(MapPlaceItem)
+                    .ToList(),
+                Events = new List<LocationSectionEventItemDto>()
+            });
 
-            var places = new List<LocationSectionPlaceItemDto>();
-            var events = new List<LocationSectionEventItemDto>();
-
-
-            if (sectionKey == "places" || sectionKey == "events")
+            sections.Add(new LocationSectionPreviewDto
             {
-                var allPlaces = await _placeRepository.GetByLocationIdAsync(locationId);
-                places = allPlaces.Select(p => new LocationSectionPlaceItemDto
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                    LocationId = p.LocationId
-                }).ToList();
-            }
-
-            return new GetLocationSectionResponseDto
-            {
-                
-                Id = locationId,
-                SectionKey = sectionKey,
-                SectionTitle = sectionTitle,
-                Places = places,
-                Events = events
-            };
+                Key = "events",
+                Title = "Events",
+                Places = new List<LocationSectionPlaceItemDto>(),
+                Events = location.Events
+                    .OrderBy(e => e.StartDate)
+                    .Take(SectionPreviewLimit)
+                    .Select(MapEventItem)
+                    .ToList()
+            });
         }
 
-        public async Task<GetLocationReviewsResponseDto> GetLocationReviewsAsync(int locationId)
+        return sections;
+    }
+
+    private static LocationSectionPlaceItemDto MapPlaceItem(Place place)
+    {
+        return new LocationSectionPlaceItemDto
         {
-            var location = await _locationRepository.GetByIDAsync(locationId);
-            if (location == null)throw new KeyNotFoundException($"Lokacija sa id-em {locationId} nije pronadjena.");
+            Id = place.Id,
+            Name = place.Name,
+            LocationId = place.LocationId
+        };
+    }
 
-            var reviews = await _locationRepository.GetReviewsByLocationIdAsync(locationId);
-            var reviewList = reviews.ToList();
-
-            var averageRating = reviewList.Any() ? reviewList.Average(r => r.Rating) : 0;
-
-            return new GetLocationReviewsResponseDto
-            {
-                LocationId = locationId,
-                AverageRating = Math.Round(averageRating, 1),
-                ReviewsCount = reviewList.Count,
-                Reviews = reviewList.Select(r => new LocationReviewItemDto
-                {
-                    Id = r.Id,
-                    UserId = r.UserId,
-                    Rating = r.Rating,
-                    Comment = r.Comment,
-                    CreatedAt = r.CreatedAt,
-                    UpdatedAt = r.UpdatedAt
-                }).ToList()
-            };
-        }
-
-        public async Task<CreateLocationReviewResponseDto> CreateLocationReviewAsync(int locationId, int userId, CreateLocationReviewRequestDto dto)
+    private static LocationSectionEventItemDto MapEventItem(Event @event)
+    {
+        return new LocationSectionEventItemDto
         {
-            var location = await _locationRepository.GetByIDAsync(locationId);
-            if (location == null)
-                throw new KeyNotFoundException($"Lokacija sa id-em {locationId} nije pronadjena.");
-
-            // Provjeri jedan korisnik - jedan review
-            var alreadyReviewed = await _locationRepository.HasUserReviewedLocationAsync(locationId, userId);
-            if (alreadyReviewed)
-                throw new InvalidOperationException("Već ste ostavili review za ovu lokaciju.");
-
-            var review = new LocationReview
-            {
-                LocationId = locationId,
-                UserId = userId,
-                Rating = dto.Rating,
-                Comment = dto.Comment ?? string.Empty,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-
-            var created = await _locationRepository.CreateReviewAsync(review);
-
-            return new CreateLocationReviewResponseDto
-            {
-                Id = created.Id,
-                UserId = created.UserId,
-                LocationId = created.LocationId,
-                Rating = created.Rating,
-                Comment = created.Comment,
-                CreatedAt = created.CreatedAt,
-                UpdatedAt = created.UpdatedAt
-            };
-        }
+            Id = @event.Id,
+            Name = @event.Name,
+            LocationId = @event.LocationId,
+            PlaceId = @event.PlaceId,
+            StartDate = @event.StartDate,
+            EndDate = @event.EndDate
+        };
     }
 }
-
