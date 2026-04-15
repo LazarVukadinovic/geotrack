@@ -1,8 +1,19 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { TagService } from '../../../../core/services/tag.service';
 import { Tag } from '../../../../core/models/tag.model';
+
+interface InterestItem {
+  tagId: number;
+  name: string;
+  slug: string;
+}
+
+interface UserInterestsResponse {
+  tags: InterestItem[];
+}
 
 @Component({
   selector: 'app-my-interests',
@@ -20,6 +31,7 @@ export class MyInterestsComponent {
     private router: Router,
     private route: ActivatedRoute,
     private tagService: TagService,
+    private http: HttpClient,
   ) {
     this.route.queryParams.subscribe(p => {
       if (p['from']) this.returnTo = '/' + p['from'];
@@ -32,11 +44,22 @@ export class MyInterestsComponent {
   }
 
   private loadSavedInterests(): void {
-    const saved = localStorage.getItem('userInterests');
-    if (saved) {
-      const ids: number[] = JSON.parse(saved);
-      this.selectedTags = this.tags.filter(t => ids.includes(t.id));
-    }
+    // Load from backend first, fallback to localStorage
+    this.http.get<UserInterestsResponse>('/api/user/me/interests').subscribe({
+      next: (res) => {
+        const ids = res.tags.map(t => t.tagId);
+        this.selectedTags = this.tags.filter(t => ids.includes(t.id));
+        // Sync localStorage
+        localStorage.setItem('userInterests', JSON.stringify(ids));
+      },
+      error: () => {
+        const saved = localStorage.getItem('userInterests');
+        if (saved) {
+          const ids: number[] = JSON.parse(saved);
+          this.selectedTags = this.tags.filter(t => ids.includes(t.id));
+        }
+      },
+    });
   }
 
   get availableTags(): Tag[] {

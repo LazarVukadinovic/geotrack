@@ -1,8 +1,20 @@
 import { Component, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { CollectionsService } from '../../services/collections';
 import { NewCollectionSheetComponent } from '../new-collection-sheet/new-collection-sheet.component';
+
+interface MeResponse {
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  avatarUrl?: string;
+  location?: string;
+}
 
 @Component({
   selector: 'app-profile',
@@ -13,23 +25,34 @@ import { NewCollectionSheetComponent } from '../new-collection-sheet/new-collect
 export class ProfileComponent implements OnInit {
   private readonly collService = inject(CollectionsService);
   private readonly router      = inject(Router);
+  private readonly http        = inject(HttpClient);
 
   @ViewChild('newSheet') newSheet!: NewCollectionSheetComponent;
 
-  fullName = 'Marko Petrović';
-  email    = 'marko.p@example.com';
+  fullName = '';
+  email    = '';
 
   get collections() {
     return this.collService.collections();
   }
 
   ngOnInit(): void {
-    const saved = localStorage.getItem('userProfile');
-    if (saved) {
-      const p = JSON.parse(saved);
-      this.fullName = p.fullName ?? this.fullName;
-      this.email    = p.email    ?? this.email;
-    }
+    this.http.get<MeResponse>('/api/user/me').subscribe({
+      next: (res) => {
+        const name = `${res.firstName} ${res.lastName}`.trim();
+        this.fullName = name || res.username;
+        this.email = res.email;
+      },
+      error: () => {
+        // Fallback to localStorage if API fails
+        const saved = localStorage.getItem('userProfile');
+        if (saved) {
+          const p = JSON.parse(saved);
+          this.fullName = p.fullName ?? '';
+          this.email = p.email ?? '';
+        }
+      },
+    });
   }
 
   onCollectionCreated(id: string): void {
