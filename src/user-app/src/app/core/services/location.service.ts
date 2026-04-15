@@ -82,7 +82,11 @@ export class LocationService implements OnDestroy {
    * Used on Explore for returning users — silently upgrades location if GPS is available.
    */
   tryBackgroundGpsRefresh(): void {
-    if (!('geolocation' in navigator)) return;
+    if (!('geolocation' in navigator)) {
+      // No geolocation API — refresh via IP so we don't keep stale cache
+      this.refreshFromIp();
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -109,7 +113,13 @@ export class LocationService implements OnDestroy {
           this.startWatching();
         });
       },
-      () => { /* GPS unavailable — no action, keep cached location */ },
+      () => {
+        this.zone.run(() => {
+          // GPS unavailable/denied — refresh via IP so the header
+          // shows the current IP-based location instead of stale cache
+          this.refreshFromIp();
+        });
+      },
       { enableHighAccuracy: false, timeout: 10_000 },
     );
   }
@@ -346,6 +356,42 @@ export class LocationService implements OnDestroy {
   }
 
   /* ── IP-based fallback ─────────────────────────────────────────────── */
+
+  /**
+   * Fetch a fresh IP-based location, replacing any stale cached value.
+   * Called when GPS is unavailable so the Explore header always reflects
+   * the user's current approximate location rather than a stale cache.
+   */
+  private refreshFromIp(): void {
+    this.http
+      .get<IpApiResponse>('http://ip-api.com/json/?fields=status,city,regionName,country,lat,lon')
+      .subscribe({
+        next: (res) => {
+          if (res.status === 'success') {
+            const city = res.city ?? '';
+            const region = res.regionName ?? '';
+            const country = res.country ?? '';
+            const displayLabel = this.buildDisplayLabel(city, region, country);
+
+            const loc: ResolvedLocation = {
+              latitude: res.lat ?? 0,
+              longitude: res.lon ?? 0,
+              city,
+              region,
+              country,
+              displayLabel,
+              source: 'ip',
+            };
+            this._location.set(loc);
+            this._loading.set(false);
+            this.saveToStorage(loc);
+          }
+        },
+        error: () => {
+          // IP lookup failed — keep whatever we have (cached or nothing)
+        },
+      });
+  }
 
   private fallbackToIp(onComplete?: () => void): void {
     this.ipFallbackStarted = true;

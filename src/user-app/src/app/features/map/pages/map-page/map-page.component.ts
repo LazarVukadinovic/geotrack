@@ -395,7 +395,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private handleLocationSuccess(lat: number, lon: number): void {
-    this.map.flyTo({ center: [lon, lat], zoom: 15, duration: 1000 });
+    this.map.resize();
+    this.map.flyTo({ center: [lon, lat], zoom: 15, duration: 1000, padding: { top: 120, bottom: 0, left: 0, right: 0 } });
     if (this.map.isStyleLoaded()) this.placeUserMarker(lat, lon);
     else this.map.once('load', () => this.placeUserMarker(lat, lon));
     this.userLat = lat; this.userLon = lon; this.isUserLocation = true;
