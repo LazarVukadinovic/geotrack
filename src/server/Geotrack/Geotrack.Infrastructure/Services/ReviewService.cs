@@ -39,7 +39,7 @@ public class ReviewService : IReviewService
             Id = r.Id,
             AuthorName = GetAuthorName(r.User),
             AvatarUrl = r.User.AvatarUrl,
-            Rating = r.Rating,
+            Rating = (int)r.Rating,
             TimeAgo = FormatTimeAgo(r.CreatedAt),
             Body = r.Comment,
             HelpfulCount = 0
@@ -105,7 +105,7 @@ public class ReviewService : IReviewService
             Id = review.Id,
             AuthorName = GetAuthorName(user!),
             AvatarUrl = user?.AvatarUrl,
-            Rating = review.Rating,
+            Rating = (int)review.Rating,
             TimeAgo = "just now",
             Body = review.Comment,
             HelpfulCount = 0
@@ -117,7 +117,7 @@ public class ReviewService : IReviewService
         Id = r.Id,
         AuthorName = GetAuthorName(r.User),
         AvatarUrl = r.User.AvatarUrl,
-        Rating = r.Rating,
+        Rating = (int)r.Rating,
         TimeAgo = FormatTimeAgo(r.CreatedAt),
         Body = r.Comment,
         HelpfulCount = 0

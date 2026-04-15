@@ -1,7 +1,7 @@
 using Geotrack.Application.DTOs.Events;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Infrastructure;
+using Geotrack.Domain.Entities.Reviews;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Services;
@@ -16,6 +16,8 @@ public class EventService : IEventService
         _db = db;
         _favoriteService = favoriteService;
     }
+
+    // --- Frontend-facing methods ---
 
     public async Task<EventsListingResponseDto> GetEventsAsync(int destinationId, string? tags = null, bool? upcoming = null, int? userId = null)
     {
@@ -131,6 +133,179 @@ public class EventService : IEventService
                 IsSaved = favoriteIds.Contains(s.Id)
             }).ToList(),
             IsSaved = isSaved
+        };
+    }
+
+    // --- Master detail/section/review methods ---
+
+    public async Task<GetEventDetailsResponseDto> GetEventDetailsAsync(int eventId, int? userId)
+    {
+        var evt = await _db.Events
+            .Include(e => e.EventReviews)
+            .Include(e => e.EventTags).ThenInclude(et => et.Tag)
+            .FirstOrDefaultAsync(e => e.Id == eventId)
+            ?? throw new KeyNotFoundException("Event not found");
+
+        var reviews = evt.EventReviews.ToList();
+        var averageRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
+
+        var isSaved = false;
+        var savedCollectionIds = new List<int>();
+
+        if (userId.HasValue)
+        {
+            isSaved = await _favoriteService.IsFavoriteAsync(userId.Value, "event", eventId);
+            savedCollectionIds = await _db.CollectionItems
+                .Where(ci => ci.EventId == eventId && ci.Collection.UserId == userId.Value)
+                .Select(ci => ci.CollectionId)
+                .ToListAsync();
+        }
+
+        var sections = new List<EventSectionPreviewDto>();
+        if (evt.EventReviews.Any())
+            sections.Add(new EventSectionPreviewDto { Key = "reviews", Title = "Reviews" });
+        if (evt.EventTags.Any())
+            sections.Add(new EventSectionPreviewDto { Key = "tags", Title = "Tags" });
+
+        return new GetEventDetailsResponseDto
+        {
+            Id = evt.Id,
+            Name = evt.Name,
+            EventTypeId = evt.EventTypeId,
+            LocationId = evt.LocationId,
+            PlaceId = evt.PlaceId,
+            Description = evt.Description,
+            StartDate = evt.StartDate,
+            EndDate = evt.EndDate,
+            CreatedAt = evt.CreatedAt,
+            UpdatedAt = evt.UpdatedAt,
+            AverageRating = averageRating,
+            ReviewsCount = reviews.Count,
+            IsSaved = isSaved,
+            SavedCollectionIds = savedCollectionIds,
+            Sections = sections
+        };
+    }
+
+    public async Task<GetEventSectionResponseDto> GetEventSectionAsync(int eventId, string sectionKey)
+    {
+        var evt = await _db.Events
+            .Include(e => e.EventReviews)
+            .Include(e => e.EventTags).ThenInclude(et => et.Tag)
+            .FirstOrDefaultAsync(e => e.Id == eventId)
+            ?? throw new KeyNotFoundException("Event not found");
+
+        var normalizedKey = sectionKey.Trim().ToLowerInvariant();
+
+        if (normalizedKey == "reviews")
+        {
+            return new GetEventSectionResponseDto
+            {
+                EventId = eventId,
+                SectionKey = "reviews",
+                SectionTitle = "Reviews",
+                Reviews = evt.EventReviews
+                    .OrderByDescending(r => r.CreatedAt)
+                    .Select(r => new EventReviewItemDto
+                    {
+                        Id = r.Id,
+                        UserId = r.UserId,
+                        Rating = r.Rating,
+                        Comment = r.Comment,
+                        CreatedAt = r.CreatedAt,
+                        UpdatedAt = r.UpdatedAt
+                    }).ToList()
+            };
+        }
+
+        if (normalizedKey == "tags")
+        {
+            return new GetEventSectionResponseDto
+            {
+                EventId = eventId,
+                SectionKey = "tags",
+                SectionTitle = "Tags",
+                Tags = evt.EventTags
+                    .Where(t => t.Tag != null)
+                    .Select(t => new EventTagItemDto
+                    {
+                        Id = t.TagId,
+                        Name = t.Tag.Name
+                    }).ToList()
+            };
+        }
+
+        throw new KeyNotFoundException("Section not found");
+    }
+
+    public async Task<GetEventReviewsResponseDto> GetEventReviewsAsync(int eventId)
+    {
+        var evt = await _db.Events.FindAsync(eventId);
+        if (evt == null)
+            throw new KeyNotFoundException("Event not found");
+
+        var reviews = await _db.EventReviews
+            .Where(r => r.EventId == eventId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        var averageRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
+
+        return new GetEventReviewsResponseDto
+        {
+            EventId = eventId,
+            AverageRating = averageRating,
+            ReviewsCount = reviews.Count,
+            Reviews = reviews.Select(r => new EventReviewItemDto
+            {
+                Id = r.Id,
+                UserId = r.UserId,
+                Rating = r.Rating,
+                Comment = r.Comment,
+                CreatedAt = r.CreatedAt,
+                UpdatedAt = r.UpdatedAt
+            }).ToList()
+        };
+    }
+
+    public async Task<CreateEventReviewResponseDto> CreateEventReviewAsync(int eventId, int userId, CreateEventReviewRequestDto request)
+    {
+        if (request.Rating < 1 || request.Rating > 5)
+            throw new InvalidOperationException("Rating must be between 1 and 5");
+
+        if ((request.Comment ?? string.Empty).Length > 1000)
+            throw new InvalidOperationException("Comment is too long");
+
+        var evt = await _db.Events.FindAsync(eventId);
+        if (evt == null)
+            throw new KeyNotFoundException("Event not found");
+
+        var alreadyReviewed = await _db.EventReviews.AnyAsync(r => r.EventId == eventId && r.UserId == userId);
+        if (alreadyReviewed)
+            throw new InvalidOperationException("User has already reviewed this event");
+
+        var review = new EventReview
+        {
+            UserId = userId,
+            EventId = eventId,
+            Rating = request.Rating,
+            Comment = request.Comment?.Trim() ?? string.Empty,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        await _db.EventReviews.AddAsync(review);
+        await _db.SaveChangesAsync();
+
+        return new CreateEventReviewResponseDto
+        {
+            Id = review.Id,
+            UserId = review.UserId,
+            EventId = review.EventId,
+            Rating = review.Rating,
+            Comment = review.Comment,
+            CreatedAt = review.CreatedAt,
+            UpdatedAt = review.UpdatedAt
         };
     }
 

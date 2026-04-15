@@ -13,7 +13,7 @@ public class EventReview
     public int EventId { get; set; }
     public Event Event { get; set; } = null!;
 
-    public int Rating { get; set; } // 1-5
+    public double Rating { get; set; } // 1-5
     public string Comment { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; }

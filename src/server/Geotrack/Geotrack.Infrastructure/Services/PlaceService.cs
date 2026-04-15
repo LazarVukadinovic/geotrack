@@ -1,7 +1,7 @@
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Infrastructure;
+using Geotrack.Domain.Entities.Reviews;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Services;
@@ -16,6 +16,8 @@ public class PlaceService : IPlaceService
         _db = db;
         _favoriteService = favoriteService;
     }
+
+    // --- Frontend-facing methods ---
 
     public async Task<List<PlaceListItemDto>> GetPlacesAsync(int destinationId, string? type = null, string? tags = null, string? category = null, int? userId = null)
     {
@@ -117,7 +119,7 @@ public class PlaceService : IPlaceService
                 Id = r.Id,
                 AuthorName = GetAuthorName(r.User),
                 AvatarUrl = r.User.AvatarUrl,
-                Rating = r.Rating,
+                Rating = (int)r.Rating,
                 TimeAgo = FormatTimeAgo(r.CreatedAt),
                 Body = r.Comment,
                 HelpfulCount = 0
@@ -191,7 +193,7 @@ public class PlaceService : IPlaceService
                 Id = r.Id,
                 AuthorName = GetAuthorName(r.User),
                 AvatarUrl = r.User.AvatarUrl,
-                Rating = r.Rating,
+                Rating = (int)r.Rating,
                 TimeAgo = FormatTimeAgo(r.CreatedAt),
                 Body = r.Comment,
                 HelpfulCount = 0
@@ -249,6 +251,163 @@ public class PlaceService : IPlaceService
             });
         }
         return items;
+    }
+
+    // --- Master detail/review methods ---
+
+    public async Task<GetPlaceDetailsResponseDto> GetPlaceDetailsAsync(int placeId, int? userId)
+    {
+        var place = await _db.Places
+            .Include(p => p.PlaceReviews)
+            .Include(p => p.Events)
+            .FirstOrDefaultAsync(p => p.Id == placeId)
+            ?? throw new KeyNotFoundException("Place not found");
+
+        var reviews = place.PlaceReviews.ToList();
+        var averageRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
+
+        var isSaved = false;
+        var savedCollectionIds = new List<int>();
+
+        if (userId.HasValue)
+        {
+            isSaved = await _favoriteService.IsFavoriteAsync(userId.Value, "place", placeId);
+            savedCollectionIds = await _db.CollectionItems
+                .Where(ci => ci.PlaceId == placeId && ci.Collection.UserId == userId.Value)
+                .Select(ci => ci.CollectionId)
+                .ToListAsync();
+        }
+
+        return new GetPlaceDetailsResponseDto
+        {
+            Id = place.Id,
+            Name = place.Name,
+            PlaceTypeId = place.PlaceTypeId,
+            LocationId = place.LocationId,
+            Description = place.Description,
+            Latitude = place.Latitude,
+            Longitude = place.Longitude,
+            ContactEmail = place.ContactEmail,
+            Number = place.Number,
+            CreatedAt = place.CreatedAt,
+            UpdatedAt = place.UpdatedAt,
+            AverageRating = averageRating,
+            ReviewsCount = reviews.Count,
+            IsSaved = isSaved,
+            SavedCollectionIds = savedCollectionIds,
+            Events = place.Events.OrderBy(e => e.StartDate).Select(e => new PlaceEventItemDto
+            {
+                Id = e.Id,
+                Name = e.Name,
+                LocationId = e.LocationId,
+                PlaceId = e.PlaceId ?? 0,
+                Description = e.Description,
+                StartDate = e.StartDate,
+                EndDate = e.EndDate,
+                CreatedAt = e.CreatedAt,
+                UpdatedAt = e.UpdatedAt
+            }).ToList()
+        };
+    }
+
+    public async Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId)
+    {
+        var place = await _db.Places.FindAsync(placeId);
+        if (place == null)
+            throw new KeyNotFoundException("Place not found");
+
+        var events = await _db.Events
+            .Where(e => e.PlaceId == placeId)
+            .OrderBy(e => e.StartDate)
+            .ToListAsync();
+
+        return new GetPlaceEventsResponseDto
+        {
+            PlaceId = placeId,
+            Events = events.Select(e => new PlaceEventItemDto
+            {
+                Id = e.Id,
+                Name = e.Name,
+                LocationId = e.LocationId,
+                PlaceId = e.PlaceId ?? 0,
+                Description = e.Description,
+                StartDate = e.StartDate,
+                EndDate = e.EndDate,
+                CreatedAt = e.CreatedAt,
+                UpdatedAt = e.UpdatedAt
+            }).ToList()
+        };
+    }
+
+    public async Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(int placeId)
+    {
+        var place = await _db.Places.FindAsync(placeId);
+        if (place == null)
+            throw new KeyNotFoundException("Place not found");
+
+        var reviews = await _db.PlaceReviews
+            .Where(r => r.PlaceId == placeId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        var averageRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
+
+        return new GetPlaceReviewsResponseDto
+        {
+            PlaceId = placeId,
+            AverageRating = averageRating,
+            ReviewsCount = reviews.Count,
+            Reviews = reviews.Select(r => new PlaceReviewItemDto
+            {
+                Id = r.Id,
+                UserId = r.UserId,
+                Rating = r.Rating,
+                Comment = r.Comment,
+                CreatedAt = r.CreatedAt,
+                UpdatedAt = r.UpdatedAt
+            }).ToList()
+        };
+    }
+
+    public async Task<CreatePlaceReviewResponseDto> CreatePlaceReviewAsync(int placeId, int userId, CreatePlaceReviewRequestDto request)
+    {
+        if (request.Rating < 1 || request.Rating > 5)
+            throw new InvalidOperationException("Rating must be between 1 and 5");
+
+        if ((request.Comment ?? string.Empty).Length > 1000)
+            throw new InvalidOperationException("Comment is too long");
+
+        var place = await _db.Places.FindAsync(placeId);
+        if (place == null)
+            throw new KeyNotFoundException("Place not found");
+
+        var alreadyReviewed = await _db.PlaceReviews.AnyAsync(r => r.PlaceId == placeId && r.UserId == userId);
+        if (alreadyReviewed)
+            throw new InvalidOperationException("User has already reviewed this place");
+
+        var review = new PlaceReview
+        {
+            UserId = userId,
+            PlaceId = placeId,
+            Rating = request.Rating,
+            Comment = request.Comment?.Trim() ?? string.Empty,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        await _db.PlaceReviews.AddAsync(review);
+        await _db.SaveChangesAsync();
+
+        return new CreatePlaceReviewResponseDto
+        {
+            Id = review.Id,
+            UserId = review.UserId,
+            PlaceId = review.PlaceId,
+            Rating = review.Rating,
+            Comment = review.Comment,
+            CreatedAt = review.CreatedAt,
+            UpdatedAt = review.UpdatedAt
+        };
     }
 
     private static string GetAuthorName(Domain.Entities.Users.User user)

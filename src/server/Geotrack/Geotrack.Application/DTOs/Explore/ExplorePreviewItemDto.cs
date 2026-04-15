@@ -21,7 +21,7 @@ public class ExplorePreviewItemDto
     public int ReviewCount { get; set; }
 
     public bool IsSaved { get; set; }
-    public int? UserRating { get; set; }
+    public double? UserRating { get; set; }
 
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }

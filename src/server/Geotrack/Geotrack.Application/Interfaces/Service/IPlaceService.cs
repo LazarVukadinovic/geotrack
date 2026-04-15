@@ -1,12 +1,17 @@
-using Geotrack.Application.DTOs.Places;
+﻿using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.DTOs.Reviews;
-
 namespace Geotrack.Application.Interfaces.Service;
-
 public interface IPlaceService
 {
+    // Frontend-facing methods (existing API shape)
     Task<List<PlaceListItemDto>> GetPlacesAsync(int destinationId, string? type = null, string? tags = null, string? category = null, int? userId = null);
     Task<PlaceDetailDto?> GetPlaceDetailAsync(int id, int? userId = null);
     Task<HotelDetailDto?> GetHotelDetailAsync(int id, int? userId = null);
     Task<List<PlaceListItemDto>> GetHotelsAsync(int destinationId, string? tag = null, int? userId = null);
+
+    // Master detail/review methods
+    Task<GetPlaceDetailsResponseDto> GetPlaceDetailsAsync(int placeId, int? userId);
+    Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId);
+    Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(int placeId);
+    Task<CreatePlaceReviewResponseDto> CreatePlaceReviewAsync(int placeId, int userId, CreatePlaceReviewRequestDto request);
 }

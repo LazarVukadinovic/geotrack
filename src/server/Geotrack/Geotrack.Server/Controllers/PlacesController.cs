@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -55,9 +56,66 @@ public class PlacesController : ControllerBase
         return Ok(detail);
     }
 
+    [HttpGet("{id:int}/events")]
+    public async Task<IActionResult> GetPlaceEvents([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _placeService.GetPlaceEventsAsync(id);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    [HttpGet("{id:int}/reviews")]
+    public async Task<IActionResult> GetPlaceReviews([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _placeService.GetPlaceReviewsAsync(id);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    [HttpPost("{id:int}/reviews")]
+    [Authorize]
+    public async Task<IActionResult> CreatePlaceReview([FromRoute] int id, [FromBody] CreatePlaceReviewRequestDto request)
+    {
+        try
+        {
+            var userId = GetUserId();
+            if (!userId.HasValue)
+                return Unauthorized();
+
+            var result = await _placeService.CreatePlaceReviewAsync(id, userId.Value, request);
+            return CreatedAtAction(nameof(GetPlaceReviews), new { id }, result);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
     private int? GetUserId()
     {
         var claim = User.FindFirst("userId")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private IActionResult MapException(Exception ex)
+    {
+        return ex switch
+        {
+            KeyNotFoundException => NotFound(new { message = ex.Message }),
+            InvalidOperationException => BadRequest(new { message = ex.Message }),
+            _ => StatusCode(500, new { message = ex.Message })
+        };
     }
 }
