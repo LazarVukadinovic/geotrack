@@ -302,25 +302,25 @@ public class UserService : IUserService
         {
             case "destination":
                 if (await _destinationRepository.GetByIDAsync(request.EntityId) == null)
-                    throw new KeyNotFoundException("Destination not found");
+                    throw new KeyNotFoundException("Destinations not found");
                 item.DestinationId = request.EntityId;
                 break;
 
             case "location":
                 if (await _locationRepository.GetByIDAsync(request.EntityId) == null)
-                    throw new KeyNotFoundException("Location not found");
+                    throw new KeyNotFoundException("Locations not found");
                 item.LocationId = request.EntityId;
                 break;
 
             case "place":
                 if (await _placeRepository.GetByIDAsync(request.EntityId) == null)
-                    throw new KeyNotFoundException("Place not found");
+                    throw new KeyNotFoundException("Places not found");
                 item.PlaceId = request.EntityId;
                 break;
 
             case "event":
                 if (await _eventRepository.GetByIDAsync(request.EntityId) == null)
-                    throw new KeyNotFoundException("Event not found");
+                    throw new KeyNotFoundException("Events not found");
                 item.EventId = request.EntityId;
                 break;
         }

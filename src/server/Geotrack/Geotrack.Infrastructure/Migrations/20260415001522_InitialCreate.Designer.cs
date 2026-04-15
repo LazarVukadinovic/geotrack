@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Geotrack.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260411011340_InitialCreate")]
+    [Migration("20260415001522_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -387,8 +387,8 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int>("DestinationId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Rating")
-                        .HasColumnType("integer");
+                    b.Property<double>("Rating")
+                        .HasColumnType("double precision");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -427,8 +427,8 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int>("EventId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Rating")
-                        .HasColumnType("integer");
+                    b.Property<double>("Rating")
+                        .HasColumnType("double precision");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -467,8 +467,8 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int>("LocationId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Rating")
-                        .HasColumnType("integer");
+                    b.Property<double>("Rating")
+                        .HasColumnType("double precision");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -507,8 +507,8 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int>("PlaceId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Rating")
-                        .HasColumnType("integer");
+                    b.Property<double>("Rating")
+                        .HasColumnType("double precision");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

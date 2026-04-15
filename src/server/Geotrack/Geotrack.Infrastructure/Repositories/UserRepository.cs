@@ -114,21 +114,21 @@ namespace Geotrack.Infrastructure.Repositories
                 .FirstOrDefaultAsync(x => x.CollectionId == collectionId && x.Id == itemId);
         }
 
-        public async Task<Dictionary<int, int>> GetLocationRatingsByUserIdAsync(int userId)
+        public async Task<Dictionary<int, double>> GetLocationRatingsByUserIdAsync(int userId)
         {
             return await _context.LocationReviews
                 .Where(x => x.UserId == userId)
                 .ToDictionaryAsync(x => x.LocationId, x => x.Rating);
         }
 
-        public async Task<Dictionary<int, int>> GetPlaceRatingsByUserIdAsync(int userId)
+        public async Task<Dictionary<int, double>> GetPlaceRatingsByUserIdAsync(int userId)
         {
             return await _context.PlaceReviews
                 .Where(x => x.UserId == userId)
                 .ToDictionaryAsync(x => x.PlaceId, x => x.Rating);
         }
 
-        public async Task<Dictionary<int, int>> GetEventRatingsByUserIdAsync(int userId)
+        public async Task<Dictionary<int, double>> GetEventRatingsByUserIdAsync(int userId)
         {
             return await _context.EventReviews
                 .Where(x => x.UserId == userId)

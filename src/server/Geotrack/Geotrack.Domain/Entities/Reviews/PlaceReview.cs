@@ -13,7 +13,7 @@ public class PlaceReview
     public int PlaceId { get; set; }
     public Place Place { get; set; } = null!;
 
-    public int Rating { get; set; } // 1-5
+    public double Rating { get; set; } // 1-5
     public string Comment { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; }

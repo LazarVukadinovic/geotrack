@@ -32,7 +32,7 @@ public interface IUserRepository : IRepository<User>
     Task DeleteUserTagsAsync(IEnumerable<UserTag> userTags);
 
     Task<User?> GetByIdWithExploreDataAsync(int userId);
-    Task<Dictionary<int, int>> GetLocationRatingsByUserIdAsync(int userId);
-    Task<Dictionary<int, int>> GetPlaceRatingsByUserIdAsync(int userId);
-    Task<Dictionary<int, int>> GetEventRatingsByUserIdAsync(int userId);
+    Task<Dictionary<int, double>> GetLocationRatingsByUserIdAsync(int userId);
+    Task<Dictionary<int, double>> GetPlaceRatingsByUserIdAsync(int userId);
+    Task<Dictionary<int, double>> GetEventRatingsByUserIdAsync(int userId);
 }

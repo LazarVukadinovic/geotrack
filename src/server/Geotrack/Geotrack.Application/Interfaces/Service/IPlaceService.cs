@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Geotrack.Application.Interfaces.Service
+﻿using Geotrack.Application.DTOs.Places;
+namespace Geotrack.Application.Interfaces.Service;
+public interface IPlaceService
 {
-    public interface IPlaceService
-    {
-    }
+    Task<GetPlaceDetailsResponseDto> GetPlaceDetailsAsync(int placeId, int? userId);
+    Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId);
+    Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(int placeId);
+    Task<CreatePlaceReviewResponseDto> CreatePlaceReviewAsync(int placeId, int userId, CreatePlaceReviewRequestDto request);
 }
