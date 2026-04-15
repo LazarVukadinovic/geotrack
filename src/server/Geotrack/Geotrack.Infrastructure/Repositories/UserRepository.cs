@@ -15,16 +15,10 @@ namespace Geotrack.Infrastructure.Repositories
             _context = context;
         }
 
-        public async Task<bool> ExistsAsync(string username, string email)
+        public async Task<bool> ExistsByEmailAsync(string email)
         {
             return await _context.Users
-                .AnyAsync(u => u.Username == username || u.Email == email);
-        }
-
-        public async Task<User?> GetByUsernameAsync(string username)
-        {
-            return await _context.Users
-                .FirstOrDefaultAsync(u => u.Username == username);
+                .AnyAsync(u => u.Email == email);
         }
 
         public async Task<User?> GetByEmailAsync(string email)

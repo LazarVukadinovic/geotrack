@@ -21,7 +21,7 @@ public class AuthService : IAuthService
 
     public async Task<RegisterResponseDto> RegisterAsync(RegisterRequestDto request)
     {
-        if (string.IsNullOrWhiteSpace(request.Username) ||
+        if (string.IsNullOrWhiteSpace(request.FullName) ||
             string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password))
             throw new InvalidOperationException("All fields are required");
@@ -29,16 +29,21 @@ public class AuthService : IAuthService
         if (!IsValidEmail(request.Email))
             throw new InvalidOperationException("Invalid email format");
 
-        var exists = await _userRepository.ExistsAsync(request.Username.Trim(), request.Email.Trim());
+        var exists = await _userRepository.ExistsByEmailAsync(request.Email.Trim());
         if (exists)
             throw new InvalidOperationException("User already exists");
 
+        // Split full name into first/last name
+        var nameParts = request.FullName.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        var firstName = nameParts.Length > 0 ? nameParts[0] : string.Empty;
+        var lastName = nameParts.Length > 1 ? nameParts[1] : string.Empty;
+
         var user = new User
         {
-            Username = request.Username.Trim(),
+            Username = request.Email.Trim(), // auto-generated from email
             Email = request.Email.Trim(),
-            FirstName = string.Empty,
-            LastName = string.Empty,
+            FirstName = firstName,
+            LastName = lastName,
             PhoneNumber = string.Empty,
             CreatedAt = DateTime.UtcNow
         };

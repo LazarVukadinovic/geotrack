@@ -6,8 +6,7 @@ namespace Geotrack.Application.Interfaces.Repository;
 
 public interface IUserRepository : IRepository<User>
 {
-    Task<bool> ExistsAsync(string username, string email);
-    Task<User?> GetByUsernameAsync(string username);
+    Task<bool> ExistsByEmailAsync(string email);
     Task<User?> GetByEmailAsync(string email);
 
     Task<User?> GetByIdWithCollectionsAsync(int userId);
