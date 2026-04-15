@@ -1,5 +1,4 @@
 import { Component, OnInit, OnDestroy, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, { Map } from 'maplibre-gl';
@@ -10,7 +9,7 @@ const MAP_STYLE_URL = '/map-style.json';
 
 @Component({
   selector: 'app-home',
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './home.component.html',
   styleUrl: './home.component.css',
 })

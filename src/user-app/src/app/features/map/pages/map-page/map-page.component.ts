@@ -332,7 +332,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.map.addLayer({
       id: this.ROUTE_LAYER, type: 'line', source: this.ROUTE_SOURCE,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': '#e8722a', 'line-width': 5, 'line-opacity': 1 },
+      paint: { 'line-color': '#e8570a', 'line-width': 5, 'line-opacity': 1 },
     });
   }
 
@@ -358,12 +358,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.map.addSource(this.USER_SOURCE, { type: 'geojson', data: geojson });
     this.map.addLayer({
       id: this.USER_RING, type: 'circle', source: this.USER_SOURCE,
-      paint: { 'circle-radius': 18, 'circle-color': '#e8722a', 'circle-opacity': 0.2,
-               'circle-stroke-width': 1.5, 'circle-stroke-color': '#e8722a', 'circle-stroke-opacity': 0.4 },
+      paint: { 'circle-radius': 18, 'circle-color': '#e8570a', 'circle-opacity': 0.2,
+               'circle-stroke-width': 1.5, 'circle-stroke-color': '#e8570a', 'circle-stroke-opacity': 0.4 },
     });
     this.map.addLayer({
       id: this.USER_LAYER, type: 'circle', source: this.USER_SOURCE,
-      paint: { 'circle-radius': 9, 'circle-color': '#e8722a', 'circle-stroke-width': 3,
+      paint: { 'circle-radius': 9, 'circle-color': '#e8570a', 'circle-stroke-width': 3,
                'circle-stroke-color': '#ffffff', 'circle-opacity': 1, 'circle-stroke-opacity': 1 },
     });
   }

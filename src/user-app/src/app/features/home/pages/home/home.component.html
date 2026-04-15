@@ -38,43 +38,47 @@
           [(ngModel)]="searchQuery"
           (input)="onSearch($any($event.target).value)"
           (keydown.escape)="clearSearch()"
-          class="w-full pl-10 pr-4 py-4 bg-white rounded-2xl text-sm text-slate-800 placeholder-slate-400 outline-none shadow-2xl focus:ring-2 focus:ring-[#e8722a] transition-all duration-200"
+          class="w-full pl-10 pr-4 py-4 bg-white rounded-2xl text-sm text-slate-800 placeholder-slate-400 outline-none shadow-2xl focus:ring-2 focus:ring-[#e8570a] transition-all duration-200"
         />
       </div>
 
       <!-- Search results dropdown -->
-      <div *ngIf="searchResults.length > 0"
-        class="mt-2 bg-white rounded-2xl shadow-2xl overflow-hidden">
-        <ul>
-          <li
-            *ngFor="let result of searchResults"
-            (click)="selectResult(result)"
-            class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 active:bg-slate-100 cursor-pointer border-b border-slate-50 last:border-0 transition-colors duration-150">
-            <div class="flex-none w-7 h-7 bg-orange-50 rounded-full flex items-center justify-center">
-              <svg class="w-3.5 h-3.5 text-[#e8722a]" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5z"/>
-              </svg>
-            </div>
-            <div class="min-w-0">
-              <p class="text-sm font-semibold text-slate-800 truncate">{{ getResultName(result) }}</p>
-              <p class="text-xs text-slate-400 truncate">{{ getResultSubtitle(result) }}</p>
-            </div>
-          </li>
-        </ul>
-      </div>
+      @if (searchResults.length > 0) {
+        <div class="mt-2 bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <ul>
+            @for (result of searchResults; track result.place_id) {
+              <li
+                (click)="selectResult(result)"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 active:bg-slate-100 cursor-pointer border-b border-slate-50 last:border-0 transition-colors duration-150">
+                <div class="flex-none w-7 h-7 bg-orange-50 rounded-full flex items-center justify-center">
+                  <svg class="w-3.5 h-3.5 text-[#e8570a]" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5z"/>
+                  </svg>
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-slate-800 truncate">{{ getResultName(result) }}</p>
+                  <p class="text-xs text-slate-400 truncate">{{ getResultSubtitle(result) }}</p>
+                </div>
+              </li>
+            }
+          </ul>
+        </div>
+      }
     </div>
     <!-- Use my location -->
     <button (click)="requestLocation()"
       [disabled]="isLocating"
       class="flex items-center gap-1.5 text-white text-sm font-semibold transition-opacity"
       [class.opacity-60]="isLocating">
-      <div *ngIf="isLocating"
-        class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin">
-      </div>
-      <svg *ngIf="!isLocating" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
-      </svg>
+      @if (isLocating) {
+        <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+      }
+      @if (!isLocating) {
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+        </svg>
+      }
       {{ isLocating ? 'Getting location…' : 'Use my current location' }}
     </button>
   </div>
