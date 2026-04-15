@@ -94,7 +94,7 @@
 
   <!-- FAB -->
   <button type="button" (click)="onAddPlace()"
-    class="fixed bottom-8 right-6 w-14 h-14 bg-[#e8722a] rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform">
+    class="fixed bottom-8 right-6 w-14 h-14 bg-[#e8570a] rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform">
     <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
       <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/>
     </svg>
@@ -161,7 +161,7 @@
       Collection Name
     </label>
     <div class="bg-slate-50 border border-slate-300 rounded-2xl flex items-center gap-3 px-4 py-3.5 mb-6"
-         [class.border-[#e8722a]]="renameValue().length > 0"
+         [class.border-[#e8570a]]="renameValue().length > 0"
          [class.bg-orange-50]="renameValue().length > 0">
       <svg class="w-4 h-4 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 12h12M3 17h8"/>
@@ -178,7 +178,7 @@
 
     <button type="button" (click)="onRenameSave()"
       [disabled]="renameValue().trim().length === 0"
-      class="w-full py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base tracking-wide
+      class="w-full py-4 bg-[#e8570a] rounded-3xl text-white font-bold text-base tracking-wide
              transition-all duration-200 mb-3 disabled:opacity-45 active:scale-[0.98]">
       Save
     </button>
