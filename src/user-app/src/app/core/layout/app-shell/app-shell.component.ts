@@ -4,6 +4,8 @@ import { ActivatedRoute, NavigationEnd, NavigationStart, Router, RouterOutlet } 
 import { filter } from 'rxjs/operators';
 import { BottomNavComponent } from '../../../shared/components/bottom-nav/bottom-nav.component';
 import { AuthService } from '../../services/auth.service';
+import { TokenStorageService } from '../../services/token-storage.service';
+import { TokenRefreshService } from '../../services/token-refresh.service';
 
 // URL prefixes that require an authenticated session. When isLoggedIn() flips
 // to false mid-session (e.g. an expired token triggers a 401 that the
@@ -23,10 +25,12 @@ const AUTH_REQUIRED_PREFIXES = [
   styleUrl: './app-shell.component.scss',
 })
 export class AppShellComponent implements OnInit {
-  private readonly router = inject(Router);
-  private readonly destroyRef = inject(DestroyRef);
-  private readonly authService = inject(AuthService);
-  protected readonly showBottomNav = signal(true);
+  private readonly router           = inject(Router);
+  private readonly destroyRef       = inject(DestroyRef);
+  private readonly authService      = inject(AuthService);
+  private readonly tokenStorage     = inject(TokenStorageService);
+  private readonly tokenRefreshSvc  = inject(TokenRefreshService);
+  protected readonly showBottomNav  = signal(true);
 
   private readonly viewport = viewChild<ElementRef<HTMLElement>>('viewport');
   private currentTrigger: 'imperative' | 'popstate' | 'hashchange' = 'imperative';
@@ -63,6 +67,12 @@ export class AppShellComponent implements OnInit {
           }
         } else {
           this.syncBottomNav();
+          // Proactively refresh when the access token is near expiry so that
+          // navigation to any page is never followed immediately by a 401.
+          // Only triggered when logged in and token is within the 2-minute buffer.
+          if (this.authService.isLoggedIn() && this.tokenStorage.isAccessTokenNearExpiry()) {
+            this.tokenRefreshSvc.refresh().subscribe({ error: () => {} });
+          }
           const el = this.viewport()?.nativeElement;
           if (!el) return;
           if (this.currentTrigger === 'popstate') {

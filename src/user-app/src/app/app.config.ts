@@ -6,12 +6,13 @@ import {
 } from '@angular/core';
 import { provideRouter, withEnabledBlockingInitialNavigation } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { catchError, firstValueFrom, of } from 'rxjs';
+import { catchError, firstValueFrom, of, switchMap } from 'rxjs';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './core/services/auth.interceptor';
 import { authErrorInterceptor } from './core/services/auth-error.interceptor';
 import { TokenStorageService } from './core/services/token-storage.service';
+import { TokenRefreshService } from './core/services/token-refresh.service';
 import { AuthService } from './core/services/auth.service';
 import { UserService } from './core/services/user.service';
 
@@ -19,36 +20,38 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
 
-    // withEnabledBlockingInitialNavigation ensures the router does not begin
-    // its first navigation until all APP_INITIALIZER factories have resolved.
-    // This means no component ever renders before the startup token validation
-    // and user-profile fetch below have completed.
+    // withEnabledBlockingInitialNavigation ensures no component renders before
+    // the startup initializer below has resolved.  That means isLoggedIn() and
+    // the user profile are both settled before any route guard or page runs.
     provideRouter(routes, withEnabledBlockingInitialNavigation()),
 
-    // authInterceptor must be first so it attaches the Authorization header;
-    // authErrorInterceptor runs next and can therefore detect that a 401
-    // came back on an authenticated request (req.headers.has('Authorization')).
+    // authInterceptor first (attaches Authorization header / proactive refresh);
+    // authErrorInterceptor second (retries with a fresh token on 401).
     provideHttpClient(withInterceptors([authInterceptor, authErrorInterceptor])),
 
-    // On every cold start, if a token is present in storage (Remember Me or
-    // current-session):
-    //  1. Call /api/user/me — this validates the token AND populates UserService
-    //     with the user's profile data before any route/component renders.
-    //  2. If the backend rejects the token (401 — expired JWT), log out so that
-    //     isLoggedIn() is false before the router starts navigation.
+    // ── Startup session restore ─────────────────────────────────────────────
+    // On every cold start:
+    //  1. If a refresh token is present in storage (Remember Me or session),
+    //     exchange it for a new access token via POST /api/auth/refresh.
+    //  2. On success, load the user profile so every page has fullName/email
+    //     ready on first render without an additional round-trip.
+    //  3. On refresh failure (token expired / revoked), clear all local state
+    //     so isLoggedIn() is false before the router begins navigation.
     provideAppInitializer(() => {
-      const tokenStorage = inject(TokenStorageService);
-      const authService  = inject(AuthService);
-      const userService  = inject(UserService);
+      const tokenStorage    = inject(TokenStorageService);
+      const tokenRefreshSvc = inject(TokenRefreshService);
+      const authService     = inject(AuthService);
+      const userService     = inject(UserService);
 
-      if (!tokenStorage.hasToken()) return;
+      if (!tokenStorage.hasRefreshToken()) return;
 
       return firstValueFrom(
-        userService.load().pipe(
+        tokenRefreshSvc.refresh().pipe(
+          switchMap(() => userService.load()),
           catchError(() => {
-            authService.logout();
+            authService.clearSession();
             return of(null);
-          })
+          }),
         )
       );
     }),
