@@ -5,7 +5,7 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { provideRouter, withEnabledBlockingInitialNavigation } from '@angular/router';
-import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { catchError, firstValueFrom, of } from 'rxjs';
 
 import { routes } from './app.routes';
@@ -13,6 +13,7 @@ import { authInterceptor } from './core/services/auth.interceptor';
 import { authErrorInterceptor } from './core/services/auth-error.interceptor';
 import { TokenStorageService } from './core/services/token-storage.service';
 import { AuthService } from './core/services/auth.service';
+import { UserService } from './core/services/user.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -20,9 +21,8 @@ export const appConfig: ApplicationConfig = {
 
     // withEnabledBlockingInitialNavigation ensures the router does not begin
     // its first navigation until all APP_INITIALIZER factories have resolved.
-    // This means ProfileTabComponent is never rendered with a stale "logged in"
-    // state from an expired token — by the time the route activates, the
-    // startup token validation below has already corrected isLoggedIn.
+    // This means no component ever renders before the startup token validation
+    // and user-profile fetch below have completed.
     provideRouter(routes, withEnabledBlockingInitialNavigation()),
 
     // authInterceptor must be first so it attaches the Authorization header;
@@ -31,18 +31,20 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(withInterceptors([authInterceptor, authErrorInterceptor])),
 
     // On every cold start, if a token is present in storage (Remember Me or
-    // current-session), verify it against the backend before any route renders.
-    // If the backend rejects it (401 — e.g. expired JWT), log the user out so
-    // that isLoggedIn() is false before the router starts navigation.
+    // current-session):
+    //  1. Call /api/user/me — this validates the token AND populates UserService
+    //     with the user's profile data before any route/component renders.
+    //  2. If the backend rejects the token (401 — expired JWT), log out so that
+    //     isLoggedIn() is false before the router starts navigation.
     provideAppInitializer(() => {
       const tokenStorage = inject(TokenStorageService);
       const authService  = inject(AuthService);
-      const http         = inject(HttpClient);
+      const userService  = inject(UserService);
 
       if (!tokenStorage.hasToken()) return;
 
       return firstValueFrom(
-        http.get<unknown>('/api/user/me').pipe(
+        userService.load().pipe(
           catchError(() => {
             authService.logout();
             return of(null);
