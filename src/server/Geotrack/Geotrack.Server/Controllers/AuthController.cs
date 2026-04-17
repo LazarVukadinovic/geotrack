@@ -22,10 +22,10 @@ public class AuthController : ControllerBase
         {
             await _authService.RegisterAsync(request);
 
-            // Auto-login after registration so the interests page can save tags
+            // Auto-login after registration so the interests page can save tags.
             var loginDto = new LoginRequestDto
             {
-                Email = request.Email,
+                Email    = request.Email,
                 Password = request.Password
             };
             var loginResponse = await _authService.LoginAsync(loginDto);
@@ -54,5 +54,34 @@ public class AuthController : ControllerBase
         {
             return Unauthorized(new { message = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Exchange a valid refresh token for a new access token + new refresh token.
+    /// The supplied refresh token is immediately revoked (rotation).
+    /// </summary>
+    [HttpPost("refresh")]
+    public async Task<ActionResult<RefreshResponseDto>> Refresh([FromBody] RefreshRequestDto request)
+    {
+        try
+        {
+            var response = await _authService.RefreshAsync(request);
+            return Ok(response);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Revoke a refresh token (manual logout).
+    /// Always returns 204 — callers must not rely on the outcome for UX decisions.
+    /// </summary>
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] LogoutRequestDto request)
+    {
+        await _authService.LogoutAsync(request);
+        return NoContent();
     }
 }

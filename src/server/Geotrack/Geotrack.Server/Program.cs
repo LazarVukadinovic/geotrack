@@ -44,6 +44,7 @@ builder.Services.AddScoped<IExploreService, ExploreService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
 // builder.Services.AddScoped<UserService>();
 // builder.Services.AddScoped<RoleService>();

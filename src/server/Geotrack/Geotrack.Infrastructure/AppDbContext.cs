@@ -50,6 +50,8 @@ public class AppDbContext : DbContext
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
 
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
     }
@@ -742,6 +744,33 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Tag>(entity =>
         {
             entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("RefreshTokens");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Token)
+                .IsRequired()
+                .HasMaxLength(128);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.ExpiresAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Fast lookup by token value
+            entity.HasIndex(x => x.Token).IsUnique();
+            // Fast lookup of active tokens per user
+            entity.HasIndex(x => new { x.UserId, x.IsRevoked, x.ExpiresAt });
         });
     }
 }
