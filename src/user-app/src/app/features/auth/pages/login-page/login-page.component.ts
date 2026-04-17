@@ -7,7 +7,9 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { UserService } from '../../../../core/services/user.service';
 
 interface AuthResponse {
-  token: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
 }
 
 @Component({
@@ -50,7 +52,7 @@ export class LoginPageComponent {
       })
       .subscribe({
         next: (response) => {
-          this.authService.login(response.token, this.rememberMe);
+          this.authService.login(response.accessToken, response.refreshToken, this.rememberMe);
           // Fetch the user profile immediately after login so that the
           // Profile page already has fullName/email on first render —
           // no manual refresh needed.

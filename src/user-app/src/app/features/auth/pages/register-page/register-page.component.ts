@@ -81,7 +81,7 @@ export class RegisterPageComponent {
     this.isLoading = true;
 
     this.http
-      .post<{ token: string }>('/api/auth/register', {
+      .post<{ accessToken: string; refreshToken: string; expiresIn: number }>('/api/auth/register', {
         fullName: this.fullName.trim(),
         email: this.email.trim(),
         password: this.password,
@@ -89,8 +89,10 @@ export class RegisterPageComponent {
       .subscribe({
         next: (res) => {
           this.isLoading = false;
-          if (res.token) {
-            this.authService.login(res.token);
+          if (res.accessToken) {
+            // Registration always defaults to Remember Me = true so the new
+            // session survives a browser restart (the user can adjust in settings).
+            this.authService.login(res.accessToken, res.refreshToken, true);
           }
           this.router.navigate(['/register/interests']);
         },
