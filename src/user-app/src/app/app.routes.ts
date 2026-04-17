@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { guestGuard } from './core/guards/guest.guard';
+import { authGuard } from './core/guards/auth.guard';
 export const routes: Routes = [
   {
     path: '',
@@ -44,18 +45,21 @@ export const routes: Routes = [
       },
       {
         path: 'profile/edit',
+        canActivate: [authGuard],
         loadComponent: () =>
           import('./features/profile/pages/edit-profile/edit-profile.component').then(m => m.EditProfileComponent),
         data: { hideBottomNav: true },
       },
       {
         path: 'profile/collections',
+        canActivate: [authGuard],
         loadComponent: () =>
           import('./features/profile/pages/my-collections-page/my-collections-page.component').then(m => m.MyCollectionsPageComponent),
         data: { hideBottomNav: true },
       },
       {
         path: 'profile/collections/:id',
+        canActivate: [authGuard],
         loadComponent: () =>
           import('./features/profile/pages/collection-detail/collection-detail.component').then(m => m.CollectionDetailComponent),
         data: { hideBottomNav: true },
@@ -64,12 +68,14 @@ export const routes: Routes = [
       // ── Settings ─────────────────────────────────────────────────────────
       {
         path: 'settings',
+        canActivate: [authGuard],
         loadComponent: () =>
           import('./features/settings/pages/settings/settings.component').then(m => m.SettingsComponent),
         data: { hideBottomNav: true },
       },
       {
         path: 'settings/interests',
+        canActivate: [authGuard],
         loadComponent: () =>
           import('./features/settings/pages/my-interests/my-interests.component').then(m => m.MyInterestsComponent),
         data: { hideBottomNav: true },

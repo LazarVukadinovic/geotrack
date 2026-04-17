@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
+import { UserService } from '../../../../core/services/user.service';
 
 interface AuthResponse {
   token: string;
@@ -28,6 +29,7 @@ export class LoginPageComponent {
     private router: Router,
     private http: HttpClient,
     private authService: AuthService,
+    private userService: UserService,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -48,9 +50,21 @@ export class LoginPageComponent {
       })
       .subscribe({
         next: (response) => {
-          this.isLoading = false;
           this.authService.login(response.token, this.rememberMe);
-          this.router.navigate(['/explore']);
+          // Fetch the user profile immediately after login so that the
+          // Profile page already has fullName/email on first render —
+          // no manual refresh needed.
+          this.userService.load().subscribe({
+            next: () => {
+              this.isLoading = false;
+              this.router.navigate(['/profile']);
+            },
+            error: () => {
+              // Profile fetch failed but the user is logged in; navigate anyway.
+              this.isLoading = false;
+              this.router.navigate(['/profile']);
+            },
+          });
         },
         error: (err: HttpErrorResponse) => {
           this.isLoading = false;

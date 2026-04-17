@@ -1,8 +1,19 @@
-import { Component, DestroyRef, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, effect, inject, OnInit, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, NavigationEnd, NavigationStart, Router, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { BottomNavComponent } from '../../../shared/components/bottom-nav/bottom-nav.component';
+import { AuthService } from '../../services/auth.service';
+
+// URL prefixes that require an authenticated session. When isLoggedIn() flips
+// to false mid-session (e.g. an expired token triggers a 401 that the
+// authErrorInterceptor catches and calls logout()), any user currently on one
+// of these pages is redirected to /profile immediately — no manual refresh needed.
+const AUTH_REQUIRED_PREFIXES = [
+  '/profile/edit',
+  '/profile/collections',
+  '/settings',
+];
 
 @Component({
   selector: 'app-shell',
@@ -14,11 +25,26 @@ import { BottomNavComponent } from '../../../shared/components/bottom-nav/bottom
 export class AppShellComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly authService = inject(AuthService);
   protected readonly showBottomNav = signal(true);
 
   private readonly viewport = viewChild<ElementRef<HTMLElement>>('viewport');
   private currentTrigger: 'imperative' | 'popstate' | 'hashchange' = 'imperative';
   private readonly scrollHistory = new Map<string, number>();
+
+  constructor() {
+    // React to runtime auth invalidation (expired token → 401 → logout()).
+    // Route guards only run on navigation; this effect handles the case where
+    // the token expires while the user is already on a protected page.
+    effect(() => {
+      if (!this.authService.isLoggedIn()) {
+        const url = this.router.url;
+        if (AUTH_REQUIRED_PREFIXES.some(prefix => url.startsWith(prefix))) {
+          this.router.navigate(['/profile']);
+        }
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.router.events
