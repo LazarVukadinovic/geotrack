@@ -81,17 +81,17 @@
           class="flex-none w-[160px] bg-white rounded-2xl shadow-sm overflow-hidden cursor-pointer active:scale-[0.97] transition-transform">
           <!-- cover mosaic -->
           <div class="relative w-full h-[120px] overflow-hidden flex">
-            @if (col.places.length === 0) { <div class="w-full h-full bg-slate-100 flex items-center justify-center">...</div> }
-            @if (col.places.length === 1) { <img [src]="col.places[0].image" class="w-full h-full object-cover"/> }
-            @if (col.places.length === 2) {
-              <img [src]="col.places[0].image" class="w-1/2 h-full object-cover border-r-2 border-white"/>
-              <img [src]="col.places[1].image" class="w-1/2 h-full object-cover"/>
+            @if (col.coverImages.length === 0) { <div class="w-full h-full bg-slate-100 flex items-center justify-center">...</div> }
+            @if (col.coverImages.length === 1) { <img [src]="col.coverImages[0]" class="w-full h-full object-cover"/> }
+            @if (col.coverImages.length === 2) {
+              <img [src]="col.coverImages[0]" class="w-1/2 h-full object-cover border-r-2 border-white"/>
+              <img [src]="col.coverImages[1]" class="w-1/2 h-full object-cover"/>
             }
-            @if (col.places.length >= 3) {
-              <img [src]="col.places[0].image" class="w-1/2 h-full object-cover border-r-2 border-white"/>
+            @if (col.coverImages.length >= 3) {
+              <img [src]="col.coverImages[0]" class="w-1/2 h-full object-cover border-r-2 border-white"/>
               <div class="w-1/2 h-full flex flex-col">
-                <img [src]="col.places[1].image" class="w-full h-1/2 object-cover border-b-2 border-white"/>
-                <img [src]="col.places[2].image" class="w-full h-1/2 object-cover"/>
+                <img [src]="col.coverImages[1]" class="w-full h-1/2 object-cover border-b-2 border-white"/>
+                <img [src]="col.coverImages[2]" class="w-full h-1/2 object-cover"/>
               </div>
             }
             <span class="absolute top-1.5 right-1.5 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-sm">
@@ -100,7 +100,7 @@
           </div>
           <div class="px-2.5 py-2">
             <p class="text-[14px] font-semibold text-slate-800 truncate">{{ col.title }}</p>
-            <p class="text-[12px] text-slate-500">{{ col.places.length }} {{ col.places.length === 1 ? 'place' : 'places' }}</p>
+            <p class="text-[12px] text-slate-500">{{ col.itemsCount }} {{ col.itemsCount === 1 ? 'place' : 'places' }}</p>
           </div>
         </div>
       }

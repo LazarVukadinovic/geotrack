@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { UserService } from '../../../../core/services/user.service';
 
 interface MeResponse {
   id: number;
@@ -37,11 +38,11 @@ export class EditProfileComponent {
     private route: ActivatedRoute,
     private http: HttpClient,
     private cdr: ChangeDetectorRef,
+    private userService: UserService,
   ) {
     this.route.queryParams.subscribe(p => {
       if (p['from']) this.returnTo = '/' + p['from'];
     });
-    // Load profile from backend
     this.http.get<MeResponse>('/api/user/me').subscribe({
       next: (res) => {
         const name = `${res.firstName} ${res.lastName}`.trim();
@@ -53,15 +54,8 @@ export class EditProfileComponent {
         this.cdr.detectChanges();
       },
       error: () => {
-        const saved = localStorage.getItem('userProfile');
-        if (saved) {
-          const p = JSON.parse(saved);
-          this.fullName = p.fullName ?? '';
-          this.email = p.email ?? '';
-          this.phone = p.phone ?? '';
-          this.location = p.location ?? '';
-        }
         this.isLoading = false;
+        this.saveError = 'Could not load your profile. Please try again.';
         this.cdr.detectChanges();
       },
     });
@@ -86,18 +80,13 @@ export class EditProfileComponent {
       location: this.location,
     }).subscribe({
       next: () => {
-        // Also persist to localStorage for fallback
-        localStorage.setItem('userProfile', JSON.stringify({
-          fullName: this.fullName,
-          email: this.email,
-          phone: this.phone,
-          location: this.location,
-        }));
-        this.isSaving = false;
-        this.saveSuccess = true;
-        this.cdr.detectChanges();
-        // Brief delay to show success before navigating
-        setTimeout(() => this.router.navigate([this.returnTo]), 600);
+        // Refresh the canonical UserService so Profile/Settings reflect the
+        // change immediately without a page reload. Navigate once the
+        // profile reload completes (success or failure).
+        this.userService.load().subscribe({
+          next: () => this.finishSaveSuccess(),
+          error: () => this.finishSaveSuccess(),
+        });
       },
       error: () => {
         this.isSaving = false;
@@ -105,6 +94,13 @@ export class EditProfileComponent {
         this.cdr.detectChanges();
       },
     });
+  }
+
+  private finishSaveSuccess(): void {
+    this.isSaving = false;
+    this.saveSuccess = true;
+    this.cdr.detectChanges();
+    setTimeout(() => this.router.navigate([this.returnTo]), 600);
   }
 
   goBack(): void {

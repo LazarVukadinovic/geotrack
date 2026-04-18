@@ -26,7 +26,7 @@ export class ProfileComponent {
     return this.collService.collections();
   }
 
-  onCollectionCreated(id: string): void {
+  onCollectionCreated(id: number): void {
     this.router.navigate(['/profile/collections', id]);
   }
 
@@ -34,6 +34,6 @@ export class ProfileComponent {
   editProfile():       void { this.router.navigate(['/profile/edit']); }
   goToInterests():     void { this.router.navigate(['/settings/interests'], { queryParams: { from: 'profile' } }); }
   goToContributions(): void { this.router.navigate(['/contributions']); }
-  goToCollection(id: string): void { this.router.navigate(['/profile/collections', id]); }
+  goToCollection(id: number): void { this.router.navigate(['/profile/collections', id]); }
   seeAllCollections(): void { this.router.navigate(['/profile/collections']); }
 }
