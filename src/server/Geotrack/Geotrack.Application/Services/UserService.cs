@@ -180,7 +180,8 @@ public class UserService : IUserService
                 UserId = collection.UserId,
                 CreatedAt = collection.CreatedAt,
                 UpdatedAt = collection.UpdatedAt,
-                ItemsCount = await _userRepository.GetCollectionItemsCountAsync(collection.Id)
+                ItemsCount = await _userRepository.GetCollectionItemsCountAsync(collection.Id),
+                CoverImages = await _userRepository.GetCollectionCoverImagesAsync(collection.Id, 3)
             });
         }
 
@@ -388,6 +389,7 @@ public class UserService : IUserService
                 DestinationId = item.DestinationId,
                 Name = item.Destination.Name,
                 Description = item.Destination.Description,
+                ImageUrl = item.Destination.ImageUrl,
                 Latitude = item.Destination.Latitude,
                 Longitude = item.Destination.Longitude,
                 CreatedAt = item.Destination.CreatedAt,
@@ -404,6 +406,7 @@ public class UserService : IUserService
                 EntityType = "location",
                 LocationId = item.LocationId,
                 Name = item.Location.Name,
+                ImageUrl = item.Location.ImageUrl,
                 Latitude = item.Location.Latitude,
                 Longitude = item.Location.Longitude,
                 CreatedAt = item.Location.CreatedAt,
@@ -421,6 +424,7 @@ public class UserService : IUserService
                 PlaceId = item.PlaceId,
                 Name = item.Place.Name,
                 Description = item.Place.Description,
+                ImageUrl = item.Place.ImageUrl,
                 Latitude = item.Place.Latitude,
                 Longitude = item.Place.Longitude,
                 ContactEmail = item.Place.ContactEmail,
@@ -440,6 +444,7 @@ public class UserService : IUserService
                 EventId = item.EventId,
                 Name = item.Event.Name,
                 Description = item.Event.Description,
+                ImageUrl = item.Event.ImageUrl,
                 StartDate = item.Event.StartDate,
                 EndDate = item.Event.EndDate,
                 CreatedAt = item.Event.CreatedAt,

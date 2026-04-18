@@ -85,6 +85,27 @@ namespace Geotrack.Infrastructure.Repositories
                 .CountAsync(ci => ci.CollectionId == collectionId);
         }
 
+        public async Task<List<string>> GetCollectionCoverImagesAsync(int collectionId, int maxCount)
+        {
+            if (maxCount <= 0) return new List<string>();
+
+            var urls = await _context.CollectionItems
+                .Where(ci => ci.CollectionId == collectionId)
+                .OrderByDescending(ci => ci.CreatedAt)
+                .Select(ci =>
+                    ci.Place != null ? ci.Place.ImageUrl :
+                    ci.Event != null ? ci.Event.ImageUrl :
+                    ci.Destination != null ? ci.Destination.ImageUrl :
+                    ci.Location != null ? ci.Location.ImageUrl : null)
+                .ToListAsync();
+
+            return urls
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Select(u => u!)
+                .Take(maxCount)
+                .ToList();
+        }
+
         public async Task<List<Tag>> GetTagsByIdsAsync(IEnumerable<int> tagIds)
         {
             var ids = tagIds.Distinct().ToList();

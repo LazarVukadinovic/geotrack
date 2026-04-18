@@ -17,6 +17,7 @@ public interface IUserRepository : IRepository<User>
     Task<Collection?> GetCollectionByIdWithItemsAsync(int userId, int collectionId);
 
     Task<int> GetCollectionItemsCountAsync(int collectionId);
+    Task<List<string>> GetCollectionCoverImagesAsync(int collectionId, int maxCount);
 
     Task<List<Tag>> GetTagsByIdsAsync(IEnumerable<int> tagIds);
 
