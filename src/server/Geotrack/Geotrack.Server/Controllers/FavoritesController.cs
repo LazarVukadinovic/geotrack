@@ -24,7 +24,12 @@ public class FavoritesController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var result = await _favoriteService.ToggleAsync(userId.Value, dto);
-        return Ok(result);
+        return result.Status switch
+        {
+            FavoriteToggleStatus.InvalidEntityType => BadRequest(new { error = "Invalid entityType. Allowed: 'place', 'event'." }),
+            FavoriteToggleStatus.EntityNotFound    => NotFound(new { error = "Target entity not found." }),
+            _ => Ok(new FavoriteToggleResponseDto { IsSaved = result.IsSaved }),
+        };
     }
 
     [HttpGet]

@@ -15,27 +15,43 @@ public class FavoriteService : IFavoriteService
         _db = db;
     }
 
-    public async Task<FavoriteToggleResponseDto> ToggleAsync(int userId, FavoriteToggleDto dto)
+    public async Task<FavoriteToggleResult> ToggleAsync(int userId, FavoriteToggleDto dto)
     {
+        var type = dto.EntityType?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        if (type != "place" && type != "event")
+        {
+            return new FavoriteToggleResult { Status = FavoriteToggleStatus.InvalidEntityType };
+        }
+
+        var exists = type == "place"
+            ? await _db.Places.AnyAsync(p => p.Id == dto.EntityId)
+            : await _db.Events.AnyAsync(e => e.Id == dto.EntityId);
+
+        if (!exists)
+        {
+            return new FavoriteToggleResult { Status = FavoriteToggleStatus.EntityNotFound };
+        }
+
         var existing = await _db.Favorites.FirstOrDefaultAsync(
-            f => f.UserId == userId && f.EntityType == dto.EntityType && f.EntityId == dto.EntityId);
+            f => f.UserId == userId && f.EntityType == type && f.EntityId == dto.EntityId);
 
         if (existing != null)
         {
             _db.Favorites.Remove(existing);
             await _db.SaveChangesAsync();
-            return new FavoriteToggleResponseDto { IsSaved = false };
+            return new FavoriteToggleResult { Status = FavoriteToggleStatus.Success, IsSaved = false };
         }
 
         _db.Favorites.Add(new Favorite
         {
             UserId = userId,
-            EntityType = dto.EntityType,
+            EntityType = type,
             EntityId = dto.EntityId,
             CreatedAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync();
-        return new FavoriteToggleResponseDto { IsSaved = true };
+        return new FavoriteToggleResult { Status = FavoriteToggleStatus.Success, IsSaved = true };
     }
 
     public async Task<HashSet<int>> GetFavoriteIdsAsync(int userId, string entityType)
