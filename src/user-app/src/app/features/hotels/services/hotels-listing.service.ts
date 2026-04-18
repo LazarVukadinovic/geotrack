@@ -1,6 +1,9 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
+import { DestinationService } from '../../../core/services/destination.service';
+import { ExploreService } from '../../explore/services/explore.service';
 import type { HotelListItem } from '../models/hotels-listing.model';
 import { MOCK_HOTELS_LISTING } from '../data/mock-hotels-listing.data';
 
@@ -24,9 +27,15 @@ interface ApiPlaceListItem {
 @Injectable({ providedIn: 'root' })
 export class HotelsListingService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
+  private readonly destinationSvc = inject(DestinationService);
+  // Ensure ExploreService is instantiated so its LocationService effect can resolve
+  // the destination id on a deep-link cold-start.
+  private readonly exploreSvc = inject(ExploreService);
   private readonly _hotels = signal<HotelListItem[]>([]);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _loaded = signal(false);
+  private loadedDestinationId: number | null = null;
 
   readonly hotels = computed(() => {
     const overrides = this._savedOverrides();
@@ -37,7 +46,16 @@ export class HotelsListingService {
   });
 
   constructor() {
-    this.http.get<ApiPlaceListItem[]>('/api/places/hotels').subscribe({
+    void this.exploreSvc;
+    effect(() => {
+      const destId = this.destinationSvc.id();
+      if (destId == null || destId === this.loadedDestinationId) return;
+      this.loadFromApi(destId);
+    });
+  }
+
+  private loadFromApi(destinationId: number): void {
+    this.http.get<ApiPlaceListItem[]>(`/api/places/hotels?destinationId=${destinationId}`).subscribe({
       next: (items) => {
         this._hotels.set(items.map((dto, i) => ({
           id: String(dto.id),
@@ -53,10 +71,12 @@ export class HotelsListingService {
           variant: (i === 0 ? 'large' : 'compact') as HotelListItem['variant'],
           isSaved: dto.isSaved,
         })));
+        this.loadedDestinationId = destinationId;
         this._loaded.set(true);
       },
       error: () => {
         this._hotels.set([...MOCK_HOTELS_LISTING]);
+        this.loadedDestinationId = destinationId;
         this._loaded.set(true);
       },
     });
@@ -67,11 +87,18 @@ export class HotelsListingService {
   }
 
   toggleSaved(id: string): void {
-    const current = this.hotels().find((h) => h.id === id)?.isSaved ?? false;
-    this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
+    if (!this.auth.isLoggedIn()) return;
+
+    const flip = () => {
+      const current = this.hotels().find((h) => h.id === id)?.isSaved ?? false;
+      this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
+    };
+    flip();
+
     const numId = parseInt(id, 10);
-    if (!isNaN(numId)) {
-      this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe();
-    }
+    if (isNaN(numId)) return;
+    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
+      error: () => flip(),
+    });
   }
 }

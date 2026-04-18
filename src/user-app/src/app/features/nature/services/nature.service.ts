@@ -1,6 +1,9 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
+import { DestinationService } from '../../../core/services/destination.service';
+import { ExploreService } from '../../explore/services/explore.service';
 import type { NatureItem } from '../models/nature.model';
 import { MOCK_NATURE } from '../data/mock-nature.data';
 
@@ -23,8 +26,12 @@ interface ApiPlaceListItem {
 @Injectable({ providedIn: 'root' })
 export class NatureService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
+  private readonly destinationSvc = inject(DestinationService);
+  private readonly exploreSvc = inject(ExploreService);
   private readonly _items = signal<NatureItem[]>([]);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
+  private loadedDestinationId: number | null = null;
 
   readonly items = computed(() => {
     const overrides = this._savedOverrides();
@@ -35,7 +42,16 @@ export class NatureService {
   });
 
   constructor() {
-    this.http.get<ApiPlaceListItem[]>('/api/places?tags=nature').subscribe({
+    void this.exploreSvc;
+    effect(() => {
+      const destId = this.destinationSvc.id();
+      if (destId == null || destId === this.loadedDestinationId) return;
+      this.loadFromApi(destId);
+    });
+  }
+
+  private loadFromApi(destinationId: number): void {
+    this.http.get<ApiPlaceListItem[]>(`/api/places?tags=nature&destinationId=${destinationId}`).subscribe({
       next: (items) => {
         this._items.set(items.map((dto, i) => ({
           id: String(dto.id),
@@ -51,9 +67,11 @@ export class NatureService {
           variant: (i === 0 ? 'large' : 'compact') as NatureItem['variant'],
           isSaved: dto.isSaved,
         })));
+        this.loadedDestinationId = destinationId;
       },
       error: () => {
         this._items.set([...MOCK_NATURE]);
+        this.loadedDestinationId = destinationId;
       },
     });
   }
@@ -63,11 +81,18 @@ export class NatureService {
   }
 
   toggleSaved(id: string): void {
-    const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
-    this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
+    if (!this.auth.isLoggedIn()) return;
+
+    const flip = () => {
+      const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
+      this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
+    };
+    flip();
+
     const numId = parseInt(id, 10);
-    if (!isNaN(numId)) {
-      this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe();
-    }
+    if (isNaN(numId)) return;
+    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
+      error: () => flip(),
+    });
   }
 }

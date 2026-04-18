@@ -1,6 +1,9 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
+import { DestinationService } from '../../../core/services/destination.service';
+import { ExploreService } from '../../explore/services/explore.service';
 import type { EventListingItem, EventsFeatured } from '../models/events-listing.model';
 import { MOCK_EVENTS_LISTING, EVENTS_FEATURED } from '../data/mock-events-listing.data';
 
@@ -28,9 +31,13 @@ interface ApiEventsResponse {
 @Injectable({ providedIn: 'root' })
 export class EventsListingService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
+  private readonly destinationSvc = inject(DestinationService);
+  private readonly exploreSvc = inject(ExploreService);
   private readonly _items = signal<EventListingItem[]>([]);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _featured = signal<EventsFeatured>(EVENTS_FEATURED);
+  private loadedDestinationId: number | null = null;
 
   readonly featured = computed(() => this._featured());
 
@@ -43,7 +50,16 @@ export class EventsListingService {
   });
 
   constructor() {
-    this.http.get<ApiEventsResponse>('/api/events').subscribe({
+    void this.exploreSvc;
+    effect(() => {
+      const destId = this.destinationSvc.id();
+      if (destId == null || destId === this.loadedDestinationId) return;
+      this.loadFromApi(destId);
+    });
+  }
+
+  private loadFromApi(destinationId: number): void {
+    this.http.get<ApiEventsResponse>(`/api/events?destinationId=${destinationId}`).subscribe({
       next: (res) => {
         this._items.set(res.items.map((dto, i) => ({
           id: String(dto.id),
@@ -65,9 +81,11 @@ export class EventsListingService {
             locationLine: res.featured.locationLine ?? '',
           });
         }
+        this.loadedDestinationId = destinationId;
       },
       error: () => {
         this._items.set([...MOCK_EVENTS_LISTING]);
+        this.loadedDestinationId = destinationId;
       },
     });
   }
@@ -81,11 +99,18 @@ export class EventsListingService {
   }
 
   toggleSaved(id: string): void {
-    const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
-    this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
+    if (!this.auth.isLoggedIn()) return;
+
+    const flip = () => {
+      const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
+      this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
+    };
+    flip();
+
     const numId = parseInt(id, 10);
-    if (!isNaN(numId)) {
-      this.http.post('/api/favorites/toggle', { entityType: 'event', entityId: numId }).subscribe();
-    }
+    if (isNaN(numId)) return;
+    this.http.post('/api/favorites/toggle', { entityType: 'event', entityId: numId }).subscribe({
+      error: () => flip(),
+    });
   }
 }

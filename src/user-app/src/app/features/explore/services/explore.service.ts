@@ -1,6 +1,8 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
+import { DestinationService } from '../../../core/services/destination.service';
 import { LocationService } from '../../../core/services/location.service';
 import type { ExploreItem } from '../../../core/models/explore-item.model';
 import type {
@@ -45,6 +47,8 @@ const RELOAD_THRESHOLD_KM = 5;
 export class ExploreService {
   private readonly http = inject(HttpClient);
   private readonly locationSvc = inject(LocationService);
+  private readonly auth = inject(AuthService);
+  private readonly destinationSvc = inject(DestinationService);
 
   private readonly _curatedForYou = signal<ExploreCuratedItem[]>([]);
   private readonly _localFavorites = signal<ExploreItem[]>([]);
@@ -188,6 +192,10 @@ export class ExploreService {
         label: 'Near',
         value: res.selectedDestination.name,
       });
+      this.destinationSvc.set({
+        id: res.selectedDestination.id,
+        name: res.selectedDestination.name,
+      });
     }
   }
 
@@ -238,30 +246,29 @@ export class ExploreService {
   }
 
   toggleSaved(id: string, list: 'curatedForYou' | 'localFavorites' | 'popularNearby' | 'topStays'): void {
-    if (list === 'curatedForYou') {
-      this._curatedForYou.update((items) =>
-        items.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item)),
-      );
-      return;
-    }
-    if (list === 'localFavorites') {
-      this._localFavorites.update((items) =>
-        items.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item)),
-      );
-      return;
-    }
-    if (list === 'popularNearby') {
-      this._popularNearby.update((items) =>
-        items.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item)),
-      );
-      return;
-    }
-    if (list === 'topStays') {
-      this._topStays.update((items) =>
-        items.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item)),
-      );
-    }
-    // Fire-and-forget API call
-    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: parseInt(id, 10) }).subscribe();
+    if (!this.auth.isLoggedIn()) return;
+
+    const flip = () => this.flipSavedIn(list, id);
+    flip();
+
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) return;
+
+    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
+      error: () => flip(),
+    });
+  }
+
+  private flipSavedIn(
+    list: 'curatedForYou' | 'localFavorites' | 'popularNearby' | 'topStays',
+    id: string,
+  ): void {
+    const toggle = <T extends { id: string; isSaved: boolean }>(items: T[]): T[] =>
+      items.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item));
+
+    if (list === 'curatedForYou') this._curatedForYou.update(toggle);
+    else if (list === 'localFavorites') this._localFavorites.update(toggle);
+    else if (list === 'popularNearby') this._popularNearby.update(toggle);
+    else if (list === 'topStays') this._topStays.update(toggle);
   }
 }
