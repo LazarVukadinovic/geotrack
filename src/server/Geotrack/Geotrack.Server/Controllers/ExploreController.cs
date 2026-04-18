@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Mvc;
 
@@ -25,10 +26,16 @@ public class ExploreController : ControllerBase
     }
 
     [HttpGet("categories")]
-    public async Task<ActionResult> GetLocalPlacesCategories([FromQuery] int destinationId = 1)
+    public async Task<ActionResult> GetLocalPlacesCategories([FromQuery] int? destinationId = null)
     {
-        var categories = await _exploreService.GetLocalPlacesCategoriesAsync(destinationId);
-        return Ok(categories);
+        var result = await _exploreService.GetLocalPlacesCategoriesAsync(destinationId);
+        return result.Status switch
+        {
+            DestinationScopedStatus.Success => Ok(result.Data),
+            DestinationScopedStatus.InvalidDestination => BadRequest(new { error = "destinationId is required and must be positive." }),
+            DestinationScopedStatus.DestinationNotFound => NotFound(new { error = "Destination not found." }),
+            _ => StatusCode(500)
+        };
     }
 
     private int? GetUserId()

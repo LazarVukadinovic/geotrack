@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Infrastructure;
@@ -186,15 +187,26 @@ public class ExploreService : IExploreService
         };
     }
 
-    public async Task<List<LocalPlacesCategoryDto>> GetLocalPlacesCategoriesAsync(int destinationId)
+    public async Task<DestinationScopedResult<List<LocalPlacesCategoryDto>>> GetLocalPlacesCategoriesAsync(int? destinationId)
     {
+        if (!destinationId.HasValue || destinationId.Value <= 0)
+        {
+            return new DestinationScopedResult<List<LocalPlacesCategoryDto>> { Status = DestinationScopedStatus.InvalidDestination };
+        }
+        if (!await _db.Destinations.AnyAsync(d => d.Id == destinationId.Value))
+        {
+            return new DestinationScopedResult<List<LocalPlacesCategoryDto>> { Status = DestinationScopedStatus.DestinationNotFound };
+        }
+
+        var destId = destinationId.Value;
+
         var types = await _db.PlaceTypes
-            .Where(pt => pt.Places.Any(p => p.Location.DestinationId == destinationId && p.PricePerNight == null))
+            .Where(pt => pt.Places.Any(p => p.Location.DestinationId == destId && p.PricePerNight == null))
             .ToListAsync();
 
         // Also get tags that can serve as categories
         var tags = await _db.Tags
-            .Where(t => t.ForPlace && t.PlaceTags.Any(pt => pt.Place.Location.DestinationId == destinationId))
+            .Where(t => t.ForPlace && t.PlaceTags.Any(pt => pt.Place.Location.DestinationId == destId))
             .Take(10)
             .ToListAsync();
 
@@ -202,7 +214,7 @@ public class ExploreService : IExploreService
 
         foreach (var pt in types)
         {
-            var count = await _db.Places.CountAsync(p => p.PlaceTypeId == pt.Id && p.Location.DestinationId == destinationId);
+            var count = await _db.Places.CountAsync(p => p.PlaceTypeId == pt.Id && p.Location.DestinationId == destId);
             cats.Add(new LocalPlacesCategoryDto
             {
                 Id = pt.Id,
@@ -213,7 +225,7 @@ public class ExploreService : IExploreService
             });
         }
 
-        return cats;
+        return new DestinationScopedResult<List<LocalPlacesCategoryDto>> { Status = DestinationScopedStatus.Success, Data = cats };
     }
 
     private static string FormatDateLabel(DateTime start, DateTime end)
