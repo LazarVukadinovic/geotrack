@@ -18,11 +18,15 @@ export class CollectionDetailComponent {
   private readonly collService = inject(CollectionsService);
   private readonly ngZone      = inject(NgZone);
 
-  private readonly id = this.route.snapshot.paramMap.get('id') ?? '';
+  private readonly id = Number(this.route.snapshot.paramMap.get('id') ?? 0);
 
   protected readonly collection = computed(() =>
     this.collService.collections().find(c => c.id === this.id)
   );
+
+  constructor() {
+    if (this.id > 0) this.collService.loadDetails(this.id);
+  }
 
   protected readonly menuOpen   = signal(false);
   protected readonly renameOpen = signal(false);
@@ -53,8 +57,8 @@ export class CollectionDetailComponent {
   }
   protected goBack(): void { this.location.back(); }
 
-  protected onRemovePlace(placeId: string): void {
-    this.collService.removePlace(this.id, placeId);
+  protected onRemovePlace(itemId: number): void {
+    this.collService.removePlace(this.id, itemId);
   }
 
   protected onAddPlace(): void {

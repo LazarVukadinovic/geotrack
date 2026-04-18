@@ -21,7 +21,7 @@ export class NewCollectionSheetComponent {
 
   private touchStartY = 0;
 
-  @Output() created = new EventEmitter<string>();
+  @Output() created = new EventEmitter<number>();
 
   open(): void {
     this.name.set('');
@@ -65,10 +65,10 @@ export class NewCollectionSheetComponent {
   protected onSave(): void {
     const trimmed = this.name().trim();
     if (!trimmed) return;
-    this.collService.addCollection(trimmed);
-    const newId = this.collService.collections().at(-1)!.id;
-    this.created.emit(newId);
-    this.close();
+    this.collService.addCollection(trimmed, (id) => {
+      this.created.emit(id);
+      this.close();
+    });
   }
 
   protected onCancel(): void {
