@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Events;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
@@ -18,13 +19,19 @@ public class EventsController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult> GetEvents(
-        [FromQuery] int destinationId = 1,
+        [FromQuery] int? destinationId = null,
         [FromQuery] string? tags = null,
         [FromQuery] bool? upcoming = null)
     {
         var userId = GetUserId();
         var result = await _eventService.GetEventsAsync(destinationId, tags, upcoming, userId);
-        return Ok(result);
+        return result.Status switch
+        {
+            DestinationScopedStatus.Success => Ok(result.Data),
+            DestinationScopedStatus.InvalidDestination => BadRequest(new { error = "destinationId is required and must be positive." }),
+            DestinationScopedStatus.DestinationNotFound => NotFound(new { error = "Destination not found." }),
+            _ => StatusCode(500)
+        };
     }
 
     [HttpGet("{id:int}")]

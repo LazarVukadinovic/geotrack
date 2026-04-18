@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Events;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.Interfaces.Service;
@@ -19,13 +20,22 @@ public class EventService : IEventService
 
     // --- Frontend-facing methods ---
 
-    public async Task<EventsListingResponseDto> GetEventsAsync(int destinationId, string? tags = null, bool? upcoming = null, int? userId = null)
+    public async Task<DestinationScopedResult<EventsListingResponseDto>> GetEventsAsync(int? destinationId, string? tags = null, bool? upcoming = null, int? userId = null)
     {
+        if (!destinationId.HasValue || destinationId.Value <= 0)
+        {
+            return new DestinationScopedResult<EventsListingResponseDto> { Status = DestinationScopedStatus.InvalidDestination };
+        }
+        if (!await _db.Destinations.AnyAsync(d => d.Id == destinationId.Value))
+        {
+            return new DestinationScopedResult<EventsListingResponseDto> { Status = DestinationScopedStatus.DestinationNotFound };
+        }
+
         var query = _db.Events
             .Include(e => e.EventType)
             .Include(e => e.Location)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
-            .Where(e => e.Location.DestinationId == destinationId);
+            .Where(e => e.Location.DestinationId == destinationId.Value);
 
         if (upcoming == true)
             query = query.Where(e => e.EndDate >= DateTime.UtcNow);
@@ -74,7 +84,11 @@ public class EventService : IEventService
             };
         }
 
-        return new EventsListingResponseDto { Items = items, Featured = featured };
+        return new DestinationScopedResult<EventsListingResponseDto>
+        {
+            Status = DestinationScopedStatus.Success,
+            Data = new EventsListingResponseDto { Items = items, Featured = featured }
+        };
     }
 
     public async Task<EventDetailDto?> GetEventDetailAsync(int id, int? userId = null)
