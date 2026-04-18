@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
+import { UserService } from '../../../../core/services/user.service';
 
 @Component({
   selector: 'app-register-page',
@@ -29,7 +30,12 @@ export class RegisterPageComponent {
     hasSpecial: false,
   };
 
-  constructor(private router: Router, private http: HttpClient, private authService: AuthService) {}
+  constructor(
+    private router: Router,
+    private http: HttpClient,
+    private authService: AuthService,
+    private userService: UserService,
+  ) {}
 
   get fullNameError(): string {
     if (!this.submitted) return '';
@@ -88,13 +94,23 @@ export class RegisterPageComponent {
       })
       .subscribe({
         next: (res) => {
-          this.isLoading = false;
           if (res.accessToken) {
             // Registration always defaults to Remember Me = true so the new
             // session survives a browser restart (the user can adjust in settings).
             this.authService.login(res.accessToken, res.refreshToken, true);
           }
-          this.router.navigate(['/register/interests']);
+          // Hydrate UserService so /register/interests and downstream screens
+          // read canonical current-user state without a hard refresh.
+          this.userService.load().subscribe({
+            next: () => {
+              this.isLoading = false;
+              this.router.navigate(['/register/interests']);
+            },
+            error: () => {
+              this.isLoading = false;
+              this.router.navigate(['/register/interests']);
+            },
+          });
         },
         error: (err: HttpErrorResponse) => {
           this.isLoading = false;

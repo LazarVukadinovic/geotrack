@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { TagService } from '../../../../core/services/tag.service';
+import { UserService } from '../../../../core/services/user.service';
 import { Tag } from '../../../../core/models/tag.model';
 
 @Component({
@@ -15,10 +16,12 @@ export class InterestsPageComponent implements OnInit {
   tags: Tag[] = [];
   selectedTagIds: Set<number> = new Set();
   isLoading = false;
+  saveError = '';
 
   constructor(
     private router: Router,
     private tagService: TagService,
+    private userService: UserService,
   ) {}
 
   ngOnInit(): void {
@@ -47,19 +50,27 @@ export class InterestsPageComponent implements OnInit {
     if (this.selectedCount === 0) return;
 
     this.isLoading = true;
+    this.saveError = '';
 
     const tagIds = [...this.selectedTagIds];
 
     this.tagService.saveUserTags(tagIds).subscribe({
       next: () => {
-        localStorage.setItem('userInterests', JSON.stringify(tagIds));
-        this.isLoading = false;
-        this.router.navigate(['/']);
+        // Reload canonical user state so interests render server truth everywhere.
+        this.userService.load().subscribe({
+          next: () => {
+            this.isLoading = false;
+            this.router.navigate(['/']);
+          },
+          error: () => {
+            this.isLoading = false;
+            this.router.navigate(['/']);
+          },
+        });
       },
       error: () => {
-        localStorage.setItem('userInterests', JSON.stringify(tagIds));
         this.isLoading = false;
-        this.router.navigate(['/']);
+        this.saveError = 'Could not save your interests. Please try again.';
       },
     });
   }
