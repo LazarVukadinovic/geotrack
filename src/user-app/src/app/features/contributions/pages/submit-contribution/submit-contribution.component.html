@@ -1,1 +1,62 @@
-<p>submit-contribution works!</p>
+<div class="min-h-screen bg-[#f5f5f0] flex flex-col">
+
+  <!-- Header -->
+  <div class="bg-[#1a2b4a] px-6 pt-12 pb-6 rounded-b-[2.5rem]">
+    <div class="flex items-center justify-between mb-4">
+      <button (click)="handleBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </button>
+      <div class="text-center">
+        <span class="text-base font-bold text-white">Add New {{ entityType }}</span>
+        <p class="text-white/50 text-xs mt-0.5">Step {{ currentStep() }} of {{ totalSteps }}</p>
+      </div>
+      <div class="w-9"></div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="h-1.5 bg-white/20 rounded-full overflow-hidden">
+      <div class="h-full bg-[#e8722a] rounded-full transition-all duration-500"
+        [style.width]="(currentStep() / totalSteps * 100) + '%'"></div>
+    </div>
+  </div>
+
+  <!-- Steps -->
+  <div class="flex-1 overflow-y-auto">
+    @switch (currentStep()) {
+      @case (1) {
+        <app-step-basics
+          [data]="draft().basics"
+          (saved)="onBasicsSaved($event)"
+        />
+      }
+      @case (2) {
+        <app-step-features
+          [data]="draft().features"
+          (saved)="onFeaturesSaved($event)"
+          (back)="prevStep()"
+        />
+      }
+      @case (3) {
+        <app-step-details
+          [data]="draft().details"
+          (saved)="onDetailsSaved($event)"
+          (back)="prevStep()"
+        />
+      }
+      @case (4) {
+        <app-step-preview
+          [draft]="draft()"
+          (confirmed)="onSubmit()"
+          (back)="prevStep()"
+        />
+      }
+      @case (5) {
+        <app-step-confirmation
+          [entityType]="entityType"
+        />
+      }
+    }
+  </div>
+</div>

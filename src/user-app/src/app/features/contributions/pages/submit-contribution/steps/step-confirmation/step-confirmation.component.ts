@@ -1,11 +1,15 @@
-import { Component } from '@angular/core';
+import { Component, input, inject } from '@angular/core';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-step-confirmation',
-  imports: [],
+  standalone: true,
   templateUrl: './step-confirmation.component.html',
-  styleUrl: './step-confirmation.component.css',
 })
 export class StepConfirmationComponent {
+  entityType = input('Stay');
+  private router = inject(Router);
 
+  goToContributions(): void { this.router.navigate(['/contributions']); }
+  addAnother(): void { this.router.navigate(['/contributions/submit'], { state: { entityType: this.entityType() } }); }
 }
