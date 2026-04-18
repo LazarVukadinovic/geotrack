@@ -17,7 +17,13 @@ export class StepFeaturesComponent {
   saved = output<FeaturesData>();
   back = output<void>();
 
-  characteristicTags = ['Hotel', 'Luxury', 'Spa', 'Family Friendly', 'Beachfront', 'Boutique', 'City Center', 'Eco-Friendly', 'Adults Only', 'Pet Friendly'];
+  characteristicTags = [
+  'Luxury', 'Boutique', 'Budget-Friendly',
+  'Family Friendly', 'Adults Only', 'Pet Friendly',
+  'Beachfront','Romantic', 'Mountain View', 'City Center', 'Countryside',
+  'Eco-Friendly', 'Business',
+  'Lakefront', 'Historic'
+];
 
   amenities = [
     { id: 'pool', label: 'POOL' },
