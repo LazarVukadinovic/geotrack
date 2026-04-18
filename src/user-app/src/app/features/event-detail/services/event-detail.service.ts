@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { AuthService } from '../../../core/services/auth.service';
 import type { EventDetail } from '../models/event-detail.model';
 import { MOCK_EVENT_DETAIL_MAP } from '../data/mock-event-detail.data';
 
@@ -20,6 +21,7 @@ interface ApiEventDetail {
 @Injectable({ providedIn: 'root' })
 export class EventDetailService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _cache = signal<Record<string, EventDetail>>({});
 
@@ -75,12 +77,22 @@ export class EventDetailService {
   }
 
   toggleSaved(id: string): void {
+    if (!this.auth.isLoggedIn()) return;
+
     const current = this.getEventDetailPageData(id);
     if (!current) return;
-    this._savedOverrides.update((m) => ({ ...m, [id]: !current.isSaved }));
+
+    const flip = () => {
+      const snap = this.getEventDetailPageData(id);
+      if (!snap) return;
+      this._savedOverrides.update((m) => ({ ...m, [id]: !snap.isSaved }));
+    };
+    flip();
+
     const numId = parseInt(id, 10);
-    if (!isNaN(numId)) {
-      this.http.post('/api/favorites/toggle', { entityType: 'event', entityId: numId }).subscribe();
-    }
+    if (isNaN(numId)) return;
+    this.http.post('/api/favorites/toggle', { entityType: 'event', entityId: numId }).subscribe({
+      error: () => flip(),
+    });
   }
 }

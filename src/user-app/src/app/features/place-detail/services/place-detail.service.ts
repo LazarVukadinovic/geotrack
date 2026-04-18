@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { AuthService } from '../../../core/services/auth.service';
 import type { PlaceDetail } from '../../../core/models/place.model';
 import { MOCK_PLACE_DETAIL_MAP } from '../data/mock-place-detail.data';
 
@@ -25,6 +26,7 @@ interface ApiPlaceDetail {
 export class PlaceDetailService {
 
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _cache = signal<Record<string, PlaceDetail>>({});
 
@@ -85,15 +87,21 @@ export class PlaceDetailService {
   }
 
   toggleSaved(id: string): void {
-    this._savedOverrides.update((m) => {
-      const cached = this._cache()[id];
-      const base = cached ?? MOCK_PLACE_DETAIL_MAP[id];
-      const current = m[id] !== undefined ? m[id] : (base?.isSaved ?? false);
-      return { ...m, [id]: !current };
-    });
+    if (!this.auth.isLoggedIn()) return;
+
+    const flip = () =>
+      this._savedOverrides.update((m) => {
+        const cached = this._cache()[id];
+        const base = cached ?? MOCK_PLACE_DETAIL_MAP[id];
+        const current = m[id] !== undefined ? m[id] : (base?.isSaved ?? false);
+        return { ...m, [id]: !current };
+      });
+    flip();
+
     const numId = parseInt(id, 10);
-    if (!isNaN(numId)) {
-      this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe();
-    }
+    if (isNaN(numId)) return;
+    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
+      error: () => flip(),
+    });
   }
 }
