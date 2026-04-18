@@ -1,25 +1,23 @@
 <div class="min-h-screen bg-[#fafafa] flex flex-col">
 
   <!-- Header -->
-  <div class="bg-[#1a2b4a] px-6 pt-12 pb-6 rounded-b-[2.5rem]">
-    <div class="flex items-center justify-between mb-4">
-      <button (click)="handleBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem] relative">
+    <div class="flex items-center justify-between">
+      <button *ngIf="currentStep() < 5" (click)="handleBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
-      <div class="text-center">
-        <span class="text-base font-bold text-white">Add New {{ entityType }}</span>
-        <p class="text-white/50 text-xs mt-0.5">Step {{ currentStep() }} of {{ totalSteps }}</p>
-      </div>
+      <div *ngIf="currentStep() === 5" class="w-9"></div>
+      <span class="text-[16] font-bold text-white tracking-wide text-center">
+        {{ currentStep() === 5 ? 'Submitted for Review' : 'Add New ' + entityType }}
+      </span>
+      
       <div class="w-9"></div>
     </div>
-
-    <!-- Progress bar -->
-    <div class="h-1.5 bg-white/20 rounded-full overflow-hidden">
-      <div class="h-full bg-[#e8722a] rounded-full transition-all duration-500"
-        [style.width]="(currentStep() / totalSteps * 100) + '%'"></div>
-    </div>
+    <p *ngIf="currentStep() < 5" class="text-white/50 text-xs text-center absolute left-0 right-0 bottom-2">
+      Step {{ currentStep() }} of 4
+    </p>
   </div>
 
   <!-- Steps -->

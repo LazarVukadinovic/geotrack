@@ -1,8 +1,8 @@
-<div class="px-5 pt-6 pb-32 flex flex-col gap-6">
+<div class="px-5 pt-6 pb-6 flex flex-col gap-6 min-h-full">
 
   <!-- Cover Image -->
   <div>
-    <p class="text-sm font-bold text-slate-700 mb-3">Cover Image</p>
+    <p class="ml-1 text-sm font-bold text-slate-700 mb-3">Cover Image</p>
     <div class="relative h-48 rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-slate-300"
       [class.border-0]="previewUrl">
       <img *ngIf="previewUrl" [src]="previewUrl" class="w-full h-full object-cover"/>
@@ -12,8 +12,7 @@
         </svg>
         <span class="text-sm text-slate-400">Tap to add photo</span>
       </div>
-      <button *ngIf="previewUrl"
-        class="absolute inset-0 flex items-center justify-center bg-black/30">
+      <button *ngIf="previewUrl" class="absolute inset-0 flex items-center justify-center bg-black/30">
         <div class="bg-white/90 rounded-xl px-4 py-2 flex items-center gap-2">
           <svg class="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -27,7 +26,7 @@
 
   <!-- Stay Name -->
   <div>
-    <label class="text-sm font-bold text-slate-700 mb-2 block">Stay Name</label>
+    <label class="ml-1 text-sm font-bold text-slate-700 mb-2 block">Stay Name</label>
     <div class="bg-white border border-slate-200 rounded-2xl flex items-center gap-3 px-4 py-3.5">
       <svg class="w-4 h-4 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
@@ -37,10 +36,10 @@
     </div>
   </div>
 
-  <!-- Stay Type — horizontalni scroll -->
+  <!-- Stay Type — scrollbar hidden -->
   <div>
-    <label class="text-sm font-bold text-slate-700 mb-3 block">Stay Type</label>
-    <div class="flex gap-2 overflow-x-auto pb-1 -mx-5 px-5 scrollbar-hide">
+    <label class="ml-1 text-sm font-bold text-slate-700 mb-3 block">Stay Type</label>
+    <div class="flex gap-2 overflow-x-auto pb-1 -mx-5 px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <button *ngFor="let type of stayTypes"
         (click)="form.stayType = type"
         class="flex-none px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200"
@@ -57,8 +56,7 @@
 
   <!-- Location Details -->
   <div>
-    <div class="flex items-center gap-2 mb-3">
-      <!-- Isti pin kao kod lokacije na kartici -->
+    <div class="ml-1 flex items-center gap-2 mb-3">
       <svg class="w-4 h-4 text-[#e8722a]" fill="currentColor" viewBox="0 0 24 24">
         <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
       </svg>
@@ -69,8 +67,8 @@
         <input type="text" [(ngModel)]="form.address" placeholder="Street address"
           class="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent"/>
       </div>
-      <div class="flex">
-        <div class="flex-1 px-4 py-3.5 border-r border-slate-100">
+      <div class="flex border-b border-slate-100 divide-x divide-slate-100">
+        <div class="flex-1 px-4 py-3.5">
           <input type="text" [(ngModel)]="form.city" placeholder="City"
             class="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent"/>
         </div>
@@ -79,30 +77,101 @@
             class="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent"/>
         </div>
       </div>
-      <div class="px-4 py-3.5 border-t border-slate-100 flex items-center gap-2">
-        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064"/>
+
+      <div class="px-4 py-3.5 flex items-center gap-3">
+        <svg class="w-4 h-4 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" stroke-width="1.5"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9m0-18c2.5 3 4 5.5 4 9s-1.5 6-4 9M3.6 9h16.8M3.6 15h16.8"/>
         </svg>
         <input type="text" [(ngModel)]="form.country" placeholder="Country"
           class="flex-1 text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent"/>
       </div>
     </div>
 
-    <!-- Pin Coordinates — isti pin -->
-    <button class="mt-3 w-full py-3 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center gap-2 text-slate-500 text-sm font-semibold active:bg-slate-50 transition-colors">
-      <svg class="w-4 h-4 text-[#e8722a]" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+    <!-- Pin Coordinates -->
+    <button (click)="openMapPicker()"
+      class="mt-3 w-full py-6 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:bg-slate-50 transition-colors">
+      <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+          d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
       </svg>
-      Pin Coordinates
+      <span class="text-sm font-semibold text-slate-600">Pin Coordinates</span>
+      <span *ngIf="form.lat && form.lng" class="text-xs text-[#e8722a] font-medium">
+        {{ form.lat.toFixed(5) }}, {{ form.lng.toFixed(5) }}
+      </span>
+      <span *ngIf="!form.lat" class="text-xs text-slate-400">Tap to set exact location on map</span>
     </button>
   </div>
-</div>
-
-<!-- Continue button -->
-<div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-5 py-4" style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
-  <button (click)="onContinue()"
-    [disabled]="!isValid()"
+  <button (click)="onContinue()" [disabled]="!isValid()"
     class="w-full py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base transition-all duration-200 active:scale-[0.98] disabled:opacity-40">
     Continue
   </button>
 </div>
+
+<!-- Continue button -->
+<!-- <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-5 py-4"
+  style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
+  <button (click)="onContinue()" [disabled]="!isValid()"
+    class="w-full py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base transition-all duration-200 active:scale-[0.98] disabled:opacity-40">
+    Continue
+  </button>
+</div> -->
+
+<!-- Map Picker Sheet -->
+@if (showMapPicker()) {
+  <div class="fixed inset-0 z-[60] bg-black/50 flex flex-col justify-end">
+    <div class="bg-white rounded-t-[2rem] flex flex-col"
+      style="height: 85dvh">
+
+      <!-- Sheet header -->
+      <div class="px-5 pt-4 pb-3 flex items-center justify-between border-b border-slate-100">
+        <div class="w-9 h-1 bg-slate-300 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-4"></div>
+        <p class="text-base font-bold text-slate-800 mt-2">Set Location</p>
+        <button (click)="showMapPicker.set(false)"
+          class="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center mt-2">
+          <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-500 text-center px-5 py-2">Tap anywhere on the map to place your pin</p>
+
+      <!-- Map placeholder -->
+      <div class="flex-1 relative bg-slate-100 overflow-hidden">
+        <div id="coord-map" class="absolute inset-0"></div>
+
+        <!-- Center crosshair -->
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div class="relative">
+            <svg class="w-8 h-8 text-[#e8722a] drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+            <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-1 bg-black/20 rounded-full blur-[2px]"></div>
+          </div>
+        </div>
+
+        <!-- Coords display -->
+        <div *ngIf="pickerLat() !== null"
+          class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white rounded-2xl px-4 py-2 shadow-lg flex items-center gap-2">
+          <svg class="w-3.5 h-3.5 text-[#e8722a]" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+          </svg>
+          <span class="text-xs font-semibold text-slate-700">
+            {{ pickerLat()!.toFixed(5) }}, {{ pickerLng()!.toFixed(5) }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Confirm -->
+      <div class="px-5 py-4 border-t border-slate-100" style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
+        <button (click)="confirmCoordinates()"
+          [disabled]="pickerLat() === null || isGeocoding()"
+          class="w-full py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base active:scale-[0.98] transition-all disabled:opacity-40">
+          Confirm Location
+        </button>
+      </div>
+    </div>
+  </div>
+}

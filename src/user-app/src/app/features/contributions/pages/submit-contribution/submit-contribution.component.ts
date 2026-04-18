@@ -23,7 +23,6 @@ export class SubmitContributionComponent {
   private router = inject(Router);
 
   entityType = 'Stay';
-  totalSteps = 4; // confirmation doesn't count as user step
   currentStep = signal(1);
 
   draft = signal<ContributionDraft>({ basics: null, features: null, details: null });
@@ -52,7 +51,6 @@ export class SubmitContributionComponent {
   onSubmit(): void {
     // HTTP call ovde
     this.currentStep.set(5);
-    this.totalSteps = 5;
   }
 
   prevStep(): void {
