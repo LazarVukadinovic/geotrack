@@ -1,6 +1,8 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
+import { DestinationService } from '../../../core/services/destination.service';
+import { ExploreService } from '../../explore/services/explore.service';
 import type { LocalPlacesCategory, CategoryMeta } from '../models/local-places.model';
 import { MOCK_LOCAL_PLACES_CATEGORIES } from '../data/mock-local-places.data';
 import { CATEGORY_META } from '../data/mock-category-items.data';
@@ -16,12 +18,24 @@ interface ApiCategory {
 @Injectable({ providedIn: 'root' })
 export class LocalPlacesService {
   private readonly http = inject(HttpClient);
+  private readonly destinationSvc = inject(DestinationService);
+  private readonly exploreSvc = inject(ExploreService);
   private readonly _categories = signal<LocalPlacesCategory[]>([]);
+  private loadedDestinationId: number | null = null;
 
   readonly categories = this._categories.asReadonly();
 
   constructor() {
-    this.http.get<ApiCategory[]>('/api/explore/categories?destinationId=1').subscribe({
+    void this.exploreSvc;
+    effect(() => {
+      const destId = this.destinationSvc.id();
+      if (destId == null || destId === this.loadedDestinationId) return;
+      this.loadFromApi(destId);
+    });
+  }
+
+  private loadFromApi(destinationId: number): void {
+    this.http.get<ApiCategory[]>(`/api/explore/categories?destinationId=${destinationId}`).subscribe({
       next: (cats) => {
         this._categories.set(cats.map(c => ({
           id: String(c.id),
@@ -30,9 +44,11 @@ export class LocalPlacesService {
           categoryKey: c.categoryKey,
           subtitle: c.subtitle ?? '',
         })));
+        this.loadedDestinationId = destinationId;
       },
       error: () => {
         this._categories.set([...MOCK_LOCAL_PLACES_CATEGORIES]);
+        this.loadedDestinationId = destinationId;
       },
     });
   }

@@ -1,6 +1,9 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
+import { DestinationService } from '../../../core/services/destination.service';
+import { ExploreService } from '../../explore/services/explore.service';
 import type { PlaceCategoryItem } from '../models/local-places.model';
 import { MOCK_CATEGORY_ITEMS } from '../data/mock-category-items.data';
 
@@ -23,14 +26,38 @@ interface ApiPlaceListItem {
 @Injectable({ providedIn: 'root' })
 export class LocalPlacesCategoryService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
+  private readonly destinationSvc = inject(DestinationService);
+  private readonly exploreSvc = inject(ExploreService);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _apiItems = signal<Record<string, PlaceCategoryItem[]>>({});
   private readonly _loadedKeys = new Set<string>();
+  private readonly _pendingKeys = signal<string[]>([]);
+
+  constructor() {
+    void this.exploreSvc;
+    effect(() => {
+      const pending = this._pendingKeys();
+      const destId = this.destinationSvc.id();
+      if (pending.length === 0 || destId == null) return;
+      for (const key of pending) {
+        if (this._loadedKeys.has(key)) continue;
+        this._loadedKeys.add(key);
+        this.fetchCategory(key, destId);
+      }
+      this._pendingKeys.set([]);
+    });
+  }
 
   loadCategory(categoryKey: string): void {
     if (this._loadedKeys.has(categoryKey)) return;
-    this._loadedKeys.add(categoryKey);
-    this.http.get<ApiPlaceListItem[]>(`/api/places?category=${categoryKey}`).subscribe({
+    const queued = this._pendingKeys();
+    if (queued.includes(categoryKey)) return;
+    this._pendingKeys.set([...queued, categoryKey]);
+  }
+
+  private fetchCategory(categoryKey: string, destinationId: number): void {
+    this.http.get<ApiPlaceListItem[]>(`/api/places?category=${categoryKey}&destinationId=${destinationId}`).subscribe({
       next: (items) => {
         const mapped = items.map((dto, i) => ({
           id: String(dto.id),
@@ -77,11 +104,18 @@ export class LocalPlacesCategoryService {
   }
 
   toggleSaved(id: string, categoryKey: string): void {
-    const current = this.getItems(categoryKey).find((item) => item.id === id)?.isSaved ?? false;
-    this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
+    if (!this.auth.isLoggedIn()) return;
+
+    const flip = () => {
+      const current = this.getItems(categoryKey).find((item) => item.id === id)?.isSaved ?? false;
+      this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
+    };
+    flip();
+
     const numId = parseInt(id, 10);
-    if (!isNaN(numId)) {
-      this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe();
-    }
+    if (isNaN(numId)) return;
+    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
+      error: () => flip(),
+    });
   }
 }
