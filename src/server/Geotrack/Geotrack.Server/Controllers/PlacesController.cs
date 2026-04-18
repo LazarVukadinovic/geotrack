@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
@@ -18,14 +19,20 @@ public class PlacesController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult> GetPlaces(
-        [FromQuery] int destinationId = 1,
+        [FromQuery] int? destinationId = null,
         [FromQuery] string? type = null,
         [FromQuery] string? tags = null,
         [FromQuery] string? category = null)
     {
         var userId = GetUserId();
-        var items = await _placeService.GetPlacesAsync(destinationId, type, tags, category, userId);
-        return Ok(items);
+        var result = await _placeService.GetPlacesAsync(destinationId, type, tags, category, userId);
+        return result.Status switch
+        {
+            DestinationScopedStatus.Success => Ok(result.Data),
+            DestinationScopedStatus.InvalidDestination => BadRequest(new { error = "destinationId is required and must be positive." }),
+            DestinationScopedStatus.DestinationNotFound => NotFound(new { error = "Destination not found." }),
+            _ => StatusCode(500)
+        };
     }
 
     [HttpGet("{id:int}")]
@@ -39,12 +46,18 @@ public class PlacesController : ControllerBase
 
     [HttpGet("hotels")]
     public async Task<ActionResult> GetHotels(
-        [FromQuery] int destinationId = 1,
+        [FromQuery] int? destinationId = null,
         [FromQuery] string? tag = null)
     {
         var userId = GetUserId();
-        var items = await _placeService.GetHotelsAsync(destinationId, tag, userId);
-        return Ok(items);
+        var result = await _placeService.GetHotelsAsync(destinationId, tag, userId);
+        return result.Status switch
+        {
+            DestinationScopedStatus.Success => Ok(result.Data),
+            DestinationScopedStatus.InvalidDestination => BadRequest(new { error = "destinationId is required and must be positive." }),
+            DestinationScopedStatus.DestinationNotFound => NotFound(new { error = "Destination not found." }),
+            _ => StatusCode(500)
+        };
     }
 
     [HttpGet("hotels/{id:int}")]

@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
@@ -19,14 +20,23 @@ public class PlaceService : IPlaceService
 
     // --- Frontend-facing methods ---
 
-    public async Task<List<PlaceListItemDto>> GetPlacesAsync(int destinationId, string? type = null, string? tags = null, string? category = null, int? userId = null)
+    public async Task<DestinationScopedResult<List<PlaceListItemDto>>> GetPlacesAsync(int? destinationId, string? type = null, string? tags = null, string? category = null, int? userId = null)
     {
+        if (!destinationId.HasValue || destinationId.Value <= 0)
+        {
+            return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.InvalidDestination };
+        }
+        if (!await _db.Destinations.AnyAsync(d => d.Id == destinationId.Value))
+        {
+            return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.DestinationNotFound };
+        }
+
         var query = _db.Places
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
             .Include(p => p.PlaceTags).ThenInclude(pt => pt.Tag)
             .Include(p => p.PlaceReviews)
-            .Where(p => p.Location.DestinationId == destinationId);
+            .Where(p => p.Location.DestinationId == destinationId.Value);
 
         if (!string.IsNullOrEmpty(type))
             query = query.Where(p => p.PlaceType.Name.ToLower() == type.ToLower());
@@ -76,7 +86,7 @@ public class PlaceService : IPlaceService
                 IsSaved = favoriteIds.Contains(p.Id)
             });
         }
-        return items;
+        return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.Success, Data = items };
     }
 
     public async Task<PlaceDetailDto?> GetPlaceDetailAsync(int id, int? userId = null)
@@ -211,14 +221,23 @@ public class PlaceService : IPlaceService
         };
     }
 
-    public async Task<List<PlaceListItemDto>> GetHotelsAsync(int destinationId, string? tag = null, int? userId = null)
+    public async Task<DestinationScopedResult<List<PlaceListItemDto>>> GetHotelsAsync(int? destinationId, string? tag = null, int? userId = null)
     {
+        if (!destinationId.HasValue || destinationId.Value <= 0)
+        {
+            return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.InvalidDestination };
+        }
+        if (!await _db.Destinations.AnyAsync(d => d.Id == destinationId.Value))
+        {
+            return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.DestinationNotFound };
+        }
+
         var query = _db.Places
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
             .Include(p => p.PlaceTags).ThenInclude(pt => pt.Tag)
             .Include(p => p.PlaceReviews)
-            .Where(p => p.Location.DestinationId == destinationId && p.PricePerNight != null);
+            .Where(p => p.Location.DestinationId == destinationId.Value && p.PricePerNight != null);
 
         if (!string.IsNullOrEmpty(tag) && tag.ToLower() != "all")
             query = query.Where(p => p.PlaceTags.Any(pt => pt.Tag.Name.ToLower() == tag.ToLower()));
@@ -250,7 +269,7 @@ public class PlaceService : IPlaceService
                 IsSaved = favoriteIds.Contains(p.Id)
             });
         }
-        return items;
+        return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.Success, Data = items };
     }
 
     // --- Master detail/review methods ---
