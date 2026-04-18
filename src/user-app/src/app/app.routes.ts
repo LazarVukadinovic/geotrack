@@ -5,7 +5,7 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./core/layout/app-shell/app-shell.component').then(m => m.AppShellComponent),
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'home' },
+      { path: '', pathMatch: 'full', redirectTo: 'contributions' },
       {
         path: 'home',
         loadComponent: () =>
@@ -57,6 +57,13 @@ export const routes: Routes = [
         path: 'profile/collections/:id',
         loadComponent: () =>
           import('./features/profile/pages/collection-detail/collection-detail.component').then(m => m.CollectionDetailComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'contributions',
+        loadComponent: () =>
+          import('./features/contributions/pages/my-contributions/my-contributions.component')
+            .then(m => m.MyContributionsPageComponent),
         data: { hideBottomNav: true },
       },
 
