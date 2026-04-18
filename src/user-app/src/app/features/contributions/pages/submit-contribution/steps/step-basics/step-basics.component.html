@@ -1,4 +1,4 @@
-<div class="px-5 pt-6 pb-28 flex flex-col gap-6">
+<div class="px-5 pt-6 pb-32 flex flex-col gap-6">
 
   <!-- Cover Image -->
   <div>
@@ -37,13 +37,13 @@
     </div>
   </div>
 
-  <!-- Stay Type -->
+  <!-- Stay Type — horizontalni scroll -->
   <div>
     <label class="text-sm font-bold text-slate-700 mb-3 block">Stay Type</label>
-    <div class="flex gap-2 flex-wrap">
+    <div class="flex gap-2 overflow-x-auto pb-1 -mx-5 px-5 scrollbar-hide">
       <button *ngFor="let type of stayTypes"
         (click)="form.stayType = type"
-        class="px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200"
+        class="flex-none px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200"
         [class.bg-[#e8722a]]="form.stayType === type"
         [class.border-[#e8722a]]="form.stayType === type"
         [class.text-white]="form.stayType === type"
@@ -58,8 +58,9 @@
   <!-- Location Details -->
   <div>
     <div class="flex items-center gap-2 mb-3">
+      <!-- Isti pin kao kod lokacije na kartici -->
       <svg class="w-4 h-4 text-[#e8722a]" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
       </svg>
       <label class="text-sm font-bold text-slate-700">Location Details</label>
     </div>
@@ -87,9 +88,10 @@
       </div>
     </div>
 
+    <!-- Pin Coordinates — isti pin -->
     <button class="mt-3 w-full py-3 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center gap-2 text-slate-500 text-sm font-semibold active:bg-slate-50 transition-colors">
-      <svg class="w-4 h-4 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/>
+      <svg class="w-4 h-4 text-[#e8722a]" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
       </svg>
       Pin Coordinates
     </button>

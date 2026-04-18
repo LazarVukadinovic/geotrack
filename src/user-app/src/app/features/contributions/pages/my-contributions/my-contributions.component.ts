@@ -20,9 +20,7 @@ export interface ContributionItem {
 })
 export class MyContributionsPageComponent {
   constructor(private router: Router) {}
-
-  filters = ['All', 'Stays', 'Pending', 'Approved'];
-  activeFilter = 'All';
+  
   showEntityPicker = signal(false);
 
   items: ContributionItem[] = [
@@ -32,16 +30,7 @@ export class MyContributionsPageComponent {
     { id: '4', name: 'Riverside Glamping Tent', location: 'Bend, Oregon', imageUrl: 'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=600&q=80', status: 'REJECTED', updatedLabel: 'Updated 3 weeks ago', entityType: 'Stay' },
   ];
 
-  filteredItems = computed(() => {
-    switch (this.activeFilter) {
-      case 'Stays': return this.items.filter(i => i.entityType === 'Stay');
-      case 'Pending': return this.items.filter(i => i.status === 'UNDER REVIEW' || i.status === 'PENDING');
-      case 'Approved': return this.items.filter(i => i.status === 'APPROVED');
-      default: return this.items;
-    }
-  });
-
-  openEntityPicker(): void { this.showEntityPicker.set(true); }
+  // openEntityPicker(): void { this.showEntityPicker.set(true); }
 
   startContribution(type: string): void {
     this.showEntityPicker.set(false);

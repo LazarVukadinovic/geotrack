@@ -13,9 +13,11 @@
 
     <div class="p-5">
       <h2 class="text-xl font-bold text-slate-800 mb-1">{{ draft().basics?.name }}</h2>
+
+      <!-- Pin — filled, isti kao step 1 -->
       <div class="flex items-center gap-1 mb-4">
-        <svg class="w-3.5 h-3.5 text-[#e8722a]" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+        <svg class="w-3.5 h-3.5 text-[#e8722a] flex-none" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
         </svg>
         <span class="text-sm text-slate-500">{{ draft().basics?.city }}, {{ draft().basics?.country }}</span>
       </div>
@@ -34,13 +36,54 @@
         <p class="text-sm text-slate-600 leading-relaxed">{{ draft().details?.description }}</p>
       </div>
 
-      <!-- Amenities -->
+      <!-- Amenities — SVG ikonice -->
       <div *ngIf="draft().features?.amenities?.length" class="mb-5">
         <p class="text-sm font-bold text-slate-800 mb-3">Selected Amenities</p>
         <div class="grid grid-cols-2 gap-2">
-          <div *ngFor="let id of draft().features?.amenities"
-            class="flex items-center gap-2">
-            <span class="text-base">{{ getAmenityEmoji(id) }}</span>
+          <div *ngFor="let id of draft().features?.amenities" class="flex items-center gap-2">
+
+            <ng-container *ngIf="id === 'pool'">
+              <svg class="w-5 h-5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12c1.5 0 1.5-1.5 3-1.5S8.5 12 10 12s1.5-1.5 3-1.5S14.5 12 16 12s1.5-1.5 3-1.5S20.5 12 22 12M3 17c1.5 0 1.5-1.5 3-1.5S8.5 17 10 17s1.5-1.5 3-1.5S14.5 17 16 17s1.5-1.5 3-1.5S20.5 17 22 17M7 8V4m5 4V4m5 4V4"/>
+              </svg>
+            </ng-container>
+            <ng-container *ngIf="id === 'wifi'">
+              <svg class="w-5 h-5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
+              </svg>
+            </ng-container>
+            <ng-container *ngIf="id === 'breakfast'">
+              <svg class="w-5 h-5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 11h18M3 11a2 2 0 01-2-2V7a2 2 0 012-2h18a2 2 0 012 2v2a2 2 0 01-2 2M3 11v8a2 2 0 002 2h14a2 2 0 002-2v-8M8 11V7m4 4V7m4 4V7"/>
+              </svg>
+            </ng-container>
+            <ng-container *ngIf="id === 'parking'">
+              <svg class="w-5 h-5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7v10m0-10h4a3 3 0 010 6H8m0-6"/>
+                <rect x="3" y="3" width="18" height="18" rx="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>
+              </svg>
+            </ng-container>
+            <ng-container *ngIf="id === 'spa'">
+              <svg class="w-5 h-5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3c0 0-4 4-4 8s4 8 4 8m0-16c0 0 4 4 4 8s-4 8-4 8m0-13c0 0-6 2-6 6M12 3c0 0 6 2 6 6"/>
+              </svg>
+            </ng-container>
+            <ng-container *ngIf="id === 'gym'">
+              <svg class="w-5 h-5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 7H4a1 1 0 00-1 1v8a1 1 0 001 1h2m0-10v10m0-10h12m0 0h2a1 1 0 011 1v8a1 1 0 01-1 1h-2m0-10v10M9 7v10m6-10v10"/>
+              </svg>
+            </ng-container>
+            <ng-container *ngIf="id === 'dining'">
+              <svg class="w-5 h-5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 3h2v7a3 3 0 006 0V3h2M8 3v7m10-7v18m-4-9h8"/>
+              </svg>
+            </ng-container>
+            <ng-container *ngIf="id === 'ac'">
+              <svg class="w-5 h-5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1010 16H2m15.73-8.27A2 2 0 1119 12H2"/>
+              </svg>
+            </ng-container>
+
             <span class="text-xs text-slate-600 font-medium">{{ getAmenityLabel(id) }}</span>
           </div>
         </div>
@@ -52,7 +95,6 @@
         <div class="flex flex-wrap gap-2">
           <div *ngFor="let id of draft().details?.bookingPartners"
             class="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-xl">
-            <span class="text-sm">{{ getPartnerEmoji(id) }}</span>
             <span class="text-xs font-semibold text-slate-700">{{ getPartnerLabel(id) }}</span>
             <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
@@ -60,6 +102,7 @@
           </div>
         </div>
       </div>
+
     </div>
   </div>
 </div>

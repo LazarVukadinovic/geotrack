@@ -13,21 +13,24 @@ export class StepPreviewComponent {
   confirmed = output<void>();
   back = output<void>();
 
-  amenityMap: Record<string, { label: string; emoji: string }> = {
-    pool: { label: 'Pool', emoji: '🏊' }, wifi: { label: 'High-speed Wi-Fi', emoji: '📶' },
-    breakfast: { label: 'Breakfast Included', emoji: '☕' }, parking: { label: 'Free Parking', emoji: '🅿️' },
-    spa: { label: 'Spa', emoji: '💆' }, gym: { label: 'Gym', emoji: '🏋️' },
-    dining: { label: 'Dining', emoji: '🍽️' }, ac: { label: 'Air Conditioning', emoji: '❄️' },
+  amenityMap: Record<string, { label: string }> = {
+    pool:      { label: 'Swimming Pool' },
+    wifi:      { label: 'High-speed Wi-Fi' },
+    breakfast: { label: 'Breakfast Included' },
+    parking:   { label: 'Free Parking' },
+    spa:       { label: 'Spa & Wellness' },
+    gym:       { label: 'Fitness Center' },
+    dining:    { label: 'On-site Dining' },
+    ac:        { label: 'Air Conditioning' },
   };
 
-  partnerMap: Record<string, { label: string; emoji: string }> = {
-    booking: { label: 'Booking.com', emoji: '🌐' },
-    airbnb: { label: 'Airbnb', emoji: '🏠' },
-    hotel: { label: 'Hotel Website', emoji: '📋' },
+  partnerMap: Record<string, { label: string }> = {
+    booking: { label: 'Booking.com' },
+    airbnb:  { label: 'Airbnb' },
+    hotel:   { label: 'Hotel Website' },
   };
 
-  getAmenityLabel(id: string): string { return this.amenityMap[id]?.label ?? id; }
-  getAmenityEmoji(id: string): string { return this.amenityMap[id]?.emoji ?? '✓'; }
-  getPartnerLabel(id: string): string { return this.partnerMap[id]?.label ?? id; }
-  getPartnerEmoji(id: string): string { return this.partnerMap[id]?.emoji ?? '🔗'; }
+getAmenityLabel(id: string): string { return this.amenityMap[id]?.label ?? id; }
+getPartnerLabel(id: string): string { return this.partnerMap[id]?.label ?? id; }
+ 
 }
