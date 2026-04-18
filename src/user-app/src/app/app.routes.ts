@@ -97,7 +97,6 @@ export const routes: Routes = [
       },
       {
         path: 'register/interests',
-        canActivate: [guestGuard],
         loadComponent: () =>
           import('./features/auth/pages/interests-page/interests-page.component').then(m => m.InterestsPageComponent),
         data: { hideBottomNav: true },
