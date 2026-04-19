@@ -15,6 +15,7 @@ import { MustSeeSliderComponent } from '../../components/must-see-slider/must-se
 import { LandmarksSliderComponent } from '../../components/landmarks-slider/landmarks-slider.component';
 import { LocalFavoritesListComponent } from '../../components/local-favorites-list/local-favorites-list.component';
 import { ExploreService } from '../../services/explore.service';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
   selector: 'app-explore-page',
@@ -31,6 +32,7 @@ import { ExploreService } from '../../services/explore.service';
     MustSeeSliderComponent,
     LandmarksSliderComponent,
     LocalFavoritesListComponent,
+    EmptyStateComponent,
   ],
   templateUrl: './explore-page.component.html',
   styleUrl: './explore-page.component.scss',
@@ -44,6 +46,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly scrollState = inject(ExploreScrollStateService);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
+  protected readonly loadError  = this.explore.loadError;
 
   constructor() {
     // For returning users, silently attempt to upgrade location via GPS in background.

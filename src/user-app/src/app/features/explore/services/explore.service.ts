@@ -16,15 +16,8 @@ import type {
   NearbyStatus,
 } from '../models/explore-extras.model';
 import {
-  MOCK_CURATED_FOR_YOU,
-  MOCK_EVENTS_THIS_WEEK,
-  MOCK_LANDMARK_CATEGORIES,
-  MOCK_LOCAL_FAVORITES,
-  MOCK_MUST_SEE_ATTRACTIONS,
   MOCK_NEARBY_STATUS,
-  MOCK_POPULAR_NEARBY,
   MOCK_PROMO_CARD,
-  MOCK_TOP_STAYS,
 } from '../data/mock-explore.data';
 
 interface ExploreApiResponse {
@@ -60,6 +53,7 @@ export class ExploreService {
   private readonly _mustSeeAttractions = signal<ExploreAttraction[]>([]);
   private readonly _landmarkCategories = signal<ExploreLandmarkCategory[]>([]);
   private readonly _loaded = signal(false);
+  private readonly _loadError = signal<string | null>(null);
 
   /** Coordinates used for the last successful load. */
   private loadedLat = 0;
@@ -76,6 +70,7 @@ export class ExploreService {
   readonly mustSeeAttractions = computed(() => this._mustSeeAttractions());
   readonly landmarkCategories = computed(() => this._landmarkCategories());
   readonly loaded = computed(() => this._loaded());
+  readonly loadError = computed(() => this._loadError());
 
   constructor() {
     // React to location changes — reload explore data when city meaningfully changes
@@ -112,13 +107,21 @@ export class ExploreService {
         this.applyResponse(res);
         this.loadedLat = lat;
         this.loadedLng = lng;
+        this._loadError.set(null);
         this._loaded.set(true);
         onComplete?.();
       },
       error: () => {
-        this.applyMockFallback();
+        this._eventsThisWeek.set([]);
+        this._topStays.set([]);
+        this._popularNearby.set([]);
+        this._mustSeeAttractions.set([]);
+        this._landmarkCategories.set([]);
+        this._curatedForYou.set([]);
+        this._localFavorites.set([]);
         this.loadedLat = lat;
         this.loadedLng = lng;
+        this._loadError.set("We couldn't load the Explore feed. Check your connection and try again.");
         this._loaded.set(true);
         onComplete?.();
       },
@@ -197,16 +200,6 @@ export class ExploreService {
         name: res.selectedDestination.name,
       });
     }
-  }
-
-  private applyMockFallback(): void {
-    this._curatedForYou.set([...MOCK_CURATED_FOR_YOU]);
-    this._localFavorites.set([...MOCK_LOCAL_FAVORITES]);
-    this._eventsThisWeek.set([...MOCK_EVENTS_THIS_WEEK]);
-    this._popularNearby.set([...MOCK_POPULAR_NEARBY]);
-    this._topStays.set([...MOCK_TOP_STAYS]);
-    this._mustSeeAttractions.set([...MOCK_MUST_SEE_ATTRACTIONS]);
-    this._landmarkCategories.set([...MOCK_LANDMARK_CATEGORIES]);
   }
 
   private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
