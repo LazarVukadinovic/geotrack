@@ -13,11 +13,12 @@ import { EventsListingService } from '../../services/events-listing.service';
 import { EventsListingScrollStateService } from '../../services/events-listing-scroll-state.service';
 import { EVENTS_LISTING_FILTERS } from '../../models/events-listing.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
   selector: 'app-events-listing-page',
   standalone: true,
-  imports: [],
+  imports: [EmptyStateComponent],
   templateUrl: './events-listing-page.component.html',
   styleUrl: './events-listing-page.component.scss',
 })
@@ -30,6 +31,7 @@ export class EventsListingPageComponent implements AfterViewInit {
 
   protected readonly filters      = EVENTS_LISTING_FILTERS;
   protected readonly activeFilter = signal('all');
+  protected readonly loadError    = this.service.loadError;
 
   protected readonly filteredItems = computed(() => {
     const filter = this.activeFilter();

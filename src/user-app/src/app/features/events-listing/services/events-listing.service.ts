@@ -5,7 +5,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { EventListingItem, EventsFeatured } from '../models/events-listing.model';
-import { MOCK_EVENTS_LISTING, EVENTS_FEATURED } from '../data/mock-events-listing.data';
+import { EVENTS_FEATURED } from '../data/mock-events-listing.data';
 
 interface ApiEventsResponse {
   items: {
@@ -37,6 +37,7 @@ export class EventsListingService {
   private readonly _items = signal<EventListingItem[]>([]);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _featured = signal<EventsFeatured>(EVENTS_FEATURED);
+  private readonly _loadError = signal<string | null>(null);
   private loadedDestinationId: number | null = null;
 
   readonly featured = computed(() => this._featured());
@@ -48,6 +49,8 @@ export class EventsListingService {
       isSaved: overrides[item.id] !== undefined ? overrides[item.id] : item.isSaved,
     }));
   });
+
+  readonly loadError = computed(() => this._loadError());
 
   constructor() {
     void this.exploreSvc;
@@ -82,10 +85,12 @@ export class EventsListingService {
           });
         }
         this.loadedDestinationId = destinationId;
+        this._loadError.set(null);
       },
       error: () => {
-        this._items.set([...MOCK_EVENTS_LISTING]);
+        this._items.set([]);
         this.loadedDestinationId = destinationId;
+        this._loadError.set("We couldn't load events. Check your connection and try again.");
       },
     });
   }
