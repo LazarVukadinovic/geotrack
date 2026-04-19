@@ -23,6 +23,13 @@
       <p class="lpc-page__subtitle">{{ meta().subtitle }}</p>
     </div>
 
+    @if (loadError()) {
+      <app-empty-state
+        title="Something went wrong"
+        [message]="loadError()!"
+      />
+    }
+
     <!-- Item card list -->
     <div class="lpc-page__list" [attr.aria-label]="meta().title + ' places'">
 

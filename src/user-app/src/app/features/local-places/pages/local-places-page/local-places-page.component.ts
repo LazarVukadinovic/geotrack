@@ -11,11 +11,12 @@ import { Router } from '@angular/router';
 import { LocalPlacesService } from '../../services/local-places.service';
 import { LocalPlacesScrollStateService } from '../../services/local-places-scroll-state.service';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
   selector: 'app-local-places-page',
   standalone: true,
-  imports: [],
+  imports: [EmptyStateComponent],
   templateUrl: './local-places-page.component.html',
   styleUrl: './local-places-page.component.scss',
 })
@@ -27,6 +28,7 @@ export class LocalPlacesPageComponent implements AfterViewInit {
   private readonly elRef       = inject(ElementRef<HTMLElement>);
 
   protected readonly categories = this.service.categories;
+  protected readonly loadError  = this.service.loadError;
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();

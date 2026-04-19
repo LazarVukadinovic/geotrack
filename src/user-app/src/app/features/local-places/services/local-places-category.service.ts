@@ -5,7 +5,6 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { PlaceCategoryItem } from '../models/local-places.model';
-import { MOCK_CATEGORY_ITEMS } from '../data/mock-category-items.data';
 
 interface ApiPlaceListItem {
   id: number;
@@ -31,6 +30,7 @@ export class LocalPlacesCategoryService {
   private readonly exploreSvc = inject(ExploreService);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _apiItems = signal<Record<string, PlaceCategoryItem[]>>({});
+  private readonly _loadErrorByKey = signal<Record<string, string>>({});
   private readonly _loadedKeys = new Set<string>();
   private readonly _pendingKeys = signal<string[]>([]);
 
@@ -73,14 +73,25 @@ export class LocalPlacesCategoryService {
           isSaved: dto.isSaved,
         }));
         this._apiItems.update(m => ({ ...m, [categoryKey]: mapped }));
+        this._loadErrorByKey.update(m => {
+          const copy = { ...m };
+          delete copy[categoryKey];
+          return copy;
+        });
+      },
+      error: () => {
+        this._apiItems.update(m => ({ ...m, [categoryKey]: [] }));
+        this._loadErrorByKey.update(m => ({
+          ...m,
+          [categoryKey]: "We couldn't load these places. Check your connection and try again.",
+        }));
       },
     });
   }
 
   getItems(categoryKey: string): PlaceCategoryItem[] {
     const overrides = this._savedOverrides();
-    const apiData = this._apiItems()[categoryKey];
-    const source = apiData ?? (MOCK_CATEGORY_ITEMS[categoryKey] ?? []);
+    const source = this._apiItems()[categoryKey] ?? [];
     return source.map((item) => ({
       ...item,
       isSaved: overrides[item.id] !== undefined ? overrides[item.id] : item.isSaved,
@@ -90,13 +101,16 @@ export class LocalPlacesCategoryService {
   itemsFor(categoryKey: string) {
     return computed(() => {
       const overrides = this._savedOverrides();
-      const apiData = this._apiItems()[categoryKey];
-      const source = apiData ?? (MOCK_CATEGORY_ITEMS[categoryKey] ?? []);
+      const source = this._apiItems()[categoryKey] ?? [];
       return source.map((item) => ({
         ...item,
         isSaved: overrides[item.id] !== undefined ? overrides[item.id] : item.isSaved,
       }));
     });
+  }
+
+  loadErrorFor(categoryKey: string) {
+    return computed(() => this._loadErrorByKey()[categoryKey] ?? null);
   }
 
   getItems$(categoryKey: string): Observable<PlaceCategoryItem[]> {

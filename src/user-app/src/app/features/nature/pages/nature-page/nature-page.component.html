@@ -38,6 +38,13 @@
       </div>
     </div>
 
+    @if (loadError()) {
+      <app-empty-state
+        title="Something went wrong"
+        [message]="loadError()!"
+      />
+    }
+
     <!-- Item card list -->
     <div class="nat-page__list" aria-label="Nature spots">
 

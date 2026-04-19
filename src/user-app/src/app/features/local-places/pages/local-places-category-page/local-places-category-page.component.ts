@@ -15,11 +15,12 @@ import { LocalPlacesService } from '../../services/local-places.service';
 import { LocalPlacesCategoryService } from '../../services/local-places-category.service';
 import { LocalPlacesCategoryScrollStateService } from '../../services/local-places-category-scroll-state.service';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
   selector: 'app-local-places-category-page',
   standalone: true,
-  imports: [],
+  imports: [EmptyStateComponent],
   templateUrl: './local-places-category-page.component.html',
   styleUrl: './local-places-category-page.component.scss',
 })
@@ -39,6 +40,7 @@ export class LocalPlacesCategoryPageComponent implements AfterViewInit {
 
   protected readonly meta    = computed(() => this.metaService.getCategoryMeta(this.categoryKey()));
   protected readonly items   = computed(() => this.catService.itemsFor(this.categoryKey())());
+  protected readonly loadError = computed(() => this.catService.loadErrorFor(this.categoryKey())());
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();

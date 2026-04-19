@@ -13,11 +13,12 @@ import { NatureService } from '../../services/nature.service';
 import { NatureScrollStateService } from '../../services/nature-scroll-state.service';
 import { NATURE_FILTERS } from '../../models/nature.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
   selector: 'app-nature-page',
   standalone: true,
-  imports: [],
+  imports: [EmptyStateComponent],
   templateUrl: './nature-page.component.html',
   styleUrl: './nature-page.component.scss',
 })
@@ -30,6 +31,7 @@ export class NaturePageComponent implements AfterViewInit {
 
   protected readonly filters      = NATURE_FILTERS;
   protected readonly activeFilter = signal('all');
+  protected readonly loadError    = this.service.loadError;
 
   protected readonly filteredItems = computed(() => {
     const filter = this.activeFilter();

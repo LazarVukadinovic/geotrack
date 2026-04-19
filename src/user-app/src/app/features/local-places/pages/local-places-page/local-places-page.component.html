@@ -23,6 +23,13 @@
       <p class="lp-page__subtitle">Browse places by category</p>
     </div>
 
+    @if (loadError()) {
+      <app-empty-state
+        title="Something went wrong"
+        [message]="loadError()!"
+      />
+    }
+
     <!-- 2-column category grid -->
     <div class="lp-page__grid" role="list" aria-label="Place categories">
       @for (cat of categories(); track cat.id) {

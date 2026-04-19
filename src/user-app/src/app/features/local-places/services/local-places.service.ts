@@ -1,10 +1,9 @@
-import { Injectable, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import { DestinationService } from '../../../core/services/destination.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { LocalPlacesCategory, CategoryMeta } from '../models/local-places.model';
-import { MOCK_LOCAL_PLACES_CATEGORIES } from '../data/mock-local-places.data';
 import { CATEGORY_META } from '../data/mock-category-items.data';
 
 interface ApiCategory {
@@ -21,9 +20,11 @@ export class LocalPlacesService {
   private readonly destinationSvc = inject(DestinationService);
   private readonly exploreSvc = inject(ExploreService);
   private readonly _categories = signal<LocalPlacesCategory[]>([]);
+  private readonly _loadError = signal<string | null>(null);
   private loadedDestinationId: number | null = null;
 
   readonly categories = this._categories.asReadonly();
+  readonly loadError = computed(() => this._loadError());
 
   constructor() {
     void this.exploreSvc;
@@ -45,10 +46,12 @@ export class LocalPlacesService {
           subtitle: c.subtitle ?? '',
         })));
         this.loadedDestinationId = destinationId;
+        this._loadError.set(null);
       },
       error: () => {
-        this._categories.set([...MOCK_LOCAL_PLACES_CATEGORIES]);
+        this._categories.set([]);
         this.loadedDestinationId = destinationId;
+        this._loadError.set("We couldn't load local places. Check your connection and try again.");
       },
     });
   }
