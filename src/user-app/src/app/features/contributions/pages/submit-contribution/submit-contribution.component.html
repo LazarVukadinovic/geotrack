@@ -20,7 +20,7 @@
   </div>
 
   <!-- Steps -->
-  <div class="flex-1 overflow-y-auto">
+  <div class="flex-1 overflow-y-auto flex flex-col">
     @switch (currentStep()) {
       @case (1) {
         <app-step-basics
@@ -31,6 +31,7 @@
       @case (2) {
         <app-step-features
           [data]="draft().features"
+          (changed)="onFeaturesChanged($event)"
           (saved)="onFeaturesSaved($event)"
           (back)="prevStep()"
         />
@@ -38,6 +39,7 @@
       @case (3) {
         <app-step-details
           [data]="draft().details"
+          (changed)="onDetailsChanged($event)"
           (saved)="onDetailsSaved($event)"
           (back)="prevStep()"
         />

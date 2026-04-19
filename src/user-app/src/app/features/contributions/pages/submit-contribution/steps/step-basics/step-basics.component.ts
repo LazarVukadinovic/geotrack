@@ -1,4 +1,4 @@
-import { Component, input, output, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, input, output, signal, OnDestroy, effect, ElementRef, viewChild, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
@@ -21,12 +21,12 @@ export interface BasicsData {
   imports: [CommonModule, FormsModule],
   templateUrl: './step-basics.component.html',
 })
-export class StepBasicsComponent implements OnInit, OnDestroy {
+export class StepBasicsComponent implements OnDestroy {
   data = input<BasicsData | null>(null);
   saved = output<BasicsData>();
 
   stayTypes = ['Hotel', 'Villa', 'Apartment', 'Resort', 'Cabin', 'Glamping', 'Hostel'];
-  previewUrl = '';
+  previewUrl = signal('');
   showMapPicker = signal(false);
   pickerLat = signal<number | null>(null);
   pickerLng = signal<number | null>(null);
@@ -38,23 +38,13 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     region: '', country: '', imageUrl: '', lat: null, lng: null
   };
 
-  ngOnInit() {
-    if (this.data()) Object.assign(this.form, this.data());
-    if (this.form.lat) {
-      this.pickerLat.set(this.form.lat);
-      this.pickerLng.set(this.form.lng);
-    }
-  }
-
-  ngOnDestroy() { this.pickerMap?.remove(); }
-
   onImageSelected(e: Event): void {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      this.previewUrl = reader.result as string;
-      this.form.imageUrl = this.previewUrl;
+      this.previewUrl.set(reader.result as string);
+      this.form.imageUrl = this.previewUrl();
     };
     reader.readAsDataURL(file);
   }
@@ -125,7 +115,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
       this.pickerMap = undefined;
       this.showMapPicker.set(false);
     }
-  }  // ← ova zagrada je nedostajala
+  } 
 
   isValid(): boolean {
     return !!this.form.name.trim() && !!this.form.city.trim() && !!this.form.country.trim();
@@ -134,4 +124,158 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   onContinue(): void {
     if (this.isValid()) this.saved.emit({ ...this.form });
   }
+  // imgPosition = signal('50% 50%');
+  // private touchStart: { x: number; y: number; px: number; py: number } | null = null;
+
+  // startTouchDrag(e: TouchEvent): void {
+  //   if (e.touches.length !== 1) return;
+  //   e.preventDefault();
+  //   const t = e.touches[0];
+  //   const [px, py] = this.imgPosition().split(' ').map(v => parseFloat(v));
+  //   this.touchStart = { x: t.clientX, y: t.clientY, px, py };
+  // }
+
+  // moveTouchDrag(e: TouchEvent): void {
+  //   if (!this.touchStart || e.touches.length !== 1) return;
+  //   e.preventDefault();
+  //   const t = e.touches[0];
+  //   const dx = (t.clientX - this.touchStart.x) / 1.5;
+  //   const dy = (t.clientY - this.touchStart.y) / 1.5;
+  //   const newPx = Math.min(100, Math.max(0, this.touchStart.px - dx));
+  //   const newPy = Math.min(100, Math.max(0, this.touchStart.py - dy));
+  //   this.imgPosition.set(`${newPx}% ${newPy}%`);
+  // }
+
+  // endTouchDrag(): void {
+  //   this.touchStart = null;
+  // }
+
+  // private onDrag(x: number, y: number): void {
+  //   if (!this.dragStart) return;
+  //   const dx = (x - this.dragStart.x) / 3;
+  //   const dy = (y - this.dragStart.y) / 3;
+  //   const px = Math.min(100, Math.max(0, this.dragStart.px - dx));
+  //   const py = Math.min(100, Math.max(0, this.dragStart.py - dy));
+  //   this.imgPosition = `${px}% ${py}%`;
+  // }
+  imgContainer = viewChild<ElementRef<HTMLDivElement>>('imgContainer');
+bgPosition = signal('50% 50%');
+bgSize = signal('cover');
+
+private touchState: {
+  startX: number; startY: number;
+  startPosX: number; startPosY: number;
+  startDist: number; startSize: number;
+} | null = null;
+
+private boundTouchStart!: (e: TouchEvent) => void;
+private boundTouchMove!: (e: TouchEvent) => void;
+private boundTouchEnd!: () => void;
+
+constructor() {
+  effect(() => {
+    const d = this.data();
+    if (d) {
+      Object.assign(this.form, d);
+      if (d.imageUrl) this.previewUrl.set(d.imageUrl);
+      if (d.lat) {
+        this.pickerLat.set(d.lat);
+        this.pickerLng.set(d.lng);
+      }
+    }
+  });
+
+  effect(() => {
+    const el = this.imgContainer()?.nativeElement;
+    if (!el) return;
+    if (this.boundTouchStart) {
+      el.removeEventListener('touchstart', this.boundTouchStart);
+      el.removeEventListener('touchmove', this.boundTouchMove);
+      el.removeEventListener('touchend', this.boundTouchEnd);
+    }
+    this.registerTouchListeners();
+  });
+}
+
+private getDist(touches: TouchList): number {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+private parsePct(val: string): number {
+  return parseFloat(val.replace('%', ''));
+}
+
+private parseSize(val: string): number {
+  if (val === 'cover') return 100;
+  return parseFloat(val.replace('%', ''));
+}
+
+private registerTouchListeners(): void {
+  const el = this.imgContainer()?.nativeElement;
+  if (!el) return;
+
+  this.boundTouchStart = (e: TouchEvent) => {
+    if (!this.previewUrl()) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('.change-label')) return;
+    e.preventDefault();
+    const posX = this.parsePct(this.bgPosition().split(' ')[0]);
+    const posY = this.parsePct(this.bgPosition().split(' ')[1]);
+    const size = this.parseSize(this.bgSize());
+    if (e.touches.length === 1) {
+      this.touchState = {
+        startX: e.touches[0].clientX,
+        startY: e.touches[0].clientY,
+        startPosX: posX, startPosY: posY,
+        startDist: 0, startSize: size
+      };
+    } else if (e.touches.length === 2) {
+      this.touchState = {
+        startX: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        startY: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+        startPosX: posX, startPosY: posY,
+        startDist: this.getDist(e.touches),
+        startSize: size
+      };
+    }
+  };
+
+  this.boundTouchMove = (e: TouchEvent) => {
+    if (!this.touchState || !this.previewUrl()) return;
+    e.preventDefault();
+
+    if (e.touches.length === 1) {
+      // Pan
+      const dx = (e.touches[0].clientX - this.touchState.startX) / 2;
+      const dy = (e.touches[0].clientY - this.touchState.startY) / 2;
+      const newX = Math.min(100, Math.max(0, this.touchState.startPosX - dx));
+      const newY = Math.min(100, Math.max(0, this.touchState.startPosY - dy));
+      this.bgPosition.set(`${newX}% ${newY}%`);
+    } else if (e.touches.length === 2) {
+      // Pinch zoom
+      const newDist = this.getDist(e.touches);
+      const scale = newDist / this.touchState.startDist;
+      const newSize = Math.min(200, Math.max(50, this.touchState.startSize * scale));
+      this.bgSize.set(`${newSize}%`);
+    }
+  };
+
+  this.boundTouchEnd = () => { this.touchState = null; };
+
+  el.addEventListener('touchstart', this.boundTouchStart, { passive: false });
+  el.addEventListener('touchmove', this.boundTouchMove, { passive: false });
+  el.addEventListener('touchend', this.boundTouchEnd);
+}
+
+ngOnDestroy() {
+  this.pickerMap?.remove();
+  const el = this.imgContainer()?.nativeElement;
+  if (el && this.boundTouchStart) {
+    el.removeEventListener('touchstart', this.boundTouchStart);
+    el.removeEventListener('touchmove', this.boundTouchMove);
+    el.removeEventListener('touchend', this.boundTouchEnd);
+  }
+}
 }

@@ -25,7 +25,7 @@ export class SubmitContributionComponent {
   entityType = 'Stay';
   currentStep = signal(1);
 
-  draft = signal<ContributionDraft>({ basics: null, features: null, details: null });
+  draft = signal<ContributionDraft>({ basics: null, features: { tags: [], amenities: [] }, details: { description: '', phone: '', website: '', bookingPartners: [] } });
 
   constructor() {
     const nav = this.router.getCurrentNavigation();
@@ -64,5 +64,11 @@ export class SubmitContributionComponent {
   resetAndStart(): void {
     this.draft.set({ basics: null, features: null, details: null });
     this.currentStep.set(1);
+  }
+  onFeaturesChanged(data: FeaturesData): void {
+    this.draft.update(d => ({ ...d, features: data }));
+  }
+  onDetailsChanged(data: DetailsData): void {
+    this.draft.update(d => ({ ...d, details: data }));
   }
 }

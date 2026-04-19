@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { Component, input, output, OnInit, effect, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export interface FeaturesData {
@@ -16,6 +16,7 @@ export class StepFeaturesComponent {
   data = input<FeaturesData | null>(null);
   saved = output<FeaturesData>();
   back = output<void>();
+  changed = output<FeaturesData>();
 
   characteristicTags = [
   'Luxury', 'Boutique', 'Budget-Friendly',
@@ -39,16 +40,26 @@ export class StepFeaturesComponent {
   selectedTags: string[] = [];
   selectedAmenities: string[] = [];
 
-  ngOnInit() {
-    if (this.data()) {
-      this.selectedTags = [...(this.data()?.tags ?? [])];
-      this.selectedAmenities = [...(this.data()?.amenities ?? [])];
-    }
+    constructor() {
+    effect(() => {
+      const d = this.data();
+      if (d) {
+        this.selectedTags = [...(d.tags ?? [])];
+        this.selectedAmenities = [...(d.amenities ?? [])];
+      }
+    });
   }
+  // ngOnInit() {
+  //   if (this.data()) {
+  //     this.selectedTags = [...(this.data()?.tags ?? [])];
+  //     this.selectedAmenities = [...(this.data()?.amenities ?? [])];
+  //   }
+  // }
 
   toggleTag(tag: string): void {
     if (this.isTagSelected(tag)) this.selectedTags = this.selectedTags.filter(t => t !== tag);
     else this.selectedTags = [...this.selectedTags, tag];
+    this.changed.emit({ tags: this.selectedTags, amenities: this.selectedAmenities });
   }
 
   isTagSelected(tag: string): boolean { return this.selectedTags.includes(tag); }
@@ -56,6 +67,7 @@ export class StepFeaturesComponent {
   toggleAmenity(id: string): void {
     if (this.isAmenitySelected(id)) this.selectedAmenities = this.selectedAmenities.filter(a => a !== id);
     else this.selectedAmenities = [...this.selectedAmenities, id];
+    this.changed.emit({ tags: this.selectedTags, amenities: this.selectedAmenities });
   }
 
   isAmenitySelected(id: string): boolean { return this.selectedAmenities.includes(id); }
