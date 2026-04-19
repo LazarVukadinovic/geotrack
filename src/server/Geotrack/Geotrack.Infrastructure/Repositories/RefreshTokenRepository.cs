@@ -13,11 +13,11 @@ public class RefreshTokenRepository : IRefreshTokenRepository
         _context = context;
     }
 
-    public Task<RefreshToken?> GetActiveByTokenAsync(string token)
+    public Task<RefreshToken?> GetActiveByTokenHashAsync(string tokenHash)
     {
         return _context.RefreshTokens
             .FirstOrDefaultAsync(rt =>
-                rt.Token == token &&
+                rt.TokenHash == tokenHash &&
                 !rt.IsRevoked &&
                 rt.ExpiresAt > DateTime.UtcNow);
     }

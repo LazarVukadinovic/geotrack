@@ -4,7 +4,7 @@ namespace Geotrack.Application.Interfaces.Repository;
 
 public interface IRefreshTokenRepository
 {
-    Task<RefreshToken?> GetActiveByTokenAsync(string token);
+    Task<RefreshToken?> GetActiveByTokenHashAsync(string tokenHash);
     Task AddAsync(RefreshToken token);
     Task SaveChangesAsync();
 }

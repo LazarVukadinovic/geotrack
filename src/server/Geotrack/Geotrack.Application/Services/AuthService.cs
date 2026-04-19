@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.Interfaces.Repository;
@@ -9,7 +11,8 @@ namespace Geotrack.Application.Services;
 
 public class AuthService : IAuthService
 {
-    private const int RefreshTokenLifetimeDays = 7;
+    private const int PersistentRefreshTokenLifetimeDays  = 7;
+    private const int SessionOnlyRefreshTokenLifetimeDays = 1;
 
     private readonly IUserRepository _userRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
@@ -76,7 +79,7 @@ public class AuthService : IAuthService
         if (result == PasswordVerificationResult.Failed)
             throw new UnauthorizedAccessException("Invalid credentials");
 
-        return await IssueTokenPairAsync(user.Id);
+        return await IssueTokenPairAsync(user.Id, request.RememberMe);
     }
 
     public async Task<RefreshResponseDto> RefreshAsync(RefreshRequestDto request)
@@ -84,7 +87,7 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
             throw new UnauthorizedAccessException("Refresh token is required");
 
-        var stored = await _refreshTokenRepository.GetActiveByTokenAsync(request.RefreshToken);
+        var stored = await _refreshTokenRepository.GetActiveByTokenHashAsync(HashToken(request.RefreshToken));
         if (stored == null)
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
 
@@ -93,8 +96,10 @@ public class AuthService : IAuthService
         stored.RevokedAt  = DateTime.UtcNow;
         await _refreshTokenRepository.SaveChangesAsync();
 
-        // Issue a fresh pair — sliding window resets here.
-        var pair = await IssueTokenPairAsync(stored.UserId);
+        // Issue a fresh pair — persistence flag survives rotation so a
+        // Remember-Me session stays long-lived, and a session-only session
+        // stays short-lived.
+        var pair = await IssueTokenPairAsync(stored.UserId, stored.IsPersistent);
 
         return new RefreshResponseDto
         {
@@ -109,7 +114,7 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
             return; // Nothing to revoke.
 
-        var stored = await _refreshTokenRepository.GetActiveByTokenAsync(request.RefreshToken);
+        var stored = await _refreshTokenRepository.GetActiveByTokenHashAsync(HashToken(request.RefreshToken));
         if (stored == null)
             return; // Already expired / revoked — nothing to do.
 
@@ -120,18 +125,23 @@ public class AuthService : IAuthService
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private async Task<LoginResponseDto> IssueTokenPairAsync(int userId)
+    private async Task<LoginResponseDto> IssueTokenPairAsync(int userId, bool isPersistent)
     {
         var accessToken  = _jwtService.GenerateAccessToken(userId);
         var refreshValue = _jwtService.GenerateRefreshToken();
 
+        var lifetimeDays = isPersistent
+            ? PersistentRefreshTokenLifetimeDays
+            : SessionOnlyRefreshTokenLifetimeDays;
+
         var refreshToken = new RefreshToken
         {
-            UserId    = userId,
-            Token     = refreshValue,
-            ExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenLifetimeDays),
-            IsRevoked = false,
-            CreatedAt = DateTime.UtcNow
+            UserId       = userId,
+            TokenHash    = HashToken(refreshValue),
+            IsPersistent = isPersistent,
+            ExpiresAt    = DateTime.UtcNow.AddDays(lifetimeDays),
+            IsRevoked    = false,
+            CreatedAt    = DateTime.UtcNow
         };
 
         await _refreshTokenRepository.AddAsync(refreshToken);
@@ -144,6 +154,15 @@ public class AuthService : IAuthService
             ExpiresIn    = 900
         };
     }
+
+    /// <summary>
+    /// SHA-256 hex digest. No per-row salt — 64-byte CSPRNG refresh tokens
+    /// already carry enough entropy that rainbow-table / brute-force attacks
+    /// are infeasible, and the refresh path should not pay a password-KDF
+    /// cost on every request.
+    /// </summary>
+    private static string HashToken(string raw)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
 
     private static bool IsValidEmail(string email)
         => Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
