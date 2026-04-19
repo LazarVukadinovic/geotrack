@@ -23,6 +23,7 @@ export class SubmitContributionComponent {
   private router = inject(Router);
 
   entityType = 'Stay';
+  editId: string | null = null;
   currentStep = signal(1);
 
   draft = signal<ContributionDraft>({ basics: null, features: { tags: [], amenities: [] }, details: { description: '', phone: '', website: '', bookingPartners: [] } });
@@ -31,6 +32,8 @@ export class SubmitContributionComponent {
     const nav = this.router.getCurrentNavigation();
     const state = (nav?.extras?.state ?? history.state) as any;
     if (state?.entityType) this.entityType = state.entityType;
+    if (state?.editId) this.editId = state.editId;
+    if (state?.editDraft) this.draft.set(state.editDraft);
   }
 
   onBasicsSaved(data: BasicsData): void {
@@ -47,10 +50,30 @@ export class SubmitContributionComponent {
     this.draft.update(d => ({ ...d, details: data }));
     this.currentStep.set(4);
   }
-
+  isSubmitting = signal(false);
+  submitError = signal<string | null>(null);
   onSubmit(): void {
-    // HTTP call here
-    this.currentStep.set(5);
+    this.isSubmitting.set(true);
+    this.submitError.set(null);
+    const payload = this.draft();
+    const url = this.editId ? `/api/contributions/${this.editId}` : '/api/contributions';
+    const method = this.editId ? 'PUT' : 'POST';
+
+    fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
+      .then(() => this.currentStep.set(5))
+      .catch(() => this.submitError.set('Something went wrong. Please try again.'))
+      .finally(() => this.isSubmitting.set(false));
+    // const payload = this.draft();
+  
+    // if (this.editId) {
+    //   // fetch(`/api/contributions/${this.editId}`, { method: 'PUT', body: JSON.stringify(payload) })
+    //   console.log('UPDATE', this.editId, payload);
+    // } else {
+    //   // fetch('/api/contributions', { method: 'POST', body: JSON.stringify(payload) })
+    //   console.log('CREATE', payload);
+    // }
+    // this.currentStep.set(5);
   }
 
   prevStep(): void {
@@ -63,6 +86,7 @@ export class SubmitContributionComponent {
   }
   resetAndStart(): void {
     this.draft.set({ basics: null, features: null, details: null });
+    this.editId = null;
     this.currentStep.set(1);
   }
   onFeaturesChanged(data: FeaturesData): void {

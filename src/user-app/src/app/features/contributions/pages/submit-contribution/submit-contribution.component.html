@@ -9,7 +9,7 @@
         </svg>
       </button>
       <span class="text-[16] font-bold text-white tracking-wide text-center">
-        {{ currentStep() === 5 ? 'Submitted for Review' : 'Add New ' + entityType }}
+        {{ currentStep() === 5 ? 'Submitted for Review' : (editId ? 'Edit ' : 'Add New ') + entityType }}
       </span>
       
       <div class="w-9"></div>
