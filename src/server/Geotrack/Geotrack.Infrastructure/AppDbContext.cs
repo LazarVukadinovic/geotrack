@@ -631,6 +631,12 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.UserTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Defense-in-depth: the application layer already de-dupes via
+            // .Distinct() in UpdateUserInterestsAsync, but a DB-level unique
+            // index guarantees no duplicate (UserId, TagId) rows can land
+            // even under concurrent writes.
+            entity.HasIndex(x => new { x.UserId, x.TagId }).IsUnique();
         });
 
         // New entities for frontend support
@@ -752,9 +758,12 @@ public class AppDbContext : DbContext
 
             entity.HasKey(x => x.Id);
 
-            entity.Property(x => x.Token)
+            entity.Property(x => x.TokenHash)
                 .IsRequired()
-                .HasMaxLength(128);
+                .HasMaxLength(64);
+
+            entity.Property(x => x.IsPersistent)
+                .IsRequired();
 
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
@@ -767,8 +776,8 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Fast lookup by token value
-            entity.HasIndex(x => x.Token).IsUnique();
+            // Fast lookup by token hash
+            entity.HasIndex(x => x.TokenHash).IsUnique();
             // Fast lookup of active tokens per user
             entity.HasIndex(x => new { x.UserId, x.IsRevoked, x.ExpiresAt });
         });
