@@ -61,4 +61,8 @@ export class SubmitContributionComponent {
     if (this.currentStep() === 1) this.router.navigate(['/contributions']);
     else this.prevStep();
   }
+  resetAndStart(): void {
+    this.draft.set({ basics: null, features: null, details: null });
+    this.currentStep.set(1);
+  }
 }

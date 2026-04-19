@@ -23,7 +23,7 @@
       class="w-full py-4 bg-[#1a2b4a] rounded-3xl text-white font-bold text-base active:scale-[0.98] transition-all">
       Go to My Contributions
     </button>
-    <button (click)="addAnother()"
+    <button (click)="addAnother.emit()"
       class="w-full py-4 border-2 border-[#1a2b4a] rounded-3xl text-[#1a2b4a] font-bold text-base active:bg-slate-50 transition-colors">
       Add Another {{ entityType() }}
     </button>

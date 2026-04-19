@@ -1,4 +1,4 @@
-import { Component, input, inject } from '@angular/core';
+import { Component, input,output, inject } from '@angular/core';
 import { Router } from '@angular/router';
 
 @Component({
@@ -8,8 +8,10 @@ import { Router } from '@angular/router';
 })
 export class StepConfirmationComponent {
   entityType = input('Stay');
+  back = output<void>();
+  addAnother = output<void>();
   private router = inject(Router);
 
   goToContributions(): void { this.router.navigate(['/contributions']); }
-  addAnother(): void { this.router.navigate(['/contributions/submit'], { state: { entityType: this.entityType() } }); }
+  // addAnother(): void { this.router.navigate(['/contributions/submit'], { state: { entityType: this.entityType() } }); }
 }
