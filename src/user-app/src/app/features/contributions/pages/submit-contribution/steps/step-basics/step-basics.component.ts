@@ -13,6 +13,8 @@ export interface BasicsData {
   imageUrl: string;
   lat: number | null;
   lng: number | null;
+  imgBgPosition: string;
+  imgBgSize: string; 
 }
 
 @Component({
@@ -35,7 +37,9 @@ export class StepBasicsComponent implements OnDestroy {
 
   form: BasicsData = {
     name: '', stayType: 'Hotel', address: '', city: '',
-    region: '', country: '', imageUrl: '', lat: null, lng: null
+    region: '', country: '', imageUrl: '', lat: null, lng: null,
+    imgBgPosition: '50% 50%',
+    imgBgSize: 'cover'
   };
 
   onImageSelected(e: Event): void {
@@ -121,7 +125,10 @@ export class StepBasicsComponent implements OnDestroy {
   }
 
   onContinue(): void {
-    if (this.isValid()) this.saved.emit({ ...this.form });
+    if (!this.isValid()) return;
+    this.form.imgBgPosition = this.bgPosition();
+    this.form.imgBgSize = this.bgSize();
+    this.saved.emit({ ...this.form });
   }
   imgContainer = viewChild<ElementRef<HTMLDivElement>>('imgContainer');
   bgPosition = signal('50% 50%');
@@ -147,6 +154,8 @@ export class StepBasicsComponent implements OnDestroy {
           this.pickerLat.set(d.lat);
           this.pickerLng.set(d.lng);
         }
+        if (d.imgBgPosition) this.bgPosition.set(d.imgBgPosition);
+        if (d.imgBgSize) this.bgSize.set(d.imgBgSize);
       }
     });
 
@@ -212,14 +221,12 @@ export class StepBasicsComponent implements OnDestroy {
       e.preventDefault();
 
       if (e.touches.length === 1) {
-        // Pan
         const dx = (e.touches[0].clientX - this.touchState.startX) / 2;
         const dy = (e.touches[0].clientY - this.touchState.startY) / 2;
         const newX = Math.min(100, Math.max(0, this.touchState.startPosX - dx));
         const newY = Math.min(100, Math.max(0, this.touchState.startPosY - dy));
         this.bgPosition.set(`${newX}% ${newY}%`);
       } else if (e.touches.length === 2) {
-        // Pinch zoom
         const newDist = this.getDist(e.touches);
         const scale = newDist / this.touchState.startDist;
         const newSize = Math.min(200, Math.max(50, this.touchState.startSize * scale));
