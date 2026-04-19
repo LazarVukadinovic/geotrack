@@ -5,7 +5,6 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { FoodMusicItem } from '../models/food-music.model';
-import { MOCK_FOOD_MUSIC } from '../data/mock-food-music.data';
 
 interface ApiPlaceListItem {
   id: number;
@@ -31,6 +30,7 @@ export class FoodMusicService {
   private readonly exploreSvc = inject(ExploreService);
   private readonly _items = signal<FoodMusicItem[]>([]);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
+  private readonly _loadError = signal<string | null>(null);
   private loadedDestinationId: number | null = null;
 
   readonly items = computed(() => {
@@ -40,6 +40,8 @@ export class FoodMusicService {
       isSaved: overrides[item.id] !== undefined ? overrides[item.id] : item.isSaved,
     }));
   });
+
+  readonly loadError = computed(() => this._loadError());
 
   constructor() {
     void this.exploreSvc;
@@ -68,10 +70,12 @@ export class FoodMusicService {
           isSaved: dto.isSaved,
         })));
         this.loadedDestinationId = destinationId;
+        this._loadError.set(null);
       },
       error: () => {
-        this._items.set([...MOCK_FOOD_MUSIC]);
+        this._items.set([]);
         this.loadedDestinationId = destinationId;
+        this._loadError.set("We couldn't load food & music places. Check your connection and try again.");
       },
     });
   }

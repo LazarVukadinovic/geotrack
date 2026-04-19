@@ -13,11 +13,12 @@ import { FoodMusicService } from '../../services/food-music.service';
 import { FoodMusicScrollStateService } from '../../services/food-music-scroll-state.service';
 import { FOOD_MUSIC_FILTERS } from '../../models/food-music.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
   selector: 'app-food-music-page',
   standalone: true,
-  imports: [],
+  imports: [EmptyStateComponent],
   templateUrl: './food-music-page.component.html',
   styleUrl: './food-music-page.component.scss',
 })
@@ -30,6 +31,7 @@ export class FoodMusicPageComponent implements AfterViewInit {
 
   protected readonly filters = FOOD_MUSIC_FILTERS;
   protected readonly activeFilter = signal('all');
+  protected readonly loadError    = this.service.loadError;
 
   protected readonly filteredItems = computed(() => {
     const filter = this.activeFilter();
