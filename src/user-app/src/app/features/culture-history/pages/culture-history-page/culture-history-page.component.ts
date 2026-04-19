@@ -13,11 +13,12 @@ import { CultureHistoryService } from '../../services/culture-history.service';
 import { CultureHistoryScrollStateService } from '../../services/culture-history-scroll-state.service';
 import { CULTURE_HISTORY_FILTERS } from '../../models/culture-history.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
   selector: 'app-culture-history-page',
   standalone: true,
-  imports: [],
+  imports: [EmptyStateComponent],
   templateUrl: './culture-history-page.component.html',
   styleUrl: './culture-history-page.component.scss',
 })
@@ -30,6 +31,7 @@ export class CultureHistoryPageComponent implements AfterViewInit {
 
   protected readonly filters      = CULTURE_HISTORY_FILTERS;
   protected readonly activeFilter = signal('all');
+  protected readonly loadError    = this.service.loadError;
 
   protected readonly filteredItems = computed(() => {
     const filter = this.activeFilter();

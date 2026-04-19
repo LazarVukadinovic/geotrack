@@ -5,7 +5,6 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { CultureHistoryItem } from '../models/culture-history.model';
-import { MOCK_CULTURE_HISTORY } from '../data/mock-culture-history.data';
 
 interface ApiPlaceListItem {
   id: number;
@@ -31,6 +30,7 @@ export class CultureHistoryService {
   private readonly exploreSvc = inject(ExploreService);
   private readonly _items = signal<CultureHistoryItem[]>([]);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
+  private readonly _loadError = signal<string | null>(null);
   private loadedDestinationId: number | null = null;
 
   readonly items = computed(() => {
@@ -40,6 +40,8 @@ export class CultureHistoryService {
       isSaved: overrides[item.id] !== undefined ? overrides[item.id] : item.isSaved,
     }));
   });
+
+  readonly loadError = computed(() => this._loadError());
 
   constructor() {
     void this.exploreSvc;
@@ -68,10 +70,12 @@ export class CultureHistoryService {
           isSaved: dto.isSaved,
         })));
         this.loadedDestinationId = destinationId;
+        this._loadError.set(null);
       },
       error: () => {
-        this._items.set([...MOCK_CULTURE_HISTORY]);
+        this._items.set([]);
         this.loadedDestinationId = destinationId;
+        this._loadError.set("We couldn't load culture & history places. Check your connection and try again.");
       },
     });
   }
