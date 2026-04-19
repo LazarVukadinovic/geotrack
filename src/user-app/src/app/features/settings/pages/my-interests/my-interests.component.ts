@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { TagService } from '../../../../core/services/tag.service';
+import { UserService } from '../../../../core/services/user.service';
 import { Tag } from '../../../../core/models/tag.model';
 
 interface InterestItem {
@@ -23,6 +24,7 @@ interface UserInterestsResponse {
 })
 export class MyInterestsComponent {
   isSaving = false;
+  saveError = '';
   tags: Tag[] = [];
   selectedTags: Tag[] = [];
   private returnTo = '/settings';
@@ -31,6 +33,7 @@ export class MyInterestsComponent {
     private router: Router,
     private route: ActivatedRoute,
     private tagService: TagService,
+    private userService: UserService,
     private http: HttpClient,
   ) {
     this.route.queryParams.subscribe(p => {
@@ -44,20 +47,15 @@ export class MyInterestsComponent {
   }
 
   private loadSavedInterests(): void {
-    // Load from backend first, fallback to localStorage
     this.http.get<UserInterestsResponse>('/api/user/me/interests').subscribe({
       next: (res) => {
         const ids = res.tags.map(t => t.tagId);
         this.selectedTags = this.tags.filter(t => ids.includes(t.id));
-        // Sync localStorage
-        localStorage.setItem('userInterests', JSON.stringify(ids));
       },
       error: () => {
-        const saved = localStorage.getItem('userInterests');
-        if (saved) {
-          const ids: number[] = JSON.parse(saved);
-          this.selectedTags = this.tags.filter(t => ids.includes(t.id));
-        }
+        // On failure, start with an empty selection rather than resurrecting
+        // stale localStorage state.
+        this.selectedTags = [];
       },
     });
   }
@@ -84,19 +82,28 @@ export class MyInterestsComponent {
   saveChanges(): void {
     if (this.isSaving) return;
     this.isSaving = true;
+    this.saveError = '';
 
     const tagIds = this.selectedTags.map(t => t.id);
 
     this.tagService.saveUserTags(tagIds).subscribe({
       next: () => {
-        localStorage.setItem('userInterests', JSON.stringify(tagIds));
-        this.isSaving = false;
-        this.router.navigate([this.returnTo]);
+        // Refresh canonical user state before navigating so downstream pages
+        // read fresh interests from UserService.
+        this.userService.load().subscribe({
+          next: () => {
+            this.isSaving = false;
+            this.router.navigate([this.returnTo]);
+          },
+          error: () => {
+            this.isSaving = false;
+            this.router.navigate([this.returnTo]);
+          },
+        });
       },
       error: () => {
-        localStorage.setItem('userInterests', JSON.stringify(tagIds));
         this.isSaving = false;
-        this.router.navigate([this.returnTo]);
+        this.saveError = 'Could not save your interests. Please try again.';
       },
     });
   }

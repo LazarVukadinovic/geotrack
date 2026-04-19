@@ -45,13 +45,10 @@ export class TagService {
   }
 
   /**
-   * Save selected tag IDs for the current user.
-   * TODO: wire to POST /api/user/tags (or similar) when the endpoint exists.
-   * Currently a no-op that resolves successfully.
+   * Replace the current user's interests with the given tag IDs (full-replace
+   * semantics server-side). Errors propagate — callers surface them.
    */
   saveUserTags(tagIds: number[]): Observable<void> {
-    return this.http.post<void>('/api/user/tags', { tagIds }).pipe(
-      catchError(() => of(undefined)),
-    );
+    return this.http.put<void>('/api/user/me/interests', { tagIds });
   }
 }
