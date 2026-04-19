@@ -3,6 +3,7 @@ import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
+import { Observable, throwError } from 'rxjs';
 import { AuthService } from '../../../../core/services/auth.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
@@ -102,13 +103,18 @@ export class PlaceDetailPageComponent {
     /* future: navigate to /map with this place highlighted */
   }
 
-  protected onReviewSubmitted(draft: ReviewDraft): void {
-    const id = this.placeId();
-    const numId = parseInt(id, 10);
-    if (isNaN(numId)) return;
-    this.http.post(`/api/reviews/places/${numId}`, { rating: draft.rating, comment: draft.body }).subscribe({
-      next: () => this.service.loadPlaceDetail(id),
+  protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
+    const numId = parseInt(this.placeId(), 10);
+    if (isNaN(numId)) return throwError(() => new Error('Invalid place id.'));
+    return this.http.post(`/api/reviews/places/${numId}`, {
+      rating:  draft.rating,
+      comment: draft.body,
     });
+  };
+
+  protected onReviewSubmitted(_draft: ReviewDraft): void {
+    const id = this.placeId();
+    if (id) this.service.loadPlaceDetail(id);
   }
 
   protected onSeeAllReviews(): void {

@@ -218,6 +218,7 @@
           <app-review-entry
             [isLoggedIn]="isLoggedIn()"
             [entityName]="h.title"
+            [submitRequest]="submitReview"
             (loginRequested)="goToLogin()"
             (reviewSubmitted)="onReviewSubmitted($event)"
           />
