@@ -8,7 +8,6 @@ export interface DetailsData {
   website: string;
   bookingPartners: string[];
 }
-
 @Component({
   selector: 'app-step-details',
   standalone: true,
@@ -32,18 +31,12 @@ export class StepDetailsComponent {
       if (d) Object.assign(this.form, d);
     });
   }
-
   form: DetailsData = { description: '', phone: '', website: '', bookingPartners: [] };
-
-  // ngOnInit() { if (this.data()) Object.assign(this.form, this.data()); }
-
   togglePartner(id: string): void {
     if (this.isPartnerSelected(id)) this.form.bookingPartners = this.form.bookingPartners.filter(p => p !== id);
     else this.form.bookingPartners = [...this.form.bookingPartners, id];
     this.changed.emit({ ...this.form });
   }
-
   isPartnerSelected(id: string): boolean { return this.form.bookingPartners.includes(id); }
-
   onContinue(): void { this.saved.emit({ ...this.form }); }
 }

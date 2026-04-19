@@ -49,7 +49,7 @@ export class SubmitContributionComponent {
   }
 
   onSubmit(): void {
-    // HTTP call ovde
+    // HTTP call here
     this.currentStep.set(5);
   }
 

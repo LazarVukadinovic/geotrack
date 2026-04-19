@@ -14,7 +14,7 @@
     <div class="p-5">
       <h2 class="text-xl font-bold text-slate-800 mb-1">{{ draft().basics?.name }}</h2>
 
-      <!-- Pin — filled, isti kao step 1 -->
+      <!-- Pin -->
       <div class="flex items-center gap-1 mb-4">
         <svg class="w-3.5 h-3.5 text-[#e8722a] flex-none" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
@@ -36,7 +36,7 @@
         <p class="text-sm text-slate-600 leading-relaxed">{{ draft().details?.description }}</p>
       </div>
 
-      <!-- Amenities — SVG ikonice -->
+      <!-- Amenities  -->
       <div *ngIf="draft().features?.amenities?.length" class="mb-5">
         <p class="text-sm font-bold text-slate-800 mb-3">Selected Amenities</p>
         <div class="grid grid-cols-2 gap-2">
@@ -118,8 +118,3 @@
     <button (click)="confirmed.emit()" class="flex-1 py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base active:scale-[0.98] transition-all">Submit</button>
   </div>
 </div>
-
-<!-- <div class="fixed bottom-0 left-0 right-0 px-5 py-4 flex gap-3" style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
-  <button (click)="back.emit()" class="flex-none px-6 py-4 border border-slate-200 rounded-3xl text-slate-700 font-bold text-base active:bg-slate-50 transition-colors bg-white/80 backdrop-blur-sm">Back</button>
-  <button (click)="confirmed.emit()" class="flex-1 py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base active:scale-[0.98] transition-all">Submit</button>
-</div> -->

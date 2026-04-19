@@ -19,7 +19,7 @@ export class StepFeaturesComponent {
   changed = output<FeaturesData>();
 
   characteristicTags = [
-  'Luxury', 'Boutique', 'Budget-Friendly',
+  'Luxury', 'Budget-Friendly',
   'Family Friendly', 'Adults Only', 'Pet Friendly',
   'Beachfront','Romantic', 'Mountain View', 'City Center', 'Countryside',
   'Eco-Friendly', 'Business',
@@ -49,12 +49,6 @@ export class StepFeaturesComponent {
       }
     });
   }
-  // ngOnInit() {
-  //   if (this.data()) {
-  //     this.selectedTags = [...(this.data()?.tags ?? [])];
-  //     this.selectedAmenities = [...(this.data()?.amenities ?? [])];
-  //   }
-  // }
 
   toggleTag(tag: string): void {
     if (this.isTagSelected(tag)) this.selectedTags = this.selectedTags.filter(t => t !== tag);

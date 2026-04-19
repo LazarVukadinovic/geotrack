@@ -21,10 +21,10 @@
   <div class="bg-white rounded-2xl p-5">
     <h3 class="text-base font-bold text-slate-800 mb-1">Available Amenities</h3>
     <p class="text-xs text-slate-500 mb-4">Selected amenities will appear prominently on the stay detail page.</p>
-    <div class="grid grid-cols-4 gap-3">
+    <div class="grid grid-cols-4 gap-2">
       <button *ngFor="let amenity of amenities"
         (click)="toggleAmenity(amenity.id)"
-        class="flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all duration-200"
+        class="flex flex-col items-center gap-1 py-3 px-1 rounded-2xl border-2 transition-all duration-200"
         [class.border-[#e8722a]]="isAmenitySelected(amenity.id)"
         [class.bg-orange-50]="isAmenitySelected(amenity.id)"
         [class.border-slate-100]="!isAmenitySelected(amenity.id)"
@@ -71,18 +71,11 @@
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24">
-
-            <!-- Šipka -->
             <line x1="7" y1="12" x2="17" y2="12" stroke-width="3.5" stroke-linecap="round"/>
-
-            <!-- Leva strana -->
             <line x1="5" y1="10" x2="5" y2="14" stroke-width="3.5" stroke-linecap="round"/>
             <line x1="3.5" y1="9.5" x2="3.5" y2="14.5" stroke-width="3" stroke-linecap="round"/>
-
-            <!-- Desna strana -->
             <line x1="19" y1="10" x2="19" y2="14" stroke-width="3.5" stroke-linecap="round"/>
             <line x1="20.5" y1="9.5" x2="20.5" y2="14.5" stroke-width="3" stroke-linecap="round"/>
-
           </svg>
         </ng-container>
         <!-- DINING -->
@@ -98,7 +91,7 @@
           </svg>
         </ng-container>
 
-        <span class="text-[10px] font-bold tracking-wide"
+        <span class="text-[9px] font-bold tracking-wide"
           [class.text-[#e8722a]]="isAmenitySelected(amenity.id)"
           [class.text-slate-500]="!isAmenitySelected(amenity.id)">
           {{ amenity.label }}
@@ -111,9 +104,3 @@
     <button (click)="onContinue()" class="flex-1 py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base transition-all active:scale-[0.98]">Continue</button>
   </div>
 </div>
-
-<!-- <div class="fixed bottom-0 left-0 right-0 px-5 py-4 flex gap-3"
-  style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
-  <button (click)="back.emit()" class="flex-none px-6 py-4 border border-slate-200 rounded-3xl text-slate-700 font-bold text-base active:bg-slate-50 transition-colors bg-white/80 backdrop-blur-sm">Back</button>
-  <button (click)="onContinue()" class="flex-1 py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base transition-all active:scale-[0.98]">Continue</button>
-</div> -->

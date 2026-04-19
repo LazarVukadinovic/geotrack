@@ -13,5 +13,4 @@ export class StepConfirmationComponent {
   private router = inject(Router);
 
   goToContributions(): void { this.router.navigate(['/contributions']); }
-  // addAnother(): void { this.router.navigate(['/contributions/submit'], { state: { entityType: this.entityType() } }); }
 }
