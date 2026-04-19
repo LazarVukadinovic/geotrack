@@ -13,11 +13,12 @@ import { HotelsListingService } from '../../services/hotels-listing.service';
 import { HotelsScrollStateService } from '../../services/hotels-scroll-state.service';
 import { HOTEL_FILTERS } from '../../models/hotels-listing.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
   selector: 'app-hotels-listing-page',
   standalone: true,
-  imports: [],
+  imports: [EmptyStateComponent],
   templateUrl: './hotels-listing-page.component.html',
   styleUrl: './hotels-listing-page.component.scss',
 })
@@ -30,6 +31,7 @@ export class HotelsListingPageComponent implements AfterViewInit {
 
   protected readonly filters = HOTEL_FILTERS;
   protected readonly activeFilter = signal('all');
+  protected readonly loadError = this.service.loadError;
 
   protected readonly filteredHotels = computed(() => {
     const filter = this.activeFilter();

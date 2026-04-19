@@ -5,7 +5,6 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { HotelListItem } from '../models/hotels-listing.model';
-import { MOCK_HOTELS_LISTING } from '../data/mock-hotels-listing.data';
 
 interface ApiPlaceListItem {
   id: number;
@@ -35,6 +34,7 @@ export class HotelsListingService {
   private readonly _hotels = signal<HotelListItem[]>([]);
   private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _loaded = signal(false);
+  private readonly _loadError = signal<string | null>(null);
   private loadedDestinationId: number | null = null;
 
   readonly hotels = computed(() => {
@@ -44,6 +44,8 @@ export class HotelsListingService {
       isSaved: overrides[h.id] !== undefined ? overrides[h.id] : h.isSaved,
     }));
   });
+
+  readonly loadError = computed(() => this._loadError());
 
   constructor() {
     void this.exploreSvc;
@@ -72,11 +74,13 @@ export class HotelsListingService {
           isSaved: dto.isSaved,
         })));
         this.loadedDestinationId = destinationId;
+        this._loadError.set(null);
         this._loaded.set(true);
       },
       error: () => {
-        this._hotels.set([...MOCK_HOTELS_LISTING]);
+        this._hotels.set([]);
         this.loadedDestinationId = destinationId;
+        this._loadError.set("We couldn't load hotels. Check your connection and try again.");
         this._loaded.set(true);
       },
     });

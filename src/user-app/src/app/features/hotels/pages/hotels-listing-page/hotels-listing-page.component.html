@@ -38,6 +38,13 @@
       </div>
     </div>
 
+    @if (loadError()) {
+      <app-empty-state
+        title="Something went wrong"
+        [message]="loadError()!"
+      />
+    }
+
     <!-- Hotel card list -->
     <div class="hotels-page__list" aria-label="Hotels list">
 
