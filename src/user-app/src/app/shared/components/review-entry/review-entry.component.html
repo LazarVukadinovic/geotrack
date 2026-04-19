@@ -45,7 +45,7 @@
 
 <!-- ── Write-a-Review popup ─────────────────────────────────────────────────── -->
 @if (popupOpen()) {
-  <!-- Backdrop captures outside-click to close -->
+  <!-- Backdrop captures outside-click to close; closePopup ignores in-flight submits -->
   <div
     class="re__backdrop"
     aria-hidden="true"
@@ -71,6 +71,7 @@
         type="button"
         class="re__modal-close"
         aria-label="Close review popup"
+        [disabled]="isSubmitting()"
         (click)="closePopup()"
       >
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -120,18 +121,29 @@
 
     <p class="re__hint">Your feedback helps others plan their trip.</p>
 
+    @if (submitError()) {
+      <p class="re__error" role="alert">{{ submitError() }}</p>
+    }
+
     <!-- Actions -->
     <button
       type="button"
       class="re__submit-btn"
+      [disabled]="!canSubmit()"
       (click)="onSubmit()"
     >
-      Submit Review
+      @if (isSubmitting()) {
+        <span class="re__spinner" aria-hidden="true"></span>
+        <span>Submitting…</span>
+      } @else {
+        <span>Submit Review</span>
+      }
     </button>
 
     <button
       type="button"
       class="re__cancel-btn"
+      [disabled]="isSubmitting()"
       (click)="closePopup()"
     >
       Cancel
