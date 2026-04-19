@@ -49,6 +49,7 @@ export class LoginPageComponent {
       .post<AuthResponse>('/api/auth/login', {
         email: this.email.trim(),
         password: this.password,
+        rememberMe: this.rememberMe,
       })
       .subscribe({
         next: (response) => {

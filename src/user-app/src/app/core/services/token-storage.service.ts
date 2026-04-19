@@ -25,6 +25,22 @@ export class TokenStorageService {
 
   readonly hasRefreshToken = computed(() => !!this._refreshToken());
 
+  constructor() {
+    // Cross-tab sync: when another tab logs out (or rotates its refresh
+    // token), the `storage` event fires here with the same key.  Mirror the
+    // new value into our in-memory signal so `hasRefreshToken` — and every
+    // computed derived from it, including AuthService.isLoggedIn — flips in
+    // lock-step.  Same-tab writes do NOT fire this event, so there is no
+    // feedback loop.
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (e) => {
+        if (e.key === REFRESH_KEY) {
+          this._refreshToken.set(e.newValue);
+        }
+      });
+    }
+  }
+
   getAccessToken(): string | null {
     return this._accessToken();
   }

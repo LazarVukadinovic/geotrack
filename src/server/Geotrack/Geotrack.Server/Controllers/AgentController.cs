@@ -1,11 +1,13 @@
 using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Geotrack.Server.Controllers;
 
 [ApiController]
 [Route("api/agent")]
+[EnableRateLimiting("agent")]
 public class AgentController : ControllerBase
 {
     private readonly IAgentService _agentService;
