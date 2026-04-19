@@ -1,4 +1,4 @@
-<div class="px-5 pt-6 pb-6 flex flex-col gap-6 min-h-full">
+<div class="px-5 pt-6 pb-32 flex flex-col gap-6 min-h-full">
 
   <!-- Cover Image -->
   <div>
@@ -103,20 +103,16 @@
       <span *ngIf="!form.lat" class="text-xs text-slate-400">Tap to set exact location on map</span>
     </button>
   </div>
-  <button (click)="onContinue()" [disabled]="!isValid()"
-    class="w-full py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base transition-all duration-200 active:scale-[0.98] disabled:opacity-40">
-    Continue
-  </button>
 </div>
 
 <!-- Continue button -->
-<!-- <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-5 py-4"
+<div class="fixed bottom-0 left-0 right-0 px-5 py-4"
   style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
   <button (click)="onContinue()" [disabled]="!isValid()"
     class="w-full py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base transition-all duration-200 active:scale-[0.98] disabled:opacity-40">
     Continue
   </button>
-</div> -->
+</div>
 
 <!-- Map Picker Sheet -->
 @if (showMapPicker()) {
