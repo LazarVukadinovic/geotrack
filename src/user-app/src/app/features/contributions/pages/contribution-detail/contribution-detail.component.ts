@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { ContributionItem } from '../my-contributions/my-contributions.component';
 import { ContributionDraft } from '../submit-contribution/submit-contribution.component';
+import { BookingPartner } from '../submit-contribution/steps/step-details/step-details.component';
 
 export interface ContributionDetail {
   id: string;
@@ -22,7 +23,7 @@ export interface ContributionDetail {
   description?: string;
   tags?: string[];
   amenities?: string[];
-  bookingPartners?: string[];
+  bookingPartners?: BookingPartner[];
   phone?: string;
   website?: string;
 }
@@ -102,7 +103,7 @@ export class ContributionDetailPageComponent implements OnInit {
         description: 'A stunning property with panoramic views. Wake up to breathtaking scenery and enjoy world-class amenities in a peaceful setting.',
         tags: ['Luxury', 'Beachfront', 'Romantic'],
         amenities: ['pool', 'wifi', 'breakfast', 'spa'],
-        bookingPartners: ['airbnb', 'booking'],
+        bookingPartners: [ { id: 'airbnb', url: '' }, { id: 'booking', url: '' }, ] as BookingPartner[],
         phone: '+1 (310) 555-0142',
         website: 'example.com',
       });
@@ -141,7 +142,7 @@ export class ContributionDetailPageComponent implements OnInit {
         description: d?.description ?? '',
         phone: d?.phone ?? '',
         website: d?.website ?? '',
-        bookingPartners: d?.bookingPartners ?? [],
+        bookingPartners: (d?.bookingPartners ?? []) as BookingPartner[],
       },
     };
     this.router.navigate(['/contributions/submit'], {

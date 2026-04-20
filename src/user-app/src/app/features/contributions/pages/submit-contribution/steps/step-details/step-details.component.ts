@@ -2,11 +2,15 @@ import { Component, input, output, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
+export interface BookingPartner {
+  id: string;
+  url: string;
+}
 export interface DetailsData {
   description: string;
   phone: string;
   website: string;
-  bookingPartners: string[];
+  bookingPartners: BookingPartner[];
 }
 @Component({
   selector: 'app-step-details',
@@ -32,11 +36,29 @@ export class StepDetailsComponent {
     });
   }
   form: DetailsData = { description: '', phone: '', website: '', bookingPartners: [] };
+  onContinue(): void { this.saved.emit({ ...this.form }); }
+  
   togglePartner(id: string): void {
-    if (this.isPartnerSelected(id)) this.form.bookingPartners = this.form.bookingPartners.filter(p => p !== id);
-    else this.form.bookingPartners = [...this.form.bookingPartners, id];
+    if (this.isPartnerSelected(id)) {
+      this.form.bookingPartners = this.form.bookingPartners.filter(p => p.id !== id);
+    } else {
+      this.form.bookingPartners = [...this.form.bookingPartners, { id, url: '' }];
+    }
     this.changed.emit({ ...this.form });
   }
-  isPartnerSelected(id: string): boolean { return this.form.bookingPartners.includes(id); }
-  onContinue(): void { this.saved.emit({ ...this.form }); }
+
+  isPartnerSelected(id: string): boolean {
+    return this.form.bookingPartners.some(p => p.id === id);
+  }
+
+  getPartnerUrl(id: string): string {
+    return this.form.bookingPartners.find(p => p.id === id)?.url ?? '';
+  }
+
+  updatePartnerUrl(id: string, url: string): void {
+    this.form.bookingPartners = this.form.bookingPartners.map(p =>
+      p.id === id ? { ...p, url } : p
+    );
+    this.changed.emit({ ...this.form });
+  }
 }
