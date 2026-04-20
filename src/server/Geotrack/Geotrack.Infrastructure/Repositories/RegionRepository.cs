@@ -17,9 +17,15 @@ namespace Geotrack.Infrastructure.Repositories
             _context = context;
         }
 
-        public async Task<List<Region>> GetAllAsync()
+        public async Task<bool> ExistsAsync(string name)
         {
-            return await _context.Regions.OrderBy(r => r.Name).ToListAsync();
+            return await _context.Regions
+                .AnyAsync(r => r.Name == name);
+        }
+
+        public async Task<Region?> GetByIdWithManagersAsync(int regionId)
+        {
+            return await _context.Regions.Include(r => r.RegionalOrganizationRegions).ThenInclude(ror => ror.RegionalOrganization).ThenInclude(ro => ro.User).FirstOrDefaultAsync(r => r.Id == regionId);
         }
     }
 }
