@@ -23,4 +23,5 @@ public interface IUserService
     Task<UpdateUserRoleResponseDtocs> RemoveRegionalManagerRoleAsync(int userId);
     Task<GetUserRegionsResponseDto> GetUserRegionsAsync(int userId);
     Task<UpdateUserRegionsResponseDto> UpdateUserRegionsAsync(int userId, UpdateUserRegionsRequestDto request);
+    Task<AddUserRegionResponseDto> AddUserRegionAsync(int userId, int regionId);
 }

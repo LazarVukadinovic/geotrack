@@ -203,6 +203,21 @@ namespace Geotrack.Infrastructure.Repositories
         {
             await _context.RegionalOrganizations.AddAsync(regionalOrganization);
         }
+
+        public async Task<bool> RegionExistsAsync(int regionId)
+        {
+            return await _context.Regions.AnyAsync(r => r.Id == regionId);
+        }
+
+        public async Task<bool> UserRegionExistsAsync(int userId, int regionId)
+        {
+            return await _context.RegionalOrganizationRegions.AnyAsync(ror => ror.UserId == userId && ror.RegionId == regionId);
+        }
+
+        public async Task AddUserRegionAsync(RegionalOrganizationRegion region)
+        {
+            await _context.RegionalOrganizationRegions.AddAsync(region);
+        }
     }
 
 }

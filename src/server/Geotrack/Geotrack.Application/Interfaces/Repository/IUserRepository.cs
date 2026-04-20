@@ -42,4 +42,7 @@ public interface IUserRepository : IRepository<User>
     Task<User?> GetByIdWithRegionsAsync(int userId);
     Task<User?> GetByIdWithRolesAndRegionsAsync(int userId);
     Task AddRegionalOrganizationAsync(RegionalOrganization regionalOrganization);
+    Task<bool> RegionExistsAsync(int regionId);
+    Task<bool> UserRegionExistsAsync(int userId, int regionId);
+    Task AddUserRegionAsync(RegionalOrganizationRegion region);
 }

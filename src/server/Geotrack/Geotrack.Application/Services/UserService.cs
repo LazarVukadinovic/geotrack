@@ -594,4 +594,64 @@ public class UserService : IUserService
             RegionIds = request.RegionIds
         };
     }
+
+    public async Task<AddUserRegionResponseDto> AddUserRegionAsync(int userId, int regionId)
+    {
+        var user = await _userRepository.GetByIdWithRolesAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        bool isRegionalManager = user.UserRoles
+            .Any(ur => ur.Role.Name == "RegionalManager");
+
+        if (!isRegionalManager)
+            throw new InvalidOperationException("User does not have the RegionalManager role.");
+
+        bool regionExists = await _userRepository.RegionExistsAsync(regionId);
+
+        if (!regionExists)
+            throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
+
+        bool alreadyAssigned = await _userRepository.UserRegionExistsAsync(userId, regionId);
+
+        if (alreadyAssigned)
+            throw new InvalidOperationException("Region is already assigned to this user.");
+
+        if (user.RegionalOrganization == null)
+        {
+            var regionalOrganization = new RegionalOrganization
+            {
+                UserId = userId,
+                RegionalOrganizationRegions = new List<RegionalOrganizationRegion>
+            {
+                new RegionalOrganizationRegion
+                {
+                    UserId = userId,
+                    RegionId = regionId,
+                    CreatedAt = DateTime.UtcNow
+                }
+            }
+            };
+
+            await _userRepository.AddRegionalOrganizationAsync(regionalOrganization);
+        }
+        else
+        {
+            await _userRepository.AddUserRegionAsync(new RegionalOrganizationRegion
+            {
+                UserId = userId,
+                RegionId = regionId,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        await _userRepository.SaveChangesAsync();
+        
+        return new AddUserRegionResponseDto
+        {
+            UserId = userId,
+            RegionId = regionId
+        };
+    }
 }

@@ -250,4 +250,22 @@ public class UserController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [HttpPost("{id}/regions/{regionId}")]
+    public async Task<IActionResult> AddUserRegion([FromRoute] int id, [FromRoute] int regionId)
+    {
+        try
+        {
+            var result = await _userService.AddUserRegionAsync(id, regionId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }
