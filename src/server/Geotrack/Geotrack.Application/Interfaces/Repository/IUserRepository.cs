@@ -45,4 +45,6 @@ public interface IUserRepository : IRepository<User>
     Task<bool> RegionExistsAsync(int regionId);
     Task<bool> UserRegionExistsAsync(int userId, int regionId);
     Task AddUserRegionAsync(RegionalOrganizationRegion region);
+    Task<RegionalOrganizationRegion?> GetUserRegionAsync(int userId, int regionId);
+    Task DeleteUserRegionAsync(RegionalOrganizationRegion region);
 }

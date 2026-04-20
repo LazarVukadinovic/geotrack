@@ -24,4 +24,5 @@ public interface IUserService
     Task<GetUserRegionsResponseDto> GetUserRegionsAsync(int userId);
     Task<UpdateUserRegionsResponseDto> UpdateUserRegionsAsync(int userId, UpdateUserRegionsRequestDto request);
     Task<AddUserRegionResponseDto> AddUserRegionAsync(int userId, int regionId);
+    Task<DeleteUserRegionResponseDto> DeleteUserRegionAsync(int userId, int regionId);
 }

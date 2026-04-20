@@ -218,6 +218,18 @@ namespace Geotrack.Infrastructure.Repositories
         {
             await _context.RegionalOrganizationRegions.AddAsync(region);
         }
+
+        public async Task<RegionalOrganizationRegion?> GetUserRegionAsync(int userId, int regionId)
+        {
+            return await _context.RegionalOrganizationRegions
+                .FirstOrDefaultAsync(ror => ror.UserId == userId && ror.RegionId == regionId);
+        }
+
+        public Task DeleteUserRegionAsync(RegionalOrganizationRegion region)
+        {
+            _context.RegionalOrganizationRegions.Remove(region);
+            return Task.CompletedTask;
+        }
     }
 
 }

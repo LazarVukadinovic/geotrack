@@ -654,4 +654,22 @@ public class UserService : IUserService
             RegionId = regionId
         };
     }
+
+    public async Task<DeleteUserRegionResponseDto> DeleteUserRegionAsync(int userId, int regionId)
+    {
+        var userRegion = await _userRepository.GetUserRegionAsync(userId, regionId);
+
+        if (userRegion == null)
+            throw new KeyNotFoundException($"Region '{regionId}' is not assigned to user '{userId}'.");
+
+        await _userRepository.DeleteUserRegionAsync(userRegion);
+
+        await _userRepository.SaveChangesAsync();
+
+        return new DeleteUserRegionResponseDto
+        {
+            UserId = userId,
+            RegionId = regionId
+        };
+    }
 }

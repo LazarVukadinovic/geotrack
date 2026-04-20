@@ -268,4 +268,18 @@ public class UserController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [HttpDelete("{id}/regions/{regionId}")]
+    public async Task<IActionResult> DeleteUserRegion([FromRoute] int id, [FromRoute] int regionId)
+    {
+        try
+        {
+            var result = await _userService.DeleteUserRegionAsync(id, regionId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
 }
