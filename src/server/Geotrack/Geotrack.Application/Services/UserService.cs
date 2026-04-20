@@ -462,4 +462,136 @@ public class UserService : IUserService
             throw new InvalidOperationException("Invalid phone number format");
         }
     }
+
+    public async Task<UpdateUserRoleResponseDtocs> AssignRegionalManagerRoleAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdWithRolesAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        bool alreadyHasRole = user.UserRoles
+            .Any(ur => ur.Role.Name == "RegionalManager");
+
+        if (alreadyHasRole)
+            throw new InvalidOperationException("User already has the RegionalManager role.");
+
+        var role = await _userRepository.GetRoleByNameAsync("RegionalManager")
+            ?? throw new InvalidOperationException("RegionalManager role does not exist.");
+
+        user.UserRoles.Add(new UserRole
+        {
+            UserId = userId,
+            RoleId = role.Id
+        });
+
+        await _userRepository.SaveChangesAsync();
+
+        return new UpdateUserRoleResponseDtocs
+        {
+            UserId = userId,
+            Roles = user.UserRoles.Select(ur => ur.Role.Name).ToList()
+        };
+    }
+    public async Task<UpdateUserRoleResponseDtocs> RemoveRegionalManagerRoleAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdWithRolesAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        var userRole = user.UserRoles
+            .FirstOrDefault(ur => ur.Role.Name == "RegionalManager");
+
+        if (userRole == null)
+            throw new InvalidOperationException("User does not have the RegionalManager role.");
+
+        await _userRepository.RemoveUserRoleAsync(userRole);
+
+        await _userRepository.SaveChangesAsync();
+
+        return new UpdateUserRoleResponseDtocs
+        {
+            UserId = userId,
+            Roles = user.UserRoles
+                .Where(ur => ur.Role.Name != "RegionalManager")
+                .Select(ur => ur.Role.Name)
+                .ToList()
+        };
+    }
+
+    public async Task<GetUserRegionsResponseDto> GetUserRegionsAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdWithRegionsAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        var regions = user.RegionalOrganization?
+            .RegionalOrganizationRegions
+            .Select(ror => new RegionItemDto
+            {
+                Id = ror.Region.Id,
+                Name = ror.Region.Name
+            })
+            .ToList() ?? new List<RegionItemDto>();
+
+        return new GetUserRegionsResponseDto
+        {
+            UserId = userId,
+            Regions = regions
+        };
+    }
+
+    public async Task<UpdateUserRegionsResponseDto> UpdateUserRegionsAsync(int userId, UpdateUserRegionsRequestDto request)
+    {
+        var user = await _userRepository.GetByIdWithRolesAndRegionsAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        bool isRegionalManager = user.UserRoles
+            .Any(ur => ur.Role.Name == "RegionalManager");
+
+        if (!isRegionalManager)
+            throw new InvalidOperationException("User does not have the RegionalManager role.");
+
+        if (user.RegionalOrganization == null)
+        {
+            user.RegionalOrganization = new RegionalOrganization
+            {
+                UserId = userId,
+                RegionalOrganizationRegions = request.RegionIds.Select(regionId => new RegionalOrganizationRegion
+                {
+                    UserId = userId,
+                    RegionId = regionId,
+                    CreatedAt = DateTime.UtcNow
+                }).ToList()
+            };
+
+            await _userRepository.AddRegionalOrganizationAsync(user.RegionalOrganization);
+        }
+        else
+        {
+            user.RegionalOrganization.RegionalOrganizationRegions.Clear();
+
+            foreach (var regionId in request.RegionIds)
+            {
+                user.RegionalOrganization.RegionalOrganizationRegions.Add(new RegionalOrganizationRegion
+                {
+                    UserId = userId,
+                    RegionId = regionId,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await _userRepository.SaveChangesAsync();
+
+        return new UpdateUserRegionsResponseDto
+        {
+            UserId = userId,
+            RegionIds = request.RegionIds
+        };
+    }
 }
