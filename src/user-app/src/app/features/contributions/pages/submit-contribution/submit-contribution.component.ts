@@ -55,25 +55,22 @@ export class SubmitContributionComponent {
   onSubmit(): void {
     this.isSubmitting.set(true);
     this.submitError.set(null);
-    const payload = this.draft();
-    const url = this.editId ? `/api/contributions/${this.editId}` : '/api/contributions';
-    const method = this.editId ? 'PUT' : 'POST';
 
-    fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
-      .then(() => this.currentStep.set(5))
-      .catch(() => this.submitError.set('Something went wrong. Please try again.'))
-      .finally(() => this.isSubmitting.set(false));
+    // Simulacija dok API nije spreman
+    setTimeout(() => {
+      this.currentStep.set(5);
+      this.isSubmitting.set(false);
+    }, 800);
+
+    // Kada API bude spreman:
     // const payload = this.draft();
-  
-    // if (this.editId) {
-    //   // fetch(`/api/contributions/${this.editId}`, { method: 'PUT', body: JSON.stringify(payload) })
-    //   console.log('UPDATE', this.editId, payload);
-    // } else {
-    //   // fetch('/api/contributions', { method: 'POST', body: JSON.stringify(payload) })
-    //   console.log('CREATE', payload);
-    // }
-    // this.currentStep.set(5);
+    // const url = this.editId ? `/api/contributions/${this.editId}` : '/api/contributions';
+    // const method = this.editId ? 'PUT' : 'POST';
+    // fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    //   .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
+    //   .then(() => this.currentStep.set(5))
+    //   .catch(() => this.submitError.set('Something went wrong. Please try again.'))
+    //   .finally(() => this.isSubmitting.set(false));
   }
 
   prevStep(): void {

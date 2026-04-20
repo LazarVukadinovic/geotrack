@@ -18,7 +18,7 @@
   <!-- Cards -->
   <div class="px-5 mt-6 flex flex-col gap-4">
     <div *ngFor="let item of items"
-      class="bg-white rounded-2xl overflow-hidden shadow-sm">
+      class="bg-white rounded-2xl overflow-hidden shadow-sm" (click)="openDetail(item)">
 
       <!-- Image -->
       <div class="relative h-44 overflow-hidden">

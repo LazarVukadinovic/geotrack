@@ -50,6 +50,19 @@
           (confirmed)="onSubmit()"
           (back)="prevStep()"
         />
+        @if (isSubmitting()) {
+        <div class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
+          <div class="bg-white rounded-2xl px-8 py-6 flex flex-col items-center gap-3">
+            <div class="w-8 h-8 border-2 border-[#e8722a] border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-sm text-slate-500">Submitting...</p>
+          </div>
+        </div>
+      }
+      @if (submitError()) {
+        <div class="fixed bottom-6 left-5 right-5 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 z-50">
+          <p class="text-sm text-red-600 text-center">{{ submitError() }}</p>
+        </div>
+      }
       }
       @case (5) {
         <app-step-confirmation

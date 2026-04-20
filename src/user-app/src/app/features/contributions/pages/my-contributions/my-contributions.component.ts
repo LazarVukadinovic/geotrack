@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ContributionDraft } from '../submit-contribution/submit-contribution.component';
 import { HttpClient } from '@angular/common/http';
-
+import { ContributionDetailPageComponent } from '../contribution-detail/contribution-detail.component';
 export interface ContributionItem {
   id: string;
   name: string;
@@ -24,7 +24,6 @@ export class MyContributionsPageComponent {
   constructor(private router: Router, private http: HttpClient) {}
   
   showEntityPicker = signal(false);
-
   items: ContributionItem[] = [
     { id: '1', name: 'Sunny Seaside Villa', location: 'Malibu, California', imageUrl: 'https://images.unsplash.com/photo-1582268611958-ebfd161ef9cf?w=600&q=80', status: 'APPROVED', updatedLabel: 'Updated 2 days ago', entityType: 'Stay' },
     { id: '2', name: 'Cozy Mountain Cabin', location: 'Aspen, Colorado', imageUrl: 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?w=600&q=80', status: 'UNDER REVIEW', updatedLabel: 'Submitted 5 hours ago', entityType: 'Stay' },
@@ -95,4 +94,7 @@ export class MyContributionsPageComponent {
   }
 
   goBack(): void { this.router.navigate(['/profile']); }
+  openDetail(item: ContributionItem): void {
+    this.router.navigate(['/contributions/detail'], { state: { item } });
+  }
 }

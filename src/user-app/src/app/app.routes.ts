@@ -73,6 +73,20 @@ export const routes: Routes = [
             .then(m => m.SubmitContributionComponent),
         data: { hideBottomNav: true },
       },
+      {
+        path: 'contributions/submit',
+        loadComponent: () =>
+          import('./features/contributions/pages/submit-contribution/submit-contribution.component')
+            .then(m => m.SubmitContributionComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'contributions/detail',
+        loadComponent: () =>
+          import('./features/contributions/pages/contribution-detail/contribution-detail.component')
+            .then(m => m.ContributionDetailPageComponent),
+        data: { hideBottomNav: true },
+      },
 
       // ── Settings ─────────────────────────────────────────────────────────
       {
