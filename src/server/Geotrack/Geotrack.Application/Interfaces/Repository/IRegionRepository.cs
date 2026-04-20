@@ -12,6 +12,8 @@ namespace Geotrack.Application.Interfaces.Repository
         
         Task<Region?> GetByIdWithManagersAsync(int regionId);
         Task<bool> ExistsAsync(string name);
-        
+        Task<bool> HasDestinationsAsync(int regionId);
+        Task<Region?> GetByIdAsync(int regionId);
+        Task DeleteAsync(Region region);
     }
 }

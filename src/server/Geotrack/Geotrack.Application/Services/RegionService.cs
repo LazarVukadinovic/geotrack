@@ -81,5 +81,20 @@ namespace Geotrack.Application.Services
                 Name = region.Name
             };
         }
+        public async Task DeleteRegionAsync(int regionId)
+        {
+            var region = await _regionRepository.GetByIdAsync(regionId);
+
+            if (region == null)
+                throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
+
+            bool hasDestinations = await _regionRepository.HasDestinationsAsync(regionId);
+
+            if (hasDestinations)
+                throw new InvalidOperationException("Cannot delete region because it has existing destinations.");
+
+            await _regionRepository.DeleteAsync(region);
+            await _regionRepository.SaveChangesAsync();
+        }
     }
 }

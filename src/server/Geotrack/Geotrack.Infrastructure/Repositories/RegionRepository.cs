@@ -23,6 +23,24 @@ namespace Geotrack.Infrastructure.Repositories
                 .AnyAsync(r => r.Name == name);
         }
 
+        public async Task<bool> HasDestinationsAsync(int regionId)
+        {
+            return await _context.Destinations
+                .AnyAsync(d => d.RegionId == regionId);
+        }
+
+        public async Task<Region?> GetByIdAsync(int regionId)
+        {
+            return await _context.Regions
+                .FirstOrDefaultAsync(r => r.Id == regionId);
+        }
+
+        public Task DeleteAsync(Region region)
+        {
+            _context.Regions.Remove(region);
+            return Task.CompletedTask;
+        }
+
         public async Task<Region?> GetByIdWithManagersAsync(int regionId)
         {
             return await _context.Regions.Include(r => r.RegionalOrganizationRegions).ThenInclude(ror => ror.RegionalOrganization).ThenInclude(ro => ro.User).FirstOrDefaultAsync(r => r.Id == regionId);
