@@ -9,5 +9,6 @@ namespace Geotrack.Application.Interfaces.Repository
 {
     public interface IRegionRepository : IRepository<Region>
     {
+        Task<List<Region>> GetAllAsync();
     }
 }
