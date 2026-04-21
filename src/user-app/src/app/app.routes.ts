@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { guestGuard } from './core/guards/guest.guard';
 import { authGuard } from './core/guards/auth.guard';
+import { interestsOnboardingGuard } from './core/guards/interests-onboarding.guard';
 export const routes: Routes = [
   {
     path: '',
@@ -139,6 +140,7 @@ export const routes: Routes = [
       },
       {
         path: 'register/interests',
+        canActivate: [interestsOnboardingGuard],
         loadComponent: () =>
           import('./features/auth/pages/interests-page/interests-page.component').then(m => m.InterestsPageComponent),
         data: { hideBottomNav: true },

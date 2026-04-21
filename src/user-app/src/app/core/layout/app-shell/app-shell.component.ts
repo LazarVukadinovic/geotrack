@@ -12,6 +12,7 @@ import { TokenRefreshService } from '../../services/token-refresh.service';
 // authErrorInterceptor catches and calls logout()), any user currently on one
 // of these pages is redirected to /profile immediately — no manual refresh needed.
 const AUTH_REQUIRED_PREFIXES = [
+  '/register/interests',
   '/profile/edit',
   '/profile/collections',
   '/settings',
