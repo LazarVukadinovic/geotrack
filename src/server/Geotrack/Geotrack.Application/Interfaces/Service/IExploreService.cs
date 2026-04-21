@@ -6,5 +6,8 @@ namespace Geotrack.Application.Interfaces.Service;
 public interface IExploreService
 {
     Task<ExplorePageDto> GetExplorePageAsync(double latitude, double longitude, int? userId = null);
-    Task<DestinationScopedResult<List<LocalPlacesCategoryDto>>> GetLocalPlacesCategoriesAsync(int? destinationId);
+    Task<DestinationScopedResult<List<LocalPlacesCategoryDto>>> GetLocalPlacesCategoriesAsync(
+        int? destinationId,
+        double? latitude = null,
+        double? longitude = null);
 }

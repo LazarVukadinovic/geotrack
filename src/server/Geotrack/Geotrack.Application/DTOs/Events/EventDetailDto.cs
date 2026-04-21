@@ -7,6 +7,8 @@ public class EventDetailDto
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Location { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
     public string? HeroImage { get; set; }
     public List<TagLabelDto> Tags { get; set; } = new();
     public string? Distance { get; set; }

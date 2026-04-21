@@ -26,7 +26,7 @@ public class ExploreStayDto
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Image { get; set; }
-    public double Rating { get; set; }
+    public double? Rating { get; set; }
     public string? ReviewCount { get; set; }
     public string? Distance { get; set; }
     public decimal PricePerNight { get; set; }
@@ -39,7 +39,7 @@ public class ExploreNearbyItemDto
     public string Title { get; set; } = string.Empty;
     public string? CategoryLabel { get; set; }
     public string? Image { get; set; }
-    public double Rating { get; set; }
+    public double? Rating { get; set; }
     public string? ReviewCount { get; set; }
     public string? Distance { get; set; }
     public bool IsSaved { get; set; }
@@ -82,6 +82,7 @@ public class ExploreLocalFavoriteDto
     public string? Location { get; set; }
     public string? Image { get; set; }
     public double? Rating { get; set; }
+    public string? ReviewCount { get; set; }
     public bool IsSaved { get; set; }
     public string? OpeningHours { get; set; }
     public bool IsRecommended { get; set; }
