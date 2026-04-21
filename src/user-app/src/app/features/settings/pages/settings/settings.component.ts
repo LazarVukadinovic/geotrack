@@ -22,14 +22,14 @@ export class SettingsComponent {
 
   goBack():            void { this.router.navigate(['/profile']); }
   goToProfile():       void { this.router.navigate(['/profile/edit'], { queryParams: { from: 'settings' } }); }
-  changePassword():    void { this.router.navigate(['/change-password']); }
-  changeLanguage():    void { console.log('Language'); }
-  openNotifications(): void { console.log('Notifications'); }
-  openPrivacy():       void { console.log('Privacy'); }
+  changePassword():    void { this.router.navigate(['/settings/change-password']); }
+  changeLanguage():    void {}
+  openNotifications(): void { this.router.navigate(['/settings/notifications']); }
+  openPrivacy():       void { this.router.navigate(['/settings/privacy-settings']); }
   openInterests():     void { this.router.navigate(['/settings/interests'], { queryParams: { from: 'settings' } }); }
-  openHelp():          void { console.log('Help'); }
-  contactSupport():    void { console.log('Support'); }
-  openTerms():         void { console.log('Terms'); }
+  openHelp():          void { this.router.navigate(['/settings/help-center']); }
+  contactSupport():    void { this.router.navigate(['/settings/contact-support']); }
+  openTerms():         void { this.router.navigate(['/settings/terms-and-privacy']); }
 
   logOut(): void {
     this.authService.logout();

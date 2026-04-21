@@ -34,7 +34,7 @@
 
     <!-- Full Name -->
     <div class="mb-4">
-      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
+      <label for="register-full-name" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Name
       </label>
       <div class="relative">
@@ -45,7 +45,10 @@
           </svg>
         </div>
         <input
+          id="register-full-name"
+          name="fullName"
           type="text"
+          autocomplete="name"
           [(ngModel)]="fullName"
           placeholder="Enter your name"
           class="w-full pl-10 pr-4 py-3.5 bg-white border rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:ring-2 focus:ring-orange-100 transition-all duration-200"
@@ -62,7 +65,7 @@
 
     <!-- Email -->
     <div class="mb-4">
-      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
+      <label for="register-email" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Email Address
       </label>
       <div class="relative">
@@ -73,7 +76,10 @@
           </svg>
         </div>
         <input
+          id="register-email"
+          name="email"
           type="email"
+          autocomplete="email"
           [(ngModel)]="email"
           placeholder="name@example.com"
           class="w-full pl-10 pr-4 py-3.5 bg-white border rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:ring-2 focus:ring-orange-100 transition-all duration-200"
@@ -90,7 +96,7 @@
 
     <!-- Create Password -->
     <div class="mb-3">
-      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
+      <label for="register-password" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Create Password
       </label>
       <div class="relative">
@@ -101,6 +107,8 @@
           </svg>
         </div>
         <input
+          id="register-password"
+          name="password"
           [type]="showPassword ? 'text' : 'password'"
           [(ngModel)]="password"
           placeholder="Enter your password"
@@ -186,7 +194,7 @@
 
     <!-- Repeat Password -->
     <div class="mt-3 mb-4">
-      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
+      <label for="register-repeat-password" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Repeat Password
       </label>
       <div class="relative">
@@ -197,6 +205,8 @@
           </svg>
         </div>
         <input
+          id="register-repeat-password"
+          name="repeatPassword"
           [type]="showRepeatPassword ? 'text' : 'password'"
           [(ngModel)]="repeatPassword"
           placeholder="Repeat your password"
