@@ -807,6 +807,7 @@ public class AppDbContext : DbContext
             entity.Property(x => x.AvatarUrl).HasMaxLength(1000);
             entity.Property(x => x.DisplayName).HasMaxLength(100);
             entity.Property(x => x.Location).HasMaxLength(200);
+            entity.Property(x => x.NeedsInterestsOnboarding).HasDefaultValue(false);
             entity.Property(x => x.GeneralNotificationsEnabled).HasDefaultValue(true);
             entity.Property(x => x.TravelRecommendationsEnabled).HasDefaultValue(true);
             entity.Property(x => x.NearbyEventsEnabled).HasDefaultValue(true);
