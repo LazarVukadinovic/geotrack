@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { TagService } from '../../../../core/services/tag.service';
+import { catchError, forkJoin, of } from 'rxjs';
+import { TagService, UserInterestItem } from '../../../../core/services/tag.service';
 import { UserService } from '../../../../core/services/user.service';
 import { Tag } from '../../../../core/models/tag.model';
 
@@ -13,10 +14,14 @@ import { Tag } from '../../../../core/models/tag.model';
   styleUrl: './interests-page.component.css',
 })
 export class InterestsPageComponent implements OnInit {
-  tags: Tag[] = [];
-  selectedTagIds: Set<number> = new Set();
-  isLoading = false;
-  saveError = '';
+  readonly tags = signal<Tag[]>([]);
+  readonly selectedTagIds = signal<Set<number>>(new Set());
+  readonly isLoadingTags = signal(true);
+  readonly isSaving = signal(false);
+  readonly loadError = signal('');
+  readonly saveError = signal('');
+  readonly selectedCount = computed(() => this.selectedTagIds().size);
+  readonly loadingPillIndexes = [0, 1, 2, 3, 4, 5];
 
   constructor(
     private router: Router,
@@ -25,61 +30,103 @@ export class InterestsPageComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.tagService.loadTags().subscribe(tags => {
-      this.tags = tags;
-    });
+    this.loadInterests();
   }
 
   toggleTag(tag: Tag): void {
-    if (this.selectedTagIds.has(tag.id)) {
-      this.selectedTagIds.delete(tag.id);
-    } else {
-      this.selectedTagIds.add(tag.id);
-    }
+    if (this.isLoadingTags() || this.isSaving()) return;
+
+    this.selectedTagIds.update((current) => {
+      const next = new Set(current);
+
+      if (next.has(tag.id)) {
+        next.delete(tag.id);
+      } else {
+        next.add(tag.id);
+      }
+
+      return next;
+    });
   }
 
   isSelected(tag: Tag): boolean {
-    return this.selectedTagIds.has(tag.id);
-  }
-
-  get selectedCount(): number {
-    return this.selectedTagIds.size;
+    return this.selectedTagIds().has(tag.id);
   }
 
   onFinish(): void {
-    if (this.selectedCount === 0) return;
+    const selectedTagIds = [...this.selectedTagIds()];
+    if (selectedTagIds.length === 0 || this.isLoadingTags() || this.isSaving()) return;
+    this.completeOnboarding(selectedTagIds);
+  }
 
-    this.isLoading = true;
-    this.saveError = '';
+  onSkip(): void {
+    if (this.isSaving()) return;
+    this.completeOnboarding([]);
+  }
 
-    const tagIds = [...this.selectedTagIds];
+  goBack(): void {
+    this.router.navigate(['/profile']);
+  }
+
+  retryLoad(): void {
+    this.loadInterests();
+  }
+
+  private completeOnboarding(tagIds: number[]): void {
+    this.isSaving.set(true);
+    this.saveError.set('');
 
     this.tagService.saveUserTags(tagIds).subscribe({
       next: () => {
-        // Reload canonical user state so interests render server truth everywhere.
+        // Reload canonical user state so route guards and downstream screens
+        // read the cleared onboarding flag immediately.
         this.userService.load().subscribe({
           next: () => {
-            this.isLoading = false;
+            this.isSaving.set(false);
             this.router.navigate(['/']);
           },
           error: () => {
-            this.isLoading = false;
+            this.isSaving.set(false);
             this.router.navigate(['/']);
           },
         });
       },
       error: () => {
-        this.isLoading = false;
-        this.saveError = 'Could not save your interests. Please try again.';
+        this.isSaving.set(false);
+        this.saveError.set('Could not finish onboarding. Please try again.');
       },
     });
   }
 
-  onSkip(): void {
-    this.router.navigate(['/']);
-  }
+  private loadInterests(): void {
+    this.isLoadingTags.set(true);
+    this.loadError.set('');
+    this.saveError.set('');
 
-  goBack(): void {
-    this.router.navigate(['/register']);
+    forkJoin({
+      tags: this.tagService.loadTags(),
+      selected: this.tagService.loadUserInterests().pipe(
+        catchError(() => of({ tags: [] as UserInterestItem[] })),
+      ),
+    }).subscribe({
+      next: ({ tags, selected }) => {
+        this.tags.set(tags);
+
+        const availableIds = new Set(tags.map(tag => tag.id));
+        this.selectedTagIds.set(new Set(
+          selected.tags
+            .map(tag => tag.tagId)
+            .filter(tagId => availableIds.has(tagId)),
+        ));
+
+        this.isLoadingTags.set(false);
+      },
+      error: () => {
+        this.tags.set([]);
+        this.selectedTagIds.set(new Set());
+        this.isLoadingTags.set(false);
+        this.loadError.set('Could not load interests right now. Please try again.');
+      },
+    });
   }
 }

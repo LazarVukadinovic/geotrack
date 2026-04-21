@@ -15,7 +15,8 @@ describe('InterestsPageComponent', () => {
   };
 
   const tagService = {
-    loadTags: vi.fn(() => of([])),
+    loadTags: vi.fn(() => of([{ id: 1, name: 'Food & Drink', slug: 'food-drink' }])),
+    loadUserInterests: vi.fn(() => of({ tags: [] })),
     saveUserTags: vi.fn(() => of(void 0)),
   };
 
@@ -42,5 +43,20 @@ describe('InterestsPageComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should load available tags on init', () => {
+    expect(tagService.loadTags).toHaveBeenCalledTimes(1);
+    expect(tagService.loadUserInterests).toHaveBeenCalledTimes(1);
+    expect(component.tags()).toEqual([{ id: 1, name: 'Food & Drink', slug: 'food-drink' }]);
+    expect(component.isLoadingTags()).toBe(false);
+  });
+
+  it('should clear onboarding state when skipping', () => {
+    component.onSkip();
+
+    expect(tagService.saveUserTags).toHaveBeenCalledWith([]);
+    expect(userService.load).toHaveBeenCalled();
+    expect(router.navigate).toHaveBeenCalledWith(['/']);
   });
 });
