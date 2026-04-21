@@ -6,66 +6,69 @@
     (action)="sectionMore.emit()"
   />
 
-  <div class="nearby-slider__viewport">
-    <div class="nearby-slider__track" data-slider-id="nearby" role="list">
-      @for (item of items(); track item.id) {
-        <article
-          class="nearby-slider__card"
-          role="button"
-          tabindex="0"
-          [attr.aria-label]="item.title"
-          [attr.data-item-id]="item.id"
-          (click)="onCardClick(item.id)"
-          (keydown.enter)="onCardClick(item.id)"
-          (keydown.space)="$event.preventDefault(); onCardClick(item.id)"
-        >
-          <div class="nearby-slider__media">
-            <img
-              class="nearby-slider__img"
-              [src]="imgSrcById()[item.id]"
-              [alt]="''"
-              width="182"
-              height="121"
-              loading="lazy"
-              decoding="async"
-              (error)="onImgError(item.id)"
-            />
-            <button
-              type="button"
-              class="nearby-slider__save"
-              [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
-              [class.nearby-slider__save--saved]="item.isSaved"
-              (click)="toggleBookmark($event, item.id)"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true" class="nearby-slider__heart">
-                <path
-                  [attr.fill]="item.isSaved ? 'var(--color-accent-orange)' : 'none'"
-                  [attr.stroke]="item.isSaved ? 'none' : 'currentColor'"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+  @if (items().length === 0) {
+    <app-empty-state
+      title="No nature spots nearby yet"
+      message="We do not have stored scenic or nature-focused places near this area."
+    />
+  } @else {
+    <div class="nearby-slider__viewport">
+      <div class="nearby-slider__track" data-slider-id="nearby" role="list">
+        @for (item of items(); track item.id) {
+          <article
+            class="nearby-slider__card"
+            role="button"
+            tabindex="0"
+            [attr.aria-label]="item.title"
+            [attr.data-item-id]="item.id"
+            (click)="onCardClick(item.id)"
+            (keydown.enter)="onCardClick(item.id)"
+            (keydown.space)="$event.preventDefault(); onCardClick(item.id)"
+          >
+            <div class="nearby-slider__media">
+              <img
+                class="nearby-slider__img"
+                [src]="imgSrcById()[item.id]"
+                [alt]="''"
+                width="182"
+                height="121"
+                loading="lazy"
+                decoding="async"
+                (error)="onImgError(item.id)"
+              />
+              @if (showFavoriteButton()) {
+                <app-favorite-button
+                  class="nearby-slider__save"
+                  [saved]="item.isSaved"
+                  [itemLabel]="item.title"
+                  (clicked)="toggleBookmark(item.id)"
                 />
-              </svg>
-            </button>
-          </div>
-
-          <div class="nearby-slider__body">
-            <h3 class="nearby-slider__title">{{ item.title }}</h3>
-            <p class="nearby-slider__category">{{ item.categoryLabel }}</p>
-            <div class="nearby-slider__meta">
-              <span class="nearby-slider__distance">{{ item.distance }}</span>
-              <span class="nearby-slider__rating">
-                <svg class="nearby-slider__star" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="currentColor" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
-                </svg>
-                {{ item.rating.toFixed(1) }}
-                <span class="nearby-slider__reviews">({{ item.reviewCount }})</span>
-              </span>
+              }
             </div>
-          </div>
-        </article>
-      }
+
+            <div class="nearby-slider__body">
+              <h3 class="nearby-slider__title">{{ item.title }}</h3>
+              <p class="nearby-slider__category">{{ item.categoryLabel }}</p>
+              <div class="nearby-slider__meta">
+                <span class="nearby-slider__distance">{{ item.distance }}</span>
+                @if (item.rating != null) {
+                  <span class="nearby-slider__rating">
+                    <svg class="nearby-slider__star" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="currentColor" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                    </svg>
+                    {{ item.rating!.toFixed(1) }}
+                    @if (item.reviewCount) {
+                      <span class="nearby-slider__reviews">({{ item.reviewCount }})</span>
+                    }
+                  </span>
+                } @else {
+                  <span class="nearby-slider__reviews nearby-slider__reviews--empty">No reviews yet</span>
+                }
+              </div>
+            </div>
+          </article>
+        }
+      </div>
     </div>
-  </div>
+  }
 </section>

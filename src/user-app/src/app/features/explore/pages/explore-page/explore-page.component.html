@@ -7,9 +7,14 @@
     <div class="explore-page__search">
       <app-search-bar
         [value]="searchQuery()"
+        controlId="explore-search"
+        controlName="exploreSearch"
+        label="Search destinations or activities"
         (valueChange)="onSearchChange($event)"
       />
     </div>
+
+    <p class="explore-page__context">{{ contextLine() }}</p>
 
     @if (loadError()) {
       <app-empty-state
@@ -37,6 +42,7 @@
 
     <app-top-stays-slider
       [items]="topStays()"
+      [showFavoriteButton]="isLoggedIn()"
       (bookmarkToggled)="toggleStaySaved($event)"
       (cardActivated)="onStayCard($event)"
       (sectionMore)="onStaysMore()"
@@ -50,6 +56,7 @@
 
     <app-local-favorites-list
       [items]="filteredLocalFavorites()"
+      [showFavoriteButton]="isLoggedIn()"
       (bookmarkToggled)="toggleLocalSaved($event)"
       (cardActivated)="onLocalCard($event)"
       (sectionMore)="onLocalMore()"
@@ -63,6 +70,7 @@
 
     <app-popular-nearby-slider
       [items]="popularNearby()"
+      [showFavoriteButton]="isLoggedIn()"
       (bookmarkToggled)="toggleNearbySaved($event)"
       (cardActivated)="onNearbyCard($event)"
       (sectionMore)="onNatureMore()"

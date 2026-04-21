@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
+import { FavoriteEntityType, FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
 import type { ExploreItem } from '../../../core/models/explore-item.model';
 import type {
@@ -23,12 +24,12 @@ import {
 interface ExploreApiResponse {
   selectedDestination?: { id: number; name: string; latitude: number; longitude: number };
   eventsThisWeek: { id: number; title: string; subtitle?: string; dateLabel?: string; image?: string }[];
-  topStays: { id: number; title: string; image?: string; rating: number; reviewCount?: string; distance?: string; pricePerNight: number; isSaved: boolean }[];
-  popularNearby: { id: number; title: string; categoryLabel?: string; image?: string; rating: number; reviewCount?: string; distance?: string; isSaved: boolean }[];
+  topStays: { id: number; title: string; image?: string; rating?: number; reviewCount?: string; distance?: string; pricePerNight: number; isSaved: boolean }[];
+  popularNearby: { id: number; title: string; categoryLabel?: string; image?: string; rating?: number; reviewCount?: string; distance?: string; isSaved: boolean }[];
   mustSeeAttractions: { id: number; title: string; type?: string; image?: string }[];
   landmarkCategories: { id: number; title: string; image?: string; categoryKey?: string }[];
   curatedForYou: { id: number; title: string; subtitle?: string; categoryLabel?: string; image?: string; isSaved: boolean }[];
-  localFavorites: { id: number; title: string; subtitle?: string; description?: string; category?: string; type?: string; location?: string; image?: string; rating?: number; isSaved: boolean; openingHours?: string; isRecommended: boolean }[];
+  localFavorites: { id: number; title: string; subtitle?: string; description?: string; category?: string; type?: string; location?: string; image?: string; rating?: number; reviewCount?: string; isSaved: boolean; openingHours?: string; isRecommended: boolean }[];
 }
 
 /** Minimum distance in km to consider a location "meaningfully different" for reloading. */
@@ -42,6 +43,7 @@ export class ExploreService {
   private readonly locationSvc = inject(LocationService);
   private readonly auth = inject(AuthService);
   private readonly destinationSvc = inject(DestinationService);
+  private readonly favoriteState = inject(FavoriteStateService);
 
   private readonly _curatedForYou = signal<ExploreCuratedItem[]>([]);
   private readonly _localFavorites = signal<ExploreItem[]>([]);
@@ -58,15 +60,16 @@ export class ExploreService {
   /** Coordinates used for the last successful load. */
   private loadedLat = 0;
   private loadedLng = 0;
+  private loadedSource: 'gps' | 'ip' | 'manual' | null = null;
 
   /** Reactive lists for templates that prefer signals. */
-  readonly curatedForYou = computed(() => this._curatedForYou());
-  readonly localFavorites = computed(() => this._localFavorites());
+  readonly curatedForYou = computed(() => this.withSavedState(this._curatedForYou(), 'place'));
+  readonly localFavorites = computed(() => this.withSavedState(this._localFavorites(), 'place'));
   readonly nearbyStatus = computed(() => this._nearbyStatus());
   readonly promo = computed(() => this._promo());
   readonly eventsThisWeek = computed(() => this._eventsThisWeek());
-  readonly popularNearby = computed(() => this._popularNearby());
-  readonly topStays = computed(() => this._topStays());
+  readonly popularNearby = computed(() => this.withSavedState(this._popularNearby(), 'place'));
+  readonly topStays = computed(() => this.withSavedState(this._topStays(), 'place'));
   readonly mustSeeAttractions = computed(() => this._mustSeeAttractions());
   readonly landmarkCategories = computed(() => this._landmarkCategories());
   readonly loaded = computed(() => this._loaded());
@@ -79,10 +82,13 @@ export class ExploreService {
       if (!loc) return;
 
       const dist = this.haversineKm(this.loadedLat, this.loadedLng, loc.latitude, loc.longitude);
-      // First load (0,0 → real) always triggers; subsequent need RELOAD_THRESHOLD_KM
-      if (this._loaded() && dist < RELOAD_THRESHOLD_KM) return;
+      const sourceChanged = this.loadedSource !== loc.source;
+      // First load (0,0 → real) always triggers. After that we still reload when
+      // the source changes, so a fresh GPS fix can replace an approximate IP load
+      // even if both coordinates are within the same city.
+      if (this._loaded() && dist < RELOAD_THRESHOLD_KM && !sourceChanged) return;
 
-      this.loadFromApi(loc.latitude, loc.longitude);
+      this.loadFromApi(loc.latitude, loc.longitude, undefined, loc.source);
     });
   }
 
@@ -93,20 +99,29 @@ export class ExploreService {
    */
   loadForLocation(lat: number, lng: number): Promise<void> {
     const dist = this.haversineKm(this.loadedLat, this.loadedLng, lat, lng);
-    if (this._loaded() && dist < RELOAD_THRESHOLD_KM) {
+    const source = this.locationSvc.location()?.source ?? null;
+    if (this._loaded() && dist < RELOAD_THRESHOLD_KM && this.loadedSource === source) {
       return Promise.resolve(); // already loaded for a nearby location
     }
     return new Promise((resolve) => {
-      this.loadFromApi(lat, lng, resolve);
+      this.loadFromApi(lat, lng, resolve, source);
     });
   }
 
-  private loadFromApi(lat: number, lng: number, onComplete?: () => void): void {
+  private loadFromApi(
+    lat: number,
+    lng: number,
+    onComplete?: () => void,
+    source?: 'gps' | 'ip' | 'manual' | null,
+  ): void {
+    this._loadError.set(null);
+
     this.http.get<ExploreApiResponse>(`/api/explore?latitude=${lat}&longitude=${lng}`).subscribe({
       next: (res) => {
         this.applyResponse(res);
         this.loadedLat = lat;
         this.loadedLng = lng;
+        this.loadedSource = source ?? this.locationSvc.location()?.source ?? null;
         this._loadError.set(null);
         this._loaded.set(true);
         onComplete?.();
@@ -121,6 +136,7 @@ export class ExploreService {
         this._localFavorites.set([]);
         this.loadedLat = lat;
         this.loadedLng = lng;
+        this.loadedSource = source ?? this.locationSvc.location()?.source ?? null;
         this._loadError.set("We couldn't load the Explore feed. Check your connection and try again.");
         this._loaded.set(true);
         onComplete?.();
@@ -152,7 +168,7 @@ export class ExploreService {
       categoryLabel: p.categoryLabel ?? '',
       image: p.image ?? '',
       rating: p.rating,
-      reviewCount: p.reviewCount ?? '',
+      reviewCount: p.reviewCount,
       distance: p.distance ?? '',
       isSaved: p.isSaved,
     })));
@@ -186,6 +202,7 @@ export class ExploreService {
       location: f.location ?? '',
       image: f.image ?? '',
       rating: f.rating,
+      reviewCount: f.reviewCount,
       isSaved: f.isSaved,
       openingHours: f.openingHours,
       isRecommended: f.isRecommended,
@@ -215,7 +232,7 @@ export class ExploreService {
 
   /** Example API-shaped streams — swap implementation for HttpClient.get. */
   getLocalFavorites$(): Observable<ExploreItem[]> {
-    return of(this._localFavorites()).pipe(delay(0));
+    return of(this.localFavorites()).pipe(delay(0));
   }
 
   getEventsThisWeek$(): Observable<ExploreEvent[]> {
@@ -223,11 +240,11 @@ export class ExploreService {
   }
 
   getPopularNearby$(): Observable<ExploreNearbyItem[]> {
-    return of(this._popularNearby()).pipe(delay(0));
+    return of(this.popularNearby()).pipe(delay(0));
   }
 
   getTopStays$(): Observable<ExploreStay[]> {
-    return of(this._topStays()).pipe(delay(0));
+    return of(this.topStays()).pipe(delay(0));
   }
 
   getMustSeeAttractions$(): Observable<ExploreAttraction[]> {
@@ -241,27 +258,39 @@ export class ExploreService {
   toggleSaved(id: string, list: 'curatedForYou' | 'localFavorites' | 'popularNearby' | 'topStays'): void {
     if (!this.auth.isLoggedIn()) return;
 
-    const flip = () => this.flipSavedIn(list, id);
-    flip();
-
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
+    const current = this.currentSavedStateForList(list, id);
+    this.favoriteState.set('place', id, !current);
 
     this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
-      error: () => flip(),
+      error: () => this.favoriteState.set('place', id, current),
     });
   }
 
-  private flipSavedIn(
+  private currentSavedStateForList(
     list: 'curatedForYou' | 'localFavorites' | 'popularNearby' | 'topStays',
     id: string,
-  ): void {
-    const toggle = <T extends { id: string; isSaved: boolean }>(items: T[]): T[] =>
-      items.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item));
+  ): boolean {
+    if (list === 'curatedForYou') {
+      return this.curatedForYou().find((item) => item.id === id)?.isSaved ?? false;
+    }
+    if (list === 'localFavorites') {
+      return this.localFavorites().find((item) => item.id === id)?.isSaved ?? false;
+    }
+    if (list === 'popularNearby') {
+      return this.popularNearby().find((item) => item.id === id)?.isSaved ?? false;
+    }
+    return this.topStays().find((item) => item.id === id)?.isSaved ?? false;
+  }
 
-    if (list === 'curatedForYou') this._curatedForYou.update(toggle);
-    else if (list === 'localFavorites') this._localFavorites.update(toggle);
-    else if (list === 'popularNearby') this._popularNearby.update(toggle);
-    else if (list === 'topStays') this._topStays.update(toggle);
+  private withSavedState<T extends { id: string; isSaved: boolean }>(
+    items: T[],
+    entityType: FavoriteEntityType,
+  ): T[] {
+    return items.map((item) => {
+      const isSaved = this.favoriteState.resolve(entityType, item.id, item.isSaved);
+      return item.isSaved === isSaved ? item : { ...item, isSaved };
+    });
   }
 }

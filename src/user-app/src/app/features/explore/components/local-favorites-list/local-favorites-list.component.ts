@@ -13,6 +13,7 @@ import { EmptyStateComponent } from '../../../../shared/components/empty-state/e
 })
 export class LocalFavoritesListComponent {
   readonly items = input.required<ExploreItem[]>();
+  readonly showFavoriteButton = input(false);
 
   readonly bookmarkToggled = output<string>();
   readonly cardActivated = output<string>();

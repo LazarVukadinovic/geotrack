@@ -15,6 +15,7 @@
           <div class="local-favorites__cell" role="listitem" [attr.data-item-id]="item.id">
             <app-destination-card
               [item]="item"
+              [showFavoriteButton]="showFavoriteButton()"
               (bookmarkToggled)="bookmarkToggled.emit($event)"
               (cardActivated)="cardActivated.emit($event)"
             />

@@ -1,17 +1,20 @@
 import { Component, effect, input, output, signal } from '@angular/core';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import type { ExploreNearbyItem } from '../../models/explore-extras.model';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
+import { FavoriteButtonComponent } from '../../../../shared/components/favorite-button/favorite-button.component';
 
 @Component({
   selector: 'app-popular-nearby-slider',
   standalone: true,
-  imports: [SectionHeaderComponent],
+  imports: [SectionHeaderComponent, EmptyStateComponent, FavoriteButtonComponent],
   templateUrl: './popular-nearby-slider.component.html',
   styleUrl: './popular-nearby-slider.component.scss',
 })
 export class PopularNearbySliderComponent {
   readonly items = input.required<ExploreNearbyItem[]>();
+  readonly showFavoriteButton = input(false);
 
   readonly bookmarkToggled = output<string>();
   readonly cardActivated   = output<string>();
@@ -41,8 +44,7 @@ export class PopularNearbySliderComponent {
     this.cardActivated.emit(id);
   }
 
-  protected toggleBookmark(event: Event, id: string): void {
-    event.stopPropagation();
+  protected toggleBookmark(id: string): void {
     this.bookmarkToggled.emit(id);
   }
 }

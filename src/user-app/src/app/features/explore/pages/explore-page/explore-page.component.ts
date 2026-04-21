@@ -1,6 +1,7 @@
 import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
+import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
 import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
@@ -40,6 +41,7 @@ import { EmptyStateComponent } from '../../../../shared/components/empty-state/e
 export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly explore     = inject(ExploreService);
   private readonly auth        = inject(AuthService);
+  private readonly destinationSvc = inject(DestinationService);
   private readonly locationSvc = inject(LocationService);
   private readonly router      = inject(Router);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
@@ -56,6 +58,22 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected readonly heroCity    = computed(() => this.locationSvc.displayCity());
   protected readonly heroCountry = computed(() => this.locationSvc.displayCountry());
+  protected readonly contextLine = computed(() => {
+    const destinationName = this.destinationSvc.name();
+    const heroCity = this.heroCity().trim().toLowerCase();
+    const normalizedDestination = destinationName.trim().toLowerCase();
+    const sourceLabel = this.locationSvc.sourceLabel();
+
+    if (!destinationName) {
+      return `Using ${sourceLabel}.`;
+    }
+
+    if (heroCity && heroCity === normalizedDestination) {
+      return `Using ${sourceLabel}.`;
+    }
+
+    return `Using ${sourceLabel}. Nearby content from ${destinationName}.`;
+  });
 
   protected readonly searchQuery = signal('');
 
