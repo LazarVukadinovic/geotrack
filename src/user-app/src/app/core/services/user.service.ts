@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { finalize, shareReplay, tap } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 
 export interface UserProfile {
@@ -13,6 +13,7 @@ export interface UserProfile {
   phoneNumber?: string;
   avatarUrl?: string;
   location?: string;
+  needsInterestsOnboarding: boolean;
 }
 
 /**
@@ -30,6 +31,10 @@ export class UserService {
   private readonly authService = inject(AuthService);
 
   private readonly _profile = signal<UserProfile | null>(null);
+  private loadInFlight$: Observable<UserProfile> | null = null;
+  readonly profile = computed(() => this._profile());
+  readonly needsInterestsOnboarding = computed(() => this._profile()?.needsInterestsOnboarding ?? false);
+  readonly avatarUrl = computed(() => this._profile()?.avatarUrl ?? '');
 
   /** Display name: "First Last", falling back to email if names are blank. */
   readonly fullName = computed(() => {
@@ -58,5 +63,39 @@ export class UserService {
     return this.http.get<UserProfile>('/api/user/me').pipe(
       tap(profile => this._profile.set(profile))
     );
+  }
+
+  patchProfile(patch: Partial<UserProfile>): void {
+    const existingProfile = this._profile();
+    if (!existingProfile) return;
+
+    this._profile.set({
+      ...existingProfile,
+      ...patch,
+    });
+  }
+
+  /**
+   * Guard-friendly current-user hydration.
+   * Reuses the cached profile when present and de-duplicates concurrent loads.
+   */
+  ensureLoaded(): Observable<UserProfile> {
+    const existingProfile = this._profile();
+    if (existingProfile) {
+      return of(existingProfile);
+    }
+
+    if (this.loadInFlight$) {
+      return this.loadInFlight$;
+    }
+
+    this.loadInFlight$ = this.load().pipe(
+      finalize(() => {
+        this.loadInFlight$ = null;
+      }),
+      shareReplay(1),
+    );
+
+    return this.loadInFlight$;
   }
 }
