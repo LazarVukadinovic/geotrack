@@ -44,12 +44,77 @@ public class UserController : ControllerBase
         }
     }
 
+    [HttpPut("me/password")]
+    public async Task<ActionResult<ChangePasswordResponseDto>> ChangePassword([FromBody] ChangePasswordRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.ChangePasswordAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("me/notifications")]
+    public async Task<ActionResult<GetNotificationSettingsResponseDto>> GetNotificationSettings()
+    {
+        try
+        {
+            return Ok(await _userService.GetNotificationSettingsAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("me/notifications")]
+    public async Task<ActionResult<UpdateNotificationSettingsResponseDto>> UpdateNotificationSettings([FromBody] UpdateNotificationSettingsRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.UpdateNotificationSettingsAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("me/interests")]
     public async Task<ActionResult<GetUserInterestsResponseDto>> GetUserInterests()
     {
         try
         {
             return Ok(await _userService.GetUserInterestsAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("me/support-requests")]
+    public async Task<ActionResult<GetSupportRequestsResponseDto>> GetSupportRequests()
+    {
+        try
+        {
+            return Ok(await _userService.GetSupportRequestsAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("me/support-requests")]
+    public async Task<ActionResult<CreateSupportRequestResponseDto>> CreateSupportRequest([FromBody] CreateSupportRequestRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.CreateSupportRequestAsync(GetUserId(), request));
         }
         catch (Exception ex)
         {

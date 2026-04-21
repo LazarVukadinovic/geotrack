@@ -21,10 +21,12 @@ public class EventsController : ControllerBase
     public async Task<ActionResult> GetEvents(
         [FromQuery] int? destinationId = null,
         [FromQuery] string? tags = null,
-        [FromQuery] bool? upcoming = null)
+        [FromQuery] bool? upcoming = null,
+        [FromQuery] double? latitude = null,
+        [FromQuery] double? longitude = null)
     {
         var userId = GetUserId();
-        var result = await _eventService.GetEventsAsync(destinationId, tags, upcoming, userId);
+        var result = await _eventService.GetEventsAsync(destinationId, tags, upcoming, userId, latitude, longitude);
         return result.Status switch
         {
             DestinationScopedStatus.Success => Ok(result.Data),
@@ -35,10 +37,13 @@ public class EventsController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    public async Task<ActionResult> GetEventDetail(int id)
+    public async Task<ActionResult> GetEventDetail(
+        int id,
+        [FromQuery] double? latitude = null,
+        [FromQuery] double? longitude = null)
     {
         var userId = GetUserId();
-        var detail = await _eventService.GetEventDetailAsync(id, userId);
+        var detail = await _eventService.GetEventDetailAsync(id, userId, latitude, longitude);
         if (detail == null) return NotFound();
         return Ok(detail);
     }

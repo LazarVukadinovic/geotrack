@@ -3,7 +3,9 @@ using Geotrack.Application.DTOs.Events;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
+using NetTopologySuite.Geometries;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -20,67 +22,114 @@ public class EventService : IEventService
 
     // --- Frontend-facing methods ---
 
-    public async Task<DestinationScopedResult<EventsListingResponseDto>> GetEventsAsync(int? destinationId, string? tags = null, bool? upcoming = null, int? userId = null)
+    public async Task<DestinationScopedResult<EventsListingResponseDto>> GetEventsAsync(
+        int? destinationId,
+        string? tags = null,
+        bool? upcoming = null,
+        int? userId = null,
+        double? latitude = null,
+        double? longitude = null)
     {
         if (!destinationId.HasValue || destinationId.Value <= 0)
         {
             return new DestinationScopedResult<EventsListingResponseDto> { Status = DestinationScopedStatus.InvalidDestination };
         }
-        if (!await _db.Destinations.AnyAsync(d => d.Id == destinationId.Value))
+        if (!await _db.Destinations.AsNoTracking().AnyAsync(d => d.Id == destinationId.Value))
         {
             return new DestinationScopedResult<EventsListingResponseDto> { Status = DestinationScopedStatus.DestinationNotFound };
         }
 
-        var query = _db.Events
-            .Include(e => e.EventType)
-            .Include(e => e.Location)
-            .Include(e => e.EventTags).ThenInclude(et => et.Tag)
-            .Where(e => e.Location.DestinationId == destinationId.Value);
+        var userPoint = latitude.HasValue && longitude.HasValue
+            ? SpatialPointFactory.Create(latitude.Value, longitude.Value)
+            : null;
+        var query = _db.Events.AsNoTracking();
+
+        if (userPoint is null)
+        {
+            query = query.Where(e => e.Location.DestinationId == destinationId.Value);
+        }
 
         if (upcoming == true)
             query = query.Where(e => e.EndDate >= DateTime.UtcNow);
 
         if (!string.IsNullOrEmpty(tags) && tags.ToLower() != "all")
         {
-            var tagList = tags.Split(',').Select(t => t.Trim().ToLower()).ToList();
+            var tagList = tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(t => t.ToLowerInvariant())
+                .ToList();
             query = query.Where(e => e.EventTags.Any(et => tagList.Contains(et.Tag.Slug.ToLower()) || tagList.Contains(et.Tag.Name.ToLower())));
         }
-
-        var events = await query.OrderBy(e => e.StartDate).ToListAsync();
 
         var favoriteIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
             : new HashSet<int>();
 
-        var items = new List<EventListItemDto>();
-        for (int i = 0; i < events.Count; i++)
+        List<EventListProjection> events;
+
+        if (userPoint is null)
         {
-            var e = events[i];
-            items.Add(new EventListItemDto
-            {
-                Id = e.Id,
-                Title = e.Name,
-                Subtitle = e.EventType?.Name,
-                Description = e.Description.Length > 150 ? e.Description[..150] + "..." : e.Description,
-                Location = e.Location?.Name,
-                Image = e.ImageUrl,
-                DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
-                Tags = e.EventTags.Select(et => et.Tag.Name).ToList(),
-                Variant = i == 0 ? "large" : "compact",
-                IsSaved = favoriteIds.Contains(e.Id)
-            });
+            events = await query
+                .Select(e => new EventListProjection
+                {
+                    Id = e.Id,
+                    Title = e.Name,
+                    Subtitle = e.EventType.Name,
+                    Description = e.Description,
+                    Location = e.Location.Name,
+                    Image = e.ImageUrl,
+                    StartDate = e.StartDate,
+                    EndDate = e.EndDate,
+                    Tags = e.EventTags.OrderBy(et => et.Tag.Name).Select(et => et.Tag.Name).ToList()
+                })
+                .OrderBy(e => e.StartDate)
+                .ToListAsync();
+        }
+        else
+        {
+            events = await query
+                .Where(e => EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
+                .Select(e => new EventListProjection
+                {
+                    Id = e.Id,
+                    Title = e.Name,
+                    Subtitle = e.EventType.Name,
+                    Description = e.Description,
+                    Location = e.Location.Name,
+                    Image = e.ImageUrl,
+                    StartDate = e.StartDate,
+                    EndDate = e.EndDate,
+                    Tags = e.EventTags.OrderBy(et => et.Tag.Name).Select(et => et.Tag.Name).ToList(),
+                    DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
+                })
+                .OrderBy(e => e.DistanceMeters)
+                .ThenBy(e => e.StartDate)
+                .ToListAsync();
         }
 
+        var items = events.Select((e, index) => new EventListItemDto
+        {
+            Id = e.Id,
+            Title = e.Title,
+            Subtitle = e.Subtitle,
+            Description = e.Description.Length > 150 ? e.Description[..150] + "..." : e.Description,
+            Location = e.Location,
+            Image = e.Image,
+            DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
+            Tags = e.Tags,
+            Variant = index == 0 ? "large" : "compact",
+            IsSaved = favoriteIds.Contains(e.Id)
+        }).ToList();
+
         EventsFeaturedDto? featured = null;
-        if (events.Any())
+        if (events.Count > 0)
         {
             var first = events.First();
             featured = new EventsFeaturedDto
             {
-                Title = first.Name,
+                Title = first.Title,
                 Description = first.Description.Length > 200 ? first.Description[..200] + "..." : first.Description,
                 DateRange = FormatDateLabel(first.StartDate, first.EndDate),
-                LocationLine = first.Location?.Name
+                LocationLine = first.Location
             };
         }
 
@@ -91,7 +140,11 @@ public class EventService : IEventService
         };
     }
 
-    public async Task<EventDetailDto?> GetEventDetailAsync(int id, int? userId = null)
+    public async Task<EventDetailDto?> GetEventDetailAsync(
+        int id,
+        int? userId = null,
+        double? latitude = null,
+        double? longitude = null)
     {
         var evt = await _db.Events
             .Include(e => e.EventType)
@@ -113,15 +166,22 @@ public class EventService : IEventService
         var favoriteIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
             : new HashSet<int>();
+        var (eventLatitude, eventLongitude) = ResolveCoordinates(evt);
 
         return new EventDetailDto
         {
             Id = evt.Id,
             Title = evt.Name,
             Location = evt.Location?.Name,
+            Latitude = eventLatitude,
+            Longitude = eventLongitude,
             HeroImage = evt.ImageUrl,
             Tags = evt.EventTags.Select(et => new TagLabelDto { Label = et.Tag.Name }).ToList(),
-            Distance = null,
+            Distance = SpatialDistanceFormatter.FormatBetween(
+                latitude,
+                longitude,
+                eventLatitude,
+                eventLongitude),
             About = evt.Description,
             Info = new EventDetailInfoDto
             {
@@ -334,5 +394,45 @@ public class EventService : IEventService
         var diff = end - start;
         if (diff.TotalHours < 24) return $"{(int)diff.TotalHours} hours";
         return $"{(int)diff.TotalDays} days";
+    }
+
+    private static (double? Latitude, double? Longitude) ResolveCoordinates(Domain.Entities.Core.Event evt)
+    {
+        if (HasUsableCoordinates(evt.Place?.Latitude, evt.Place?.Longitude))
+        {
+            return (evt.Place!.Latitude, evt.Place.Longitude);
+        }
+
+        if (HasUsableCoordinates(evt.Location?.Latitude, evt.Location?.Longitude))
+        {
+            return (evt.Location!.Latitude, evt.Location.Longitude);
+        }
+
+        return (null, null);
+    }
+
+    private static bool HasUsableCoordinates(double? latitude, double? longitude)
+    {
+        return latitude.HasValue &&
+               longitude.HasValue &&
+               !double.IsNaN(latitude.Value) &&
+               !double.IsNaN(longitude.Value) &&
+               !double.IsInfinity(latitude.Value) &&
+               !double.IsInfinity(longitude.Value) &&
+               (latitude.Value != 0d || longitude.Value != 0d);
+    }
+
+    private sealed class EventListProjection
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Subtitle { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public string? Location { get; set; }
+        public string? Image { get; set; }
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public double? DistanceMeters { get; set; }
+        public List<string> Tags { get; set; } = new();
     }
 }

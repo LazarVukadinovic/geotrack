@@ -17,18 +17,26 @@ public class ExploreController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult> GetExplorePage(
-        [FromQuery] double latitude = 42.6507,
-        [FromQuery] double longitude = 18.0944)
+        [FromQuery] double? latitude,
+        [FromQuery] double? longitude)
     {
+        if (!latitude.HasValue || !longitude.HasValue)
+        {
+            return BadRequest(new { error = "latitude and longitude are required." });
+        }
+
         var userId = GetUserId();
-        var result = await _exploreService.GetExplorePageAsync(latitude, longitude, userId);
+        var result = await _exploreService.GetExplorePageAsync(latitude.Value, longitude.Value, userId);
         return Ok(result);
     }
 
     [HttpGet("categories")]
-    public async Task<ActionResult> GetLocalPlacesCategories([FromQuery] int? destinationId = null)
+    public async Task<ActionResult> GetLocalPlacesCategories(
+        [FromQuery] int? destinationId = null,
+        [FromQuery] double? latitude = null,
+        [FromQuery] double? longitude = null)
     {
-        var result = await _exploreService.GetLocalPlacesCategoriesAsync(destinationId);
+        var result = await _exploreService.GetLocalPlacesCategoriesAsync(destinationId, latitude, longitude);
         return result.Status switch
         {
             DestinationScopedStatus.Success => Ok(result.Data),

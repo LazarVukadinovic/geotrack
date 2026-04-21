@@ -10,10 +10,29 @@ namespace Geotrack.Server.Controllers;
 public class LocationController : ControllerBase
 {
     private readonly ILocationService _locationService;
+    private readonly IClientLocationResolverService _clientLocationResolver;
 
-    public LocationController(ILocationService locationService)
+    public LocationController(
+        ILocationService locationService,
+        IClientLocationResolverService clientLocationResolver)
     {
         _locationService = locationService;
+        _clientLocationResolver = clientLocationResolver;
+    }
+
+    [HttpGet("approximate")]
+    public async Task<IActionResult> GetApproximateLocation(CancellationToken cancellationToken)
+    {
+        var location = await _clientLocationResolver.ResolveApproximateLocationAsync(
+            GetClientIpAddress(),
+            cancellationToken);
+
+        if (location is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Unable to determine approximate location from IP." });
+        }
+
+        return Ok(location);
     }
 
     [HttpGet("{id}")]
@@ -81,6 +100,23 @@ public class LocationController : ControllerBase
     {
         var userIdClaim = User.FindFirst("userId")?.Value;
         return int.TryParse(userIdClaim, out var userId) ? userId : null;
+    }
+
+    private string? GetClientIpAddress()
+    {
+        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwardedFor))
+        {
+            return forwardedFor.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        }
+
+        var realIp = Request.Headers["X-Real-IP"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(realIp))
+        {
+            return realIp;
+        }
+
+        return HttpContext.Connection.RemoteIpAddress?.ToString();
     }
 
     private IActionResult MapException(Exception ex)

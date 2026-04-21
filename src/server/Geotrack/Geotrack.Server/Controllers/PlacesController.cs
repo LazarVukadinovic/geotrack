@@ -22,10 +22,12 @@ public class PlacesController : ControllerBase
         [FromQuery] int? destinationId = null,
         [FromQuery] string? type = null,
         [FromQuery] string? tags = null,
-        [FromQuery] string? category = null)
+        [FromQuery] string? category = null,
+        [FromQuery] double? latitude = null,
+        [FromQuery] double? longitude = null)
     {
         var userId = GetUserId();
-        var result = await _placeService.GetPlacesAsync(destinationId, type, tags, category, userId);
+        var result = await _placeService.GetPlacesAsync(destinationId, type, tags, category, userId, latitude, longitude);
         return result.Status switch
         {
             DestinationScopedStatus.Success => Ok(result.Data),
@@ -36,10 +38,13 @@ public class PlacesController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    public async Task<ActionResult> GetPlaceDetail(int id)
+    public async Task<ActionResult> GetPlaceDetail(
+        int id,
+        [FromQuery] double? latitude = null,
+        [FromQuery] double? longitude = null)
     {
         var userId = GetUserId();
-        var detail = await _placeService.GetPlaceDetailAsync(id, userId);
+        var detail = await _placeService.GetPlaceDetailAsync(id, userId, latitude, longitude);
         if (detail == null) return NotFound();
         return Ok(detail);
     }
@@ -47,10 +52,12 @@ public class PlacesController : ControllerBase
     [HttpGet("hotels")]
     public async Task<ActionResult> GetHotels(
         [FromQuery] int? destinationId = null,
-        [FromQuery] string? tag = null)
+        [FromQuery] string? tag = null,
+        [FromQuery] double? latitude = null,
+        [FromQuery] double? longitude = null)
     {
         var userId = GetUserId();
-        var result = await _placeService.GetHotelsAsync(destinationId, tag, userId);
+        var result = await _placeService.GetHotelsAsync(destinationId, tag, userId, latitude, longitude);
         return result.Status switch
         {
             DestinationScopedStatus.Success => Ok(result.Data),
@@ -61,10 +68,13 @@ public class PlacesController : ControllerBase
     }
 
     [HttpGet("hotels/{id:int}")]
-    public async Task<ActionResult> GetHotelDetail(int id)
+    public async Task<ActionResult> GetHotelDetail(
+        int id,
+        [FromQuery] double? latitude = null,
+        [FromQuery] double? longitude = null)
     {
         var userId = GetUserId();
-        var detail = await _placeService.GetHotelDetailAsync(id, userId);
+        var detail = await _placeService.GetHotelDetailAsync(id, userId, latitude, longitude);
         if (detail == null) return NotFound();
         return Ok(detail);
     }

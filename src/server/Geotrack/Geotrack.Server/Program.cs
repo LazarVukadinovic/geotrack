@@ -22,7 +22,9 @@ if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException(
         "ConnectionStrings:DefaultConnection is required. Set via user-secrets, environment variable, or appsettings.*.json.");
 
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(
+    connectionString,
+    npgsqlOptions => npgsqlOptions.UseNetTopologySuite()));
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -48,6 +50,7 @@ builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IExploreService, ExploreService>();
+builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
@@ -132,12 +135,14 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+await PostgisStartup.EnsureReadyAsync(app.Services, app.Environment.IsDevelopment());
+
 // Auto-apply migrations and seed data in development
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+    await db.Database.MigrateAsync();
     await SeedData.InitializeAsync(db);
 }
 
@@ -161,3 +166,5 @@ app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();
+
+public partial class Program;
