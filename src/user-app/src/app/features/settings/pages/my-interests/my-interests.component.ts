@@ -1,20 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
+import { catchError, forkJoin, of } from 'rxjs';
 import { TagService } from '../../../../core/services/tag.service';
 import { UserService } from '../../../../core/services/user.service';
 import { Tag } from '../../../../core/models/tag.model';
-
-interface InterestItem {
-  tagId: number;
-  name: string;
-  slug: string;
-}
-
-interface UserInterestsResponse {
-  tags: InterestItem[];
-}
 
 @Component({
   selector: 'app-my-interests',
@@ -23,10 +13,16 @@ interface UserInterestsResponse {
   styleUrl: './my-interests.component.css',
 })
 export class MyInterestsComponent {
-  isSaving = false;
-  saveError = '';
-  tags: Tag[] = [];
-  selectedTags: Tag[] = [];
+  readonly isLoading = signal(true);
+  readonly isSaving = signal(false);
+  readonly loadError = signal('');
+  readonly saveError = signal('');
+  readonly tags = signal<Tag[]>([]);
+  readonly selectedTags = signal<Tag[]>([]);
+  readonly availableTags = computed(() => {
+    const selectedIds = new Set(this.selectedTags().map(tag => tag.id));
+    return this.tags().filter(tag => !selectedIds.has(tag.id));
+  });
   private returnTo = '/settings';
 
   constructor(
@@ -34,57 +30,34 @@ export class MyInterestsComponent {
     private route: ActivatedRoute,
     private tagService: TagService,
     private userService: UserService,
-    private http: HttpClient,
   ) {
     this.route.queryParams.subscribe(p => {
       if (p['from']) this.returnTo = '/' + p['from'];
     });
 
-    this.tagService.loadTags().subscribe(tags => {
-      this.tags = tags;
-      this.loadSavedInterests();
-    });
-  }
-
-  private loadSavedInterests(): void {
-    this.http.get<UserInterestsResponse>('/api/user/me/interests').subscribe({
-      next: (res) => {
-        const ids = res.tags.map(t => t.tagId);
-        this.selectedTags = this.tags.filter(t => ids.includes(t.id));
-      },
-      error: () => {
-        // On failure, start with an empty selection rather than resurrecting
-        // stale localStorage state.
-        this.selectedTags = [];
-      },
-    });
-  }
-
-  get availableTags(): Tag[] {
-    const selectedIds = this.selectedTags.map(t => t.id);
-    return this.tags.filter(t => !selectedIds.includes(t.id));
+    this.loadInterests();
   }
 
   addTag(tag: Tag): void {
     if (!this.isSelected(tag)) {
-      this.selectedTags = [...this.selectedTags, tag];
+      this.selectedTags.update(tags => [...tags, tag]);
     }
   }
 
   removeTag(tag: Tag): void {
-    this.selectedTags = this.selectedTags.filter(t => t.id !== tag.id);
+    this.selectedTags.update(tags => tags.filter(t => t.id !== tag.id));
   }
 
   isSelected(tag: Tag): boolean {
-    return this.selectedTags.some(t => t.id === tag.id);
+    return this.selectedTags().some(t => t.id === tag.id);
   }
 
   saveChanges(): void {
-    if (this.isSaving) return;
-    this.isSaving = true;
-    this.saveError = '';
+    if (this.isSaving() || this.isLoading()) return;
+    this.isSaving.set(true);
+    this.saveError.set('');
 
-    const tagIds = this.selectedTags.map(t => t.id);
+    const tagIds = this.selectedTags().map(t => t.id);
 
     this.tagService.saveUserTags(tagIds).subscribe({
       next: () => {
@@ -92,23 +65,54 @@ export class MyInterestsComponent {
         // read fresh interests from UserService.
         this.userService.load().subscribe({
           next: () => {
-            this.isSaving = false;
+            this.isSaving.set(false);
             this.router.navigate([this.returnTo]);
           },
           error: () => {
-            this.isSaving = false;
+            this.isSaving.set(false);
             this.router.navigate([this.returnTo]);
           },
         });
       },
       error: () => {
-        this.isSaving = false;
-        this.saveError = 'Could not save your interests. Please try again.';
+        this.isSaving.set(false);
+        this.saveError.set('Could not save your interests. Please try again.');
       },
     });
   }
 
   goBack(): void {
     this.router.navigate([this.returnTo]);
+  }
+
+  retryLoad(): void {
+    this.loadInterests();
+  }
+
+  private loadInterests(): void {
+    this.isLoading.set(true);
+    this.loadError.set('');
+    this.saveError.set('');
+    this.selectedTags.set([]);
+
+    forkJoin({
+      tags: this.tagService.loadTags(),
+      selected: this.tagService.loadUserInterests().pipe(
+        catchError(() => of({ tags: [] })),
+      ),
+    }).subscribe({
+      next: ({ tags, selected }) => {
+        this.tags.set(tags);
+        const ids = new Set(selected.tags.map(tag => tag.tagId));
+        this.selectedTags.set(tags.filter(tag => ids.has(tag.id)));
+        this.isLoading.set(false);
+      },
+      error: () => {
+        this.tags.set([]);
+        this.selectedTags.set([]);
+        this.isLoading.set(false);
+        this.loadError.set('Could not load your interests. Please try again.');
+      },
+    });
   }
 }

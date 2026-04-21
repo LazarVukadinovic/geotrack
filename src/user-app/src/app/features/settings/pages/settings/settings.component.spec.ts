@@ -21,6 +21,7 @@ describe('Settings', () => {
   const userService = {
     fullName: signal('Test User'),
     email: signal('test@example.com'),
+    avatarUrl: signal('/media/uploads/avatars/test-user.png'),
   };
 
   beforeEach(async () => {

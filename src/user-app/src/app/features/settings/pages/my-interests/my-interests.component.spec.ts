@@ -1,19 +1,20 @@
-import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { MyInterestsComponent } from './my-interests.component';
 import { UserService } from '../../../../core/services/user.service';
+import { TagService } from '../../../../core/services/tag.service';
 
 describe('MyInterests', () => {
   let component: MyInterestsComponent;
   let fixture: ComponentFixture<MyInterestsComponent>;
-  let httpMock: HttpTestingController;
+
+  const tags = [
+    { id: 1, name: 'Food & Drink', slug: 'food-drink' },
+    { id: 2, name: 'Nature', slug: 'nature' },
+    { id: 3, name: 'History', slug: 'history' },
+  ];
 
   const router = {
     navigate: vi.fn(),
@@ -31,11 +32,15 @@ describe('MyInterests', () => {
     ),
   };
 
-  const tags = [
-    { id: 1, name: 'Food & Drink', slug: 'food-drink' },
-    { id: 2, name: 'Nature', slug: 'nature' },
-    { id: 3, name: 'History', slug: 'history' },
-  ];
+  const tagService = {
+    loadTags: vi.fn(() => of(tags)),
+    loadUserInterests: vi.fn(() =>
+      of({
+        tags: [{ tagId: 1, name: 'Food & Drink', slug: 'food-drink' }],
+      }),
+    ),
+    saveUserTags: vi.fn(() => of(void 0)),
+  };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -43,27 +48,16 @@ describe('MyInterests', () => {
     await TestBed.configureTestingModule({
       imports: [MyInterestsComponent],
       providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
         { provide: Router, useValue: router },
         { provide: ActivatedRoute, useValue: { queryParams: of({}) } },
         { provide: UserService, useValue: userService },
+        { provide: TagService, useValue: tagService },
       ],
     }).compileComponents();
 
-    httpMock = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(MyInterestsComponent);
     component = fixture.componentInstance;
-
-    httpMock.expectOne('/api/tags').flush(tags);
-    httpMock.expectOne('/api/user/me/interests').flush({
-      tags: [{ tagId: 1, name: 'Food & Drink', slug: 'food-drink' }],
-    });
     await fixture.whenStable();
-  });
-
-  afterEach(() => {
-    httpMock.verify();
   });
 
   it('should create', () => {
@@ -71,11 +65,13 @@ describe('MyInterests', () => {
   });
 
   it('should load selected interests from the current-user API', () => {
-    expect(component.selectedTags.map((tag) => tag.id)).toEqual([1]);
+    expect(tagService.loadTags).toHaveBeenCalledTimes(1);
+    expect(tagService.loadUserInterests).toHaveBeenCalledTimes(1);
+    expect(component.selectedTags().map((tag) => tag.id)).toEqual([1]);
   });
 
   it('should add and remove tags from the selection', () => {
-    const tag = component.availableTags[0];
+    const tag = component.availableTags()[0];
 
     component.addTag(tag);
     expect(component.isSelected(tag)).toBe(true);
@@ -87,16 +83,12 @@ describe('MyInterests', () => {
   it('should persist selected tags through the current API contract', () => {
     userService.load.mockClear();
     router.navigate.mockClear();
+    tagService.saveUserTags.mockClear();
 
-    component.selectedTags = [tags[0], tags[2]];
+    component.selectedTags.set([tags[0], tags[2]]);
     component.saveChanges();
 
-    const request = httpMock.expectOne('/api/user/me/interests');
-    expect(request.request.method).toBe('PUT');
-    expect(request.request.body).toEqual({ tagIds: [1, 3] });
-
-    request.flush({});
-
+    expect(tagService.saveUserTags).toHaveBeenCalledWith([1, 3]);
     expect(userService.load).toHaveBeenCalledTimes(1);
     expect(router.navigate).toHaveBeenCalledWith(['/settings']);
   });
@@ -104,17 +96,14 @@ describe('MyInterests', () => {
   it('should surface save errors instead of silently navigating away', () => {
     userService.load.mockClear();
     router.navigate.mockClear();
-
-    component.selectedTags = [tags[1]];
-    component.saveChanges();
-
-    const request = httpMock.expectOne('/api/user/me/interests');
-    request.flush(
-      { message: 'Save failed' },
-      { status: 500, statusText: 'Server Error' },
+    tagService.saveUserTags.mockReturnValueOnce(
+      throwError(() => new Error('Save failed')),
     );
 
-    expect(component.saveError).toBe(
+    component.selectedTags.set([tags[1]]);
+    component.saveChanges();
+
+    expect(component.saveError()).toBe(
       'Could not save your interests. Please try again.',
     );
     expect(userService.load).not.toHaveBeenCalled();

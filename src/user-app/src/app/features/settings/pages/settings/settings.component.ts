@@ -15,6 +15,7 @@ export class SettingsComponent {
   // renders, so fullName() and email() are already set on first paint.
   protected readonly fullName = inject(UserService).fullName;
   protected readonly email    = inject(UserService).email;
+  protected readonly avatarUrl = inject(UserService).avatarUrl;
 
   readonly language = 'English (US)';
 
