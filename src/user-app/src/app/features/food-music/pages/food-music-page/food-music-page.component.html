@@ -100,10 +100,12 @@
                   <svg class="fmc__star" viewBox="0 0 24 24" aria-hidden="true">
                     <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
                   </svg>
-                  <span class="fmc__rating">{{ item.rating.toFixed(1) }}</span>
+                  <span class="fmc__rating">{{ item.rating!.toFixed(1) }}</span>
                   @if (item.reviewCount) {
-                    <span class="fmc__reviews">&middot; {{ item.reviewCount }} reviews</span>
+                    <span class="fmc__reviews">&middot; {{ item.reviewCount }}</span>
                   }
+                } @else {
+                  <span class="fmc__no-rating">No reviews yet</span>
                 }
                 @if (item.openingHours) {
                   <span class="fmc__hours">{{ item.openingHours }}</span>
@@ -181,10 +183,12 @@
                   <svg class="fmc__star" viewBox="0 0 24 24" aria-hidden="true">
                     <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
                   </svg>
-                  <span class="fmc__rating">{{ item.rating.toFixed(1) }}</span>
+                  <span class="fmc__rating">{{ item.rating!.toFixed(1) }}</span>
                   @if (item.reviewCount) {
                     <span class="fmc__reviews">&middot; {{ item.reviewCount }}</span>
                   }
+                } @else {
+                  <span class="fmc__no-rating">No reviews yet</span>
                 }
               </div>
 

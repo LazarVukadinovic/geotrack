@@ -3,6 +3,8 @@ import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
+import { FavoriteStateService } from '../../../core/services/favorite-state.service';
+import { LocationService } from '../../../core/services/location.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { CultureHistoryItem } from '../models/culture-history.model';
 
@@ -27,17 +29,17 @@ export class CultureHistoryService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly destinationSvc = inject(DestinationService);
+  private readonly favoriteState = inject(FavoriteStateService);
+  private readonly locationSvc = inject(LocationService);
   private readonly exploreSvc = inject(ExploreService);
   private readonly _items = signal<CultureHistoryItem[]>([]);
-  private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _loadError = signal<string | null>(null);
   private loadedDestinationId: number | null = null;
 
   readonly items = computed(() => {
-    const overrides = this._savedOverrides();
     return this._items().map((item) => ({
       ...item,
-      isSaved: overrides[item.id] !== undefined ? overrides[item.id] : item.isSaved,
+      isSaved: this.favoriteState.resolve('place', item.id, item.isSaved),
     }));
   });
 
@@ -53,7 +55,9 @@ export class CultureHistoryService {
   }
 
   private loadFromApi(destinationId: number): void {
-    this.http.get<ApiPlaceListItem[]>(`/api/places?tags=culture,history&destinationId=${destinationId}`).subscribe({
+    this.http.get<ApiPlaceListItem[]>(
+      `/api/places?tags=culture,history,historic-sites,museums,galleries,exhibitions,landmarks&destinationId=${destinationId}${this.buildLocationQuery()}`
+    ).subscribe({
       next: (items) => {
         this._items.set(items.map((dto, i) => ({
           id: String(dto.id),
@@ -80,23 +84,24 @@ export class CultureHistoryService {
     });
   }
 
+  private buildLocationQuery(): string {
+    const loc = this.locationSvc.location();
+    if (!loc) return '';
+    return `&latitude=${loc.latitude}&longitude=${loc.longitude}`;
+  }
+
   getItems$(): Observable<CultureHistoryItem[]> {
     return of(this.items()).pipe(delay(0));
   }
 
   toggleSaved(id: string): void {
     if (!this.auth.isLoggedIn()) return;
-
-    const flip = () => {
-      const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
-      this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
-    };
-    flip();
-
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
+    const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
+    this.favoriteState.set('place', id, !current);
     this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
-      error: () => flip(),
+      error: () => this.favoriteState.set('place', id, current),
     });
   }
 }
