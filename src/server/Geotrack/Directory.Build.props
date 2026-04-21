@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Prevent tool-generated intermediate folders from being picked up by SDK default item globs. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);**\codex-obj\**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

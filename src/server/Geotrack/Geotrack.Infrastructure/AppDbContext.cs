@@ -4,7 +4,9 @@ using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
+using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
+using Point = NetTopologySuite.Geometries.Point;
 
 namespace Geotrack.Infrastructure;
 
@@ -49,6 +51,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
+    public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
@@ -56,9 +59,34 @@ public class AppDbContext : DbContext
     {
     }
 
+    public override int SaveChanges()
+    {
+        SyncSpatialColumns();
+        return base.SaveChanges();
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        SyncSpatialColumns();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        SyncSpatialColumns();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        SyncSpatialColumns();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.HasPostgresExtension("postgis");
 
         modelBuilder.Entity<Region>(entity =>
         {
@@ -128,6 +156,10 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.DestinationTypeId);
             entity.HasIndex(x => x.RegionId);
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<DestinationType>(entity =>
@@ -176,6 +208,10 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.EventTypeId);
             entity.HasIndex(x => x.LocationId);
             entity.HasIndex(x => x.PlaceId);
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<EventType>(entity =>
@@ -215,6 +251,10 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.DestinationId);
             entity.HasIndex(x => x.LocationTypeId);
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<LocationType>(entity =>
@@ -263,6 +303,10 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.PlaceTypeId);
             entity.HasIndex(x => x.LocationId);
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<PlaceType>(entity =>
@@ -613,6 +657,35 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
+        modelBuilder.Entity<SupportRequest>(entity =>
+        {
+            entity.ToTable("SupportRequests");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Category)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Subject)
+                .HasMaxLength(160);
+
+            entity.Property(x => x.Message)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(40);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.SupportRequests)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+        });
+
         modelBuilder.Entity<UserTag>(entity =>
         {
             entity.ToTable("UserTags");
@@ -734,6 +807,11 @@ public class AppDbContext : DbContext
             entity.Property(x => x.AvatarUrl).HasMaxLength(1000);
             entity.Property(x => x.DisplayName).HasMaxLength(100);
             entity.Property(x => x.Location).HasMaxLength(200);
+            entity.Property(x => x.GeneralNotificationsEnabled).HasDefaultValue(true);
+            entity.Property(x => x.TravelRecommendationsEnabled).HasDefaultValue(true);
+            entity.Property(x => x.NearbyEventsEnabled).HasDefaultValue(true);
+            entity.Property(x => x.CollectionUpdatesEnabled).HasDefaultValue(true);
+            entity.Property(x => x.EmailNotificationsEnabled).HasDefaultValue(false);
         });
 
         // ImageUrl fields for other entities
@@ -781,5 +859,76 @@ public class AppDbContext : DbContext
             // Fast lookup of active tokens per user
             entity.HasIndex(x => new { x.UserId, x.IsRevoked, x.ExpiresAt });
         });
+    }
+
+    private void SyncSpatialColumns()
+    {
+        foreach (var entry in ChangeTracker.Entries<Destination>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
+                    SpatialPointFactory.Create(entry.Entity.Latitude, entry.Entity.Longitude);
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Location>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
+                    SpatialPointFactory.Create(entry.Entity.Latitude, entry.Entity.Longitude);
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Place>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
+                    SpatialPointFactory.Create(entry.Entity.Latitude, entry.Entity.Longitude);
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Event>())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified))
+            {
+                continue;
+            }
+
+            entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
+                ResolveEventCoordinates(entry.Entity);
+        }
+    }
+
+    private Point? ResolveEventCoordinates(Event entity)
+    {
+        if (entity.Place is not null)
+        {
+            return SpatialPointFactory.Create(entity.Place.Latitude, entity.Place.Longitude);
+        }
+
+        if (entity.Location is not null)
+        {
+            return SpatialPointFactory.Create(entity.Location.Latitude, entity.Location.Longitude);
+        }
+
+        if (entity.PlaceId.HasValue)
+        {
+            var localPlace = Places.Local.FirstOrDefault(place => place.Id == entity.PlaceId.Value);
+            if (localPlace is not null)
+            {
+                return SpatialPointFactory.Create(localPlace.Latitude, localPlace.Longitude);
+            }
+        }
+
+        var localLocation = Locations.Local.FirstOrDefault(location => location.Id == entity.LocationId);
+        if (localLocation is not null)
+        {
+            return SpatialPointFactory.Create(localLocation.Latitude, localLocation.Longitude);
+        }
+
+        return null;
     }
 }
