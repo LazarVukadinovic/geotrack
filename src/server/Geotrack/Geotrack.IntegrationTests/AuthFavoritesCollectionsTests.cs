@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Favorites;
+using Geotrack.Application.DTOs.Tags;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.IntegrationTests.Infrastructure;
 using Xunit;
@@ -161,6 +163,171 @@ public sealed class AuthFavoritesCollectionsTests
         Assert.DoesNotContain(afterDelete.Collections, collection => collection.Id == createdCollection.Id);
     }
 
+    [Fact]
+    public async Task Profile_avatar_flow_uploads_serves_replaces_and_persists_current_user_avatar()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await RegisterAndLoginAsync(app);
+
+        using var firstUpload = CreateAvatarUploadContent(AvatarPngBytes, "avatar-one.png", "image/png");
+        var firstResponse = await client.PutAsync("/api/user/me/avatar", firstUpload);
+        firstResponse.EnsureSuccessStatusCode();
+
+        var firstAvatar = await firstResponse.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
+        Assert.NotNull(firstAvatar);
+        Assert.StartsWith("/media/uploads/avatars/", firstAvatar.AvatarUrl);
+
+        var meAfterFirstUpload = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
+        Assert.NotNull(meAfterFirstUpload);
+        Assert.Equal(firstAvatar.AvatarUrl, meAfterFirstUpload.AvatarUrl);
+
+        var firstAvatarFile = await client.GetAsync(firstAvatar.AvatarUrl);
+        firstAvatarFile.EnsureSuccessStatusCode();
+        Assert.Equal("image/png", firstAvatarFile.Content.Headers.ContentType?.MediaType);
+
+        using var secondUpload = CreateAvatarUploadContent(AvatarPngBytes, "avatar-two.png", "image/png");
+        var secondResponse = await client.PutAsync("/api/user/me/avatar", secondUpload);
+        secondResponse.EnsureSuccessStatusCode();
+
+        var secondAvatar = await secondResponse.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
+        Assert.NotNull(secondAvatar);
+        Assert.StartsWith("/media/uploads/avatars/", secondAvatar.AvatarUrl);
+        Assert.NotEqual(firstAvatar.AvatarUrl, secondAvatar.AvatarUrl);
+
+        var meAfterSecondUpload = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
+        Assert.NotNull(meAfterSecondUpload);
+        Assert.Equal(secondAvatar.AvatarUrl, meAfterSecondUpload.AvatarUrl);
+
+        var oldAvatarRequest = await client.GetAsync(firstAvatar.AvatarUrl);
+        Assert.Equal(HttpStatusCode.NotFound, oldAvatarRequest.StatusCode);
+
+        var secondAvatarFile = await client.GetAsync(secondAvatar.AvatarUrl);
+        secondAvatarFile.EnsureSuccessStatusCode();
+        Assert.Equal("image/png", secondAvatarFile.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Profile_avatar_flow_rejects_invalid_uploads()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await RegisterAndLoginAsync(app);
+
+        using var invalidUpload = CreateAvatarUploadContent(new byte[] { 1, 2, 3, 4 }, "avatar.txt", "text/plain");
+        var response = await client.PutAsync("/api/user/me/avatar", invalidUpload);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var errorBody = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.NotNull(errorBody);
+        Assert.Equal("Only PNG, JPG, GIF, or WEBP images are supported.", errorBody["message"]);
+    }
+
+    [Fact]
+    public async Task Swagger_openapi_includes_avatar_upload_endpoint_as_multipart_form_data()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var response = await client.GetAsync("/swagger/v1/swagger.json");
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = document.RootElement;
+        var operation = root
+            .GetProperty("paths")
+            .GetProperty("/api/user/me/avatar")
+            .GetProperty("put");
+
+        var requestBodySchema = operation
+            .GetProperty("requestBody")
+            .GetProperty("content")
+            .GetProperty("multipart/form-data")
+            .GetProperty("schema");
+
+        var resolvedSchema = ResolveSchema(root, requestBodySchema);
+        var avatarProperty = resolvedSchema
+            .GetProperty("properties")
+            .GetProperty("avatar");
+
+        Assert.Equal("string", avatarProperty.GetProperty("type").GetString());
+        Assert.Equal("binary", avatarProperty.GetProperty("format").GetString());
+    }
+
+    [Fact]
+    public async Task Register_flow_sets_and_clears_interests_onboarding_state()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var email = $"onboarding-{Guid.NewGuid():N}@example.com";
+
+        var registerResponse = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterRequestDto
+            {
+                FullName = "Onboarding Traveler",
+                Email = email,
+                Password = "password123",
+            });
+        registerResponse.EnsureSuccessStatusCode();
+
+        var registeredSession = await registerResponse.Content.ReadFromJsonAsync<LoginResponseDto>();
+        Assert.NotNull(registeredSession);
+        Assert.False(string.IsNullOrWhiteSpace(registeredSession.AccessToken));
+
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", registeredSession.AccessToken);
+
+        var meAfterRegister = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
+        Assert.NotNull(meAfterRegister);
+        Assert.True(meAfterRegister.NeedsInterestsOnboarding);
+        Assert.Equal(email, meAfterRegister.Email);
+
+        var availableTags = await client.GetFromJsonAsync<List<TagDto>>("/api/tags");
+        Assert.NotNull(availableTags);
+        Assert.NotEmpty(availableTags);
+
+        var onboardingTags = await client.GetFromJsonAsync<List<TagDto>>("/api/tags?forUser=true");
+        Assert.NotNull(onboardingTags);
+        Assert.NotEmpty(onboardingTags);
+        Assert.Contains(onboardingTags, tag => tag.Slug == "food-drink");
+        Assert.DoesNotContain(onboardingTags, tag => tag.Slug == "budget");
+
+        var updateInterestsResponse = await client.PutAsJsonAsync(
+            "/api/user/me/interests",
+            new UpdateUserInterestsRequestDto
+            {
+                TagIds = new List<int> { availableTags[0].Id }
+            });
+        updateInterestsResponse.EnsureSuccessStatusCode();
+
+        var meAfterInterests = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
+        Assert.NotNull(meAfterInterests);
+        Assert.False(meAfterInterests.NeedsInterestsOnboarding);
+    }
+
+    [Fact]
+    public async Task Register_flow_returns_a_clear_message_when_the_email_is_already_in_use()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var duplicateResponse = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterRequestDto
+            {
+                FullName = "Duplicate Traveler",
+                Email = "marko.p@example.com",
+                Password = "password123",
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, duplicateResponse.StatusCode);
+
+        var errorBody = await duplicateResponse.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.NotNull(errorBody);
+        Assert.Equal("An account with this email already exists.", errorBody["message"]);
+    }
+
     private static async Task<HttpClient> LoginAsync(GeotrackApiFactory app)
     {
         var client = app.CreateClient();
@@ -183,4 +350,56 @@ public sealed class AuthFavoritesCollectionsTests
 
         return client;
     }
+
+    private static MultipartFormDataContent CreateAvatarUploadContent(byte[] bytes, string fileName, string contentType)
+    {
+        var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(bytes);
+        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+        content.Add(fileContent, "avatar", fileName);
+        return content;
+    }
+
+    private static async Task<HttpClient> RegisterAndLoginAsync(GeotrackApiFactory app)
+    {
+        var client = app.CreateClient();
+        var email = $"avatar-{Guid.NewGuid():N}@example.com";
+
+        var registerResponse = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterRequestDto
+            {
+                FullName = "Avatar Tester",
+                Email = email,
+                Password = "password123",
+            });
+        registerResponse.EnsureSuccessStatusCode();
+
+        var login = await registerResponse.Content.ReadFromJsonAsync<LoginResponseDto>();
+        Assert.NotNull(login);
+
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", login.AccessToken);
+
+        return client;
+    }
+
+    private static JsonElement ResolveSchema(JsonElement root, JsonElement schema)
+    {
+        if (!schema.TryGetProperty("$ref", out var schemaRef))
+            return schema;
+
+        var reference = schemaRef.GetString()
+            ?? throw new InvalidOperationException("Swagger schema reference was missing.");
+        var referenceSegments = reference.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var schemaName = referenceSegments[^1];
+
+        return root
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty(schemaName);
+    }
+
+    private static readonly byte[] AvatarPngBytes = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jx4kAAAAASUVORK5CYII=");
 }
