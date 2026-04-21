@@ -1,16 +1,18 @@
 import { Component, effect, input, output, signal } from '@angular/core';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../core/constants/explore-media.constants';
 import type { ExploreItem } from '../../../core/models/explore-item.model';
+import { FavoriteButtonComponent } from '../favorite-button/favorite-button.component';
 
 @Component({
   selector: 'app-destination-card',
   standalone: true,
-  imports: [],
+  imports: [FavoriteButtonComponent],
   templateUrl: './destination-card.component.html',
   styleUrl: './destination-card.component.scss',
 })
 export class DestinationCardComponent {
   readonly item = input.required<ExploreItem>();
+  readonly showFavoriteButton = input(false);
 
   readonly bookmarkToggled = output<string>();
   readonly cardActivated = output<string>();
