@@ -16,6 +16,8 @@ bld/
 artifacts/
 TestResults/
 BenchmarkDotNet.Artifacts/
+**/.codexobj/
+*.tmp
 
 # User-specific files
 *.rsuser
