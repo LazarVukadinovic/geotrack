@@ -8,6 +8,22 @@ namespace Geotrack.Infrastructure.Services;
 
 public class TagService : ITagService
 {
+    private static readonly string[] UserInterestSlugs =
+    {
+        "food-drink",
+        "history",
+        "beaches",
+        "nature",
+        "museums",
+        "local-events",
+        "nightlife",
+        "festivals",
+        "adventure",
+        "scenic-walks",
+        "culture",
+        "shopping",
+    };
+
     private readonly AppDbContext _db;
 
     public TagService(AppDbContext db)
@@ -19,8 +35,14 @@ public class TagService : ITagService
     {
         var query = _db.Tags.AsQueryable();
 
-        // All tags are available for user interests - no filter needed for now
-        var tags = await query.OrderBy(t => t.Name).ToListAsync();
+        if (forUser == true)
+        {
+            query = query.Where(t => UserInterestSlugs.Contains(t.Slug));
+        }
+
+        var tags = await query
+            .OrderBy(t => t.Name)
+            .ToListAsync();
 
         return tags.Select(t => new TagDto
         {
@@ -32,11 +54,11 @@ public class TagService : ITagService
 
     public async Task SaveUserTagsAsync(int userId, List<int> tagIds)
     {
-        // Remove existing user tags
-        var existing = await _db.UserTags.Where(ut => ut.UserId == userId).ToListAsync();
+        var existing = await _db.UserTags
+            .Where(ut => ut.UserId == userId)
+            .ToListAsync();
         _db.UserTags.RemoveRange(existing);
 
-        // Add new ones
         foreach (var tagId in tagIds)
         {
             _db.UserTags.Add(new UserTag

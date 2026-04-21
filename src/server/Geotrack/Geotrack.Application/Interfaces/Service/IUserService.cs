@@ -6,6 +6,7 @@ public interface IUserService
 {
     Task<GetMeResponseDto> GetMeAsync(int userId);
     Task<UpdateMeResponseDto> UpdateMeAsync(int userId, UpdateMeRequestDto request);
+    Task<UpdateAvatarResponseDto> UpdateAvatarAsync(int userId, byte[] fileBytes);
     Task<ChangePasswordResponseDto> ChangePasswordAsync(int userId, ChangePasswordRequestDto request);
     Task<GetNotificationSettingsResponseDto> GetNotificationSettingsAsync(int userId);
     Task<UpdateNotificationSettingsResponseDto> UpdateNotificationSettingsAsync(int userId, UpdateNotificationSettingsRequestDto request);

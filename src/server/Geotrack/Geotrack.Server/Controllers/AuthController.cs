@@ -27,8 +27,9 @@ public class AuthController : ControllerBase
             // Auto-login after registration so the interests page can save tags.
             var loginDto = new LoginRequestDto
             {
-                Email    = request.Email,
-                Password = request.Password
+                Email      = request.Email,
+                Password   = request.Password,
+                RememberMe = true
             };
             var loginResponse = await _authService.LoginAsync(loginDto);
 

@@ -30,6 +30,7 @@ public class User
     public string? AvatarUrl { get; set; }
     public string? DisplayName { get; set; }
     public string? Location { get; set; }
+    public bool NeedsInterestsOnboarding { get; set; }
     public bool GeneralNotificationsEnabled { get; set; } = true;
     public bool TravelRecommendationsEnabled { get; set; } = true;
     public bool NearbyEventsEnabled { get; set; } = true;

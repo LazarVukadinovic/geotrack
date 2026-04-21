@@ -16,6 +16,7 @@ public class GetMeResponseDto
     public string PhoneNumber { get; set; } = string.Empty;
     public string? AvatarUrl { get; set; }
     public string? Location { get; set; }
+    public bool NeedsInterestsOnboarding { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public List<CollectionPreviewDto> Collections { get; set; } = new();

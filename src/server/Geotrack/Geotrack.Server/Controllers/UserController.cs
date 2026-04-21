@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Tags;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Server.Requests;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,6 +12,7 @@ namespace Geotrack.Server.Controllers;
 [Authorize]
 public class UserController : ControllerBase
 {
+    private const long MaxAvatarFileSizeBytes = 5 * 1024 * 1024;
     private readonly IUserService _userService;
 
     public UserController(IUserService userService)
@@ -37,6 +39,31 @@ public class UserController : ControllerBase
         try
         {
             return Ok(await _userService.UpdateMeAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("me/avatar")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<UpdateAvatarResponseDto>> UpdateAvatar([FromForm] UpdateAvatarRequest request)
+    {
+        try
+        {
+            var avatar = request.Avatar;
+
+            if (avatar is null || avatar.Length == 0)
+                return BadRequest(new { message = "Please select an image to upload." });
+
+            if (avatar.Length > MaxAvatarFileSizeBytes)
+                return BadRequest(new { message = "Profile image must be 5 MB or smaller." });
+
+            await using var memoryStream = new MemoryStream();
+            await avatar.CopyToAsync(memoryStream);
+
+            return Ok(await _userService.UpdateAvatarAsync(GetUserId(), memoryStream.ToArray()));
         }
         catch (Exception ex)
         {

@@ -41,7 +41,7 @@ public class AuthService : IAuthService
 
         var exists = await _userRepository.ExistsByEmailAsync(request.Email.Trim());
         if (exists)
-            throw new InvalidOperationException("User already exists");
+            throw new InvalidOperationException("An account with this email already exists.");
 
         var nameParts = request.FullName.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
         var firstName = nameParts.Length > 0 ? nameParts[0] : string.Empty;
@@ -49,12 +49,13 @@ public class AuthService : IAuthService
 
         var user = new User
         {
-            Username    = request.Email.Trim(),
-            Email       = request.Email.Trim(),
-            FirstName   = firstName,
-            LastName    = lastName,
-            PhoneNumber = string.Empty,
-            CreatedAt   = DateTime.UtcNow
+            Username                 = request.Email.Trim(),
+            Email                    = request.Email.Trim(),
+            FirstName                = firstName,
+            LastName                 = lastName,
+            PhoneNumber              = string.Empty,
+            NeedsInterestsOnboarding = true,
+            CreatedAt                = DateTime.UtcNow
         };
 
         user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);

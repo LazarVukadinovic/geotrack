@@ -5,9 +5,12 @@ using Geotrack.Infrastructure;
 using Geotrack.Infrastructure.Repositories;
 using Geotrack.Infrastructure.Services;
 using Geotrack.Server;
+using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -51,6 +54,7 @@ builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IExploreService, ExploreService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>();
+builder.Services.AddScoped<IUserAvatarStorageService, LocalUserAvatarStorageService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
@@ -157,6 +161,19 @@ else
 {
     app.UseHttpsRedirection();
 }
+
+var mediaRoot = Path.Combine(app.Environment.ContentRootPath, "media");
+Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "avatars"));
+
+var mediaContentTypes = new FileExtensionContentTypeProvider();
+mediaContentTypes.Mappings[".webp"] = "image/webp";
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(mediaRoot),
+    RequestPath = "/media",
+    ContentTypeProvider = mediaContentTypes,
+});
 
 app.UseAuthentication();
 app.UseAuthorization();

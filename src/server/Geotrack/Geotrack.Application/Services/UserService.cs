@@ -26,6 +26,7 @@ public class UserService : IUserService
     private readonly ILocationRepository _locationRepository;
     private readonly IPlaceRepository _placeRepository;
     private readonly IEventRepository _eventRepository;
+    private readonly IUserAvatarStorageService _userAvatarStorageService;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public UserService(
@@ -33,13 +34,15 @@ public class UserService : IUserService
         IDestinationRepository destinationRepository,
         ILocationRepository locationRepository,
         IPlaceRepository placeRepository,
-        IEventRepository eventRepository)
+        IEventRepository eventRepository,
+        IUserAvatarStorageService userAvatarStorageService)
     {
         _userRepository = userRepository;
         _destinationRepository = destinationRepository;
         _locationRepository = locationRepository;
         _placeRepository = placeRepository;
         _eventRepository = eventRepository;
+        _userAvatarStorageService = userAvatarStorageService;
     }
 
     public async Task<GetMeResponseDto> GetMeAsync(int userId)
@@ -72,6 +75,7 @@ public class UserService : IUserService
             PhoneNumber = user.PhoneNumber,
             AvatarUrl = user.AvatarUrl,
             Location = user.Location,
+            NeedsInterestsOnboarding = user.NeedsInterestsOnboarding,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt,
             Collections = collections
@@ -105,6 +109,39 @@ public class UserService : IUserService
             Location = user.Location,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt
+        };
+    }
+
+    public async Task<UpdateAvatarResponseDto> UpdateAvatarAsync(int userId, byte[] fileBytes)
+    {
+        var user = await _userRepository.GetByIDAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        var previousAvatarUrl = user.AvatarUrl;
+        var storedAvatar = await _userAvatarStorageService.StoreAsync(userId, fileBytes);
+
+        try
+        {
+            user.AvatarUrl = storedAvatar.AvatarUrl;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _userRepository.SaveChangesAsync();
+        }
+        catch
+        {
+            await _userAvatarStorageService.DeleteAsync(storedAvatar.AvatarUrl);
+            throw;
+        }
+
+        if (_userAvatarStorageService.IsManagedAvatarUrl(previousAvatarUrl) &&
+            !string.Equals(previousAvatarUrl, storedAvatar.AvatarUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            await _userAvatarStorageService.DeleteAsync(previousAvatarUrl!);
+        }
+
+        return new UpdateAvatarResponseDto
+        {
+            AvatarUrl = user.AvatarUrl ?? string.Empty,
+            UpdatedAt = user.UpdatedAt,
         };
     }
 
@@ -212,6 +249,8 @@ public class UserService : IUserService
             });
         }
 
+        user.NeedsInterestsOnboarding = false;
+        user.UpdatedAt = DateTime.UtcNow;
         await _userRepository.SaveChangesAsync();
 
         var updatedUser = await _userRepository.GetByIdWithUserTagsAsync(userId)

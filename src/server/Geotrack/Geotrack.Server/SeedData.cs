@@ -10,12 +10,26 @@ namespace Geotrack.Server;
 
 public static class SeedData
 {
+    private sealed record SeedTagDefinition(
+        string Name,
+        string Slug,
+        bool ForDestination = false,
+        bool ForLocation = false,
+        bool ForPlace = false,
+        bool ForEvent = false,
+        string Description = "",
+        string? ImageUrl = null);
+
     private static string U(string photoId, int w = 800) =>
         $"https://images.unsplash.com/photo-{photoId}?ixlib=rb-4.0.3&auto=format&fit=crop&w={w}&q=75";
 
     public static async Task InitializeAsync(AppDbContext db)
     {
-        if (await db.Destinations.AnyAsync()) return; // Already seeded
+        if (await db.Destinations.AnyAsync())
+        {
+            await EnsureSeedTagsAsync(db);
+            return; // Already seeded
+        }
 
         // ── Region ──
         var region = new Region { Name = "Dalmatia", CreatedAt = DateTime.UtcNow };
@@ -70,48 +84,7 @@ public static class SeedData
         await db.SaveChangesAsync();
 
         // ── Tags (interest tags + entity tags) ──
-        var tags = new List<Tag>
-        {
-            new() { Name = "Food & Drink", Slug = "food-drink", ForPlace = true, ForEvent = true, CreatedAt = DateTime.UtcNow, ImageUrl = U("1414235077428-338989a2e8c0") },
-            new() { Name = "History", Slug = "history", ForPlace = true, ForDestination = true, CreatedAt = DateTime.UtcNow, ImageUrl = U("1560703650-1e76a3b39c9c") },
-            new() { Name = "Beaches", Slug = "beaches", ForPlace = true, CreatedAt = DateTime.UtcNow, ImageUrl = U("1507525428034-b723cf961d3e") },
-            new() { Name = "Nature", Slug = "nature", ForPlace = true, CreatedAt = DateTime.UtcNow, ImageUrl = U("1441974231531-c6227db76b6e") },
-            new() { Name = "Museums", Slug = "museums", ForPlace = true, CreatedAt = DateTime.UtcNow, ImageUrl = U("1564399580075-3af6f48fa3e2") },
-            new() { Name = "Local Events", Slug = "local-events", ForEvent = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Nightlife", Slug = "nightlife", ForPlace = true, ForEvent = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Festivals", Slug = "festivals", ForEvent = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Adventure", Slug = "adventure", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Scenic Walks", Slug = "scenic-walks", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Culture", Slug = "culture", ForPlace = true, ForDestination = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Shopping", Slug = "shopping", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            // Hotel-specific tags
-            new() { Name = "Luxury", Slug = "luxury", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Budget", Slug = "budget", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Family Friendly", Slug = "family-friendly", ForPlace = true, ForEvent = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Spa", Slug = "spa", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Pool", Slug = "pool", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Breakfast", Slug = "breakfast", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Sea View", Slug = "sea-view", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            // Event-specific
-            new() { Name = "Live Music", Slug = "live-music", ForEvent = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Cultural", Slug = "cultural", ForEvent = true, ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Outdoor", Slug = "outdoor", ForEvent = true, ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Food & Market", Slug = "food-market", ForEvent = true, CreatedAt = DateTime.UtcNow },
-            // Additional
-            new() { Name = "Fine Dining", Slug = "fine-dining", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Beach Bars", Slug = "beach-bars", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Landmarks", Slug = "landmarks", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Districts", Slug = "districts", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Galleries", Slug = "galleries", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Exhibitions", Slug = "exhibitions", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Historic Sites", Slug = "historic-sites", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Islands", Slug = "islands", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Parks", Slug = "parks", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Mountains", Slug = "mountains", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Hiking", Slug = "hiking", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Scenic Views", Slug = "scenic-views", ForPlace = true, CreatedAt = DateTime.UtcNow },
-            new() { Name = "Boutique", Slug = "boutique", ForPlace = true, CreatedAt = DateTime.UtcNow },
-        };
+        var tags = BuildSeedTags(DateTime.UtcNow);
         db.Tags.AddRange(tags);
         await db.SaveChangesAsync();
 
@@ -552,5 +525,86 @@ public static class SeedData
             new DestinationTag { DestinationId = dubrovnik.Id, TagId = T("beaches").Id }
         );
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureSeedTagsAsync(AppDbContext db)
+    {
+        var existingSlugs = await db.Tags
+            .Select(tag => tag.Slug)
+            .ToListAsync();
+
+        var existingSlugSet = existingSlugs.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missingTags = BuildSeedTags(DateTime.UtcNow)
+            .Where(tag => !existingSlugSet.Contains(tag.Slug))
+            .ToList();
+
+        if (missingTags.Count == 0)
+        {
+            return;
+        }
+
+        db.Tags.AddRange(missingTags);
+        await db.SaveChangesAsync();
+    }
+
+    private static List<Tag> BuildSeedTags(DateTime createdAt)
+    {
+        return BuildSeedTagDefinitions()
+            .Select(definition => new Tag
+            {
+                Name = definition.Name,
+                Slug = definition.Slug,
+                ForDestination = definition.ForDestination,
+                ForLocation = definition.ForLocation,
+                ForPlace = definition.ForPlace,
+                ForEvent = definition.ForEvent,
+                Description = definition.Description,
+                ImageUrl = definition.ImageUrl,
+                CreatedAt = createdAt,
+            })
+            .ToList();
+    }
+
+    private static List<SeedTagDefinition> BuildSeedTagDefinitions()
+    {
+        return new List<SeedTagDefinition>
+        {
+            new("Food & Drink", "food-drink", ForPlace: true, ForEvent: true, ImageUrl: U("1414235077428-338989a2e8c0")),
+            new("History", "history", ForDestination: true, ForPlace: true, ImageUrl: U("1560703650-1e76a3b39c9c")),
+            new("Beaches", "beaches", ForPlace: true, ImageUrl: U("1507525428034-b723cf961d3e")),
+            new("Nature", "nature", ForPlace: true, ImageUrl: U("1441974231531-c6227db76b6e")),
+            new("Museums", "museums", ForPlace: true, ImageUrl: U("1564399580075-3af6f48fa3e2")),
+            new("Local Events", "local-events", ForEvent: true),
+            new("Nightlife", "nightlife", ForPlace: true, ForEvent: true),
+            new("Festivals", "festivals", ForEvent: true),
+            new("Adventure", "adventure", ForPlace: true),
+            new("Scenic Walks", "scenic-walks", ForPlace: true),
+            new("Culture", "culture", ForDestination: true, ForPlace: true),
+            new("Shopping", "shopping", ForPlace: true),
+            new("Luxury", "luxury", ForPlace: true),
+            new("Budget", "budget", ForPlace: true),
+            new("Family Friendly", "family-friendly", ForPlace: true, ForEvent: true),
+            new("Spa", "spa", ForPlace: true),
+            new("Pool", "pool", ForPlace: true),
+            new("Breakfast", "breakfast", ForPlace: true),
+            new("Sea View", "sea-view", ForPlace: true),
+            new("Live Music", "live-music", ForEvent: true),
+            new("Cultural", "cultural", ForPlace: true, ForEvent: true),
+            new("Outdoor", "outdoor", ForPlace: true, ForEvent: true),
+            new("Food & Market", "food-market", ForEvent: true),
+            new("Fine Dining", "fine-dining", ForPlace: true),
+            new("Beach Bars", "beach-bars", ForPlace: true),
+            new("Landmarks", "landmarks", ForPlace: true),
+            new("Districts", "districts", ForPlace: true),
+            new("Galleries", "galleries", ForPlace: true),
+            new("Exhibitions", "exhibitions", ForPlace: true),
+            new("Historic Sites", "historic-sites", ForPlace: true),
+            new("Islands", "islands", ForPlace: true),
+            new("Parks", "parks", ForPlace: true),
+            new("Mountains", "mountains", ForPlace: true),
+            new("Hiking", "hiking", ForPlace: true),
+            new("Scenic Views", "scenic-views", ForPlace: true),
+            new("Boutique", "boutique", ForPlace: true),
+        };
     }
 }
