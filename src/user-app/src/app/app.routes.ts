@@ -80,6 +80,48 @@ export const routes: Routes = [
           import('./features/settings/pages/my-interests/my-interests.component').then(m => m.MyInterestsComponent),
         data: { hideBottomNav: true },
       },
+      {
+        path: 'settings/change-password',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/settings/pages/change-password-page/change-password-page.component').then(m => m.ChangePasswordPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'settings/notifications',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/settings/pages/notifications-page/notifications-page.component').then(m => m.NotificationsPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'settings/privacy-settings',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/settings/pages/privacy-settings-page/privacy-settings-page.component').then(m => m.PrivacySettingsPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'settings/help-center',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/settings/pages/help-center-page/help-center-page.component').then(m => m.HelpCenterPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'settings/contact-support',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/settings/pages/contact-support-page/contact-support-page.component').then(m => m.ContactSupportPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'settings/terms-and-privacy',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/settings/pages/terms-privacy-page/terms-privacy-page.component').then(m => m.TermsPrivacyPageComponent),
+        data: { hideBottomNav: true },
+      },
 
       // ── Auth (registracija) ───────────────────────────────────────────────
       {
@@ -103,12 +145,6 @@ export const routes: Routes = [
       },
 
       // ── Ostale rute ───────────────────────────────────────────────────────
-      {
-        path: 'recommendations',
-        loadComponent: () =>
-          import('./features/recommendations/pages/recommendations-page/recommendations-page.component').then(m => m.RecommendationsPageComponent),
-        data: { hideBottomNav: true },
-      },
       {
         path: 'hotels',
         loadComponent: () =>

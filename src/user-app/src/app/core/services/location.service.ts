@@ -25,6 +25,7 @@ export class LocationService implements OnDestroy {
   private readonly _location = signal<ResolvedLocation | null>(null);
   private readonly _loading = signal(true);
   private readonly _error = signal<string | null>(null);
+  private readonly _hasCompletedLocationEntry = signal(this.readEntryCompleteFromStorage());
 
   readonly location = computed(() => this._location());
   readonly loading = computed(() => this._loading());
@@ -34,9 +35,7 @@ export class LocationService implements OnDestroy {
   readonly ready = computed(() => this._location() !== null);
 
   /** True after the user has completed the initial location-entry flow at least once. */
-  readonly hasCompletedLocationEntry = computed(() => {
-    try { return localStorage.getItem(ENTRY_COMPLETE_KEY) === 'true'; } catch { return false; }
-  });
+  readonly hasCompletedLocationEntry = computed(() => this._hasCompletedLocationEntry());
 
   readonly displayLabel = computed(() => {
     const loc = this._location();
@@ -47,6 +46,12 @@ export class LocationService implements OnDestroy {
 
   readonly displayCity = computed(() => this._location()?.city ?? this.displayLabel());
   readonly displayCountry = computed(() => this._location()?.country ?? '');
+  readonly sourceLabel = computed(() => {
+    const source = this._location()?.source;
+    if (source === 'gps') return 'exact location';
+    if (source === 'manual') return 'selected location';
+    return 'approximate location';
+  });
 
   /* ── Lifecycle ─────────────────────────────────────────────────────── */
 
@@ -74,7 +79,28 @@ export class LocationService implements OnDestroy {
    * After this, returning users skip the landing page.
    */
   markLocationEntryComplete(): void {
+    this._hasCompletedLocationEntry.set(true);
     try { localStorage.setItem(ENTRY_COMPLETE_KEY, 'true'); } catch { /* quota */ }
+  }
+
+  clearSavedLocation(): void {
+    this.stopWatching();
+    this.lastGeocodedLat = 0;
+    this.lastGeocodedLng = 0;
+    this.lastGeocodeTime = 0;
+    this.ipFallbackStarted = false;
+    this._location.set(null);
+    this._loading.set(false);
+    this._error.set(null);
+    this._hasCompletedLocationEntry.set(false);
+
+    try {
+      localStorage.removeItem(LOCATION_KEY);
+      localStorage.removeItem(ENTRY_COMPLETE_KEY);
+      sessionStorage.removeItem(LOCATION_KEY);
+    } catch {
+      // storage may be unavailable; silent
+    }
   }
 
   /**
@@ -293,44 +319,48 @@ export class LocationService implements OnDestroy {
     const url =
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`;
 
-    this.http.get<NominatimResponse>(url).subscribe({
-      next: (res) => {
-        const addr = res.address ?? {};
-        const city = this.extractCity(addr);
-        const region = addr.state ?? addr.county ?? '';
-        const country = addr.country ?? '';
-        const displayLabel = this.buildDisplayLabel(city, region, country);
+    void fetch(url)
+      .then((res) => res.ok ? res.json() as Promise<NominatimResponse> : Promise.reject())
+      .then((res) => {
+        this.zone.run(() => {
+          const addr = res.address ?? {};
+          const city = this.extractCity(addr);
+          const region = addr.state ?? addr.county ?? '';
+          const country = addr.country ?? '';
+          const displayLabel = this.buildDisplayLabel(city, region, country);
 
-        const loc: ResolvedLocation = {
-          latitude: lat,
-          longitude: lng,
-          city,
-          region,
-          country,
-          displayLabel,
-          source,
-        };
-        this._location.set(loc);
-        this._loading.set(false);
-        this._error.set(null);
-        this.saveToStorage(loc);
-      },
-      error: () => {
-        // Geocode failed but we still have coords
-        if (!this._location()) {
-          this._location.set({
+          const loc: ResolvedLocation = {
             latitude: lat,
             longitude: lng,
-            city: '',
-            region: '',
-            country: '',
-            displayLabel: 'Explore',
+            city,
+            region,
+            country,
+            displayLabel,
             source,
-          });
-        }
-        this._loading.set(false);
-      },
-    });
+          };
+          this._location.set(loc);
+          this._loading.set(false);
+          this._error.set(null);
+          this.saveToStorage(loc);
+        });
+      })
+      .catch(() => {
+        this.zone.run(() => {
+          // Geocode failed but we still have coords
+          if (!this._location()) {
+            this._location.set({
+              latitude: lat,
+              longitude: lng,
+              city: '',
+              region: '',
+              country: '',
+              displayLabel: 'Explore',
+              source,
+            });
+          }
+          this._loading.set(false);
+        });
+      });
   }
 
   private extractCity(addr: NominatimAddress): string {
@@ -364,28 +394,14 @@ export class LocationService implements OnDestroy {
    */
   private refreshFromIp(): void {
     this.http
-      .get<IpApiResponse>('http://ip-api.com/json/?fields=status,city,regionName,country,lat,lon')
+      .get<ApproximateLocationResponse>('/api/locations/approximate')
       .subscribe({
         next: (res) => {
-          if (res.status === 'success') {
-            const city = res.city ?? '';
-            const region = res.regionName ?? '';
-            const country = res.country ?? '';
-            const displayLabel = this.buildDisplayLabel(city, region, country);
-
-            const loc: ResolvedLocation = {
-              latitude: res.lat ?? 0,
-              longitude: res.lon ?? 0,
-              city,
-              region,
-              country,
-              displayLabel,
-              source: 'ip',
-            };
-            this._location.set(loc);
-            this._loading.set(false);
-            this.saveToStorage(loc);
-          }
+          const loc = this.mapApproximateLocation(res);
+          this._location.set(loc);
+          this._loading.set(false);
+          this._error.set(null);
+          this.saveToStorage(loc);
         },
         error: () => {
           // IP lookup failed — keep whatever we have (cached or nothing)
@@ -395,30 +411,15 @@ export class LocationService implements OnDestroy {
 
   private fallbackToIp(onComplete?: () => void): void {
     this.ipFallbackStarted = true;
-    // ip-api.com free tier — no key needed, returns city/region/country
     this.http
-      .get<IpApiResponse>('http://ip-api.com/json/?fields=status,city,regionName,country,lat,lon')
+      .get<ApproximateLocationResponse>('/api/locations/approximate')
       .subscribe({
         next: (res) => {
-          if (res.status === 'success') {
-            const city = res.city ?? '';
-            const region = res.regionName ?? '';
-            const country = res.country ?? '';
-            const displayLabel = this.buildDisplayLabel(city, region, country);
-
-            const loc: ResolvedLocation = {
-              latitude: res.lat ?? 0,
-              longitude: res.lon ?? 0,
-              city,
-              region,
-              country,
-              displayLabel,
-              source: 'ip',
-            };
-            this._location.set(loc);
-            this.saveToStorage(loc);
-          }
+          const loc = this.mapApproximateLocation(res);
+          this._location.set(loc);
+          this.saveToStorage(loc);
           this._loading.set(false);
+          this._error.set(null);
           onComplete?.();
         },
         error: () => {
@@ -449,6 +450,30 @@ export class LocationService implements OnDestroy {
     } catch { /* corrupt data — ignore */ }
     return null;
   }
+
+  private readEntryCompleteFromStorage(): boolean {
+    try {
+      return localStorage.getItem(ENTRY_COMPLETE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  private mapApproximateLocation(res: ApproximateLocationResponse): ResolvedLocation {
+    const city = res.city ?? '';
+    const region = res.region ?? '';
+    const country = res.country ?? '';
+
+    return {
+      latitude: res.latitude ?? 0,
+      longitude: res.longitude ?? 0,
+      city,
+      region,
+      country,
+      displayLabel: res.displayLabel ?? this.buildDisplayLabel(city, region, country),
+      source: 'ip',
+    };
+  }
 }
 
 /* ── External API response shapes ────────────────────────────────────── */
@@ -469,11 +494,12 @@ interface NominatimResponse {
   address?: NominatimAddress;
 }
 
-interface IpApiResponse {
-  status: string;
+interface ApproximateLocationResponse {
+  latitude?: number;
+  longitude?: number;
   city?: string;
-  regionName?: string;
+  region?: string;
   country?: string;
-  lat?: number;
-  lon?: number;
+  displayLabel?: string;
+  source?: string;
 }
