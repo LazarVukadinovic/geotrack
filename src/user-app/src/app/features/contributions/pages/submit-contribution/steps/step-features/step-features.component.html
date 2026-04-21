@@ -1,0 +1,106 @@
+<div class="px-5 pt-6 pb-6 flex flex-col gap-6 min-h-full">
+
+  <div class="bg-white rounded-2xl p-5">
+    <h3 class="text-base font-bold text-slate-800 mb-1">Stay Characteristics</h3>
+    <p class="text-xs text-slate-500 mb-4">Select tags that best describe the vibe and setting.</p>
+    <div class="flex flex-wrap gap-2 justify-center">
+      <button *ngFor="let tag of characteristicTags"
+        (click)="toggleTag(tag)"
+        class="px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200"
+        [class.bg-[#e8722a]]="isTagSelected(tag)"
+        [class.border-[#e8722a]]="isTagSelected(tag)"
+        [class.text-white]="isTagSelected(tag)"
+        [class.bg-white]="!isTagSelected(tag)"
+        [class.border-slate-200]="!isTagSelected(tag)"
+        [class.text-slate-600]="!isTagSelected(tag)">
+        {{ tag }}
+      </button>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-2xl p-5">
+    <h3 class="text-base font-bold text-slate-800 mb-1">Available Amenities</h3>
+    <p class="text-xs text-slate-500 mb-4">Selected amenities will appear prominently on the stay detail page.</p>
+    <div class="grid grid-cols-4 gap-2">
+      <button *ngFor="let amenity of amenities"
+        (click)="toggleAmenity(amenity.id)"
+        class="flex flex-col items-center gap-1 py-3 px-1 rounded-2xl border-2 transition-all duration-200"
+        [class.border-[#e8722a]]="isAmenitySelected(amenity.id)"
+        [class.bg-orange-50]="isAmenitySelected(amenity.id)"
+        [class.border-slate-100]="!isAmenitySelected(amenity.id)"
+        [class.bg-slate-50]="!isAmenitySelected(amenity.id)">
+
+        <!-- POOL -->
+        <ng-container *ngIf="amenity.id === 'pool'">
+          <svg class="w-6 h-6" [class.text-[#e8722a]]="isAmenitySelected('pool')" [class.text-slate-400]="!isAmenitySelected('pool')" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12c1.5 0 1.5-1.5 3-1.5S8.5 12 10 12s1.5-1.5 3-1.5S14.5 12 16 12s1.5-1.5 3-1.5S20.5 12 22 12M3 17c1.5 0 1.5-1.5 3-1.5S8.5 17 10 17s1.5-1.5 3-1.5S14.5 17 16 17s1.5-1.5 3-1.5S20.5 17 22 17M7 8V4m5 4V4m5 4V4"/>
+          </svg>
+        </ng-container>
+        <!-- WIFI -->
+        <ng-container *ngIf="amenity.id === 'wifi'">
+          <svg class="w-6 h-6" [class.text-[#e8722a]]="isAmenitySelected('wifi')" [class.text-slate-400]="!isAmenitySelected('wifi')" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
+          </svg>
+        </ng-container>
+        <!-- BREAKFAST -->
+        <ng-container *ngIf="amenity.id === 'breakfast'">
+          <svg class="w-6 h-6" [class.text-[#e8722a]]="isAmenitySelected('breakfast')" [class.text-slate-400]="!isAmenitySelected('breakfast')" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9V6.5M12 9V6.5M16 9V6.5"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 11h12v5a4 4 0 01-4 4H10a4 4 0 01-4-4v-5z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18 13h1a2 2 0 010 4h-1"/>
+          </svg>
+        </ng-container>
+        <!-- PARKING -->
+        <ng-container *ngIf="amenity.id === 'parking'">
+          <svg class="w-6 h-6" [class.text-[#e8722a]]="isAmenitySelected('parking')" [class.text-slate-400]="!isAmenitySelected('parking')" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7v10m0-10h4a3 3 0 010 6H8m0-6"/>
+            <rect x="3" y="3" width="18" height="18" rx="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>
+          </svg>
+        </ng-container>
+        <!-- SPA -->
+        <ng-container *ngIf="amenity.id === 'spa'">
+          <svg class="w-6 h-6" [class.text-[#e8722a]]="isAmenitySelected('spa')" [class.text-slate-400]="!isAmenitySelected('spa')" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3c0 0-4 4-4 8s4 8 4 8m0-16c0 0 4 4 4 8s-4 8-4 8m0-13c0 0-6 2-6 6M12 3c0 0 6 2 6 6"/>
+          </svg>
+        </ng-container>
+        <!-- GYM -->
+        <ng-container *ngIf="amenity.id === 'gym'">
+          <svg class="w-6 h-6"
+              [class.text-[#e8722a]]="isAmenitySelected('gym')"
+              [class.text-slate-400]="!isAmenitySelected('gym')"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24">
+            <line x1="7" y1="12" x2="17" y2="12" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="5" y1="10" x2="5" y2="14" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="3.5" y1="9.5" x2="3.5" y2="14.5" stroke-width="3" stroke-linecap="round"/>
+            <line x1="19" y1="10" x2="19" y2="14" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="20.5" y1="9.5" x2="20.5" y2="14.5" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </ng-container>
+        <!-- DINING -->
+        <ng-container *ngIf="amenity.id === 'dining'">
+          <svg class="w-6 h-6" [class.text-[#e8722a]]="isAmenitySelected('dining')" [class.text-slate-400]="!isAmenitySelected('dining')" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 2v7c0 1.1.9 2 2 2h1v11h2V11h1a2 2 0 002-2V2h-2v5H7V2H5v5H4V2H3zM19 2v20h-2V13h-1.5C14.67 13 14 12.33 14 11.5V6c0-2.21 1.79-4 4-4h1z"/>
+          </svg>
+        </ng-container>
+        <!-- A/C -->
+        <ng-container *ngIf="amenity.id === 'ac'">
+          <svg class="w-6 h-6" [class.text-[#e8722a]]="isAmenitySelected('ac')" [class.text-slate-400]="!isAmenitySelected('ac')" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1010 16H2m15.73-8.27A2 2 0 1119 12H2"/>
+          </svg>
+        </ng-container>
+
+        <span class="text-[9px] font-bold tracking-wide"
+          [class.text-[#e8722a]]="isAmenitySelected(amenity.id)"
+          [class.text-slate-500]="!isAmenitySelected(amenity.id)">
+          {{ amenity.label }}
+        </span>
+      </button>
+    </div>
+  </div>
+    <div class="mt-auto flex gap-3">
+    <button (click)="back.emit()" class="flex-none px-6 py-4 border border-slate-200 rounded-3xl text-slate-700 font-bold text-base active:bg-slate-50 transition-colors">Back</button>
+    <button (click)="onContinue()" class="flex-1 py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base transition-all active:scale-[0.98]">Continue</button>
+  </div>
+</div>
