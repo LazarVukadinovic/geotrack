@@ -6,58 +6,55 @@
     (action)="sectionMore.emit()"
   />
 
-  <div class="curated__viewport">
-    <div class="curated__track" data-slider-id="curated" role="list">
-      @for (item of items(); track item.id) {
-        <article
-          class="curated__card"
-          role="button"
-          tabindex="0"
-          [attr.aria-label]="item.title"
-          [attr.data-item-id]="item.id"
-          (click)="onCardClick(item.id)"
-          (keydown.enter)="onCardClick(item.id)"
-          (keydown.space)="$event.preventDefault(); onCardClick(item.id)"
-        >
-          <div class="curated__media">
-            <img
-              class="curated__img"
-              [src]="imgSrcById()[item.id]"
-              [alt]="''"
-              width="220"
-              height="160"
-              loading="lazy"
-              decoding="async"
-              (error)="onImgError(item.id)"
-            />
-            <button
-              type="button"
-              class="curated__save"
-              [class.curated__save--saved]="item.isSaved"
-              [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save ' + item.title"
-              [attr.aria-pressed]="item.isSaved"
-              (click)="onBookmarkClick($event, item.id)"
-            >
-              <svg class="curated__heart" viewBox="0 0 24 24" aria-hidden="true">
-                @if (item.isSaved) {
-                  <path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                } @else {
-                  <path fill="currentColor" d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z" />
-                }
-              </svg>
-            </button>
-          </div>
-
-          <div class="curated__body">
-            <h3 class="curated__title">{{ item.title }}</h3>
-            <p class="curated__subtitle">{{ item.subtitle }}</p>
-            <div class="curated__footer">
-              <span class="curated__tag">{{ item.categoryLabel }}</span>
-              <span class="curated__more" aria-hidden="true">More &rsaquo;</span>
+  @if (items().length === 0) {
+    <app-empty-state
+      title="Nothing personalized nearby yet"
+      message="We do not have nearby matches for your saved interests in this area yet."
+    />
+  } @else {
+    <div class="curated__viewport">
+      <div class="curated__track" data-slider-id="curated" role="list">
+        @for (item of items(); track item.id) {
+          <article
+            class="curated__card"
+            role="button"
+            tabindex="0"
+            [attr.aria-label]="item.title"
+            [attr.data-item-id]="item.id"
+            (click)="onCardClick(item.id)"
+            (keydown.enter)="onCardClick(item.id)"
+            (keydown.space)="$event.preventDefault(); onCardClick(item.id)"
+          >
+            <div class="curated__media">
+              <img
+                class="curated__img"
+                [src]="imgSrcById()[item.id]"
+                [alt]="''"
+                width="220"
+                height="160"
+                loading="lazy"
+                decoding="async"
+                (error)="onImgError(item.id)"
+              />
+              <app-favorite-button
+                class="curated__save"
+                [saved]="item.isSaved"
+                [itemLabel]="item.title"
+                (clicked)="onBookmarkClick(item.id)"
+              />
             </div>
-          </div>
-        </article>
-      }
+
+            <div class="curated__body">
+              <h3 class="curated__title">{{ item.title }}</h3>
+              <p class="curated__subtitle">{{ item.subtitle }}</p>
+              <div class="curated__footer">
+                <span class="curated__tag">{{ item.categoryLabel }}</span>
+                <span class="curated__more" aria-hidden="true">More &rsaquo;</span>
+              </div>
+            </div>
+          </article>
+        }
+      </div>
     </div>
-  </div>
+  }
 </section>

@@ -1,12 +1,13 @@
 import { Component, effect, input, output, signal } from '@angular/core';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import type { ExploreLandmarkCategory } from '../../models/explore-extras.model';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 
 @Component({
   selector: 'app-landmarks-slider',
   standalone: true,
-  imports: [SectionHeaderComponent],
+  imports: [SectionHeaderComponent, EmptyStateComponent],
   templateUrl: './landmarks-slider.component.html',
   styleUrl: './landmarks-slider.component.scss',
 })

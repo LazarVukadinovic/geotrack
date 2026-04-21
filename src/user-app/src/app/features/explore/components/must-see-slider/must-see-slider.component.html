@@ -6,36 +6,43 @@
     (action)="sectionMore.emit()"
   />
 
-  <div class="mustsee-slider__viewport">
-    <div class="mustsee-slider__track" data-slider-id="must-see" role="list">
-      @for (item of items(); track item.id) {
-        <article
-          class="mustsee-slider__card"
-          role="button"
-          tabindex="0"
-          [attr.aria-label]="item.title"
-          [attr.data-item-id]="item.id"
-          (click)="onCardClick(item.id)"
-          (keydown.enter)="onCardClick(item.id)"
-          (keydown.space)="$event.preventDefault(); onCardClick(item.id)"
-        >
-          <img
-            class="mustsee-slider__img"
-            [src]="imgSrcById()[item.id]"
-            [alt]="''"
-            width="180"
-            height="220"
-            loading="lazy"
-            decoding="async"
-            (error)="onImgError(item.id)"
-          />
-          <div class="mustsee-slider__overlay"></div>
-          <div class="mustsee-slider__content">
-            <h3 class="mustsee-slider__title">{{ item.title }}</h3>
-            <p class="mustsee-slider__type">{{ item.type }}</p>
-          </div>
-        </article>
-      }
+  @if (items().length === 0) {
+    <app-empty-state
+      title="No culture & history matches yet"
+      message="We do not have nearby museums, landmarks, or historic places stored for this area."
+    />
+  } @else {
+    <div class="mustsee-slider__viewport">
+      <div class="mustsee-slider__track" data-slider-id="must-see" role="list">
+        @for (item of items(); track item.id) {
+          <article
+            class="mustsee-slider__card"
+            role="button"
+            tabindex="0"
+            [attr.aria-label]="item.title"
+            [attr.data-item-id]="item.id"
+            (click)="onCardClick(item.id)"
+            (keydown.enter)="onCardClick(item.id)"
+            (keydown.space)="$event.preventDefault(); onCardClick(item.id)"
+          >
+            <img
+              class="mustsee-slider__img"
+              [src]="imgSrcById()[item.id]"
+              [alt]="''"
+              width="180"
+              height="220"
+              loading="lazy"
+              decoding="async"
+              (error)="onImgError(item.id)"
+            />
+            <div class="mustsee-slider__overlay"></div>
+            <div class="mustsee-slider__content">
+              <h3 class="mustsee-slider__title">{{ item.title }}</h3>
+              <p class="mustsee-slider__type">{{ item.type }}</p>
+            </div>
+          </article>
+        }
+      </div>
     </div>
-  </div>
+  }
 </section>

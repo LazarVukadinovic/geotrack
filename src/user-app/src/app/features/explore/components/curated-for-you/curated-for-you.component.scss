@@ -70,32 +70,7 @@
   position: absolute;
   top: var(--space-2);
   right: var(--space-2);
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.92);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
-
-  &:focus-visible {
-    outline: 2px solid var(--color-accent-orange);
-    outline-offset: 2px;
-  }
-}
-
-.curated__heart {
-  width: 14px;
-  height: 14px;
-  color: var(--color-muted);
-
-  .curated__save--saved & {
-    color: #e8570a;
-  }
+  z-index: 2;
 }
 
 .curated__body {

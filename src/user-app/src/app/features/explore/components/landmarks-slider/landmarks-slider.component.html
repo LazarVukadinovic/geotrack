@@ -6,29 +6,36 @@
     (action)="sectionMore.emit()"
   />
 
-  <div class="landmarks-slider__viewport">
-    <div class="landmarks-slider__track" data-slider-id="landmarks" role="list">
-      @for (item of items(); track item.id) {
-        <button
-          type="button"
-          class="landmarks-slider__tile"
-          role="listitem"
-          (click)="tileActivated.emit(item.categoryKey)"
-        >
-          <img
-            class="landmarks-slider__img"
-            [src]="imgSrcById()[item.id]"
-            [alt]="''"
-            width="110"
-            height="110"
-            loading="lazy"
-            decoding="async"
-            (error)="onImgError(item.id)"
-          />
-          <div class="landmarks-slider__overlay"></div>
-          <span class="landmarks-slider__label">{{ item.title }}</span>
-        </button>
-      }
+  @if (items().length === 0) {
+    <app-empty-state
+      title="No local categories nearby yet"
+      message="We do not have enough nearby places to build local categories for this area."
+    />
+  } @else {
+    <div class="landmarks-slider__viewport">
+      <div class="landmarks-slider__track" data-slider-id="landmarks" role="list">
+        @for (item of items(); track item.id) {
+          <button
+            type="button"
+            class="landmarks-slider__tile"
+            role="listitem"
+            (click)="tileActivated.emit(item.categoryKey)"
+          >
+            <img
+              class="landmarks-slider__img"
+              [src]="imgSrcById()[item.id]"
+              [alt]="''"
+              width="110"
+              height="110"
+              loading="lazy"
+              decoding="async"
+              (error)="onImgError(item.id)"
+            />
+            <div class="landmarks-slider__overlay"></div>
+            <span class="landmarks-slider__label">{{ item.title }}</span>
+          </button>
+        }
+      </div>
     </div>
-  </div>
+  }
 </section>
