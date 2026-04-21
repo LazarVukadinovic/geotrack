@@ -178,6 +178,20 @@ namespace Geotrack.Infrastructure.Repositories
             await _context.CollectionItems.AddAsync(item);
         }
 
+        public async Task<List<SupportRequest>> GetSupportRequestsByUserIdAsync(int userId, int take)
+        {
+            return await _context.SupportRequests
+                .Where(request => request.UserId == userId)
+                .OrderByDescending(request => request.CreatedAt)
+                .Take(take)
+                .ToListAsync();
+        }
+
+        public async Task AddSupportRequestAsync(SupportRequest supportRequest)
+        {
+            await _context.SupportRequests.AddAsync(supportRequest);
+        }
+
         public async Task AddUserTagAsync(UserTag userTag)
         {
             await _context.UserTags.AddAsync(userTag);

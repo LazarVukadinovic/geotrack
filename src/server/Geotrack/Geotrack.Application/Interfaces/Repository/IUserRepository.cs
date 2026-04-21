@@ -28,6 +28,8 @@ public interface IUserRepository : IRepository<User>
     Task DeleteCollectionAsync(Collection collection);
     Task DeleteCollectionItemAsync(CollectionItem item);
     Task AddCollectionItemAsync(CollectionItem item);
+    Task<List<SupportRequest>> GetSupportRequestsByUserIdAsync(int userId, int take);
+    Task AddSupportRequestAsync(SupportRequest supportRequest);
 
     Task AddUserTagAsync(UserTag userTag);
     Task DeleteUserTagsAsync(IEnumerable<UserTag> userTags);

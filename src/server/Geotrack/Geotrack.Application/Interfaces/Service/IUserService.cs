@@ -6,9 +6,14 @@ public interface IUserService
 {
     Task<GetMeResponseDto> GetMeAsync(int userId);
     Task<UpdateMeResponseDto> UpdateMeAsync(int userId, UpdateMeRequestDto request);
+    Task<ChangePasswordResponseDto> ChangePasswordAsync(int userId, ChangePasswordRequestDto request);
+    Task<GetNotificationSettingsResponseDto> GetNotificationSettingsAsync(int userId);
+    Task<UpdateNotificationSettingsResponseDto> UpdateNotificationSettingsAsync(int userId, UpdateNotificationSettingsRequestDto request);
 
     Task<GetUserInterestsResponseDto> GetUserInterestsAsync(int userId);
     Task<UpdateUserInterestsResponseDto> UpdateUserInterestsAsync(int userId, UpdateUserInterestsRequestDto request);
+    Task<GetSupportRequestsResponseDto> GetSupportRequestsAsync(int userId);
+    Task<CreateSupportRequestResponseDto> CreateSupportRequestAsync(int userId, CreateSupportRequestRequestDto request);
 
     Task<GetCollectionsResponseDto> GetCollectionsAsync(int userId);
     Task<CreateCollectionResponseDto> CreateCollectionAsync(int userId, CreateCollectionRequestDto request);

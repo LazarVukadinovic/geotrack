@@ -1,20 +1,33 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
+using Microsoft.AspNetCore.Identity;
 
 namespace Geotrack.Application.Services;
 
 public class UserService : IUserService
 {
+    private static readonly HashSet<string> AllowedSupportCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "account-access",
+        "saved-places-and-collections",
+        "location-and-maps",
+        "ask-agent",
+        "events-and-stays",
+        "privacy-and-data",
+    };
+
     private readonly IUserRepository _userRepository;
     private readonly IDestinationRepository _destinationRepository;
     private readonly ILocationRepository _locationRepository;
     private readonly IPlaceRepository _placeRepository;
     private readonly IEventRepository _eventRepository;
+    private readonly PasswordHasher<User> _passwordHasher = new();
+
     public UserService(
         IUserRepository userRepository,
         IDestinationRepository destinationRepository,
@@ -95,6 +108,56 @@ public class UserService : IUserService
         };
     }
 
+    public async Task<ChangePasswordResponseDto> ChangePasswordAsync(int userId, ChangePasswordRequestDto request)
+    {
+        ValidatePasswordChangeRequest(request);
+
+        var user = await _userRepository.GetByIDAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        var currentPasswordResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.CurrentPassword);
+        if (currentPasswordResult == PasswordVerificationResult.Failed)
+            throw new InvalidOperationException("Current password is incorrect");
+
+        if (request.CurrentPassword == request.NewPassword)
+            throw new InvalidOperationException("Choose a password you are not already using");
+
+        user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        return new ChangePasswordResponseDto
+        {
+            Message = "Password updated successfully."
+        };
+    }
+
+    public async Task<GetNotificationSettingsResponseDto> GetNotificationSettingsAsync(int userId)
+    {
+        var user = await _userRepository.GetByIDAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        return MapNotificationSettings(user);
+    }
+
+    public async Task<UpdateNotificationSettingsResponseDto> UpdateNotificationSettingsAsync(int userId, UpdateNotificationSettingsRequestDto request)
+    {
+        var user = await _userRepository.GetByIDAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        user.GeneralNotificationsEnabled = request.GeneralNotifications;
+        user.TravelRecommendationsEnabled = request.TravelRecommendations;
+        user.NearbyEventsEnabled = request.NearbyEvents;
+        user.CollectionUpdatesEnabled = request.CollectionUpdates;
+        user.EmailNotificationsEnabled = request.EmailNotifications;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        return MapUpdatedNotificationSettings(user);
+    }
+
     public async Task<GetUserInterestsResponseDto> GetUserInterestsAsync(int userId)
     {
         var user = await _userRepository.GetByIdWithUserTagsAsync(userId)
@@ -104,7 +167,7 @@ public class UserService : IUserService
         {
             Tags = user.UserTags
                 .Where(x => x.Tag != null)
-                .Select(x => MapTagToInterestItemDto(x.Tag))
+                .Select(x => MapTagToInterestItemDto(x.Tag!))
                 .OrderBy(x => x.Name)
                 .ToList()
         };
@@ -158,10 +221,52 @@ public class UserService : IUserService
         {
             Tags = updatedUser.UserTags
                 .Where(x => x.Tag != null)
-                .Select(x => MapTagToInterestItemDto(x.Tag))
+                .Select(x => MapTagToInterestItemDto(x.Tag!))
                 .OrderBy(x => x.Name)
                 .ToList()
         };
+    }
+
+    public async Task<GetSupportRequestsResponseDto> GetSupportRequestsAsync(int userId)
+    {
+        var user = await _userRepository.GetByIDAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        _ = user;
+
+        var requests = await _userRepository.GetSupportRequestsByUserIdAsync(userId, 5);
+
+        return new GetSupportRequestsResponseDto
+        {
+            Requests = requests
+                .Select(MapSupportRequest)
+                .ToList()
+        };
+    }
+
+    public async Task<CreateSupportRequestResponseDto> CreateSupportRequestAsync(int userId, CreateSupportRequestRequestDto request)
+    {
+        var user = await _userRepository.GetByIDAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        _ = user;
+
+        ValidateSupportRequest(request);
+
+        var supportRequest = new SupportRequest
+        {
+            UserId = userId,
+            Category = NormalizeSupportCategory(request.Category),
+            Subject = request.Subject.Trim(),
+            Message = request.Message.Trim(),
+            Status = "Received",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _userRepository.AddSupportRequestAsync(supportRequest);
+        await _userRepository.SaveChangesAsync();
+
+        return MapCreatedSupportRequest(supportRequest);
     }
 
     public async Task<GetCollectionsResponseDto> GetCollectionsAsync(int userId)
@@ -377,6 +482,60 @@ public class UserService : IUserService
         };
     }
 
+    private static GetNotificationSettingsResponseDto MapNotificationSettings(User user)
+    {
+        return new GetNotificationSettingsResponseDto
+        {
+            GeneralNotifications = user.GeneralNotificationsEnabled,
+            TravelRecommendations = user.TravelRecommendationsEnabled,
+            NearbyEvents = user.NearbyEventsEnabled,
+            CollectionUpdates = user.CollectionUpdatesEnabled,
+            EmailNotifications = user.EmailNotificationsEnabled
+        };
+    }
+
+    private static UpdateNotificationSettingsResponseDto MapUpdatedNotificationSettings(User user)
+    {
+        return new UpdateNotificationSettingsResponseDto
+        {
+            GeneralNotifications = user.GeneralNotificationsEnabled,
+            TravelRecommendations = user.TravelRecommendationsEnabled,
+            NearbyEvents = user.NearbyEventsEnabled,
+            CollectionUpdates = user.CollectionUpdatesEnabled,
+            EmailNotifications = user.EmailNotificationsEnabled
+        };
+    }
+
+    private static CreateSupportRequestResponseDto MapCreatedSupportRequest(SupportRequest supportRequest)
+    {
+        return new CreateSupportRequestResponseDto
+        {
+            Id = supportRequest.Id,
+            ReferenceCode = BuildSupportReferenceCode(supportRequest.Id),
+            Category = supportRequest.Category,
+            Subject = supportRequest.Subject,
+            Message = supportRequest.Message,
+            Status = supportRequest.Status,
+            CreatedAt = supportRequest.CreatedAt
+        };
+    }
+
+    private static SupportRequestItemDto MapSupportRequest(SupportRequest supportRequest)
+    {
+        return new SupportRequestItemDto
+        {
+            Id = supportRequest.Id,
+            ReferenceCode = BuildSupportReferenceCode(supportRequest.Id),
+            Category = supportRequest.Category,
+            Subject = supportRequest.Subject,
+            Message = supportRequest.Message,
+            Status = supportRequest.Status,
+            CreatedAt = supportRequest.CreatedAt
+        };
+    }
+
+    private static string BuildSupportReferenceCode(int id) => $"GT-{id:D6}";
+
     private static CollectionItemDto MapCollectionItem(CollectionItem item)
     {
         if (item.DestinationId.HasValue && item.Destination != null)
@@ -471,5 +630,51 @@ public class UserService : IUserService
         {
             throw new InvalidOperationException("Invalid phone number format");
         }
+    }
+
+    private static void ValidatePasswordChangeRequest(ChangePasswordRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword))
+            throw new InvalidOperationException("Current password is required");
+
+        if (string.IsNullOrWhiteSpace(request.NewPassword))
+            throw new InvalidOperationException("New password is required");
+
+        if (request.NewPassword.Length < 8)
+            throw new InvalidOperationException("New password must be at least 8 characters long");
+    }
+
+    private static void ValidateSupportRequest(CreateSupportRequestRequestDto request)
+    {
+        var normalizedCategory = NormalizeSupportCategory(request.Category);
+        _ = normalizedCategory;
+
+        if (string.IsNullOrWhiteSpace(request.Subject))
+            throw new InvalidOperationException("Support request subject is required");
+
+        if (request.Subject.Trim().Length < 6)
+            throw new InvalidOperationException("Support request subject must be at least 6 characters long");
+
+        if (request.Subject.Trim().Length > 160)
+            throw new InvalidOperationException("Support request subject is too long");
+
+        if (string.IsNullOrWhiteSpace(request.Message))
+            throw new InvalidOperationException("Support request message is required");
+
+        if (request.Message.Trim().Length < 20)
+            throw new InvalidOperationException("Support request message must be at least 20 characters long");
+
+        if (request.Message.Trim().Length > 2000)
+            throw new InvalidOperationException("Support request message is too long");
+    }
+
+    private static string NormalizeSupportCategory(string? category)
+    {
+        var normalized = (category ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (!AllowedSupportCategories.Contains(normalized))
+            throw new InvalidOperationException("Invalid support request category");
+
+        return normalized;
     }
 }

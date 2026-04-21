@@ -14,6 +14,7 @@ public class User
     public string Email { get; set; } = string.Empty;
 
     public ICollection<Collection> Collections { get; set; } = new List<Collection>(); // NAVIGATIONAL
+    public ICollection<SupportRequest> SupportRequests { get; set; } = new List<SupportRequest>(); // NAVIGATIONAL
 
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>(); // NAVIGATIONAL
 
@@ -29,6 +30,11 @@ public class User
     public string? AvatarUrl { get; set; }
     public string? DisplayName { get; set; }
     public string? Location { get; set; }
+    public bool GeneralNotificationsEnabled { get; set; } = true;
+    public bool TravelRecommendationsEnabled { get; set; } = true;
+    public bool NearbyEventsEnabled { get; set; } = true;
+    public bool CollectionUpdatesEnabled { get; set; } = true;
+    public bool EmailNotificationsEnabled { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
