@@ -97,12 +97,16 @@
               </div>
 
               <div class="hcard__meta">
-                <svg class="hcard__star" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
-                </svg>
-                <span class="hcard__rating">{{ item.rating.toFixed(1) }}</span>
-                @if (item.reviewCount) {
-                  <span class="hcard__reviews">&middot; {{ item.reviewCount }} reviews</span>
+                @if (item.rating != null) {
+                  <svg class="hcard__star" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                  </svg>
+                  <span class="hcard__rating">{{ item.rating!.toFixed(1) }}</span>
+                  @if (item.reviewCount) {
+                    <span class="hcard__reviews">&middot; {{ item.reviewCount }}</span>
+                  }
+                } @else {
+                  <span class="hcard__no-rating">No reviews yet</span>
                 }
               </div>
 
@@ -173,12 +177,16 @@
               </div>
 
               <div class="hcard__meta">
-                <svg class="hcard__star" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
-                </svg>
-                <span class="hcard__rating">{{ item.rating.toFixed(1) }}</span>
-                @if (item.reviewCount) {
-                  <span class="hcard__reviews">&middot; {{ item.reviewCount }}</span>
+                @if (item.rating != null) {
+                  <svg class="hcard__star" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                  </svg>
+                  <span class="hcard__rating">{{ item.rating!.toFixed(1) }}</span>
+                  @if (item.reviewCount) {
+                    <span class="hcard__reviews">&middot; {{ item.reviewCount }}</span>
+                  }
+                } @else {
+                  <span class="hcard__no-rating">No reviews yet</span>
                 }
               </div>
 

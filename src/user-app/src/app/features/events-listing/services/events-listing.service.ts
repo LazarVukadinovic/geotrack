@@ -3,6 +3,8 @@ import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
+import { FavoriteStateService } from '../../../core/services/favorite-state.service';
+import { LocationService } from '../../../core/services/location.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { EventListingItem, EventsFeatured } from '../models/events-listing.model';
 import { EVENTS_FEATURED } from '../data/mock-events-listing.data';
@@ -33,9 +35,10 @@ export class EventsListingService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly destinationSvc = inject(DestinationService);
+  private readonly favoriteState = inject(FavoriteStateService);
+  private readonly locationSvc = inject(LocationService);
   private readonly exploreSvc = inject(ExploreService);
   private readonly _items = signal<EventListingItem[]>([]);
-  private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _featured = signal<EventsFeatured>(EVENTS_FEATURED);
   private readonly _loadError = signal<string | null>(null);
   private loadedDestinationId: number | null = null;
@@ -43,10 +46,9 @@ export class EventsListingService {
   readonly featured = computed(() => this._featured());
 
   readonly items = computed(() => {
-    const overrides = this._savedOverrides();
     return this._items().map((item) => ({
       ...item,
-      isSaved: overrides[item.id] !== undefined ? overrides[item.id] : item.isSaved,
+      isSaved: this.favoriteState.resolve('event', item.id, item.isSaved),
     }));
   });
 
@@ -62,7 +64,7 @@ export class EventsListingService {
   }
 
   private loadFromApi(destinationId: number): void {
-    this.http.get<ApiEventsResponse>(`/api/events?destinationId=${destinationId}`).subscribe({
+    this.http.get<ApiEventsResponse>(`/api/events?destinationId=${destinationId}${this.buildLocationQuery()}`).subscribe({
       next: (res) => {
         this._items.set(res.items.map((dto, i) => ({
           id: String(dto.id),
@@ -95,6 +97,12 @@ export class EventsListingService {
     });
   }
 
+  private buildLocationQuery(): string {
+    const loc = this.locationSvc.location();
+    if (!loc) return '';
+    return `&latitude=${loc.latitude}&longitude=${loc.longitude}`;
+  }
+
   getItems$(): Observable<EventListingItem[]> {
     return of(this.items()).pipe(delay(0));
   }
@@ -105,17 +113,12 @@ export class EventsListingService {
 
   toggleSaved(id: string): void {
     if (!this.auth.isLoggedIn()) return;
-
-    const flip = () => {
-      const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
-      this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
-    };
-    flip();
-
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
+    const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
+    this.favoriteState.set('event', id, !current);
     this.http.post('/api/favorites/toggle', { entityType: 'event', entityId: numId }).subscribe({
-      error: () => flip(),
+      error: () => this.favoriteState.set('event', id, current),
     });
   }
 }

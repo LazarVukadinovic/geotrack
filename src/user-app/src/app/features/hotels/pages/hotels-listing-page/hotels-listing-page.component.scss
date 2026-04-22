@@ -409,6 +409,12 @@
   color: #e8570a;
 }
 
+.hcard__no-rating {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
 .hcard__save {
   width: 36px;
   height: 36px;
