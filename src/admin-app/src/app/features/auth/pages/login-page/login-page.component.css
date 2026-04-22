@@ -2,3 +2,8 @@
   0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-20px); }
 }
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input::-webkit-credentials-auto-fill-button {
+  display: none !important;
+}

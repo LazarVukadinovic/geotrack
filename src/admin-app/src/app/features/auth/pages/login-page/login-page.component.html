@@ -1,9 +1,8 @@
-<!-- src/app/auth/login/login.component.html -->
 <div class="flex h-screen w-screen overflow-hidden font-sans">
 
   <!-- ═══ LEFT PANEL ═══ -->
   <div
-    class="relative flex flex-col justify-between overflow-hidden min-w-[320px] w-[380px] px-10 py-12"
+    class="relative flex flex-col justify-between overflow-hidden min-w-[320px] w-[450px] px-10 py-12"
     style="background: linear-gradient(145deg, #1a2a6c 0%, #1565d8 55%, #0f9adb 100%);"
   >
     <!-- Grid overlay -->
@@ -28,7 +27,7 @@
       <img
         src="images/logo.png"
         alt="GeoTrack logo"
-        class="w-9 h-9 object-contain rounded-lg"
+        class="w-10 h-10 object-contain rounded-lg"
         style="filter: drop-shadow(0 0 8px rgba(0,220,255,0.5));"
       />
       <span class="text-white font-bold text-xl tracking-wide">GeoTrack</span>
@@ -36,21 +35,16 @@
 
     <!-- Welcome text -->
     <div class="relative z-10">
-      <h1 class="text-white font-extrabold leading-tight mb-4 text-[2.1rem]">
+      <h1 class="text-white font-extrabold leading-tight mb-4 text-[2.8rem]">
         Welcome to<br />
         <span class="text-[#7de8ff]">GeoTrack</span>
       </h1>
-      <p class="text-blue-100 text-sm leading-relaxed max-w-[260px] opacity-85">
+      <p class="text-blue-100 text-xl leading-relaxed max-w-[300px] opacity-85">
         Access the platform to manage destinations, locations, places, events, and content workflows.
       </p>
     </div>
 
-    <!-- Dots -->
-    <div class="relative z-10 flex items-center gap-2">
-      <span class="rounded-full bg-white" style="width:36px;height:6px;"></span>
-      <span class="rounded-full bg-white/30" style="width:24px;height:6px;"></span>
-      <span class="rounded-full bg-white/30" style="width:24px;height:6px;"></span>
-    </div>
+    <div style="height:18px;"></div>
   </div>
 
   <!-- ═══ RIGHT PANEL ═══ -->
@@ -58,18 +52,18 @@
 
     <!-- Form card -->
     <div
-      class="bg-white rounded-2xl w-full border border-[#e8ecf4] px-10 py-10"
-      style="max-width:420px; box-shadow: 0 4px 24px rgba(0,0,0,0.07);"
+      class="bg-white rounded-2xl w-full border border-[#e8ecf4] px-15 py-20"
+      style="max-width:480px; box-shadow: 0 4px 24px rgba(0,0,0,0.07);"
     >
       <div class="text-center mb-8">
         <h2 class="font-bold text-gray-900 text-2xl mb-1.5">Sign in</h2>
-        <p class="text-gray-500 text-sm">Use your account to access GeoTrack</p>
+        <p class="text-gray-500 text-sm">Use your account to access GeoTrack Regional</p>
       </div>
 
       <form (ngSubmit)="onSubmit()" #loginForm="ngForm" novalidate>
 
         <!-- ── Email ── -->
-        <div class="mb-5">
+        <div class="mb-8">
           <label for="email" class="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
           <input
             #emailInput="ngModel"
@@ -103,7 +97,7 @@
         </div>
 
         <!-- ── Password ── -->
-        <div class="mb-5">
+        <div class="mb-8">
           <label for="password" class="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
           <div class="relative">
             <input
@@ -153,7 +147,7 @@
         </div>
 
         <!-- ── Remember me + Forgot ── -->
-        <div class="flex items-center justify-between mb-6 text-sm">
+        <div class="flex items-center justify-between mb-8 text-sm">
           <label class="flex items-center gap-2 text-gray-600 cursor-pointer select-none">
             <input
               type="checkbox"
