@@ -1,10 +1,13 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { Observable } from 'rxjs';
+import { UserService } from '../../../core/services/user.service';
 
 export interface ReviewDraft {
   rating: number;
   body: string;
 }
+
+let nextReviewBodyId = 0;
 
 @Component({
   selector: 'app-review-entry',
@@ -27,6 +30,7 @@ export class ReviewEntryComponent {
   readonly loginRequested   = output<void>();
   /** Emitted only after a successful submit. */
   readonly reviewSubmitted  = output<ReviewDraft>();
+  protected readonly avatarUrl = inject(UserService).avatarUrl;
 
   // ─── Popup state ────────────────────────────────────────────────────────────
   protected readonly popupOpen   = signal(false);
@@ -36,6 +40,7 @@ export class ReviewEntryComponent {
 
   protected readonly isSubmitting = signal(false);
   protected readonly submitError  = signal('');
+  protected readonly reviewBodyId = `review-body-${++nextReviewBodyId}`;
 
   protected readonly effectiveRating = computed(() =>
     this.hoverRating() || this.draftRating(),

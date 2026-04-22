@@ -84,11 +84,18 @@
   align-items: center;
   justify-content: center;
   color: #4a6fa5;
+  overflow: hidden;
 
   svg {
     width: 22px;
     height: 22px;
   }
+}
+
+.re__write-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .re__write-info {

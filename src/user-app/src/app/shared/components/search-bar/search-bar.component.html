@@ -1,4 +1,7 @@
 <div class="search-bar">
+  <label class="visually-hidden" [attr.for]="resolvedControlId()">
+    {{ label() }}
+  </label>
   <svg class="search-bar__icon" viewBox="0 0 24 24" aria-hidden="true">
     <path
       fill="none"
@@ -10,6 +13,8 @@
   </svg>
   <input
     #searchField
+    [id]="resolvedControlId()"
+    [attr.name]="resolvedControlName()"
     class="search-bar__input"
     type="search"
     autocomplete="off"

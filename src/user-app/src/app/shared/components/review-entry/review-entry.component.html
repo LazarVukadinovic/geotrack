@@ -11,11 +11,15 @@
     (keydown.space)="$event.preventDefault(); openPopup()"
   >
     <div class="re__write-avatar" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
-        <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-              d="M4 20c0-4 3.582-7 8-7s8 3 8 7"/>
-      </svg>
+      @if (avatarUrl()) {
+        <img [src]="avatarUrl()" alt="" class="re__write-avatar-image"/>
+      } @else {
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
+          <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                d="M4 20c0-4 3.582-7 8-7s8 3 8 7"/>
+        </svg>
+      }
     </div>
     <div class="re__write-info">
       <span class="re__write-label">Write a Review</span>
@@ -110,13 +114,15 @@
     </div>
 
     <!-- Review text area -->
+    <label class="visually-hidden" [attr.for]="reviewBodyId">Review text</label>
     <textarea
+      [id]="reviewBodyId"
+      name="reviewBody"
       class="re__textarea"
       rows="5"
       placeholder="Share your experience (helpful tips for other travelers)..."
       [value]="draftBody()"
       (input)="onBodyInput($event)"
-      aria-label="Review text"
     ></textarea>
 
     <p class="re__hint">Your feedback helps others plan their trip.</p>
@@ -134,7 +140,7 @@
     >
       @if (isSubmitting()) {
         <span class="re__spinner" aria-hidden="true"></span>
-        <span>Submitting…</span>
+        <span>Submitting...</span>
       } @else {
         <span>Submit Review</span>
       }
