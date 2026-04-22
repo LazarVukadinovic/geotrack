@@ -5,6 +5,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { Observable, throwError } from 'rxjs';
 import { AuthService } from '../../../../core/services/auth.service';
+import { LocationService } from '../../../../core/services/location.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
 import { HttpClient } from '@angular/common/http';
@@ -25,6 +26,7 @@ export class HotelDetailPageComponent {
   private readonly location = inject(Location);
   private readonly service  = inject(HotelDetailService);
   private readonly auth     = inject(AuthService);
+  private readonly locationSvc = inject(LocationService);
   private readonly http     = inject(HttpClient);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
@@ -40,14 +42,47 @@ export class HotelDetailPageComponent {
 
   protected readonly scrollProgress = signal(0);
 
+  protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
+    this.hotel()?.latitude ?? null,
+    this.hotel()?.longitude ?? null,
+  ));
+
+  protected readonly mapUrl = computed(() => this.buildMapUrl(
+    this.hotel()?.latitude ?? null,
+    this.hotel()?.longitude ?? null,
+  ));
+
+  protected readonly primaryBookingPartners = computed(() =>
+    (this.hotel()?.bookingPartners ?? []).filter((partner) => !!partner.url && partner.variant !== 'muted'),
+  );
+
+  protected readonly secondaryBookingPartners = computed(() =>
+    (this.hotel()?.bookingPartners ?? []).filter((partner) => !!partner.url && partner.variant === 'muted'),
+  );
+
+  protected readonly hasBookingPartners = computed(() =>
+    this.primaryBookingPartners().length > 0 || this.secondaryBookingPartners().length > 0,
+  );
+
+  private readonly locationRequestKey = computed(() => {
+    const loc = this.locationSvc.location();
+    if (!loc) return 'none';
+    return `${loc.latitude}:${loc.longitude}:${loc.source}`;
+  });
+
   private readonly hdScroll = viewChild<ElementRef<HTMLElement>>('hdScroll');
 
   constructor() {
     effect(() => {
-      const id = this.hotelId();
+      this.hotelId();
       this.scrollProgress.set(0);
       const el = this.hdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
+    });
+
+    effect(() => {
+      const id = this.hotelId();
+      this.locationRequestKey();
       if (id) this.service.loadHotelDetail(id);
     });
   }
@@ -89,14 +124,6 @@ export class HotelDetailPageComponent {
     (event.target as HTMLImageElement).src = '/images/explore-image-fallback.svg';
   }
 
-  protected onGetDirections(): void {
-    /* future: open maps / directions integration */
-  }
-
-  protected onViewOnMap(): void {
-    /* future: navigate to /map with this hotel highlighted */
-  }
-
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
     const numId = parseInt(this.hotelId(), 10);
     if (isNaN(numId)) return throwError(() => new Error('Invalid hotel id.'));
@@ -113,10 +140,6 @@ export class HotelDetailPageComponent {
 
   protected onSeeAllReviews(): void {
     /* future: navigate to full reviews page */
-  }
-
-  protected onBookingPartner(_id: string): void {
-    /* future: open partner booking link */
   }
 
   protected amenityIconPath(icon: HotelAmenityIcon): string {
@@ -138,5 +161,23 @@ export class HotelDetailPageComponent {
       case 'ac':
         return 'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z';
     }
+  }
+
+  private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {
+    if (!this.hasUsableCoordinates(latitude, longitude)) return null;
+    return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
+  }
+
+  private buildMapUrl(latitude: number | null, longitude: number | null): string | null {
+    if (!this.hasUsableCoordinates(latitude, longitude)) return null;
+    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+  }
+
+  private hasUsableCoordinates(latitude: number | null, longitude: number | null): boolean {
+    return latitude != null &&
+      longitude != null &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      (latitude !== 0 || longitude !== 0);
   }
 }

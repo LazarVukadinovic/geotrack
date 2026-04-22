@@ -94,51 +94,77 @@
               <path fill="currentColor"
                     d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
             </svg>
-            <span class="pd__stat-val">{{ p.rating.toFixed(1) }}</span>
-            <span class="pd__stat-sub">({{ p.reviewCount }} reviews)</span>
+            @if (p.rating != null) {
+              <span class="pd__stat-val">{{ p.rating!.toFixed(1) }}</span>
+              @if (p.reviewCount) {
+                <span class="pd__stat-sub">({{ p.reviewCount }})</span>
+              }
+            } @else {
+              <span class="pd__stat-sub pd__stat-sub--empty">No reviews yet</span>
+            }
           </div>
 
-          <span class="pd__stat-dot" aria-hidden="true"></span>
+          @if (p.distance) {
+            <span class="pd__stat-dot" aria-hidden="true"></span>
 
-          <div class="pd__stat">
-            <svg class="pd__stat-icon pd__stat-icon--dist" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke="currentColor" fill="none" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round"
-                    d="M3 18l9-9 9 9"/>
-            </svg>
-            <span class="pd__stat-val">{{ p.distance }}</span>
-          </div>
+            <div class="pd__stat">
+              <svg class="pd__stat-icon pd__stat-icon--dist" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke="currentColor" fill="none" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round"
+                      d="M3 18l9-9 9 9"/>
+              </svg>
+              <span class="pd__stat-val">{{ p.distance }}</span>
+            </div>
+          }
 
-          <span class="pd__stat-dot" aria-hidden="true"></span>
+          @if (p.openStatus) {
+            <span class="pd__stat-dot" aria-hidden="true"></span>
 
-          <div class="pd__stat">
-            <svg class="pd__stat-icon pd__stat-icon--clock" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" fill="none" stroke-width="2"/>
-              <path stroke="currentColor" fill="none" stroke-width="2"
-                    stroke-linecap="round" d="M12 6v6l4 2"/>
-            </svg>
-            <span class="pd__stat-val pd__stat-val--open">{{ p.openStatus }}</span>
-          </div>
+            <div class="pd__stat">
+              <svg class="pd__stat-icon pd__stat-icon--clock" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" fill="none" stroke-width="2"/>
+                <path stroke="currentColor" fill="none" stroke-width="2"
+                      stroke-linecap="round" d="M12 6v6l4 2"/>
+              </svg>
+              <span class="pd__stat-val pd__stat-val--open">{{ p.openStatus }}</span>
+            </div>
+          }
         </div>
 
         <!-- CTA buttons -->
-        <div class="pd__ctas">
-          <button type="button" class="pd__cta pd__cta--primary" (click)="onGetDirections()">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path fill="currentColor"
-                    d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-            Get Directions
-          </button>
-          <button type="button" class="pd__cta pd__cta--outline" (click)="onViewOnMap()">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke="currentColor" fill="none" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round"
-                    d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
-            </svg>
-            View on Map
-          </button>
-        </div>
+        @if (directionsUrl() || mapUrl()) {
+          <div class="pd__ctas">
+            @if (directionsUrl(); as directionsHref) {
+              <a
+                class="pd__cta pd__cta--primary"
+                [href]="directionsHref"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor"
+                        d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                Get Directions
+              </a>
+            }
+            @if (mapUrl(); as mapHref) {
+              <a
+                class="pd__cta pd__cta--outline"
+                [href]="mapHref"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke="currentColor" fill="none" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+                </svg>
+                View on Map
+              </a>
+            }
+          </div>
+        }
 
         <!-- ── About ──────────────────────────────────────────────────── -->
         <div class="pd__divider"></div>
@@ -257,12 +283,16 @@
                   <div class="pd__similar-body">
                     <h3 class="pd__similar-title">{{ s.title }}</h3>
                     <div class="pd__similar-meta">
-                      <svg class="pd__similar-star" viewBox="0 0 24 24" aria-hidden="true">
-                        <path fill="currentColor"
-                              d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
-                      </svg>
-                      <span class="pd__similar-rating">{{ s.rating.toFixed(1) }}</span>
-                      <span class="pd__similar-dist">{{ s.distance }}</span>
+                      @if (s.rating != null) {
+                        <svg class="pd__similar-star" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="currentColor"
+                                d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                        </svg>
+                        <span class="pd__similar-rating">{{ s.rating!.toFixed(1) }}</span>
+                      }
+                      @if (s.distance) {
+                        <span class="pd__similar-dist">{{ s.distance }}</span>
+                      }
                     </div>
                   </div>
                 </article>

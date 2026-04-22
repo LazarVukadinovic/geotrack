@@ -3,6 +3,7 @@ import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
+import { LocationService } from '../../../../core/services/location.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { EventDetailService } from '../../services/event-detail.service';
 
@@ -17,6 +18,7 @@ export class EventDetailPageComponent {
   private readonly route    = inject(ActivatedRoute);
   private readonly router   = inject(Router);
   private readonly location = inject(Location);
+  private readonly locationSvc = inject(LocationService);
   private readonly service  = inject(EventDetailService);
 
   protected readonly eventId = toSignal(
@@ -31,15 +33,35 @@ export class EventDetailPageComponent {
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by ed__scroll. */
   protected readonly scrollProgress = signal(0);
 
+  protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
+    this.event()?.latitude ?? null,
+    this.event()?.longitude ?? null,
+  ));
+
+  protected readonly mapUrl = computed(() => this.buildMapUrl(
+    this.event()?.latitude ?? null,
+    this.event()?.longitude ?? null,
+  ));
+
+  private readonly locationRequestKey = computed(() => {
+    const loc = this.locationSvc.location();
+    if (!loc) return 'none';
+    return `${loc.latitude}:${loc.longitude}:${loc.source}`;
+  });
+
   private readonly edScroll = viewChild<ElementRef<HTMLElement>>('edScroll');
 
   constructor() {
-    // Reset scroll when the route param changes (same component instance reused).
     effect(() => {
-      const id = this.eventId();
+      this.eventId();
       this.scrollProgress.set(0);
       const el = this.edScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
+    });
+
+    effect(() => {
+      const id = this.eventId();
+      this.locationRequestKey();
       if (id) this.service.loadEventDetail(id);
     });
   }
@@ -78,11 +100,21 @@ export class EventDetailPageComponent {
     (event.target as HTMLImageElement).src = '/images/explore-image-fallback.svg';
   }
 
-  protected onGetDirections(): void {
-    /* future: open maps / directions integration */
+  private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {
+    if (!this.hasUsableCoordinates(latitude, longitude)) return null;
+    return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
   }
 
-  protected onViewOnMap(): void {
-    /* future: navigate to /map with this event highlighted */
+  private buildMapUrl(latitude: number | null, longitude: number | null): string | null {
+    if (!this.hasUsableCoordinates(latitude, longitude)) return null;
+    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+  }
+
+  private hasUsableCoordinates(latitude: number | null, longitude: number | null): boolean {
+    return latitude != null &&
+      longitude != null &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      (latitude !== 0 || longitude !== 0);
   }
 }
