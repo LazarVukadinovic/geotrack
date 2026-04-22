@@ -167,5 +167,69 @@ namespace Geotrack.Infrastructure.Repositories
             _context.UserTags.RemoveRange(userTags);
             return Task.CompletedTask;
         }
+
+        public async Task<User?> GetByIdWithRolesAsync(int userId)
+        {
+            return await _context.Users.Include(u => u.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task<Role?> GetRoleByNameAsync(string roleName)
+        {
+            return await _context.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
+        }
+
+        public Task RemoveUserRoleAsync(UserRole userRole)
+        {
+            _context.UserRoles.Remove(userRole);
+            return Task.CompletedTask;
+        }
+
+        public async Task<User?> GetByIdWithRegionsAsync(int userId)
+        {
+            return await _context.Users.Include(u => u.RegionalOrganization).ThenInclude(ro => ro.RegionalOrganizationRegions).ThenInclude(ror => ror.Region).FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task<User?> GetByIdWithRolesAndRegionsAsync(int userId)
+        {
+            return await _context.Users
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .Include(u => u.RegionalOrganization)
+                    .ThenInclude(ro => ro.RegionalOrganizationRegions)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task AddRegionalOrganizationAsync(RegionalOrganization regionalOrganization)
+        {
+            await _context.RegionalOrganizations.AddAsync(regionalOrganization);
+        }
+
+        public async Task<bool> RegionExistsAsync(int regionId)
+        {
+            return await _context.Regions.AnyAsync(r => r.Id == regionId);
+        }
+
+        public async Task<bool> UserRegionExistsAsync(int userId, int regionId)
+        {
+            return await _context.RegionalOrganizationRegions.AnyAsync(ror => ror.UserId == userId && ror.RegionId == regionId);
+        }
+
+        public async Task AddUserRegionAsync(RegionalOrganizationRegion region)
+        {
+            await _context.RegionalOrganizationRegions.AddAsync(region);
+        }
+
+        public async Task<RegionalOrganizationRegion?> GetUserRegionAsync(int userId, int regionId)
+        {
+            return await _context.RegionalOrganizationRegions
+                .FirstOrDefaultAsync(ror => ror.UserId == userId && ror.RegionId == regionId);
+        }
+
+        public Task DeleteUserRegionAsync(RegionalOrganizationRegion region)
+        {
+            _context.RegionalOrganizationRegions.Remove(region);
+            return Task.CompletedTask;
+        }
     }
+
 }
