@@ -182,4 +182,104 @@ public class UserController : ControllerBase
             _ => BadRequest(new { message = ex.Message })
         };
     }
+
+    [HttpPut("{id}/role/regional-manager")]
+    public async Task<IActionResult> AssignRegionalManagerRole([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _userService.AssignRegionalManagerRoleAsync(id);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("{id}/role/regional-manager")]
+    public async Task<IActionResult> RemoveRegionalManagerRole([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _userService.RemoveRegionalManagerRoleAsync(id);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("{id}/regions")]
+    public async Task<IActionResult> GetUserRegions([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _userService.GetUserRegionsAsync(id);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("{id}/regions")]
+    public async Task<IActionResult> UpdateUserRegions([FromRoute] int id, [FromBody] UpdateUserRegionsRequestDto request)
+    {
+        try
+        {
+            var result = await _userService.UpdateUserRegionsAsync(id, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{id}/regions/{regionId}")]
+    public async Task<IActionResult> AddUserRegion([FromRoute] int id, [FromRoute] int regionId)
+    {
+        try
+        {
+            var result = await _userService.AddUserRegionAsync(id, regionId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("{id}/regions/{regionId}")]
+    public async Task<IActionResult> DeleteUserRegion([FromRoute] int id, [FromRoute] int regionId)
+    {
+        try
+        {
+            var result = await _userService.DeleteUserRegionAsync(id, regionId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
 }
