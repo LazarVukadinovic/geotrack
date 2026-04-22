@@ -1,7 +1,7 @@
 <div class="min-h-screen flex flex-col bg-[#fafafa] pb-24">
 
   <!-- Header -->
-  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem]">
+  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[1.5rem]">
     <div class="flex items-center justify-between">
       <button type="button" (click)="goBack()"
         class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
@@ -158,7 +158,7 @@
     <h2 class="text-xl font-bold text-slate-800 mb-1">Rename Collection</h2>
     <p class="text-sm text-slate-500 mb-5">Enter a new name for this collection.</p>
 
-    <label class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+    <label for="rename-collection-name" class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
       Collection Name
     </label>
     <div class="bg-slate-50 border border-slate-300 rounded-2xl flex items-center gap-3 px-4 py-3.5 mb-6"
@@ -168,6 +168,8 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 12h12M3 17h8"/>
       </svg>
       <input
+        id="rename-collection-name"
+        name="collectionName"
         type="text"
         [value]="renameValue()"
         (input)="renameValue.set($any($event.target).value)"

@@ -16,6 +16,13 @@ interface MeResponse {
   location?: string;
 }
 
+interface UpdateAvatarResponse {
+  avatarUrl: string;
+  updatedAt?: string;
+}
+
+const MAX_AVATAR_FILE_BYTES = 5 * 1024 * 1024;
+
 @Component({
   selector: 'app-edit-profile',
   imports: [CommonModule, FormsModule],
@@ -27,10 +34,14 @@ export class EditProfileComponent {
   email     = '';
   phone     = '';
   location  = '';
+  avatarUrl = '';
   isSaving  = false;
   isLoading = true;
+  isUploadingAvatar = false;
   saveError = '';
+  avatarError = '';
   saveSuccess = false;
+  readonly acceptedAvatarTypes = 'image/jpeg,image/png,image/webp,image/gif';
   private returnTo = '/profile';
 
   constructor(
@@ -50,12 +61,56 @@ export class EditProfileComponent {
         this.email = res.email;
         this.phone = res.phoneNumber ?? '';
         this.location = res.location ?? '';
+        this.avatarUrl = res.avatarUrl ?? '';
         this.isLoading = false;
         this.cdr.detectChanges();
       },
       error: () => {
         this.isLoading = false;
         this.saveError = 'Could not load your profile. Please try again.';
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  onAvatarSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+
+    if (!file || this.isUploadingAvatar) return;
+
+    this.avatarError = '';
+
+    if (file.size > MAX_AVATAR_FILE_BYTES) {
+      this.avatarError = 'Profile photo must be 5 MB or smaller.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    if (file.type && !file.type.startsWith('image/')) {
+      this.avatarError = 'Please choose a valid image file.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    this.isUploadingAvatar = true;
+    this.cdr.detectChanges();
+
+    this.http.put<UpdateAvatarResponse>('/api/user/me/avatar', formData).subscribe({
+      next: (response) => {
+        this.avatarUrl = response.avatarUrl ?? '';
+        this.isUploadingAvatar = false;
+        this.avatarError = '';
+        this.userService.patchProfile({ avatarUrl: this.avatarUrl });
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.isUploadingAvatar = false;
+        this.avatarError = err?.error?.message || 'Failed to upload profile photo. Please try again.';
         this.cdr.detectChanges();
       },
     });

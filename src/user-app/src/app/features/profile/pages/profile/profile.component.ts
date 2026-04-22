@@ -21,6 +21,7 @@ export class ProfileComponent {
   // renders, so fullName() and email() are already set on first paint.
   protected readonly fullName = inject(UserService).fullName;
   protected readonly email    = inject(UserService).email;
+  protected readonly avatarUrl = inject(UserService).avatarUrl;
 
   get collections() {
     return this.collService.collections();
