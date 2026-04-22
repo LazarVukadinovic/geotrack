@@ -16,7 +16,7 @@ export interface HotelSimilar {
   id: string;
   title: string;
   image: string;
-  rating: number;
+  rating?: number;
   distance: string;
   isSaved: boolean;
 }
@@ -43,16 +43,19 @@ export interface HotelBookingPartner {
   id: string;
   name: string;
   variant: BookingPartnerVariant;
+  url?: string | null;
 }
 
 export interface HotelDetail {
   id: string;
   title: string;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   heroImage: string;
   tags: HotelTag[];
-  rating: number;
-  reviewCount: string;
+  rating?: number;
+  reviewCount?: string;
   distance: string;
   pricePerNight: number;
   about: string;

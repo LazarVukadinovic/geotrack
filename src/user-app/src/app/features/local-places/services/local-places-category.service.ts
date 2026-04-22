@@ -3,6 +3,8 @@ import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
+import { FavoriteStateService } from '../../../core/services/favorite-state.service';
+import { LocationService } from '../../../core/services/location.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { PlaceCategoryItem } from '../models/local-places.model';
 
@@ -27,8 +29,9 @@ export class LocalPlacesCategoryService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly destinationSvc = inject(DestinationService);
+  private readonly favoriteState = inject(FavoriteStateService);
+  private readonly locationSvc = inject(LocationService);
   private readonly exploreSvc = inject(ExploreService);
-  private readonly _savedOverrides = signal<Record<string, boolean>>({});
   private readonly _apiItems = signal<Record<string, PlaceCategoryItem[]>>({});
   private readonly _loadErrorByKey = signal<Record<string, string>>({});
   private readonly _loadedKeys = new Set<string>();
@@ -57,7 +60,9 @@ export class LocalPlacesCategoryService {
   }
 
   private fetchCategory(categoryKey: string, destinationId: number): void {
-    this.http.get<ApiPlaceListItem[]>(`/api/places?category=${categoryKey}&destinationId=${destinationId}`).subscribe({
+    this.http.get<ApiPlaceListItem[]>(
+      `/api/places?category=${categoryKey}&destinationId=${destinationId}${this.buildLocationQuery()}`
+    ).subscribe({
       next: (items) => {
         const mapped = items.map((dto, i) => ({
           id: String(dto.id),
@@ -89,22 +94,26 @@ export class LocalPlacesCategoryService {
     });
   }
 
+  private buildLocationQuery(): string {
+    const loc = this.locationSvc.location();
+    if (!loc) return '';
+    return `&latitude=${loc.latitude}&longitude=${loc.longitude}`;
+  }
+
   getItems(categoryKey: string): PlaceCategoryItem[] {
-    const overrides = this._savedOverrides();
     const source = this._apiItems()[categoryKey] ?? [];
     return source.map((item) => ({
       ...item,
-      isSaved: overrides[item.id] !== undefined ? overrides[item.id] : item.isSaved,
+      isSaved: this.favoriteState.resolve('place', item.id, item.isSaved),
     }));
   }
 
   itemsFor(categoryKey: string) {
     return computed(() => {
-      const overrides = this._savedOverrides();
       const source = this._apiItems()[categoryKey] ?? [];
       return source.map((item) => ({
         ...item,
-        isSaved: overrides[item.id] !== undefined ? overrides[item.id] : item.isSaved,
+        isSaved: this.favoriteState.resolve('place', item.id, item.isSaved),
       }));
     });
   }
@@ -119,17 +128,12 @@ export class LocalPlacesCategoryService {
 
   toggleSaved(id: string, categoryKey: string): void {
     if (!this.auth.isLoggedIn()) return;
-
-    const flip = () => {
-      const current = this.getItems(categoryKey).find((item) => item.id === id)?.isSaved ?? false;
-      this._savedOverrides.update((m) => ({ ...m, [id]: !current }));
-    };
-    flip();
-
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
+    const current = this.getItems(categoryKey).find((item) => item.id === id)?.isSaved ?? false;
+    this.favoriteState.set('place', id, !current);
     this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
-      error: () => flip(),
+      error: () => this.favoriteState.set('place', id, current),
     });
   }
 }

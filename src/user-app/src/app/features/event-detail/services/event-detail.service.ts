@@ -1,6 +1,8 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { FavoriteStateService } from '../../../core/services/favorite-state.service';
+import { LocationService } from '../../../core/services/location.service';
 import type { EventDetail } from '../models/event-detail.model';
 import { MOCK_EVENT_DETAIL_MAP } from '../data/mock-event-detail.data';
 
@@ -8,6 +10,8 @@ interface ApiEventDetail {
   id: number;
   title: string;
   location?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   heroImage?: string;
   tags: { label: string }[];
   distance?: string;
@@ -22,29 +26,47 @@ interface ApiEventDetail {
 export class EventDetailService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
-  private readonly _savedOverrides = signal<Record<string, boolean>>({});
+  private readonly favoriteState = inject(FavoriteStateService);
+  private readonly locationSvc = inject(LocationService);
   private readonly _cache = signal<Record<string, EventDetail>>({});
+  private readonly lastRequestKeyById = new Map<string, string>();
 
   getEventDetailPageData(id: string): EventDetail | null {
-    const overrides = this._savedOverrides();
     const cached = this._cache()[id];
     if (cached) {
-      return { ...cached, isSaved: overrides[id] ?? cached.isSaved };
+      return {
+        ...cached,
+        isSaved: this.favoriteState.resolve('event', id, cached.isSaved),
+      };
     }
     const base = MOCK_EVENT_DETAIL_MAP[id];
     if (!base) return null;
-    return { ...base, isSaved: overrides[id] ?? base.isSaved };
+    return {
+      ...base,
+      isSaved: this.favoriteState.resolve('event', id, base.isSaved),
+    };
   }
 
   loadEventDetail(id: string): void {
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    this.http.get<ApiEventDetail>(`/api/events/${numId}`).subscribe({
+    const locationQuery = this.buildLocationQuery();
+    const requestKey = `${numId}${locationQuery}`;
+    if (this.lastRequestKeyById.get(id) === requestKey) return;
+    this.lastRequestKeyById.set(id, requestKey);
+
+    this.http.get<ApiEventDetail>(`/api/events/${numId}${locationQuery}`).subscribe({
       next: (dto) => {
+        if (this.lastRequestKeyById.get(id) !== requestKey) {
+          return;
+        }
+
         const detail: EventDetail = {
           id: String(dto.id),
           title: dto.title,
           location: dto.location ?? '',
+          latitude: dto.latitude ?? null,
+          longitude: dto.longitude ?? null,
           heroImage: dto.heroImage ?? '',
           tags: dto.tags,
           distance: dto.distance ?? '',
@@ -72,8 +94,20 @@ export class EventDetailService {
           isSaved: dto.isSaved,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
+        this.lastRequestKeyById.delete(id);
+      },
+      error: () => {
+        if (this.lastRequestKeyById.get(id) === requestKey) {
+          this.lastRequestKeyById.delete(id);
+        }
       },
     });
+  }
+
+  private buildLocationQuery(): string {
+    const loc = this.locationSvc.location();
+    if (!loc) return '';
+    return `?latitude=${loc.latitude}&longitude=${loc.longitude}`;
   }
 
   toggleSaved(id: string): void {
@@ -82,17 +116,11 @@ export class EventDetailService {
     const current = this.getEventDetailPageData(id);
     if (!current) return;
 
-    const flip = () => {
-      const snap = this.getEventDetailPageData(id);
-      if (!snap) return;
-      this._savedOverrides.update((m) => ({ ...m, [id]: !snap.isSaved }));
-    };
-    flip();
-
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
+    this.favoriteState.set('event', id, !current.isSaved);
     this.http.post('/api/favorites/toggle', { entityType: 'event', entityId: numId }).subscribe({
-      error: () => flip(),
+      error: () => this.favoriteState.set('event', id, current.isSaved),
     });
   }
 }

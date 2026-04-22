@@ -2,6 +2,7 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import { DestinationService } from '../../../core/services/destination.service';
+import { LocationService } from '../../../core/services/location.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { LocalPlacesCategory, CategoryMeta } from '../models/local-places.model';
 import { CATEGORY_META } from '../data/mock-category-items.data';
@@ -18,6 +19,7 @@ interface ApiCategory {
 export class LocalPlacesService {
   private readonly http = inject(HttpClient);
   private readonly destinationSvc = inject(DestinationService);
+  private readonly locationSvc = inject(LocationService);
   private readonly exploreSvc = inject(ExploreService);
   private readonly _categories = signal<LocalPlacesCategory[]>([]);
   private readonly _loadError = signal<string | null>(null);
@@ -36,7 +38,7 @@ export class LocalPlacesService {
   }
 
   private loadFromApi(destinationId: number): void {
-    this.http.get<ApiCategory[]>(`/api/explore/categories?destinationId=${destinationId}`).subscribe({
+    this.http.get<ApiCategory[]>(`/api/explore/categories?destinationId=${destinationId}${this.buildLocationQuery()}`).subscribe({
       next: (cats) => {
         this._categories.set(cats.map(c => ({
           id: String(c.id),
@@ -54,6 +56,12 @@ export class LocalPlacesService {
         this._loadError.set("We couldn't load local places. Check your connection and try again.");
       },
     });
+  }
+
+  private buildLocationQuery(): string {
+    const loc = this.locationSvc.location();
+    if (!loc) return '';
+    return `&latitude=${loc.latitude}&longitude=${loc.longitude}`;
   }
 
   getCategories$(): Observable<LocalPlacesCategory[]> {
