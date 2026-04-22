@@ -25,10 +25,6 @@ export class LoginComponent {
     this.showPassword.update(v => !v);
   }
 
-  /**
-   * Fokus na polju: dodaj plavi ring ako je validan, crveni ako nije.
-   * (Tailwind ne može dinamički ring boju bez custom config, pa koristimo inline style.)
-   */
   onFieldFocus(event: Event, control: NgModel): void {
     const el = event.target as HTMLInputElement;
     const isInvalid = control.invalid && control.touched;
@@ -48,8 +44,7 @@ export class LoginComponent {
     if (!this.email() || !this.password()) return;
     this.isLoading.set(true);
 
-    // TODO: zameni sa pravim AuthService pozivom
-    // Primer kako da postaviš authError ako server vrati grešku:
+    // zameniti sa pravim AuthService pozivom
     // this.authService.login(this.email(), this.password()).subscribe({
     //   next: () => this.router.navigate(['/dashboard']),
     //   error: () => {
