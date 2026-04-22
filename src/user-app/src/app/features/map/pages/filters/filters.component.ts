@@ -16,7 +16,6 @@ interface Category {
 export class Filters {
   selectedCategories: string[] = [];
   selectedDistance = 'Any';
-  selectedRating = 'Any';
 
   allCategories: Category[] = [
     { id: 'restaurants', label: 'Restaurants'},
@@ -34,7 +33,6 @@ export class Filters {
   ];
 
   distances = ['Any', '0.5km', '1km', '2km', '5km'];
-  ratings   = ['Any', '3', '4', '4.5'];
 
   constructor(private router: Router) {
     const saved = sessionStorage.getItem('mapFilters');
@@ -42,7 +40,6 @@ export class Filters {
       const f = JSON.parse(saved);
       this.selectedCategories = f.categories ?? [];
       this.selectedDistance   = f.distance   ?? 'Any';
-      this.selectedRating     = f.rating     ?? 'Any';
     }
   }
 
@@ -61,7 +58,6 @@ export class Filters {
   clearAll(): void {
     this.selectedCategories = [];
     this.selectedDistance   = 'Any';
-    this.selectedRating     = 'Any';
     sessionStorage.removeItem('mapFilters');
     this.router.navigate(['/map'], {
       state: { fromFilters: true, cleared: true }
@@ -72,7 +68,6 @@ export class Filters {
     sessionStorage.setItem('mapFilters', JSON.stringify({
       categories: this.selectedCategories,
       distance:   this.selectedDistance,
-      rating:     this.selectedRating,
     }));
 
     this.router.navigate(['/map'], {

@@ -24,7 +24,10 @@
               d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
           </svg>
         </div>
+        <label class="visually-hidden" for="map-destination-search">Search places on the map</label>
         <input
+          id="map-destination-search"
+          name="mapSearchQuery"
           type="text"
           [(ngModel)]="searchQuery"
           (input)="onSearchInput($any($event.target).value)"
