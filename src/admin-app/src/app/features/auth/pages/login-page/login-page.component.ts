@@ -1,6 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, NgModel } from '@angular/forms';
 import { Router } from '@angular/router';
 
 @Component({
@@ -11,12 +11,13 @@ import { Router } from '@angular/router';
   styleUrl: './login-page.component.css'
 })
 export class LoginComponent {
-  // Using Angular signals — consistent with user-app patterns
-  readonly email         = signal('');
-  readonly password      = signal('');
-  readonly rememberMe    = signal(false);
-  readonly showPassword  = signal(false);
-  readonly isLoading     = signal(false);
+  readonly email        = signal('');
+  readonly password     = signal('');
+  readonly rememberMe   = signal(false);
+  readonly showPassword = signal(false);
+  readonly isLoading    = signal(false);
+  /** Poruka greške od servera (npr. "Invalid credentials") */
+  readonly authError    = signal<string | null>(null);
 
   constructor(private readonly router: Router) {}
 
@@ -24,10 +25,39 @@ export class LoginComponent {
     this.showPassword.update(v => !v);
   }
 
+  /**
+   * Fokus na polju: dodaj plavi ring ako je validan, crveni ako nije.
+   * (Tailwind ne može dinamički ring boju bez custom config, pa koristimo inline style.)
+   */
+  onFieldFocus(event: Event, control: NgModel): void {
+    const el = event.target as HTMLInputElement;
+    const isInvalid = control.invalid && control.touched;
+    el.style.boxShadow = isInvalid
+      ? '0 0 0 3px rgba(239,68,68,0.15)'
+      : '0 0 0 3px rgba(21,101,216,0.12)';
+    el.style.borderColor = isInvalid ? '#f87171' : '#1565d8';
+  }
+
+  onFieldBlur(event: Event): void {
+    const el = event.target as HTMLInputElement;
+    el.style.boxShadow = 'none';
+  }
+
   onSubmit(): void {
+    this.authError.set(null);
     if (!this.email() || !this.password()) return;
     this.isLoading.set(true);
-    // TODO: replace with real AuthService call
+
+    // TODO: zameni sa pravim AuthService pozivom
+    // Primer kako da postaviš authError ako server vrati grešku:
+    // this.authService.login(this.email(), this.password()).subscribe({
+    //   next: () => this.router.navigate(['/dashboard']),
+    //   error: () => {
+    //     this.isLoading.set(false);
+    //     this.authError.set('Invalid email or password. Please try again.');
+    //   }
+    // });
+
     setTimeout(() => {
       this.isLoading.set(false);
       this.router.navigate(['/dashboard']);
@@ -36,7 +66,7 @@ export class LoginComponent {
 
   setSubmitHover(event: Event, isHover: boolean): void {
     const btn = event.target as HTMLButtonElement;
-    if (this.isLoading() || !this.email() || !this.password()) return;
+    if (this.isLoading()) return;
     btn.style.background = isHover
       ? 'linear-gradient(135deg, #1250b0 0%, #1575d0 100%)'
       : 'linear-gradient(135deg, #1565d8 0%, #1a86e8 100%)';
