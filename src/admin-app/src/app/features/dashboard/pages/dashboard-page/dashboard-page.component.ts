@@ -42,9 +42,9 @@ export class DashboardComponent {
   ];
 
   quickActions = [
-    { label: 'Create New Destination', desc: 'Define a new geographical area, route, or broader travel context.', icon: 'map' },
+    { label: 'Create New Destination', desc: 'Define a new geographical area, route, or broader travel context.', icon: 'flag' },
     { label: 'Add New Location',       desc: 'Add a specific POI, business, landmark, or location to the map.',   icon: 'pin' },
-    { label: 'Add New Place',          desc: 'Add a specific POI, business, landmark, or location to the map.',   icon: 'pin' },
+    { label: 'Add New Place',          desc: 'Add a specific POI, business, landmark, or location to the map.',   icon: 'home' },
     { label: 'Schedule Event',         desc: 'Publish a time-bound activity or gathering in your region.',         icon: 'calendar' },
   ];
 
