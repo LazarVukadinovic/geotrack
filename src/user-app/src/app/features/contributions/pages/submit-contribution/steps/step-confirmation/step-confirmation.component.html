@@ -1,0 +1,31 @@
+<div class="flex flex-col items-center justify-center min-h-[70vh] px-8 text-center">
+
+  <!-- Success animation -->
+  <div class="relative mb-8">
+    <div class="w-24 h-24 rounded-full bg-orange-100 flex items-center justify-center">
+      <div class="w-16 h-16 rounded-full bg-orange-200 flex items-center justify-center">
+        <div class="w-14 h-14 rounded-full bg-[#e8722a] flex items-center justify-center">
+          <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="text-2xl font-bold text-slate-800 mb-3">Submitted for Review</h2>
+  <p class="text-sm text-slate-500 leading-relaxed mb-12">
+    Your contribution will be reviewed before it appears on the app.
+  </p>
+
+  <div class="w-full flex flex-col gap-3">
+    <button (click)="goToContributions()"
+      class="w-full py-4 bg-[#1a2b4a] rounded-3xl text-white font-bold text-base active:scale-[0.98] transition-all">
+      Go to My Contributions
+    </button>
+    <button (click)="addAnother.emit()"
+      class="w-full py-4 border-2 border-[#1a2b4a] rounded-3xl text-[#1a2b4a] font-bold text-base active:bg-slate-50 transition-colors">
+      Add Another {{ entityType() }}
+    </button>
+  </div>
+</div>

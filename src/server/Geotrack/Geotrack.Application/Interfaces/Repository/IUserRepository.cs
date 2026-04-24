@@ -38,4 +38,16 @@ public interface IUserRepository : IRepository<User>
     Task<Dictionary<int, double>> GetLocationRatingsByUserIdAsync(int userId);
     Task<Dictionary<int, double>> GetPlaceRatingsByUserIdAsync(int userId);
     Task<Dictionary<int, double>> GetEventRatingsByUserIdAsync(int userId);
+
+    Task<User?> GetByIdWithRolesAsync(int userId);
+    Task<Role?> GetRoleByNameAsync(string roleName);
+    Task RemoveUserRoleAsync(UserRole userRole);
+    Task<User?> GetByIdWithRegionsAsync(int userId);
+    Task<User?> GetByIdWithRolesAndRegionsAsync(int userId);
+    Task AddRegionalOrganizationAsync(RegionalOrganization regionalOrganization);
+    Task<bool> RegionExistsAsync(int regionId);
+    Task<bool> UserRegionExistsAsync(int userId, int regionId);
+    Task AddUserRegionAsync(RegionalOrganizationRegion region);
+    Task<RegionalOrganizationRegion?> GetUserRegionAsync(int userId, int regionId);
+    Task DeleteUserRegionAsync(RegionalOrganizationRegion region);
 }

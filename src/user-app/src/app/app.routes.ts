@@ -65,6 +65,30 @@ export const routes: Routes = [
           import('./features/profile/pages/collection-detail/collection-detail.component').then(m => m.CollectionDetailComponent),
         data: { hideBottomNav: true },
       },
+      {
+        path: 'contributions',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/contributions/pages/my-contributions/my-contributions.component')
+            .then(m => m.MyContributionsPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'contributions/submit',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/contributions/pages/submit-contribution/submit-contribution.component')
+            .then(m => m.SubmitContributionComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'contributions/detail',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/contributions/pages/contribution-detail/contribution-detail.component')
+            .then(m => m.ContributionDetailPageComponent),
+        data: { hideBottomNav: true },
+      },
 
       // ── Settings ─────────────────────────────────────────────────────────
       {

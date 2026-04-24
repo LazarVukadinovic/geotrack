@@ -24,4 +24,11 @@ public interface IUserService
 
     Task<AddCollectionItemResponseDto> AddCollectionItemAsync(int userId, int collectionId, AddCollectionItemRequestDto request);
     Task DeleteCollectionItemAsync(int userId, int collectionId, int itemId);
+
+    Task<UpdateUserRoleResponseDtocs> AssignRegionalManagerRoleAsync(int userId);
+    Task<UpdateUserRoleResponseDtocs> RemoveRegionalManagerRoleAsync(int userId);
+    Task<GetUserRegionsResponseDto> GetUserRegionsAsync(int userId);
+    Task<UpdateUserRegionsResponseDto> UpdateUserRegionsAsync(int userId, UpdateUserRegionsRequestDto request);
+    Task<AddUserRegionResponseDto> AddUserRegionAsync(int userId, int regionId);
+    Task<DeleteUserRegionResponseDto> DeleteUserRegionAsync(int userId, int regionId);
 }

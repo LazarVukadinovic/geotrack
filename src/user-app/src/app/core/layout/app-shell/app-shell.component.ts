@@ -15,6 +15,7 @@ const AUTH_REQUIRED_PREFIXES = [
   '/register/interests',
   '/profile/edit',
   '/profile/collections',
+  '/contributions',
   '/settings',
 ];
 

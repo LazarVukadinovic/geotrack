@@ -1,0 +1,76 @@
+<div class="min-h-screen bg-[#fafafa] flex flex-col">
+
+  <!-- Header -->
+  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem] relative">
+    <div class="flex items-center justify-between">
+      <button (click)="handleBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </button>
+      <span class="text-[16] font-bold text-white tracking-wide text-center">
+        {{ currentStep() === 5 ? 'Submitted for Review' : (editId ? 'Edit ' : 'Add New ') + entityType }}
+      </span>
+
+      <div class="w-9"></div>
+    </div>
+    <p *ngIf="currentStep() < 5" class="text-white/50 text-xs text-center absolute left-0 right-0 bottom-2">
+      Step {{ currentStep() }} of 4
+    </p>
+  </div>
+
+  <!-- Steps -->
+  <div class="flex-1 overflow-y-auto flex flex-col">
+    @switch (currentStep()) {
+      @case (1) {
+        <app-step-basics
+          [data]="draft().basics"
+          (saved)="onBasicsSaved($event)"
+        />
+      }
+      @case (2) {
+        <app-step-features
+          [data]="draft().features"
+          (changed)="onFeaturesChanged($event)"
+          (saved)="onFeaturesSaved($event)"
+          (back)="prevStep()"
+        />
+      }
+      @case (3) {
+        <app-step-details
+          [data]="draft().details"
+          (changed)="onDetailsChanged($event)"
+          (saved)="onDetailsSaved($event)"
+          (back)="prevStep()"
+        />
+      }
+      @case (4) {
+        <app-step-preview
+          [draft]="draft()"
+          (confirmed)="onSubmit()"
+          (back)="prevStep()"
+        />
+        @if (isSubmitting()) {
+        <div class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
+          <div class="bg-white rounded-2xl px-8 py-6 flex flex-col items-center gap-3">
+            <div class="w-8 h-8 border-2 border-[#e8722a] border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-sm text-slate-500">Submitting...</p>
+          </div>
+        </div>
+      }
+      @if (submitError()) {
+        <div class="fixed bottom-6 left-5 right-5 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 z-50">
+          <p class="text-sm text-red-600 text-center">{{ submitError() }}</p>
+        </div>
+      }
+      }
+      @case (5) {
+        <app-step-confirmation
+          [entityType]="entityType"
+          (back)="prevStep()"
+          (addAnother)="resetAndStart()"
+        />
+      }
+    }
+  </div>
+</div>

@@ -255,6 +255,90 @@ public class UserController : ControllerBase
         }
     }
 
+    [HttpPut("~/api/users/{id:int}/role/regional-manager")]
+    public async Task<IActionResult> AssignRegionalManagerRole([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _userService.AssignRegionalManagerRoleAsync(id);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("~/api/users/{id:int}/role/regional-manager")]
+    public async Task<IActionResult> RemoveRegionalManagerRole([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _userService.RemoveRegionalManagerRoleAsync(id);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("~/api/users/{id:int}/regions")]
+    public async Task<IActionResult> GetUserRegions([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _userService.GetUserRegionsAsync(id);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("~/api/users/{id:int}/regions")]
+    public async Task<IActionResult> UpdateUserRegions([FromRoute] int id, [FromBody] UpdateUserRegionsRequestDto request)
+    {
+        try
+        {
+            var result = await _userService.UpdateUserRegionsAsync(id, request);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("~/api/users/{id:int}/regions/{regionId:int}")]
+    public async Task<IActionResult> AddUserRegion([FromRoute] int id, [FromRoute] int regionId)
+    {
+        try
+        {
+            var result = await _userService.AddUserRegionAsync(id, regionId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("~/api/users/{id:int}/regions/{regionId:int}")]
+    public async Task<IActionResult> DeleteUserRegion([FromRoute] int id, [FromRoute] int regionId)
+    {
+        try
+        {
+            var result = await _userService.DeleteUserRegionAsync(id, regionId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     private int GetUserId()
     {
         var userIdClaim = User.FindFirst("userId")?.Value;

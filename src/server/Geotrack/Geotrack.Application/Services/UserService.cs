@@ -671,6 +671,225 @@ public class UserService : IUserService
         }
     }
 
+    public async Task<UpdateUserRoleResponseDtocs> AssignRegionalManagerRoleAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdWithRolesAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        bool alreadyHasRole = user.UserRoles
+            .Any(ur => ur.Role.Name == "RegionalManager");
+
+        if (alreadyHasRole)
+            throw new InvalidOperationException("User already has the RegionalManager role.");
+
+        var role = await _userRepository.GetRoleByNameAsync("RegionalManager")
+            ?? throw new InvalidOperationException("RegionalManager role does not exist.");
+
+        user.UserRoles.Add(new UserRole
+        {
+            UserId = userId,
+            RoleId = role.Id,
+            Role = role
+        });
+
+        await _userRepository.SaveChangesAsync();
+
+        return new UpdateUserRoleResponseDtocs
+        {
+            UserId = userId,
+            Roles = user.UserRoles.Select(ur => ur.Role.Name).ToList()
+        };
+    }
+
+    public async Task<UpdateUserRoleResponseDtocs> RemoveRegionalManagerRoleAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdWithRolesAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        var userRole = user.UserRoles
+            .FirstOrDefault(ur => ur.Role.Name == "RegionalManager");
+
+        if (userRole == null)
+            throw new InvalidOperationException("User does not have the RegionalManager role.");
+
+        await _userRepository.RemoveUserRoleAsync(userRole);
+
+        await _userRepository.SaveChangesAsync();
+
+        return new UpdateUserRoleResponseDtocs
+        {
+            UserId = userId,
+            Roles = user.UserRoles
+                .Where(ur => ur.Role.Name != "RegionalManager")
+                .Select(ur => ur.Role.Name)
+                .ToList()
+        };
+    }
+
+    public async Task<GetUserRegionsResponseDto> GetUserRegionsAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdWithRegionsAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        var regions = user.RegionalOrganization?
+            .RegionalOrganizationRegions
+            .Select(ror => new RegionItemDto
+            {
+                Id = ror.Region.Id,
+                Name = ror.Region.Name
+            })
+            .ToList() ?? new List<RegionItemDto>();
+
+        return new GetUserRegionsResponseDto
+        {
+            UserId = userId,
+            Regions = regions
+        };
+    }
+
+    public async Task<UpdateUserRegionsResponseDto> UpdateUserRegionsAsync(int userId, UpdateUserRegionsRequestDto request)
+    {
+        var regionIds = request.RegionIds.Distinct().ToList();
+        var user = await _userRepository.GetByIdWithRolesAndRegionsAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        bool isRegionalManager = user.UserRoles
+            .Any(ur => ur.Role.Name == "RegionalManager");
+
+        if (!isRegionalManager)
+            throw new InvalidOperationException("User does not have the RegionalManager role.");
+
+        foreach (var regionId in regionIds)
+        {
+            if (!await _userRepository.RegionExistsAsync(regionId))
+                throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
+        }
+
+        if (user.RegionalOrganization == null)
+        {
+            user.RegionalOrganization = new RegionalOrganization
+            {
+                UserId = userId,
+                RegionalOrganizationRegions = regionIds.Select(regionId => new RegionalOrganizationRegion
+                {
+                    UserId = userId,
+                    RegionId = regionId,
+                    CreatedAt = DateTime.UtcNow
+                }).ToList()
+            };
+
+            await _userRepository.AddRegionalOrganizationAsync(user.RegionalOrganization);
+        }
+        else
+        {
+            user.RegionalOrganization.RegionalOrganizationRegions.Clear();
+
+            foreach (var regionId in regionIds)
+            {
+                user.RegionalOrganization.RegionalOrganizationRegions.Add(new RegionalOrganizationRegion
+                {
+                    UserId = userId,
+                    RegionId = regionId,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await _userRepository.SaveChangesAsync();
+
+        return new UpdateUserRegionsResponseDto
+        {
+            UserId = userId,
+            RegionIds = regionIds
+        };
+    }
+
+    public async Task<AddUserRegionResponseDto> AddUserRegionAsync(int userId, int regionId)
+    {
+        var user = await _userRepository.GetByIdWithRolesAndRegionsAsync(userId);
+
+        if (user == null)
+            throw new KeyNotFoundException($"User with id '{userId}' was not found.");
+
+        bool isRegionalManager = user.UserRoles
+            .Any(ur => ur.Role.Name == "RegionalManager");
+
+        if (!isRegionalManager)
+            throw new InvalidOperationException("User does not have the RegionalManager role.");
+
+        bool regionExists = await _userRepository.RegionExistsAsync(regionId);
+
+        if (!regionExists)
+            throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
+
+        bool alreadyAssigned = await _userRepository.UserRegionExistsAsync(userId, regionId);
+
+        if (alreadyAssigned)
+            throw new InvalidOperationException("Region is already assigned to this user.");
+
+        if (user.RegionalOrganization == null)
+        {
+            var regionalOrganization = new RegionalOrganization
+            {
+                UserId = userId,
+                RegionalOrganizationRegions = new List<RegionalOrganizationRegion>
+                {
+                    new RegionalOrganizationRegion
+                    {
+                        UserId = userId,
+                        RegionId = regionId,
+                        CreatedAt = DateTime.UtcNow
+                    }
+                }
+            };
+
+            await _userRepository.AddRegionalOrganizationAsync(regionalOrganization);
+        }
+        else
+        {
+            await _userRepository.AddUserRegionAsync(new RegionalOrganizationRegion
+            {
+                UserId = userId,
+                RegionId = regionId,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        await _userRepository.SaveChangesAsync();
+
+        return new AddUserRegionResponseDto
+        {
+            UserId = userId,
+            RegionId = regionId
+        };
+    }
+
+    public async Task<DeleteUserRegionResponseDto> DeleteUserRegionAsync(int userId, int regionId)
+    {
+        var userRegion = await _userRepository.GetUserRegionAsync(userId, regionId);
+
+        if (userRegion == null)
+            throw new KeyNotFoundException($"Region '{regionId}' is not assigned to user '{userId}'.");
+
+        await _userRepository.DeleteUserRegionAsync(userRegion);
+
+        await _userRepository.SaveChangesAsync();
+
+        return new DeleteUserRegionResponseDto
+        {
+            UserId = userId,
+            RegionId = regionId
+        };
+    }
+
     private static void ValidatePasswordChangeRequest(ChangePasswordRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.CurrentPassword))

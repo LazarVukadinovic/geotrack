@@ -28,6 +28,7 @@ public static class SeedData
         if (await db.Destinations.AnyAsync())
         {
             await EnsureSeedTagsAsync(db);
+            await EnsureDemoUsersAsync(db);
             return; // Already seeded
         }
 
@@ -545,6 +546,121 @@ public static class SeedData
 
         db.Tags.AddRange(missingTags);
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureDemoUsersAsync(AppDbContext db)
+    {
+        var hasher = new PasswordHasher<User>();
+        var now = DateTime.UtcNow;
+        var usersChanged = false;
+
+        var demoUser = await db.Users.FirstOrDefaultAsync(user => user.Email == "marko.p@example.com");
+        if (demoUser == null)
+        {
+            demoUser = new User
+            {
+                Username = "marko",
+                Email = "marko.p@example.com",
+                FirstName = "Marko",
+                LastName = "Petrovic",
+                PasswordHash = "",
+                AvatarUrl = U("1507003211169-0a1dd7228f2d", 200),
+                DisplayName = "marko_p",
+                Location = "San Francisco, CA",
+                CreatedAt = now
+            };
+            demoUser.PasswordHash = hasher.HashPassword(demoUser, "password123");
+            db.Users.Add(demoUser);
+            usersChanged = true;
+        }
+
+        if (NormalizeDemoUserDefaults(demoUser))
+        {
+            usersChanged = true;
+        }
+
+        if (hasher.VerifyHashedPassword(demoUser, demoUser.PasswordHash, "password123") == PasswordVerificationResult.Failed)
+        {
+            demoUser.PasswordHash = hasher.HashPassword(demoUser, "password123");
+            usersChanged = true;
+        }
+
+        var reviewerElena = await db.Users.FirstOrDefaultAsync(user => user.Email == "elena@example.com");
+        if (reviewerElena == null)
+        {
+            reviewerElena = new User
+            {
+                Username = "elena",
+                Email = "elena@example.com",
+                FirstName = "Elena",
+                LastName = "Rossi",
+                PasswordHash = "",
+                AvatarUrl = U("1494790108377-be9c29b29330", 200),
+                CreatedAt = now
+            };
+            reviewerElena.PasswordHash = hasher.HashPassword(reviewerElena, "password123");
+            db.Users.Add(reviewerElena);
+            usersChanged = true;
+        }
+
+        if (NormalizeDemoUserDefaults(reviewerElena))
+        {
+            usersChanged = true;
+        }
+
+        if (hasher.VerifyHashedPassword(reviewerElena, reviewerElena.PasswordHash, "password123") == PasswordVerificationResult.Failed)
+        {
+            reviewerElena.PasswordHash = hasher.HashPassword(reviewerElena, "password123");
+            usersChanged = true;
+        }
+
+        if (usersChanged)
+        {
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static bool NormalizeDemoUserDefaults(User user)
+    {
+        var changed = false;
+
+        if (!user.GeneralNotificationsEnabled)
+        {
+            user.GeneralNotificationsEnabled = true;
+            changed = true;
+        }
+
+        if (!user.TravelRecommendationsEnabled)
+        {
+            user.TravelRecommendationsEnabled = true;
+            changed = true;
+        }
+
+        if (!user.NearbyEventsEnabled)
+        {
+            user.NearbyEventsEnabled = true;
+            changed = true;
+        }
+
+        if (!user.CollectionUpdatesEnabled)
+        {
+            user.CollectionUpdatesEnabled = true;
+            changed = true;
+        }
+
+        if (user.EmailNotificationsEnabled)
+        {
+            user.EmailNotificationsEnabled = false;
+            changed = true;
+        }
+
+        if (user.NeedsInterestsOnboarding)
+        {
+            user.NeedsInterestsOnboarding = false;
+            changed = true;
+        }
+
+        return changed;
     }
 
     private static List<Tag> BuildSeedTags(DateTime createdAt)
