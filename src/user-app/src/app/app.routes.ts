@@ -83,6 +83,19 @@ export const routes: Routes = [
       },
       {
         path: 'contributions/detail',
+        redirectTo: 'contributions',
+        pathMatch: 'full',
+      },
+      {
+        path: 'contributions/:id/edit',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/contributions/pages/submit-contribution/submit-contribution.component')
+            .then(m => m.SubmitContributionComponent),
+        data: { hideBottomNav: true },
+      },
+      {
+        path: 'contributions/:id',
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/contributions/pages/contribution-detail/contribution-detail.component')
