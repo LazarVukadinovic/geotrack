@@ -52,6 +52,7 @@ public class AppDbContext : DbContext
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
     public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
+    public DbSet<StayContribution> StayContributions => Set<StayContribution>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
@@ -684,6 +685,88 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<StayContribution>(entity =>
+        {
+            entity.ToTable("StayContributions");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(x => x.StayType)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Address)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.City)
+                .IsRequired()
+                .HasMaxLength(120);
+
+            entity.Property(x => x.Region)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.Country)
+                .IsRequired()
+                .HasMaxLength(120);
+
+            entity.Property(x => x.CoverImageUrl)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.ImagePosition)
+                .HasMaxLength(40);
+
+            entity.Property(x => x.ImageSize)
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Phone)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.Website)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.ReviewNote)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.TagsJson)
+                .HasColumnType("jsonb");
+
+            entity.Property(x => x.AmenitiesJson)
+                .HasColumnType("jsonb");
+
+            entity.Property(x => x.BookingPartnersJson)
+                .HasColumnType("jsonb");
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ReviewedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.PublishedPlace)
+                .WithMany()
+                .HasForeignKey(x => x.PublishedPlaceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => new { x.UserId, x.SubmittedAt });
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.PublishedPlaceId);
         });
 
         modelBuilder.Entity<UserTag>(entity =>

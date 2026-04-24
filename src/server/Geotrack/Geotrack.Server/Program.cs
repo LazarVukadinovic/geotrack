@@ -79,8 +79,10 @@ builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IExploreService, ExploreService>();
+builder.Services.AddScoped<IStayContributionService, StayContributionService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>();
 builder.Services.AddScoped<IUserAvatarStorageService, LocalUserAvatarStorageService>();
+builder.Services.AddScoped<IContributionMediaStorageService, LocalContributionMediaStorageService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
@@ -190,6 +192,7 @@ else
 
 var mediaRoot = Path.Combine(app.Environment.ContentRootPath, "media");
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "avatars"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "contributions"));
 
 var mediaContentTypes = new FileExtensionContentTypeProvider();
 mediaContentTypes.Mappings[".webp"] = "image/webp";

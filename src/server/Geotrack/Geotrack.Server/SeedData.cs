@@ -28,6 +28,7 @@ public static class SeedData
         if (await db.Destinations.AnyAsync())
         {
             await EnsureSeedTagsAsync(db);
+            await EnsureRolesAsync(db);
             await EnsureDemoUsersAsync(db);
             return; // Already seeded
         }
@@ -124,6 +125,8 @@ public static class SeedData
         var bpExpedia = new BookingPartner { Name = "Expedia", Variant = "muted" };
         db.BookingPartners.AddRange(bpBooking, bpAirbnb, bpExpedia);
         await db.SaveChangesAsync();
+
+        await EnsureRolesAsync(db);
 
         // ── Demo User ──
         var hasher = new PasswordHasher<User>();
@@ -618,6 +621,23 @@ public static class SeedData
         {
             await db.SaveChangesAsync();
         }
+    }
+
+    private static async Task EnsureRolesAsync(AppDbContext db)
+    {
+        if (await db.Roles.AnyAsync(role => role.Name == "RegionalManager"))
+        {
+            return;
+        }
+
+        db.Roles.Add(new Role
+        {
+            Name = "RegionalManager",
+            Description = "Can review and approve regional user contributions.",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync();
     }
 
     private static bool NormalizeDemoUserDefaults(User user)
