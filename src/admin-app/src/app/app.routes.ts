@@ -64,12 +64,12 @@ export const routes: Routes = [
     //       import('./features/analytics/pages/analytics-page/analytics-page.component')
     //         .then(m => m.AnalyticsPageComponent),
     //   },
-    //   {
-    //     path: 'settings',
-    //     loadComponent: () =>
-    //       import('./features/settings/pages/settings/settings.component')
-    //         .then(m => m.SettingsComponent),
-    //   },
+      {
+        path: 'settings',
+        loadComponent: () =>
+          import('./features/settings/pages/settings-page/settings-page.component')
+            .then(m => m.SettingsComponent),
+      },
     ],
   },
 
