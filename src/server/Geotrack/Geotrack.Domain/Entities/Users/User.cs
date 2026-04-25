@@ -18,6 +18,9 @@ public class User
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>(); // NAVIGATIONAL
 
     public ICollection<UserTag> UserTags { get; set; } = new List<UserTag>(); // NAVIGATIONAL
+    public bool EmailConfirmed { get; set; }
+    public string? EmailConfirmationToken { get; set; }
+    public DateTime? EmailConfirmationTokenExpiresAt { get; set; }
 
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
@@ -29,4 +32,6 @@ public class User
     public DateTime? UpdatedAt { get; set; }
 
     public RegionalOrganization? RegionalOrganization { get; set; } // NAVIGATIONAL
+
+
 }

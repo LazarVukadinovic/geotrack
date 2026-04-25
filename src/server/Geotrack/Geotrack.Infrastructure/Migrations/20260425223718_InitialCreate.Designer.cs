@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Geotrack.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260415001522_InitialCreate")]
+    [Migration("20260425223718_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -629,6 +629,9 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int>("TagTypeId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -642,7 +645,55 @@ namespace Geotrack.Infrastructure.Migrations
                     b.HasIndex("Slug")
                         .IsUnique();
 
+                    b.HasIndex("TagTypeId");
+
                     b.ToTable("Tags", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Tags.TagType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("ForDestination")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ForEvent")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ForLocation")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ForPlace")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TagType");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.UserTag", b =>
@@ -827,6 +878,15 @@ namespace Geotrack.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("EmailConfirmationToken")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("EmailConfirmationTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("EmailConfirmed")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("FirstName")
                         .IsRequired()
@@ -1123,6 +1183,14 @@ namespace Geotrack.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("PlaceTypeId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Geotrack.Domain.Entities.Tags.TagType", "TagType")
+                        .WithMany("Tags")
+                        .HasForeignKey("TagTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TagType");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.UserTag", b =>
@@ -1313,6 +1381,11 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("PlaceTags");
 
                     b.Navigation("UserTags");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Tags.TagType", b =>
+                {
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.Collection", b =>
