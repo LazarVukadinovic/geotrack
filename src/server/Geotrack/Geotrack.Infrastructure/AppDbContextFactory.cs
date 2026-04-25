@@ -13,7 +13,7 @@ namespace Geotrack.Infrastructure
         public AppDbContext CreateDbContext(string[] args)
         {
             var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-            optionsBuilder.UseNpgsql("Host=localhost;Port=5432;Database=geotrack;Username=postgres;Password=gruja123"); // vrati na 5555
+            optionsBuilder.UseNpgsql("Host=localhost;Port=5555;Database=geotrack;Username=postgres;Password=5555");
 
             return new AppDbContext(optionsBuilder.Options);
         }
