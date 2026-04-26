@@ -16,10 +16,6 @@ import type {
   ExploreStay,
   NearbyStatus,
 } from '../models/explore-extras.model';
-import {
-  MOCK_NEARBY_STATUS,
-  MOCK_PROMO_CARD,
-} from '../data/mock-explore.data';
 
 interface ExploreApiResponse {
   selectedDestination?: { id: number; name: string; latitude: number; longitude: number };
@@ -35,6 +31,17 @@ interface ExploreApiResponse {
 /** Minimum distance in km to consider a location "meaningfully different" for reloading. */
 const RELOAD_THRESHOLD_KM = 5;
 
+const DEFAULT_NEARBY_STATUS: NearbyStatus = {
+  label: 'Near',
+  value: 'Resolving destination',
+};
+
+const AUTH_PROMO_CARD: ExplorePromoCard = {
+  title: 'Personalize GeoTrack',
+  message: 'Sign in to save places, manage collections, and keep your profile preferences synced.',
+  ctaLabel: 'Sign In',
+};
+
 @Injectable({
   providedIn: 'root',
 })
@@ -47,8 +54,8 @@ export class ExploreService {
 
   private readonly _curatedForYou = signal<ExploreCuratedItem[]>([]);
   private readonly _localFavorites = signal<ExploreItem[]>([]);
-  private readonly _nearbyStatus = signal<NearbyStatus>({ ...MOCK_NEARBY_STATUS });
-  private readonly _promo = signal<ExplorePromoCard>({ ...MOCK_PROMO_CARD });
+  private readonly _nearbyStatus = signal<NearbyStatus>({ ...DEFAULT_NEARBY_STATUS });
+  private readonly _promo = signal<ExplorePromoCard>({ ...AUTH_PROMO_CARD });
   private readonly _eventsThisWeek = signal<ExploreEvent[]>([]);
   private readonly _popularNearby = signal<ExploreNearbyItem[]>([]);
   private readonly _topStays = signal<ExploreStay[]>([]);
@@ -230,7 +237,7 @@ export class ExploreService {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  /** Example API-shaped streams — swap implementation for HttpClient.get. */
+  /** Signal-backed streams kept for existing components that consume observables. */
   getLocalFavorites$(): Observable<ExploreItem[]> {
     return of(this.localFavorites()).pipe(delay(0));
   }

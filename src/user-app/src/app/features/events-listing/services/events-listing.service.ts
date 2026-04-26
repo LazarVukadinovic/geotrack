@@ -7,7 +7,6 @@ import { FavoriteStateService } from '../../../core/services/favorite-state.serv
 import { LocationService } from '../../../core/services/location.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { EventListingItem, EventsFeatured } from '../models/events-listing.model';
-import { EVENTS_FEATURED } from '../data/mock-events-listing.data';
 
 interface ApiEventsResponse {
   items: {
@@ -39,7 +38,7 @@ export class EventsListingService {
   private readonly locationSvc = inject(LocationService);
   private readonly exploreSvc = inject(ExploreService);
   private readonly _items = signal<EventListingItem[]>([]);
-  private readonly _featured = signal<EventsFeatured>(EVENTS_FEATURED);
+  private readonly _featured = signal<EventsFeatured | null>(null);
   private readonly _loadError = signal<string | null>(null);
   private loadedDestinationId: number | null = null;
 
@@ -107,7 +106,7 @@ export class EventsListingService {
     return of(this.items()).pipe(delay(0));
   }
 
-  getFeatured$(): Observable<EventsFeatured> {
+  getFeatured$(): Observable<EventsFeatured | null> {
     return of(this._featured()).pipe(delay(0));
   }
 

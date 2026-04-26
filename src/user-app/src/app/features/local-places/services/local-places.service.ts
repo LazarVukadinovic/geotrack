@@ -5,7 +5,19 @@ import { DestinationService } from '../../../core/services/destination.service';
 import { LocationService } from '../../../core/services/location.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { LocalPlacesCategory, CategoryMeta } from '../models/local-places.model';
-import { CATEGORY_META } from '../data/mock-category-items.data';
+
+const CATEGORY_META: Record<string, CategoryMeta> = {
+  beaches: { title: 'Beaches', subtitle: 'Explore beach spots and coastal places' },
+  museums: { title: 'Museums', subtitle: 'Discover museums and exhibitions' },
+  parks: { title: 'Parks', subtitle: 'Browse parks and green spaces' },
+  markets: { title: 'Markets', subtitle: 'Local markets and fresh finds' },
+  restaurants: { title: 'Restaurants', subtitle: 'Places to eat nearby' },
+  cafes: { title: 'Cafes', subtitle: 'Coffee and casual stops nearby' },
+  'historic-sites': { title: 'Historic Sites', subtitle: 'History-backed places in this destination' },
+  galleries: { title: 'Galleries', subtitle: 'Art and exhibition spaces' },
+  'nature-reserves': { title: 'Nature Reserves', subtitle: 'Protected nature and outdoor places' },
+  viewpoints: { title: 'Viewpoints', subtitle: 'Scenic places from the catalog' },
+};
 
 interface ApiCategory {
   id: number;
