@@ -27,6 +27,15 @@ public class RefreshTokenRepository : IRefreshTokenRepository
         await _context.RefreshTokens.AddAsync(token);
     }
 
+    public async Task RevokeActiveForUserAsync(int userId, DateTime revokedAt)
+    {
+        await _context.RefreshTokens
+            .Where(rt => rt.UserId == userId && !rt.IsRevoked && rt.ExpiresAt > revokedAt)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(rt => rt.IsRevoked, true)
+                .SetProperty(rt => rt.RevokedAt, revokedAt));
+    }
+
     public async Task SaveChangesAsync()
     {
         await _context.SaveChangesAsync();

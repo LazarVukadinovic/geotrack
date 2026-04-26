@@ -20,7 +20,7 @@ public class JwtService : IJwtService
     }
 
     /// <inheritdoc />
-    public string GenerateAccessToken(int userId)
+    public string GenerateAccessToken(int userId, IEnumerable<string> roles)
     {
         var key = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(_config["Jwt:Key"]!)
@@ -28,10 +28,15 @@ public class JwtService : IJwtService
 
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim("userId", userId.ToString())
         };
+
+        claims.AddRange(roles
+            .Where(role => !string.IsNullOrWhiteSpace(role))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(role => new Claim(ClaimTypes.Role, role)));
 
         var token = new JwtSecurityToken(
             issuer: _config["Jwt:Issuer"],

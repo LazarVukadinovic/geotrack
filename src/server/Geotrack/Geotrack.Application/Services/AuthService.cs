@@ -31,15 +31,20 @@ public class AuthService : IAuthService
 
     public async Task<RegisterResponseDto> RegisterAsync(RegisterRequestDto request)
     {
+        var normalizedEmail = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+
         if (string.IsNullOrWhiteSpace(request.FullName) ||
             string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password))
             throw new InvalidOperationException("All fields are required");
 
-        if (!IsValidEmail(request.Email))
+        if (!IsValidEmail(normalizedEmail))
             throw new InvalidOperationException("Invalid email format");
 
-        var exists = await _userRepository.ExistsByEmailAsync(request.Email.Trim());
+        if (!IsStrongPassword(request.Password))
+            throw new InvalidOperationException("Password must be at least 8 characters long and include a number and a special character.");
+
+        var exists = await _userRepository.ExistsByEmailAsync(normalizedEmail);
         if (exists)
             throw new InvalidOperationException("An account with this email already exists.");
 
@@ -49,8 +54,8 @@ public class AuthService : IAuthService
 
         var user = new User
         {
-            Username                 = request.Email.Trim(),
-            Email                    = request.Email.Trim(),
+            Username                 = normalizedEmail,
+            Email                    = normalizedEmail,
             FirstName                = firstName,
             LastName                 = lastName,
             PhoneNumber              = string.Empty,
@@ -68,11 +73,13 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request)
     {
+        var normalizedEmail = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+
         if (string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password))
             throw new UnauthorizedAccessException("Email and password are required");
 
-        var user = await _userRepository.GetByEmailAsync(request.Email.Trim());
+        var user = await _userRepository.GetByEmailAsync(normalizedEmail);
         if (user == null)
             throw new UnauthorizedAccessException("Invalid credentials");
 
@@ -128,7 +135,11 @@ public class AuthService : IAuthService
 
     private async Task<LoginResponseDto> IssueTokenPairAsync(int userId, bool isPersistent)
     {
-        var accessToken  = _jwtService.GenerateAccessToken(userId);
+        var user = await _userRepository.GetByIdWithRolesAsync(userId)
+            ?? throw new UnauthorizedAccessException("Invalid credentials");
+        var roles = user.UserRoles.Select(userRole => userRole.Role.Name);
+
+        var accessToken  = _jwtService.GenerateAccessToken(userId, roles);
         var refreshValue = _jwtService.GenerateRefreshToken();
 
         var lifetimeDays = isPersistent
@@ -167,4 +178,11 @@ public class AuthService : IAuthService
 
     private static bool IsValidEmail(string email)
         => Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
+
+    private static bool IsStrongPassword(string password)
+    {
+        return password.Length >= 8 &&
+               password.Any(char.IsDigit) &&
+               Regex.IsMatch(password, @"[!@#$%^&*(),.?""{}|<>]");
+    }
 }
