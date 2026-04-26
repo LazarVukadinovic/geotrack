@@ -625,19 +625,43 @@ public static class SeedData
 
     private static async Task EnsureRolesAsync(AppDbContext db)
     {
-        if (await db.Roles.AnyAsync(role => role.Name == "RegionalManager"))
+        await EnsureRoleAsync(
+            db,
+            "Admin",
+            "Can manage users, regions, and administrative configuration.");
+
+        await EnsureRoleAsync(
+            db,
+            "RegionalManager",
+            "Can review and approve regional user contributions.");
+    }
+
+    private static async Task EnsureRoleAsync(AppDbContext db, string name, string description)
+    {
+        if (await db.Roles.AnyAsync(role => role.Name == name))
         {
             return;
         }
 
         db.Roles.Add(new Role
         {
-            Name = "RegionalManager",
-            Description = "Can review and approve regional user contributions.",
+            Name = name,
+            Description = description,
             CreatedAt = DateTime.UtcNow
         });
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            if (!await db.Roles.AnyAsync(role => role.Name == name))
+            {
+                throw;
+            }
+        }
     }
 
     private static bool NormalizeDemoUserDefaults(User user)

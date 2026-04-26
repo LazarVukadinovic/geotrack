@@ -256,6 +256,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("~/api/users/{id:int}/role/regional-manager")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> AssignRegionalManagerRole([FromRoute] int id)
     {
         try
@@ -270,6 +271,7 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("~/api/users/{id:int}/role/regional-manager")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> RemoveRegionalManagerRole([FromRoute] int id)
     {
         try
@@ -284,6 +286,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("~/api/users/{id:int}/regions")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetUserRegions([FromRoute] int id)
     {
         try
@@ -298,6 +301,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("~/api/users/{id:int}/regions")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateUserRegions([FromRoute] int id, [FromBody] UpdateUserRegionsRequestDto request)
     {
         try
@@ -312,6 +316,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost("~/api/users/{id:int}/regions/{regionId:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> AddUserRegion([FromRoute] int id, [FromRoute] int regionId)
     {
         try
@@ -326,6 +331,7 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("~/api/users/{id:int}/regions/{regionId:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteUserRegion([FromRoute] int id, [FromRoute] int regionId)
     {
         try
@@ -356,7 +362,7 @@ public class UserController : ControllerBase
             UnauthorizedAccessException => Unauthorized(new { message = ex.Message }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
-            _ => BadRequest(new { message = ex.Message })
+            _ => StatusCode(500, new { message = "An unexpected error occurred." })
         };
     }
 }

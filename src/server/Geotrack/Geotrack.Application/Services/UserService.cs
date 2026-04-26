@@ -26,6 +26,7 @@ public class UserService : IUserService
     private readonly ILocationRepository _locationRepository;
     private readonly IPlaceRepository _placeRepository;
     private readonly IEventRepository _eventRepository;
+    private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IUserAvatarStorageService _userAvatarStorageService;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
@@ -35,6 +36,7 @@ public class UserService : IUserService
         ILocationRepository locationRepository,
         IPlaceRepository placeRepository,
         IEventRepository eventRepository,
+        IRefreshTokenRepository refreshTokenRepository,
         IUserAvatarStorageService userAvatarStorageService)
     {
         _userRepository = userRepository;
@@ -42,6 +44,7 @@ public class UserService : IUserService
         _locationRepository = locationRepository;
         _placeRepository = placeRepository;
         _eventRepository = eventRepository;
+        _refreshTokenRepository = refreshTokenRepository;
         _userAvatarStorageService = userAvatarStorageService;
     }
 
@@ -163,10 +166,11 @@ public class UserService : IUserService
         user.UpdatedAt = DateTime.UtcNow;
 
         await _userRepository.SaveChangesAsync();
+        await _refreshTokenRepository.RevokeActiveForUserAsync(userId, DateTime.UtcNow);
 
         return new ChangePasswordResponseDto
         {
-            Message = "Password updated successfully."
+            Message = "Password updated successfully. Please sign in again."
         };
     }
 
@@ -900,6 +904,12 @@ public class UserService : IUserService
 
         if (request.NewPassword.Length < 8)
             throw new InvalidOperationException("New password must be at least 8 characters long");
+
+        if (!request.NewPassword.Any(char.IsDigit))
+            throw new InvalidOperationException("New password must include a number");
+
+        if (!Regex.IsMatch(request.NewPassword, @"[!@#$%^&*(),.?""{}|<>]"))
+            throw new InvalidOperationException("New password must include a special character");
     }
 
     private static void ValidateSupportRequest(CreateSupportRequestRequestDto request)

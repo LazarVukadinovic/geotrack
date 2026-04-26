@@ -17,14 +17,16 @@ namespace Geotrack.Infrastructure.Repositories
 
         public async Task<bool> ExistsByEmailAsync(string email)
         {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
             return await _context.Users
-                .AnyAsync(u => u.Email == email);
+                .AnyAsync(u => u.Email.ToLower() == normalizedEmail);
         }
 
         public async Task<User?> GetByEmailAsync(string email)
         {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
             return await _context.Users
-                .FirstOrDefaultAsync(u => u.Email == email);
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
         }
 
         public async Task<User?> GetByIdWithCollectionsAsync(int userId)
