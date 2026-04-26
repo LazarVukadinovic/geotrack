@@ -15,9 +15,7 @@ const OSRM_URL = 'https://router.project-osrm.org/route/v1/foot';
 interface Place {
   name: string;
   category: string;
-  rating: string;
   distance: string;
-  status: string;
   lat: number;
   lon: number;
 }
@@ -79,10 +77,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   constructor(public router: Router, private cdr: ChangeDetectorRef) {
     const nav = this.router.getCurrentNavigation();
     const state = (nav?.extras?.state ?? history.state) as any;
-    const savedLocation = sessionStorage.getItem('mapLocation');
+    const savedLocation = this.readSessionJson<any>('mapLocation');
 
     if (savedLocation) {
-      const loc = JSON.parse(savedLocation);
+      const loc = savedLocation;
       this.destinationName = loc.name ?? this.destinationName;
       this.destinationLat  = loc.lat  ?? this.destinationLat;
       this.destinationLon  = loc.lon  ?? this.destinationLon;
@@ -128,11 +126,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     let initCenter: [number, number] = [this.destinationLon, this.destinationLat];
     let initZoom = 13;
 
-    const savedView = sessionStorage.getItem('mapViewState');
+    const savedView = this.readSessionJson<{ center?: [number, number]; zoom?: number }>('mapViewState');
     if (savedView) {
-      const vs = JSON.parse(savedView);
-      initCenter = vs.center;
-      initZoom = vs.zoom;
+      const vs = savedView;
+      if (Array.isArray(vs.center) && vs.center.length === 2) {
+        initCenter = vs.center;
+      }
+      if (typeof vs.zoom === 'number') {
+        initZoom = vs.zoom;
+      }
       sessionStorage.removeItem('mapViewState');
     }
 
@@ -156,9 +158,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         this.map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
       });
 
-      const savedFilters = sessionStorage.getItem('mapFilters');
+      const savedFilters = this.readSessionJson<any>('mapFilters');
       if (savedFilters) {
-        const f = JSON.parse(savedFilters);
+        const f = savedFilters;
         this.activeDistance = f.distance ?? 'Any';
         if (f.categories?.length > 0) this.applyMultipleFilters(f.categories);
         else this.applyFilter('all');
@@ -193,9 +195,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         this.selectedPlace = {
           name,
           category: this.formatCategory(type),
-          rating: (3.5 + Math.random() * 1.5).toFixed(1),
           distance,
-          status: 'Open Now • Closes 10 PM',
           lat: poiLat,
           lon: poiLon,
         };
@@ -219,9 +219,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     if (radiusKm === Infinity) {
       poiLayers.forEach(id => {
         if (!this.map.getLayer(id)) return;
-        const savedFilters = sessionStorage.getItem('mapFilters');
+        const savedFilters = this.readSessionJson<any>('mapFilters');
         if (savedFilters) {
-          const f = JSON.parse(savedFilters);
+          const f = savedFilters;
           if (f.categories?.length > 0) this.applyMultipleFilters(f.categories);
           else this.map.setFilter(id, null);
         } else {
@@ -472,6 +472,16 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       attraction:'Attraction', shop:'Shop', bar:'Bar', park:'Park',
     };
     return map[raw.toLowerCase()] ?? raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
+  private readSessionJson<T>(key: string): T | null {
+    try {
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) as T : null;
+    } catch {
+      sessionStorage.removeItem(key);
+      return null;
+    }
   }
 
   zoomIn():  void { this.map.zoomIn({ duration: 300 }); }

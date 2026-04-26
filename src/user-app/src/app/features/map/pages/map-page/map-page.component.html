@@ -135,25 +135,12 @@
                 d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
             </svg>
           </div>
-          <button class="absolute top-1 right-1 w-6 h-6 bg-white rounded-full shadow flex items-center justify-center">
-            <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-            </svg>
-          </button>
         </div>
 
         <div class="flex-1 min-w-0">
           <h3 class="text-base font-bold text-slate-800 leading-tight mb-0.5">{{ selectedPlace.name }}</h3>
           <p class="text-xs text-slate-400 mb-1.5">{{ selectedPlace.category }}</p>
           <div class="flex items-center gap-3 text-xs text-slate-500">
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
-              {{ selectedPlace.rating }}
-            </span>
-            <span class="text-slate-300">•</span>
             <span class="flex items-center gap-1">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -162,7 +149,6 @@
               {{ selectedPlace.distance }}
             </span>
           </div>
-          <p class="text-xs text-green-500 font-medium mt-1">{{ selectedPlace.status }}</p>
         </div>
 
         <button (click)="closePlace()"
@@ -174,10 +160,6 @@
       </div>
 
       <div class="flex gap-2 px-4 pb-4">
-        <button class="flex-1 py-3 bg-[#e8570a] rounded-2xl text-white text-sm font-bold active:scale-[0.98] transition-all">
-          View Details
-        </button>
-
         <!-- Directions -->
         <button
           (click)="openDirections()"

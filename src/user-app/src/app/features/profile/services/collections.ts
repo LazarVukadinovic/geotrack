@@ -146,20 +146,19 @@ export class CollectionsService {
             title: i.name,
             image: i.imageUrl ?? '',
           }));
-          this._collections.update(cols =>
-            cols.map(c =>
-              c.id === collectionId
-                ? {
-                    ...c,
-                    title: res.name,
-                    description: res.description,
-                    itemsCount: places.length,
-                    coverImages: places.slice(0, 3).map(p => p.image).filter(Boolean),
-                    places,
-                  }
-                : c,
-            ),
-          );
+          const loaded: Collection = {
+            id: res.id,
+            title: res.name,
+            description: res.description,
+            itemsCount: places.length,
+            coverImages: places.slice(0, 3).map(p => p.image).filter(Boolean),
+            places,
+          };
+          this._collections.update(cols => {
+            const exists = cols.some(c => c.id === collectionId);
+            if (!exists) return [loaded, ...cols];
+            return cols.map(c => c.id === collectionId ? loaded : c);
+          });
         },
       });
   }
