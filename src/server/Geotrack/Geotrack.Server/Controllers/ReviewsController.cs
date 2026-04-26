@@ -32,7 +32,7 @@ public class ReviewsController : ControllerBase
 
     [Authorize]
     [HttpPost("places/{placeId:int}")]
-    public async Task<ActionResult> CreatePlaceReview(int placeId, [FromBody] CreateReviewDto dto)
+    public async Task<IActionResult> CreatePlaceReview(int placeId, [FromBody] CreateReviewDto dto)
     {
         var userId = GetRequiredUserId();
         if (userId == null) return Unauthorized();
@@ -44,13 +44,13 @@ public class ReviewsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return MapException(ex);
         }
     }
 
     [Authorize]
     [HttpPost("events/{eventId:int}")]
-    public async Task<ActionResult> CreateEventReview(int eventId, [FromBody] CreateReviewDto dto)
+    public async Task<IActionResult> CreateEventReview(int eventId, [FromBody] CreateReviewDto dto)
     {
         var userId = GetRequiredUserId();
         if (userId == null) return Unauthorized();
@@ -62,7 +62,7 @@ public class ReviewsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return MapException(ex);
         }
     }
 
@@ -70,5 +70,15 @@ public class ReviewsController : ControllerBase
     {
         var claim = User.FindFirst("userId")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private IActionResult MapException(Exception ex)
+    {
+        return ex switch
+        {
+            KeyNotFoundException => NotFound(new { message = ex.Message }),
+            InvalidOperationException => BadRequest(new { message = ex.Message }),
+            _ => StatusCode(500, new { message = "An unexpected error occurred." })
+        };
     }
 }

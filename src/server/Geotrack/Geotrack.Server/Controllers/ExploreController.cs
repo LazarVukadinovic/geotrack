@@ -25,6 +25,11 @@ public class ExploreController : ControllerBase
             return BadRequest(new { error = "latitude and longitude are required." });
         }
 
+        if (!HasValidCoordinates(latitude.Value, longitude.Value))
+        {
+            return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
+        }
+
         var userId = GetUserId();
         var result = await _exploreService.GetExplorePageAsync(latitude.Value, longitude.Value, userId);
         return Ok(result);
@@ -50,5 +55,18 @@ public class ExploreController : ControllerBase
     {
         var claim = User.FindFirst("userId")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private static bool HasValidCoordinates(double latitude, double longitude)
+    {
+        return !double.IsNaN(latitude) &&
+               !double.IsNaN(longitude) &&
+               !double.IsInfinity(latitude) &&
+               !double.IsInfinity(longitude) &&
+               latitude >= -90 &&
+               latitude <= 90 &&
+               longitude >= -180 &&
+               longitude <= 180 &&
+               (latitude != 0d || longitude != 0d);
     }
 }

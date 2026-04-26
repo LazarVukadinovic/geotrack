@@ -109,6 +109,7 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpGet("review")]
+    [Authorize(Roles = "RegionalManager")]
     public async Task<ActionResult<GetStayContributionsResponseDto>> GetReviewQueue([FromQuery] string? status = null)
     {
         try
@@ -122,6 +123,7 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/approve")]
+    [Authorize(Roles = "RegionalManager")]
     public async Task<ActionResult<StayContributionResponseDto>> Approve(
         [FromRoute] int id,
         [FromBody] ReviewStayContributionRequestDto request)
@@ -138,6 +140,7 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/reject")]
+    [Authorize(Roles = "RegionalManager")]
     public async Task<ActionResult<StayContributionResponseDto>> Reject(
         [FromRoute] int id,
         [FromBody] ReviewStayContributionRequestDto request)
@@ -199,7 +202,7 @@ public class ContributionsController : ControllerBase
             UnauthorizedAccessException => Unauthorized(new { message = ex.Message }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
-            _ => BadRequest(new { message = ex.Message })
+            _ => StatusCode(500, new { message = "An unexpected error occurred." })
         };
     }
 }

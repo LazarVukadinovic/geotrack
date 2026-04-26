@@ -1,6 +1,6 @@
 ﻿using Geotrack.Application.DTOs.Region;
 using Geotrack.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Geotrack.Server.Controllers
@@ -26,7 +26,7 @@ namespace Geotrack.Server.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return MapUnexpected(ex);
             }
         }
 
@@ -44,11 +44,12 @@ namespace Geotrack.Server.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return MapUnexpected(ex);
             }
         }
 
         [HttpPost]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> CreateRegion([FromBody] CreateRegionRequestDto request)
         {
             try
@@ -62,11 +63,12 @@ namespace Geotrack.Server.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return MapUnexpected(ex);
             }
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteRegion([FromRoute] int id)
         {
             try
@@ -84,8 +86,13 @@ namespace Geotrack.Server.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return MapUnexpected(ex);
             }
+        }
+
+        private IActionResult MapUnexpected(Exception _)
+        {
+            return StatusCode(500, new { message = "An unexpected error occurred." });
         }
     }
 }

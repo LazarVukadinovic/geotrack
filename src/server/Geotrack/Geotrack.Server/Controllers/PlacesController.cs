@@ -138,7 +138,7 @@ public class PlacesController : ControllerBase
         {
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
-            _ => StatusCode(500, new { message = ex.Message })
+            _ => StatusCode(500, new { message = "An unexpected error occurred." })
         };
     }
 }
