@@ -1,11 +1,22 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import type { ChatMessage } from '../models/agent.model';
-import {
-  AGENT_WELCOME_MESSAGE,
-  MOCK_FALLBACK_RESPONSE,
-  MOCK_RESPONSE_ENTRIES,
-} from '../data/mock-agent.data';
+import type { ChatMessage, SuggestionPill } from '../models/agent.model';
+
+const AGENT_SUGGESTION_PILLS: SuggestionPill[] = [
+  { label: 'Top Attractions', prompt: 'Show me top attractions' },
+  { label: 'Best Restaurants', prompt: 'Recommend restaurants' },
+  { label: 'Stays', prompt: 'Show me places to stay' },
+  { label: 'Events', prompt: 'What events are happening?' },
+];
+
+const AGENT_WELCOME_MESSAGE: ChatMessage = {
+  id: 'welcome',
+  role: 'assistant',
+  type: 'text',
+  text: 'Ask Agent can search the GeoTrack catalog. Live AI planning is not connected yet.',
+  suggestionPills: AGENT_SUGGESTION_PILLS,
+  timestamp: new Date(),
+};
 
 interface ApiAgentResponse {
   id: string;
@@ -15,12 +26,14 @@ interface ApiAgentResponse {
   cardsTitle?: string;
   cards?: {
     id: number;
+    entityType?: string;
+    detailUrl?: string | null;
     title: string;
     description?: string;
     image?: string;
-    rating: number;
-    durationHours: number;
-    distanceKm: number;
+    rating?: number | null;
+    durationHours?: number | null;
+    distanceKm?: number | null;
     isFavorite: boolean;
   }[];
   suggestionPills?: { label: string; prompt: string }[];
@@ -67,12 +80,14 @@ export class AgentService {
           cardsTitle: res.cardsTitle,
           cards: res.cards?.map(c => ({
             id: String(c.id),
+            entityType: c.entityType ?? 'place',
+            detailUrl: c.detailUrl ?? null,
             title: c.title,
             description: c.description ?? '',
             image: c.image ?? '',
-            rating: c.rating,
-            durationHours: c.durationHours,
-            distanceKm: c.distanceKm,
+            rating: c.rating ?? null,
+            durationHours: c.durationHours ?? null,
+            distanceKm: c.distanceKm ?? null,
             isFavorite: c.isFavorite,
           })),
           suggestionPills: res.suggestionPills,
@@ -82,23 +97,14 @@ export class AgentService {
       },
       error: () => {
         this._isTyping.set(false);
-        // Fallback to mock response
-        const response = this.buildMockResponse(trimmed);
-        this._messages.update(msgs => [...msgs, response]);
+        this._messages.update(msgs => [...msgs, {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          type: 'text',
+          text: 'Ask Agent is unavailable right now. No offline or mock answer was shown.',
+          timestamp: new Date(),
+        }]);
       },
     });
-  }
-
-  private buildMockResponse(userText: string): ChatMessage {
-    const lower = userText.toLowerCase();
-    const entry = MOCK_RESPONSE_ENTRIES.find(e =>
-      e.keywords.some(kw => lower.includes(kw)),
-    );
-    const payload = entry ? entry.build() : { ...MOCK_FALLBACK_RESPONSE };
-    return {
-      ...payload,
-      id: crypto.randomUUID(),
-      timestamp: new Date(),
-    };
   }
 }

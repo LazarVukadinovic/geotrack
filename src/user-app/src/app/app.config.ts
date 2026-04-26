@@ -47,10 +47,15 @@ export const appConfig: ApplicationConfig = {
 
       return firstValueFrom(
         tokenRefreshSvc.refresh().pipe(
-          switchMap(() => userService.load()),
           catchError(() => {
             authService.clearSession();
             return of(null);
+          }),
+          switchMap((token) => {
+            if (!token) return of(null);
+            return userService.load().pipe(
+              catchError(() => of(null)),
+            );
           }),
         )
       );
