@@ -29,6 +29,9 @@ export class EventDetailPageComponent {
   protected readonly event = computed(() =>
     this.service.getEventDetailPageData(this.eventId()),
   );
+  protected readonly loadState = computed(() =>
+    this.service.getLoadState(this.eventId()),
+  );
 
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by ed__scroll. */
   protected readonly scrollProgress = signal(0);
@@ -66,21 +69,9 @@ export class EventDetailPageComponent {
     });
   }
 
-  /** Local saved state for similar-event cards (transient, not persisted). */
-  private readonly _similarSaved = signal<Record<string, boolean>>({});
-
   protected onScroll(event: Event): void {
     const scrollTop = (event.currentTarget as Element).scrollTop;
     this.scrollProgress.set(Math.min(scrollTop / 200, 1));
-  }
-
-  protected isSimilarSaved(id: string): boolean {
-    return this._similarSaved()[id] ?? false;
-  }
-
-  protected toggleSimilarSaved(event: Event, id: string): void {
-    event.stopPropagation();
-    this._similarSaved.update((m) => ({ ...m, [id]: !m[id] }));
   }
 
   protected goBack(): void {

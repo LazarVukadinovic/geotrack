@@ -18,14 +18,6 @@
       <span class="pd__top-bar-title" aria-hidden="true">Explore</span>
 
       <div class="pd__hero-actions">
-        <button type="button" class="pd__hero-btn" aria-label="Share this place">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>
-          </svg>
-        </button>
-
         <button
           type="button"
           class="pd__hero-btn"
@@ -180,8 +172,6 @@
         <section class="pd__section">
           <app-section-header
             title="Reviews"
-            actionLabel="See all"
-            (action)="onSeeAllReviews()"
           />
 
           <app-review-entry
@@ -221,13 +211,13 @@
 
                 <p class="pd__review-body">{{ review.body }}</p>
 
-                <button type="button" class="pd__review-helpful">
+                <span class="pd__review-helpful">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path fill="currentColor"
                           d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
                   </svg>
                   Helpful ({{ review.helpfulCount }})
-                </button>
+                </span>
               </div>
             }
           </div>
@@ -239,7 +229,6 @@
         <section class="pd__section pd__section--last">
           <app-section-header
             title="Similar Places"
-            actionLabel="More"
           />
 
           <div class="pd__similar-viewport">
@@ -260,24 +249,6 @@
                       loading="lazy"
                       decoding="async"
                     />
-                    <button
-                      type="button"
-                      class="pd__similar-fav"
-                      [class.pd__similar-fav--saved]="isSimilarSaved(s.id)"
-                      [attr.aria-label]="isSimilarSaved(s.id) ? 'Remove from saved' : 'Save'"
-                      (click)="toggleSimilarSaved($event, s.id)"
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          [attr.fill]="isSimilarSaved(s.id) ? '#e8570a' : 'none'"
-                          [attr.stroke]="isSimilarSaved(s.id) ? 'none' : 'currentColor'"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-                        />
-                      </svg>
-                    </button>
                   </div>
 
                   <div class="pd__similar-body">
@@ -306,6 +277,15 @@
 
   </article>
 
+} @else if (placeId() && loadState() === 'loading') {
+  <div class="pd__not-found">
+    <p>Loading place...</p>
+  </div>
+} @else if (placeId() && loadState() === 'error') {
+  <div class="pd__not-found">
+    <p>We couldn't load this place right now.</p>
+    <button type="button" class="pd__not-found-back" (click)="goBack()">Go back</button>
+  </div>
 } @else if (placeId()) {
   <div class="pd__not-found">
     <p>Place not found.</p>

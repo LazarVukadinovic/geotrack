@@ -4,7 +4,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
 import type { HotelDetail } from '../models/hotel-detail.model';
-import { MOCK_HOTEL_DETAIL_MAP } from '../data/mock-hotel-detail.data';
+import type { DetailLoadState } from '../../place-detail/services/place-detail.service';
 
 interface ApiHotelDetail {
   id: number;
@@ -34,6 +34,7 @@ export class HotelDetailService {
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
   private readonly _cache = signal<Record<string, HotelDetail>>({});
+  private readonly _loadState = signal<Record<string, DetailLoadState>>({});
   private readonly lastRequestKeyById = new Map<string, string>();
 
   getHotelDetailPageData(id: string): HotelDetail | undefined {
@@ -45,22 +46,24 @@ export class HotelDetailService {
       };
     }
 
-    const base = MOCK_HOTEL_DETAIL_MAP[id];
-    if (!base) return undefined;
+    return undefined;
+  }
 
-    return {
-      ...base,
-      isSaved: this.favoriteState.resolve('place', id, base.isSaved),
-    };
+  getLoadState(id: string): DetailLoadState {
+    return this._loadState()[id] ?? 'idle';
   }
 
   loadHotelDetail(id: string): void {
     const numId = parseInt(id, 10);
-    if (isNaN(numId)) return;
+    if (isNaN(numId)) {
+      this.setLoadState(id, 'notFound');
+      return;
+    }
     const locationQuery = this.buildLocationQuery();
     const requestKey = `${numId}${locationQuery}`;
     if (this.lastRequestKeyById.get(id) === requestKey) return;
     this.lastRequestKeyById.set(id, requestKey);
+    this.setLoadState(id, 'loading');
 
     this.http.get<ApiHotelDetail>(`/api/places/hotels/${numId}${locationQuery}`).subscribe({
       next: (dto) => {
@@ -112,10 +115,12 @@ export class HotelDetailService {
           isSaved: dto.isSaved,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
+        this.setLoadState(id, 'loaded');
         this.lastRequestKeyById.delete(id);
       },
-      error: () => {
+      error: (err) => {
         if (this.lastRequestKeyById.get(id) === requestKey) {
+          this.setLoadState(id, err?.status === 404 ? 'notFound' : 'error');
           this.lastRequestKeyById.delete(id);
         }
       },
@@ -126,6 +131,10 @@ export class HotelDetailService {
     const loc = this.locationSvc.location();
     if (!loc) return '';
     return `?latitude=${loc.latitude}&longitude=${loc.longitude}`;
+  }
+
+  private setLoadState(id: string, state: DetailLoadState): void {
+    this._loadState.update(current => ({ ...current, [id]: state }));
   }
 
   toggleSaved(id: string): void {

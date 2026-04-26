@@ -4,7 +4,8 @@ import { AuthService } from '../../../core/services/auth.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
 import type { PlaceDetail } from '../../../core/models/place.model';
-import { MOCK_PLACE_DETAIL_MAP } from '../data/mock-place-detail.data';
+
+export type DetailLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
 
 interface ApiPlaceDetail {
   id: number;
@@ -34,6 +35,7 @@ export class PlaceDetailService {
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
   private readonly _cache = signal<Record<string, PlaceDetail>>({});
+  private readonly _loadState = signal<Record<string, DetailLoadState>>({});
   private readonly lastRequestKeyById = new Map<string, string>();
 
   getPlaceDetailPageData(id: string): PlaceDetail | undefined {
@@ -45,22 +47,24 @@ export class PlaceDetailService {
       };
     }
 
-    const base = MOCK_PLACE_DETAIL_MAP[id];
-    if (!base) return undefined;
+    return undefined;
+  }
 
-    return {
-      ...base,
-      isSaved: this.favoriteState.resolve('place', id, base.isSaved),
-    };
+  getLoadState(id: string): DetailLoadState {
+    return this._loadState()[id] ?? 'idle';
   }
 
   loadPlaceDetail(id: string): void {
     const numId = parseInt(id, 10);
-    if (isNaN(numId)) return;
+    if (isNaN(numId)) {
+      this.setLoadState(id, 'notFound');
+      return;
+    }
     const locationQuery = this.buildLocationQuery();
     const requestKey = `${numId}${locationQuery}`;
     if (this.lastRequestKeyById.get(id) === requestKey) return;
     this.lastRequestKeyById.set(id, requestKey);
+    this.setLoadState(id, 'loading');
 
     this.http.get<ApiPlaceDetail>(`/api/places/${numId}${locationQuery}`).subscribe({
       next: (dto) => {
@@ -103,10 +107,12 @@ export class PlaceDetailService {
           category: (dto.category ?? 'attraction') as PlaceDetail['category'],
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
+        this.setLoadState(id, 'loaded');
         this.lastRequestKeyById.delete(id);
       },
-      error: () => {
+      error: (err) => {
         if (this.lastRequestKeyById.get(id) === requestKey) {
+          this.setLoadState(id, err?.status === 404 ? 'notFound' : 'error');
           this.lastRequestKeyById.delete(id);
         }
       },
@@ -117,6 +123,10 @@ export class PlaceDetailService {
     const loc = this.locationSvc.location();
     if (!loc) return '';
     return `?latitude=${loc.latitude}&longitude=${loc.longitude}`;
+  }
+
+  private setLoadState(id: string, state: DetailLoadState): void {
+    this._loadState.update(current => ({ ...current, [id]: state }));
   }
 
   toggleSaved(id: string): void {

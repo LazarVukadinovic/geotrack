@@ -39,6 +39,9 @@ export class PlaceDetailPageComponent {
   protected readonly place = computed(() =>
     this.service.getPlaceDetailPageData(this.placeId()),
   );
+  protected readonly loadState = computed(() =>
+    this.service.getLoadState(this.placeId()),
+  );
 
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by pd__scroll. */
   protected readonly scrollProgress = signal(0);
@@ -76,22 +79,10 @@ export class PlaceDetailPageComponent {
     });
   }
 
-  /** Local saved state for similar-place cards (transient, not persisted). */
-  private readonly _similarSaved = signal<Record<string, boolean>>({});
-
   /** Called by (scroll) on .pd__scroll - the page's own scroll container. */
   protected onScroll(event: Event): void {
     const scrollTop = (event.currentTarget as Element).scrollTop;
     this.scrollProgress.set(Math.min(scrollTop / 200, 1));
-  }
-
-  protected isSimilarSaved(id: string): boolean {
-    return this._similarSaved()[id] ?? false;
-  }
-
-  protected toggleSimilarSaved(event: Event, id: string): void {
-    event.stopPropagation();
-    this._similarSaved.update((m) => ({ ...m, [id]: !m[id] }));
   }
 
   protected goBack(): void {
@@ -118,7 +109,7 @@ export class PlaceDetailPageComponent {
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
     const numId = parseInt(this.placeId(), 10);
     if (isNaN(numId)) return throwError(() => new Error('Invalid place id.'));
-    return this.http.post(`/api/reviews/places/${numId}`, {
+    return this.http.post(`/api/places/${numId}/reviews`, {
       rating:  draft.rating,
       comment: draft.body,
     });
@@ -127,10 +118,6 @@ export class PlaceDetailPageComponent {
   protected onReviewSubmitted(_draft: ReviewDraft): void {
     const id = this.placeId();
     if (id) this.service.loadPlaceDetail(id);
-  }
-
-  protected onSeeAllReviews(): void {
-    /* future: navigate to full reviews page */
   }
 
   private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {

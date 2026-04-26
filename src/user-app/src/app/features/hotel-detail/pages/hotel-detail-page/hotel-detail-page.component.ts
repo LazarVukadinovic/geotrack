@@ -39,6 +39,9 @@ export class HotelDetailPageComponent {
   protected readonly hotel = computed(() =>
     this.service.getHotelDetailPageData(this.hotelId()),
   );
+  protected readonly loadState = computed(() =>
+    this.service.getLoadState(this.hotelId()),
+  );
 
   protected readonly scrollProgress = signal(0);
 
@@ -87,20 +90,9 @@ export class HotelDetailPageComponent {
     });
   }
 
-  private readonly _similarSaved = signal<Record<string, boolean>>({});
-
   protected onScroll(event: Event): void {
     const scrollTop = (event.currentTarget as Element).scrollTop;
     this.scrollProgress.set(Math.min(scrollTop / 200, 1));
-  }
-
-  protected isSimilarSaved(id: string): boolean {
-    return this._similarSaved()[id] ?? false;
-  }
-
-  protected toggleSimilarSaved(event: Event, id: string): void {
-    event.stopPropagation();
-    this._similarSaved.update((m) => ({ ...m, [id]: !m[id] }));
   }
 
   protected goBack(): void {
@@ -127,7 +119,7 @@ export class HotelDetailPageComponent {
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
     const numId = parseInt(this.hotelId(), 10);
     if (isNaN(numId)) return throwError(() => new Error('Invalid hotel id.'));
-    return this.http.post(`/api/reviews/places/${numId}`, {
+    return this.http.post(`/api/places/${numId}/reviews`, {
       rating:  draft.rating,
       comment: draft.body,
     });
@@ -136,10 +128,6 @@ export class HotelDetailPageComponent {
   protected onReviewSubmitted(_draft: ReviewDraft): void {
     const id = this.hotelId();
     if (id) this.service.loadHotelDetail(id);
-  }
-
-  protected onSeeAllReviews(): void {
-    /* future: navigate to full reviews page */
   }
 
   protected amenityIconPath(icon: HotelAmenityIcon): string {
