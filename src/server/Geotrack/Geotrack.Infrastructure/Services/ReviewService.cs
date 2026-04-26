@@ -48,12 +48,20 @@ public class ReviewService : IReviewService
 
     public async Task<ReviewDto> CreatePlaceReviewAsync(int placeId, int userId, CreateReviewDto dto)
     {
+        ValidateReview(dto);
+
+        if (!await _db.Places.AnyAsync(p => p.Id == placeId))
+            throw new KeyNotFoundException("Place not found");
+
+        if (await _db.PlaceReviews.AnyAsync(r => r.PlaceId == placeId && r.UserId == userId))
+            throw new InvalidOperationException("User has already reviewed this place");
+
         var review = new PlaceReview
         {
             PlaceId = placeId,
             UserId = userId,
             Rating = dto.Rating,
-            Comment = dto.Comment,
+            Comment = dto.Comment?.Trim() ?? string.Empty,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -85,12 +93,20 @@ public class ReviewService : IReviewService
 
     public async Task<ReviewDto> CreateEventReviewAsync(int eventId, int userId, CreateReviewDto dto)
     {
+        ValidateReview(dto);
+
+        if (!await _db.Events.AnyAsync(e => e.Id == eventId))
+            throw new KeyNotFoundException("Event not found");
+
+        if (await _db.EventReviews.AnyAsync(r => r.EventId == eventId && r.UserId == userId))
+            throw new InvalidOperationException("User has already reviewed this event");
+
         var review = new EventReview
         {
             EventId = eventId,
             UserId = userId,
             Rating = dto.Rating,
-            Comment = dto.Comment,
+            Comment = dto.Comment?.Trim() ?? string.Empty,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -122,6 +138,15 @@ public class ReviewService : IReviewService
         Body = r.Comment,
         HelpfulCount = 0
     };
+
+    private static void ValidateReview(CreateReviewDto dto)
+    {
+        if (dto.Rating < 1 || dto.Rating > 5)
+            throw new InvalidOperationException("Rating must be between 1 and 5");
+
+        if ((dto.Comment ?? string.Empty).Length > 1000)
+            throw new InvalidOperationException("Comment is too long");
+    }
 
     private static string GetAuthorName(Domain.Entities.Users.User user)
     {

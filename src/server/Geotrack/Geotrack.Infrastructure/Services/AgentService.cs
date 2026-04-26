@@ -8,37 +8,51 @@ namespace Geotrack.Infrastructure.Services;
 public class AgentService : IAgentService
 {
     private readonly AppDbContext _db;
+    private readonly IFavoriteService _favoriteService;
 
-    public AgentService(AppDbContext db)
+    public AgentService(AppDbContext db, IFavoriteService favoriteService)
     {
         _db = db;
+        _favoriteService = favoriteService;
     }
 
     public async Task<AgentResponseDto> ProcessMessageAsync(string text, int? userId = null)
     {
-        var lower = text.ToLower();
+        var lower = (text ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(lower))
+        {
+            return new AgentResponseDto
+            {
+                Id = Guid.NewGuid().ToString(),
+                Role = "assistant",
+                Type = "text",
+                Text = "Ask Agent needs a search question before it can look through the GeoTrack catalog.",
+                SuggestionPills = GetDefaultPills(),
+                Timestamp = DateTime.UtcNow
+            };
+        }
 
-        // Keyword-based stub responses matching frontend mock patterns
+        // Catalog search shell only; no fabricated AI planning response.
         if (ContainsAny(lower, "beach", "swim", "coast", "sea"))
-            return BuildCardsResponse("Beach Recommendations", await GetPlaceCards("beach", 3));
+            return BuildCardsResponse("Beach Recommendations", await GetPlaceCards("beach", 3, userId));
 
         if (ContainsAny(lower, "restaurant", "food", "eat", "dinner", "lunch", "cuisine"))
-            return BuildCardsResponse("Restaurant Picks", await GetPlaceCards("restaurant", 3));
+            return BuildCardsResponse("Restaurant Picks", await GetPlaceCards("restaurant", 3, userId));
 
         if (ContainsAny(lower, "hotel", "stay", "accommodation", "sleep"))
-            return BuildCardsResponse("Top Stays", await GetHotelCards(3));
+            return BuildCardsResponse("Top Stays", await GetHotelCards(3, userId));
 
         if (ContainsAny(lower, "event", "festival", "concert", "show"))
-            return BuildCardsResponse("Upcoming Events", await GetEventCards(3));
+            return BuildCardsResponse("Upcoming Events", await GetEventCards(3, userId));
 
         if (ContainsAny(lower, "nature", "hike", "park", "island", "outdoor"))
-            return BuildCardsResponse("Nature Escapes", await GetPlaceCards("nature", 3));
+            return BuildCardsResponse("Nature Escapes", await GetPlaceCards("nature", 3, userId));
 
         if (ContainsAny(lower, "culture", "museum", "history", "landmark"))
-            return BuildCardsResponse("Cultural Highlights", await GetPlaceCards("museum", 3));
+            return BuildCardsResponse("Cultural Highlights", await GetPlaceCards("museum", 3, userId));
 
         if (ContainsAny(lower, "fun", "weekend", "things to do", "activities", "recommend"))
-            return BuildCardsResponse("Suggested Weekend Plans", await GetMixedCards(3));
+            return BuildCardsResponse("Suggested Places", await GetMixedCards(3, userId));
 
         // Default text response
         return new AgentResponseDto
@@ -46,7 +60,7 @@ public class AgentService : IAgentService
             Id = Guid.NewGuid().ToString(),
             Role = "assistant",
             Type = "text",
-            Text = "Great question! I'd love to help you explore. Could you tell me more about what you're interested in? For example, are you looking for beaches, restaurants, cultural sites, events, or nature spots?",
+            Text = "Ask Agent is currently a limited GeoTrack catalog search, not a live AI planner. Try asking for beaches, restaurants, stays, events, culture, or nature and I can search the current database.",
             SuggestionPills = GetDefaultPills(),
             Timestamp = DateTime.UtcNow
         };
@@ -61,7 +75,7 @@ public class AgentService : IAgentService
                 Id = Guid.NewGuid().ToString(),
                 Role = "assistant",
                 Type = "text",
-                Text = $"I don't have specific recommendations for that yet, but I'm sure you'll find great options to explore!",
+            Text = "I couldn't find matching GeoTrack catalog results for that request.",
                 SuggestionPills = GetDefaultPills(),
                 Timestamp = DateTime.UtcNow
             };
@@ -72,7 +86,7 @@ public class AgentService : IAgentService
             Id = Guid.NewGuid().ToString(),
             Role = "assistant",
             Type = "suggestion_cards",
-            Text = $"Here are some great options for you:",
+            Text = "I searched the current GeoTrack catalog and found these options:",
             CardsTitle = title,
             Cards = cards,
             SuggestionPills = GetDefaultPills(),
@@ -80,7 +94,7 @@ public class AgentService : IAgentService
         };
     }
 
-    private async Task<List<AgentRecommendationCardDto>> GetPlaceCards(string category, int count)
+    private async Task<List<AgentRecommendationCardDto>> GetPlaceCards(string category, int count, int? userId)
     {
         var places = await _db.Places
             .Include(p => p.PlaceTags).ThenInclude(pt => pt.Tag)
@@ -88,77 +102,97 @@ public class AgentService : IAgentService
                         || p.PlaceType.Name.ToLower().Contains(category))
             .Take(count)
             .ToListAsync();
+        var favoriteIds = userId.HasValue
+            ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
+            : new HashSet<int>();
 
         return places.Select(p => new AgentRecommendationCardDto
         {
             Id = p.Id,
+            EntityType = "place",
+            DetailUrl = $"/places/{p.Id}",
             Title = p.Name,
             Description = p.Description.Length > 100 ? p.Description[..100] + "..." : p.Description,
             Image = p.ImageUrl,
-            Rating = p.AverageRating ?? 4.0,
-            DurationHours = 2.0,
-            DistanceKm = 3.5,
-            IsFavorite = false
+            Rating = p.AverageRating,
+            DurationHours = null,
+            DistanceKm = null,
+            IsFavorite = favoriteIds.Contains(p.Id)
         }).ToList();
     }
 
-    private async Task<List<AgentRecommendationCardDto>> GetHotelCards(int count)
+    private async Task<List<AgentRecommendationCardDto>> GetHotelCards(int count, int? userId)
     {
         var hotels = await _db.Places
             .Where(p => p.PricePerNight != null)
             .Take(count)
             .ToListAsync();
+        var favoriteIds = userId.HasValue
+            ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
+            : new HashSet<int>();
 
         return hotels.Select(p => new AgentRecommendationCardDto
         {
             Id = p.Id,
+            EntityType = "place",
+            DetailUrl = $"/stays/{p.Id}",
             Title = p.Name,
             Description = p.Description.Length > 100 ? p.Description[..100] + "..." : p.Description,
             Image = p.ImageUrl,
-            Rating = p.AverageRating ?? 4.0,
-            DurationHours = 0,
-            DistanceKm = 2.0,
-            IsFavorite = false
+            Rating = p.AverageRating,
+            DurationHours = null,
+            DistanceKm = null,
+            IsFavorite = favoriteIds.Contains(p.Id)
         }).ToList();
     }
 
-    private async Task<List<AgentRecommendationCardDto>> GetEventCards(int count)
+    private async Task<List<AgentRecommendationCardDto>> GetEventCards(int count, int? userId)
     {
         var events = await _db.Events
             .Where(e => e.EndDate >= DateTime.UtcNow)
             .Take(count)
             .ToListAsync();
+        var favoriteIds = userId.HasValue
+            ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
+            : new HashSet<int>();
 
         return events.Select(e => new AgentRecommendationCardDto
         {
             Id = e.Id,
+            EntityType = "event",
+            DetailUrl = $"/events/{e.Id}",
             Title = e.Name,
             Description = e.Description.Length > 100 ? e.Description[..100] + "..." : e.Description,
             Image = e.ImageUrl,
-            Rating = 4.5,
+            Rating = null,
             DurationHours = (e.EndDate - e.StartDate).TotalHours,
-            DistanceKm = 1.5,
-            IsFavorite = false
+            DistanceKm = null,
+            IsFavorite = favoriteIds.Contains(e.Id)
         }).ToList();
     }
 
-    private async Task<List<AgentRecommendationCardDto>> GetMixedCards(int count)
+    private async Task<List<AgentRecommendationCardDto>> GetMixedCards(int count, int? userId)
     {
         var places = await _db.Places
             .OrderByDescending(p => p.AverageRating)
             .Take(count)
             .ToListAsync();
+        var favoriteIds = userId.HasValue
+            ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
+            : new HashSet<int>();
 
         return places.Select(p => new AgentRecommendationCardDto
         {
             Id = p.Id,
+            EntityType = "place",
+            DetailUrl = p.PricePerNight.HasValue ? $"/stays/{p.Id}" : $"/places/{p.Id}",
             Title = p.Name,
             Description = p.Description.Length > 100 ? p.Description[..100] + "..." : p.Description,
             Image = p.ImageUrl,
-            Rating = p.AverageRating ?? 4.0,
-            DurationHours = 2.5,
-            DistanceKm = 3.0,
-            IsFavorite = false
+            Rating = p.AverageRating,
+            DurationHours = null,
+            DistanceKm = null,
+            IsFavorite = favoriteIds.Contains(p.Id)
         }).ToList();
     }
 

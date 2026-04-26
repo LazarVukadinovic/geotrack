@@ -45,10 +45,7 @@ public class PlaceService : IPlaceService
         var userPoint = BuildUserPoint(latitude, longitude);
         var query = _db.Places.AsNoTracking();
 
-        if (userPoint is null)
-        {
-            query = query.Where(p => p.Location.DestinationId == destinationId.Value);
-        }
+        query = query.Where(p => p.Location.DestinationId == destinationId.Value);
 
         if (!string.IsNullOrEmpty(type))
         {
@@ -277,10 +274,7 @@ public class PlaceService : IPlaceService
             .AsNoTracking()
             .Where(p => p.PricePerNight != null);
 
-        if (userPoint is null)
-        {
-            query = query.Where(p => p.Location.DestinationId == destinationId.Value);
-        }
+        query = query.Where(p => p.Location.DestinationId == destinationId.Value);
 
         if (!string.IsNullOrEmpty(tag) && tag.ToLower() != "all")
         {
@@ -530,7 +524,7 @@ public class PlaceService : IPlaceService
 
     private static Point? BuildUserPoint(double? latitude, double? longitude)
     {
-        return latitude.HasValue && longitude.HasValue
+        return latitude.HasValue && longitude.HasValue && HasUsableCoordinates(latitude.Value, longitude.Value)
             ? SpatialPointFactory.Create(latitude.Value, longitude.Value)
             : null;
     }

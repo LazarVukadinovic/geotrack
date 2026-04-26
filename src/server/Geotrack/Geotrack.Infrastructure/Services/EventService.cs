@@ -39,15 +39,10 @@ public class EventService : IEventService
             return new DestinationScopedResult<EventsListingResponseDto> { Status = DestinationScopedStatus.DestinationNotFound };
         }
 
-        var userPoint = latitude.HasValue && longitude.HasValue
-            ? SpatialPointFactory.Create(latitude.Value, longitude.Value)
-            : null;
+        var userPoint = BuildUserPoint(latitude, longitude);
         var query = _db.Events.AsNoTracking();
 
-        if (userPoint is null)
-        {
-            query = query.Where(e => e.Location.DestinationId == destinationId.Value);
-        }
+        query = query.Where(e => e.Location.DestinationId == destinationId.Value);
 
         if (upcoming == true)
             query = query.Where(e => e.EndDate >= DateTime.UtcNow);
@@ -420,6 +415,16 @@ public class EventService : IEventService
                !double.IsInfinity(latitude.Value) &&
                !double.IsInfinity(longitude.Value) &&
                (latitude.Value != 0d || longitude.Value != 0d);
+    }
+
+    private static Point? BuildUserPoint(double? latitude, double? longitude)
+    {
+        if (!HasUsableCoordinates(latitude, longitude))
+        {
+            return null;
+        }
+
+        return SpatialPointFactory.Create(latitude!.Value, longitude!.Value);
     }
 
     private sealed class EventListProjection

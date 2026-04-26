@@ -202,9 +202,16 @@ public class StayContributionService : IStayContributionService
 
     public async Task<GetStayContributionsResponseDto> GetReviewQueueAsync(int reviewerUserId, string? status)
     {
-        await EnsureRegionalManagerAsync(reviewerUserId);
+        var reviewer = await EnsureRegionalManagerAsync(reviewerUserId);
+        var assignedRegions = GetAssignedRegionNames(reviewer);
+
+        if (assignedRegions.Count == 0)
+        {
+            return new GetStayContributionsResponseDto();
+        }
 
         var query = _db.StayContributions.AsNoTracking();
+        query = query.Where(x => x.Region != "" && assignedRegions.Contains(x.Region.ToLower()));
 
         if (!string.IsNullOrWhiteSpace(status))
         {
@@ -539,16 +546,26 @@ public class StayContributionService : IStayContributionService
     {
         var reviewer = await EnsureRegionalManagerAsync(reviewerUserId);
 
-        var assignedRegions = reviewer.RegionalOrganization?.RegionalOrganizationRegions
+        var assignedRegions = GetAssignedRegionNames(reviewer);
+
+        if (assignedRegions.Count == 0)
+            throw new UnauthorizedAccessException("Regional manager has no assigned regions.");
+
+        if (string.IsNullOrWhiteSpace(contribution.Region))
+            throw new UnauthorizedAccessException("Contribution has no reviewable region.");
+
+        if (!assignedRegions.Contains(contribution.Region.Trim().ToLowerInvariant()))
+            throw new UnauthorizedAccessException("Regional manager is not assigned to this contribution's region.");
+    }
+
+    private static List<string> GetAssignedRegionNames(User reviewer)
+    {
+        return reviewer.RegionalOrganization?.RegionalOrganizationRegions
             .Select(x => x.Region.Name)
             .Where(x => !string.IsNullOrWhiteSpace(x))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        if (assignedRegions.Count == 0 || string.IsNullOrWhiteSpace(contribution.Region))
-            return;
-
-        if (!assignedRegions.Contains(contribution.Region))
-            throw new UnauthorizedAccessException("Regional manager is not assigned to this contribution's region.");
+            .Select(x => x.Trim().ToLowerInvariant())
+            .Distinct()
+            .ToList() ?? new List<string>();
     }
 
     private async Task<User> EnsureRegionalManagerAsync(int reviewerUserId)

@@ -20,12 +20,14 @@ public class AgentResponseDto
 public class AgentRecommendationCardDto
 {
     public int Id { get; set; }
+    public string EntityType { get; set; } = "place";
+    public string? DetailUrl { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string? Image { get; set; }
-    public double Rating { get; set; }
-    public double DurationHours { get; set; }
-    public double DistanceKm { get; set; }
+    public double? Rating { get; set; }
+    public double? DurationHours { get; set; }
+    public double? DistanceKm { get; set; }
     public bool IsFavorite { get; set; }
 }
 

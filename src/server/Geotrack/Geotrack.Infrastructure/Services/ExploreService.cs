@@ -96,6 +96,7 @@ public class ExploreService : IExploreService
         var events = await _db.Events
             .AsNoTracking()
             .Where(e =>
+                e.Location.DestinationId == resolvedDestination.Id &&
                 EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 e.EndDate >= DateTime.UtcNow)
             .Select(e => new
@@ -116,6 +117,7 @@ public class ExploreService : IExploreService
         var topStays = await _db.Places
             .AsNoTracking()
             .Where(p =>
+                p.Location.DestinationId == resolvedDestination.Id &&
                 p.PricePerNight != null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(p => new
@@ -136,6 +138,7 @@ public class ExploreService : IExploreService
         var nearbyNature = await _db.Places
             .AsNoTracking()
             .Where(p =>
+                p.Location.DestinationId == resolvedDestination.Id &&
                 p.PricePerNight == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (NatureTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
@@ -158,6 +161,7 @@ public class ExploreService : IExploreService
         var cultureHistory = await _db.Places
             .AsNoTracking()
             .Where(p =>
+                p.Location.DestinationId == resolvedDestination.Id &&
                 p.PricePerNight == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (CultureHistoryTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
@@ -179,6 +183,7 @@ public class ExploreService : IExploreService
         var foodMusic = await _db.Places
             .AsNoTracking()
             .Where(p =>
+                p.Location.DestinationId == resolvedDestination.Id &&
                 p.PricePerNight == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (FoodMusicTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
@@ -205,6 +210,7 @@ public class ExploreService : IExploreService
         var curatedPlacesQuery = _db.Places
             .AsNoTracking()
             .Where(p =>
+                p.Location.DestinationId == resolvedDestination.Id &&
                 p.PricePerNight == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null);
 
@@ -236,7 +242,7 @@ public class ExploreService : IExploreService
             .Take(6)
             .ToListAsync();
 
-        var landmarkCategories = await BuildLandmarkCategoriesAsync(userPoint);
+        var landmarkCategories = await BuildLandmarkCategoriesAsync(userPoint, resolvedDestination.Id);
 
         return new ExplorePageDto
         {
@@ -355,6 +361,7 @@ public class ExploreService : IExploreService
             query = _db.Places
                 .AsNoTracking()
                 .Where(p =>
+                    p.Location.DestinationId == destinationId.Value &&
                     p.PricePerNight == null &&
                     EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .GroupBy(p => new { p.PlaceTypeId, p.PlaceType.Name })
@@ -383,11 +390,12 @@ public class ExploreService : IExploreService
         };
     }
 
-    private async Task<List<ExploreLandmarkCategoryDto>> BuildLandmarkCategoriesAsync(Point userPoint)
+    private async Task<List<ExploreLandmarkCategoryDto>> BuildLandmarkCategoriesAsync(Point userPoint, int destinationId)
     {
         return await _db.Places
             .AsNoTracking()
             .Where(p =>
+                p.Location.DestinationId == destinationId &&
                 p.PricePerNight == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
             .GroupBy(p => new { p.PlaceTypeId, p.PlaceType.Name })

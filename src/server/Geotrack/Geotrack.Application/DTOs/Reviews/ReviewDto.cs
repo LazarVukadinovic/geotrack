@@ -1,5 +1,7 @@
 namespace Geotrack.Application.DTOs.Reviews;
 
+using System.ComponentModel.DataAnnotations;
+
 public class ReviewDto
 {
     public int Id { get; set; }
@@ -13,6 +15,9 @@ public class ReviewDto
 
 public class CreateReviewDto
 {
+    [Range(1, 5)]
     public int Rating { get; set; }
+
+    [MaxLength(1000)]
     public string Comment { get; set; } = string.Empty;
 }
