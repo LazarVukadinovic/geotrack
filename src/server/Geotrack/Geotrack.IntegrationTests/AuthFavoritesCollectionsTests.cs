@@ -267,7 +267,7 @@ public sealed class AuthFavoritesCollectionsTests
             {
                 FullName = "Onboarding Traveler",
                 Email = email,
-                Password = "password123",
+                Password = "Password123!",
             });
         registerResponse.EnsureSuccessStatusCode();
 
@@ -318,7 +318,7 @@ public sealed class AuthFavoritesCollectionsTests
             {
                 FullName = "Duplicate Traveler",
                 Email = "marko.p@example.com",
-                Password = "password123",
+                Password = "Password123!",
             });
 
         Assert.Equal(HttpStatusCode.BadRequest, duplicateResponse.StatusCode);
@@ -371,7 +371,7 @@ public sealed class AuthFavoritesCollectionsTests
             {
                 FullName = "Avatar Tester",
                 Email = email,
-                Password = "password123",
+                Password = "Password123!",
             });
         registerResponse.EnsureSuccessStatusCode();
 
