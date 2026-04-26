@@ -1,5 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
+import { AuthService } from '../../../../core/services/auth.service';
 import { SettingsSubpageShellComponent } from '../../components/settings-subpage-shell/settings-subpage-shell.component';
 import { UserSettingsService } from '../../services/user-settings.service';
 
@@ -12,6 +14,8 @@ import { UserSettingsService } from '../../services/user-settings.service';
 })
 export class ChangePasswordPageComponent {
   private readonly settingsService = inject(UserSettingsService);
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
 
   protected readonly currentPassword = signal('');
   protected readonly newPassword = signal('');
@@ -37,6 +41,14 @@ export class ChangePasswordPageComponent {
 
     if (this.newPassword().length < 8) {
       return 'Use at least 8 characters.';
+    }
+
+    if (!/\d/.test(this.newPassword())) {
+      return 'Include at least one number.';
+    }
+
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(this.newPassword())) {
+      return 'Include at least one special character.';
     }
 
     if (this.newPassword() === this.currentPassword() && this.currentPassword().length > 0) {
@@ -90,6 +102,10 @@ export class ChangePasswordPageComponent {
         this.newPassword.set('');
         this.confirmPassword.set('');
         this.hasSubmitted.set(false);
+        window.setTimeout(() => {
+          this.authService.clearSession();
+          void this.router.navigate(['/login']);
+        }, 1200);
       },
       error: (error: { error?: { message?: string } }) => {
         this.isSaving.set(false);

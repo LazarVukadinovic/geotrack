@@ -63,6 +63,7 @@ export class RegisterPageComponent {
   get passwordError(): string {
     if (!this.submitted) return '';
     if (!this.password) return 'Password is required.';
+    if (!this.isPasswordStrong()) return 'Use at least 8 characters, a number, and a special character.';
     return '';
   }
 
@@ -79,6 +80,7 @@ export class RegisterPageComponent {
       !!this.email &&
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email) &&
       !!this.password &&
+      this.isPasswordStrong() &&
       this.password === this.repeatPassword
     );
   }
@@ -219,5 +221,11 @@ export class RegisterPageComponent {
       || normalized.includes('email is taken')
       || normalized.includes('email already')
       || normalized.includes('user already exists');
+  }
+
+  private isPasswordStrong(): boolean {
+    return this.password.length >= 8 &&
+      /\d/.test(this.password) &&
+      /[!@#$%^&*(),.?":{}|<>]/.test(this.password);
   }
 }
