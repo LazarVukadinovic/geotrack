@@ -14,8 +14,10 @@ public class HotelDetailDto
     public double? Rating { get; set; }
     public string? ReviewCount { get; set; }
     public string? Distance { get; set; }
-    public decimal PricePerNight { get; set; }
+    public decimal? PricePerNight { get; set; }
     public string? About { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? PhoneNumber { get; set; }
     public List<BookingPartnerDto> BookingPartners { get; set; } = new();
     public List<AmenityDto> Amenities { get; set; } = new();
     public List<ReviewDto> Reviews { get; set; } = new();

@@ -13,6 +13,7 @@ public interface IUserService
 
     Task<GetUserInterestsResponseDto> GetUserInterestsAsync(int userId);
     Task<UpdateUserInterestsResponseDto> UpdateUserInterestsAsync(int userId, UpdateUserInterestsRequestDto request);
+    Task DismissInferredInterestAsync(int userId, int tagId);
     Task<GetSupportRequestsResponseDto> GetSupportRequestsAsync(int userId);
     Task<CreateSupportRequestResponseDto> CreateSupportRequestAsync(int userId, CreateSupportRequestRequestDto request);
 

@@ -7,4 +7,6 @@ public class PlaceBookingPartner
 
     public int BookingPartnerId { get; set; }
     public BookingPartner BookingPartner { get; set; } = null!;
+
+    public string? Url { get; set; }
 }

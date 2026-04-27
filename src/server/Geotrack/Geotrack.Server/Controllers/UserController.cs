@@ -162,6 +162,20 @@ public class UserController : ControllerBase
         }
     }
 
+    [HttpDelete("me/interests/inferred/{tagId:int}")]
+    public async Task<ActionResult> DismissInferredInterest([FromRoute] int tagId)
+    {
+        try
+        {
+            await _userService.DismissInferredInterestAsync(GetUserId(), tagId);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("me/collections")]
     public async Task<ActionResult<GetCollectionsResponseDto>> GetCollections()
     {

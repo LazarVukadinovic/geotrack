@@ -1,5 +1,6 @@
 ﻿using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
@@ -203,6 +204,35 @@ namespace Geotrack.Infrastructure.Repositories
         {
             _context.UserTags.RemoveRange(userTags);
             return Task.CompletedTask;
+        }
+
+        public async Task<List<UserInterestSignal>> GetVisibleInferredInterestSignalsAsync(int userId, double minimumScore)
+        {
+            var explicitTagIds = _context.UserTags
+                .Where(ut => ut.UserId == userId)
+                .Select(ut => ut.TagId);
+
+            return await _context.UserInterestSignals
+                .Include(signal => signal.Tag)
+                .Where(signal =>
+                    signal.UserId == userId &&
+                    signal.Source == "inferred" &&
+                    !signal.IsDismissed &&
+                    signal.Score >= minimumScore &&
+                    !explicitTagIds.Contains(signal.TagId))
+                .OrderByDescending(signal => signal.Score)
+                .ThenBy(signal => signal.Tag.Name)
+                .ToListAsync();
+        }
+
+        public async Task<UserInterestSignal?> GetUserInterestSignalAsync(int userId, int tagId)
+        {
+            return await _context.UserInterestSignals
+                .Include(signal => signal.Tag)
+                .FirstOrDefaultAsync(signal =>
+                    signal.UserId == userId &&
+                    signal.TagId == tagId &&
+                    signal.Source == "inferred");
         }
 
         public async Task<User?> GetByIdWithRolesAsync(int userId)

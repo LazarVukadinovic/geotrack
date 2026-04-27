@@ -91,7 +91,9 @@ public class StayContributionService : IStayContributionService
             ImageSize = NormalizeImageSize(request.ImageSize),
             Description = request.Description.Trim(),
             Phone = request.Phone.Trim(),
+            ContactEmail = NormalizeContactEmail(request.ContactEmail),
             Website = NormalizeWebsite(request.Website),
+            PricePerNight = NormalizePricePerNight(request.PricePerNight),
             TagsJson = Serialize(NormalizeTags(request.Tags)),
             AmenitiesJson = Serialize(NormalizeAmenities(request.Amenities)),
             BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners)),
@@ -148,7 +150,9 @@ public class StayContributionService : IStayContributionService
         contribution.ImageSize = NormalizeImageSize(request.ImageSize);
         contribution.Description = request.Description.Trim();
         contribution.Phone = request.Phone.Trim();
+        contribution.ContactEmail = NormalizeContactEmail(request.ContactEmail);
         contribution.Website = NormalizeWebsite(request.Website);
+        contribution.PricePerNight = NormalizePricePerNight(request.PricePerNight);
         contribution.TagsJson = Serialize(NormalizeTags(request.Tags));
         contribution.AmenitiesJson = Serialize(NormalizeAmenities(request.Amenities));
         contribution.BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners));
@@ -282,7 +286,9 @@ public class StayContributionService : IStayContributionService
     {
         var now = DateTime.UtcNow;
         var location = await ResolveLocationAsync(contribution, now);
-        var placeTypeId = await ResolvePlaceTypeIdAsync("Hotel", now);
+        var placeTypeId = await ResolvePlaceTypeIdAsync(
+            FirstNonEmpty(contribution.StayType, "Hotel"),
+            now);
 
         Place place;
         if (contribution.PublishedPlaceId.HasValue)
@@ -309,9 +315,9 @@ public class StayContributionService : IStayContributionService
         place.Address = contribution.Address;
         place.Description = contribution.Description;
         place.Number = contribution.Phone;
-        place.ContactEmail = string.Empty;
+        place.ContactEmail = contribution.ContactEmail;
         place.OpeningHours = null;
-        place.PricePerNight = 0m;
+        place.PricePerNight = contribution.PricePerNight;
         place.PlaceTypeId = placeTypeId;
         place.LocationId = location.Id;
         place.Latitude = contribution.Latitude ?? location.Latitude;
@@ -537,7 +543,8 @@ public class StayContributionService : IStayContributionService
             await _db.PlaceBookingPartners.AddAsync(new PlaceBookingPartner
             {
                 PlaceId = placeId,
-                BookingPartnerId = bookingPartner.Id
+                BookingPartnerId = bookingPartner.Id,
+                Url = NormalizeWebsite(partner.Url)
             });
         }
     }
@@ -628,9 +635,12 @@ public class StayContributionService : IStayContributionService
         if (request.Phone.Trim().Length > 50)
             throw new InvalidOperationException("Phone number is too long.");
 
+        _ = NormalizeContactEmail(request.ContactEmail);
+
         if (request.Website.Trim().Length > 500)
             throw new InvalidOperationException("Website is too long.");
 
+        _ = NormalizePricePerNight(request.PricePerNight);
         _ = NormalizeAmenities(request.Amenities);
         _ = NormalizeBookingPartners(request.BookingPartners);
     }
@@ -665,7 +675,7 @@ public class StayContributionService : IStayContributionService
             .Select(x => new ContributionBookingPartnerDto
             {
                 Id = x.Id.Trim().ToLowerInvariant(),
-                Url = x.Url.Trim()
+                Url = NormalizeWebsite(x.Url)
             })
             .DistinctBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -677,6 +687,35 @@ public class StayContributionService : IStayContributionService
             throw new InvalidOperationException("Booking partner URL is too long.");
 
         return normalized.Take(10).ToList();
+    }
+
+    private static string NormalizeContactEmail(string? email)
+    {
+        var trimmed = email?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
+            return string.Empty;
+
+        if (trimmed.Length > 200)
+            throw new InvalidOperationException("Contact email is too long.");
+
+        if (!IsValidEmail(trimmed))
+            throw new InvalidOperationException("Contact email is invalid.");
+
+        return trimmed.ToLowerInvariant();
+    }
+
+    private static decimal? NormalizePricePerNight(decimal? pricePerNight)
+    {
+        if (!pricePerNight.HasValue)
+            return null;
+
+        if (pricePerNight.Value < 0m)
+            throw new InvalidOperationException("Price per night cannot be negative.");
+
+        if (pricePerNight.Value > 100000m)
+            throw new InvalidOperationException("Price per night is too large.");
+
+        return decimal.Round(pricePerNight.Value, 2, MidpointRounding.AwayFromZero);
     }
 
     private static string NormalizeWebsite(string? website)
@@ -757,7 +796,9 @@ public class StayContributionService : IStayContributionService
         ImageSize = contribution.ImageSize,
         Description = contribution.Description,
         Phone = contribution.Phone,
+        ContactEmail = contribution.ContactEmail,
         Website = contribution.Website,
+        PricePerNight = contribution.PricePerNight,
         Tags = DeserializeStringList(contribution.TagsJson),
         Amenities = DeserializeStringList(contribution.AmenitiesJson),
         BookingPartners = DeserializeBookingPartners(contribution.BookingPartnersJson),
@@ -824,6 +865,9 @@ public class StayContributionService : IStayContributionService
     private static string ToTitle(string value) =>
         string.Join(" ", value.Split('-', '_', StringSplitOptions.RemoveEmptyEntries)
             .Select(x => char.ToUpperInvariant(x[0]) + x[1..]));
+
+    private static bool IsValidEmail(string email) =>
+        Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
 
     private static string FirstNonEmpty(params string[] values) =>
         values.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x))?.Trim() ?? string.Empty;

@@ -3,6 +3,7 @@ using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.AspNetCore.Identity;
@@ -11,6 +12,8 @@ namespace Geotrack.Application.Services;
 
 public class UserService : IUserService
 {
+    private const double InferredInterestVisibleScore = 5.0;
+
     private static readonly HashSet<string> AllowedSupportCategories = new(StringComparer.OrdinalIgnoreCase)
     {
         "account-access",
@@ -204,12 +207,21 @@ public class UserService : IUserService
         var user = await _userRepository.GetByIdWithUserTagsAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
+        var explicitTags = user.UserTags
+            .Where(x => x.Tag != null)
+            .Select(x => MapTagToInterestItemDto(x.Tag!))
+            .OrderBy(x => x.Name)
+            .ToList();
+
+        var inferredSignals = await _userRepository.GetVisibleInferredInterestSignalsAsync(userId, InferredInterestVisibleScore);
+
         return new GetUserInterestsResponseDto
         {
-            Tags = user.UserTags
+            Tags = explicitTags,
+            ExplicitTags = explicitTags,
+            InferredTags = inferredSignals
                 .Where(x => x.Tag != null)
-                .Select(x => MapTagToInterestItemDto(x.Tag!))
-                .OrderBy(x => x.Name)
+                .Select(MapSignalToInferredInterestItemDto)
                 .ToList()
         };
     }
@@ -260,14 +272,33 @@ public class UserService : IUserService
         var updatedUser = await _userRepository.GetByIdWithUserTagsAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
+        var explicitTags = updatedUser.UserTags
+            .Where(x => x.Tag != null)
+            .Select(x => MapTagToInterestItemDto(x.Tag!))
+            .OrderBy(x => x.Name)
+            .ToList();
+
         return new UpdateUserInterestsResponseDto
         {
-            Tags = updatedUser.UserTags
-                .Where(x => x.Tag != null)
-                .Select(x => MapTagToInterestItemDto(x.Tag!))
-                .OrderBy(x => x.Name)
-                .ToList()
+            Tags = explicitTags,
+            ExplicitTags = explicitTags
         };
+    }
+
+    public async Task DismissInferredInterestAsync(int userId, int tagId)
+    {
+        var signal = await _userRepository.GetUserInterestSignalAsync(userId, tagId);
+        if (signal is null)
+        {
+            return;
+        }
+
+        signal.IsDismissed = true;
+        signal.DismissedAt = DateTime.UtcNow;
+        signal.DismissedAtScore = signal.Score;
+        signal.EvidenceSinceDismissal = 0.0;
+
+        await _userRepository.SaveChangesAsync();
     }
 
     public async Task<GetSupportRequestsResponseDto> GetSupportRequestsAsync(int userId)
@@ -522,6 +553,27 @@ public class UserService : IUserService
             PlaceTypeId = tag.PlaceTypeId,
             CreatedAt = tag.CreatedAt,
             UpdatedAt = tag.UpdatedAt
+        };
+    }
+
+    private static InferredInterestItemDto MapSignalToInferredInterestItemDto(UserInterestSignal signal)
+    {
+        return new InferredInterestItemDto
+        {
+            TagId = signal.Tag.Id,
+            Name = signal.Tag.Name,
+            Slug = signal.Tag.Slug,
+            Description = signal.Tag.Description,
+            ForDestination = signal.Tag.ForDestination,
+            ForLocation = signal.Tag.ForLocation,
+            ForPlace = signal.Tag.ForPlace,
+            ForEvent = signal.Tag.ForEvent,
+            PlaceTypeId = signal.Tag.PlaceTypeId,
+            CreatedAt = signal.Tag.CreatedAt,
+            UpdatedAt = signal.Tag.UpdatedAt,
+            Score = signal.Score,
+            LastInteractionAt = signal.LastInteractionAt,
+            LastReason = signal.LastReason
         };
     }
 

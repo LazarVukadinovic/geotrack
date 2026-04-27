@@ -113,7 +113,8 @@ public class AuthService : IAuthService
         {
             AccessToken  = pair.AccessToken,
             RefreshToken = pair.RefreshToken,
-            ExpiresIn    = pair.ExpiresIn
+            ExpiresIn    = pair.ExpiresIn,
+            SessionPersistent = pair.SessionPersistent
         };
     }
 
@@ -163,7 +164,8 @@ public class AuthService : IAuthService
         {
             AccessToken  = accessToken,
             RefreshToken = refreshValue,
-            ExpiresIn    = 900
+            ExpiresIn    = 900,
+            SessionPersistent = isPersistent
         };
     }
 

@@ -34,7 +34,9 @@ public class StayContribution
 
     public string Description { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
+    public string ContactEmail { get; set; } = string.Empty;
     public string Website { get; set; } = string.Empty;
+    public decimal? PricePerNight { get; set; }
 
     public string TagsJson { get; set; } = "[]";
     public string AmenitiesJson { get; set; } = "[]";

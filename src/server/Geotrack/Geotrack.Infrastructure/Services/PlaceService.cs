@@ -210,14 +210,16 @@ public class PlaceService : IPlaceService
             Rating = averageRating,
             ReviewCount = FormatReviewCountLabel(reviewCount),
             Distance = detailDistance,
-            PricePerNight = place.PricePerNight ?? 0,
+            PricePerNight = place.PricePerNight,
             About = place.Description,
+            ContactEmail = place.ContactEmail,
+            PhoneNumber = place.Number,
             BookingPartners = place.PlaceBookingPartners.Select(pb => new BookingPartnerDto
             {
                 Id = pb.BookingPartner.Id,
                 Name = pb.BookingPartner.Name,
                 Variant = pb.BookingPartner.Variant,
-                Url = null
+                Url = pb.Url
             }).ToList(),
             Amenities = place.PlaceAmenities.Select(pa => new AmenityDto
             {

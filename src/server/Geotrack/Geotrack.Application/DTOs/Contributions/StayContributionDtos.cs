@@ -26,7 +26,9 @@ public class StayContributionDetailDto : StayContributionListItemDto
     public string ImageSize { get; set; } = "cover";
     public string Description { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
+    public string ContactEmail { get; set; } = string.Empty;
     public string Website { get; set; } = string.Empty;
+    public decimal? PricePerNight { get; set; }
     public List<string> Tags { get; set; } = new();
     public List<string> Amenities { get; set; } = new();
     public List<ContributionBookingPartnerDto> BookingPartners { get; set; } = new();
@@ -48,7 +50,9 @@ public class UpsertStayContributionDto
     public string ImageSize { get; set; } = "cover";
     public string Description { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
+    public string ContactEmail { get; set; } = string.Empty;
     public string Website { get; set; } = string.Empty;
+    public decimal? PricePerNight { get; set; }
     public List<string> Tags { get; set; } = new();
     public List<string> Amenities { get; set; } = new();
     public List<ContributionBookingPartnerDto> BookingPartners { get; set; } = new();

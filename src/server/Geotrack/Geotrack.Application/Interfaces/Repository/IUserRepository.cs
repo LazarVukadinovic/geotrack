@@ -1,4 +1,5 @@
 ﻿using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 
@@ -33,6 +34,8 @@ public interface IUserRepository : IRepository<User>
 
     Task AddUserTagAsync(UserTag userTag);
     Task DeleteUserTagsAsync(IEnumerable<UserTag> userTags);
+    Task<List<UserInterestSignal>> GetVisibleInferredInterestSignalsAsync(int userId, double minimumScore);
+    Task<UserInterestSignal?> GetUserInterestSignalAsync(int userId, int tagId);
 
     Task<User?> GetByIdWithExploreDataAsync(int userId);
     Task<Dictionary<int, double>> GetLocationRatingsByUserIdAsync(int userId);
