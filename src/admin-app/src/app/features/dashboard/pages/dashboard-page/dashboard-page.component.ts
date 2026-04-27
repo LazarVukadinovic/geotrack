@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-
+import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 interface Activity {
   avatar: string;
   initials: string;
@@ -24,7 +24,7 @@ interface QueueItem {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, SidebarComponent],
   templateUrl: './dashboard-page.component.html',
   styleUrl: './dashboard-page.component.css'
 })
