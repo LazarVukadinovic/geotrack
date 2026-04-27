@@ -17,6 +17,7 @@ import { LandmarksSliderComponent } from '../../components/landmarks-slider/land
 import { LocalFavoritesListComponent } from '../../components/local-favorites-list/local-favorites-list.component';
 import { ExploreService } from '../../services/explore.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 
 @Component({
   selector: 'app-explore-page',
@@ -46,6 +47,8 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly router      = inject(Router);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
+  private readonly analytics   = inject(AnalyticsService);
+  private searchAnalyticsTimeout?: ReturnType<typeof setTimeout>;
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
   protected readonly loadError  = this.explore.loadError;
@@ -103,6 +106,20 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected onSearchChange(value: string): void {
     this.searchQuery.set(value);
+    clearTimeout(this.searchAnalyticsTimeout);
+    const query = value.trim();
+    if (query.length < 2) return;
+
+    this.searchAnalyticsTimeout = setTimeout(() => {
+      this.analytics.track('search_performed', {
+        metadata: {
+          surface: 'explore',
+          queryLength: query.length,
+          localMatches: this.filteredLocalFavorites().length,
+          eventMatches: this.eventsThisWeek().length,
+        },
+      });
+    }, 600);
   }
 
   protected toggleNearbySaved(id: string): void {
@@ -226,6 +243,8 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.searchAnalyticsTimeout);
+
     const host     = this.elRef.nativeElement as HTMLElement;
     const viewport = host.closest<HTMLElement>('.app-shell__viewport');
     const scrollTop = viewport?.scrollTop ?? 0;

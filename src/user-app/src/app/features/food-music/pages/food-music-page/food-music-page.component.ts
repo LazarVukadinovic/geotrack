@@ -13,6 +13,7 @@ import { FoodMusicService } from '../../services/food-music.service';
 import { FoodMusicScrollStateService } from '../../services/food-music-scroll-state.service';
 import { FOOD_MUSIC_FILTERS } from '../../models/food-music.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
@@ -28,6 +29,7 @@ export class FoodMusicPageComponent implements AfterViewInit {
   private readonly router      = inject(Router);
   private readonly scrollState = inject(FoodMusicScrollStateService);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
+  private readonly analytics   = inject(AnalyticsService);
 
   protected readonly filters = FOOD_MUSIC_FILTERS;
   protected readonly activeFilter = signal('all');
@@ -98,7 +100,12 @@ export class FoodMusicPageComponent implements AfterViewInit {
   }
 
   protected setFilter(id: string): void {
+    if (this.activeFilter() === id) return;
     this.activeFilter.set(id);
+    this.analytics.track('filter_applied', {
+      entityType: 'place',
+      metadata: { surface: 'food_music_listing', filter: id },
+    });
   }
 
   protected toggleSaved(event: Event, id: string): void {

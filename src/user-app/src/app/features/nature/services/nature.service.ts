@@ -5,6 +5,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
+import { AnalyticsService } from '../../../core/services/analytics.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { NatureItem } from '../models/nature.model';
 
@@ -31,6 +32,7 @@ export class NatureService {
   private readonly destinationSvc = inject(DestinationService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly exploreSvc = inject(ExploreService);
   private readonly _items = signal<NatureItem[]>([]);
   private readonly _loadError = signal<string | null>(null);
@@ -99,7 +101,13 @@ export class NatureService {
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
     const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
-    this.favoriteState.set('place', id, !current);
+    const next = !current;
+    this.favoriteState.set('place', id, next);
+    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', {
+      entityType: 'place',
+      entityId: numId,
+      metadata: { surface: 'nature_listing' },
+    });
     this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
       error: () => this.favoriteState.set('place', id, current),
     });

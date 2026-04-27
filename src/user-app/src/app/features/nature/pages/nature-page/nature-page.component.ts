@@ -13,6 +13,7 @@ import { NatureService } from '../../services/nature.service';
 import { NatureScrollStateService } from '../../services/nature-scroll-state.service';
 import { NATURE_FILTERS } from '../../models/nature.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
@@ -28,6 +29,7 @@ export class NaturePageComponent implements AfterViewInit {
   private readonly router      = inject(Router);
   private readonly scrollState = inject(NatureScrollStateService);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
+  private readonly analytics   = inject(AnalyticsService);
 
   protected readonly filters      = NATURE_FILTERS;
   protected readonly activeFilter = signal('all');
@@ -98,7 +100,12 @@ export class NaturePageComponent implements AfterViewInit {
   }
 
   protected setFilter(id: string): void {
+    if (this.activeFilter() === id) return;
     this.activeFilter.set(id);
+    this.analytics.track('filter_applied', {
+      entityType: 'place',
+      metadata: { surface: 'nature_listing', filter: id },
+    });
   }
 
   protected toggleSaved(event: Event, id: string): void {

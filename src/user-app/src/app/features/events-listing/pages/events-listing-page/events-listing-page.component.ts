@@ -13,6 +13,7 @@ import { EventsListingService } from '../../services/events-listing.service';
 import { EventsListingScrollStateService } from '../../services/events-listing-scroll-state.service';
 import { EVENTS_LISTING_FILTERS } from '../../models/events-listing.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 
 @Component({
@@ -28,6 +29,7 @@ export class EventsListingPageComponent implements AfterViewInit {
   private readonly router      = inject(Router);
   private readonly scrollState = inject(EventsListingScrollStateService);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
+  private readonly analytics   = inject(AnalyticsService);
 
   protected readonly filters      = EVENTS_LISTING_FILTERS;
   protected readonly activeFilter = signal('all');
@@ -98,7 +100,12 @@ export class EventsListingPageComponent implements AfterViewInit {
   }
 
   protected setFilter(id: string): void {
+    if (this.activeFilter() === id) return;
     this.activeFilter.set(id);
+    this.analytics.track('filter_applied', {
+      entityType: 'event',
+      metadata: { surface: 'events_listing', filter: id },
+    });
   }
 
   protected toggleSaved(event: Event, id: string): void {

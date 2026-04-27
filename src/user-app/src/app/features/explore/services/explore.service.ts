@@ -5,6 +5,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { FavoriteEntityType, FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
+import { AnalyticsService } from '../../../core/services/analytics.service';
 import type { ExploreItem } from '../../../core/models/explore-item.model';
 import type {
   ExploreAttraction,
@@ -51,6 +52,7 @@ export class ExploreService {
   private readonly auth = inject(AuthService);
   private readonly destinationSvc = inject(DestinationService);
   private readonly favoriteState = inject(FavoriteStateService);
+  private readonly analytics = inject(AnalyticsService);
 
   private readonly _curatedForYou = signal<ExploreCuratedItem[]>([]);
   private readonly _localFavorites = signal<ExploreItem[]>([]);
@@ -268,7 +270,13 @@ export class ExploreService {
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
     const current = this.currentSavedStateForList(list, id);
-    this.favoriteState.set('place', id, !current);
+    const next = !current;
+    this.favoriteState.set('place', id, next);
+    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', {
+      entityType: list === 'topStays' ? 'hotel' : 'place',
+      entityId: numId,
+      metadata: { surface: `explore_${list}` },
+    });
 
     this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
       error: () => this.favoriteState.set('place', id, current),
