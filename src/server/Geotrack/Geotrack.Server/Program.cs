@@ -7,11 +7,14 @@ using Geotrack.Infrastructure.Services;
 using Geotrack.Server;
 using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Net.Http.Headers;
+using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 
@@ -75,18 +78,27 @@ builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<IRegionService, RegionService>();
 builder.Services.AddScoped<IFavoriteService, FavoriteService>();
+builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
+builder.Services.AddScoped<IUserInterestSignalUpdater, UserInterestSignalUpdater>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IExploreService, ExploreService>();
 builder.Services.AddScoped<IStayContributionService, StayContributionService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>();
+builder.Services.AddHttpClient<IMapService, MapService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("GeoTrack/1.0");
+});
 builder.Services.AddScoped<IUserAvatarStorageService, LocalUserAvatarStorageService>();
 builder.Services.AddScoped<IContributionMediaStorageService, LocalContributionMediaStorageService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+
+var forwardedHeadersEnabled = ConfigureForwardedHeaders(builder);
 
 // builder.Services.AddScoped<UserService>();
 // builder.Services.AddScoped<RoleService>();
@@ -153,6 +165,25 @@ builder.Services.AddRateLimiter(options =>
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true,
             }));
+
+    // Analytics ingestion: partition by authenticated user, then anonymous
+    // session id, then IP as a last resort. 60 batches/minute is generous
+    // given the 5-second client-side flush window.
+    options.AddPolicy("analytics", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey:
+                httpContext.User.FindFirst("userId")?.Value
+                ?? httpContext.Request.Headers["X-Anonymous-Session"].ToString()
+                ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
 });
 
 builder.Services.AddCors(options =>
@@ -181,6 +212,7 @@ if (app.Environment.IsDevelopment())
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
+    app.UseHsts();
     app.UseExceptionHandler(errorApp =>
     {
         errorApp.Run(async context =>
@@ -198,10 +230,31 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
     app.UseCors("AllowFrontendDev");
 }
-else
+
+if (forwardedHeadersEnabled)
+{
+    app.UseForwardedHeaders();
+}
+
+if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
+
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        if (!context.Request.Path.StartsWithSegments("/swagger"))
+        {
+            ApplySecurityHeaders(context.Response.Headers);
+        }
+
+        return Task.CompletedTask;
+    });
+
+    await next();
+});
 
 var mediaRoot = Path.Combine(app.Environment.ContentRootPath, "media");
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "avatars"));
@@ -215,6 +268,26 @@ app.UseStaticFiles(new StaticFileOptions
     FileProvider = new PhysicalFileProvider(mediaRoot),
     RequestPath = "/media",
     ContentTypeProvider = mediaContentTypes,
+    OnPrepareResponse = context =>
+    {
+        var headers = context.Context.Response.Headers;
+        headers[HeaderNames.XContentTypeOptions] = "nosniff";
+
+        if (context.Context.Request.Path.StartsWithSegments("/media/uploads/avatars"))
+        {
+            headers[HeaderNames.CacheControl] = "public, max-age=86400, immutable";
+            return;
+        }
+
+        if (context.Context.Request.Path.StartsWithSegments("/media/uploads/contributions"))
+        {
+            headers[HeaderNames.CacheControl] = "no-store";
+            headers["X-Robots-Tag"] = "noindex, noarchive, nosnippet";
+            return;
+        }
+
+        headers[HeaderNames.CacheControl] = "no-store";
+    }
 });
 
 app.UseAuthentication();
@@ -225,5 +298,78 @@ app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();
+
+static bool ConfigureForwardedHeaders(WebApplicationBuilder builder)
+{
+    var enabled = builder.Configuration.GetValue<bool>("ForwardedHeaders:Enabled");
+    if (!enabled)
+        return false;
+
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders =
+            ForwardedHeaders.XForwardedFor |
+            ForwardedHeaders.XForwardedProto |
+            ForwardedHeaders.XForwardedHost;
+        options.ForwardLimit = Math.Max(1, builder.Configuration.GetValue<int?>("ForwardedHeaders:ForwardLimit") ?? 1);
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+
+        foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? Array.Empty<string>())
+        {
+            if (IPAddress.TryParse(proxy, out var proxyAddress))
+            {
+                options.KnownProxies.Add(proxyAddress);
+            }
+        }
+
+        foreach (var network in builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? Array.Empty<string>())
+        {
+            if (TryParseNetwork(network, out var ipNetwork))
+            {
+                options.KnownNetworks.Add(ipNetwork);
+            }
+        }
+    });
+
+    return true;
+}
+
+static bool TryParseNetwork(string value, out Microsoft.AspNetCore.HttpOverrides.IPNetwork network)
+{
+    network = default!;
+
+    var parts = value.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+    if (parts.Length != 2 ||
+        !IPAddress.TryParse(parts[0], out var address) ||
+        !int.TryParse(parts[1], out var prefixLength))
+    {
+        return false;
+    }
+
+    network = new Microsoft.AspNetCore.HttpOverrides.IPNetwork(address, prefixLength);
+    return true;
+}
+
+static void ApplySecurityHeaders(IHeaderDictionary headers)
+{
+    headers[HeaderNames.XContentTypeOptions] = "nosniff";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    headers["Permissions-Policy"] = "geolocation=(self), microphone=(), camera=()";
+    headers["Cross-Origin-Opener-Policy"] = "same-origin";
+    headers["Content-Security-Policy"] =
+        "default-src 'self'; " +
+        "base-uri 'self'; " +
+        "frame-ancestors 'none'; " +
+        "form-action 'self'; " +
+        "object-src 'none'; " +
+        "img-src 'self' data: blob: https://tiles.openfreemap.org https://klokantech.github.io https://maputnik.github.io https://orangemug.github.io; " +
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+        "font-src 'self' data: https://fonts.gstatic.com https://klokantech.github.io; " +
+        "connect-src 'self' https://tiles.openfreemap.org https://klokantech.github.io https://maputnik.github.io https://orangemug.github.io; " +
+        "worker-src 'self' blob:; " +
+        "script-src 'self';";
+}
 
 public partial class Program;

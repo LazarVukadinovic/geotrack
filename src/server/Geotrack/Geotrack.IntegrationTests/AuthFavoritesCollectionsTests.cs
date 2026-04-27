@@ -47,8 +47,10 @@ public sealed class AuthFavoritesCollectionsTests
         var tokenPair = await login.Content.ReadFromJsonAsync<LoginResponseDto>();
         Assert.NotNull(tokenPair);
         Assert.False(string.IsNullOrWhiteSpace(tokenPair.AccessToken));
-        Assert.False(string.IsNullOrWhiteSpace(tokenPair.RefreshToken));
+        Assert.Equal(string.Empty, tokenPair.RefreshToken);
         Assert.Equal(900, tokenPair.ExpiresIn);
+        Assert.True(login.Headers.TryGetValues("Set-Cookie", out var authCookies));
+        Assert.Contains(authCookies, value => value.Contains("geotrack_refresh=", StringComparison.Ordinal));
 
         authorizedClient.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", tokenPair.AccessToken);
@@ -60,6 +62,42 @@ public sealed class AuthFavoritesCollectionsTests
         Assert.NotNull(me);
         Assert.Equal("marko.p@example.com", me.Email);
         Assert.Equal("Marko", me.FirstName);
+    }
+
+    [Fact]
+    public async Task Refresh_flow_uses_cookie_backed_session_and_logout_revokes_it()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var login = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequestDto
+            {
+                Email = "marko.p@example.com",
+                Password = "password123",
+                RememberMe = false,
+            });
+        login.EnsureSuccessStatusCode();
+
+        var loggedInSession = await login.Content.ReadFromJsonAsync<LoginResponseDto>();
+        Assert.NotNull(loggedInSession);
+        Assert.False(string.IsNullOrWhiteSpace(loggedInSession.AccessToken));
+        Assert.Equal(string.Empty, loggedInSession.RefreshToken);
+
+        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { });
+        refresh.EnsureSuccessStatusCode();
+
+        var refreshedSession = await refresh.Content.ReadFromJsonAsync<RefreshResponseDto>();
+        Assert.NotNull(refreshedSession);
+        Assert.False(string.IsNullOrWhiteSpace(refreshedSession.AccessToken));
+        Assert.Equal(string.Empty, refreshedSession.RefreshToken);
+
+        var logout = await client.PostAsJsonAsync("/api/auth/logout", new { });
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+
+        var refreshAfterLogout = await client.PostAsJsonAsync("/api/auth/refresh", new { });
+        Assert.Equal(HttpStatusCode.Unauthorized, refreshAfterLogout.StatusCode);
     }
 
     [Fact]

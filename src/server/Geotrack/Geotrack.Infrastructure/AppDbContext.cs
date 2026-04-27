@@ -1,5 +1,6 @@
 ﻿using System;
 using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
@@ -55,6 +56,10 @@ public class AppDbContext : DbContext
     public DbSet<StayContribution> StayContributions => Set<StayContribution>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
+    public DbSet<AnonymousSession> AnonymousSessions => Set<AnonymousSession>();
+    public DbSet<UserInterestSignal> UserInterestSignals => Set<UserInterestSignal>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -734,8 +739,14 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Phone)
                 .HasMaxLength(50);
 
+            entity.Property(x => x.ContactEmail)
+                .HasMaxLength(200);
+
             entity.Property(x => x.Website)
                 .HasMaxLength(500);
+
+            entity.Property(x => x.PricePerNight)
+                .HasColumnType("decimal(10,2)");
 
             entity.Property(x => x.ReviewNote)
                 .HasMaxLength(1000);
@@ -835,6 +846,9 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("PlaceBookingPartners");
             entity.HasKey(x => new { x.PlaceId, x.BookingPartnerId });
+
+            entity.Property(x => x.Url)
+                .HasMaxLength(500);
 
             entity.HasOne(x => x.Place)
                 .WithMany(x => x.PlaceBookingPartners)
@@ -942,6 +956,102 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.TokenHash).IsUnique();
             // Fast lookup of active tokens per user
             entity.HasIndex(x => new { x.UserId, x.IsRevoked, x.ExpiresAt });
+        });
+
+        modelBuilder.Entity<AnonymousSession>(entity =>
+        {
+            entity.ToTable("AnonymousSessions");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.LastSeenAt).IsRequired();
+
+            entity.Property(x => x.EntryRoute).HasMaxLength(300);
+            entity.Property(x => x.CoarseRegion).HasMaxLength(120);
+            entity.Property(x => x.CoarseCountry).HasMaxLength(120);
+
+            entity.Property(x => x.UserAgentFamily)
+                .IsRequired()
+                .HasMaxLength(40)
+                .HasDefaultValue("other");
+
+            entity.HasIndex(x => x.LastSeenAt);
+        });
+
+        modelBuilder.Entity<AnalyticsEvent>(entity =>
+        {
+            entity.ToTable("AnalyticsEvents");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.EventType)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.EntityType).HasMaxLength(40);
+            entity.Property(x => x.Route).HasMaxLength(300);
+
+            entity.Property(x => x.MetadataJson)
+                .IsRequired()
+                .HasColumnType("jsonb")
+                .HasDefaultValue("{}");
+
+            entity.Property(x => x.OccurredAt).IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.AnonymousSession)
+                .WithMany()
+                .HasForeignKey(x => x.AnonymousSessionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.Destination)
+                .WithMany()
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.OccurredAt);
+            entity.HasIndex(x => new { x.UserId, x.OccurredAt });
+            entity.HasIndex(x => new { x.AnonymousSessionId, x.OccurredAt });
+            entity.HasIndex(x => new { x.EventType, x.OccurredAt });
+            entity.HasIndex(x => new { x.EntityType, x.EntityId, x.OccurredAt });
+            entity.HasIndex(x => new { x.DestinationId, x.OccurredAt });
+        });
+
+        modelBuilder.Entity<UserInterestSignal>(entity =>
+        {
+            entity.ToTable("UserInterestSignals");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Score).IsRequired();
+
+            entity.Property(x => x.Source)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue("inferred");
+
+            entity.Property(x => x.LastInteractionAt).IsRequired();
+            entity.Property(x => x.LastReason).HasMaxLength(80);
+            entity.Property(x => x.IsDismissed).HasDefaultValue(false);
+            entity.Property(x => x.EvidenceSinceDismissal).HasDefaultValue(0.0);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany()
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.TagId }).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.Score });
         });
     }
 
