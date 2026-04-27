@@ -19,7 +19,28 @@
     </div>
   </div>
 
-  @if (collection(); as col) {
+  @if (loadState() === 'loading' && !collection()) {
+    <div class="flex-1 flex flex-col items-center justify-center gap-3 px-6">
+      <div class="w-8 h-8 border-2 border-[#e8570a] border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-sm text-slate-400">Loading collection...</p>
+    </div>
+  } @else if (loadState() === 'error') {
+    <div class="flex-1 flex flex-col items-center justify-center gap-4 px-8 text-center">
+      <p class="text-sm text-slate-500">We couldn't load this collection right now.</p>
+      <button type="button" (click)="reloadCollection()"
+        class="px-6 py-2.5 bg-[#e8570a] rounded-xl text-white text-sm font-bold">
+        Retry
+      </button>
+    </div>
+  } @else if (loadState() === 'notFound' && !collection()) {
+    <div class="flex-1 flex flex-col items-center justify-center gap-4 px-8 text-center">
+      <p class="text-sm text-slate-500">This collection could not be found.</p>
+      <button type="button" (click)="goBack()"
+        class="px-6 py-2.5 bg-[#1a2b4a] rounded-xl text-white text-sm font-bold">
+        Go back
+      </button>
+    </div>
+  } @else if (collection(); as col) {
 
     <!-- Cover mosaic -->
     <div class="mx-5 mt-8 rounded-2xl overflow-hidden relative" style="height: 220px;">
@@ -59,6 +80,12 @@
 
     <!-- Places list -->
     <div class="px-5 mt-5">
+      @if (loadState() === 'loading') {
+        <div class="mb-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+          <p class="text-xs font-semibold text-slate-700">Refreshing collection details...</p>
+        </div>
+      }
+
       <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Places</p>
 
       @if (places.length === 0) {
@@ -67,7 +94,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
           </svg>
-          <p class="text-sm text-slate-500 text-center">No places yet. Tap + to add your first one.</p>
+          <p class="text-sm text-slate-500 text-center">No places are saved in this collection yet.</p>
         </div>
       }
 
@@ -85,6 +112,11 @@
           </button>
         </div>
       }
+
+      <div class="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+        <p class="text-sm font-semibold text-slate-700">Collection actions</p>
+        <p class="text-xs text-slate-500 mt-1">Adding places directly from this screen is intentionally unavailable in this build because there is no trustworthy backend-backed picker here yet.</p>
+      </div>
     </div>
 
   } @else {
@@ -92,15 +124,6 @@
       <p class="text-sm text-slate-400">Collection not found.</p>
     </div>
   }
-
-  <!-- FAB -->
-  <button type="button" (click)="onAddPlace()"
-    class="fixed bottom-8 right-6 w-14 h-14 bg-[#e8570a] rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform">
-    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/>
-    </svg>
-  </button>
-
 </div>
 <!-- ── Menu sheet ──────────────────────────────────────────────────────────── -->
 @if (menuOpen()) {

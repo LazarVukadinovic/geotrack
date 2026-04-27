@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal, NgZone, OnDestroy } from '@angular/core';
 import { Location } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { CollectionsService } from '../../services/collections';
 
 const DISMISS_THRESHOLD = 120;
@@ -13,7 +13,6 @@ const DISMISS_THRESHOLD = 120;
 })
 export class CollectionDetailComponent {
   private readonly location    = inject(Location);
-  private readonly router      = inject(Router);
   private readonly route       = inject(ActivatedRoute);
   private readonly collService = inject(CollectionsService);
   private readonly ngZone      = inject(NgZone);
@@ -22,6 +21,9 @@ export class CollectionDetailComponent {
 
   protected readonly collection = computed(() =>
     this.collService.collections().find(c => c.id === this.id)
+  );
+  protected readonly loadState = computed(() =>
+    this.collService.getDetailLoadState(this.id)
   );
 
   constructor() {
@@ -61,11 +63,6 @@ export class CollectionDetailComponent {
     this.collService.removePlace(this.id, itemId);
   }
 
-  protected onAddPlace(): void {
-    //ekran za dodavanje mesta
-    this.router.navigate(['/profile/collections', this.id, 'add-place']);
-  }
-
   protected onMenuOpen(): void {
     this.menuOpen.set(true);
   }
@@ -93,6 +90,12 @@ export class CollectionDetailComponent {
     this.collService.deleteCollection(this.id);
     this.menuOpen.set(false);
     this.location.back();
+  }
+
+  protected reloadCollection(): void {
+    if (this.id > 0) {
+      this.collService.loadDetails(this.id);
+    }
   }
   protected onMenuTouchStart(e: TouchEvent): void {
     this.activeDrag = 'menu';

@@ -1,7 +1,7 @@
 import { Location } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { vi } from 'vitest';
 import { CollectionDetailComponent } from './collection-detail.component';
 import { CollectionsService } from '../../services/collections';
@@ -9,10 +9,6 @@ import { CollectionsService } from '../../services/collections';
 describe('CollectionDetail', () => {
   let component: CollectionDetailComponent;
   let fixture: ComponentFixture<CollectionDetailComponent>;
-
-  const router = {
-    navigate: vi.fn(),
-  };
 
   const location = {
     back: vi.fn(),
@@ -29,6 +25,7 @@ describe('CollectionDetail', () => {
       },
     ]),
     loadDetails: vi.fn(),
+    getDetailLoadState: vi.fn(() => 'loaded'),
     removePlace: vi.fn(),
     renameCollection: vi.fn(),
     deleteCollection: vi.fn(),
@@ -40,7 +37,6 @@ describe('CollectionDetail', () => {
     await TestBed.configureTestingModule({
       imports: [CollectionDetailComponent],
       providers: [
-        { provide: Router, useValue: router },
         { provide: Location, useValue: location },
         {
           provide: ActivatedRoute,

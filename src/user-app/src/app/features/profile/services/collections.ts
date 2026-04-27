@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { AnalyticsService } from '../../../core/services/analytics.service';
 
 export interface CollectionPlace {
   itemId: number;
@@ -17,6 +18,8 @@ export interface Collection {
   coverImages: string[];
   places?: CollectionPlace[];
 }
+
+export type CollectionDetailLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
 
 interface CollectionListItemDto {
   id: number;
@@ -97,8 +100,10 @@ interface AddCollectionItemResponseDto {
 export class CollectionsService {
   private readonly http        = inject(HttpClient);
   private readonly authService = inject(AuthService);
+  private readonly analytics   = inject(AnalyticsService);
 
   private readonly _collections = signal<Collection[]>([]);
+  private readonly _detailLoadStates = signal<Record<number, CollectionDetailLoadState>>({});
   readonly collections = computed(() => this._collections());
 
   private _loaded = false;
@@ -109,9 +114,14 @@ export class CollectionsService {
         if (!this._loaded) this.loadFromApi();
       } else {
         this._collections.set([]);
+        this._detailLoadStates.set({});
         this._loaded = false;
       }
     });
+  }
+
+  getDetailLoadState(collectionId: number): CollectionDetailLoadState {
+    return this._detailLoadStates()[collectionId] ?? 'idle';
   }
 
   private loadFromApi(): void {
@@ -136,6 +146,12 @@ export class CollectionsService {
 
   /** Fetch full items for one collection and merge them into the signal. */
   loadDetails(collectionId: number): void {
+    if (collectionId <= 0) {
+      this.setDetailLoadState(collectionId, 'notFound');
+      return;
+    }
+
+    this.setDetailLoadState(collectionId, 'loading');
     this.http
       .get<GetCollectionDetailsResponseDto>(`/api/user/me/collections/${collectionId}`)
       .subscribe({
@@ -159,6 +175,10 @@ export class CollectionsService {
             if (!exists) return [loaded, ...cols];
             return cols.map(c => c.id === collectionId ? loaded : c);
           });
+          this.setDetailLoadState(collectionId, 'loaded');
+        },
+        error: (err) => {
+          this.setDetailLoadState(collectionId, err?.status === 404 ? 'notFound' : 'error');
         },
       });
   }
@@ -176,6 +196,7 @@ export class CollectionsService {
           places: [],
         };
         this._collections.update(cols => [created, ...cols]);
+        this.analytics.track('collection_created', { entityType: 'collection', entityId: res.id });
         onCreated?.(res.id);
       },
     });
@@ -222,6 +243,11 @@ export class CollectionsService {
                 : c,
             ),
           );
+          this.analytics.track('collection_item_added', {
+            entityType: 'place',
+            entityId: place.placeId,
+            metadata: { collectionId },
+          });
         },
         error: () => {
           this._collections.update(cols =>
@@ -265,6 +291,13 @@ export class CollectionsService {
       }),
     );
 
+    if (removed) {
+      this.analytics.track('collection_item_removed', {
+        entityType: 'place',
+        entityId: removed.placeId,
+        metadata: { collectionId },
+      });
+    }
     this.http
       .delete(`/api/user/me/collections/${collectionId}/items/${itemId}`)
       .subscribe({
@@ -313,5 +346,9 @@ export class CollectionsService {
           );
         },
       });
+  }
+
+  private setDetailLoadState(collectionId: number, state: CollectionDetailLoadState): void {
+    this._detailLoadStates.update(current => ({ ...current, [collectionId]: state }));
   }
 }
