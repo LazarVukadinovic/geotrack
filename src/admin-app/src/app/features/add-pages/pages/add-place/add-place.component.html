@@ -1,0 +1,261 @@
+<div class="flex h-screen w-screen overflow-hidden bg-gray-50">
+  <app-sidebar></app-sidebar>
+
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <app-topbar title="New Place"></app-topbar>
+
+    <div class="flex-1 overflow-y-auto px-8 py-6">
+      <div class="flex gap-5 items-start">
+
+        <!-- ═══ LEFT COLUMN ═══ -->
+        <div class="flex-1 min-w-0">
+
+          <!-- Basic Information -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <h3 class="text-sm font-bold text-gray-900 mb-0.5">Basic Information</h3>
+            <p class="text-xs text-gray-500 mb-4">Core details and hierarchy of the place.</p>
+
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Region (Locked)</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none" value="Šumadija, Srbija" readonly />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Parent Destination (Locked)</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none" value="Central District" readonly />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Parent Location <span class="text-red-500">*</span></label>
+                <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 bg-white outline-none">
+                  <option value="">Select parent location...</option>
+                  <option>Oplenac Area</option>
+                  <option>Central Zone</option>
+                  <option>Old Town</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Place Type/Category <span class="text-red-500">*</span></label>
+                <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 bg-white outline-none" [(ngModel)]="placeType">
+                  <option value="">Select type...</option>
+                  <option value="Museum">Museum</option>
+                  <option value="Restaurant">Restaurant</option>
+                  <option value="Park">Park</option>
+                  <option value="Landmark">Landmark</option>
+                  <option value="Hotel">Hotel</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Place Name <span class="text-red-500">*</span></label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. National History Museum" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Internal Reference ID</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. PLC-001" />
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Short Excerpt / Summary <span class="text-red-500">*</span></label>
+              <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans" placeholder="Max 160 characters..." rows="2"></textarea>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Full Description</label>
+              <div class="border border-gray-300 rounded-lg overflow-hidden">
+                <div class="flex gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200">
+                  <button class="px-2 py-0.5 rounded text-sm text-gray-600 hover:bg-gray-200 border-none bg-transparent cursor-pointer"><strong>B</strong></button>
+                  <button class="px-2 py-0.5 rounded text-sm text-gray-600 hover:bg-gray-200 border-none bg-transparent cursor-pointer"><em>I</em></button>
+                  <button class="px-2 py-0.5 rounded text-sm text-gray-600 hover:bg-gray-200 border-none bg-transparent cursor-pointer"><u>U</u></button>
+                </div>
+                <textarea class="w-full border-none px-3 py-2 text-sm min-h-[100px] resize-y font-sans outline-none" placeholder="Comprehensive details..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Context & Visit Information -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <h3 class="text-sm font-bold text-gray-900 mb-4">Context &amp; Visit Information</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Best Time to Visit</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. Spring mornings" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Visitor Tips</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. Book in advance" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Access Notes</label>
+                <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans" placeholder="Parking details, walk distance..." rows="3"></textarea>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Accessibility Notes</label>
+                <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans" placeholder="Wheelchair access, ramps..." rows="3"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Operational Information -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <h3 class="text-sm font-bold text-gray-900 mb-0.5">Operational Information</h3>
+            <p class="text-xs text-blue-500 mb-4">Showing operational fields for '{{ placeType || 'Museum' }}' place type.</p>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Website</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="https://" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Contact Phone</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="+1 (555) 000-0000" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Admission / Price Range</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. $10 - $25 Adults" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Booking / External Link</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="https://tickets..." />
+              </div>
+            </div>
+          </div>
+
+          <!-- Operating Hours -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="text-sm font-bold text-gray-900 mb-0.5">Operating Information</h3>
+                <p class="text-xs text-gray-500">Hours, pricing, and visit details.</p>
+              </div>
+              <!-- Toggle -->
+              <div
+                class="relative w-10 h-5 rounded-full cursor-pointer transition-colors duration-200"
+                [class.bg-blue-600]="opsEnabled"
+                [class.bg-gray-300]="!opsEnabled"
+                (click)="opsEnabled = !opsEnabled"
+              >
+                <div
+                  class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200"
+                  [class.left-5]="opsEnabled"
+                  [class.left-0.5]="!opsEnabled"
+                ></div>
+              </div>
+            </div>
+
+            <p class="text-xs font-semibold text-gray-700 mb-3">Regular Opening Hours</p>
+
+            <div *ngFor="let day of days" class="flex items-center gap-2 mb-2">
+              <span class="text-xs font-medium text-gray-600 w-24 flex-shrink-0"
+                    [class.text-blue-600]="day.name === 'Saturday'">{{ day.name }}</span>
+
+              <ng-container *ngIf="day.open; else closedTpl">
+                <select class="border border-gray-300 rounded-lg px-2 py-1 text-xs text-gray-700 bg-white outline-none" [(ngModel)]="day.openTime">
+                  <option *ngFor="let t of openTimes">{{ t }}</option>
+                </select>
+                <span class="text-xs text-gray-400">to</span>
+                <select class="border border-gray-300 rounded-lg px-2 py-1 text-xs text-gray-700 bg-white outline-none" [(ngModel)]="day.closeTime">
+                  <option *ngFor="let t of closeTimes">{{ t }}</option>
+                </select>
+                <button class="text-gray-400 hover:text-red-500 text-base leading-none border-none bg-transparent cursor-pointer px-1" (click)="day.open = false">×</button>
+              </ng-container>
+
+              <ng-template #closedTpl>
+                <span class="text-xs text-gray-400">Closed</span>
+                <button class="ml-2 text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded-md px-2 py-0.5 bg-blue-50 cursor-pointer" (click)="day.open = true">Set Hours</button>
+              </ng-template>
+            </div>
+          </div>
+
+          <!-- Hero Media -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="text-sm font-bold text-gray-900 mb-0.5">Hero Media</h3>
+                <p class="text-xs text-gray-500">Main cover image and optional gallery</p>
+              </div>
+              <button class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 cursor-pointer">Library</button>
+            </div>
+            <div class="border-2 border-dashed border-gray-300 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors">
+              <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              </div>
+              <span>Click to upload Main Cover Image</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ═══ RIGHT PANEL ═══ -->
+        <div class="w-64 min-w-[256px]">
+
+          <!-- Publishing -->
+          <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Publishing</h4>
+            <button class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors">Publish</button>
+          </div>
+
+          <!-- Geographic Context -->
+          <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Geographic Context</h4>
+            <p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3">
+              <strong>Note:</strong> A Place is a specific pinnable location on the map.
+            </p>
+            <div class="relative h-28 rounded-lg overflow-hidden mb-3 bg-blue-100">
+              <div class="absolute inset-0 bg-blue-100"></div>
+              <div class="absolute inset-0" style="background-image: linear-gradient(rgba(99,102,241,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.1) 1px, transparent 1px); background-size: 20px 20px;"></div>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#1d4ed8" stroke="white" stroke-width="1.5">
+                  <circle cx="12" cy="10" r="3"/>
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                </svg>
+              </div>
+              <button class="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-blue-700 bg-white border border-blue-200 rounded-md px-2 py-1 cursor-pointer shadow-sm">Pin from Map</button>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <label class="block text-[11px] font-semibold text-gray-600 mb-1">Latitude</label>
+                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. 44.0165" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-gray-600 mb-1">Longitude</label>
+                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. -123.9615" />
+              </div>
+            </div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Street Address</label>
+            <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="123 Main Street" />
+          </div>
+
+          <!-- Classification -->
+          <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Classification</h4>
+            <label class="flex items-center gap-2 text-sm text-gray-700 mb-2 cursor-pointer" *ngFor="let item of classItems">
+              <input type="checkbox" [(ngModel)]="item.checked" class="w-4 h-4 accent-blue-700" />
+              {{ item.label }}
+            </label>
+            <div class="mt-3">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Additional Tags</label>
+              <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. Surfing, Hiking, Seafood..." />
+              <div class="flex gap-1.5 mt-2 flex-wrap">
+                <span class="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5">Scenic Drive</span>
+                <span class="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5">Rainforest</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metadata -->
+          <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Metadata</h4>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs"><span class="text-gray-500">Created By</span><span class="text-gray-900 font-semibold">Sarah J.</span></div>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs"><span class="text-gray-500">Assigned Region</span><span class="text-gray-900 font-semibold">Šumadija</span></div>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs"><span class="text-gray-500">Parent Dest.</span><span class="text-gray-900 font-semibold">Central District</span></div>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs"><span class="text-gray-500">Parent Location</span><span class="text-gray-900 font-semibold">Oplenac Area</span></div>
+            <div class="flex justify-between items-center py-1.5 text-xs"><span class="text-gray-500">Created</span><span class="text-gray-900 font-semibold">Oct 12, 2023</span></div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

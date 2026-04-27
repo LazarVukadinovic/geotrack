@@ -27,6 +27,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/add-pages/pages/add-location/add-location.component').then(m => m.NewLocationComponent),
       },
+      {
+        path: 'places/new',
+        loadComponent: () =>
+          import('./features/add-pages/pages/add-place/add-place.component').then(m => m.NewPlaceComponent),
+      },
     //   {
     //     path: 'requests',
     //     loadComponent: () =>
