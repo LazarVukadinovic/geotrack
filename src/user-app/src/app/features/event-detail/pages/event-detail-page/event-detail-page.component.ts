@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { LocationService } from '../../../../core/services/location.service';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { EventDetailService } from '../../services/event-detail.service';
 
@@ -19,6 +20,7 @@ export class EventDetailPageComponent {
   private readonly router   = inject(Router);
   private readonly location = inject(Location);
   private readonly locationSvc = inject(LocationService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly service  = inject(EventDetailService);
 
   protected readonly eventId = toSignal(
@@ -89,6 +91,16 @@ export class EventDetailPageComponent {
 
   protected onHeroImgError(event: Event): void {
     (event.target as HTMLImageElement).src = '/images/explore-image-fallback.svg';
+  }
+
+  protected onDirectionsClick(): void {
+    const numId = parseInt(this.eventId(), 10);
+    if (isNaN(numId)) return;
+    this.analytics.track('directions_started', {
+      entityType: 'event',
+      entityId: numId,
+      metadata: { provider: 'google_maps', context: 'event_detail' },
+    });
   }
 
   private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {

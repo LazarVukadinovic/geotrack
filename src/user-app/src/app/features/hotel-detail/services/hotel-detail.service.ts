@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
+import { AnalyticsService } from '../../../core/services/analytics.service';
 import type { HotelDetail } from '../models/hotel-detail.model';
 import type { DetailLoadState } from '../../place-detail/services/place-detail.service';
 
@@ -17,7 +18,9 @@ interface ApiHotelDetail {
   rating?: number;
   reviewCount?: string;
   distance?: string;
-  pricePerNight: number;
+  pricePerNight?: number | null;
+  contactEmail?: string | null;
+  phoneNumber?: string | null;
   about?: string;
   bookingPartners: { id: number; name: string; variant: string; url?: string | null }[];
   amenities: { id: number; label: string; icon: string }[];
@@ -33,6 +36,7 @@ export class HotelDetailService {
   private readonly auth = inject(AuthService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly _cache = signal<Record<string, HotelDetail>>({});
   private readonly _loadState = signal<Record<string, DetailLoadState>>({});
   private readonly lastRequestKeyById = new Map<string, string>();
@@ -82,8 +86,10 @@ export class HotelDetailService {
           rating: dto.rating,
           reviewCount: dto.reviewCount,
           distance: dto.distance ?? '',
-          pricePerNight: dto.pricePerNight,
+          pricePerNight: dto.pricePerNight ?? null,
           about: dto.about ?? '',
+          contactEmail: dto.contactEmail ?? null,
+          phoneNumber: dto.phoneNumber ?? null,
           bookingPartners: dto.bookingPartners.map(b => ({
             id: String(b.id),
             name: b.name,
@@ -117,6 +123,7 @@ export class HotelDetailService {
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');
         this.lastRequestKeyById.delete(id);
+        this.analytics.track('detail_view', { entityType: 'hotel', entityId: dto.id });
       },
       error: (err) => {
         if (this.lastRequestKeyById.get(id) === requestKey) {
@@ -144,7 +151,9 @@ export class HotelDetailService {
 
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    this.favoriteState.set('place', id, !current.isSaved);
+    const next = !current.isSaved;
+    this.favoriteState.set('place', id, next);
+    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', { entityType: 'hotel', entityId: numId });
     this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
       error: () => this.favoriteState.set('place', id, current.isSaved),
     });

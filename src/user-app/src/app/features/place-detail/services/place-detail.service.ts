@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
+import { AnalyticsService } from '../../../core/services/analytics.service';
 import type { PlaceDetail } from '../../../core/models/place.model';
 
 export type DetailLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
@@ -34,6 +35,7 @@ export class PlaceDetailService {
   private readonly auth = inject(AuthService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly _cache = signal<Record<string, PlaceDetail>>({});
   private readonly _loadState = signal<Record<string, DetailLoadState>>({});
   private readonly lastRequestKeyById = new Map<string, string>();
@@ -109,6 +111,7 @@ export class PlaceDetailService {
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');
         this.lastRequestKeyById.delete(id);
+        this.analytics.track('detail_view', { entityType: 'place', entityId: dto.id });
       },
       error: (err) => {
         if (this.lastRequestKeyById.get(id) === requestKey) {
@@ -136,7 +139,9 @@ export class PlaceDetailService {
 
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    this.favoriteState.set('place', id, !current.isSaved);
+    const next = !current.isSaved;
+    this.favoriteState.set('place', id, next);
+    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', { entityType: 'place', entityId: numId });
     this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
       error: () => this.favoriteState.set('place', id, current.isSaved),
     });

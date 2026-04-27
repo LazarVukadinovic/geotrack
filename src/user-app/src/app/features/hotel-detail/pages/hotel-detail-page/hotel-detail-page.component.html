@@ -107,6 +107,15 @@
               <span class="hd__stat-val">{{ h.distance }}</span>
             </div>
           }
+
+          @if (h.pricePerNight != null) {
+            <span class="hd__stat-dot" aria-hidden="true"></span>
+
+            <div class="hd__stat">
+              <span class="hd__stat-val">${{ h.pricePerNight }}</span>
+              <span class="hd__stat-sub">/ night</span>
+            </div>
+          }
         </div>
 
         <!-- CTA buttons -->
@@ -118,6 +127,7 @@
                 [href]="directionsHref"
                 target="_blank"
                 rel="noreferrer"
+                (click)="onDirectionsClick()"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path fill="currentColor"
@@ -158,6 +168,7 @@
                   [href]="partner.url"
                   target="_blank"
                   rel="noreferrer"
+                  (click)="onPartnerClick(partner)"
                 >
                   <span>{{ partner.name }}</span>
                   <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -179,6 +190,7 @@
                     [href]="partner.url"
                     target="_blank"
                     rel="noreferrer"
+                    (click)="onPartnerClick(partner)"
                   >
                     <span>{{ partner.name }}</span>
                     <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -200,6 +212,22 @@
           <h2 class="hd__section-title">About this property</h2>
           <p class="hd__about">{{ h.about }}</p>
         </section>
+
+        @if (h.contactEmail || h.phoneNumber) {
+          <div class="hd__divider"></div>
+
+          <section class="hd__section">
+            <h2 class="hd__section-title">Contact</h2>
+            <div class="flex flex-col gap-2 text-sm">
+              @if (h.contactEmail) {
+                <a [href]="'mailto:' + h.contactEmail" class="text-[#e8570a] break-all">{{ h.contactEmail }}</a>
+              }
+              @if (h.phoneNumber) {
+                <p class="text-slate-600">{{ h.phoneNumber }}</p>
+              }
+            </div>
+          </section>
+        }
 
         <!-- ── Amenities ──────────────────────────────────────────────────── -->
         <div class="hd__divider"></div>

@@ -6,12 +6,13 @@ import { map } from 'rxjs/operators';
 import { Observable, throwError } from 'rxjs';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LocationService } from '../../../../core/services/location.service';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
 import { HttpClient } from '@angular/common/http';
 import { HotelDetailService } from '../../services/hotel-detail.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
-import type { HotelAmenityIcon } from '../../models/hotel-detail.model';
+import type { HotelAmenityIcon, HotelBookingPartner } from '../../models/hotel-detail.model';
 
 @Component({
   selector: 'app-hotel-detail-page',
@@ -27,6 +28,7 @@ export class HotelDetailPageComponent {
   private readonly service  = inject(HotelDetailService);
   private readonly auth     = inject(AuthService);
   private readonly locationSvc = inject(LocationService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly http     = inject(HttpClient);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
@@ -127,7 +129,32 @@ export class HotelDetailPageComponent {
 
   protected onReviewSubmitted(_draft: ReviewDraft): void {
     const id = this.hotelId();
-    if (id) this.service.loadHotelDetail(id);
+    if (!id) return;
+    const numId = parseInt(id, 10);
+    if (!isNaN(numId)) {
+      this.analytics.track('review_created', { entityType: 'hotel', entityId: numId });
+    }
+    this.service.loadHotelDetail(id);
+  }
+
+  protected onDirectionsClick(): void {
+    const numId = parseInt(this.hotelId(), 10);
+    if (isNaN(numId)) return;
+    this.analytics.track('directions_started', {
+      entityType: 'hotel',
+      entityId: numId,
+      metadata: { provider: 'google_maps', context: 'hotel_detail' },
+    });
+  }
+
+  protected onPartnerClick(partner: HotelBookingPartner): void {
+    const numId = parseInt(this.hotelId(), 10);
+    if (isNaN(numId)) return;
+    this.analytics.trackOutboundLink(partner.name, partner.url, {
+      entityType: 'hotel',
+      entityId: numId,
+      metadata: { context: 'hotel_detail' },
+    });
   }
 
   protected amenityIconPath(icon: HotelAmenityIcon): string {

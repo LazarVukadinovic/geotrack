@@ -6,6 +6,7 @@ import { map } from 'rxjs/operators';
 import { Observable, throwError } from 'rxjs';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LocationService } from '../../../../core/services/location.service';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
 import { HttpClient } from '@angular/common/http';
@@ -26,6 +27,7 @@ export class PlaceDetailPageComponent {
   private readonly service  = inject(PlaceDetailService);
   private readonly auth     = inject(AuthService);
   private readonly locationSvc = inject(LocationService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly http     = inject(HttpClient);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
@@ -117,7 +119,22 @@ export class PlaceDetailPageComponent {
 
   protected onReviewSubmitted(_draft: ReviewDraft): void {
     const id = this.placeId();
-    if (id) this.service.loadPlaceDetail(id);
+    if (!id) return;
+    const numId = parseInt(id, 10);
+    if (!isNaN(numId)) {
+      this.analytics.track('review_created', { entityType: 'place', entityId: numId });
+    }
+    this.service.loadPlaceDetail(id);
+  }
+
+  protected onDirectionsClick(): void {
+    const numId = parseInt(this.placeId(), 10);
+    if (isNaN(numId)) return;
+    this.analytics.track('directions_started', {
+      entityType: 'place',
+      entityId: numId,
+      metadata: { provider: 'google_maps', context: 'place_detail' },
+    });
   }
 
   private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {

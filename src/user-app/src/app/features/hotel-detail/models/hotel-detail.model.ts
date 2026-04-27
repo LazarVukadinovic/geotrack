@@ -57,8 +57,10 @@ export interface HotelDetail {
   rating?: number;
   reviewCount?: string;
   distance: string;
-  pricePerNight: number;
+  pricePerNight: number | null;
   about: string;
+  contactEmail?: string | null;
+  phoneNumber?: string | null;
   bookingPartners: HotelBookingPartner[];
   amenities: HotelAmenity[];
   reviews: HotelReview[];
