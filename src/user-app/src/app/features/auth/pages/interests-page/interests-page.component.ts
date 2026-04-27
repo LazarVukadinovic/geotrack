@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
 import { TagService, UserInterestItem } from '../../../../core/services/tag.service';
 import { UserService } from '../../../../core/services/user.service';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { Tag } from '../../../../core/models/tag.model';
 
 @Component({
@@ -27,6 +28,7 @@ export class InterestsPageComponent implements OnInit {
     private router: Router,
     private tagService: TagService,
     private userService: UserService,
+    private analytics: AnalyticsService,
   ) {}
 
   ngOnInit(): void {
@@ -78,6 +80,9 @@ export class InterestsPageComponent implements OnInit {
 
     this.tagService.saveUserTags(tagIds).subscribe({
       next: () => {
+        this.analytics.track('interests_completed', {
+          metadata: { tagCount: tagIds.length },
+        });
         // Reload canonical user state so route guards and downstream screens
         // read the cleared onboarding flag immediately.
         this.userService.load().subscribe({

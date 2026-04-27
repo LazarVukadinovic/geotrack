@@ -101,11 +101,11 @@ describe('RegisterPageComponent', () => {
 
     req.flush({
       accessToken: 'access-token',
-      refreshToken: 'refresh-token',
       expiresIn: 900,
+      sessionPersistent: true,
     });
 
-    expect(authService.login).toHaveBeenCalledWith('access-token', 'refresh-token', true);
+    expect(authService.login).toHaveBeenCalledWith('access-token', true);
     expect(userService.load).toHaveBeenCalled();
     expect(router.navigate).toHaveBeenCalledWith(['/register/interests']);
     expect(component.isLoading).toBe(false);

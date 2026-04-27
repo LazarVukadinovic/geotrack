@@ -38,7 +38,7 @@
     } @else {
       <!-- Selected Section -->
       <div>
-        <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Selected</p>
+        <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Selected by you</p>
 
         <!-- Empty state -->
         @if (selectedTags().length === 0) {
@@ -72,6 +72,48 @@
           </div>
         }
       </div>
+
+      <!-- Inferred Section -->
+      @if (visibleInferredTags().length > 0) {
+        <div>
+          <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Suggested from activity</p>
+
+          <div class="bg-white rounded-2xl shadow-sm px-4 py-4 flex flex-col gap-3">
+            @for (tag of visibleInferredTags(); track tag.tagId) {
+              <div class="flex items-center gap-3">
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-slate-800">{{ tag.name }}</p>
+                  @if (tag.description) {
+                    <p class="text-xs text-slate-400 mt-0.5">{{ tag.description }}</p>
+                  }
+                </div>
+
+                <button
+                  type="button"
+                  (click)="addInferred(tag)"
+                  class="flex-none rounded-full bg-[#1a2b4a] px-3 py-2 text-xs font-semibold text-white active:bg-[#24395f]">
+                  Add
+                </button>
+
+                <button
+                  type="button"
+                  (click)="dismissInferred(tag)"
+                  [disabled]="isDismissingInferred(tag)"
+                  class="flex-none inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 active:bg-slate-50 disabled:opacity-60"
+                  [attr.aria-label]="'Remove suggested interest ' + tag.name">
+                  @if (isDismissingInferred(tag)) {
+                    <div class="w-4 h-4 border-2 border-slate-300 border-t-[#e8570a] rounded-full animate-spin"></div>
+                  } @else {
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.3" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  }
+                </button>
+              </div>
+            }
+          </div>
+        </div>
+      }
 
       <!-- Discover More Section -->
       <div>

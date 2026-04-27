@@ -36,10 +36,13 @@ describe('MyInterests', () => {
     loadTags: vi.fn(() => of(tags)),
     loadUserInterests: vi.fn(() =>
       of({
+        explicitTags: [{ tagId: 1, name: 'Food & Drink', slug: 'food-drink' }],
+        inferredTags: [{ tagId: 2, name: 'Nature', slug: 'nature', score: 5, lastInteractionAt: new Date().toISOString() }],
         tags: [{ tagId: 1, name: 'Food & Drink', slug: 'food-drink' }],
       }),
     ),
     saveUserTags: vi.fn(() => of(void 0)),
+    dismissInferredInterest: vi.fn(() => of(void 0)),
   };
 
   beforeEach(async () => {
@@ -68,6 +71,8 @@ describe('MyInterests', () => {
     expect(tagService.loadTags).toHaveBeenCalledTimes(1);
     expect(tagService.loadUserInterests).toHaveBeenCalledTimes(1);
     expect(component.selectedTags().map((tag) => tag.id)).toEqual([1]);
+    expect(component.visibleInferredTags().map((tag) => tag.tagId)).toEqual([2]);
+    expect(component.availableTags().map((tag) => tag.id)).toEqual([3]);
   });
 
   it('should add and remove tags from the selection', () => {
@@ -78,6 +83,13 @@ describe('MyInterests', () => {
 
     component.removeTag(tag);
     expect(component.isSelected(tag)).toBe(false);
+  });
+
+  it('should let users dismiss inferred interests', () => {
+    component.dismissInferred(component.visibleInferredTags()[0]);
+
+    expect(tagService.dismissInferredInterest).toHaveBeenCalledWith(2);
+    expect(component.visibleInferredTags()).toEqual([]);
   });
 
   it('should persist selected tags through the current API contract', () => {

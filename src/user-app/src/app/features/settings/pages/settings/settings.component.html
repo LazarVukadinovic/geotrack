@@ -65,19 +65,19 @@
       <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
 
         <!-- Language -->
-        <button (click)="changeLanguage()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
+        <div class="w-full flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 opacity-90">
           <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">Language</span>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-slate-700">Language</p>
+            <p class="text-xs text-slate-400">Additional language support is not available yet.</p>
+          </div>
           <span class="text-sm text-[#e8570a] font-semibold mr-1">{{ language }}</span>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-        </button>
+        </div>
 
         <!-- Notifications -->
         <button (click)="openNotifications()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">

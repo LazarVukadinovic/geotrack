@@ -3,6 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, { Map } from 'maplibre-gl';
 import { LocationService } from '../../../../core/services/location.service';
+import { MapApiService, MapSearchResult } from '../../../../core/services/map-api.service';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { ExploreService } from '../../../explore/services/explore.service';
 
 const MAP_STYLE_URL = '/map-style.json';
@@ -16,13 +18,15 @@ const MAP_STYLE_URL = '/map-style.json';
 export class Home implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly locationSvc = inject(LocationService);
+  private readonly mapApi = inject(MapApiService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly exploreSvc = inject(ExploreService);
 
   private bgMap!: Map;
   private searchTimeout?: ReturnType<typeof setTimeout>;
 
   searchQuery = '';
-  searchResults: any[] = [];
+  searchResults: MapSearchResult[] = [];
   isLocating = false;
 
   ngOnInit(): void {
@@ -83,21 +87,32 @@ export class Home implements OnInit, OnDestroy {
   }
 
   private geocode(query: string): void {
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en&addressdetails=0&namedetails=0`)
-      .then(r => r.json())
-      .then(data => this.searchResults = data)
-      .catch(() => this.searchResults = []);
+    this.mapApi.search(query).subscribe({
+      next: (results) => {
+        this.searchResults = results;
+        this.analytics.track('search_performed', {
+          metadata: {
+            surface: 'home_destination_entry',
+            queryLength: query.trim().length,
+            resultCount: results.length,
+          },
+        });
+      },
+      error: () => {
+        this.searchResults = [];
+      },
+    });
   }
 
   /**
    * Manual destination flow — no GPS permission needed.
    * Sets the destination in LocationService, preloads Explore data, then navigates.
    */
-  selectResult(result: any): void {
+  selectResult(result: MapSearchResult): void {
     this.searchResults = [];
-    const name = this.getResultName(result);
-    const lat = parseFloat(result.lat);
-    const lon = parseFloat(result.lon);
+    const name = result.name;
+    const lat = result.latitude;
+    const lon = result.longitude;
 
     this.searchQuery = name;
     this.isLocating = true;
@@ -118,13 +133,12 @@ export class Home implements OnInit, OnDestroy {
     this.searchResults = [];
   }
 
-  getResultName(result: any): string {
-    return result.display_name?.split(',')[0] ?? '';
+  getResultName(result: MapSearchResult): string {
+    return result.name;
   }
 
-  getResultSubtitle(result: any): string {
-    const parts = result.display_name?.split(',') ?? [];
-    return parts.slice(1, 3).join(',').trim();
+  getResultSubtitle(result: MapSearchResult): string {
+    return result.subtitle ?? '';
   }
 
   /* ── Use my current location ───────────────────────────────────────── */

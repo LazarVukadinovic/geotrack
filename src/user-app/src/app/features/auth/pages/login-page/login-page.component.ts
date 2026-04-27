@@ -5,11 +5,12 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
 import { UserService } from '../../../../core/services/user.service';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 
 interface AuthResponse {
   accessToken: string;
-  refreshToken: string;
   expiresIn: number;
+  sessionPersistent: boolean;
 }
 
 @Component({
@@ -32,6 +33,7 @@ export class LoginPageComponent {
     private http: HttpClient,
     private authService: AuthService,
     private userService: UserService,
+    private analytics: AnalyticsService,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -53,7 +55,8 @@ export class LoginPageComponent {
       })
       .subscribe({
         next: (response) => {
-          this.authService.login(response.accessToken, response.refreshToken, this.rememberMe);
+          this.authService.login(response.accessToken, this.rememberMe);
+          this.analytics.track('login_completed');
           // Fetch the user profile immediately after login so that the
           // Profile page already has fullName/email on first render —
           // no manual refresh needed.
