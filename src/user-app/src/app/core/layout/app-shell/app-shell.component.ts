@@ -6,6 +6,8 @@ import { BottomNavComponent } from '../../../shared/components/bottom-nav/bottom
 import { AuthService } from '../../services/auth.service';
 import { TokenStorageService } from '../../services/token-storage.service';
 import { TokenRefreshService } from '../../services/token-refresh.service';
+import { AnalyticsService } from '../../services/analytics.service';
+import { LocationService } from '../../services/location.service';
 
 // URL prefixes that require an authenticated session. When isLoggedIn() flips
 // to false mid-session (e.g. an expired token triggers a 401 that the
@@ -32,6 +34,8 @@ export class AppShellComponent implements OnInit {
   private readonly authService      = inject(AuthService);
   private readonly tokenStorage     = inject(TokenStorageService);
   private readonly tokenRefreshSvc  = inject(TokenRefreshService);
+  private readonly analytics        = inject(AnalyticsService);
+  private readonly locationService  = inject(LocationService);
   protected readonly showBottomNav  = signal(true);
 
   private readonly viewport = viewChild<ElementRef<HTMLElement>>('viewport');
@@ -69,6 +73,17 @@ export class AppShellComponent implements OnInit {
           }
         } else {
           this.syncBottomNav();
+          // Fire a page_view for every navigation. AnalyticsService normalizes
+          // the URL into a route template (`/places/:id`) and enriches with
+          // destination + region context. Failures are swallowed inside the
+          // service.
+          const loc = this.locationService.location();
+          this.analytics.track('page_view', {
+            metadata: {
+              region: loc?.region,
+              source: loc?.source,
+            },
+          });
           // Proactively refresh when the access token is near expiry so that
           // navigation to any page is never followed immediately by a 401.
           // Only triggered when logged in and token is within the 2-minute buffer.

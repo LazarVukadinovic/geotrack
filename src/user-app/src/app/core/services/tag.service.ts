@@ -7,9 +7,18 @@ export interface UserInterestItem {
   tagId: number;
   name: string;
   slug: string;
+  description?: string;
+}
+
+export interface InferredInterestItem extends UserInterestItem {
+  score: number;
+  lastInteractionAt: string;
+  lastReason?: string | null;
 }
 
 export interface UserInterestsResponse {
+  explicitTags?: UserInterestItem[];
+  inferredTags?: InferredInterestItem[];
   tags: UserInterestItem[];
 }
 
@@ -36,5 +45,9 @@ export class TagService {
    */
   saveUserTags(tagIds: number[]): Observable<void> {
     return this.http.put<void>('/api/user/me/interests', { tagIds });
+  }
+
+  dismissInferredInterest(tagId: number): Observable<void> {
+    return this.http.delete<void>(`/api/user/me/interests/inferred/${tagId}`);
   }
 }

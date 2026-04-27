@@ -1,6 +1,7 @@
 import { Injectable, signal, computed, OnDestroy, NgZone, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ResolvedLocation } from '../models/location.model';
+import { MapApiService } from './map-api.service';
 
 /** Minimum metres between two positions before we re-geocode. */
 const MIN_DISTANCE_METRES = 500;
@@ -12,6 +13,7 @@ const ENTRY_COMPLETE_KEY = 'geotrack_location_entry_complete';
 @Injectable({ providedIn: 'root' })
 export class LocationService implements OnDestroy {
   private readonly http = inject(HttpClient);
+  private readonly mapApi = inject(MapApiService);
   private readonly zone = inject(NgZone);
 
   private watchId: number | null = null;
@@ -316,64 +318,42 @@ export class LocationService implements OnDestroy {
     this.lastGeocodedLng = lng;
     this.lastGeocodeTime = Date.now();
 
-    const url =
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`;
+    this.mapApi.reverseGeocode(lat, lng).subscribe({
+      next: (res) => {
+        const city = res.city ?? '';
+        const region = res.region ?? '';
+        const country = res.country ?? '';
+        const displayLabel = res.displayLabel ?? this.buildDisplayLabel(city, region, country);
 
-    void fetch(url)
-      .then((res) => res.ok ? res.json() as Promise<NominatimResponse> : Promise.reject())
-      .then((res) => {
-        this.zone.run(() => {
-          const addr = res.address ?? {};
-          const city = this.extractCity(addr);
-          const region = addr.state ?? addr.county ?? '';
-          const country = addr.country ?? '';
-          const displayLabel = this.buildDisplayLabel(city, region, country);
-
-          const loc: ResolvedLocation = {
+        const loc: ResolvedLocation = {
+          latitude: lat,
+          longitude: lng,
+          city,
+          region,
+          country,
+          displayLabel,
+          source,
+        };
+        this._location.set(loc);
+        this._loading.set(false);
+        this._error.set(null);
+        this.saveToStorage(loc);
+      },
+      error: () => {
+        if (!this._location()) {
+          this._location.set({
             latitude: lat,
             longitude: lng,
-            city,
-            region,
-            country,
-            displayLabel,
+            city: '',
+            region: '',
+            country: '',
+            displayLabel: 'Explore',
             source,
-          };
-          this._location.set(loc);
-          this._loading.set(false);
-          this._error.set(null);
-          this.saveToStorage(loc);
-        });
-      })
-      .catch(() => {
-        this.zone.run(() => {
-          // Geocode failed but we still have coords
-          if (!this._location()) {
-            this._location.set({
-              latitude: lat,
-              longitude: lng,
-              city: '',
-              region: '',
-              country: '',
-              displayLabel: 'Explore',
-              source,
-            });
-          }
-          this._loading.set(false);
-        });
-      });
-  }
-
-  private extractCity(addr: NominatimAddress): string {
-    return (
-      addr.city ??
-      addr.town ??
-      addr.village ??
-      addr.municipality ??
-      addr.county ??
-      addr.state_district ??
-      addr.state ??
-      ''
-    );
+          });
+        }
+        this._loading.set(false);
+      },
+    });
   }
 
   private buildDisplayLabel(city: string, region: string, country: string): string {

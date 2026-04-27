@@ -14,8 +14,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     return next(req);
   }
 
-  const refreshToken = tokenStorage.getRefreshToken();
-  if (!refreshToken) {
+  if (!tokenStorage.hasSession()) {
     return next(req);
   }
 

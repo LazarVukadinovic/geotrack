@@ -244,7 +244,12 @@ export const routes: Routes = [
           import('./features/event-detail/pages/event-detail-page/event-detail-page.component').then(m => m.EventDetailPageComponent),
         data: { hideBottomNav: true },
       },
+      {
+        path: '**',
+        loadComponent: () =>
+          import('./core/pages/not-found-page/not-found-page.component').then(m => m.NotFoundPageComponent),
+        data: { hideBottomNav: true },
+      },
     ],
   },
-  { path: '**', redirectTo: 'explore' },
 ];
