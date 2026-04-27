@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map, tap } from 'rxjs';
+import { AnalyticsService } from '../../../core/services/analytics.service';
 import { BasicsData } from '../pages/submit-contribution/steps/step-basics/step-basics.component';
 import { DetailsData } from '../pages/submit-contribution/steps/step-details/step-details.component';
 import { FeaturesData } from '../pages/submit-contribution/steps/step-features/step-features.component';
@@ -33,7 +34,9 @@ export interface ContributionDetail extends ContributionListItem {
   imageSize: string;
   description: string;
   phone: string;
+  contactEmail: string;
   website: string;
+  pricePerNight: number | null;
   tags: string[];
   amenities: string[];
   bookingPartners: ContributionBookingPartner[];
@@ -84,7 +87,9 @@ interface ApiContributionDetail extends ApiContributionListItem {
   imageSize: string;
   description: string;
   phone: string;
+  contactEmail: string;
   website: string;
+  pricePerNight?: number | null;
   tags: string[];
   amenities: string[];
   bookingPartners: ContributionBookingPartner[];
@@ -105,7 +110,9 @@ interface UpsertStayContributionPayload {
   imageSize: string;
   description: string;
   phone: string;
+  contactEmail: string;
   website: string;
+  pricePerNight: number | null;
   tags: string[];
   amenities: string[];
   bookingPartners: ContributionBookingPartner[];
@@ -114,6 +121,7 @@ interface UpsertStayContributionPayload {
 @Injectable({ providedIn: 'root' })
 export class ContributionsService {
   private readonly http = inject(HttpClient);
+  private readonly analytics = inject(AnalyticsService);
 
   private readonly _items = signal<ContributionListItem[]>([]);
   private readonly _isLoading = signal(false);
@@ -149,20 +157,29 @@ export class ContributionsService {
   createStay(draft: ContributionDraftData): Observable<ContributionDetail> {
     return this.http.post<ContributionResponse>('/api/contributions/stays', this.toFormData(draft)).pipe(
       map(res => mapDetail(res.contribution)),
-      tap(() => this.loadMine()),
+      tap(detail => {
+        this.analytics.track('contribution_created', { entityId: detail.id });
+        this.loadMine();
+      }),
     );
   }
 
   updateStay(id: number, draft: ContributionDraftData): Observable<ContributionDetail> {
     return this.http.put<ContributionResponse>(`/api/contributions/stays/${id}`, this.toFormData(draft)).pipe(
       map(res => mapDetail(res.contribution)),
-      tap(() => this.loadMine()),
+      tap(detail => {
+        this.analytics.track('contribution_updated', { entityId: detail.id });
+        this.loadMine();
+      }),
     );
   }
 
   deleteContribution(id: number): Observable<void> {
     return this.http.delete<void>(`/api/contributions/${id}`).pipe(
-      tap(() => this._items.update(items => items.filter(item => item.id !== id))),
+      tap(() => {
+        this._items.update(items => items.filter(item => item.id !== id));
+        this.analytics.track('contribution_deleted', { entityId: id });
+      }),
     );
   }
 
@@ -189,7 +206,9 @@ export class ContributionsService {
       details: {
         description: detail.description ?? '',
         phone: detail.phone ?? '',
+        contactEmail: detail.contactEmail ?? '',
         website: detail.website ?? '',
+        pricePerNight: detail.pricePerNight != null ? String(detail.pricePerNight) : '',
         bookingPartners: detail.bookingPartners ?? [],
       },
     };
@@ -213,7 +232,9 @@ export class ContributionsService {
       imageSize: basics.imgBgSize || 'cover',
       description: details.description,
       phone: details.phone,
+      contactEmail: details.contactEmail,
       website: details.website,
+      pricePerNight: details.pricePerNight,
       tags: features.tags,
       amenities: features.amenities,
       bookingPartners: details.bookingPartners,
@@ -245,11 +266,22 @@ function normalizeFeatures(features: FeaturesData | null): FeaturesData {
   };
 }
 
-function normalizeDetails(details: DetailsData | null): DetailsData {
+interface NormalizedDetailsData {
+  description: string;
+  phone: string;
+  contactEmail: string;
+  website: string;
+  pricePerNight: number | null;
+  bookingPartners: ContributionBookingPartner[];
+}
+
+function normalizeDetails(details: DetailsData | null): NormalizedDetailsData {
   return {
     description: details?.description ?? '',
     phone: details?.phone ?? '',
+    contactEmail: details?.contactEmail?.trim() ?? '',
     website: details?.website ?? '',
+    pricePerNight: normalizePricePerNight(details?.pricePerNight ?? ''),
     bookingPartners: details?.bookingPartners ?? [],
   };
 }
@@ -287,13 +319,29 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     imageSize: item.imageSize || 'cover',
     description: item.description ?? '',
     phone: item.phone ?? '',
+    contactEmail: item.contactEmail ?? '',
     website: item.website ?? '',
+    pricePerNight: item.pricePerNight ?? null,
     tags: item.tags ?? [],
     amenities: item.amenities ?? [],
     bookingPartners: item.bookingPartners ?? [],
     reviewNote: item.reviewNote ?? null,
     reviewedAt: item.reviewedAt ?? null,
   };
+}
+
+function normalizePricePerNight(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number(trimmed.replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+
+  return Math.round(parsed * 100) / 100;
 }
 
 function statusLabel(status: ContributionStatus): string {

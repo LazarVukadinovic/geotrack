@@ -21,7 +21,14 @@ describe('StepPreviewComponent', () => {
       imgBgSize: 'cover',
     },
     features: { tags: ['Beachfront'], amenities: ['wifi'] },
-    details: { description: 'A test contribution.', phone: '', website: '', bookingPartners: [] },
+    details: {
+      description: 'A test contribution.',
+      phone: '',
+      contactEmail: '',
+      website: '',
+      pricePerNight: '',
+      bookingPartners: [],
+    },
   };
 
   beforeEach(async () => {

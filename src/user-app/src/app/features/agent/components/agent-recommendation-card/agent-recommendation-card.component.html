@@ -41,7 +41,7 @@
 
     <div class="rec-card__actions">
       @if (card().detailUrl) {
-        <a class="rec-card__btn rec-card__btn--primary" [routerLink]="card().detailUrl">
+        <a class="rec-card__btn rec-card__btn--primary" [routerLink]="card().detailUrl" (click)="onCardClicked()">
           View
         </a>
       }

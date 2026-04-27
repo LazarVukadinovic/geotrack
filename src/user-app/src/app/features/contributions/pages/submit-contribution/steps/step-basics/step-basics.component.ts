@@ -1,7 +1,9 @@
-import { Component, input, output, signal, OnDestroy, effect, ElementRef, viewChild } from '@angular/core';
+import { Component, input, output, signal, OnDestroy, effect, ElementRef, viewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
+import { firstValueFrom } from 'rxjs';
+import { MapApiService } from '../../../../../../core/services/map-api.service';
 
 export interface BasicsData {
   name: string;
@@ -25,6 +27,7 @@ export interface BasicsData {
   templateUrl: './step-basics.component.html',
 })
 export class StepBasicsComponent implements OnDestroy {
+  private readonly mapApi = inject(MapApiService);
   data = input<BasicsData | null>(null);
   saved = output<BasicsData>();
 
@@ -111,15 +114,11 @@ export class StepBasicsComponent implements OnDestroy {
     this.isGeocoding.set(true);
 
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
-      );
-      const data = await res.json();
-      const a = data.address ?? {};
-      this.form.address = [a.road, a.house_number].filter(Boolean).join(' ');
-      this.form.city    = a.city ?? a.town ?? a.village ?? a.municipality ?? '';
-      this.form.region  = a.state ?? a.county ?? '';
-      this.form.country = a.country ?? '';
+      const data = await firstValueFrom(this.mapApi.reverseGeocode(lat, lng));
+      this.form.address = data.address ?? '';
+      this.form.city = data.city ?? '';
+      this.form.region = data.region ?? '';
+      this.form.country = data.country ?? '';
     } catch {
     } finally {
       this.isGeocoding.set(false);

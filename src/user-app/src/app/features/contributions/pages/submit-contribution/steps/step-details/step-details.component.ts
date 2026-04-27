@@ -9,7 +9,9 @@ export interface BookingPartner {
 export interface DetailsData {
   description: string;
   phone: string;
+  contactEmail: string;
   website: string;
+  pricePerNight: string;
   bookingPartners: BookingPartner[];
 }
 @Component({
@@ -35,7 +37,14 @@ export class StepDetailsComponent {
       if (d) Object.assign(this.form, d);
     });
   }
-  form: DetailsData = { description: '', phone: '', website: '', bookingPartners: [] };
+  form: DetailsData = {
+    description: '',
+    phone: '',
+    contactEmail: '',
+    website: '',
+    pricePerNight: '',
+    bookingPartners: [],
+  };
   onContinue(): void { this.saved.emit({ ...this.form }); }
 
   togglePartner(id: string): void {

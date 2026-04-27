@@ -42,6 +42,26 @@
         <p class="text-sm text-slate-600 leading-relaxed">{{ draft().details?.description }}</p>
       </div>
 
+      @if (draft().details?.pricePerNight || draft().details?.contactEmail || draft().details?.phone || draft().details?.website) {
+        <div class="mb-5">
+          <p class="text-sm font-bold text-slate-800 mb-3">Contact and booking info</p>
+          <div class="flex flex-col gap-2 text-sm text-slate-600">
+            @if (draft().details?.pricePerNight) {
+              <p>Nightly rate: ${{ draft().details?.pricePerNight }}</p>
+            }
+            @if (draft().details?.contactEmail) {
+              <p>Email: {{ draft().details?.contactEmail }}</p>
+            }
+            @if (draft().details?.phone) {
+              <p>Phone: {{ draft().details?.phone }}</p>
+            }
+            @if (draft().details?.website) {
+              <p class="break-all">Website: {{ draft().details?.website }}</p>
+            }
+          </div>
+        </div>
+      }
+
       <!-- Amenities  -->
       <div *ngIf="draft().features?.amenities?.length" class="mb-5">
         <p class="text-sm font-bold text-slate-800 mb-3">Selected Amenities</p>

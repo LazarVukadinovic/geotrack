@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { AnalyticsService } from '../../../core/services/analytics.service';
 import type { ChatMessage, SuggestionPill } from '../models/agent.model';
 
 const AGENT_SUGGESTION_PILLS: SuggestionPill[] = [
@@ -43,6 +44,7 @@ interface ApiAgentResponse {
 @Injectable({ providedIn: 'root' })
 export class AgentService {
   private readonly http = inject(HttpClient);
+  private readonly analytics = inject(AnalyticsService);
   private readonly _messages = signal<ChatMessage[]>([
     { ...AGENT_WELCOME_MESSAGE, timestamp: new Date() },
   ]);
@@ -68,6 +70,12 @@ export class AgentService {
     this._messages.update(msgs => [...msgs, userMsg]);
     this._hasSentMessage.set(true);
     this._isTyping.set(true);
+
+    // Privacy: never persist the prompt text via analytics — only its length
+    // and a fast non-cryptographic hash for grouping similar prompts.
+    this.analytics.track('agent_prompt_sent', {
+      metadata: { length: trimmed.length, promptHash: hashPrompt(trimmed) },
+    });
 
     this.http.post<ApiAgentResponse>('/api/agent/message', { text: trimmed }).subscribe({
       next: (res) => {
@@ -107,4 +115,14 @@ export class AgentService {
       },
     });
   }
+}
+
+// Cheap djb2 hash. Returns an 8-char hex string. Not cryptographic — only
+// good enough to group identical/very-similar prompts in admin analytics.
+function hashPrompt(text: string): string {
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
 }
