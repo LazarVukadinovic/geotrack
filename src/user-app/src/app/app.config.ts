@@ -15,6 +15,7 @@ import { TokenStorageService } from './core/services/token-storage.service';
 import { TokenRefreshService } from './core/services/token-refresh.service';
 import { AuthService } from './core/services/auth.service';
 import { UserService } from './core/services/user.service';
+import { AnalyticsService } from './core/services/analytics.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -43,7 +44,7 @@ export const appConfig: ApplicationConfig = {
       const authService     = inject(AuthService);
       const userService     = inject(UserService);
 
-      if (!tokenStorage.hasRefreshToken()) return;
+      if (!tokenStorage.hasSession()) return;
 
       return firstValueFrom(
         tokenRefreshSvc.refresh().pipe(
@@ -59,6 +60,13 @@ export const appConfig: ApplicationConfig = {
           }),
         )
       );
+    }),
+
+    // Eagerly construct AnalyticsService so its visibilitychange/beforeunload
+    // listeners and 5-second flush timer are running before the first
+    // NavigationEnd fires for the page_view event in AppShellComponent.
+    provideAppInitializer(() => {
+      inject(AnalyticsService);
     }),
   ]
 };
