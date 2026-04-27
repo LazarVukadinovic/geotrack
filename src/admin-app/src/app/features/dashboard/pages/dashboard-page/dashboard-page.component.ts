@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 interface Activity {
@@ -25,11 +25,12 @@ interface QueueItem {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, SidebarComponent, TopbarComponent],
   templateUrl: './dashboard-page.component.html',
   styleUrl: './dashboard-page.component.css'
 })
 export class DashboardComponent {
+  constructor(private router: Router) {}
   sidebarOpen = true;
   region = 'Šumadija, Srbija';
   userName = 'Sarah Jenkins';
@@ -43,10 +44,10 @@ export class DashboardComponent {
   ];
 
   quickActions = [
-    { label: 'Create New Destination', desc: 'Define a new geographical area, route, or broader travel context.', icon: 'flag' },
-    { label: 'Add New Location',       desc: 'Add a specific POI, business, landmark, or location to the map.',   icon: 'pin' },
-    { label: 'Add New Place',          desc: 'Add a specific POI, business, landmark, or location to the map.',   icon: 'home' },
-    { label: 'Schedule Event',         desc: 'Publish a time-bound activity or gathering in your region.',         icon: 'calendar' },
+    { label: 'Create New Destination', desc: 'Define a new geographical area, route, or broader travel context.', icon: 'flag', route: '/destinations/new' },
+    { label: 'Add New Location',       desc: 'Add a specific POI, business, landmark, or location to the map.',   icon: 'pin',  route: '/locations/new' },
+    { label: 'Add New Place',          desc: 'Add a specific POI, business, landmark, or location to the map.',   icon: 'home',  route: '/places/new' },
+    { label: 'Schedule Event',         desc: 'Publish a time-bound activity or gathering in your region.',         icon: 'calendar', route: '/events/new' },
   ];
 
   activities: Activity[] = [
@@ -89,5 +90,8 @@ export class DashboardComponent {
     if (type === 'destination') return 'map';
     if (type === 'event')       return 'calendar';
     return 'inbox';
+  }
+  navigate(route: string) {
+    this.router.navigate([route]);
   }
 }

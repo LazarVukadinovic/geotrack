@@ -22,6 +22,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/dashboard/pages/dashboard-page/dashboard-page.component').then(m => m.DashboardComponent),
       },
+      {
+        path: 'locations/new',
+        loadComponent: () =>
+          import('./features/add-pages/pages/add-location/add-location.component').then(m => m.NewLocationComponent),
+      },
     //   {
     //     path: 'requests',
     //     loadComponent: () =>
