@@ -90,4 +90,9 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
     {
         await _context.DestinationReviews.AddAsync(review);
     }
+
+    public async Task<List<Destination>> SearchByNameAsync(string query)
+    {
+        return await _context.Destinations.Where(d => d.Name.ToLower().Contains(query.ToLower())).ToListAsync();
+    }
 }

@@ -14,4 +14,6 @@ public interface IDestinationRepository : IRepository<Destination>
     Task<bool> HasUserReviewedDestinationAsync(int destinationId, int
     userId);
     Task AddReviewAsync(DestinationReview review);
+
+    Task<List<Destination>> SearchByNameAsync(string query);
 }

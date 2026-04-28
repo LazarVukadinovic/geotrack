@@ -26,7 +26,7 @@ namespace Geotrack.Infrastructure.Repositories
         }
 
         public async Task<IEnumerable<T>> GetAllAsync() => await context.Set<T>().ToListAsync();
-        public async Task<T?> GetByIDAsync(int id) => await context.Set<T>().FindAsync(id);
+        public async Task<T?> GetByIdAsync(int id) => await context.Set<T>().FindAsync(id);
 
         public async Task SaveChangesAsync() => await context.SaveChangesAsync();
     }

@@ -107,4 +107,11 @@ public class DestinationController : ControllerBase
             _ => StatusCode(500, new { message = ex.Message })
         };
     }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] string? query)
+    {
+        var results = await _destinationService.SearchAsync(query ?? string.Empty);
+        return Ok(results);
+    }
 }

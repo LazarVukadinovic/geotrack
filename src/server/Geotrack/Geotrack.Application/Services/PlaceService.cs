@@ -56,7 +56,7 @@ public class PlaceService : IPlaceService
 
     public async Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId)
     {
-        var place = await _placeRepository.GetByIDAsync(placeId);
+        var place = await _placeRepository.GetByIdAsync(placeId);
         if (place == null)
             throw new KeyNotFoundException("Places not found");
 
@@ -71,7 +71,7 @@ public class PlaceService : IPlaceService
 
     public async Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(int placeId)
     {
-        var place = await _placeRepository.GetByIDAsync(placeId);
+        var place = await _placeRepository.GetByIdAsync(placeId);
         if (place == null)
             throw new KeyNotFoundException("Places not found");
 
@@ -103,7 +103,7 @@ public class PlaceService : IPlaceService
         if ((request.Comment ?? string.Empty).Length > 1000)
             throw new InvalidOperationException("Comment is too long");
 
-        var place = await _placeRepository.GetByIDAsync(placeId);
+        var place = await _placeRepository.GetByIdAsync(placeId);
         if (place == null)
             throw new KeyNotFoundException("Places not found");
 

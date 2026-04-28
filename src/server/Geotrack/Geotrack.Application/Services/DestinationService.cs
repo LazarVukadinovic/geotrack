@@ -183,7 +183,7 @@ public class DestinationService : IDestinationService
 
     public async Task<GetDestinationReviewsResponseDto> GetDestinationReviewsAsync(int destinationId)
     {
-        var destination = await _destinationRepository.GetByIDAsync(destinationId);
+        var destination = await _destinationRepository.GetByIdAsync(destinationId);
         if (destination == null)
             throw new KeyNotFoundException("Destination not found");
 
@@ -215,7 +215,7 @@ public class DestinationService : IDestinationService
         if ((request.Comment ?? string.Empty).Length > 1000)
             throw new InvalidOperationException("Comment is too long");
 
-        var destination = await _destinationRepository.GetByIDAsync(destinationId);
+        var destination = await _destinationRepository.GetByIdAsync(destinationId);
         if (destination == null)
             throw new KeyNotFoundException("Destination not found");
 
@@ -558,6 +558,23 @@ public class DestinationService : IDestinationService
     private static double DegreesToRadians(double degrees)
     {
         return degrees * Math.PI / 180.0;
+    }
+
+    public async Task<List<DestinationSearchResultDto>> SearchAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return new List<DestinationSearchResultDto>();
+
+        var destinations = await _destinationRepository.SearchByNameAsync(query);
+
+        return destinations.Select(d => new DestinationSearchResultDto
+        {
+            Id = d.Id,
+            Name = d.Name,
+            Description = d.Description,
+            Latitude = d.Latitude,
+            Longitude = d.Longitude,
+        }).ToList();
     }
 
     private sealed class UserExploreContext
