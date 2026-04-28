@@ -3,11 +3,12 @@ import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { CollectionsService } from '../../services/collections';
 import { NewCollectionSheetComponent } from '../new-collection-sheet/new-collection-sheet.component';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 
 @Component({
   selector: 'app-my-collections-page',
   standalone: true,
-  imports: [NewCollectionSheetComponent],
+  imports: [NewCollectionSheetComponent, ImageFallbackDirective],
   templateUrl: './my-collections-page.component.html',
   styleUrl: './my-collections-page.component.css',
 })

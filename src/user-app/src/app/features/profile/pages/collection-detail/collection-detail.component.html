@@ -53,20 +53,20 @@
         </div>
       }
       @if (places.length === 1) {
-        <img [src]="places[0].image" class="w-full h-full object-cover"/>
+        <img appImageFallback [src]="places[0].image" class="w-full h-full object-cover"/>
       }
       @if (places.length === 2) {
         <div class="flex h-full">
-          <img [src]="places[0].image" class="w-1/2 h-full object-cover border-r-2 border-white"/>
-          <img [src]="places[1].image" class="w-1/2 h-full object-cover"/>
+          <img appImageFallback [src]="places[0].image" class="w-1/2 h-full object-cover border-r-2 border-white"/>
+          <img appImageFallback [src]="places[1].image" class="w-1/2 h-full object-cover"/>
         </div>
       }
       @if (places.length >= 3) {
         <div class="flex h-full">
-          <img [src]="places[0].image" class="w-1/2 h-full object-cover border-r-2 border-white"/>
+          <img appImageFallback [src]="places[0].image" class="w-1/2 h-full object-cover border-r-2 border-white"/>
           <div class="w-1/2 h-full flex flex-col">
-            <img [src]="places[1].image" class="w-full h-1/2 object-cover border-b-2 border-white"/>
-            <img [src]="places[2].image" class="w-full h-1/2 object-cover"/>
+            <img appImageFallback [src]="places[1].image" class="w-full h-1/2 object-cover border-b-2 border-white"/>
+            <img appImageFallback [src]="places[2].image" class="w-full h-1/2 object-cover"/>
           </div>
         </div>
       }
@@ -100,7 +100,7 @@
 
       @for (place of places; track place.itemId) {
         <div class="bg-white rounded-2xl shadow-sm overflow-hidden flex items-center gap-4 px-4 py-3.5 mb-3">
-          <img [src]="place.image" class="w-16 h-16 rounded-xl object-cover flex-none"/>
+          <img appImageFallback [src]="place.image" class="w-16 h-16 rounded-xl object-cover flex-none"/>
           <div class="flex-1 min-w-0">
             <p class="text-base font-semibold text-slate-800 truncate">{{ place.title }}</p>
           </div>

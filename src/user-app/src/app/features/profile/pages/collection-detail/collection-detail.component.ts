@@ -2,13 +2,14 @@ import { Component, computed, inject, signal, NgZone, OnDestroy } from '@angular
 import { Location } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { CollectionsService } from '../../services/collections';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 
 const DISMISS_THRESHOLD = 120;
 
 @Component({
   selector: 'app-collection-detail',
   standalone: true,
-  imports: [],
+  imports: [ImageFallbackDirective],
   templateUrl: './collection-detail.component.html',
 })
 export class CollectionDetailComponent {

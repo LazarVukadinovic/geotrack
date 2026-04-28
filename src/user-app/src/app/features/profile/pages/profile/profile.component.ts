@@ -4,10 +4,11 @@ import { Router } from '@angular/router';
 import { CollectionsService } from '../../services/collections';
 import { NewCollectionSheetComponent } from '../new-collection-sheet/new-collection-sheet.component';
 import { UserService } from '../../../../core/services/user.service';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 
 @Component({
   selector: 'app-profile',
-  imports: [CommonModule, NewCollectionSheetComponent],
+  imports: [CommonModule, NewCollectionSheetComponent, ImageFallbackDirective],
   templateUrl: './profile.component.html',
   styleUrl: './profile.component.css',
 })
