@@ -9,6 +9,7 @@ import { LocationService } from '../../../../core/services/location.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { HttpClient } from '@angular/common/http';
 import { PlaceDetailService } from '../../services/place-detail.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
@@ -16,7 +17,7 @@ import type { ReviewDraft } from '../../../../shared/components/review-entry/rev
 @Component({
   selector: 'app-place-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective],
   templateUrl: './place-detail-page.component.html',
   styleUrl: './place-detail-page.component.scss',
 })
@@ -102,10 +103,6 @@ export class PlaceDetailPageComponent {
 
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/places', id]);
-  }
-
-  protected onHeroImgError(event: Event): void {
-    (event.target as HTMLImageElement).src = '/images/explore-image-fallback.svg';
   }
 
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {

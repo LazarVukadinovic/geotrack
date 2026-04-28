@@ -42,6 +42,7 @@
     <!-- ── Hero image: absolute backdrop, never scrolls ──────────────────── -->
     <div class="ed__hero" aria-hidden="true">
       <img
+        appImageFallback
         class="ed__hero-img"
         [src]="ev.heroImage"
         alt=""
@@ -49,7 +50,6 @@
         height="480"
         loading="eager"
         decoding="async"
-        (error)="onHeroImgError($event)"
       />
     </div>
 
@@ -285,6 +285,7 @@
                 <article class="ed__similar-card" role="listitem">
                   <div class="ed__similar-media">
                     <img
+                      appImageFallback
                       class="ed__similar-img"
                       [src]="s.image"
                       [alt]="s.title"

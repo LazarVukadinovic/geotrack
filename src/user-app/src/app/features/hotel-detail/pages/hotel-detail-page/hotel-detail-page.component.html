@@ -42,6 +42,7 @@
     <!-- ── Hero image: absolute backdrop, never scrolls ──────────────────── -->
     <div class="hd__hero" aria-hidden="true">
       <img
+        appImageFallback
         class="hd__hero-img"
         [src]="h.heroImage"
         alt=""
@@ -49,7 +50,6 @@
         height="480"
         loading="eager"
         decoding="async"
-        (error)="onHeroImgError($event)"
       />
     </div>
 
@@ -327,10 +327,11 @@
                   (click)="navigateToSimilar(s.id)"
                 >
                   <div class="hd__similar-media">
-                    <img
-                      class="hd__similar-img"
-                      [src]="s.image"
-                      [alt]="s.title"
+                  <img
+                    appImageFallback
+                    class="hd__similar-img"
+                    [src]="s.image"
+                    [alt]="s.title"
                       width="160"
                       height="110"
                       loading="lazy"

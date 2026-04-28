@@ -1,6 +1,7 @@
 import { Component, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import type { AnalyticsEntityType } from '../../../../core/services/analytics.types';
 import type { AgentRecommendationCard } from '../../models/agent.model';
 
@@ -11,7 +12,7 @@ const ALLOWED_ENTITY_TYPES = new Set<AnalyticsEntityType>([
 @Component({
   selector: 'app-agent-recommendation-card',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, ImageFallbackDirective],
   templateUrl: './agent-recommendation-card.component.html',
   styleUrl: './agent-recommendation-card.component.scss',
 })

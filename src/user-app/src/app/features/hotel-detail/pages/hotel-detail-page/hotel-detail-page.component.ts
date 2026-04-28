@@ -9,6 +9,7 @@ import { LocationService } from '../../../../core/services/location.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { HttpClient } from '@angular/common/http';
 import { HotelDetailService } from '../../services/hotel-detail.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
@@ -17,7 +18,7 @@ import type { HotelAmenityIcon, HotelBookingPartner } from '../../models/hotel-d
 @Component({
   selector: 'app-hotel-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective],
   templateUrl: './hotel-detail-page.component.html',
   styleUrl: './hotel-detail-page.component.scss',
 })
@@ -112,10 +113,6 @@ export class HotelDetailPageComponent {
 
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/stays', id]);
-  }
-
-  protected onHeroImgError(event: Event): void {
-    (event.target as HTMLImageElement).src = '/images/explore-image-fallback.svg';
   }
 
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {

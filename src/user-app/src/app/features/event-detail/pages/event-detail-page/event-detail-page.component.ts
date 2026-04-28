@@ -6,12 +6,13 @@ import { map } from 'rxjs/operators';
 import { LocationService } from '../../../../core/services/location.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { EventDetailService } from '../../services/event-detail.service';
 
 @Component({
   selector: 'app-event-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent],
+  imports: [SectionHeaderComponent, ImageFallbackDirective],
   templateUrl: './event-detail-page.component.html',
   styleUrl: './event-detail-page.component.scss',
 })
@@ -87,10 +88,6 @@ export class EventDetailPageComponent {
 
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/events', id]);
-  }
-
-  protected onHeroImgError(event: Event): void {
-    (event.target as HTMLImageElement).src = '/images/explore-image-fallback.svg';
   }
 
   protected onDirectionsClick(): void {

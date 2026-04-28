@@ -42,6 +42,7 @@
     <!-- ── Hero image: absolute backdrop, never scrolls ──────────────────── -->
     <div class="pd__hero" aria-hidden="true">
       <img
+        appImageFallback
         class="pd__hero-img"
         [src]="p.heroImage"
         alt=""
@@ -49,7 +50,6 @@
         height="480"
         loading="eager"
         decoding="async"
-        (error)="onHeroImgError($event)"
       />
     </div>
 
@@ -242,6 +242,7 @@
                 >
                   <div class="pd__similar-media">
                     <img
+                      appImageFallback
                       class="pd__similar-img"
                       [src]="s.image"
                       [alt]="s.title"
