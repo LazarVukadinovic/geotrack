@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#78b7c9"/>
+      <stop offset="1" stop-color="#2d6f8f"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="500" fill="#d7eef1"/>
+  <rect y="310" width="800" height="190" fill="url(#sea)"/>
+  <path d="M88 150h450v220H88z" fill="#efe3cc"/>
+  <path d="M120 116h382l52 34H68z" fill="#b06545"/>
+  <rect x="135" y="198" width="58" height="44" fill="#6c8ca1"/>
+  <rect x="230" y="198" width="58" height="44" fill="#6c8ca1"/>
+  <rect x="325" y="198" width="58" height="44" fill="#6c8ca1"/>
+  <rect x="420" y="198" width="58" height="44" fill="#6c8ca1"/>
+  <rect x="135" y="278" width="58" height="44" fill="#6c8ca1"/>
+  <rect x="230" y="278" width="58" height="44" fill="#6c8ca1"/>
+  <rect x="325" y="278" width="58" height="44" fill="#6c8ca1"/>
+  <rect x="420" y="278" width="58" height="44" fill="#6c8ca1"/>
+  <path d="M520 250c64-28 128-20 194 0v120H520z" fill="#d8c49b"/>
+  <path d="M0 392c102-20 176-20 280 0s198 20 302 0 158-20 218 0v108H0z" fill="#1f6f8f" opacity=".48"/>
+</svg>

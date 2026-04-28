@@ -23,11 +23,14 @@ public static class SeedData
     private static string U(string photoId, int w = 800) =>
         $"https://images.unsplash.com/photo-{photoId}?ixlib=rb-4.0.3&auto=format&fit=crop&w={w}&q=75";
 
+    private static string SeedMedia(string fileName) => $"/media/seed/{fileName}.svg";
+
     public static async Task InitializeAsync(AppDbContext db)
     {
         if (await db.Destinations.AnyAsync())
         {
             await EnsureSeedTagsAsync(db);
+            await EnsureSeedMediaAsync(db);
             await EnsureRolesAsync(db);
             await EnsureDemoUsersAsync(db);
             return; // Already seeded
@@ -65,7 +68,7 @@ public static class SeedData
         await db.SaveChangesAsync();
 
         // ── Locations ──
-        var oldTown = new Location { Name = "Old Town", DestinationId = dubrovnik.Id, LocationTypeId = neighborhoodType.Id, Latitude = 42.6411, Longitude = 18.1083, ImageUrl = U("1560703650-1e76a3b39c9c"), CreatedAt = DateTime.UtcNow };
+        var oldTown = new Location { Name = "Old Town", DestinationId = dubrovnik.Id, LocationTypeId = neighborhoodType.Id, Latitude = 42.6411, Longitude = 18.1083, ImageUrl = SeedMedia("dubrovnik-old-town"), CreatedAt = DateTime.UtcNow };
         var lapad = new Location { Name = "Lapad", DestinationId = dubrovnik.Id, LocationTypeId = districtType.Id, Latitude = 42.6585, Longitude = 18.0686, ImageUrl = U("1596275281743-e4c30b6e0e27"), CreatedAt = DateTime.UtcNow };
         var gruz = new Location { Name = "Gruž", DestinationId = dubrovnik.Id, LocationTypeId = districtType.Id, Latitude = 42.6597, Longitude = 18.0778, CreatedAt = DateTime.UtcNow };
         db.Locations.AddRange(oldTown, lapad, gruz);
@@ -217,7 +220,7 @@ public static class SeedData
         {
             Name = "Culture Club Revelin", Subtitle = "Nightclub in a 16th-century fortress", PlaceTypeId = ptBar.Id, LocationId = oldTown.Id,
             Description = "One of Europe's most unique nightclubs, set inside a 16th-century defensive fortress. Hosts world-renowned DJs and themed events throughout the summer.",
-            ImageUrl = U("1516450360452-9258136e97a1"), Latitude = 42.6423, Longitude = 18.1121,
+            ImageUrl = SeedMedia("culture-club-revelin"), Latitude = 42.6423, Longitude = 18.1121,
             OpeningHours = "11:00 PM - 5:00 AM", AverageRating = 4.4, ReviewCount = 143, CreatedAt = DateTime.UtcNow
         };
         var proto = new Place
@@ -233,14 +236,14 @@ public static class SeedData
         {
             Name = "Dubrovnik Old Town Walls", Subtitle = "Iconic medieval fortifications", PlaceTypeId = ptLandmark.Id, LocationId = oldTown.Id,
             Description = "Walk along the magnificent medieval walls that encircle the Old Town. These ancient fortifications offer breathtaking panoramic views of the city's terracotta rooftops and the sparkling Adriatic Sea.",
-            ImageUrl = U("1560703650-1e76a3b39c9c"), Latitude = 42.6411, Longitude = 18.1083,
+            ImageUrl = SeedMedia("dubrovnik-old-town"), Latitude = 42.6411, Longitude = 18.1083,
             OpeningHours = "8:00 AM - 6:30 PM", AverageRating = 4.9, ReviewCount = 423, CreatedAt = DateTime.UtcNow
         };
         var rectorsPlace = new Place
         {
             Name = "Rector's Palace", Subtitle = "Gothic-Renaissance masterpiece", PlaceTypeId = ptMuseum.Id, LocationId = oldTown.Id,
             Description = "A stunning Gothic-Renaissance palace that once served as the seat of the Republic of Ragusa. Now houses a museum with period furniture, paintings, and artifacts.",
-            ImageUrl = U("1564399580075-3af6f48fa3e2"), Latitude = 42.6407, Longitude = 18.1107,
+            ImageUrl = SeedMedia("rectors-palace"), Latitude = 42.6407, Longitude = 18.1107,
             OpeningHours = "9:00 AM - 6:00 PM", AverageRating = 4.6, ReviewCount = 187, CreatedAt = DateTime.UtcNow
         };
         var warPhotoMuseum = new Place
@@ -316,7 +319,7 @@ public static class SeedData
         {
             Name = "Hotel Excelsior", Subtitle = "Historic luxury hotel", PlaceTypeId = ptHotel.Id, LocationId = oldTown.Id,
             Description = "A grand historic hotel offering luxurious rooms with stunning sea views. Located near the Old Town, it combines classic elegance with modern amenities.",
-            ImageUrl = U("1542314831-de8b4b14c4fc"), Latitude = 42.6395, Longitude = 18.1138,
+            ImageUrl = SeedMedia("hotel-excelsior"), Latitude = 42.6395, Longitude = 18.1138,
             PricePerNight = 165, AverageRating = 4.7, ReviewCount = 287, CreatedAt = DateTime.UtcNow
         };
         var grandHotelPark = new Place
@@ -423,7 +426,7 @@ public static class SeedData
         {
             Name = "Dubrovnik Summer Festival", EventTypeId = etFestival.Id, LocationId = oldTown.Id,
             Description = "Experience an unforgettable evening under the stars. The Summer Festival brings together world-class talent, delicious street food, and an exclusive beachfront atmosphere. Whether you're here to dance barefoot in the sand or simply be captivated by the stage, this is the ultimate summer experience.",
-            ImageUrl = U("1533174072545-7a4b6ad7a6c8"),
+            ImageUrl = SeedMedia("dubrovnik-summer-festival"),
             StartDate = DateTime.UtcNow.AddDays(5), EndDate = DateTime.UtcNow.AddDays(47),
             TicketPrice = "€25 - €100", Duration = "42 days", HostedBy = "Dubrovnik Summer Festival Foundation",
             VenueDescription = "Multiple venues across Old Town including Lovrijenac Fortress, Rector's Palace courtyard, and the Gradac Park amphitheatre.",
@@ -549,6 +552,76 @@ public static class SeedData
 
         db.Tags.AddRange(missingTags);
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureSeedMediaAsync(AppDbContext db)
+    {
+        var changed = false;
+
+        async Task UpdateLocationImageAsync(string name, string imageUrl)
+        {
+            var location = await db.Locations.FirstOrDefaultAsync(l => l.Name == name);
+            if (location is not null && ShouldReplaceSeedImage(location.ImageUrl, imageUrl))
+            {
+                location.ImageUrl = imageUrl;
+                changed = true;
+            }
+        }
+
+        async Task UpdatePlaceImageAsync(string name, string imageUrl)
+        {
+            var place = await db.Places.FirstOrDefaultAsync(p => p.Name == name);
+            if (place is not null && ShouldReplaceSeedImage(place.ImageUrl, imageUrl))
+            {
+                place.ImageUrl = imageUrl;
+                changed = true;
+            }
+        }
+
+        async Task UpdateEventImageAsync(string name, string imageUrl)
+        {
+            var @event = await db.Events.FirstOrDefaultAsync(e => e.Name == name);
+            if (@event is not null && ShouldReplaceSeedImage(@event.ImageUrl, imageUrl))
+            {
+                @event.ImageUrl = imageUrl;
+                changed = true;
+            }
+        }
+
+        async Task UpdateTagImageAsync(string slug, string imageUrl)
+        {
+            var tag = await db.Tags.FirstOrDefaultAsync(t => t.Slug == slug);
+            if (tag is not null && ShouldReplaceSeedImage(tag.ImageUrl, imageUrl))
+            {
+                tag.ImageUrl = imageUrl;
+                changed = true;
+            }
+        }
+
+        await UpdateLocationImageAsync("Old Town", SeedMedia("dubrovnik-old-town"));
+        await UpdatePlaceImageAsync("Dubrovnik Old Town Walls", SeedMedia("dubrovnik-old-town"));
+        await UpdatePlaceImageAsync("Rector's Palace", SeedMedia("rectors-palace"));
+        await UpdatePlaceImageAsync("Culture Club Revelin", SeedMedia("culture-club-revelin"));
+        await UpdatePlaceImageAsync("Hotel Excelsior", SeedMedia("hotel-excelsior"));
+        await UpdateEventImageAsync("Dubrovnik Summer Festival", SeedMedia("dubrovnik-summer-festival"));
+        await UpdateTagImageAsync("history", SeedMedia("dubrovnik-old-town"));
+        await UpdateTagImageAsync("museums", SeedMedia("rectors-palace"));
+
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static bool ShouldReplaceSeedImage(string? currentImageUrl, string replacementImageUrl)
+    {
+        if (string.Equals(currentImageUrl, replacementImageUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return string.IsNullOrWhiteSpace(currentImageUrl) ||
+            currentImageUrl.StartsWith("https://images.unsplash.com/photo-", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task EnsureDemoUsersAsync(AppDbContext db)
@@ -730,10 +803,10 @@ public static class SeedData
         return new List<SeedTagDefinition>
         {
             new("Food & Drink", "food-drink", ForPlace: true, ForEvent: true, ImageUrl: U("1414235077428-338989a2e8c0")),
-            new("History", "history", ForDestination: true, ForPlace: true, ImageUrl: U("1560703650-1e76a3b39c9c")),
+            new("History", "history", ForDestination: true, ForPlace: true, ImageUrl: SeedMedia("dubrovnik-old-town")),
             new("Beaches", "beaches", ForPlace: true, ImageUrl: U("1507525428034-b723cf961d3e")),
             new("Nature", "nature", ForPlace: true, ImageUrl: U("1441974231531-c6227db76b6e")),
-            new("Museums", "museums", ForPlace: true, ImageUrl: U("1564399580075-3af6f48fa3e2")),
+            new("Museums", "museums", ForPlace: true, ImageUrl: SeedMedia("rectors-palace")),
             new("Local Events", "local-events", ForEvent: true),
             new("Nightlife", "nightlife", ForPlace: true, ForEvent: true),
             new("Festivals", "festivals", ForEvent: true),

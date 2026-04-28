@@ -257,10 +257,12 @@ app.Use(async (context, next) =>
 });
 
 var mediaRoot = Path.Combine(app.Environment.ContentRootPath, "media");
+Directory.CreateDirectory(Path.Combine(mediaRoot, "seed"));
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "avatars"));
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "contributions"));
 
 var mediaContentTypes = new FileExtensionContentTypeProvider();
+mediaContentTypes.Mappings[".svg"] = "image/svg+xml";
 mediaContentTypes.Mappings[".webp"] = "image/webp";
 
 app.UseStaticFiles(new StaticFileOptions
@@ -283,6 +285,12 @@ app.UseStaticFiles(new StaticFileOptions
         {
             headers[HeaderNames.CacheControl] = "no-store";
             headers["X-Robots-Tag"] = "noindex, noarchive, nosnippet";
+            return;
+        }
+
+        if (context.Context.Request.Path.StartsWithSegments("/media/seed"))
+        {
+            headers[HeaderNames.CacheControl] = "public, max-age=604800, immutable";
             return;
         }
 
