@@ -1,5 +1,5 @@
-import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild,AfterViewInit,NgZone } from '@angular/core';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component'; 
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component'; 
@@ -18,9 +18,33 @@ interface DayHours {
   templateUrl: './add-place.component.html',
   styleUrl: './add-place.component.css'
 })
-export class NewPlaceComponent {
-  placeType = 'Museum';
+export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
+  constructor(private zone: NgZone) {}
+  placeType  = 'Museum';
   opsEnabled = false;
+  @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
+  @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
+  @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
+
+  isBold      = false;
+  isItalic    = false;
+  isUnderline = false;
+ 
+  execFormat(command: 'bold' | 'italic' | 'underline'): void {
+    document.execCommand(command, false, undefined);
+    this.editorRef.nativeElement.focus();
+    this.syncToolbarState();
+  }
+ 
+  onEditorChange(): void { this.syncToolbarState(); }
+  onEditorFocus():  void { this.syncToolbarState(); }
+  onEditorBlur():   void { this.syncToolbarState(); }
+ 
+  private syncToolbarState(): void {
+    this.isBold      = document.queryCommandState('bold');
+    this.isItalic    = document.queryCommandState('italic');
+    this.isUnderline = document.queryCommandState('underline');
+  }
 
   openTimes = ['08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM'];
   closeTimes = ['04:00 PM', '05:00 PM', '06:00 PM', '07:00 PM', '08:00 PM', '09:00 PM'];
@@ -42,4 +66,11 @@ export class NewPlaceComponent {
     { label: 'Historical Site',     checked: false },
     { label: 'National Park Access',checked: false },
   ];
+  ngOnInit(): void {}
+ 
+  ngAfterViewInit(): void {
+    
+  }
+ 
+  ngOnDestroy(): void {}
 }
