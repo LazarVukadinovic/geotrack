@@ -2,6 +2,7 @@ using Geotrack.Server;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace Geotrack.IntegrationTests.Infrastructure;
@@ -56,6 +57,11 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
                 {
                     ["ConnectionStrings:DefaultConnection"] = _testConnectionString,
                 });
+        });
+        builder.ConfigureLogging(logging =>
+        {
+            logging.ClearProviders();
+            logging.AddConsole();
         });
 
         return base.CreateHost(builder);

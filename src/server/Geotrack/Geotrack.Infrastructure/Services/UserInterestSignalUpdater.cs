@@ -16,18 +16,28 @@ public class UserInterestSignalUpdater : IUserInterestSignalUpdater
     private static readonly IReadOnlyDictionary<string, double> Weights =
         new Dictionary<string, double>(StringComparer.Ordinal)
         {
-            [AnalyticsEventTypes.DetailView] = 1.0,
-            [AnalyticsEventTypes.SearchPerformed] = 1.5,
-            [AnalyticsEventTypes.FilterApplied] = 1.5,
-            [AnalyticsEventTypes.MapMarkerOpened] = 1.5,
-            [AnalyticsEventTypes.AgentRecommendationOpened] = 3.0,
-            [AnalyticsEventTypes.DirectionsStarted] = 4.0,
+            [AnalyticsEventTypes.DetailView] = 0.75,
+            [AnalyticsEventTypes.SearchPerformed] = 1.0,
+            [AnalyticsEventTypes.FilterApplied] = 1.0,
+            [AnalyticsEventTypes.MapMarkerOpened] = 0.75,
+            [AnalyticsEventTypes.AgentRecommendationOpened] = 2.5,
+            [AnalyticsEventTypes.DirectionsStarted] = 3.5,
             [AnalyticsEventTypes.OutboundLinkClicked] = 5.0,
             [AnalyticsEventTypes.FavoriteAdded] = 5.0,
             [AnalyticsEventTypes.CollectionItemAdded] = 5.0,
             [AnalyticsEventTypes.ReviewCreated] = 7.0,
             [AnalyticsEventTypes.FavoriteRemoved] = -3.0,
             [AnalyticsEventTypes.CollectionItemRemoved] = -3.0,
+        };
+
+    private static readonly IReadOnlyDictionary<string, TimeSpan> ScoringCooldowns =
+        new Dictionary<string, TimeSpan>(StringComparer.Ordinal)
+        {
+            [AnalyticsEventTypes.DetailView] = TimeSpan.FromMinutes(20),
+            [AnalyticsEventTypes.MapMarkerOpened] = TimeSpan.FromMinutes(5),
+            [AnalyticsEventTypes.AgentRecommendationOpened] = TimeSpan.FromMinutes(10),
+            [AnalyticsEventTypes.DirectionsStarted] = TimeSpan.FromMinutes(10),
+            [AnalyticsEventTypes.OutboundLinkClicked] = TimeSpan.FromMinutes(5),
         };
 
     private readonly AppDbContext _db;
@@ -82,6 +92,11 @@ public class UserInterestSignalUpdater : IUserInterestSignalUpdater
         {
             if (byTagId.TryGetValue(tagId, out var signal))
             {
+                if (ShouldSkipScoring(signal, enrichedEvent.EventType, reason, now, weight))
+                {
+                    continue;
+                }
+
                 signal.Score = Math.Clamp(signal.Score + weight, -ScoreCap, ScoreCap);
                 if (signal.IsDismissed && weight > 0)
                 {
@@ -116,6 +131,23 @@ public class UserInterestSignalUpdater : IUserInterestSignalUpdater
                 byTagId[tagId] = fresh;
             }
         }
+    }
+
+    private static bool ShouldSkipScoring(
+        UserInterestSignal signal,
+        string eventType,
+        string reason,
+        DateTime now,
+        double weight)
+    {
+        if (weight <= 0)
+        {
+            return false;
+        }
+
+        return ScoringCooldowns.TryGetValue(eventType, out var cooldown) &&
+            string.Equals(signal.LastReason, reason, StringComparison.Ordinal) &&
+            now - signal.LastInteractionAt < cooldown;
     }
 
     private async Task<List<int>> ResolveTagIdsAsync(string entityType, int entityId, CancellationToken ct)

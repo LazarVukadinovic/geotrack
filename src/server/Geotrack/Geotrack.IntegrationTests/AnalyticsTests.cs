@@ -136,6 +136,88 @@ public sealed class AnalyticsTests
     }
 
     [Fact]
+    public async Task Noisy_duplicate_events_are_dropped_across_recent_ingestion_window()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var sessionId = Guid.NewGuid();
+        var batch = new
+        {
+            anonymousSessionId = sessionId,
+            events = new object[]
+            {
+                new { eventType = AnalyticsEventTypes.PageView, route = "/explore" },
+            },
+        };
+
+        var first = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var second = await client.PostAsJsonAsync("/api/analytics/events", batch);
+
+        Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var rows = await db.AnalyticsEvents
+            .Where(e => e.AnonymousSessionId == sessionId)
+            .ToListAsync();
+
+        Assert.Single(rows);
+        Assert.Equal(AnalyticsEventTypes.PageView, rows[0].EventType);
+    }
+
+    [Fact]
+    public async Task High_value_outbound_clicks_are_not_deduped_as_noisy_events()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var sessionId = Guid.NewGuid();
+        var batch = new
+        {
+            anonymousSessionId = sessionId,
+            events = new object[]
+            {
+                new
+                {
+                    eventType = AnalyticsEventTypes.OutboundLinkClicked,
+                    entityType = AnalyticsEntityTypes.Hotel,
+                    entityId = 1,
+                    metadata = new Dictionary<string, object?>
+                    {
+                        ["provider"] = "booking",
+                        ["host"] = "booking.com",
+                    },
+                },
+                new
+                {
+                    eventType = AnalyticsEventTypes.OutboundLinkClicked,
+                    entityType = AnalyticsEntityTypes.Hotel,
+                    entityId = 1,
+                    metadata = new Dictionary<string, object?>
+                    {
+                        ["provider"] = "booking",
+                        ["host"] = "booking.com",
+                    },
+                },
+            },
+        };
+
+        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var rows = await db.AnalyticsEvents
+            .Where(e => e.AnonymousSessionId == sessionId)
+            .ToListAsync();
+
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, row => Assert.Equal(AnalyticsEventTypes.OutboundLinkClicked, row.EventType));
+    }
+
+    [Fact]
     public async Task Favorite_added_event_writes_inferred_signals_for_each_place_tag()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -169,6 +251,15 @@ public sealed class AnalyticsTests
 
         var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await WaitForAsync(
+            async () =>
+            {
+                await using var waitScope = app.Services.CreateAsyncScope();
+                var waitDb = waitScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                return await waitDb.UserInterestSignals.CountAsync(s => s.UserId == userId) == expectedTagCount;
+            },
+            "Timed out waiting for async inferred-interest processing.");
 
         await using var verify = app.Services.CreateAsyncScope();
         var verifyDb = verify.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -216,6 +307,17 @@ public sealed class AnalyticsTests
             var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
+
+        await WaitForAsync(
+            async () =>
+            {
+                await using var waitScope = app.Services.CreateAsyncScope();
+                var waitDb = waitScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                return await waitDb.UserInterestSignals
+                    .Where(s => s.UserId == userId)
+                    .AnyAsync(s => s.Score >= 1000.0);
+            },
+            "Timed out waiting for repeated async inferred-interest processing.");
 
         await using var verify = app.Services.CreateAsyncScope();
         var verifyDb = verify.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -290,6 +392,7 @@ public sealed class AnalyticsTests
         }
 
         await PostFavoriteAddedAsync(client, placeId);
+        await WaitForSignalAsync(app, userId, tagId, signal => signal.Score >= 5.0);
 
         var interests = await client.GetFromJsonAsync<GetUserInterestsResponseDto>("/api/user/me/interests");
         Assert.NotNull(interests);
@@ -304,11 +407,13 @@ public sealed class AnalyticsTests
         Assert.DoesNotContain(interests!.InferredTags, tag => tag.TagId == tagId);
 
         await PostFavoriteAddedAsync(client, placeId);
+        await WaitForSignalAsync(app, userId, tagId, signal => signal.EvidenceSinceDismissal >= 5.0);
         interests = await client.GetFromJsonAsync<GetUserInterestsResponseDto>("/api/user/me/interests");
         Assert.NotNull(interests);
         Assert.DoesNotContain(interests!.InferredTags, tag => tag.TagId == tagId);
 
         await PostFavoriteAddedAsync(client, placeId);
+        await WaitForSignalAsync(app, userId, tagId, signal => !signal.IsDismissed);
         interests = await client.GetFromJsonAsync<GetUserInterestsResponseDto>("/api/user/me/interests");
         Assert.NotNull(interests);
         Assert.Contains(interests!.InferredTags, tag => tag.TagId == tagId);
@@ -406,6 +511,15 @@ public sealed class AnalyticsTests
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
+        await WaitForAsync(
+            async () =>
+            {
+                await using var waitScope = app.Services.CreateAsyncScope();
+                var waitDb = waitScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                return await waitDb.UserInterestSignals.CountAsync(signal => signal.UserId == userId) == expectedTagCount;
+            },
+            "Timed out waiting for outbound-click inferred-interest processing.");
+
         await using var verify = app.Services.CreateAsyncScope();
         var verifyDb = verify.ServiceProvider.GetRequiredService<AppDbContext>();
         var signals = await verifyDb.UserInterestSignals
@@ -466,5 +580,38 @@ public sealed class AnalyticsTests
             });
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    private static Task WaitForSignalAsync(
+        GeotrackApiFactory app,
+        int userId,
+        int tagId,
+        Func<UserInterestSignal, bool> predicate) =>
+        WaitForAsync(
+            async () =>
+            {
+                await using var scope = app.Services.CreateAsyncScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var signal = await db.UserInterestSignals
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(s => s.UserId == userId && s.TagId == tagId);
+                return signal is not null && predicate(signal);
+            },
+            "Timed out waiting for inferred-interest signal processing.");
+
+    private static async Task WaitForAsync(Func<Task<bool>> predicate, string timeoutMessage)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await predicate())
+            {
+                return;
+            }
+
+            await Task.Delay(50);
+        }
+
+        throw new TimeoutException(timeoutMessage);
     }
 }
