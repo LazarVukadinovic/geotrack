@@ -1,8 +1,10 @@
 import { Component, ElementRef, ViewChild, NgZone, ChangeDetectorRef, AfterViewInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+
+declare const L: any;
 
 interface ClassItem {
   label: string;
@@ -12,7 +14,7 @@ interface ClassItem {
 @Component({
   selector: 'app-new-event',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, DecimalPipe, FormsModule, SidebarComponent, TopbarComponent],
   templateUrl: './add-event.component.html',
   styleUrl: './add-event.component.css',
   styles: [`
@@ -33,7 +35,9 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
  
   constructor(private zone: NgZone, private cdr: ChangeDetectorRef) {}
  
-  @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
+  @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
+  @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
+  @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
  
   // ── Basic fields ──────────────────────────────────────────────
   eventTitle = 'Summer Festival';
@@ -126,7 +130,6 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       this._currentImages = [...images];
       this._currentIndex  = index;
       this._renderLightbox();
- 
       this._lightboxKeyHandler = (e: KeyboardEvent) => {
         if (e.key === 'Escape')     { this.closeLightbox(); }
         if (e.key === 'ArrowRight') { this._currentIndex = (this._currentIndex + 1) % this._currentImages.length; this._renderLightbox(); }
@@ -139,10 +142,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
  
   private _renderLightbox(): void {
     if (this.lightboxEl) document.body.removeChild(this.lightboxEl);
-    const imgs   = this._currentImages;
-    const idx    = this._currentIndex;
-    const single = imgs.length === 1;
- 
+    const imgs = this._currentImages, idx = this._currentIndex, single = imgs.length === 1;
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;';
     overlay.addEventListener('click', () => this.closeLightbox());
@@ -167,8 +167,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     }
  
     const img = document.createElement('img');
-    img.src = imgs[idx].url;
-    img.alt = imgs[idx].name;
+    img.src = imgs[idx].url; img.alt = imgs[idx].name;
     img.style.cssText = 'max-width:88vw;max-height:80vh;object-fit:contain;border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.5);';
     img.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(img);
@@ -187,11 +186,9 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
         const thumb = document.createElement('div');
         thumb.style.cssText = `width:48px;height:48px;border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid ${ti === idx ? 'white' : 'transparent'};opacity:${ti === idx ? '1' : '0.5'};transition:all 0.15s;`;
         const tImg = document.createElement('img');
-        tImg.src = im.url;
-        tImg.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+        tImg.src = im.url; tImg.style.cssText = 'width:100%;height:100%;object-fit:cover;';
         tImg.addEventListener('click', (e) => { e.stopPropagation(); this._currentIndex = ti; this._renderLightbox(); });
-        thumb.appendChild(tImg);
-        thumbRow.appendChild(thumb);
+        thumb.appendChild(tImg); thumbRow.appendChild(thumb);
       });
       overlay.appendChild(thumbRow);
     }
@@ -206,20 +203,184 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     document.body.style.overflow = '';
   }
  
+  // ── Geographic pin / Leaflet ──────────────────────────────────
+  pinModalOpen = false;
+  pinConfirmed = false;
+ 
+  pinLat: string = '';
+  pinLng: string = '';
+  streetAddress: string = '';
+  isGeocodingAddress = false;
+ 
+  modalPinLat: number | null = null;
+  modalPinLng: number | null = null;
+ 
+  private miniMap    : any = null;
+  private modalMap   : any = null;
+  private miniMarker : any = null;
+  private modalMarker: any = null;
+  private _geocodeDebounce: any = null;
+ 
+  private makePinIcon(): any {
+    return L.divIcon({
+      html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
+               <path d="M12 0C5.373 0 0 5.373 0 12c0 8 12 20 12 20S24 20 24 12C24 5.373 18.627 0 12 0z" fill="#2563eb" stroke="white" stroke-width="1.5"/>
+               <circle cx="12" cy="12" r="4" fill="white"/>
+             </svg>`,
+      iconSize: [24, 32], iconAnchor: [12, 32], className: '',
+    });
+  }
+ 
+  private initMiniMap(): void {
+    if (this.miniMap) return;
+    const el = this.miniMapContainer?.nativeElement;
+    if (!el) return;
+    this.miniMap = L.map(el, {
+      zoomControl: false, dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, touchZoom: false, attributionControl: false,
+    }).setView([44.0, 20.9], 8);
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.miniMap);
+  }
+ 
+  openPinModal(): void {
+    this.pinModalOpen = true;
+    const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
+    if (!isNaN(lat) && !isNaN(lng)) { this.modalPinLat = lat; this.modalPinLng = lng; }
+    else { this.modalPinLat = null; this.modalPinLng = null; }
+    setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
+  }
+ 
+  closePinModal(): void { this.pinModalOpen = false; this.destroyModalMap(); }
+  onPinModalBackdropClick(_event: MouseEvent): void { this.closePinModal(); }
+ 
+  private initModalMap(el: HTMLDivElement): void {
+    if (this.modalMap) return;
+    const center: [number, number] = (this.modalPinLat !== null && this.modalPinLng !== null)
+      ? [this.modalPinLat, this.modalPinLng] : [44.0, 20.9];
+    const zoom = this.modalPinLat !== null ? 14 : 9;
+ 
+    this.modalMap = L.map(el, { zoomControl: true, attributionControl: false }).setView(center, zoom);
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.modalMap);
+    setTimeout(() => this.modalMap?.invalidateSize(), 200);
+ 
+    if (this.modalPinLat !== null && this.modalPinLng !== null) {
+      this.modalMarker = L.marker([this.modalPinLat, this.modalPinLng], { icon: this.makePinIcon(), draggable: true }).addTo(this.modalMap);
+      this.modalMarker.on('dragend', (e: any) => {
+        const pos = e.target.getLatLng();
+        this.zone.run(() => { this.modalPinLat = pos.lat; this.modalPinLng = pos.lng; });
+      });
+    }
+ 
+    this.modalMap.on('click', (e: any) => {
+      this.zone.run(() => { this.modalPinLat = e.latlng.lat; this.modalPinLng = e.latlng.lng; });
+      if (this.modalMarker) {
+        this.modalMarker.setLatLng(e.latlng);
+      } else {
+        this.modalMarker = L.marker(e.latlng, { icon: this.makePinIcon(), draggable: true }).addTo(this.modalMap);
+        this.modalMarker.on('dragend', (ev: any) => {
+          const pos = ev.target.getLatLng();
+          this.zone.run(() => { this.modalPinLat = pos.lat; this.modalPinLng = pos.lng; });
+        });
+      }
+    });
+  }
+ 
+  private destroyModalMap(): void {
+    if (this.modalMap) { this.modalMap.remove(); this.modalMap = null; this.modalMarker = null; }
+  }
+ 
+  confirmPin(): void {
+    if (this.modalPinLat === null || this.modalPinLng === null) {
+      alert('Please click on the map to place a pin first.');
+      return;
+    }
+    this.pinLat = this.modalPinLat.toFixed(6);
+    this.pinLng = this.modalPinLng.toFixed(6);
+    this.pinConfirmed = true;
+    this.updateMiniMapPin(this.modalPinLat, this.modalPinLng);
+    this.reverseGeocode(this.modalPinLat, this.modalPinLng);
+    this.closePinModal();
+  }
+ 
+  onCoordInputChange(): void {
+    const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
+    if (isNaN(lat) || isNaN(lng)) return;
+    this.pinConfirmed = true;
+    this.updateMiniMapPin(lat, lng);
+    if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
+    this._geocodeDebounce = setTimeout(() => this.reverseGeocode(lat, lng), 300);
+  }
+ 
+  private async reverseGeocode(lat: number, lng: number): Promise<void> {
+    this.isGeocodingAddress = true;
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'TourismCMS/1.0' } });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.display_name) {
+        this.zone.run(() => {
+          const a = data.address || {}, parts: string[] = [];
+          if (a.road) parts.push(a.road + (a.house_number ? ' ' + a.house_number : ''));
+          if (a.city || a.town || a.village || a.municipality) parts.push(a.city ?? a.town ?? a.village ?? a.municipality);
+          if (a.postcode) parts.push(a.postcode);
+          if (a.country)  parts.push(a.country);
+          this.streetAddress = parts.length ? parts.join(', ') : data.display_name;
+          this.cdr.detectChanges();
+        });
+      }
+    } catch (_) {
+    } finally {
+      this.zone.run(() => { this.isGeocodingAddress = false; this.cdr.detectChanges(); });
+    }
+  }
+ 
+  private updateMiniMapPin(lat: number, lng: number): void {
+    if (!this.miniMap) this.initMiniMap();
+    if (!this.miniMap) return;
+    if (this.miniMarker) {
+      this.miniMarker.setLatLng([lat, lng]);
+    } else {
+      this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.miniMap);
+    }
+    this.miniMap.setView([lat, lng], 14);
+  }
+ 
   // ── Classification ────────────────────────────────────────────
   classItems: ClassItem[] = [
-    { label: 'Music',           checked: true  },
-    { label: 'Outdoor',         checked: true  },
+    { label: 'Music',           checked: false  },
+    { label: 'Outdoor',         checked: false  },
     { label: 'Culture',         checked: false },
     { label: 'Family Friendly', checked: false },
   ];
  
+  // ── Tags ──────────────────────────────────────────────────────
+  tags    : string[] = [];
+  tagInput: string   = '';
+ 
+  addTag(event: Event): void {
+    event.preventDefault();
+    const value = this.tagInput.trim();
+    if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
+    this.tags     = [...this.tags, value];
+    this.tagInput = '';
+  }
+ 
+  removeTag(tag: string): void {
+    this.tags = this.tags.filter(t => t !== tag);
+  }
+ 
   // ── Lifecycle ─────────────────────────────────────────────────
-  ngAfterViewInit(): void {}
+  ngAfterViewInit(): void {
+    setTimeout(() => this.initMiniMap(), 0);
+  }
  
   ngOnDestroy(): void {
+    this.destroyModalMap();
     this.closeLightbox();
     this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
+    if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
+    if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
   }
 }
