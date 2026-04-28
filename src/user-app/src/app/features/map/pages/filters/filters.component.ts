@@ -16,15 +16,12 @@ interface Category {
 })
 export class Filters {
   selectedCategories: string[] = [];
-  selectedDistance = 'Any';
 
   allCategories: Category[] = [
     { id: 'places', label: 'Places' },
     { id: 'stays', label: 'Stays' },
     { id: 'events', label: 'Events' },
   ];
-
-  distances = ['Any', '0.5km', '1km', '2km', '5km'];
 
   constructor(
     private router: Router,
@@ -35,7 +32,6 @@ export class Filters {
       try {
         const f = JSON.parse(saved);
         this.selectedCategories = f.categories ?? [];
-        this.selectedDistance = f.distance ?? 'Any';
       } catch {
         sessionStorage.removeItem('mapFilters');
       }
@@ -56,13 +52,11 @@ export class Filters {
 
   clearAll(): void {
     this.selectedCategories = [];
-    this.selectedDistance = 'Any';
     sessionStorage.removeItem('mapFilters');
     this.analytics.track('filter_applied', {
       metadata: {
         surface: 'map_filters',
         categories: [],
-        distance: 'Any',
         cleared: true,
       },
     });
@@ -74,14 +68,12 @@ export class Filters {
   applyFilters(): void {
     sessionStorage.setItem('mapFilters', JSON.stringify({
       categories: this.selectedCategories,
-      distance: this.selectedDistance,
     }));
 
     this.analytics.track('filter_applied', {
       metadata: {
         surface: 'map_filters',
         categories: this.selectedCategories,
-        distance: this.selectedDistance,
       },
     });
 

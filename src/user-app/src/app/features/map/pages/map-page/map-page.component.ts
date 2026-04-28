@@ -5,32 +5,41 @@ import { Router } from '@angular/router';
 import maplibregl, {
   GeoJSONSource,
   Map as MapLibreMap,
-  MapMouseEvent,
   MapStyleImageMissingEvent,
 } from 'maplibre-gl';
 import {
   MapApiService,
-  MapEntitiesResponse,
   MapEntityMarker,
+  MapMarkersMode,
+  MapMarkersResponse,
   MapRouteResult,
   MapSearchResult,
+  MapViewportBounds,
 } from '../../../../core/services/map-api.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
+import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import type { AnalyticsEntityType } from '../../../../core/services/analytics.types';
 
 const MAP_STYLE_URL = '/map-style.json';
 
-const DISTANCE_RADIUS_KM: Record<string, number | null> = {
-  Any: null,
-  '0.5km': 0.5,
-  '1km': 1,
-  '2km': 2,
-  '5km': 5,
-};
+const DESTINATION_ZOOM_THRESHOLD = 10;
+const VIEWPORT_DEBOUNCE_MS = 250;
+const VIEWPORT_CACHE_PADDING = 0.1;
+
+interface MarkerEntry {
+  data: MapEntityMarker;
+  marker: maplibregl.Marker;
+  imageElement: HTMLImageElement;
+}
+
+interface CachedViewport extends MapViewportBounds {
+  mode: MapMarkersMode;
+}
 
 @Component({
   selector: 'app-map-page',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ImageFallbackDirective],
   templateUrl: './map-page.component.html',
   styleUrl: './map-page.component.css',
 })
@@ -41,16 +50,20 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private readonly ROUTE_SOURCE = 'route-source';
   private readonly ROUTE_LAYER = 'route-layer';
   private readonly ROUTE_OUTLINE = 'route-layer-outline';
-  private readonly ENTITY_SOURCE = 'geotrack-entity-source';
-  private readonly ENTITY_LAYER = 'geotrack-entity-layer';
 
   private map!: MapLibreMap;
   private userLat: number | null = null;
   private userLon: number | null = null;
   private searchTimeout?: ReturnType<typeof setTimeout>;
   private filterCategories: string[] = [];
-  private readonly markersByKey = new Map<string, MapEntityMarker>();
+  private readonly markersByKey = new Map<string, MarkerEntry>();
+  private readonly markerImageFallbackUsed = new Set<string>();
   private readonly allowedCategoryIds = new Set(['places', 'stays', 'events']);
+  private viewportLoadTimeout?: ReturnType<typeof setTimeout>;
+  private requestSeq = 0;
+  private lastFetchedViewport: CachedViewport | null = null;
+
+  currentMode: MapMarkersMode = 'entities';
 
   destinationName = 'Search Your Destination';
   destinationLat = 44.0165;
@@ -60,7 +73,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   isLocating = false;
   isLoadingRoute = false;
   activeCategory = 'all';
-  activeDistance = 'Any';
   hasActiveFilters = false;
   isUserLocation = false;
 
@@ -125,16 +137,14 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       }));
     }
 
-    const savedFilters = this.readSessionJson<{ categories?: string[]; distance?: string }>('mapFilters');
+    const savedFilters = this.readSessionJson<{ categories?: string[] }>('mapFilters');
     if (savedFilters) {
       this.filterCategories = (savedFilters.categories ?? []).filter((category) => this.allowedCategoryIds.has(category));
-      this.activeDistance = savedFilters.distance ?? 'Any';
-      this.hasActiveFilters = this.filterCategories.length > 0 || this.activeDistance !== 'Any';
+      this.hasActiveFilters = this.filterCategories.length > 0;
     }
 
     if (state?.cleared) {
       this.filterCategories = [];
-      this.activeDistance = 'Any';
       this.hasActiveFilters = false;
     }
   }
@@ -144,6 +154,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.viewportLoadTimeout) {
+      clearTimeout(this.viewportLoadTimeout);
+    }
+
     if (this.map) {
       const center = this.map.getCenter();
       const zoom = this.map.getZoom();
@@ -151,6 +165,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         center: [center.lng, center.lat],
         zoom,
       }));
+
+      for (const entry of this.markersByKey.values()) {
+        entry.marker.remove();
+      }
+      this.markersByKey.clear();
+      this.markerImageFallbackUsed.clear();
+
       this.map.remove();
     }
 
@@ -220,7 +241,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }));
 
     this.map.jumpTo({ center: [result.longitude, result.latitude], zoom: 14 });
-    this.loadEntities();
+    this.invalidateMarkerCache();
+    this.scheduleViewportLoad(0);
   }
 
   locateMe(): void {
@@ -257,7 +279,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   selectCategory(category: { id: string; label: string }): void {
     this.activeCategory = category.id;
     this.filterCategories = [];
-    this.activeDistance = 'Any';
     this.hasActiveFilters = false;
     this.selectedPlace = null;
     this.routeErrorMessage = '';
@@ -268,11 +289,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       metadata: {
         surface: 'map',
         category: category.id,
-        distance: 'Any',
       },
     });
 
-    this.loadEntities();
+    this.invalidateMarkerCache();
+    this.scheduleViewportLoad(0);
   }
 
   openDirections(): void {
@@ -365,107 +386,247 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         this.map.addImage(event.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
       });
 
-      this.ensureEntityLayer();
-
       if (this.isUserLocation) {
         this.placeUserMarker(this.destinationLat, this.destinationLon);
       }
 
-      this.loadEntities();
+      this.scheduleViewportLoad(0);
     });
 
-    this.map.on('click', this.ENTITY_LAYER, (event) => {
-      const key = event.features?.[0]?.properties?.['key'];
-      if (typeof key === 'string') {
-        const marker = this.markersByKey.get(key) ?? null;
-        this.selectedPlace = marker;
-        this.routeErrorMessage = '';
-        this.clearRoute();
-        if (marker) {
-          this.analytics.track('map_marker_opened', {
-            entityType: this.toAnalyticsEntityType(marker),
-            entityId: marker.entityId,
-            metadata: {
-              surface: 'map',
-              category: marker.categoryLabel ?? marker.entityType,
-            },
-          });
-        }
-        this.cdr.detectChanges();
-      }
+    this.map.on('moveend', () => {
+      this.scheduleViewportLoad();
     });
 
-    this.map.on('click', (event: MapMouseEvent) => {
-      const features = this.map.queryRenderedFeatures(event.point, { layers: [this.ENTITY_LAYER] });
-      if (features.length === 0 && this.selectedPlace) {
+    this.map.on('click', () => {
+      if (this.selectedPlace) {
         this.closePlace();
         this.cdr.detectChanges();
       }
     });
-
-    this.map.on('mouseenter', this.ENTITY_LAYER, () => {
-      this.map.getCanvas().style.cursor = 'pointer';
-    });
-
-    this.map.on('mouseleave', this.ENTITY_LAYER, () => {
-      this.map.getCanvas().style.cursor = '';
-    });
   }
 
-  private loadEntities(): void {
+  private scheduleViewportLoad(debounceMs: number = VIEWPORT_DEBOUNCE_MS): void {
     if (!this.map) return;
 
+    if (this.viewportLoadTimeout) {
+      clearTimeout(this.viewportLoadTimeout);
+      this.viewportLoadTimeout = undefined;
+    }
+
+    if (debounceMs <= 0) {
+      this.loadMarkersForViewport();
+      return;
+    }
+
+    this.viewportLoadTimeout = setTimeout(() => {
+      this.viewportLoadTimeout = undefined;
+      this.loadMarkersForViewport();
+    }, debounceMs);
+  }
+
+  private loadMarkersForViewport(): void {
+    if (!this.map) return;
+
+    const mapBounds = this.map.getBounds();
+    const zoom = this.map.getZoom();
+    const bounds: MapViewportBounds = {
+      north: mapBounds.getNorth(),
+      south: mapBounds.getSouth(),
+      east: mapBounds.getEast(),
+      west: mapBounds.getWest(),
+    };
+
+    const expectedMode: MapMarkersMode = zoom < DESTINATION_ZOOM_THRESHOLD ? 'destinations' : 'entities';
+
+    if (this.isWithinCachedViewport(bounds, expectedMode)) {
+      return;
+    }
+
+    const seq = ++this.requestSeq;
     this.isLoading = true;
     this.loadErrorMessage = '';
-    this.emptyStateMessage = '';
     this.cdr.detectChanges();
 
-    this.mapApi.getEntities(
-      this.destinationLat,
-      this.destinationLon,
-      this.getRequestedCategories(),
-      DISTANCE_RADIUS_KM[this.activeDistance],
-    ).subscribe({
+    this.mapApi.getMarkersInViewport(bounds, zoom, this.getRequestedCategories()).subscribe({
       next: (response) => {
-        this.applyEntities(response);
+        if (seq !== this.requestSeq) return;
+        this.lastFetchedViewport = { ...bounds, mode: response.mode };
+        this.applyMarkers(response);
         this.isLoading = false;
         this.cdr.detectChanges();
       },
       error: () => {
-        this.markersByKey.clear();
-        this.setEntityData([]);
-        this.selectedPlace = null;
-        this.emptyStateMessage = '';
-        this.loadErrorMessage = "GeoTrack couldn't load backend-backed map results right now.";
+        if (seq !== this.requestSeq) return;
         this.isLoading = false;
+        this.loadErrorMessage = "GeoTrack couldn't load backend-backed map results right now.";
         this.cdr.detectChanges();
       },
     });
   }
 
-  private applyEntities(response: MapEntitiesResponse): void {
-    const markers = response.markers ?? [];
-    const validKeys = new Set<string>();
+  private isWithinCachedViewport(bounds: MapViewportBounds, mode: MapMarkersMode): boolean {
+    const last = this.lastFetchedViewport;
+    if (!last || last.mode !== mode) return false;
 
-    this.markersByKey.clear();
+    const dy = (last.north - last.south) * VIEWPORT_CACHE_PADDING;
+    const dx = (last.east - last.west) * VIEWPORT_CACHE_PADDING;
+
+    return bounds.north <= last.north + dy
+      && bounds.south >= last.south - dy
+      && bounds.east <= last.east + dx
+      && bounds.west >= last.west - dx;
+  }
+
+  private invalidateMarkerCache(): void {
+    this.lastFetchedViewport = null;
+  }
+
+  private applyMarkers(response: MapMarkersResponse): void {
+    const markers = response.markers ?? [];
+    const newKeys = new Set<string>();
+
     for (const marker of markers) {
       const key = this.getMarkerKey(marker);
-      validKeys.add(key);
-      this.markersByKey.set(key, marker);
+      newKeys.add(key);
+      const existing = this.markersByKey.get(key);
+      if (existing) {
+        existing.data = marker;
+        existing.marker.setLngLat([marker.longitude, marker.latitude]);
+        this.refreshMarkerDom(existing, marker);
+      } else {
+        const entry = this.createMarkerEntry(marker);
+        this.markersByKey.set(key, entry);
+      }
     }
 
-    this.setEntityData(markers);
+    for (const [key, entry] of this.markersByKey) {
+      if (!newKeys.has(key)) {
+        entry.marker.remove();
+        this.markersByKey.delete(key);
+        this.markerImageFallbackUsed.delete(key);
+      }
+    }
 
-    if (this.selectedPlace && !validKeys.has(this.getMarkerKey(this.selectedPlace))) {
-      this.selectedPlace = null;
-      this.clearRoute();
-    } else if (this.selectedPlace) {
-      this.selectedPlace = this.markersByKey.get(this.getMarkerKey(this.selectedPlace)) ?? this.selectedPlace;
+    this.currentMode = response.mode;
+
+    if (this.selectedPlace) {
+      const selectedKey = this.getMarkerKey(this.selectedPlace);
+      const stillVisible = this.markersByKey.get(selectedKey);
+      if (stillVisible) {
+        this.selectedPlace = stillVisible.data;
+      } else {
+        this.selectedPlace = null;
+        this.clearRoute();
+      }
     }
 
     this.emptyStateMessage = markers.length === 0
-      ? 'GeoTrack does not have backend-backed places, stays, or events mapped for this area yet.'
+      ? (response.mode === 'destinations'
+        ? 'Pan or zoom in to discover destinations.'
+        : 'GeoTrack does not have backend-backed places, stays, or events mapped for this area yet.')
       : '';
+  }
+
+  private createMarkerEntry(marker: MapEntityMarker): MarkerEntry {
+    const button = document.createElement('button');
+    button.type = 'button';
+
+    const img = document.createElement('img');
+    img.alt = '';
+    img.draggable = false;
+    button.appendChild(img);
+
+    const key = this.getMarkerKey(marker);
+    img.addEventListener('error', () => {
+      if (this.markerImageFallbackUsed.has(key)) return;
+      this.markerImageFallbackUsed.add(key);
+      img.src = EXPLORE_IMAGE_FALLBACK;
+    });
+
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const entry = this.markersByKey.get(key);
+      this.onMarkerClick(entry?.data ?? marker);
+    });
+
+    const mapMarker = new maplibregl.Marker({ element: button, anchor: 'center' })
+      .setLngLat([marker.longitude, marker.latitude])
+      .addTo(this.map);
+
+    const entry: MarkerEntry = { data: marker, marker: mapMarker, imageElement: img };
+    this.refreshMarkerDom(entry, marker);
+    return entry;
+  }
+
+  private refreshMarkerDom(entry: MarkerEntry, marker: MapEntityMarker): void {
+    const button = entry.marker.getElement();
+    button.classList.add('gt-marker');
+    button.classList.remove('gt-marker--place', 'gt-marker--stay', 'gt-marker--event', 'gt-marker--destination');
+    button.classList.add(`gt-marker--${marker.entityType}`);
+
+    if (button.getAttribute('aria-label') !== marker.title) {
+      button.setAttribute('aria-label', marker.title);
+    }
+
+    const key = this.getMarkerKey(marker);
+    const desiredSrc = marker.imageUrl ?? EXPLORE_IMAGE_FALLBACK;
+    if (entry.imageElement.getAttribute('src') !== desiredSrc) {
+      this.markerImageFallbackUsed.delete(key);
+      entry.imageElement.src = desiredSrc;
+    }
+  }
+
+  private onMarkerClick(marker: MapEntityMarker): void {
+    if (marker.entityType === 'destination') {
+      this.selectedPlace = null;
+      this.routeErrorMessage = '';
+      this.searchResults = [];
+      this.clearRoute();
+
+      this.destinationName = marker.title;
+      this.destinationLat = marker.latitude;
+      this.destinationLon = marker.longitude;
+      this.searchQuery = marker.title;
+      this.isUserLocation = false;
+
+      sessionStorage.setItem('mapLocation', JSON.stringify({
+        name: marker.title,
+        lat: marker.latitude,
+        lon: marker.longitude,
+        isUserLocation: false,
+      }));
+
+      this.analytics.track('map_marker_opened', {
+        entityType: 'destination',
+        entityId: marker.entityId,
+        metadata: {
+          surface: 'map',
+          mode: 'destinations',
+        },
+      });
+
+      this.invalidateMarkerCache();
+      this.map.flyTo({
+        center: [marker.longitude, marker.latitude],
+        zoom: Math.max(this.map.getZoom() + 1, 13),
+        duration: 800,
+      });
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.selectedPlace = marker;
+    this.routeErrorMessage = '';
+    this.clearRoute();
+    this.analytics.track('map_marker_opened', {
+      entityType: this.toAnalyticsEntityType(marker),
+      entityId: marker.entityId,
+      metadata: {
+        surface: 'map',
+        category: marker.categoryLabel ?? marker.entityType,
+      },
+    });
+    this.cdr.detectChanges();
   }
 
   private getRequestedCategories(): string[] {
@@ -476,61 +637,17 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     return this.activeCategory === 'all' ? [] : [this.activeCategory];
   }
 
-  private ensureEntityLayer(): void {
-    if (!this.map.getSource(this.ENTITY_SOURCE)) {
-      this.map.addSource(this.ENTITY_SOURCE, {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      });
-    }
-
-    if (!this.map.getLayer(this.ENTITY_LAYER)) {
-      this.map.addLayer({
-        id: this.ENTITY_LAYER,
-        type: 'circle',
-        source: this.ENTITY_SOURCE,
-        paint: {
-          'circle-radius': 7,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff',
-          'circle-color': [
-            'match',
-            ['get', 'entityType'],
-            'stay', '#e8570a',
-            'event', '#1a2b4a',
-            '#2f855a',
-          ],
-        },
-      });
-    }
-  }
-
-  private setEntityData(markers: MapEntityMarker[]): void {
-    const data: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: markers.map((marker) => ({
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: [marker.longitude, marker.latitude],
-        },
-        properties: {
-          key: this.getMarkerKey(marker),
-          entityType: marker.entityType,
-        },
-      })),
-    };
-
-    const source = this.map.getSource(this.ENTITY_SOURCE) as GeoJSONSource | undefined;
-    source?.setData(data);
-  }
-
   private getMarkerKey(marker: MapEntityMarker): string {
     return `${marker.entityType}:${marker.entityId}`;
   }
 
   private toAnalyticsEntityType(marker: MapEntityMarker): AnalyticsEntityType {
-    return marker.entityType === 'stay' ? 'hotel' : marker.entityType;
+    switch (marker.entityType) {
+      case 'stay': return 'hotel';
+      case 'event': return 'event';
+      case 'destination': return 'destination';
+      default: return 'place';
+    }
   }
 
   private drawRoute(route: MapRouteResult): void {
@@ -669,7 +786,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }));
 
     this.isLocating = false;
-    this.loadEntities();
+    this.invalidateMarkerCache();
     this.cdr.detectChanges();
   }
 

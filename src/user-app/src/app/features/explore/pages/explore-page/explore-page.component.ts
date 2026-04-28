@@ -1,7 +1,6 @@
 import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
-import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
 import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
@@ -42,7 +41,6 @@ import { AnalyticsService } from '../../../../core/services/analytics.service';
 export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly explore     = inject(ExploreService);
   private readonly auth        = inject(AuthService);
-  private readonly destinationSvc = inject(DestinationService);
   private readonly locationSvc = inject(LocationService);
   private readonly router      = inject(Router);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
@@ -59,23 +57,31 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.locationSvc.tryBackgroundGpsRefresh();
   }
 
-  protected readonly heroCity    = computed(() => this.locationSvc.displayCity());
-  protected readonly heroCountry = computed(() => this.locationSvc.displayCountry());
+  private readonly heroLocation = computed(() => {
+    const loc = this.locationSvc.location();
+    const label = loc?.displayLabel ?? (this.locationSvc.loading() ? 'Explore' : this.locationSvc.displayLabel());
+    const displayLabel = this.splitDisplayLabel(label);
+    const city = loc?.city?.trim()
+      || loc?.region?.trim()
+      || loc?.country?.trim()
+      || displayLabel.city;
+    const country = loc?.country?.trim() ?? '';
+
+    return {
+      city,
+      country: this.countryForHero(city, country || displayLabel.country),
+    };
+  });
+
+  protected readonly heroCity    = computed(() => this.heroLocation().city);
+  protected readonly heroCountry = computed(() => this.heroLocation().country);
   protected readonly contextLine = computed(() => {
-    const destinationName = this.destinationSvc.name();
-    const heroCity = this.heroCity().trim().toLowerCase();
-    const normalizedDestination = destinationName.trim().toLowerCase();
-    const sourceLabel = this.locationSvc.sourceLabel();
-
-    if (!destinationName) {
-      return `Using ${sourceLabel}.`;
-    }
-
-    if (heroCity && heroCity === normalizedDestination) {
-      return `Using ${sourceLabel}.`;
-    }
-
-    return `Using ${sourceLabel}. Nearby content from ${destinationName}.`;
+    const source = this.locationSvc.location()?.source;
+    if (source === 'gps') return 'Using exact location.';
+    if (source === 'manual') return 'Using selected location.';
+    if (source === 'ip') return 'Using nearby location.';
+    if (this.locationSvc.loading()) return 'Resolving location.';
+    return 'Location unavailable.';
   });
 
   protected readonly searchQuery = signal('');
@@ -120,6 +126,27 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
         },
       });
     }, 600);
+  }
+
+  private splitDisplayLabel(label: string): { city: string; country: string } {
+    const parts = label
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean);
+
+    if (parts.length === 0) {
+      return { city: 'Explore', country: '' };
+    }
+
+    return {
+      city: parts[0],
+      country: parts.slice(1).join(', '),
+    };
+  }
+
+  private countryForHero(city: string, country: string): string {
+    if (!country) return '';
+    return city.trim().toLowerCase() === country.trim().toLowerCase() ? '' : country;
   }
 
   protected toggleNearbySaved(id: string): void {

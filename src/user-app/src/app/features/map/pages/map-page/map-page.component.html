@@ -17,7 +17,9 @@
       </div>
     } @else if (!isLoading && emptyStateMessage) {
       <div class="absolute left-4 right-4 bottom-36 z-20 rounded-2xl bg-white/95 shadow-xl border border-slate-200 px-4 py-3">
-        <p class="text-sm font-semibold text-slate-800">No GeoTrack entities here yet</p>
+        <p class="text-sm font-semibold text-slate-800">
+          {{ currentMode === 'destinations' ? 'Zoom in to discover places' : 'No GeoTrack entities here yet' }}
+        </p>
         <p class="text-xs text-slate-500 mt-1">{{ emptyStateMessage }}</p>
       </div>
     }
@@ -142,7 +144,7 @@
         <div class="flex gap-3 p-4">
           <div class="flex-none w-20 h-20 bg-slate-100 rounded-xl overflow-hidden relative">
             @if (place.imageUrl) {
-              <img [src]="place.imageUrl" class="w-full h-full object-cover" alt="" />
+              <img appImageFallback [src]="place.imageUrl" class="w-full h-full object-cover" alt="" />
             } @else {
               <div class="absolute inset-0 flex items-center justify-center">
                 <svg class="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">

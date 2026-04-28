@@ -38,7 +38,7 @@ const DEFAULT_NEARBY_STATUS: NearbyStatus = {
 };
 
 const AUTH_PROMO_CARD: ExplorePromoCard = {
-  title: 'Personalize GeoTrack',
+  title: 'Personalize your stay',
   message: 'Sign in to save places, manage collections, and keep your profile preferences synced.',
   ctaLabel: 'Sign In',
 };

@@ -1,6 +1,8 @@
 <header class="welcome-hero">
   <p class="welcome-hero__line">
-    Welcome to <span class="welcome-hero__city">{{ city() }}</span>,
+    Welcome to <span class="welcome-hero__city">{{ city() }}</span>
   </p>
-  <p class="welcome-hero__country">{{ country() }}</p>
+  @if (country()) {
+    <p class="welcome-hero__country">{{ country() }}</p>
+  }
 </header>

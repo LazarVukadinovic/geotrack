@@ -38,23 +38,7 @@
 
     <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 mb-8">
       <p class="text-sm font-semibold text-slate-700">Map scope</p>
-      <p class="text-xs text-slate-500 mt-1">Only GeoTrack places, stays, and events with real backend records appear here. Unlisted categories are intentionally hidden.</p>
-    </div>
-
-    <!-- Distance section -->
-    <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Max Distance</p>
-    <div class="flex gap-2 mb-8">
-      <button *ngFor="let d of distances"
-        (click)="selectedDistance = d"
-        class="flex-1 py-2.5 rounded-2xl border text-sm font-semibold transition-colors duration-200"
-        [class.bg-[#1a2b4a]]="selectedDistance === d"
-        [class.border-[#1a2b4a]]="selectedDistance === d"
-        [class.text-white]="selectedDistance === d"
-        [class.bg-white]="selectedDistance !== d"
-        [class.border-slate-200]="selectedDistance !== d"
-        [class.text-slate-600]="selectedDistance !== d">
-        {{ d }}
-      </button>
+      <p class="text-xs text-slate-500 mt-1">The map loads only what's currently in view, so results scale with how you pan and zoom. Distance presets aren't needed.</p>
     </div>
 
     <!-- Apply button -->
