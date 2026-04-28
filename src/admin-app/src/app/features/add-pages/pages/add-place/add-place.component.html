@@ -201,22 +201,115 @@
 
           <!-- Hero Media -->
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-              <div>
-                <h3 class="text-sm font-bold text-gray-900 mb-0.5">Hero Media</h3>
-                <p class="text-xs text-gray-500">Main cover image and optional gallery</p>
-              </div>
-              <button class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 cursor-pointer">Library</button>
-            </div>
-            <div class="border-2 border-dashed border-gray-300 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors">
-              <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-              </div>
-              <span>Click to upload Main Cover Image</span>
-            </div>
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h3 class="text-sm font-bold text-gray-900 mb-0.5">Hero Media</h3>
+          <p class="text-xs text-gray-500">Main cover image and optional gallery</p>
+        </div>
+        <button type="button" class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 cursor-pointer">
+          Library
+        </button>
+      </div>
+ 
+      @if (!coverImageUrl) {
+        <label
+          class="border-2 border-dashed border-gray-300 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors"
+          for="coverImageInput"
+        >
+          <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
           </div>
+          <span>Click to upload Main Cover Image</span>
+          <span class="text-xs text-gray-400">PNG, JPG, WEBP</span>
+        </label>
+      }
+ 
+      @if (coverImageUrl) {
+        <div class="relative rounded-xl overflow-hidden group">
+          <img
+            [src]="coverImageUrl"
+            alt="Cover preview"
+            class="w-full object-cover rounded-xl cursor-zoom-in"
+            style="max-height: 280px;"
+            (click)="openLightbox([{ url: coverImageUrl!, name: coverImageName }], 0)"
+          />
+          <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 pointer-events-none">
+            <label for="coverImageInput"
+                   class="bg-white text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 pointer-events-auto">
+              Replace
+            </label>
+            <button type="button" (click)="removeCoverImage()"
+                    class="bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto">
+              Remove
+            </button>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-2 mb-4">{{ coverImageName }}</p>
+      }
+ 
+      <input id="coverImageInput" type="file" accept="image/*" class="hidden"
+             (change)="onCoverImageSelected($event)" />
+ 
+      <div class="border-t border-gray-100 my-4"></div>
+ 
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-xs font-semibold text-gray-600">
+          Gallery Images <span class="text-gray-400 font-normal">(Optional)</span>
+        </p>
+        @if (galleryImages.length > 0) {
+          <label for="galleryInput"
+                 class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1 cursor-pointer hover:bg-blue-100">
+            + Add
+          </label>
+        }
+      </div>
+ 
+      @if (galleryImages.length > 0) {
+        <div class="overflow-y-auto mb-2" style="max-height: 316px; scrollbar-width: thin;">
+          <div class="grid grid-cols-3 gap-2">
+            @for (img of galleryImages; track img.url; let i = $index) {
+              <div class="relative rounded-lg overflow-hidden group aspect-square">
+                <img
+                  [src]="img.url"
+                  [alt]="img.name"
+                  class="w-full h-full object-cover cursor-zoom-in"
+                  (click)="openLightbox(galleryImages, i)"
+                />
+                <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+                  <button type="button" (click)="removeGalleryImage(i)"
+                          class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto">
+                    Remove
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mb-1">
+          {{ galleryImages.length }} image{{ galleryImages.length !== 1 ? 's' : '' }} added
+        </p>
+      }
+ 
+      @if (galleryImages.length === 0) {
+        <label
+          for="galleryInput"
+          class="border-2 border-dashed border-gray-300 rounded-xl py-6 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors"
+        >
+          <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </div>
+          <span>Click to add Gallery Images</span>
+          <span class="text-xs text-gray-400">PNG, JPG, WEBP · Multiple selection allowed</span>
+        </label>
+      }
+ 
+      <input id="galleryInput" type="file" accept="image/*" multiple class="hidden"
+             (change)="onGalleryImagesSelected($event)" />
+    </div>
 
         </div>
 
