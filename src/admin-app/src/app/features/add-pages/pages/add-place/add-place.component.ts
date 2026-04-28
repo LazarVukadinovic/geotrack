@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component'; 
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component'; 
 
+declare const L: any;
+
 interface DayHours {
   name: string;
   open: boolean;
@@ -60,23 +62,40 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   ];
 
   classItems = [
-    { label: 'Coastal & Marine',    checked: true  },
-    { label: 'Mountain & Forest',   checked: true  },
-    { label: 'Urban Center',        checked: false },
-    { label: 'Historical Site',     checked: false },
-    { label: 'National Park Access',checked: false },
-  ];
+      { label: 'Coastal & Marine',     checked: false },
+      { label: 'Mountain & Forest',    checked: false },
+      { label: 'Urban Center',         checked: false },
+      { label: 'Historical Site',      checked: false },
+      { label: 'National Park Access', checked: false },
+    ];
+  // ─── Tags ──────────────────────────────────────────────────────────────────
+    tags    : string[] = [];
+    tagInput: string   = '';
+ 
+    addTag(event: Event): void {
+      event.preventDefault();
+      const value = this.tagInput.trim();
+      if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
+      this.tags     = [...this.tags, value];
+      this.tagInput = '';
+    }
+ 
+    removeTag(tag: string): void {
+      this.tags = this.tags.filter(t => t !== tag);
+    }
   ngOnInit(): void {}
  
   ngAfterViewInit(): void {
-    
+    setTimeout(() => this.initMiniMap(), 0);
   }
  
   ngOnDestroy(): void {
-    this.closeLightbox();
-    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
-  }
+      this.destroyModalMap();
+      this.closeLightbox();
+      this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
+      if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
+      if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
+    }
   // ─── Cover image ───────────────────────────────────────────────────────────
   coverImageUrl : string | null = null;
   coverImageName: string        = '';
@@ -253,5 +272,165 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         this._lightboxKeyHandler = null;
       }
       document.body.style.overflow = '';
+    }
+   // ─── Geographic pin / Leaflet ──────────────────────────────────────────────
+    pinModalOpen  = false;
+    pinConfirmed  = false;
+    pinLat: string = '';
+    pinLng: string = '';
+    streetAddress: string = '';
+    modalPinLat: number | null = null;
+    modalPinLng: number | null = null;
+ 
+    private miniMap    : any = null;
+    private modalMap   : any = null;
+    private miniMarker : any = null;
+    private modalMarker: any = null;
+ 
+    private makePinIcon(): any {
+      return L.divIcon({
+        html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
+                 <path d="M12 0C5.373 0 0 5.373 0 12c0 8 12 20 12 20S24 20 24 12C24 5.373 18.627 0 12 0z"
+                       fill="#2563eb" stroke="white" stroke-width="1.5"/>
+                 <circle cx="12" cy="12" r="4" fill="white"/>
+               </svg>`,
+        iconSize:   [24, 32],
+        iconAnchor: [12, 32],
+        className:  '',
+      });
+    }
+ 
+    private initMiniMap(): void {
+      if (this.miniMap) return;
+      const el = this.miniMapContainer?.nativeElement;
+      if (!el) return;
+ 
+      this.miniMap = L.map(el, {
+        zoomControl: false, dragging: false, scrollWheelZoom: false,
+        doubleClickZoom: false, touchZoom: false, attributionControl: false,
+      }).setView([44.0, 20.9], 8);
+ 
+      L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+      }).addTo(this.miniMap);
+    }
+ 
+    openPinModal(): void {
+      this.pinModalOpen = true;
+      const lat = parseFloat(this.pinLat);
+      const lng = parseFloat(this.pinLng);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        this.modalPinLat = lat;
+        this.modalPinLng = lng;
+      } else {
+        this.modalPinLat = null;
+        this.modalPinLng = null;
+      }
+      setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
+    }
+ 
+    closePinModal(): void {
+      this.pinModalOpen = false;
+      this.destroyModalMap();
+    }
+ 
+    onPinModalBackdropClick(_event: MouseEvent): void {
+      this.closePinModal();
+    }
+ 
+    private initModalMap(el: HTMLDivElement): void {
+      if (this.modalMap) return;
+ 
+      const center: [number, number] = (this.modalPinLat !== null && this.modalPinLng !== null)
+        ? [this.modalPinLat, this.modalPinLng]
+        : [44.0, 20.9];
+      const zoom = (this.modalPinLat !== null) ? 14 : 9;
+ 
+      this.modalMap = L.map(el, {
+        zoomControl: true,
+        attributionControl: false,
+      }).setView(center, zoom);
+ 
+      L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+      }).addTo(this.modalMap);
+ 
+      setTimeout(() => this.modalMap?.invalidateSize(), 200);
+ 
+      if (this.modalPinLat !== null && this.modalPinLng !== null) {
+        this.modalMarker = L.marker([this.modalPinLat, this.modalPinLng], {
+          icon: this.makePinIcon(),
+          draggable: true,
+        }).addTo(this.modalMap);
+ 
+        this.modalMarker.on('dragend', (e: any) => {
+          const pos = e.target.getLatLng();
+          this.modalPinLat = pos.lat;
+          this.modalPinLng = pos.lng;
+        });
+      }
+ 
+      this.modalMap.on('click', (e: any) => {
+        this.modalPinLat = e.latlng.lat;
+        this.modalPinLng = e.latlng.lng;
+ 
+        if (this.modalMarker) {
+          this.modalMarker.setLatLng(e.latlng);
+        } else {
+          this.modalMarker = L.marker(e.latlng, {
+            icon: this.makePinIcon(),
+            draggable: true,
+          }).addTo(this.modalMap);
+ 
+          this.modalMarker.on('dragend', (ev: any) => {
+            const pos = ev.target.getLatLng();
+            this.modalPinLat = pos.lat;
+            this.modalPinLng = pos.lng;
+          });
+        }
+      });
+    }
+ 
+    private destroyModalMap(): void {
+      if (this.modalMap) {
+        this.modalMap.remove();
+        this.modalMap    = null;
+        this.modalMarker = null;
+      }
+    }
+ 
+    confirmPin(): void {
+      if (this.modalPinLat === null || this.modalPinLng === null) {
+        alert('Please click on the map to place a pin first.');
+        return;
+      }
+      this.pinLat = this.modalPinLat.toFixed(6);
+      this.pinLng = this.modalPinLng.toFixed(6);
+      this.pinConfirmed = true;
+      this.updateMiniMapPin(this.modalPinLat, this.modalPinLng);
+      this.closePinModal();
+    }
+ 
+    onCoordInputChange(): void {
+      const lat = parseFloat(this.pinLat);
+      const lng = parseFloat(this.pinLng);
+      if (isNaN(lat) || isNaN(lng)) return;
+      this.pinConfirmed = true;
+      this.updateMiniMapPin(lat, lng);
+    }
+ 
+    private updateMiniMapPin(lat: number, lng: number): void {
+      if (!this.miniMap) this.initMiniMap();
+      if (!this.miniMap) return;
+ 
+      if (this.miniMarker) {
+        this.miniMarker.setLatLng([lat, lng]);
+      } else {
+        this.miniMarker = L.marker([lat, lng], {
+          icon: this.makePinIcon(),
+          draggable: false,
+        }).addTo(this.miniMap);
+      }
+      this.miniMap.setView([lat, lng], 14);
     }
 }
