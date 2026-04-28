@@ -62,4 +62,9 @@ public class LocationRepository : Repository<Location>, ILocationRepository
     {
         await _context.LocationReviews.AddAsync(review);
     }
+
+    public async Task<List<Location>> SearchByNameAsync(string query)
+    {
+        return await _context.Locations.Include(l => l.Destination).Where(l => l.Name.ToLower().Contains(query.ToLower())).ToListAsync();
+    }
 }
