@@ -114,4 +114,19 @@ public class DestinationController : ControllerBase
         var results = await _destinationService.SearchAsync(query ?? string.Empty);
         return Ok(results);
     }
+
+    [HttpGet("{destinationId}/search")]
+    public async Task<IActionResult> SearchWithinDestination(
+    int destinationId,
+    [FromQuery] string? query,
+    [FromQuery] string? types)
+    {
+        var typeList = types?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+        var results = await _destinationService.SearchWithinDestinationAsync(
+            destinationId, query ?? string.Empty, typeList);
+
+        return Ok(results);
+    }
 }

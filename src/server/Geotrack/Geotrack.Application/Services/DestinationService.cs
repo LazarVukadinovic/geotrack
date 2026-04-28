@@ -14,6 +14,7 @@ public class DestinationService : IDestinationService
 
     private readonly IDestinationRepository _destinationRepository;
     private readonly IUserRepository _userRepository;
+    private static readonly HashSet<string> AllTypes = new() { "location", "place", "event" };
 
     public DestinationService(IDestinationRepository destinationRepository, IUserRepository userRepository)
     {
@@ -575,6 +576,82 @@ public class DestinationService : IDestinationService
             Latitude = d.Latitude,
             Longitude = d.Longitude,
         }).ToList();
+    }
+
+    public async Task<List<DestinationSearchItemDto>> SearchWithinDestinationAsync(int destinationId, string query, IEnumerable<string>? types)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return new List<DestinationSearchItemDto>();
+
+        var exists = await _destinationRepository.ExistsAsync(destinationId);
+
+        if (!exists)
+            throw new KeyNotFoundException($"Destinacija {destinationId} nije pronadjena.");
+
+        var typesToSearch = types?.Select(t => t.ToLower().Trim()).Where(t => AllTypes.Contains(t)).ToHashSet();
+
+        if (typesToSearch == null || typesToSearch.Count == 0)
+            typesToSearch = AllTypes;
+
+        var results = new List<DestinationSearchItemDto>();
+
+        var tasks = new List<Task>();
+
+        if (typesToSearch.Contains("location"))
+            tasks.Add(Task.Run(async () =>
+            {
+                var locations = await _destinationRepository.SearchLocationsAsync(destinationId,query);
+
+                lock (results)
+                    results.AddRange(locations.Select(l => new DestinationSearchItemDto
+                    {
+                        Id = l.Id,
+                        Type = "location",
+                        Name = l.Name,
+                        Description = null,
+                        Latitude = l.Latitude,
+                        Longitude = l.Longitude,
+                        ParentName = null
+                    }));
+
+            }));
+        if (typesToSearch.Contains("place"))
+            tasks.Add(Task.Run(async () =>
+            {
+                var places = await _destinationRepository.SearchPlacesAsync(destinationId, query);
+                lock (results)
+                    results.AddRange(places.Select(p => new DestinationSearchItemDto
+                    {
+                        Id = p.Id,
+                        Type = "place",
+                        Name = p.Name,
+                        Description = p.Description,
+                        Latitude = p.Latitude,
+                        Longitude = p.Longitude,
+                        ParentName = p.Location?.Name
+                    }));
+            }));
+
+        if (typesToSearch.Contains("event"))
+            tasks.Add(Task.Run(async () =>
+            {
+                var events = await _destinationRepository.SearchEventsAsync(destinationId, query);
+                lock (results)
+                    results.AddRange(events.Select(e => new DestinationSearchItemDto
+                    {
+                        Id = e.Id,
+                        Type = "event",
+                        Name = e.Name,
+                        Description = e.Description,
+                        Latitude = e.Place?.Latitude ?? 0,
+                        Longitude = e.Place?.Longitude ?? 0,
+                        ParentName = e.Place?.Name
+                    }));
+            }));
+
+        await Task.WhenAll(tasks);
+
+        return results;
     }
 
     private sealed class UserExploreContext

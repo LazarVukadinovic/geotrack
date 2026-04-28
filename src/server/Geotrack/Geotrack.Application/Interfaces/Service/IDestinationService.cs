@@ -10,4 +10,5 @@ public interface IDestinationService
     Task<GetDestinationReviewsResponseDto> GetDestinationReviewsAsync(int destinationId);
     Task<CreateDestinationReviewResponseDto> CreateDestinationReviewAsync(int destinationId, int userId, CreateDestinationReviewRequestDto request);
     Task<List<DestinationSearchResultDto>> SearchAsync(string query);
+    Task<List<DestinationSearchItemDto>> SearchWithinDestinationAsync(int destinationId, string query, IEnumerable<string>? types);
 }
