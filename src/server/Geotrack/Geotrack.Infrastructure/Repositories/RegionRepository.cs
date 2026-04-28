@@ -45,5 +45,10 @@ namespace Geotrack.Infrastructure.Repositories
         {
             return await _context.Regions.Include(r => r.RegionalOrganizationRegions).ThenInclude(ror => ror.RegionalOrganization).ThenInclude(ro => ro.User).FirstOrDefaultAsync(r => r.Id == regionId);
         }
+        public async Task<bool> ExistsInTerritoryAsync(int territoryId, string name)
+        {
+            return await _context.Regions
+                .AnyAsync(r => r.TerritoryId == territoryId && r.Name == name);
+        }
     }
 }

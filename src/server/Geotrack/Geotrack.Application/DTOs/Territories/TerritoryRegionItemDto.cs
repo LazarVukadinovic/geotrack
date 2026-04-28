@@ -1,0 +1,7 @@
+﻿namespace Geotrack.Application.DTOs.Territories;
+
+public class TerritoryRegionItemDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}

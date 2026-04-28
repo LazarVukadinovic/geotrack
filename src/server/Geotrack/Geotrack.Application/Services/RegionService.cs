@@ -1,13 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Geotrack.Application.DTOs.Region;
+﻿using Geotrack.Application.DTOs.Region;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Domain.Entities.Core;
 
 namespace Geotrack.Application.Services
 {
@@ -53,48 +47,6 @@ namespace Geotrack.Application.Services
                     })
                     .ToList()
             };
-
-
-        }
-
-        public async Task<CreateRegionResponseDto> CreateRegionAsync(CreateRegionRequestDto request)
-        {
-            if (string.IsNullOrWhiteSpace(request.Name))
-                throw new InvalidOperationException("Region name cannot be empty.");
-
-            bool exists = await _regionRepository.ExistsAsync(request.Name);
-
-            if (exists)
-                throw new InvalidOperationException($"Region with name '{request.Name}' already exists.");
-
-            var region = new Region
-            {
-                Name = request.Name
-            };
-
-            await _regionRepository.AddAsync(region);
-            await _regionRepository.SaveChangesAsync();
-
-            return new CreateRegionResponseDto
-            {
-                Id = region.Id,
-                Name = region.Name
-            };
-        }
-        public async Task DeleteRegionAsync(int regionId)
-        {
-            var region = await _regionRepository.GetByIdAsync(regionId);
-
-            if (region == null)
-                throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
-
-            bool hasDestinations = await _regionRepository.HasDestinationsAsync(regionId);
-
-            if (hasDestinations)
-                throw new InvalidOperationException("Cannot delete region because it has existing destinations.");
-
-            await _regionRepository.DeleteAsync(region);
-            await _regionRepository.SaveChangesAsync();
         }
     }
 }
