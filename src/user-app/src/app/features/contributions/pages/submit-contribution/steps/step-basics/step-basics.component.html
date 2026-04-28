@@ -10,10 +10,9 @@
 
     <div *ngIf="previewUrl()"
       class="absolute inset-0"
-      [style.background-image]="'url(' + previewUrl() + ')'"
-      [style.background-size]="bgSize()"
-      [style.background-position]="bgPosition()"
-      [style.background-repeat]="'no-repeat'">
+      [appBackgroundImageFallback]="previewUrl()"
+      [backgroundImageFallbackSize]="bgSize()"
+      [backgroundImageFallbackPosition]="bgPosition()">
     </div>
 
     <div *ngIf="!previewUrl()" class="absolute inset-0 flex flex-col items-center justify-center gap-2">

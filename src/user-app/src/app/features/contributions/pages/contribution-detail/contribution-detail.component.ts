@@ -2,11 +2,12 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ContributionDetail, ContributionsService } from '../../services/contributions.service';
+import { BackgroundImageFallbackDirective } from '../../../../shared/directives/background-image-fallback.directive';
 
 @Component({
   selector: 'app-contribution-detail',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, BackgroundImageFallbackDirective],
   templateUrl: './contribution-detail.component.html',
   styleUrl: './contribution-detail.component.css',
 })

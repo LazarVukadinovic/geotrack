@@ -44,10 +44,9 @@
       <div class="mx-5 mt-5 rounded-2xl overflow-hidden h-52 relative bg-slate-100">
         @if (d.coverImageUrl) {
           <div class="absolute inset-0"
-            [style.background-image]="'url(' + d.coverImageUrl + ')'"
-            [style.background-size]="d.imageSize || 'cover'"
-            [style.background-position]="d.imagePosition || '50% 50%'"
-            [style.background-repeat]="'no-repeat'">
+            [appBackgroundImageFallback]="d.coverImageUrl"
+            [backgroundImageFallbackSize]="d.imageSize || 'cover'"
+            [backgroundImageFallbackPosition]="d.imagePosition || '50% 50%'">
           </div>
         } @else {
           <div class="absolute inset-0 flex items-center justify-center">

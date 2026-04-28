@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
 import { firstValueFrom } from 'rxjs';
 import { MapApiService } from '../../../../../../core/services/map-api.service';
+import { BackgroundImageFallbackDirective } from '../../../../../../shared/directives/background-image-fallback.directive';
 
 export interface BasicsData {
   name: string;
@@ -23,7 +24,7 @@ export interface BasicsData {
 @Component({
   selector: 'app-step-basics',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, BackgroundImageFallbackDirective],
   templateUrl: './step-basics.component.html',
 })
 export class StepBasicsComponent implements OnDestroy {

@@ -5,10 +5,9 @@
     <div class="h-52 overflow-hidden">
       <div *ngIf="draft().basics?.imageUrl"
         class="w-full h-full"
-        [style.background-image]="'url(' + draft().basics!.imageUrl + ')'"
-        [style.background-size]="draft().basics!.imgBgSize || 'cover'"
-        [style.background-position]="draft().basics!.imgBgPosition || '50% 50%'"
-        [style.background-repeat]="'no-repeat'">
+        [appBackgroundImageFallback]="draft().basics!.imageUrl"
+        [backgroundImageFallbackSize]="draft().basics!.imgBgSize || 'cover'"
+        [backgroundImageFallbackPosition]="draft().basics!.imgBgPosition || '50% 50%'">
       </div>
       <div *ngIf="!draft().basics?.imageUrl" class="w-full h-full bg-slate-100 flex items-center justify-center">
         <svg class="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
