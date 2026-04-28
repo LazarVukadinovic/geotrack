@@ -46,7 +46,6 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly elRef       = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
   private readonly analytics   = inject(AnalyticsService);
-  private searchAnalyticsTimeout?: ReturnType<typeof setTimeout>;
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
   protected readonly loadError  = this.explore.loadError;
@@ -112,20 +111,6 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected onSearchChange(value: string): void {
     this.searchQuery.set(value);
-    clearTimeout(this.searchAnalyticsTimeout);
-    const query = value.trim();
-    if (query.length < 2) return;
-
-    this.searchAnalyticsTimeout = setTimeout(() => {
-      this.analytics.track('search_performed', {
-        metadata: {
-          surface: 'explore',
-          queryLength: query.length,
-          localMatches: this.filteredLocalFavorites().length,
-          eventMatches: this.eventsThisWeek().length,
-        },
-      });
-    }, 600);
   }
 
   private splitDisplayLabel(label: string): { city: string; country: string } {
@@ -166,6 +151,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     const item = this.explore.localFavorites().find((i) => i.id === id);
     if (!item || item.category === 'hotel') return;
     this.scrollState.markClickedItem('local-favorites', id);
+    this.trackExploreSearchCommit('place', id);
     this.router.navigate(['/places', id]);
   }
 
@@ -226,6 +212,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected onEvent(id: string): void {
     this.scrollState.markClickedItem('events', id);
+    this.trackExploreSearchCommit('event', id);
     this.router.navigate(['/events', id]);
   }
 
@@ -270,8 +257,6 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    clearTimeout(this.searchAnalyticsTimeout);
-
     const host     = this.elRef.nativeElement as HTMLElement;
     const viewport = host.closest<HTMLElement>('.app-shell__viewport');
     const scrollTop = viewport?.scrollTop ?? 0;
@@ -284,5 +269,23 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     });
 
     this.scrollState.save(scrollTop, sliders);
+  }
+
+  private trackExploreSearchCommit(entityType: 'place' | 'event', id: string): void {
+    const query = this.searchQuery().trim();
+    if (query.length < 2) return;
+
+    const entityId = parseInt(id, 10);
+    this.analytics.track('search_performed', {
+      entityType,
+      entityId: isNaN(entityId) ? undefined : entityId,
+      metadata: {
+        surface: 'explore',
+        queryLength: query.length,
+        localMatches: this.filteredLocalFavorites().length,
+        eventMatches: this.eventsThisWeek().length,
+        committed: true,
+      },
+    });
   }
 }

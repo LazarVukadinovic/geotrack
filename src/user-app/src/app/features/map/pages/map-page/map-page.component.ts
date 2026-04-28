@@ -205,13 +205,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.mapApi.search(value).subscribe({
         next: (results) => {
           this.searchResults = results;
-          this.analytics.track('search_performed', {
-            metadata: {
-              surface: 'map',
-              queryLength: value.trim().length,
-              resultCount: results.length,
-            },
-          });
           this.cdr.detectChanges();
         },
         error: () => {
@@ -223,6 +216,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   selectSearchResult(result: MapSearchResult): void {
+    const committedQuery = this.searchQuery.trim();
+    const resultCount = this.searchResults.length;
+    const selectedIndex = this.searchResults.findIndex((candidate) =>
+      candidate.name === result.name &&
+      candidate.latitude === result.latitude &&
+      candidate.longitude === result.longitude);
     this.searchResults = [];
     this.searchQuery = result.name;
     this.destinationName = result.name;
@@ -241,6 +240,14 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }));
 
     this.map.jumpTo({ center: [result.longitude, result.latitude], zoom: 14 });
+    this.analytics.track('search_performed', {
+      metadata: {
+        surface: 'map',
+        queryLength: committedQuery.length || result.name.length,
+        resultCount,
+        selectedIndex: selectedIndex >= 0 ? selectedIndex : null,
+      },
+    });
     this.invalidateMarkerCache();
     this.scheduleViewportLoad(0);
   }
@@ -277,6 +284,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   selectCategory(category: { id: string; label: string }): void {
+    if (this.activeCategory === category.id && !this.hasActiveFilters) {
+      return;
+    }
+
     this.activeCategory = category.id;
     this.filterCategories = [];
     this.hasActiveFilters = false;

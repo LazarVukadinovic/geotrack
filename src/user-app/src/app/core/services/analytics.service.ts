@@ -13,19 +13,56 @@ import {
 const SESSION_KEY = 'geotrack_anon_session_id';
 const ENDPOINT = '/api/analytics/events';
 
-const FLUSH_INTERVAL_MS = 5_000;
+const PERIODIC_FLUSH_INTERVAL_MS = 15_000;
+const NORMAL_FLUSH_DELAY_MS = 2_500;
+const SOON_FLUSH_DELAY_MS = 750;
 const MAX_BATCH = 25;
 /** Hard cap matching the server's MaxBatchSize. */
 const SERVER_BATCH_CAP = 50;
+const MAX_DEDUPE_ENTRIES = 200;
+
+type FlushMode = 'normal' | 'soon' | 'immediate';
+
+interface CollectionRule {
+  cooldownMs?: number;
+  coalescePending?: boolean;
+  includeMetadata?: boolean;
+  flush?: FlushMode;
+}
+
+const COLLECTION_RULES: Partial<Record<AnalyticsEventType, CollectionRule>> = {
+  page_view: { cooldownMs: 30_000, coalescePending: true },
+  detail_view: { cooldownMs: 120_000, coalescePending: true },
+  map_marker_opened: { cooldownMs: 20_000, coalescePending: true },
+  directions_started: { cooldownMs: 30_000, coalescePending: true, flush: 'soon' },
+  search_performed: { cooldownMs: 15_000, coalescePending: true, includeMetadata: true, flush: 'soon' },
+  filter_applied: { cooldownMs: 60_000, coalescePending: true, includeMetadata: true, flush: 'soon' },
+  outbound_link_clicked: { flush: 'immediate' },
+  logout_completed: { flush: 'immediate' },
+  favorite_added: { flush: 'soon' },
+  favorite_removed: { flush: 'soon' },
+  collection_created: { flush: 'soon' },
+  collection_item_added: { flush: 'soon' },
+  collection_item_removed: { flush: 'soon' },
+  review_created: { flush: 'soon' },
+  contribution_created: { flush: 'soon' },
+  contribution_updated: { flush: 'soon' },
+  contribution_deleted: { flush: 'soon' },
+  agent_recommendation_opened: { flush: 'soon' },
+  login_completed: { flush: 'soon' },
+  register_completed: { flush: 'soon' },
+  interests_completed: { flush: 'soon' },
+};
 
 /**
- * First-party analytics tracker. Buffers events client-side and flushes them
- * to POST /api/analytics/events on a 5-second timer, when the queue hits 25
- * events, or when the tab becomes hidden / unloads. The auth interceptor
- * attaches the JWT automatically for authenticated users; anonymous sessions
- * carry a sessionStorage-bound UUID that dies with the tab.
+ * First-party analytics tracker. Buffers events client-side, suppresses obvious
+ * short-window duplicates, coalesces pending noisy events, and flushes to
+ * POST /api/analytics/events when the queue is old enough, high-value events
+ * arrive, the queue hits 25 events, or the page is hidden/unloaded. The auth
+ * interceptor attaches the JWT automatically for authenticated users; anonymous
+ * sessions carry a sessionStorage-bound UUID that dies with the tab.
  *
- * Failures are swallowed silently — analytics must never break the user flow.
+ * Failures are swallowed silently; analytics must never break the user flow.
  * Callers should never wrap track() in try/catch.
  */
 @Injectable({ providedIn: 'root' })
@@ -42,13 +79,14 @@ export class AnalyticsService {
 
   private readonly anonymousSessionId: string = this.initSessionId();
   private flushTimer: ReturnType<typeof setInterval> | null = null;
+  private scheduledFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private scheduledFlushDelayMs: number | null = null;
   private visibilityHandler: (() => void) | null = null;
+  private pagehideHandler: (() => void) | null = null;
   private unloadHandler: (() => void) | null = null;
+  private readonly recentFingerprints = new Map<string, number>();
 
   constructor() {
-    // Threshold flush: when the queue swells past MAX_BATCH between timer
-    // ticks (e.g. a burst of card views), flush immediately instead of
-    // waiting up to 5s.
     effect(() => {
       if (this._queue().length >= MAX_BATCH) {
         this.flushNow();
@@ -56,9 +94,8 @@ export class AnalyticsService {
     });
 
     if (typeof window !== 'undefined') {
-      // Run timers outside Angular's zone so they don't trigger change detection.
       this.zone.runOutsideAngular(() => {
-        this.flushTimer = setInterval(() => this.flushNow(), FLUSH_INTERVAL_MS);
+        this.flushTimer = setInterval(() => this.flushNow(), PERIODIC_FLUSH_INTERVAL_MS);
       });
 
       this.visibilityHandler = () => {
@@ -68,10 +105,12 @@ export class AnalyticsService {
       };
       document.addEventListener('visibilitychange', this.visibilityHandler);
 
-      // beforeunload is the last-ditch flush. sendBeacon cannot attach an
-      // Authorization header, so authenticated events flushed only here may
+      // pagehide/beforeunload are last-ditch flushes. sendBeacon cannot attach
+      // an Authorization header, so authenticated events flushed only here may
       // end up tagged anonymous-only. visibilitychange above is the primary
       // path for authenticated users.
+      this.pagehideHandler = () => this.beaconFlush();
+      window.addEventListener('pagehide', this.pagehideHandler);
       this.unloadHandler = () => this.beaconFlush();
       window.addEventListener('beforeunload', this.unloadHandler);
     }
@@ -89,7 +128,36 @@ export class AnalyticsService {
       metadata: payload?.metadata,
       clientOccurredAt: new Date().toISOString(),
     };
-    this._queue.update((q) => [...q, envelope]);
+
+    const rule = COLLECTION_RULES[eventType];
+    const includeMetadata = rule?.includeMetadata === true;
+    const fingerprint = this.buildFingerprint(envelope, includeMetadata);
+    const now = Date.now();
+
+    if (rule?.cooldownMs && this.isWithinDedupeWindow(fingerprint, now, rule.cooldownMs)) {
+      return;
+    }
+
+    if (rule?.cooldownMs) {
+      this.rememberFingerprint(fingerprint, now);
+    }
+
+    this._queue.update((q) => {
+      if (!rule?.coalescePending) {
+        return [...q, envelope];
+      }
+
+      const existingIndex = q.findIndex((queued) =>
+        this.buildFingerprint(queued, includeMetadata) === fingerprint);
+
+      if (existingIndex < 0) {
+        return [...q, envelope];
+      }
+
+      return q.map((queued, index) => index === existingIndex ? envelope : queued);
+    });
+
+    this.scheduleFlush(rule?.flush ?? 'normal');
   }
 
   trackOutboundLink(
@@ -108,10 +176,11 @@ export class AnalyticsService {
   }
 
   flushNow(): void {
+    this.clearScheduledFlush();
+
     const queued = this._queue();
     if (queued.length === 0) return;
 
-    // Take up to the server batch cap; keep any overflow for the next flush.
     const toSend = queued.slice(0, SERVER_BATCH_CAP);
     const remaining = queued.slice(SERVER_BATCH_CAP);
     this._queue.set(remaining);
@@ -130,29 +199,37 @@ export class AnalyticsService {
   }
 
   /**
-   * Best-effort flush on unload. Uses sendBeacon (cannot attach
-   * Authorization). Authenticated-only events that hit only this path may
-   * end up tagged anonymous-only — accepted trade-off.
+   * Best-effort flush on unload. Uses sendBeacon (cannot attach Authorization).
+   * Authenticated-only events that hit only this path may end up tagged
+   * anonymous-only; accepted trade-off.
    */
   private beaconFlush(): void {
+    this.clearScheduledFlush();
+
     const queued = this._queue();
     if (queued.length === 0) return;
     if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return;
 
+    const toSend = queued.slice(0, SERVER_BATCH_CAP);
+    const remaining = queued.slice(SERVER_BATCH_CAP);
     const batch: AnalyticsEventBatch = {
       anonymousSessionId: this.anonymousSessionId,
-      events: queued.slice(0, SERVER_BATCH_CAP),
+      events: toSend,
     };
+
     try {
       const blob = new Blob([JSON.stringify(batch)], { type: 'application/json' });
-      navigator.sendBeacon(ENDPOINT, blob);
-      this._queue.set([]);
+      if (navigator.sendBeacon(ENDPOINT, blob)) {
+        this._queue.set(remaining);
+      }
     } catch {
-      // ignore — analytics must never throw.
+      // ignore; analytics must never throw.
     }
   }
 
   private cleanup(): void {
+    this.clearScheduledFlush();
+
     if (this.flushTimer !== null) {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
@@ -160,6 +237,10 @@ export class AnalyticsService {
     if (this.visibilityHandler) {
       document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = null;
+    }
+    if (this.pagehideHandler) {
+      window.removeEventListener('pagehide', this.pagehideHandler);
+      this.pagehideHandler = null;
     }
     if (this.unloadHandler) {
       window.removeEventListener('beforeunload', this.unloadHandler);
@@ -215,6 +296,106 @@ export class AnalyticsService {
     } catch {
       return null;
     }
+  }
+
+  private scheduleFlush(mode: FlushMode): void {
+    if (mode === 'immediate') {
+      this.flushNow();
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const delayMs = mode === 'soon' ? SOON_FLUSH_DELAY_MS : NORMAL_FLUSH_DELAY_MS;
+    if (this.scheduledFlushTimer !== null && this.scheduledFlushDelayMs !== null) {
+      if (this.scheduledFlushDelayMs <= delayMs) {
+        return;
+      }
+      this.clearScheduledFlush();
+    }
+
+    this.zone.runOutsideAngular(() => {
+      this.scheduledFlushDelayMs = delayMs;
+      this.scheduledFlushTimer = setTimeout(() => {
+        this.scheduledFlushTimer = null;
+        this.scheduledFlushDelayMs = null;
+        this.flushNow();
+      }, delayMs);
+    });
+  }
+
+  private clearScheduledFlush(): void {
+    if (this.scheduledFlushTimer !== null) {
+      clearTimeout(this.scheduledFlushTimer);
+      this.scheduledFlushTimer = null;
+      this.scheduledFlushDelayMs = null;
+    }
+  }
+
+  private isWithinDedupeWindow(fingerprint: string, now: number, cooldownMs: number): boolean {
+    this.pruneFingerprints(now);
+    const previous = this.recentFingerprints.get(fingerprint);
+    return previous !== undefined && now - previous < cooldownMs;
+  }
+
+  private rememberFingerprint(fingerprint: string, now: number): void {
+    this.recentFingerprints.set(fingerprint, now);
+    this.pruneFingerprints(now);
+  }
+
+  private pruneFingerprints(now: number): void {
+    for (const [key, timestamp] of this.recentFingerprints) {
+      if (now - timestamp > 5 * 60_000) {
+        this.recentFingerprints.delete(key);
+      }
+    }
+
+    while (this.recentFingerprints.size > MAX_DEDUPE_ENTRIES) {
+      const oldest = this.recentFingerprints.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.recentFingerprints.delete(oldest);
+    }
+  }
+
+  private buildFingerprint(envelope: AnalyticsEventEnvelope, includeMetadata: boolean): string {
+    return [
+      envelope.eventType,
+      envelope.entityType ?? '',
+      envelope.entityId ?? '',
+      envelope.destinationId ?? '',
+      envelope.route ?? '',
+      includeMetadata ? this.metadataFingerprint(envelope.metadata) : '',
+    ].join('|');
+  }
+
+  private metadataFingerprint(metadata: Record<string, unknown> | undefined): string {
+    if (!metadata) return '';
+
+    try {
+      return Object.keys(metadata)
+        .sort()
+        .map((key) => `${key}:${this.fingerprintValue(metadata[key])}`)
+        .join(',');
+    } catch {
+      return '';
+    }
+  }
+
+  private fingerprintValue(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => this.fingerprintValue(item)).join(',')}]`;
+    }
+    if (typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      return `{${Object.keys(record)
+        .sort()
+        .map((key) => `${key}:${this.fingerprintValue(record[key])}`)
+        .join(',')}}`;
+    }
+    return String(value);
   }
 
   /**

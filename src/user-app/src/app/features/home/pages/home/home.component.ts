@@ -90,13 +90,6 @@ export class Home implements OnInit, OnDestroy {
     this.mapApi.search(query).subscribe({
       next: (results) => {
         this.searchResults = results;
-        this.analytics.track('search_performed', {
-          metadata: {
-            surface: 'home_destination_entry',
-            queryLength: query.trim().length,
-            resultCount: results.length,
-          },
-        });
       },
       error: () => {
         this.searchResults = [];
@@ -109,6 +102,12 @@ export class Home implements OnInit, OnDestroy {
    * Sets the destination in LocationService, preloads Explore data, then navigates.
    */
   selectResult(result: MapSearchResult): void {
+    const committedQuery = this.searchQuery.trim();
+    const resultCount = this.searchResults.length;
+    const selectedIndex = this.searchResults.findIndex((candidate) =>
+      candidate.name === result.name &&
+      candidate.latitude === result.latitude &&
+      candidate.longitude === result.longitude);
     this.searchResults = [];
     const name = result.name;
     const lat = result.latitude;
@@ -119,6 +118,14 @@ export class Home implements OnInit, OnDestroy {
 
     // Set manual destination in LocationService (IP fallback handles general context)
     this.locationSvc.setManualDestination(lat, lon, name);
+    this.analytics.track('search_performed', {
+      metadata: {
+        surface: 'home_destination_entry',
+        queryLength: committedQuery.length || name.length,
+        resultCount,
+        selectedIndex: selectedIndex >= 0 ? selectedIndex : null,
+      },
+    });
 
     // Preload explore data, then navigate
     this.exploreSvc.loadForLocation(lat, lon).then(() => {

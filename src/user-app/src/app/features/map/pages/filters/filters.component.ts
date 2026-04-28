@@ -27,15 +27,7 @@ export class Filters {
     private router: Router,
     private analytics: AnalyticsService,
   ) {
-    const saved = sessionStorage.getItem('mapFilters');
-    if (saved) {
-      try {
-        const f = JSON.parse(saved);
-        this.selectedCategories = f.categories ?? [];
-      } catch {
-        sessionStorage.removeItem('mapFilters');
-      }
-    }
+    this.selectedCategories = this.readSavedCategories();
   }
 
   toggleCategory(cat: Category): void {
@@ -51,31 +43,39 @@ export class Filters {
   }
 
   clearAll(): void {
+    const previousCategories = this.readSavedCategories();
+    const hadEffectiveFilters = previousCategories.length > 0 || this.selectedCategories.length > 0;
     this.selectedCategories = [];
     sessionStorage.removeItem('mapFilters');
-    this.analytics.track('filter_applied', {
-      metadata: {
-        surface: 'map_filters',
-        categories: [],
-        cleared: true,
-      },
-    });
+    if (hadEffectiveFilters) {
+      this.analytics.track('filter_applied', {
+        metadata: {
+          surface: 'map_filters',
+          categories: [],
+          cleared: true,
+        },
+      });
+    }
     this.router.navigate(['/map'], {
       state: { fromFilters: true, cleared: true },
     });
   }
 
   applyFilters(): void {
+    const previousCategories = this.readSavedCategories();
+    const nextCategories = this.normalizeCategories(this.selectedCategories);
     sessionStorage.setItem('mapFilters', JSON.stringify({
-      categories: this.selectedCategories,
+      categories: nextCategories,
     }));
 
-    this.analytics.track('filter_applied', {
-      metadata: {
-        surface: 'map_filters',
-        categories: this.selectedCategories,
-      },
-    });
+    if (!this.sameCategories(previousCategories, nextCategories)) {
+      this.analytics.track('filter_applied', {
+        metadata: {
+          surface: 'map_filters',
+          categories: nextCategories,
+        },
+      });
+    }
 
     this.router.navigate(['/map'], {
       state: { applyFilters: true, fromFilters: true },
@@ -84,5 +84,30 @@ export class Filters {
 
   goBack(): void {
     this.router.navigate(['/map']);
+  }
+
+  private readSavedCategories(): string[] {
+    const saved = sessionStorage.getItem('mapFilters');
+    if (!saved) return [];
+
+    try {
+      const parsed = JSON.parse(saved) as { categories?: unknown };
+      return Array.isArray(parsed.categories)
+        ? this.normalizeCategories(parsed.categories.filter((value): value is string => typeof value === 'string'))
+        : [];
+    } catch {
+      sessionStorage.removeItem('mapFilters');
+      return [];
+    }
+  }
+
+  private normalizeCategories(categories: string[]): string[] {
+    const allowed = new Set(this.allCategories.map((category) => category.id));
+    return [...new Set(categories.filter((category) => allowed.has(category)))].sort();
+  }
+
+  private sameCategories(left: string[], right: string[]): boolean {
+    if (left.length !== right.length) return false;
+    return left.every((value, index) => value === right[index]);
   }
 }
