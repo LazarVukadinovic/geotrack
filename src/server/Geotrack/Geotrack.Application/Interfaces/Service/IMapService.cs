@@ -19,4 +19,13 @@ public interface IMapService
         double? radiusKm,
         int? userId = null,
         CancellationToken cancellationToken = default);
+    Task<GetMapMarkersResponseDto> GetMarkersInViewportAsync(
+        double north,
+        double south,
+        double east,
+        double west,
+        double zoom,
+        IEnumerable<string>? categories,
+        int? userId = null,
+        CancellationToken cancellationToken = default);
 }

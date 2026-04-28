@@ -36,6 +36,12 @@ public class GetMapEntitiesResponseDto
     public List<MapEntityMarkerDto> Markers { get; set; } = new();
 }
 
+public class GetMapMarkersResponseDto
+{
+    public string Mode { get; set; } = string.Empty;
+    public List<MapEntityMarkerDto> Markers { get; set; } = new();
+}
+
 public class MapEntityMarkerDto
 {
     public string EntityType { get; set; } = string.Empty;

@@ -70,6 +70,42 @@ public class MapController : ControllerBase
         return Ok(route);
     }
 
+    [HttpGet("markers")]
+    public async Task<IActionResult> GetMarkers(
+        [FromQuery] double? north,
+        [FromQuery] double? south,
+        [FromQuery] double? east,
+        [FromQuery] double? west,
+        [FromQuery] double? zoom,
+        [FromQuery] string? categories,
+        CancellationToken cancellationToken)
+    {
+        if (!north.HasValue || !south.HasValue || !east.HasValue || !west.HasValue ||
+            !HasValidBounds(north.Value, south.Value, east.Value, west.Value))
+        {
+            return BadRequest(new { message = "Valid north/south/east/west bounds are required." });
+        }
+
+        var effectiveZoom = zoom.HasValue && !double.IsNaN(zoom.Value) && !double.IsInfinity(zoom.Value)
+            ? Math.Clamp(zoom.Value, 0d, 22d)
+            : 13d;
+
+        var categoryList = (categories ?? string.Empty)
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        var result = await _mapService.GetMarkersInViewportAsync(
+            north.Value,
+            south.Value,
+            east.Value,
+            west.Value,
+            effectiveZoom,
+            categoryList,
+            TryGetUserId(),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
     [HttpGet("entities")]
     public async Task<IActionResult> GetEntities(
         [FromQuery] double? latitude,
@@ -112,5 +148,18 @@ public class MapController : ControllerBase
                longitude >= -180 &&
                longitude <= 180 &&
                (latitude != 0d || longitude != 0d);
+    }
+
+    private static bool HasValidBounds(double north, double south, double east, double west)
+    {
+        if (double.IsNaN(north) || double.IsNaN(south) || double.IsNaN(east) || double.IsNaN(west))
+            return false;
+        if (double.IsInfinity(north) || double.IsInfinity(south) || double.IsInfinity(east) || double.IsInfinity(west))
+            return false;
+        if (north < -90 || north > 90 || south < -90 || south > 90)
+            return false;
+        if (east < -180 || east > 180 || west < -180 || west > 180)
+            return false;
+        return north > south;
     }
 }

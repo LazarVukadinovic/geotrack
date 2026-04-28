@@ -13,12 +13,14 @@ public class MapService : IMapService
 {
     private const string NominatimBaseUrl = "https://nominatim.openstreetmap.org";
     private const string OsrmBaseUrl = "https://router.project-osrm.org/route/v1/foot";
+    private const double DestinationZoomThreshold = 10d;
     private static readonly HashSet<string> AllowedCategories = new(StringComparer.OrdinalIgnoreCase)
     {
         "places",
         "stays",
         "events",
     };
+    private static readonly GeometryFactory ViewportGeometryFactory = new(new PrecisionModel(), 4326);
 
     private readonly HttpClient _httpClient;
     private readonly AppDbContext _db;
@@ -251,6 +253,163 @@ public class MapService : IMapService
                 .OrderBy(marker => ParseDistanceMeters(marker.Distance))
                 .ThenBy(marker => marker.Title)
                 .Take(50)
+                .ToList(),
+        };
+    }
+
+    public async Task<GetMapMarkersResponseDto> GetMarkersInViewportAsync(
+        double north,
+        double south,
+        double east,
+        double west,
+        double zoom,
+        IEnumerable<string>? categories,
+        int? userId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (north <= south)
+            throw new InvalidOperationException("'north' must be greater than 'south'.");
+
+        var envelope = ViewportGeometryFactory.CreatePolygon(new[]
+        {
+            new Coordinate(west, south),
+            new Coordinate(east, south),
+            new Coordinate(east, north),
+            new Coordinate(west, north),
+            new Coordinate(west, south),
+        });
+
+        if (zoom < DestinationZoomThreshold)
+        {
+            var destinations = await _db.Destinations
+                .AsNoTracking()
+                .Include(destination => destination.DestinationType)
+                .Where(destination => EF.Property<Point?>(destination, SpatialPointFactory.CoordinatesPropertyName) != null)
+                .Where(destination => EF.Property<Point>(destination, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
+                .OrderBy(destination => destination.Name)
+                .Take(30)
+                .Select(destination => new MapEntityMarkerDto
+                {
+                    EntityType = "destination",
+                    EntityId = destination.Id,
+                    Title = destination.Name,
+                    Subtitle = null,
+                    CategoryLabel = destination.DestinationType != null ? destination.DestinationType.Name : null,
+                    ImageUrl = destination.ImageUrl,
+                    DetailRoute = null,
+                    Latitude = destination.Latitude,
+                    Longitude = destination.Longitude,
+                    Distance = null,
+                    IsSaved = false,
+                })
+                .ToListAsync(cancellationToken);
+
+            return new GetMapMarkersResponseDto
+            {
+                Mode = "destinations",
+                Markers = destinations,
+            };
+        }
+
+        var normalizedCategories = NormalizeCategories(categories);
+
+        var favoritePlaceIds = userId.HasValue
+            ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
+            : new HashSet<int>();
+        var favoriteEventIds = userId.HasValue
+            ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
+            : new HashSet<int>();
+
+        var markers = new List<MapEntityMarkerDto>();
+
+        if (ShouldIncludePlaces(normalizedCategories))
+        {
+            var places = await _db.Places
+                .AsNoTracking()
+                .Include(place => place.PlaceType)
+                .Include(place => place.Location)
+                .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null)
+                .Where(place => EF.Property<Point>(place, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
+                .Select(place => new PlaceMarkerProjection
+                {
+                    Id = place.Id,
+                    Title = place.Name,
+                    Subtitle = place.Location.Name,
+                    CategoryLabel = place.PlaceType.Name,
+                    ImageUrl = place.ImageUrl,
+                    Latitude = place.Latitude,
+                    Longitude = place.Longitude,
+                    PricePerNight = place.PricePerNight,
+                    DistanceMeters = null,
+                })
+                .Where(place => normalizedCategories.Count == 0
+                    || (normalizedCategories.Contains("stays") && place.PricePerNight != null)
+                    || (normalizedCategories.Contains("places") && place.PricePerNight == null))
+                .OrderBy(place => place.Title)
+                .Take(40)
+                .ToListAsync(cancellationToken);
+
+            markers.AddRange(places.Select(place => new MapEntityMarkerDto
+            {
+                EntityType = place.PricePerNight != null ? "stay" : "place",
+                EntityId = place.Id,
+                Title = place.Title,
+                Subtitle = place.Subtitle,
+                CategoryLabel = place.CategoryLabel,
+                ImageUrl = place.ImageUrl,
+                DetailRoute = place.PricePerNight != null ? $"/stays/{place.Id}" : $"/places/{place.Id}",
+                Latitude = place.Latitude,
+                Longitude = place.Longitude,
+                Distance = null,
+                IsSaved = favoritePlaceIds.Contains(place.Id),
+            }));
+        }
+
+        if (normalizedCategories.Count == 0 || normalizedCategories.Contains("events"))
+        {
+            var events = await _db.Events
+                .AsNoTracking()
+                .Include(@event => @event.EventType)
+                .Include(@event => @event.Location)
+                .Where(@event => EF.Property<Point?>(@event, SpatialPointFactory.CoordinatesPropertyName) != null)
+                .Where(@event => EF.Property<Point>(@event, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
+                .Select(@event => new EventMarkerProjection
+                {
+                    Id = @event.Id,
+                    Title = @event.Name,
+                    Subtitle = @event.Location.Name,
+                    CategoryLabel = @event.EventType.Name,
+                    ImageUrl = @event.ImageUrl,
+                    Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
+                    Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
+                    DistanceMeters = null,
+                })
+                .OrderBy(@event => @event.Title)
+                .Take(20)
+                .ToListAsync(cancellationToken);
+
+            markers.AddRange(events.Select(@event => new MapEntityMarkerDto
+            {
+                EntityType = "event",
+                EntityId = @event.Id,
+                Title = @event.Title,
+                Subtitle = @event.Subtitle,
+                CategoryLabel = @event.CategoryLabel,
+                ImageUrl = @event.ImageUrl,
+                DetailRoute = $"/events/{@event.Id}",
+                Latitude = @event.Latitude,
+                Longitude = @event.Longitude,
+                Distance = null,
+                IsSaved = favoriteEventIds.Contains(@event.Id),
+            }));
+        }
+
+        return new GetMapMarkersResponseDto
+        {
+            Mode = "entities",
+            Markers = markers
+                .OrderBy(marker => marker.Title)
+                .Take(60)
                 .ToList(),
         };
     }
