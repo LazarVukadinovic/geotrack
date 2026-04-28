@@ -28,7 +28,7 @@ export interface MapRouteResult {
   durationSeconds?: number | null;
 }
 
-export type MapEntityType = 'place' | 'stay' | 'event';
+export type MapEntityType = 'place' | 'stay' | 'event' | 'destination';
 
 export interface MapEntityMarker {
   entityType: MapEntityType;
@@ -46,6 +46,20 @@ export interface MapEntityMarker {
 
 export interface MapEntitiesResponse {
   focusLabel?: string | null;
+  markers: MapEntityMarker[];
+}
+
+export type MapMarkersMode = 'entities' | 'destinations';
+
+export interface MapViewportBounds {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
+
+export interface MapMarkersResponse {
+  mode: MapMarkersMode;
   markers: MapEntityMarker[];
 }
 
@@ -101,5 +115,24 @@ export class MapApiService {
     }
 
     return this.http.get<MapEntitiesResponse>('/api/map/entities', { params });
+  }
+
+  getMarkersInViewport(
+    bounds: MapViewportBounds,
+    zoom: number,
+    categories: string[],
+  ): Observable<MapMarkersResponse> {
+    let params = new HttpParams()
+      .set('north', String(bounds.north))
+      .set('south', String(bounds.south))
+      .set('east', String(bounds.east))
+      .set('west', String(bounds.west))
+      .set('zoom', String(zoom));
+
+    if (categories.length > 0) {
+      params = params.set('categories', categories.join(','));
+    }
+
+    return this.http.get<MapMarkersResponse>('/api/map/markers', { params });
   }
 }

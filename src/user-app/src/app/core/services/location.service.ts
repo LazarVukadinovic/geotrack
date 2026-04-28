@@ -46,13 +46,22 @@ export class LocationService implements OnDestroy {
     return 'Explore';
   });
 
-  readonly displayCity = computed(() => this._location()?.city ?? this.displayLabel());
-  readonly displayCountry = computed(() => this._location()?.country ?? '');
+  readonly displayCity = computed(() => {
+    const loc = this._location();
+    if (!loc) return this.displayLabel();
+
+    return loc.city.trim()
+      || loc.region.trim()
+      || loc.country.trim()
+      || loc.displayLabel.trim()
+      || 'Explore';
+  });
+  readonly displayCountry = computed(() => this._location()?.country.trim() ?? '');
   readonly sourceLabel = computed(() => {
     const source = this._location()?.source;
     if (source === 'gps') return 'exact location';
     if (source === 'manual') return 'selected location';
-    return 'approximate location';
+    return 'nearby location';
   });
 
   /* ── Lifecycle ─────────────────────────────────────────────────────── */
@@ -129,10 +138,10 @@ export class LocationService implements OnDestroy {
           this._location.set({
             latitude,
             longitude,
-            city: current?.city ?? '',
-            region: current?.region ?? '',
-            country: current?.country ?? '',
-            displayLabel: current?.displayLabel ?? 'Explore',
+            city: current?.source === 'gps' ? current.city : '',
+            region: current?.source === 'gps' ? current.region : '',
+            country: current?.source === 'gps' ? current.country : '',
+            displayLabel: current?.source === 'gps' ? current.displayLabel : 'Explore',
             source: 'gps',
           });
           this._loading.set(false);
@@ -157,7 +166,7 @@ export class LocationService implements OnDestroy {
   /**
    * Requests browser geolocation permission and resolves GPS coordinates.
    * Does NOT trigger automatically — only when user explicitly asks.
-   * Returns coordinates immediately; reverse-geocode runs in background.
+   * Returns after reverse-geocode settles so location labels are ready.
    */
   requestGps(): Promise<{ latitude: number; longitude: number }> {
     return new Promise((resolve, reject) => {
@@ -168,34 +177,36 @@ export class LocationService implements OnDestroy {
 
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const { latitude, longitude } = pos.coords;
+          this.zone.run(() => {
+            const { latitude, longitude } = pos.coords;
 
-          // Set a minimal location immediately (coords known, city pending)
-          const current = this._location();
-          if (!current || current.source !== 'gps') {
+            // Set coordinates immediately; wait for reverse-geocode before the
+            // caller navigates so the Explore hero has the country label ready.
+            const current = this._location();
+            const canReuseCurrentLabel = current?.source === 'gps'
+              && this.haversineMetres(current.latitude, current.longitude, latitude, longitude) < MIN_DISTANCE_METRES;
             this._location.set({
               latitude,
               longitude,
-              city: current?.city ?? '',
-              region: current?.region ?? '',
-              country: current?.country ?? '',
-              displayLabel: current?.displayLabel ?? 'Explore',
+              city: canReuseCurrentLabel ? current.city : '',
+              region: canReuseCurrentLabel ? current.region : '',
+              country: canReuseCurrentLabel ? current.country : '',
+              displayLabel: canReuseCurrentLabel ? current.displayLabel : 'Explore',
               source: 'gps',
             });
             this._loading.set(false);
             this.saveToStorage(this._location()!);
-          }
 
-          // Reverse-geocode in background to get city/country
-          this.reverseGeocode(latitude, longitude, 'gps');
+            this.reverseGeocode(latitude, longitude, 'gps').finally(() => {
+              resolve({ latitude, longitude });
+            });
 
-          // Start watching for position updates
-          this.startWatching();
-
-          resolve({ latitude, longitude });
+            // Start watching for position updates
+            this.startWatching();
+          });
         },
         (err) => {
-          reject(err);
+          this.zone.run(() => reject(err));
         },
         { enableHighAccuracy: false, timeout: 10_000 },
       );
@@ -313,46 +324,52 @@ export class LocationService implements OnDestroy {
 
   /* ── Reverse geocoding (OpenStreetMap Nominatim) ───────────────────── */
 
-  private reverseGeocode(lat: number, lng: number, source: 'gps' | 'ip' | 'manual'): void {
+  private reverseGeocode(lat: number, lng: number, source: 'gps' | 'ip' | 'manual'): Promise<ResolvedLocation | null> {
     this.lastGeocodedLat = lat;
     this.lastGeocodedLng = lng;
     this.lastGeocodeTime = Date.now();
 
-    this.mapApi.reverseGeocode(lat, lng).subscribe({
-      next: (res) => {
-        const city = res.city ?? '';
-        const region = res.region ?? '';
-        const country = res.country ?? '';
-        const displayLabel = res.displayLabel ?? this.buildDisplayLabel(city, region, country);
+    return new Promise((resolve) => {
+      this.mapApi.reverseGeocode(lat, lng).subscribe({
+        next: (res) => {
+          const city = res.city ?? '';
+          const region = res.region ?? '';
+          const country = res.country ?? '';
+          const displayLabel = res.displayLabel ?? this.buildDisplayLabel(city, region, country);
 
-        const loc: ResolvedLocation = {
-          latitude: lat,
-          longitude: lng,
-          city,
-          region,
-          country,
-          displayLabel,
-          source,
-        };
-        this._location.set(loc);
-        this._loading.set(false);
-        this._error.set(null);
-        this.saveToStorage(loc);
-      },
-      error: () => {
-        if (!this._location()) {
-          this._location.set({
+          const loc: ResolvedLocation = {
             latitude: lat,
             longitude: lng,
-            city: '',
-            region: '',
-            country: '',
-            displayLabel: 'Explore',
+            city,
+            region,
+            country,
+            displayLabel,
             source,
-          });
-        }
-        this._loading.set(false);
-      },
+          };
+          this._location.set(loc);
+          this._loading.set(false);
+          this._error.set(null);
+          this.saveToStorage(loc);
+          resolve(loc);
+        },
+        error: () => {
+          let loc = this._location();
+          if (!loc) {
+            loc = {
+              latitude: lat,
+              longitude: lng,
+              city: '',
+              region: '',
+              country: '',
+              displayLabel: 'Explore',
+              source,
+            };
+            this._location.set(loc);
+          }
+          this._loading.set(false);
+          resolve(loc);
+        },
+      });
     });
   }
 
