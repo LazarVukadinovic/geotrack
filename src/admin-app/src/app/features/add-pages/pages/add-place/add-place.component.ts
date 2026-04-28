@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit, NgZone } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit, NgZone, ChangeDetectorRef } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
@@ -23,10 +23,23 @@ interface DayHours {
   standalone: true,
   imports: [CommonModule, FormsModule, DecimalPipe, SidebarComponent, TopbarComponent],
   templateUrl: './add-place.component.html',
+  styles: [`
+    .rte-field { position: relative; }
+    .rte-ph {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 0.5rem 0.75rem;
+      color: #9ca3af;
+      font-size: 0.875rem;
+      pointer-events: none;
+      user-select: none;
+      line-height: 1.5rem;
+    }
+  `]
 })
 export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone) {}
+  constructor(private zone: NgZone, private cdr: ChangeDetectorRef) {}
 
   //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -34,9 +47,10 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
   //Rich text editor
-  isBold      = false;
-  isItalic    = false;
-  isUnderline = false;
+  isBold        = false;
+  isItalic      = false;
+  isUnderline   = false;
+  editorIsEmpty = true;
 
   execFormat(command: 'bold' | 'italic' | 'underline'): void {
     document.execCommand(command, false, undefined);
@@ -44,9 +58,29 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.syncToolbarState();
   }
 
-  onEditorChange(): void { this.syncToolbarState(); }
-  onEditorFocus():  void { this.syncToolbarState(); }
-  onEditorBlur():   void { this.syncToolbarState(); }
+  onEditorChange(): void {
+    this.syncToolbarState();
+    this.syncEmptyState();
+  }
+  onEditorFocus(): void {
+    this.syncToolbarState();
+    this.syncEmptyState();
+  }
+  onEditorBlur(): void {
+    this.syncToolbarState();
+    const el = this.editorRef?.nativeElement;
+    if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
+      el.innerHTML = '';
+    }
+    this.syncEmptyState();
+  }
+
+  private syncEmptyState(): void {
+    const el = this.editorRef?.nativeElement;
+    if (!el) return;
+    const text = el.innerText ?? el.textContent ?? '';
+    this.editorIsEmpty = text.trim() === '' && el.innerHTML !== '<img' && !el.querySelector('img');
+  }
 
   private syncToolbarState(): void {
     this.isBold      = document.queryCommandState('bold');
@@ -54,12 +88,15 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isUnderline = document.queryCommandState('underline');
   }
 
-  //Place type & ops
   placeType  = 'Museum';
   opsEnabled = false;
 
-  openTimes  = ['06:00 AM','07:00 AM','08:00 AM','09:00 AM','10:00 AM','11:00 AM','12:00 PM'];
-  closeTimes = ['02:00 PM','03:00 PM','04:00 PM','05:00 PM','06:00 PM','07:00 PM','08:00 PM','09:00 PM','10:00 PM'];
+  allHours: string[] = [
+    '12:00 AM','01:00 AM','02:00 AM','03:00 AM','04:00 AM','05:00 AM',
+    '06:00 AM','07:00 AM','08:00 AM','09:00 AM','10:00 AM','11:00 AM',
+    '12:00 PM','01:00 PM','02:00 PM','03:00 PM','04:00 PM','05:00 PM',
+    '06:00 PM','07:00 PM','08:00 PM','09:00 PM','10:00 PM','11:00 PM',
+  ];
 
   days: DayHours[] = [
     { name: 'Monday',    open: true,  openTime: '09:00 AM', closeTime: '05:00 PM' },
@@ -139,6 +176,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   pinLat: string = '';
   pinLng: string = '';
   streetAddress: string = '';
+  isGeocodingAddress = false;
 
   modalPinLat: number | null = null;
   modalPinLng: number | null = null;
@@ -147,6 +185,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private modalMap   : any = null;
   private miniMarker : any = null;
   private modalMarker: any = null;
+  private _geocodeDebounce: any = null;
 
   private makePinIcon(): any {
     return L.divIcon({
@@ -228,14 +267,18 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
       this.modalMarker.on('dragend', (e: any) => {
         const pos = e.target.getLatLng();
-        this.modalPinLat = pos.lat;
-        this.modalPinLng = pos.lng;
+        this.zone.run(() => {
+          this.modalPinLat = pos.lat;
+          this.modalPinLng = pos.lng;
+        });
       });
     }
 
     this.modalMap.on('click', (e: any) => {
-      this.modalPinLat = e.latlng.lat;
-      this.modalPinLng = e.latlng.lng;
+      this.zone.run(() => {
+        this.modalPinLat = e.latlng.lat;
+        this.modalPinLng = e.latlng.lng;
+      });
 
       if (this.modalMarker) {
         this.modalMarker.setLatLng(e.latlng);
@@ -247,8 +290,10 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
         this.modalMarker.on('dragend', (ev: any) => {
           const pos = ev.target.getLatLng();
-          this.modalPinLat = pos.lat;
-          this.modalPinLng = pos.lng;
+          this.zone.run(() => {
+            this.modalPinLat = pos.lat;
+            this.modalPinLng = pos.lng;
+          });
         });
       }
     });
@@ -273,6 +318,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.pinConfirmed = true;
 
     this.updateMiniMapPin(this.modalPinLat, this.modalPinLng);
+    this.reverseGeocode(this.modalPinLat, this.modalPinLng);
     this.closePinModal();
   }
 
@@ -282,6 +328,40 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     if (isNaN(lat) || isNaN(lng)) return;
     this.pinConfirmed = true;
     this.updateMiniMapPin(lat, lng);
+
+    if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
+    this._geocodeDebounce = setTimeout(() => this.reverseGeocode(lat, lng), 300);
+  }
+
+  private async reverseGeocode(lat: number, lng: number): Promise<void> {
+    this.isGeocodingAddress = true;
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`;
+      const res = await fetch(url, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'TourismCMS/1.0' }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.display_name) {
+        this.zone.run(() => {
+          const a = data.address || {};
+          const parts: string[] = [];
+          if (a.road)         parts.push(a.road + (a.house_number ? ' ' + a.house_number : ''));
+          if (a.city || a.town || a.village || a.municipality)
+            parts.push(a.city ?? a.town ?? a.village ?? a.municipality);
+          if (a.postcode)     parts.push(a.postcode);
+          if (a.country)      parts.push(a.country);
+          this.streetAddress = parts.length ? parts.join(', ') : data.display_name;
+          this.cdr.detectChanges();
+        });
+      }
+    } catch (_) {
+    } finally {
+      this.zone.run(() => {
+        this.isGeocodingAddress = false;
+        this.cdr.detectChanges();
+      });
+    }
   }
 
   private updateMiniMapPin(lat: number, lng: number): void {
@@ -342,7 +422,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       'display:flex;align-items:center;justify-content:center;';
     overlay.addEventListener('click', () => this.closeLightbox());
 
-    // Close
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&times;';
     closeBtn.style.cssText =
@@ -352,7 +431,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     closeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.closeLightbox(); });
     overlay.appendChild(closeBtn);
 
-    // Counter
     if (!single) {
       const counter = document.createElement('div');
       counter.textContent = `${idx + 1} / ${imgs.length}`;
@@ -363,7 +441,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       overlay.appendChild(counter);
     }
 
-    // Prev
     if (!single) {
       const prev = document.createElement('button');
       prev.innerHTML = '&#8249;';
@@ -379,7 +456,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       overlay.appendChild(prev);
     }
 
-    // Image
     const img = document.createElement('img');
     img.src = imgs[idx].url;
     img.alt = imgs[idx].name;
@@ -389,7 +465,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     img.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(img);
 
-    // Next
     if (!single) {
       const next = document.createElement('button');
       next.innerHTML = '&#8250;';
@@ -405,7 +480,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       overlay.appendChild(next);
     }
 
-    // Thumbnails
     if (!single) {
       const thumbRow = document.createElement('div');
       thumbRow.style.cssText =
@@ -462,5 +536,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
+    if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
   }
 }
