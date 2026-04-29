@@ -100,16 +100,22 @@
                     title="Underline (Ctrl+U)"
                   ><u>U</u></button>
                 </div>
-                <div
-                  #editorRef
-                  contenteditable="true"
-                  class="w-full px-3 py-2 text-sm min-h-[100px] outline-none text-gray-700"
-                  style="font-family: inherit;"
-                  (keyup)="onEditorChange()"
-                  (mouseup)="onEditorChange()"
-                  (focus)="onEditorFocus()"
-                  (blur)="onEditorBlur()"
-                ></div>
+                <div class="relative rte-field">
+                  @if (editorIsEmpty) {
+                    <span class="rte-ph">Provide a comprehensive description of this location...</span>
+                  }
+                  <div
+                    #editorRef
+                    contenteditable="true"
+                    class="w-full px-3 py-2 text-sm min-h-[100px] outline-none text-gray-700"
+                    style="font-family: inherit;"
+                    (keyup)="onEditorChange()"
+                    (input)="onEditorChange()"
+                    (mouseup)="onEditorChange()"
+                    (focus)="onEditorFocus()"
+                    (blur)="onEditorBlur()"
+                  ></div>
+                </div>
               </div>
             </div>
           </div>

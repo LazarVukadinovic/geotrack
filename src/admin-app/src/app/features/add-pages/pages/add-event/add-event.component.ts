@@ -47,8 +47,8 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   allDay     = false;
   freeEvent  = false;
   recurring  = false;
-  startDate  = '2024-10-24';
-  endDate    = '2024-10-26';
+  startDate  = this.todayIso();
+  endDate    = this.todayIso();
   startTime  = '21:00';
   endTime    = '05:00';
 
@@ -268,7 +268,58 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     const [y, m, d] = iso.split('-').map(Number);
     return `${this.monthNames[m - 1].slice(0, 3)} ${d}, ${y}`;
   }
+  private todayIso(): string {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  get startDateDisplay(): string { return this.isoToDisplay(this.startDate); }
+  get endDateDisplay():   string { return this.isoToDisplay(this.endDate); }
 
+  private isoToDisplay(iso: string): string {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}.${m}.${y}`;
+  }
+
+  private displayToIso(display: string): string | null {
+    const clean = display.replace(/[\/\-\s]/g, '.');
+    const parts = clean.split('.');
+    if (parts.length !== 3) return null;
+    const [d, m, y] = parts.map(p => p.padStart(2, '0'));
+    if (!d || !m || !y || y.length < 4) return null;
+    const day = parseInt(d), month = parseInt(m), year = parseInt(y);
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+
+  onDateTextInput(event: Event, field: 'startDate' | 'endDate'): void {
+    const input = event.target as HTMLInputElement;
+    let val = input.value.replace(/[^\d\.\/]/g, '');
+    const digits = val.replace(/\D/g, '');
+    if (digits.length >= 3 && digits.length <= 4 && !val.includes('.')) {
+      val = digits.slice(0, 2) + '.' + digits.slice(2);
+    } else if (digits.length >= 5 && val.split('.').length < 3) {
+      const d = digits.slice(0, 2), m = digits.slice(2, 4), y = digits.slice(4);
+      val = `${d}.${m}.${y ? '.' + y : ''}`.replace('..', '.');
+    }
+    input.value = val;
+  }
+
+  onDateTextBlur(event: Event, field: 'startDate' | 'endDate'): void {
+    const input = event.target as HTMLInputElement;
+    const iso = this.displayToIso(input.value);
+    if (iso) {
+      if (field === 'startDate') this.startDate = iso;
+      else                       this.endDate   = iso;
+      input.value = this.isoToDisplay(iso);
+    } else if (input.value.trim() !== '') {
+      input.value = field === 'startDate' ? this.startDateDisplay : this.endDateDisplay;
+    }
+  }
   clockMode: 'hour' | 'minute' = 'hour';
   selectedHour   = 12;
   selectedMinute = 0;

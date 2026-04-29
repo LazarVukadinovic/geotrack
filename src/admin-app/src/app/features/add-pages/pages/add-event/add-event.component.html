@@ -79,8 +79,12 @@
               <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="radio" name="venueType" value="place" [(ngModel)]="venueType" class="accent-blue-700" /> Place</label>
             </div>
             <div class="mb-3">
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Location Selector <span class="text-red-500">*</span></label>
-              <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" [placeholder]="'Search ' + venueType + 's...'" />
+              <label class="block text-xs font-semibold text-gray-600 mb-1">
+                {{ venueType === 'place' ? 'Place Selector' : 'Location Selector' }}
+                <span class="text-red-500">*</span>
+              </label>
+              <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                    [placeholder]="venueType === 'place' ? 'Search places...' : 'Search locations...'" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Venue Name <span class="text-gray-400 font-normal">(Optional)</span></label>
@@ -111,77 +115,95 @@
 
             <div class="grid grid-cols-2 gap-3 mb-3">
 
-              <!-- ── Start Date picker ── -->
-              <div class="relative">
-                <label class="block text-xs font-semibold text-gray-600 mb-1">Start Date <span class="text-red-500">*</span></label>
-                <button type="button"
-                  class="w-full flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm bg-white cursor-pointer hover:border-blue-400 transition-colors outline-none text-left"
-                  [class.border-blue-500]="activePicker === 'startDate'"
-                  [class.border-gray-300]="activePicker !== 'startDate'"
-                  (click)="togglePicker('startDate', $event)">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                  <span class="flex-1" [class.text-gray-700]="startDate" [class.text-gray-400]="!startDate">{{ startDate ? formatDisplayDate(startDate) : 'Pick date' }}</span>
-                </button>
-                @if (activePicker === 'startDate') {
-                  <div class="picker-dropdown" (click)="$event.stopPropagation()">
-                    <div class="picker-header">
-                      <button type="button" class="picker-nav" (click)="prevMonth()">&#8249;</button>
-                      <span class="picker-month-year">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
-                      <button type="button" class="picker-nav" (click)="nextMonth()">&#8250;</button>
-                    </div>
-                    <div class="picker-weekdays">
-                      <span *ngFor="let d of weekDays">{{ d }}</span>
-                    </div>
-                    <div class="picker-days">
-                      <button *ngFor="let day of calendarDays" type="button"
-                        class="picker-day"
-                        [class.empty]="day === 0"
-                        [class.selected]="isSelectedDate(day, startDate)"
-                        [class.today]="isToday(day)"
-                        [disabled]="day === 0"
-                        (click)="selectDate(day, 'startDate')">
-                        {{ day !== 0 ? day : '' }}
-                      </button>
-                    </div>
-                  </div>
-                }
+          <!-- ── Start Date picker ── -->
+          <div class="relative">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Start Date <span class="text-red-500">*</span></label>
+            <div class="flex items-center gap-0 border rounded-lg overflow-hidden bg-white"
+                [class.border-blue-500]="activePicker === 'startDate'"
+                [class.border-gray-300]="activePicker !== 'startDate'">
+              <button type="button"
+                class="flex items-center justify-center px-2.5 py-1.5 border-r border-gray-200 bg-gray-50 hover:bg-blue-50 transition-colors flex-shrink-0 outline-none"
+                (click)="togglePicker('startDate', $event)"
+                title="Open calendar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </button>
+              <input type="text"
+                class="flex-1 px-2.5 py-1.5 text-sm text-gray-700 outline-none bg-white min-w-0"
+                placeholder="dd.mm.yyyy"
+                [value]="startDateDisplay"
+                (input)="onDateTextInput($event, 'startDate')"
+                (blur)="onDateTextBlur($event, 'startDate')"
+                (click)="$event.stopPropagation()" />
+            </div>
+            @if (activePicker === 'startDate') {
+              <div class="picker-dropdown" (click)="$event.stopPropagation()">
+                <div class="picker-header">
+                  <button type="button" class="picker-nav" (click)="prevMonth()">&#8249;</button>
+                  <span class="picker-month-year">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
+                  <button type="button" class="picker-nav" (click)="nextMonth()">&#8250;</button>
+                </div>
+                <div class="picker-weekdays">
+                  <span *ngFor="let d of weekDays">{{ d }}</span>
+                </div>
+                <div class="picker-days">
+                  <button *ngFor="let day of calendarDays" type="button"
+                    class="picker-day"
+                    [class.empty]="day === 0"
+                    [class.selected]="isSelectedDate(day, startDate)"
+                    [class.today]="isToday(day)"
+                    [disabled]="day === 0"
+                    (click)="selectDate(day, 'startDate')">
+                    {{ day !== 0 ? day : '' }}
+                  </button>
+                </div>
               </div>
+            }
+          </div>
 
-              <!-- ── End Date picker ── -->
-              <div class="relative">
-                <label class="block text-xs font-semibold text-gray-600 mb-1">End Date <span class="text-red-500">*</span></label>
-                <button type="button"
-                  class="w-full flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm bg-white cursor-pointer hover:border-blue-400 transition-colors outline-none text-left"
-                  [class.border-blue-500]="activePicker === 'endDate'"
-                  [class.border-gray-300]="activePicker !== 'endDate'"
-                  (click)="togglePicker('endDate', $event)">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                  <span class="flex-1" [class.text-gray-700]="endDate" [class.text-gray-400]="!endDate">{{ endDate ? formatDisplayDate(endDate) : 'Pick date' }}</span>
-                </button>
-                @if (activePicker === 'endDate') {
-                  <div class="picker-dropdown" (click)="$event.stopPropagation()">
-                    <div class="picker-header">
-                      <button type="button" class="picker-nav" (click)="prevMonth()">&#8249;</button>
-                      <span class="picker-month-year">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
-                      <button type="button" class="picker-nav" (click)="nextMonth()">&#8250;</button>
-                    </div>
-                    <div class="picker-weekdays">
-                      <span *ngFor="let d of weekDays">{{ d }}</span>
-                    </div>
-                    <div class="picker-days">
-                      <button *ngFor="let day of calendarDays" type="button"
-                        class="picker-day"
-                        [class.empty]="day === 0"
-                        [class.selected]="isSelectedDate(day, endDate)"
-                        [class.today]="isToday(day)"
-                        [disabled]="day === 0"
-                        (click)="selectDate(day, 'endDate')">
-                        {{ day !== 0 ? day : '' }}
-                      </button>
-                    </div>
-                  </div>
-                }
+          <!-- ── End Date picker ── -->
+          <div class="relative">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">End Date <span class="text-red-500">*</span></label>
+            <div class="flex items-center gap-0 border rounded-lg overflow-hidden bg-white"
+                [class.border-blue-500]="activePicker === 'endDate'"
+                [class.border-gray-300]="activePicker !== 'endDate'">
+              <button type="button"
+                class="flex items-center justify-center px-2.5 py-1.5 border-r border-gray-200 bg-gray-50 hover:bg-blue-50 transition-colors flex-shrink-0 outline-none"
+                (click)="togglePicker('endDate', $event)"
+                title="Open calendar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </button>
+              <input type="text"
+                class="flex-1 px-2.5 py-1.5 text-sm text-gray-700 outline-none bg-white min-w-0"
+                placeholder="dd.mm.yyyy"
+                [value]="endDateDisplay"
+                (input)="onDateTextInput($event, 'endDate')"
+                (blur)="onDateTextBlur($event, 'endDate')"
+                (click)="$event.stopPropagation()" />
               </div>
+              @if (activePicker === 'endDate') {
+                <div class="picker-dropdown" (click)="$event.stopPropagation()">
+                  <div class="picker-header">
+                    <button type="button" class="picker-nav" (click)="prevMonth()">&#8249;</button>
+                    <span class="picker-month-year">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
+                    <button type="button" class="picker-nav" (click)="nextMonth()">&#8250;</button>
+                  </div>
+                  <div class="picker-weekdays">
+                    <span *ngFor="let d of weekDays">{{ d }}</span>
+                  </div>
+                  <div class="picker-days">
+                    <button *ngFor="let day of calendarDays" type="button"
+                      class="picker-day"
+                      [class.empty]="day === 0"
+                      [class.selected]="isSelectedDate(day, endDate)"
+                      [class.today]="isToday(day)"
+                      [disabled]="day === 0"
+                      (click)="selectDate(day, 'endDate')">
+                      {{ day !== 0 ? day : '' }}
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
 
               @if (!allDay) {
 
