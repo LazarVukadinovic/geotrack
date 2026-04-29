@@ -1,5 +1,5 @@
 import { AfterViewInit, ChangeDetectorRef, Component, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location as AngularLocation } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, {
@@ -28,6 +28,10 @@ const MAP_STYLE_URL = '/map-style.json';
 const DESTINATION_ZOOM_THRESHOLD = 10;
 const VIEWPORT_DEBOUNCE_MS = 250;
 const VIEWPORT_CACHE_PADDING = 0.1;
+const MAP_VIEW_STATE_KEY = 'mapViewState';
+const MAP_OPENED_THIS_SESSION_KEY = 'mapOpenedThisSession';
+const INITIAL_LOCATION_ZOOM = 13;
+const DETAIL_FOCUS_ZOOM = 16;
 
 interface MarkerEntry {
   data: MapEntityMarker;
@@ -37,6 +41,27 @@ interface MarkerEntry {
 
 interface CachedViewport extends MapViewportBounds {
   mode: MapMarkersMode;
+}
+
+interface StoredMapViewState {
+  center?: [number, number];
+  zoom?: number;
+}
+
+interface MapInitialView {
+  center: [number, number];
+  zoom: number;
+}
+
+interface MapNavigationState {
+  name?: string;
+  lat?: number;
+  lon?: number;
+  isUserLocation?: boolean;
+  fromFilters?: boolean;
+  cleared?: boolean;
+  mapFocus?: Partial<MapEntityMarker> | null;
+  mapPreviewRestore?: boolean;
 }
 
 @Component({
@@ -63,6 +88,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private requestSeq = 0;
   private routeRequestSeq = 0;
   private lastFetchedViewport: CachedViewport | null = null;
+  private isDestroyed = false;
+  private readonly initialMapFocus: MapEntityMarker | null;
+  private preserveSelectedPlaceFromNavigation = false;
 
   currentMode: MapMarkersMode = 'entities';
 
@@ -98,16 +126,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     private readonly mapApi: MapApiService,
     private readonly analytics: AnalyticsService,
     private readonly locationSvc: LocationService,
+    private readonly angularLocation: AngularLocation,
   ) {
     const nav = this.router.getCurrentNavigation();
-    const state = (nav?.extras?.state ?? history.state) as {
-      name?: string;
-      lat?: number;
-      lon?: number;
-      isUserLocation?: boolean;
-      fromFilters?: boolean;
-      cleared?: boolean;
-    };
+    const state = (nav?.extras?.state ?? history.state) as MapNavigationState;
     const savedLocation = this.readSessionJson<{
       name?: string;
       lat?: number;
@@ -135,6 +157,16 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       }));
     }
 
+    this.initialMapFocus = this.readMapFocus(state?.mapFocus);
+    if (this.initialMapFocus) {
+      this.destinationName = this.initialMapFocus.title;
+      this.destinationLat = this.initialMapFocus.latitude;
+      this.destinationLon = this.initialMapFocus.longitude;
+      this.isUserLocation = false;
+      this.selectedPlace = this.initialMapFocus;
+      this.preserveSelectedPlaceFromNavigation = true;
+    }
+
     const savedFilters = this.readSessionJson<{ categories?: string[] }>('mapFilters');
     if (savedFilters) {
       this.filterCategories = (savedFilters.categories ?? []).filter((category) => this.allowedCategoryIds.has(category));
@@ -148,21 +180,18 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    setTimeout(() => this.initMap(), 0);
+    setTimeout(() => void this.initMap(), 0);
   }
 
   ngOnDestroy(): void {
+    this.isDestroyed = true;
+
     if (this.viewportLoadTimeout) {
       clearTimeout(this.viewportLoadTimeout);
     }
 
     if (this.map) {
-      const center = this.map.getCenter();
-      const zoom = this.map.getZoom();
-      sessionStorage.setItem('mapViewState', JSON.stringify({
-        center: [center.lng, center.lat],
-        zoom,
-      }));
+      this.persistMapViewState();
 
       for (const entry of this.markersByKey.values()) {
         entry.marker.remove();
@@ -189,6 +218,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   goBack(): void {
+    this.clearMapFocusHistoryState();
     this.router.navigate(['/home']);
   }
 
@@ -226,6 +256,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.destinationLat = result.latitude;
     this.destinationLon = result.longitude;
     this.isUserLocation = false;
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
     this.selectedPlace = null;
     this.routeErrorMessage = '';
     this.clearRoute();
@@ -289,6 +321,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.activeCategory = category.id;
     this.filterCategories = [];
     this.hasActiveFilters = false;
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
     this.selectedPlace = null;
     this.routeErrorMessage = '';
     this.clearRoute();
@@ -382,11 +416,21 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   openDetails(): void {
-    if (!this.selectedPlace?.detailRoute) return;
-    void this.router.navigateByUrl(this.selectedPlace.detailRoute);
+    const selectedPlace = this.selectedPlace;
+    if (!selectedPlace?.detailRoute) return;
+
+    this.persistMapFocusHistoryState(selectedPlace);
+    void this.router.navigateByUrl(selectedPlace.detailRoute, {
+      state: {
+        fromMapPreview: true,
+        mapFocus: selectedPlace,
+      },
+    });
   }
 
   closePlace(): void {
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
     this.selectedPlace = null;
     this.routeErrorMessage = '';
     this.clearRoute();
@@ -394,34 +438,23 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private readonly resizeHandler = () => this.map?.resize();
 
-  private initMap(): void {
+  private async initMap(): Promise<void> {
     const container = document.getElementById('map');
     if (!container) return;
 
-    let initCenter: [number, number] = [this.destinationLon, this.destinationLat];
-    let initZoom = 13;
-
-    const savedView = this.readSessionJson<{ center?: [number, number]; zoom?: number }>('mapViewState');
-    if (savedView?.center && savedView.center.length === 2) {
-      initCenter = savedView.center;
-    }
-    if (typeof savedView?.zoom === 'number') {
-      initZoom = savedView.zoom;
-    }
-
-    if (savedView) {
-      sessionStorage.removeItem('mapViewState');
-    }
+    const initialView = await this.resolveInitialMapView();
+    if (this.isDestroyed) return;
 
     this.map = new maplibregl.Map({
       container,
       style: MAP_STYLE_URL,
-      center: initCenter,
-      zoom: initZoom,
+      center: initialView.center,
+      zoom: initialView.zoom,
       attributionControl: false,
       fadeDuration: 0,
       trackResize: true,
     });
+    this.markMapOpenedThisSession();
 
     window.addEventListener('resize', this.resizeHandler);
     this.map.touchZoomRotate.enable();
@@ -451,6 +484,152 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  private async resolveInitialMapView(): Promise<MapInitialView> {
+    if (this.initialMapFocus) {
+      return {
+        center: [this.initialMapFocus.longitude, this.initialMapFocus.latitude],
+        zoom: DETAIL_FOCUS_ZOOM,
+      };
+    }
+
+    const savedView = this.readSavedMapViewState();
+    if (this.hasOpenedMapThisSession() && savedView) {
+      return savedView;
+    }
+
+    const origin = await this.locationSvc.resolveRoutingOrigin();
+    if (origin && this.hasUsableCoordinates(origin.latitude, origin.longitude)) {
+      return {
+        center: [origin.longitude, origin.latitude],
+        zoom: INITIAL_LOCATION_ZOOM,
+      };
+    }
+
+    if (savedView) {
+      this.markMapOpenedThisSession();
+      return savedView;
+    }
+
+    this.loadErrorMessage = "GeoTrack couldn't determine your current location, so the map opened at the last selected destination.";
+    this.cdr.detectChanges();
+
+    return {
+      center: [this.destinationLon, this.destinationLat],
+      zoom: INITIAL_LOCATION_ZOOM,
+    };
+  }
+
+  private hasOpenedMapThisSession(): boolean {
+    try {
+      return sessionStorage.getItem(MAP_OPENED_THIS_SESSION_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  private markMapOpenedThisSession(): void {
+    try {
+      sessionStorage.setItem(MAP_OPENED_THIS_SESSION_KEY, 'true');
+    } catch {
+      // storage may be unavailable; restore simply falls back to location.
+    }
+  }
+
+  private persistMapViewState(): void {
+    const center = this.map.getCenter();
+    const zoom = this.map.getZoom();
+    try {
+      sessionStorage.setItem(MAP_VIEW_STATE_KEY, JSON.stringify({
+        center: [center.lng, center.lat],
+        zoom,
+      }));
+      this.markMapOpenedThisSession();
+    } catch {
+      // storage may be unavailable; the next map open will resolve location again.
+    }
+  }
+
+  private readSavedMapViewState(): MapInitialView | null {
+    const savedView = this.readSessionJson<StoredMapViewState>(MAP_VIEW_STATE_KEY);
+    const center = savedView?.center;
+    const zoom = savedView?.zoom;
+
+    if (!center ||
+      center.length !== 2 ||
+      !this.hasUsableCoordinates(center[1], center[0]) ||
+      typeof zoom !== 'number' ||
+      !Number.isFinite(zoom)) {
+      return null;
+    }
+
+    return {
+      center,
+      zoom: Math.min(Math.max(zoom, 0), 22),
+    };
+  }
+
+  private readMapFocus(value: Partial<MapEntityMarker> | null | undefined): MapEntityMarker | null {
+    if (!value || typeof value !== 'object') return null;
+
+    const entityType = value.entityType;
+    if (entityType !== 'place' && entityType !== 'stay' && entityType !== 'event') return null;
+
+    const entityId = typeof value.entityId === 'number' ? value.entityId : NaN;
+    const latitude = value.latitude;
+    const longitude = value.longitude;
+    const title = typeof value.title === 'string' ? value.title.trim() : '';
+
+    if (!Number.isFinite(entityId) ||
+      entityId <= 0 ||
+      !title ||
+      !this.hasUsableCoordinates(latitude, longitude)) {
+      return null;
+    }
+
+    return {
+      entityType,
+      entityId,
+      title,
+      subtitle: typeof value.subtitle === 'string' && value.subtitle.trim() ? value.subtitle : null,
+      categoryLabel: typeof value.categoryLabel === 'string' && value.categoryLabel.trim() ? value.categoryLabel : null,
+      imageUrl: typeof value.imageUrl === 'string' && value.imageUrl.trim() ? value.imageUrl : null,
+      detailRoute: typeof value.detailRoute === 'string' && value.detailRoute.trim() ? value.detailRoute : null,
+      latitude: latitude as number,
+      longitude: longitude as number,
+      distance: typeof value.distance === 'string' && value.distance.trim() ? value.distance : null,
+      isSaved: value.isSaved === true,
+    };
+  }
+
+  private persistMapFocusHistoryState(marker: MapEntityMarker): void {
+    const mapFocus = this.readMapFocus(marker);
+    if (!mapFocus) return;
+
+    try {
+      this.angularLocation.replaceState(this.router.url, '', {
+        ...(history.state ?? {}),
+        mapFocus,
+        mapPreviewRestore: true,
+      } satisfies MapNavigationState);
+    } catch {
+      // History state may be unavailable in restricted browser modes.
+    }
+  }
+
+  private clearMapFocusHistoryState(): void {
+    try {
+      const currentState = history.state as MapNavigationState | null;
+      if (!currentState?.mapFocus && !currentState?.mapPreviewRestore) return;
+
+      const nextState = { ...currentState };
+      delete nextState.mapFocus;
+      delete nextState.mapPreviewRestore;
+      this.angularLocation.replaceState(this.router.url, '', nextState);
+    } catch {
+      // If history state cannot be updated, the in-memory selectedPlace still controls this view.
+    }
   }
 
   private scheduleViewportLoad(debounceMs: number = VIEWPORT_DEBOUNCE_MS): void {
@@ -562,7 +741,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       const stillVisible = this.markersByKey.get(selectedKey);
       if (stillVisible) {
         this.selectedPlace = stillVisible.data;
-      } else {
+        this.preserveSelectedPlaceFromNavigation = false;
+      } else if (!this.shouldPreserveSelectedPlaceDuringMarkerRefresh()) {
         this.selectedPlace = null;
         this.clearRoute();
       }
@@ -625,6 +805,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private onMarkerClick(marker: MapEntityMarker): void {
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
+
     if (marker.entityType === 'destination') {
       this.selectedPlace = null;
       this.routeErrorMessage = '';
@@ -696,6 +879,14 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       case 'destination': return 'destination';
       default: return 'place';
     }
+  }
+
+  private shouldPreserveSelectedPlaceDuringMarkerRefresh(): boolean {
+    return this.preserveSelectedPlaceFromNavigation || this.isLoadingRoute || this.hasRenderedRoute();
+  }
+
+  private hasRenderedRoute(): boolean {
+    return !!this.map?.getSource(this.ROUTE_SOURCE);
   }
 
   private isCurrentRouteRequest(routeRequestId: number, selectedKey: string): boolean {
@@ -832,6 +1023,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.destinationLon = lon;
     this.locationSvc.setGpsLocation(lat, lon);
     this.isUserLocation = true;
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
     this.selectedPlace = null;
     this.routeErrorMessage = '';
     this.clearRoute();
