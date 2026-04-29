@@ -1,7 +1,7 @@
 <section class="curated" aria-label="Curated for you">
   <app-section-header
     title="Curated for You"
-    subtitle="Based on recent activity — adapting as you explore"
+    subtitle="Based on your interests and recent activity nearby"
     actionLabel="More"
     (action)="sectionMore.emit()"
   />
@@ -9,7 +9,7 @@
   @if (items().length === 0) {
     <app-empty-state
       title="Nothing personalized nearby yet"
-      message="We do not have nearby matches for your saved interests in this area yet."
+      message="We do not have nearby matches for your saved interests or recent activity yet."
     />
   } @else {
     <div class="curated__viewport">

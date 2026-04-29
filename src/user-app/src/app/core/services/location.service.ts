@@ -25,11 +25,19 @@ export class LocationService implements OnDestroy {
   /* ── Public reactive state ─────────────────────────────────────────── */
 
   private readonly _location = signal<ResolvedLocation | null>(null);
+  private readonly _approximateLocation = signal<ResolvedLocation | null>(null);
   private readonly _loading = signal(true);
   private readonly _error = signal<string | null>(null);
   private readonly _hasCompletedLocationEntry = signal(this.readEntryCompleteFromStorage());
 
   readonly location = computed(() => this._location());
+  readonly routingOrigin = computed(() => {
+    const loc = this._location();
+    if (this.isRoutingOrigin(loc)) return loc;
+
+    const approximate = this._approximateLocation();
+    return this.isRoutingOrigin(approximate) ? approximate : null;
+  });
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
 
@@ -71,6 +79,9 @@ export class LocationService implements OnDestroy {
     const cached = this.restoreFromStorage();
     if (cached) {
       this._location.set(cached);
+      if (cached.source === 'ip' && this.hasUsableCoordinates(cached.latitude, cached.longitude)) {
+        this._approximateLocation.set(cached);
+      }
       this._loading.set(false);
       this.lastGeocodedLat = cached.latitude;
       this.lastGeocodedLng = cached.longitude;
@@ -101,6 +112,7 @@ export class LocationService implements OnDestroy {
     this.lastGeocodeTime = 0;
     this.ipFallbackStarted = false;
     this._location.set(null);
+    this._approximateLocation.set(null);
     this._loading.set(false);
     this._error.set(null);
     this._hasCompletedLocationEntry.set(false);
@@ -131,7 +143,7 @@ export class LocationService implements OnDestroy {
           const { latitude, longitude } = pos.coords;
           const current = this._location();
           // Only update if meaningfully different from cached location
-          if (current) {
+          if (current?.source === 'gps') {
             const dist = this.haversineMetres(current.latitude, current.longitude, latitude, longitude);
             if (dist < MIN_DISTANCE_METRES) return;
           }
@@ -211,6 +223,66 @@ export class LocationService implements OnDestroy {
         { enableHighAccuracy: false, timeout: 10_000 },
       );
     });
+  }
+
+  /**
+   * Stores exact browser coordinates resolved outside the landing-page flow.
+   * Used by the map page's locate control so map directions and app-wide
+   * location state share the same GPS source of truth.
+   */
+  setGpsLocation(latitude: number, longitude: number): void {
+    if (!this.hasUsableCoordinates(latitude, longitude)) return;
+
+    const current = this._location();
+    const canReuseCurrentLabel = current?.source === 'gps'
+      && this.haversineMetres(current.latitude, current.longitude, latitude, longitude) < MIN_DISTANCE_METRES;
+
+    const loc: ResolvedLocation = {
+      latitude,
+      longitude,
+      city: canReuseCurrentLabel ? current.city : '',
+      region: canReuseCurrentLabel ? current.region : '',
+      country: canReuseCurrentLabel ? current.country : '',
+      displayLabel: canReuseCurrentLabel ? current.displayLabel : 'Explore',
+      source: 'gps',
+    };
+
+    this._location.set(loc);
+    this._loading.set(false);
+    this._error.set(null);
+    this.saveToStorage(loc);
+    void this.reverseGeocode(latitude, longitude, 'gps');
+    this.startWatching();
+  }
+
+  /**
+   * Resolve the origin that should be used for route drawing.
+   *
+   * Routing must never use manual/search/destination state. Exact GPS wins
+   * when available; otherwise we use a backend-backed IP location. If neither
+   * is honestly available, callers should not draw a route.
+   */
+  async resolveRoutingOrigin(): Promise<ResolvedLocation | null> {
+    const geolocationPermission = await this.getGeolocationPermissionState();
+    if (geolocationPermission === 'granted') {
+      const exact = await this.getCurrentGpsForRouting();
+      if (exact) return exact;
+    }
+
+    const existing = this.routingOrigin();
+    if (existing?.source === 'gps' && geolocationPermission === null) {
+      return existing;
+    }
+    if (existing?.source === 'ip') {
+      return existing;
+    }
+
+    const approximate = this._approximateLocation();
+    if (this.isRoutingOrigin(approximate)) {
+      return approximate;
+    }
+
+    return this.fetchApproximateLocationForRouting();
   }
 
   /**
@@ -395,6 +467,10 @@ export class LocationService implements OnDestroy {
       .subscribe({
         next: (res) => {
           const loc = this.mapApproximateLocation(res);
+          if (!this.isRoutingOrigin(loc)) {
+            return;
+          }
+          this._approximateLocation.set(loc);
           this._location.set(loc);
           this._loading.set(false);
           this._error.set(null);
@@ -413,6 +489,13 @@ export class LocationService implements OnDestroy {
       .subscribe({
         next: (res) => {
           const loc = this.mapApproximateLocation(res);
+          if (!this.isRoutingOrigin(loc)) {
+            this._loading.set(false);
+            this._error.set('Unable to determine location');
+            onComplete?.();
+            return;
+          }
+          this._approximateLocation.set(loc);
           this._location.set(loc);
           this.saveToStorage(loc);
           this._loading.set(false);
@@ -454,6 +537,83 @@ export class LocationService implements OnDestroy {
     } catch {
       return false;
     }
+  }
+
+  private fetchApproximateLocationForRouting(): Promise<ResolvedLocation | null> {
+    return new Promise((resolve) => {
+      this.http
+        .get<ApproximateLocationResponse>('/api/locations/approximate')
+        .subscribe({
+          next: (res) => {
+            const loc = this.mapApproximateLocation(res);
+            if (!this.isRoutingOrigin(loc)) {
+              resolve(null);
+              return;
+            }
+
+            this._approximateLocation.set(loc);
+            if (!this._location()) {
+              this._location.set(loc);
+              this._loading.set(false);
+              this._error.set(null);
+              this.saveToStorage(loc);
+            }
+            resolve(loc);
+          },
+          error: () => resolve(null),
+        });
+    });
+  }
+
+  private async getGeolocationPermissionState(): Promise<PermissionState | null> {
+    if (typeof navigator === 'undefined' || !('permissions' in navigator)) {
+      return null;
+    }
+
+    try {
+      const status = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+      return status.state;
+    } catch {
+      return null;
+    }
+  }
+
+  private getCurrentGpsForRouting(): Promise<ResolvedLocation | null> {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      return Promise.resolve(null);
+    }
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          this.zone.run(() => {
+            const { latitude, longitude } = pos.coords;
+            this.setGpsLocation(latitude, longitude);
+            resolve(this._location());
+          });
+        },
+        () => resolve(null),
+        { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 },
+      );
+    });
+  }
+
+  private isRoutingOrigin(loc: ResolvedLocation | null): loc is ResolvedLocation {
+    return loc !== null &&
+      (loc.source === 'gps' || loc.source === 'ip') &&
+      this.hasUsableCoordinates(loc.latitude, loc.longitude);
+  }
+
+  private hasUsableCoordinates(latitude: number | null | undefined, longitude: number | null | undefined): boolean {
+    return typeof latitude === 'number' &&
+      typeof longitude === 'number' &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      (latitude !== 0 || longitude !== 0);
   }
 
   private mapApproximateLocation(res: ApproximateLocationResponse): ResolvedLocation {

@@ -17,9 +17,11 @@ import {
   MapViewportBounds,
 } from '../../../../core/services/map-api.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
+import { LocationService } from '../../../../core/services/location.service';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import type { AnalyticsEntityType } from '../../../../core/services/analytics.types';
+import type { ResolvedLocation } from '../../../../core/models/location.model';
 
 const MAP_STYLE_URL = '/map-style.json';
 
@@ -52,8 +54,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private readonly ROUTE_OUTLINE = 'route-layer-outline';
 
   private map!: MapLibreMap;
-  private userLat: number | null = null;
-  private userLon: number | null = null;
   private searchTimeout?: ReturnType<typeof setTimeout>;
   private filterCategories: string[] = [];
   private readonly markersByKey = new Map<string, MarkerEntry>();
@@ -61,6 +61,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private readonly allowedCategoryIds = new Set(['places', 'stays', 'events']);
   private viewportLoadTimeout?: ReturnType<typeof setTimeout>;
   private requestSeq = 0;
+  private routeRequestSeq = 0;
   private lastFetchedViewport: CachedViewport | null = null;
 
   currentMode: MapMarkersMode = 'entities';
@@ -96,6 +97,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     private readonly cdr: ChangeDetectorRef,
     private readonly mapApi: MapApiService,
     private readonly analytics: AnalyticsService,
+    private readonly locationSvc: LocationService,
   ) {
     const nav = this.router.getCurrentNavigation();
     const state = (nav?.extras?.state ?? history.state) as {
@@ -118,10 +120,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.destinationLat = savedLocation.lat ?? this.destinationLat;
       this.destinationLon = savedLocation.lon ?? this.destinationLon;
       this.isUserLocation = savedLocation.isUserLocation === true;
-      if (this.isUserLocation) {
-        this.userLat = this.destinationLat;
-        this.userLon = this.destinationLon;
-      }
     }
 
     if (state?.name) {
@@ -307,37 +305,75 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.scheduleViewportLoad(0);
   }
 
-  openDirections(): void {
+  async openDirections(): Promise<void> {
     if (!this.selectedPlace) return;
 
-    const originLat = this.userLat ?? this.destinationLat;
-    const originLon = this.userLon ?? this.destinationLon;
+    const selectedPlace = this.selectedPlace;
+    const selectedKey = this.getMarkerKey(selectedPlace);
+    const routeRequestId = ++this.routeRequestSeq;
 
     this.isLoadingRoute = true;
     this.routeErrorMessage = '';
+    this.clearRoute();
+    this.cdr.detectChanges();
+
+    const origin = await this.locationSvc.resolveRoutingOrigin();
+    if (!this.isCurrentRouteRequest(routeRequestId, selectedKey)) {
+      if (routeRequestId === this.routeRequestSeq) {
+        this.isLoadingRoute = false;
+        this.cdr.detectChanges();
+      }
+      return;
+    }
+
+    if (!origin || !this.hasUsableCoordinates(origin.latitude, origin.longitude)) {
+      this.isLoadingRoute = false;
+      this.routeErrorMessage = 'Location is unavailable, so directions cannot be calculated yet.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    if (origin.source === 'gps' && this.map.isStyleLoaded()) {
+      this.placeUserMarker(origin.latitude, origin.longitude);
+    }
+
     this.analytics.track('directions_started', {
-      entityType: this.toAnalyticsEntityType(this.selectedPlace),
-      entityId: this.selectedPlace.entityId,
+      entityType: this.toAnalyticsEntityType(selectedPlace),
+      entityId: selectedPlace.entityId,
       metadata: {
         surface: 'map',
         provider: 'osrm',
+        originSource: origin.source,
       },
     });
-    this.cdr.detectChanges();
 
     this.mapApi.getWalkingRoute(
-      originLat,
-      originLon,
-      this.selectedPlace.latitude,
-      this.selectedPlace.longitude,
+      origin.latitude,
+      origin.longitude,
+      selectedPlace.latitude,
+      selectedPlace.longitude,
     ).subscribe({
       next: (route) => {
+        if (!this.isCurrentRouteRequest(routeRequestId, selectedKey)) {
+          if (routeRequestId === this.routeRequestSeq) {
+            this.isLoadingRoute = false;
+            this.cdr.detectChanges();
+          }
+          return;
+        }
         this.drawRoute(route);
         this.fitRoute(route);
         this.isLoadingRoute = false;
         this.cdr.detectChanges();
       },
       error: () => {
+        if (!this.isCurrentRouteRequest(routeRequestId, selectedKey)) {
+          if (routeRequestId === this.routeRequestSeq) {
+            this.isLoadingRoute = false;
+            this.cdr.detectChanges();
+          }
+          return;
+        }
         this.isLoadingRoute = false;
         this.routeErrorMessage = 'Walking directions are unavailable right now.';
         this.cdr.detectChanges();
@@ -397,8 +433,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         this.map.addImage(event.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
       });
 
-      if (this.isUserLocation) {
-        this.placeUserMarker(this.destinationLat, this.destinationLon);
+      const exactLocation = this.getExactUserLocation();
+      if (exactLocation) {
+        this.placeUserMarker(exactLocation.latitude, exactLocation.longitude);
       }
 
       this.scheduleViewportLoad(0);
@@ -661,6 +698,31 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  private isCurrentRouteRequest(routeRequestId: number, selectedKey: string): boolean {
+    return routeRequestId === this.routeRequestSeq &&
+      this.selectedPlace !== null &&
+      this.getMarkerKey(this.selectedPlace) === selectedKey;
+  }
+
+  private getExactUserLocation(): ResolvedLocation | null {
+    const loc = this.locationSvc.location();
+    return loc?.source === 'gps' && this.hasUsableCoordinates(loc.latitude, loc.longitude)
+      ? loc
+      : null;
+  }
+
+  private hasUsableCoordinates(latitude: number | null | undefined, longitude: number | null | undefined): boolean {
+    return typeof latitude === 'number' &&
+      typeof longitude === 'number' &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      (latitude !== 0 || longitude !== 0);
+  }
+
   private drawRoute(route: MapRouteResult): void {
     const coordinates = route.coordinates.map((point) => [point.longitude, point.latitude] as [number, number]);
     if (coordinates.length < 2) {
@@ -768,8 +830,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.destinationName = 'My Location';
     this.destinationLat = lat;
     this.destinationLon = lon;
-    this.userLat = lat;
-    this.userLon = lon;
+    this.locationSvc.setGpsLocation(lat, lon);
     this.isUserLocation = true;
     this.selectedPlace = null;
     this.routeErrorMessage = '';

@@ -207,7 +207,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   }
 
   protected onCuratedMore(): void {
-    this.router.navigate(['/culture-and-history']);
+    this.router.navigate(['/recommendations']);
   }
 
   protected onEvent(id: string): void {
