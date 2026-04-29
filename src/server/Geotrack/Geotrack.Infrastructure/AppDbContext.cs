@@ -45,6 +45,8 @@ public class AppDbContext : DbContext
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
 
+    public DbSet<Territory> Territories => Set<Territory>();
+
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
     }
@@ -52,6 +54,24 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Territory>(entity =>
+        {
+            entity.ToTable("Territories");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .HasMaxLength(200);
+
+            entity.HasIndex(x => x.Name)
+                .IsUnique();
+
+            entity.HasMany(x => x.Regions)
+                .WithOne(x => x.Territory)
+                .HasForeignKey(x => x.TerritoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
 
         modelBuilder.Entity<Region>(entity =>
         {
@@ -62,7 +82,14 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Name)
                 .HasMaxLength(200);
 
-            entity.HasIndex(x => x.Name)
+            entity.HasOne(x => x.Territory)
+                .WithMany(x => x.Regions)
+                .HasForeignKey(x => x.TerritoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.TerritoryId);
+
+            entity.HasIndex(x => new { x.TerritoryId, x.Name })
                 .IsUnique();
         });
 
@@ -625,5 +652,7 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+
     }
 }

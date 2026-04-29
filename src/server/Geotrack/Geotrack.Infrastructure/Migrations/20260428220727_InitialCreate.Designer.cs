@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Geotrack.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260425223718_InitialCreate")]
+    [Migration("20260428220727_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -357,6 +357,38 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int>("TerritoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TerritoryId");
+
+                    b.HasIndex("TerritoryId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Regions", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Core.Territory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -365,7 +397,7 @@ namespace Geotrack.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Regions", (string)null);
+                    b.ToTable("Territories", (string)null);
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Reviews.DestinationReview", b =>
@@ -1025,6 +1057,17 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("PlaceType");
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Core.Region", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Core.Territory", "Territory")
+                        .WithMany("Regions")
+                        .HasForeignKey("TerritoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Territory");
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Reviews.DestinationReview", b =>
                 {
                     b.HasOne("Geotrack.Domain.Entities.Core.Destination", "Destination")
@@ -1368,6 +1411,11 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("Destinations");
 
                     b.Navigation("RegionalOrganizationRegions");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Core.Territory", b =>
+                {
+                    b.Navigation("Regions");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Tags.Tag", b =>
