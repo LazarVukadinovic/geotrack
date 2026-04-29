@@ -202,6 +202,72 @@ public sealed class AuthFavoritesCollectionsTests
     }
 
     [Fact]
+    public async Task Collection_item_membership_drives_favorite_state_and_rejects_duplicates()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app);
+
+        var createResponse = await client.PostAsJsonAsync(
+            "/api/user/me/collections",
+            new CreateCollectionRequestDto
+            {
+                Name = "Saved from cards",
+                Description = "Collection item coverage",
+            });
+        createResponse.EnsureSuccessStatusCode();
+
+        var createdCollection = await createResponse.Content.ReadFromJsonAsync<CreateCollectionResponseDto>();
+        Assert.NotNull(createdCollection);
+
+        var addResponse = await client.PostAsJsonAsync(
+            $"/api/user/me/collections/{createdCollection.Id}/items",
+            new AddCollectionItemRequestDto { EntityType = "place", EntityId = 1 });
+        addResponse.EnsureSuccessStatusCode();
+
+        var addedItem = await addResponse.Content.ReadFromJsonAsync<AddCollectionItemResponseDto>();
+        Assert.NotNull(addedItem);
+
+        var favoritesAfterCollectionSave = await client.GetFromJsonAsync<HashSet<int>>("/api/favorites?entityType=place");
+        Assert.NotNull(favoritesAfterCollectionSave);
+        Assert.Contains(1, favoritesAfterCollectionSave);
+
+        var duplicateResponse = await client.PostAsJsonAsync(
+            $"/api/user/me/collections/{createdCollection.Id}/items",
+            new AddCollectionItemRequestDto { EntityType = "place", EntityId = 1 });
+        Assert.Equal(HttpStatusCode.BadRequest, duplicateResponse.StatusCode);
+
+        var details = await client.GetFromJsonAsync<GetCollectionDetailsResponseDto>(
+            $"/api/user/me/collections/{createdCollection.Id}");
+        Assert.NotNull(details);
+        Assert.Single(details.Items);
+        Assert.Equal(1, details.Items[0].PlaceId);
+
+        var removeResponse = await client.DeleteAsync(
+            $"/api/user/me/collections/{createdCollection.Id}/items/{addedItem.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, removeResponse.StatusCode);
+
+        var favoritesAfterRemove = await client.GetFromJsonAsync<HashSet<int>>("/api/favorites?entityType=place");
+        Assert.NotNull(favoritesAfterRemove);
+        Assert.DoesNotContain(1, favoritesAfterRemove);
+
+        var addAgainResponse = await client.PostAsJsonAsync(
+            $"/api/user/me/collections/{createdCollection.Id}/items",
+            new AddCollectionItemRequestDto { EntityType = "place", EntityId = 1 });
+        addAgainResponse.EnsureSuccessStatusCode();
+
+        var favoritesAfterAddAgain = await client.GetFromJsonAsync<HashSet<int>>("/api/favorites?entityType=place");
+        Assert.NotNull(favoritesAfterAddAgain);
+        Assert.Contains(1, favoritesAfterAddAgain);
+
+        var deleteCollectionResponse = await client.DeleteAsync($"/api/user/me/collections/{createdCollection.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteCollectionResponse.StatusCode);
+
+        var favoritesAfterCollectionDelete = await client.GetFromJsonAsync<HashSet<int>>("/api/favorites?entityType=place");
+        Assert.NotNull(favoritesAfterCollectionDelete);
+        Assert.DoesNotContain(1, favoritesAfterCollectionDelete);
+    }
+
+    [Fact]
     public async Task Profile_avatar_flow_uploads_serves_replaces_and_persists_current_user_avatar()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();

@@ -13,11 +13,16 @@ public class EventService : IEventService
 {
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
+    private readonly IReviewContentModerationService _contentModeration;
 
-    public EventService(AppDbContext db, IFavoriteService favoriteService)
+    public EventService(
+        AppDbContext db,
+        IFavoriteService favoriteService,
+        IReviewContentModerationService contentModeration)
     {
         _db = db;
         _favoriteService = favoriteService;
+        _contentModeration = contentModeration;
     }
 
     // --- Frontend-facing methods ---
@@ -344,6 +349,8 @@ public class EventService : IEventService
 
         if ((request.Comment ?? string.Empty).Length > 1000)
             throw new InvalidOperationException("Comment is too long");
+
+        await _contentModeration.EnsureAllowedReviewTextAsync(request.Comment);
 
         var evt = await _db.Events.FindAsync(eventId);
         if (evt == null)

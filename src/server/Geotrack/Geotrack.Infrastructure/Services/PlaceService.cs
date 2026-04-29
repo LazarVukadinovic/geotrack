@@ -14,11 +14,16 @@ public class PlaceService : IPlaceService
 {
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
+    private readonly IReviewContentModerationService _contentModeration;
 
-    public PlaceService(AppDbContext db, IFavoriteService favoriteService)
+    public PlaceService(
+        AppDbContext db,
+        IFavoriteService favoriteService,
+        IReviewContentModerationService contentModeration)
     {
         _db = db;
         _favoriteService = favoriteService;
+        _contentModeration = contentModeration;
     }
 
     // --- Frontend-facing methods ---
@@ -112,6 +117,10 @@ public class PlaceService : IPlaceService
 
         var reviewCount = place.PlaceReviews.Count;
         var averageRating = CalculateAverageRating(place.PlaceReviews);
+        var reportedReviewIds = await GetReportedReviewIdsAsync(
+            userId,
+            ReviewReportTargetType.Place,
+            place.PlaceReviews.Select(r => r.Id));
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
             latitude,
             longitude,
@@ -140,7 +149,8 @@ public class PlaceService : IPlaceService
                 Rating = (int)r.Rating,
                 TimeAgo = FormatTimeAgo(r.CreatedAt),
                 Body = r.Comment,
-                HelpfulCount = 0
+                HelpfulCount = 0,
+                ReportedByCurrentUser = reportedReviewIds.Contains(r.Id)
             }).ToList(),
             Similar = similar.Select(s => new SimilarPlaceDto
             {
@@ -192,6 +202,10 @@ public class PlaceService : IPlaceService
 
         var reviewCount = place.PlaceReviews.Count;
         var averageRating = CalculateAverageRating(place.PlaceReviews);
+        var reportedReviewIds = await GetReportedReviewIdsAsync(
+            userId,
+            ReviewReportTargetType.Place,
+            place.PlaceReviews.Select(r => r.Id));
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
             latitude,
             longitude,
@@ -235,7 +249,8 @@ public class PlaceService : IPlaceService
                 Rating = (int)r.Rating,
                 TimeAgo = FormatTimeAgo(r.CreatedAt),
                 Body = r.Comment,
-                HelpfulCount = 0
+                HelpfulCount = 0,
+                ReportedByCurrentUser = reportedReviewIds.Contains(r.Id)
             }).ToList(),
             Similar = similar.Select(s => new SimilarPlaceDto
             {
@@ -416,6 +431,8 @@ public class PlaceService : IPlaceService
         if ((request.Comment ?? string.Empty).Length > 1000)
             throw new InvalidOperationException("Comment is too long");
 
+        await _contentModeration.EnsureAllowedReviewTextAsync(request.Comment);
+
         var place = await _db.Places.FindAsync(placeId);
         if (place == null)
             throw new KeyNotFoundException("Place not found");
@@ -573,6 +590,30 @@ public class PlaceService : IPlaceService
         if (diff.TotalDays < 30) return $"{(int)diff.TotalDays}d ago";
         if (diff.TotalDays < 365) return $"{(int)(diff.TotalDays / 30)}mo ago";
         return $"{(int)(diff.TotalDays / 365)}y ago";
+    }
+
+    private async Task<HashSet<int>> GetReportedReviewIdsAsync(
+        int? currentUserId,
+        ReviewReportTargetType targetType,
+        IEnumerable<int> reviewIds)
+    {
+        if (!currentUserId.HasValue)
+            return new HashSet<int>();
+
+        var ids = reviewIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return new HashSet<int>();
+
+        var reportedIds = await _db.ReviewReports
+            .AsNoTracking()
+            .Where(report =>
+                report.ReporterUserId == currentUserId.Value &&
+                report.TargetType == targetType &&
+                ids.Contains(report.ReviewId))
+            .Select(report => report.ReviewId)
+            .ToListAsync();
+
+        return reportedIds.ToHashSet();
     }
 
     private sealed class PlaceListProjection

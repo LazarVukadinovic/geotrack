@@ -31,6 +31,7 @@ public class UserService : IUserService
     private readonly IEventRepository _eventRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IUserAvatarStorageService _userAvatarStorageService;
+    private readonly IFavoriteService _favoriteService;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public UserService(
@@ -40,7 +41,8 @@ public class UserService : IUserService
         IPlaceRepository placeRepository,
         IEventRepository eventRepository,
         IRefreshTokenRepository refreshTokenRepository,
-        IUserAvatarStorageService userAvatarStorageService)
+        IUserAvatarStorageService userAvatarStorageService,
+        IFavoriteService favoriteService)
     {
         _userRepository = userRepository;
         _destinationRepository = destinationRepository;
@@ -49,6 +51,7 @@ public class UserService : IUserService
         _eventRepository = eventRepository;
         _refreshTokenRepository = refreshTokenRepository;
         _userAvatarStorageService = userAvatarStorageService;
+        _favoriteService = favoriteService;
     }
 
     public async Task<GetMeResponseDto> GetMeAsync(int userId)
@@ -456,11 +459,28 @@ public class UserService : IUserService
 
     public async Task DeleteCollectionAsync(int userId, int collectionId)
     {
-        var collection = await _userRepository.GetCollectionByIdForUserAsync(userId, collectionId)
+        var collection = await _userRepository.GetCollectionByIdWithItemsAsync(userId, collectionId)
             ?? throw new KeyNotFoundException("Collection not found");
+
+        var affectedFavorites = collection.CollectionItems
+            .Select(ResolveFavoriteEntity)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
 
         await _userRepository.DeleteCollectionAsync(collection);
         await _userRepository.SaveChangesAsync();
+
+        foreach (var affected in affectedFavorites)
+        {
+            await _favoriteService.RemoveIfUnsavedAsync(userId, affected.EntityType, affected.EntityId);
+        }
+
+        if (affectedFavorites.Count > 0)
+        {
+            await _userRepository.SaveChangesAsync();
+        }
     }
 
     public async Task<AddCollectionItemResponseDto> AddCollectionItemAsync(int userId, int collectionId, AddCollectionItemRequestDto request)
@@ -511,6 +531,10 @@ public class UserService : IUserService
         }
 
         await _userRepository.AddCollectionItemAsync(item);
+        if (entityType is "place" or "event")
+        {
+            await _favoriteService.EnsureSavedAsync(userId, entityType, request.EntityId);
+        }
         await _userRepository.SaveChangesAsync();
 
         return new AddCollectionItemResponseDto
@@ -534,8 +558,19 @@ public class UserService : IUserService
         var item = await _userRepository.GetCollectionItemByIdAsync(collection.Id, itemId)
             ?? throw new KeyNotFoundException("Collection item not found");
 
+        var affectedFavorite = ResolveFavoriteEntity(item);
+
         await _userRepository.DeleteCollectionItemAsync(item);
         await _userRepository.SaveChangesAsync();
+
+        if (affectedFavorite.HasValue)
+        {
+            await _favoriteService.RemoveIfUnsavedAsync(
+                userId,
+                affectedFavorite.Value.EntityType,
+                affectedFavorite.Value.EntityId);
+            await _userRepository.SaveChangesAsync();
+        }
     }
 
     private static InterestItemDto MapTagToInterestItemDto(Tag tag)
@@ -707,6 +742,21 @@ public class UserService : IUserService
         }
 
         throw new InvalidOperationException("Invalid collection item state");
+    }
+
+    private static (string EntityType, int EntityId)? ResolveFavoriteEntity(CollectionItem item)
+    {
+        if (item.PlaceId.HasValue)
+        {
+            return ("place", item.PlaceId.Value);
+        }
+
+        if (item.EventId.HasValue)
+        {
+            return ("event", item.EventId.Value);
+        }
+
+        return null;
     }
 
     private static void ValidateProfileFields(string firstName, string lastName, string phoneNumber)
