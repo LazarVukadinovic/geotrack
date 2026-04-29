@@ -49,6 +49,8 @@ public class AppDbContext : DbContext
     public DbSet<LocationReview> LocationReviews => Set<LocationReview>();
     public DbSet<PlaceReview> PlaceReviews => Set<PlaceReview>();
     public DbSet<EventReview> EventReviews => Set<EventReview>();
+    public DbSet<ReviewReport> ReviewReports => Set<ReviewReport>();
+    public DbSet<ModerationTerm> ModerationTerms => Set<ModerationTerm>();
 
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
@@ -604,6 +606,136 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => new { x.UserId, x.EventId })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<ReviewReport>(entity =>
+        {
+            entity.ToTable("ReviewReports");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.TargetType)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Reason)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Decision)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Note)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.DecisionNote)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.EntityName)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.RegionName)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.ReviewAuthorName)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.ReviewCommentSnapshot)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.ReporterUser)
+                .WithMany()
+                .HasForeignKey(x => x.ReporterUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ReviewedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.PlaceReview)
+                .WithMany()
+                .HasForeignKey(x => x.PlaceReviewId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.EventReview)
+                .WithMany()
+                .HasForeignKey(x => x.EventReviewId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => new { x.ReporterUserId, x.TargetType, x.ReviewId })
+                .IsUnique();
+
+            entity.HasIndex(x => new { x.TargetType, x.ReviewId });
+            entity.HasIndex(x => new { x.RegionId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.PlaceReviewId);
+            entity.HasIndex(x => x.EventReviewId);
+            entity.HasIndex(x => x.ReviewedByUserId);
+        });
+
+        modelBuilder.Entity<ModerationTerm>(entity =>
+        {
+            entity.ToTable("ModerationTerms");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Term)
+                .IsRequired()
+                .HasMaxLength(160);
+
+            entity.Property(x => x.NormalizedTerm)
+                .IsRequired()
+                .HasMaxLength(160);
+
+            entity.Property(x => x.LanguageCode)
+                .IsRequired()
+                .HasMaxLength(10);
+
+            entity.Property(x => x.Category)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.MatchType)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.IsActive)
+                .IsRequired();
+
+            entity.Property(x => x.Severity)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.CreatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => new { x.LanguageCode, x.NormalizedTerm, x.Category, x.MatchType })
+                .IsUnique()
+                .HasDatabaseName("IX_ModerationTerms_UQ_NormalizedRule");
+
+            entity.HasIndex(x => new { x.IsActive, x.LanguageCode });
+            entity.HasIndex(x => x.Category);
+            entity.HasIndex(x => x.MatchType);
+            entity.HasIndex(x => x.CreatedByUserId);
+            entity.HasIndex(x => x.UpdatedByUserId);
         });
 
         modelBuilder.Entity<Collection>(entity =>
