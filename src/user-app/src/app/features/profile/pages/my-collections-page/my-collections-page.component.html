@@ -17,7 +17,7 @@
 
   <!-- Scrollable content area -->
   <div class="flex-1 min-h-0 overflow-y-auto pb-10">
-    <p class="text-center text-[13px] text-slate-500 mt-4 mx-5 tracking-wide">Places you've saved, organised your way</p>
+    <p class="text-center text-[13px] text-slate-500 mt-4 mx-5 tracking-wide">Items you've saved, organised your way</p>
   <div class="grid grid-cols-2 gap-3 px-5 mt-6">
 
     @for (col of collections(); track col.id) {
@@ -72,7 +72,7 @@
         <!-- Label -->
         <div class="px-3 pt-2.5 pb-3 flex flex-col gap-0.5">
           <span class="text-[14px] font-semibold text-slate-800 truncate">{{ col.title }}</span>
-          <span class="text-[12px] text-slate-600">{{ col.placeCount }} {{ col.placeCount === 1 ? 'place' : 'places' }}</span>
+          <span class="text-[12px] text-slate-600">{{ col.placeCount }} {{ col.placeCount === 1 ? 'item' : 'items' }}</span>
         </div>
       </button>
     }

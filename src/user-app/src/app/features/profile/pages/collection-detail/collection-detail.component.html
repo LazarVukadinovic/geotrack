@@ -73,12 +73,12 @@
       <!-- overlay -->
       <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-4 py-3.5 gap-4">
         <p class="text-white text-sm font-medium opacity-80">
-          {{ col.itemsCount }} {{ col.itemsCount === 1 ? 'place' : 'places' }}
+          {{ col.itemsCount }} {{ col.itemsCount === 1 ? 'item' : 'items' }}
         </p>
       </div>
     </div>
 
-    <!-- Places list -->
+    <!-- Items list -->
     <div class="px-5 mt-5">
       @if (loadState() === 'loading') {
         <div class="mb-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
@@ -86,7 +86,7 @@
         </div>
       }
 
-      <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Places</p>
+      <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Items</p>
 
       @if (places.length === 0) {
         <div class="bg-white rounded-2xl shadow-sm px-5 py-10 flex flex-col items-center gap-3">
@@ -94,7 +94,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
           </svg>
-          <p class="text-sm text-slate-500 text-center">No places are saved in this collection yet.</p>
+          <p class="text-sm text-slate-500 text-center">No items are saved in this collection yet.</p>
         </div>
       }
 
