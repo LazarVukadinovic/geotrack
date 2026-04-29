@@ -88,6 +88,43 @@ public class ExploreLocalFavoriteDto
     public bool IsRecommended { get; set; }
 }
 
+public class ExploreRecommendationsPageDto
+{
+    public ExploreDestinationDto? SelectedDestination { get; set; }
+    public List<ExploreRecommendationFilterDto> Filters { get; set; } = new();
+    public List<ExploreRecommendationItemDto> Items { get; set; } = new();
+    public bool HasSignals { get; set; }
+    public string? EmptyReason { get; set; }
+    public int Skip { get; set; }
+    public int Take { get; set; }
+    public int NextSkip { get; set; }
+    public bool HasMore { get; set; }
+}
+
+public class ExploreRecommendationFilterDto
+{
+    public int TagId { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public int Count { get; set; }
+}
+
+public class ExploreRecommendationItemDto
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Reason { get; set; }
+    public string? Description { get; set; }
+    public string? Location { get; set; }
+    public string? Image { get; set; }
+    public double? Rating { get; set; }
+    public string? ReviewCount { get; set; }
+    public string? Distance { get; set; }
+    public string? OpeningHours { get; set; }
+    public string CategoryLabel { get; set; } = string.Empty;
+    public int? MatchedTagId { get; set; }
+    public bool IsSaved { get; set; }
+}
+
 public class LocalPlacesCategoryDto
 {
     public int Id { get; set; }

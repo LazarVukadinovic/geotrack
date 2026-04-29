@@ -1,5 +1,6 @@
 using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.Interfaces.Service;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Geotrack.Server.Controllers;
@@ -49,6 +50,57 @@ public class ExploreController : ControllerBase
             DestinationScopedStatus.DestinationNotFound => NotFound(new { error = "Destination not found." }),
             _ => StatusCode(500)
         };
+    }
+
+    [Authorize]
+    [HttpGet("recommendations")]
+    public async Task<ActionResult> GetRecommendations(
+        [FromQuery] double? latitude,
+        [FromQuery] double? longitude,
+        [FromQuery] int? tagId = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 8)
+    {
+        if (!latitude.HasValue || !longitude.HasValue)
+        {
+            return BadRequest(new { error = "latitude and longitude are required." });
+        }
+
+        if (!HasValidCoordinates(latitude.Value, longitude.Value))
+        {
+            return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
+        }
+
+        if (tagId.HasValue && tagId.Value <= 0)
+        {
+            return BadRequest(new { error = "tagId must be positive when provided." });
+        }
+
+        if (skip < 0)
+        {
+            return BadRequest(new { error = "skip must be zero or greater." });
+        }
+
+        if (take <= 0)
+        {
+            return BadRequest(new { error = "take must be greater than zero." });
+        }
+
+        var userId = GetUserId();
+        if (!userId.HasValue)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _exploreService.GetRecommendationsAsync(
+            latitude.Value,
+            longitude.Value,
+            userId.Value,
+            tagId,
+            skip,
+            take);
+
+        return Ok(result);
     }
 
     private int? GetUserId()

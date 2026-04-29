@@ -9,6 +9,16 @@ namespace Geotrack.Infrastructure.Services;
 
 public class ExploreService : IExploreService
 {
+    private const double ExplicitInterestWeight = 100.0;
+    private const double MinimumInferredInterestScore = 5.0;
+    private const double MaximumInferredInterestWeight = 30.0;
+    private const int CuratedCandidateLimit = 60;
+    private const int CuratedSectionItemLimit = 6;
+    private const int RecommendationCandidateLimit = 200;
+    private const int RecommendationDefaultTake = 8;
+    private const int RecommendationMaxTake = 20;
+    private const int RecommendationFilterLimit = 10;
+
     private static readonly string[] FoodMusicTagSlugs =
     [
         "food-drink",
@@ -85,13 +95,9 @@ public class ExploreService : IExploreService
         var placeFavoriteIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
-        var userTagIds = userId.HasValue
-            ? await _db.UserTags
-                .AsNoTracking()
-                .Where(ut => ut.UserId == userId.Value)
-                .Select(ut => ut.TagId)
-                .ToListAsync()
-            : new List<int>();
+        var curationSignals = userId.HasValue
+            ? await LoadCurationSignalsAsync(userId.Value)
+            : new List<CuratedInterestSignal>();
 
         var events = await _db.Events
             .AsNoTracking()
@@ -207,40 +213,16 @@ public class ExploreService : IExploreService
             .Take(6)
             .ToListAsync();
 
-        var curatedPlacesQuery = _db.Places
-            .AsNoTracking()
-            .Where(p =>
-                p.Location.DestinationId == resolvedDestination.Id &&
-                p.PricePerNight == null &&
-                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null);
-
-        if (userTagIds.Count > 0)
-        {
-            curatedPlacesQuery = curatedPlacesQuery
-                .Where(p => p.PlaceTags.Any(pt => userTagIds.Contains(pt.TagId)));
-        }
-
-        var curatedPlaces = await curatedPlacesQuery
-            .Select(p => new
-            {
-                p.Id,
-                p.Name,
-                p.Subtitle,
-                p.ImageUrl,
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
-                Rating = p.PlaceReviews.Select(r => (double?)r.Rating).Average() ?? 0,
-                MatchCount = p.PlaceTags.Count(pt => userTagIds.Contains(pt.TagId)),
-                CategoryLabel = p.PlaceTags
-                    .OrderByDescending(pt => userTagIds.Contains(pt.TagId))
-                    .ThenBy(pt => pt.Tag.Name)
-                    .Select(pt => pt.Tag.Name)
-                    .FirstOrDefault()
-            })
-            .OrderByDescending(p => p.MatchCount)
-            .ThenBy(p => p.DistanceMeters)
-            .ThenByDescending(p => p.Rating)
-            .Take(6)
-            .ToListAsync();
+        var duplicatePlaceIds = nearbyNature
+            .Select(p => p.Id)
+            .Concat(cultureHistory.Select(p => p.Id))
+            .Concat(foodMusic.Select(p => p.Id))
+            .ToHashSet();
+        var curatedPlaces = await BuildCuratedPlacesAsync(
+            resolvedDestination.Id,
+            userPoint,
+            curationSignals,
+            duplicatePlaceIds);
 
         var landmarkCategories = await BuildLandmarkCategoriesAsync(userPoint, resolvedDestination.Id);
 
@@ -295,10 +277,10 @@ public class ExploreService : IExploreService
             CuratedForYou = curatedPlaces.Select(p => new ExploreCuratedItemDto
             {
                 Id = p.Id,
-                Title = p.Name,
-                Subtitle = string.IsNullOrWhiteSpace(p.Subtitle) ? "Near your current area" : p.Subtitle,
+                Title = p.Title,
+                Subtitle = p.Reason,
                 CategoryLabel = p.CategoryLabel,
-                Image = p.ImageUrl,
+                Image = p.Image,
                 IsSaved = placeFavoriteIds.Contains(p.Id)
             }).ToList(),
             LocalFavorites = foodMusic.Select(p => new ExploreLocalFavoriteDto
@@ -317,6 +299,109 @@ public class ExploreService : IExploreService
                 OpeningHours = p.OpeningHours,
                 IsRecommended = true
             }).ToList()
+        };
+    }
+
+    public async Task<ExploreRecommendationsPageDto> GetRecommendationsAsync(
+        double latitude,
+        double longitude,
+        int userId,
+        int? tagId = null,
+        int skip = 0,
+        int take = RecommendationDefaultTake)
+    {
+        var userPoint = SpatialPointFactory.Create(latitude, longitude);
+        var resolvedDestination = await ResolveDestinationAsync(userPoint);
+        var normalizedSkip = Math.Max(0, skip);
+        var normalizedTake = Math.Clamp(take, 1, RecommendationMaxTake);
+
+        if (resolvedDestination is null)
+        {
+            return new ExploreRecommendationsPageDto
+            {
+                HasSignals = false,
+                EmptyReason = "We could not resolve a nearby destination for recommendations.",
+                Skip = normalizedSkip,
+                Take = normalizedTake,
+                NextSkip = normalizedSkip
+            };
+        }
+
+        var curationSignals = await LoadCurationSignalsAsync(userId);
+        if (curationSignals.Count == 0)
+        {
+            return new ExploreRecommendationsPageDto
+            {
+                SelectedDestination = MapExploreDestination(resolvedDestination),
+                HasSignals = false,
+                EmptyReason = "Add saved interests or keep exploring places so GeoTrack can build recommendations for you.",
+                Skip = normalizedSkip,
+                Take = normalizedTake,
+                NextSkip = normalizedSkip
+            };
+        }
+
+        var favoriteIds = await _favoriteService.GetFavoriteIdsAsync(userId, "place");
+        var rankedPlaces = await BuildRankedCuratedPlacesAsync(
+            resolvedDestination.Id,
+            userPoint,
+            curationSignals,
+            duplicatePlaceIds: new HashSet<int>(),
+            candidateLimit: RecommendationCandidateLimit);
+
+        var filters = rankedPlaces
+            .SelectMany(place => place.MatchedTags)
+            .GroupBy(tag => new { tag.TagId, tag.Name })
+            .Select(group => new ExploreRecommendationFilterDto
+            {
+                TagId = group.Key.TagId,
+                Label = group.Key.Name,
+                Count = group.Select(tag => tag.TagId).Count()
+            })
+            .OrderByDescending(filter => filter.Count)
+            .ThenBy(filter => filter.Label)
+            .Take(RecommendationFilterLimit)
+            .ToList();
+
+        var filteredPlaces = tagId.HasValue
+            ? rankedPlaces
+                .Where(place => place.MatchedTags.Any(tag => tag.TagId == tagId.Value))
+                .ToList()
+            : rankedPlaces;
+
+        var pageItems = filteredPlaces
+            .Skip(normalizedSkip)
+            .Take(normalizedTake)
+            .ToList();
+
+        return new ExploreRecommendationsPageDto
+        {
+            SelectedDestination = MapExploreDestination(resolvedDestination),
+            Filters = filters,
+            Items = pageItems.Select(place => new ExploreRecommendationItemDto
+            {
+                Id = place.Id,
+                Title = place.Title,
+                Reason = place.Reason,
+                Description = TrimDescription(place.Description, 170),
+                Location = place.Location,
+                Image = place.Image,
+                Rating = place.AverageRating.HasValue ? Math.Round(place.AverageRating.Value, 1) : null,
+                ReviewCount = FormatReviewCountLabel(place.ReviewCount),
+                Distance = SpatialDistanceFormatter.Format(place.DistanceMeters),
+                OpeningHours = place.OpeningHours,
+                CategoryLabel = place.CategoryLabel,
+                MatchedTagId = place.PrimaryTagId,
+                IsSaved = favoriteIds.Contains(place.Id)
+            }).ToList(),
+            HasSignals = true,
+            EmptyReason = filteredPlaces.Count == 0
+                ? "No recommendations match this filter yet."
+                : null,
+            Skip = normalizedSkip,
+            Take = normalizedTake,
+            NextSkip = normalizedSkip + pageItems.Count,
+            HasMore = filteredPlaces.Count > normalizedSkip + pageItems.Count
         };
     }
 
@@ -418,6 +503,202 @@ public class ExploreService : IExploreService
             .ToListAsync();
     }
 
+    private async Task<List<CuratedInterestSignal>> LoadCurationSignalsAsync(int userId)
+    {
+        var explicitInterests = await _db.UserTags
+            .AsNoTracking()
+            .Where(ut => ut.UserId == userId)
+            .Select(ut => new CuratedInterestSignal
+            {
+                TagId = ut.TagId,
+                IsExplicit = true,
+                Weight = ExplicitInterestWeight
+            })
+            .ToListAsync();
+
+        var explicitTagIds = explicitInterests
+            .Select(interest => interest.TagId)
+            .ToList();
+
+        var inferredSignals = await _db.UserInterestSignals
+            .AsNoTracking()
+            .Where(signal =>
+                signal.UserId == userId &&
+                signal.Source == "inferred" &&
+                !signal.IsDismissed &&
+                signal.Score >= MinimumInferredInterestScore &&
+                !explicitTagIds.Contains(signal.TagId))
+            .OrderByDescending(signal => signal.Score)
+            .ThenByDescending(signal => signal.LastInteractionAt)
+            .Select(signal => new
+            {
+                TagId = signal.TagId,
+                signal.Score,
+                LastInteractionAt = signal.LastInteractionAt
+            })
+            .Take(20)
+            .ToListAsync();
+
+        explicitInterests.AddRange(inferredSignals.Select(signal => new CuratedInterestSignal
+        {
+            TagId = signal.TagId,
+            IsExplicit = false,
+            Weight = Math.Min(signal.Score, MaximumInferredInterestWeight),
+            LastInteractionAt = signal.LastInteractionAt
+        }));
+
+        return explicitInterests;
+    }
+
+    private async Task<List<RankedCuratedPlace>> BuildCuratedPlacesAsync(
+        int destinationId,
+        Point userPoint,
+        IReadOnlyCollection<CuratedInterestSignal> curationSignals,
+        ISet<int> duplicatePlaceIds)
+    {
+        var rankedPlaces = await BuildRankedCuratedPlacesAsync(
+            destinationId,
+            userPoint,
+            curationSignals,
+            duplicatePlaceIds,
+            CuratedCandidateLimit);
+
+        return rankedPlaces
+            .Take(CuratedSectionItemLimit)
+            .ToList();
+    }
+
+    private async Task<List<RankedCuratedPlace>> BuildRankedCuratedPlacesAsync(
+        int destinationId,
+        Point userPoint,
+        IReadOnlyCollection<CuratedInterestSignal> curationSignals,
+        ISet<int> duplicatePlaceIds,
+        int candidateLimit)
+    {
+        if (curationSignals.Count == 0)
+        {
+            return [];
+        }
+
+        var signalByTagId = curationSignals
+            .GroupBy(signal => signal.TagId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(signal => signal.Weight).First());
+        var curationTagIds = signalByTagId.Keys.ToList();
+        var explicitTagIds = curationSignals
+            .Where(signal => signal.IsExplicit)
+            .Select(signal => signal.TagId)
+            .ToList();
+        var inferredTagIds = curationSignals
+            .Where(signal => !signal.IsExplicit)
+            .Select(signal => signal.TagId)
+            .ToList();
+
+        var candidates = await _db.Places
+            .AsNoTracking()
+            .Where(p =>
+                p.Location.DestinationId == destinationId &&
+                p.PricePerNight == null &&
+                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
+                p.PlaceTags.Any(pt => curationTagIds.Contains(pt.TagId)))
+            .Select(p => new CuratedPlaceCandidate
+            {
+                Id = p.Id,
+                Title = p.Name,
+                Description = p.Description,
+                Location = p.Location.Name,
+                Image = p.ImageUrl,
+                PlaceTypeName = p.PlaceType.Name,
+                OpeningHours = p.OpeningHours,
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
+                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
+                ReviewCount = p.PlaceReviews.Count(),
+                ExplicitMatchCount = p.PlaceTags.Count(pt => explicitTagIds.Contains(pt.TagId)),
+                InferredMatchCount = p.PlaceTags.Count(pt => inferredTagIds.Contains(pt.TagId)),
+                MatchedTags = p.PlaceTags
+                    .Where(pt => curationTagIds.Contains(pt.TagId))
+                    .Select(pt => new CuratedTagMatch
+                    {
+                        TagId = pt.TagId,
+                        Name = pt.Tag.Name
+                    })
+                    .ToList()
+            })
+            .OrderByDescending(p => p.ExplicitMatchCount)
+            .ThenByDescending(p => p.InferredMatchCount)
+            .ThenBy(p => p.DistanceMeters)
+            .ThenByDescending(p => p.AverageRating ?? 0)
+            .Take(candidateLimit)
+            .ToListAsync();
+
+        return candidates
+            .Select(candidate => RankCuratedCandidate(
+                candidate,
+                signalByTagId,
+                duplicatePlaceIds.Contains(candidate.Id)))
+            .Where(candidate => candidate.Score > 0)
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.IsDuplicateWithOtherSection)
+            .ThenBy(candidate => candidate.DistanceMeters)
+            .ThenByDescending(candidate => candidate.AverageRating ?? 0)
+            .ThenByDescending(candidate => candidate.ReviewCount)
+            .ThenBy(candidate => candidate.Title)
+            .ToList();
+    }
+
+    private static RankedCuratedPlace RankCuratedCandidate(
+        CuratedPlaceCandidate candidate,
+        IReadOnlyDictionary<int, CuratedInterestSignal> signalByTagId,
+        bool isDuplicateWithOtherSection)
+    {
+        var score = 0.0;
+        CuratedTagMatch? bestTag = null;
+        CuratedInterestSignal? bestSignal = null;
+
+        foreach (var tag in candidate.MatchedTags)
+        {
+            if (!signalByTagId.TryGetValue(tag.TagId, out var signal))
+            {
+                continue;
+            }
+
+            score += signal.Weight;
+
+            if (bestSignal is null ||
+                signal.Weight > bestSignal.Weight ||
+                (Math.Abs(signal.Weight - bestSignal.Weight) < 0.001 && signal.IsExplicit && !bestSignal.IsExplicit))
+            {
+                bestTag = tag;
+                bestSignal = signal;
+            }
+        }
+
+        var categoryLabel = bestTag?.Name ?? candidate.PlaceTypeName;
+        var reason = bestSignal?.IsExplicit == true
+            ? $"Matches your saved interest: {categoryLabel}"
+            : $"Based on recent activity: {categoryLabel}";
+
+        return new RankedCuratedPlace
+        {
+            Id = candidate.Id,
+            Title = candidate.Title,
+            Description = candidate.Description,
+            Location = candidate.Location,
+            Image = candidate.Image,
+            CategoryLabel = categoryLabel,
+            PrimaryTagId = bestTag?.TagId,
+            Reason = reason,
+            Score = score,
+            DistanceMeters = candidate.DistanceMeters,
+            AverageRating = candidate.AverageRating,
+            ReviewCount = candidate.ReviewCount,
+            OpeningHours = candidate.OpeningHours,
+            MatchedTags = candidate.MatchedTags,
+            IsDuplicateWithOtherSection = isDuplicateWithOtherSection
+        };
+    }
+
     private async Task<ResolvedDestinationCandidate?> ResolveDestinationAsync(Point userPoint)
     {
         var nearestPlace = await _db.Places
@@ -497,6 +778,31 @@ public class ExploreService : IExploreService
         };
     }
 
+    private static ExploreDestinationDto MapExploreDestination(ResolvedDestinationCandidate destination)
+    {
+        return new ExploreDestinationDto
+        {
+            Id = destination.Id,
+            Name = destination.Name,
+            Description = destination.Description,
+            Latitude = destination.Latitude,
+            Longitude = destination.Longitude
+        };
+    }
+
+    private static string? TrimDescription(string? description, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            return null;
+        }
+
+        var trimmed = description.Trim();
+        return trimmed.Length > maxLength
+            ? trimmed[..maxLength] + "..."
+            : trimmed;
+    }
+
     private sealed class ResolvedDestinationCandidate
     {
         public int Id { get; set; }
@@ -506,5 +812,55 @@ public class ExploreService : IExploreService
         public double Longitude { get; set; }
         public double DistanceMeters { get; set; }
         public int Priority { get; set; }
+    }
+
+    private sealed class CuratedInterestSignal
+    {
+        public int TagId { get; set; }
+        public bool IsExplicit { get; set; }
+        public double Weight { get; set; }
+        public DateTime? LastInteractionAt { get; set; }
+    }
+
+    private sealed class CuratedPlaceCandidate
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Location { get; set; }
+        public string? Image { get; set; }
+        public string PlaceTypeName { get; set; } = string.Empty;
+        public string? OpeningHours { get; set; }
+        public double DistanceMeters { get; set; }
+        public double? AverageRating { get; set; }
+        public int ReviewCount { get; set; }
+        public int ExplicitMatchCount { get; set; }
+        public int InferredMatchCount { get; set; }
+        public List<CuratedTagMatch> MatchedTags { get; set; } = new();
+    }
+
+    private sealed class CuratedTagMatch
+    {
+        public int TagId { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class RankedCuratedPlace
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Location { get; set; }
+        public string? Image { get; set; }
+        public string CategoryLabel { get; set; } = string.Empty;
+        public int? PrimaryTagId { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public double Score { get; set; }
+        public double DistanceMeters { get; set; }
+        public double? AverageRating { get; set; }
+        public int ReviewCount { get; set; }
+        public string? OpeningHours { get; set; }
+        public List<CuratedTagMatch> MatchedTags { get; set; } = new();
+        public bool IsDuplicateWithOtherSection { get; set; }
     }
 }
