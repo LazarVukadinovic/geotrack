@@ -170,6 +170,12 @@ export const routes: Routes = [
         data: { hideBottomNav: true },
       },
       {
+        path: 'reviews/:entityType/:id',
+        loadComponent: () =>
+          import('./features/reviews/pages/reviews-page/reviews-page.component').then(m => m.ReviewsPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
         path: 'login',
         canActivate: [guestGuard],
         loadComponent: () =>
