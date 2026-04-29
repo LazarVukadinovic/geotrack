@@ -1,0 +1,300 @@
+<div class="rec-page">
+  <header class="rec-page__topbar">
+    <button type="button" class="rec-page__back" aria-label="Go back" (click)="goBack()">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 5l-7 7 7 7" />
+      </svg>
+    </button>
+
+    <span class="rec-page__topbar-title">Recommendations</span>
+    <div class="rec-page__topbar-spacer" aria-hidden="true"></div>
+  </header>
+
+  <div class="rec-page__scroll">
+    <section class="rec-page__hero" aria-labelledby="recommendations-title">
+      <span class="rec-page__eyebrow">Curated for You</span>
+      <h1 id="recommendations-title" class="rec-page__title">Top Travel Picks</h1>
+      <div class="rec-page__title-accent" aria-hidden="true"></div>
+      <p class="rec-page__subtitle">
+        Based on your saved interests and recent activity near {{ destinationLabel() }}.
+      </p>
+    </section>
+
+    @if (showFilters()) {
+      <div class="rec-page__filters-viewport">
+        <div class="rec-page__filters" role="list" aria-label="Filter recommendations by interest">
+          <button
+            type="button"
+            class="rec-page__pill"
+            [class.rec-page__pill--active]="activeTagId() === null"
+            (click)="setFilter(null)"
+            role="listitem"
+          >All</button>
+
+          @if (isInitialLoading()) {
+            @for (slot of [1, 2, 3]; track slot) {
+              <span class="rec-page__pill-skeleton" aria-hidden="true"></span>
+            }
+          } @else {
+            @for (filter of filters(); track filter.tagId) {
+              <button
+                type="button"
+                class="rec-page__pill"
+                [class.rec-page__pill--active]="activeTagId() === filter.tagId"
+                (click)="setFilter(filter.tagId)"
+                role="listitem"
+              >{{ filter.label }}</button>
+            }
+          }
+        </div>
+      </div>
+    }
+
+    @if (isInitialLoading()) {
+      <div class="rec-page__list" aria-hidden="true">
+        <article class="rec-card rec-card--large rec-card--skeleton">
+          <div class="rec-card__skeleton-media"></div>
+          <div class="rec-card__skeleton-body">
+            <span class="rec-card__skeleton-line rec-card__skeleton-line--short"></span>
+            <span class="rec-card__skeleton-line"></span>
+            <span class="rec-card__skeleton-line rec-card__skeleton-line--medium"></span>
+          </div>
+        </article>
+        @for (slot of [1, 2]; track slot) {
+          <article class="rec-card rec-card--compact rec-card--skeleton">
+            <div class="rec-card__skeleton-media rec-card__skeleton-media--compact"></div>
+            <div class="rec-card__skeleton-body rec-card__skeleton-body--compact">
+              <span class="rec-card__skeleton-line rec-card__skeleton-line--medium"></span>
+              <span class="rec-card__skeleton-line rec-card__skeleton-line--short"></span>
+            </div>
+          </article>
+        }
+      </div>
+    } @else if (loadError()) {
+      <div class="rec-page__state">
+        <app-empty-state
+          title="Something went wrong"
+          [message]="loadError()!"
+        />
+        <button type="button" class="rec-page__retry" (click)="retry()">Try Again</button>
+      </div>
+    } @else if (items().length > 0) {
+      <div class="rec-page__list" aria-label="Personalized travel recommendations">
+        @for (item of items(); track item.id; let idx = $index) {
+
+          @if (idx === 0) {
+
+            <!-- Large featured card: image on top -->
+            <article
+              class="rec-card rec-card--large"
+              [attr.data-rec-id]="item.id"
+              (click)="onItemCard(item.id)"
+              role="button"
+              tabindex="0"
+              [attr.aria-label]="item.title"
+              (keydown.enter)="onItemCard(item.id)"
+              (keydown.space)="onItemCard(item.id)"
+            >
+              <div class="rec-card__media">
+                <img
+                  class="rec-card__img"
+                  [src]="imgSrcById()[item.id]"
+                  [alt]="item.title"
+                  loading="lazy"
+                  decoding="async"
+                  (error)="onImgError(item.id)"
+                />
+                @if (item.categoryLabel) {
+                  <span class="rec-card__badge">
+                    <svg class="rec-card__badge-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    {{ item.categoryLabel }}
+                  </span>
+                }
+              </div>
+
+              <div class="rec-card__body">
+                @if (item.reason) {
+                  <p class="rec-card__reason">{{ item.reason }}</p>
+                }
+
+                <h2 class="rec-card__name">{{ item.title }}</h2>
+
+                @if (item.location) {
+                  <div class="rec-card__location">
+                    <svg class="rec-card__pin" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    {{ item.location }}
+                  </div>
+                }
+
+                <div class="rec-card__meta">
+                  @if (item.rating != null) {
+                    <svg class="rec-card__star" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                    </svg>
+                    <span class="rec-card__rating">{{ item.rating!.toFixed(1) }}</span>
+                    @if (item.reviewCount) {
+                      <span class="rec-card__reviews">&middot; {{ item.reviewCount }}</span>
+                    }
+                  } @else {
+                    <span class="rec-card__no-rating">No reviews yet</span>
+                  }
+                  @if (item.distance) {
+                    <span class="rec-card__distance">&middot; {{ item.distance }}</span>
+                  }
+                </div>
+
+                @if (item.description) {
+                  <p class="rec-card__desc">{{ item.description }}</p>
+                }
+
+                <div class="rec-card__footer">
+                  <button type="button" class="rec-card__cta" (click)="$event.stopPropagation(); onItemCard(item.id)">
+                    Explore Details &rarr;
+                  </button>
+                  <button
+                    type="button"
+                    class="rec-card__save"
+                    [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save recommendation'"
+                    (click)="toggleSaved($event, item.id)"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        [attr.fill]="item.isSaved ? '#e8570a' : 'none'"
+                        [attr.stroke]="item.isSaved ? 'none' : 'currentColor'"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </article>
+
+          } @else {
+
+            <!-- Compact card: image left, info right -->
+            <article
+              class="rec-card rec-card--compact"
+              [attr.data-rec-id]="item.id"
+              (click)="onItemCard(item.id)"
+              role="button"
+              tabindex="0"
+              [attr.aria-label]="item.title"
+              (keydown.enter)="onItemCard(item.id)"
+              (keydown.space)="onItemCard(item.id)"
+            >
+              <div class="rec-card__media rec-card__media--compact">
+                <img
+                  class="rec-card__img"
+                  [src]="imgSrcById()[item.id]"
+                  [alt]="item.title"
+                  loading="lazy"
+                  decoding="async"
+                  (error)="onImgError(item.id)"
+                />
+                @if (item.categoryLabel) {
+                  <span class="rec-card__badge rec-card__badge--compact">{{ item.categoryLabel }}</span>
+                }
+              </div>
+
+              <div class="rec-card__body rec-card__body--compact">
+                <h2 class="rec-card__name rec-card__name--compact">{{ item.title }}</h2>
+
+                @if (item.location) {
+                  <div class="rec-card__location rec-card__location--compact">
+                    <svg class="rec-card__pin" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    {{ item.location }}
+                  </div>
+                }
+
+                <div class="rec-card__meta">
+                  @if (item.rating != null) {
+                    <svg class="rec-card__star" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                    </svg>
+                    <span class="rec-card__rating">{{ item.rating!.toFixed(1) }}</span>
+                    @if (item.reviewCount) {
+                      <span class="rec-card__reviews">&middot; {{ item.reviewCount }}</span>
+                    }
+                  } @else {
+                    <span class="rec-card__no-rating">No reviews yet</span>
+                  }
+                </div>
+
+                <div class="rec-card__footer rec-card__footer--compact">
+                  <button type="button" class="rec-card__cta rec-card__cta--compact" (click)="$event.stopPropagation(); onItemCard(item.id)">
+                    Explore &rarr;
+                  </button>
+                  <button
+                    type="button"
+                    class="rec-card__save"
+                    [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save recommendation'"
+                    (click)="toggleSaved($event, item.id)"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        [attr.fill]="item.isSaved ? '#e8570a' : 'none'"
+                        [attr.stroke]="item.isSaved ? 'none' : 'currentColor'"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </article>
+
+          }
+        }
+      </div>
+
+      <div class="rec-page__pagination" aria-live="polite">
+        @if (loadMoreError()) {
+          <p class="rec-page__load-error">{{ loadMoreError() }}</p>
+        }
+
+        @if (hasMore()) {
+          <button
+            type="button"
+            class="rec-page__load-more"
+            [disabled]="loadingMore()"
+            (click)="loadMore()"
+          >
+            @if (loadingMore()) {
+              Loading...
+            } @else {
+              Load More
+            }
+          </button>
+        } @else {
+          <p class="rec-page__end">You're caught up for now.</p>
+        }
+      </div>
+    } @else {
+      <div class="rec-page__state">
+        <app-empty-state
+          [title]="hasSignals() ? 'No matching recommendations' : 'No recommendations yet'"
+          [message]="emptyReason() || 'Explore and save places to build a more personal list.'"
+        />
+      </div>
+    }
+  </div>
+</div>

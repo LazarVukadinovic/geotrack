@@ -163,6 +163,13 @@ export const routes: Routes = [
 
       // ── Auth (registracija) ───────────────────────────────────────────────
       {
+        path: 'recommendations',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/recommendations/pages/recommendations-page/recommendations-page.component').then(m => m.RecommendationsPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
         path: 'login',
         canActivate: [guestGuard],
         loadComponent: () =>
