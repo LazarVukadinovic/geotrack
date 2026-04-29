@@ -12,8 +12,10 @@ import { ReviewEntryComponent } from '../../../../shared/components/review-entry
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { HttpClient } from '@angular/common/http';
 import { HotelDetailService } from '../../services/hotel-detail.service';
+import { ReviewsService } from '../../../reviews/services/reviews.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
-import type { HotelAmenityIcon, HotelBookingPartner } from '../../models/hotel-detail.model';
+import type { HotelAmenityIcon, HotelBookingPartner, HotelDetail } from '../../models/hotel-detail.model';
+import type { MapEntityMarker } from '../../../../core/services/map-api.service';
 
 @Component({
   selector: 'app-hotel-detail-page',
@@ -31,6 +33,7 @@ export class HotelDetailPageComponent {
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly http     = inject(HttpClient);
+  private readonly reviewsService = inject(ReviewsService);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
@@ -47,13 +50,17 @@ export class HotelDetailPageComponent {
   );
 
   protected readonly scrollProgress = signal(0);
+  protected readonly reportMessage = signal('');
+  protected readonly reportError = signal('');
+  private readonly reportedReviewIds = signal<Record<string, boolean>>({});
+  private readonly reportingReviewIds = signal<Record<string, boolean>>({});
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.hotel()?.latitude ?? null,
     this.hotel()?.longitude ?? null,
   ));
 
-  protected readonly mapUrl = computed(() => this.buildMapUrl(
+  protected readonly hasMapCoordinates = computed(() => this.hasUsableCoordinates(
     this.hotel()?.latitude ?? null,
     this.hotel()?.longitude ?? null,
   ));
@@ -115,6 +122,28 @@ export class HotelDetailPageComponent {
     this.router.navigate(['/stays', id]);
   }
 
+  protected openReviews(): void {
+    const hotel = this.hotel();
+    if (!hotel) return;
+
+    void this.router.navigate(['/reviews', 'stay', hotel.id], {
+      queryParams: { title: hotel.title },
+      state: { entityTitle: hotel.title },
+    });
+  }
+
+  protected viewOnMap(): void {
+    const hotel = this.hotel();
+    if (!hotel) return;
+
+    const mapFocus = this.buildMapFocus(hotel);
+    if (!mapFocus) return;
+
+    void this.router.navigate(['/map'], {
+      state: { mapFocus },
+    });
+  }
+
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
     const numId = parseInt(this.hotelId(), 10);
     if (isNaN(numId)) return throwError(() => new Error('Invalid hotel id.'));
@@ -132,6 +161,43 @@ export class HotelDetailPageComponent {
       this.analytics.track('review_created', { entityType: 'hotel', entityId: numId });
     }
     this.service.loadHotelDetail(id);
+  }
+
+  protected isReviewReported(review: { id: string; reportedByCurrentUser: boolean }): boolean {
+    return review.reportedByCurrentUser || !!this.reportedReviewIds()[review.id];
+  }
+
+  protected isReviewReporting(reviewId: string): boolean {
+    return !!this.reportingReviewIds()[reviewId];
+  }
+
+  protected reportReview(reviewId: string): void {
+    if (!this.isLoggedIn()) {
+      this.reportMessage.set('');
+      this.reportError.set('Log in to report a review.');
+      return;
+    }
+
+    const numericReviewId = parseInt(reviewId, 10);
+    if (isNaN(numericReviewId) || this.isReviewReporting(reviewId)) return;
+
+    this.reportMessage.set('');
+    this.reportError.set('');
+    this.setReviewReporting(reviewId, true);
+
+    this.reviewsService.reportReview('place', numericReviewId).subscribe({
+      next: (response) => {
+        this.setReviewReporting(reviewId, false);
+        this.markReviewReported(reviewId);
+        this.reportMessage.set(response.alreadyReported
+          ? 'You have already reported this review.'
+          : 'Thanks. A regional manager will review this report.');
+      },
+      error: (err) => {
+        this.setReviewReporting(reviewId, false);
+        this.reportError.set(err?.error?.message || 'Could not report this review. Please try again.');
+      },
+    });
   }
 
   protected onDirectionsClick(): void {
@@ -180,16 +246,48 @@ export class HotelDetailPageComponent {
     return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
   }
 
-  private buildMapUrl(latitude: number | null, longitude: number | null): string | null {
-    if (!this.hasUsableCoordinates(latitude, longitude)) return null;
-    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-  }
-
   private hasUsableCoordinates(latitude: number | null, longitude: number | null): boolean {
     return latitude != null &&
       longitude != null &&
       Number.isFinite(latitude) &&
       Number.isFinite(longitude) &&
       (latitude !== 0 || longitude !== 0);
+  }
+
+  private buildMapFocus(hotel: HotelDetail): MapEntityMarker | null {
+    const entityId = parseInt(hotel.id, 10);
+    const latitude = hotel.latitude ?? null;
+    const longitude = hotel.longitude ?? null;
+    if (isNaN(entityId) || !this.hasUsableCoordinates(latitude, longitude)) return null;
+
+    return {
+      entityType: 'stay',
+      entityId,
+      title: hotel.title,
+      subtitle: hotel.location || null,
+      categoryLabel: hotel.tags[0]?.label ?? 'Stay',
+      imageUrl: hotel.heroImage || null,
+      detailRoute: `/stays/${hotel.id}`,
+      latitude: latitude as number,
+      longitude: longitude as number,
+      distance: hotel.distance || null,
+      isSaved: hotel.isSaved,
+    };
+  }
+
+  private markReviewReported(reviewId: string): void {
+    this.reportedReviewIds.update(current => ({ ...current, [reviewId]: true }));
+  }
+
+  private setReviewReporting(reviewId: string, isReporting: boolean): void {
+    this.reportingReviewIds.update(current => {
+      const next = { ...current };
+      if (isReporting) {
+        next[reviewId] = true;
+      } else {
+        delete next[reviewId];
+      }
+      return next;
+    });
   }
 }

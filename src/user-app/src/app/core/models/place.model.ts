@@ -24,6 +24,7 @@ export interface PlaceReview {
   timeAgo: string;
   body: string;
   helpfulCount: number;
+  reportedByCurrentUser: boolean;
 }
 
 export interface PlaceSimilar {

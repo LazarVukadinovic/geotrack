@@ -1,9 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { AuthService } from '../../../core/services/auth.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
+import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import type { PlaceDetail } from '../../../core/models/place.model';
 
 export type DetailLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
@@ -21,7 +21,7 @@ interface ApiPlaceDetail {
   distance?: string;
   openStatus?: string;
   about?: string;
-  reviews: { id: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number }[];
+  reviews: { id: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean }[];
   similar: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[];
   isSaved: boolean;
   contentType: string;
@@ -32,10 +32,10 @@ interface ApiPlaceDetail {
 export class PlaceDetailService {
 
   private readonly http = inject(HttpClient);
-  private readonly auth = inject(AuthService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
+  private readonly saveToCollection = inject(SaveToCollectionService);
   private readonly _cache = signal<Record<string, PlaceDetail>>({});
   private readonly _loadState = signal<Record<string, DetailLoadState>>({});
   private readonly lastRequestKeyById = new Map<string, string>();
@@ -95,6 +95,7 @@ export class PlaceDetailService {
             timeAgo: r.timeAgo ?? '',
             body: r.body,
             helpfulCount: r.helpfulCount,
+            reportedByCurrentUser: r.reportedByCurrentUser ?? false,
           })),
           similar: dto.similar.map(s => ({
             id: String(s.id),
@@ -133,17 +134,18 @@ export class PlaceDetailService {
   }
 
   toggleSaved(id: string): void {
-    if (!this.auth.isLoggedIn()) return;
     const current = this.getPlaceDetailPageData(id);
     if (!current) return;
 
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    const next = !current.isSaved;
-    this.favoriteState.set('place', id, next);
-    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', { entityType: 'place', entityId: numId });
-    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
-      error: () => this.favoriteState.set('place', id, current.isSaved),
+    this.saveToCollection.open({
+      entityType: 'place',
+      entityId: numId,
+      title: current.title,
+      imageUrl: current.heroImage,
+      surface: 'place_detail',
+      analyticsEntityType: 'place',
     });
   }
 }

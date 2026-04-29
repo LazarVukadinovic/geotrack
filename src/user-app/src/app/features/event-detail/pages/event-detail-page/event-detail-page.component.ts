@@ -8,6 +8,8 @@ import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { EventDetailService } from '../../services/event-detail.service';
+import type { EventDetail } from '../../models/event-detail.model';
+import type { MapEntityMarker } from '../../../../core/services/map-api.service';
 
 @Component({
   selector: 'app-event-detail-page',
@@ -44,7 +46,7 @@ export class EventDetailPageComponent {
     this.event()?.longitude ?? null,
   ));
 
-  protected readonly mapUrl = computed(() => this.buildMapUrl(
+  protected readonly hasMapCoordinates = computed(() => this.hasUsableCoordinates(
     this.event()?.latitude ?? null,
     this.event()?.longitude ?? null,
   ));
@@ -90,6 +92,18 @@ export class EventDetailPageComponent {
     this.router.navigate(['/events', id]);
   }
 
+  protected viewOnMap(): void {
+    const event = this.event();
+    if (!event) return;
+
+    const mapFocus = this.buildMapFocus(event);
+    if (!mapFocus) return;
+
+    void this.router.navigate(['/map'], {
+      state: { mapFocus },
+    });
+  }
+
   protected onDirectionsClick(): void {
     const numId = parseInt(this.eventId(), 10);
     if (isNaN(numId)) return;
@@ -105,16 +119,32 @@ export class EventDetailPageComponent {
     return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
   }
 
-  private buildMapUrl(latitude: number | null, longitude: number | null): string | null {
-    if (!this.hasUsableCoordinates(latitude, longitude)) return null;
-    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-  }
-
   private hasUsableCoordinates(latitude: number | null, longitude: number | null): boolean {
     return latitude != null &&
       longitude != null &&
       Number.isFinite(latitude) &&
       Number.isFinite(longitude) &&
       (latitude !== 0 || longitude !== 0);
+  }
+
+  private buildMapFocus(event: EventDetail): MapEntityMarker | null {
+    const entityId = parseInt(event.id, 10);
+    const latitude = event.latitude ?? null;
+    const longitude = event.longitude ?? null;
+    if (isNaN(entityId) || !this.hasUsableCoordinates(latitude, longitude)) return null;
+
+    return {
+      entityType: 'event',
+      entityId,
+      title: event.title,
+      subtitle: event.info.venue || event.location || null,
+      categoryLabel: event.tags[0]?.label ?? 'Event',
+      imageUrl: event.heroImage || null,
+      detailRoute: `/events/${event.id}`,
+      latitude: latitude as number,
+      longitude: longitude as number,
+      distance: event.distance || null,
+      isSaved: event.isSaved,
+    };
   }
 }

@@ -1,9 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { AuthService } from '../../../core/services/auth.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
+import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import type { EventDetail } from '../models/event-detail.model';
 import type { DetailLoadState } from '../../place-detail/services/place-detail.service';
 
@@ -26,10 +26,10 @@ interface ApiEventDetail {
 @Injectable({ providedIn: 'root' })
 export class EventDetailService {
   private readonly http = inject(HttpClient);
-  private readonly auth = inject(AuthService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
+  private readonly saveToCollection = inject(SaveToCollectionService);
   private readonly _cache = signal<Record<string, EventDetail>>({});
   private readonly _loadState = signal<Record<string, DetailLoadState>>({});
   private readonly lastRequestKeyById = new Map<string, string>();
@@ -124,18 +124,18 @@ export class EventDetailService {
   }
 
   toggleSaved(id: string): void {
-    if (!this.auth.isLoggedIn()) return;
-
     const current = this.getEventDetailPageData(id);
     if (!current) return;
 
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    const next = !current.isSaved;
-    this.favoriteState.set('event', id, next);
-    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', { entityType: 'event', entityId: numId });
-    this.http.post('/api/favorites/toggle', { entityType: 'event', entityId: numId }).subscribe({
-      error: () => this.favoriteState.set('event', id, current.isSaved),
+    this.saveToCollection.open({
+      entityType: 'event',
+      entityId: numId,
+      title: current.title,
+      imageUrl: current.heroImage,
+      surface: 'event_detail',
+      analyticsEntityType: 'event',
     });
   }
 }

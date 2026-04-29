@@ -10,6 +10,7 @@ export interface HotelReview {
   timeAgo: string;
   body: string;
   helpfulCount: number;
+  reportedByCurrentUser: boolean;
 }
 
 export interface HotelSimilar {
