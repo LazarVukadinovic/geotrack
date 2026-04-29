@@ -9,13 +9,15 @@ namespace Geotrack.Infrastructure.Services;
 public class ReviewService : IReviewService
 {
     private readonly AppDbContext _db;
+    private readonly IReviewContentModerationService _contentModeration;
 
-    public ReviewService(AppDbContext db)
+    public ReviewService(AppDbContext db, IReviewContentModerationService contentModeration)
     {
         _db = db;
+        _contentModeration = contentModeration;
     }
 
-    public async Task<List<ReviewDto>> GetPlaceReviewsAsync(int placeId)
+    public async Task<List<ReviewDto>> GetPlaceReviewsAsync(int placeId, int? currentUserId = null)
     {
         var reviews = await _db.PlaceReviews
             .Include(r => r.User)
@@ -23,16 +25,26 @@ public class ReviewService : IReviewService
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
 
-        return reviews.Select(MapReview).ToList();
+        var reportedReviewIds = await GetReportedReviewIdsAsync(
+            currentUserId,
+            ReviewReportTargetType.Place,
+            reviews.Select(review => review.Id));
+
+        return reviews.Select(review => MapReview(review, reportedReviewIds.Contains(review.Id))).ToList();
     }
 
-    public async Task<List<ReviewDto>> GetEventReviewsAsync(int eventId)
+    public async Task<List<ReviewDto>> GetEventReviewsAsync(int eventId, int? currentUserId = null)
     {
         var reviews = await _db.EventReviews
             .Include(r => r.User)
             .Where(r => r.EventId == eventId)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
+
+        var reportedReviewIds = await GetReportedReviewIdsAsync(
+            currentUserId,
+            ReviewReportTargetType.Event,
+            reviews.Select(review => review.Id));
 
         return reviews.Select(r => new ReviewDto
         {
@@ -42,13 +54,14 @@ public class ReviewService : IReviewService
             Rating = (int)r.Rating,
             TimeAgo = FormatTimeAgo(r.CreatedAt),
             Body = r.Comment,
-            HelpfulCount = 0
+            HelpfulCount = 0,
+            ReportedByCurrentUser = reportedReviewIds.Contains(r.Id)
         }).ToList();
     }
 
     public async Task<ReviewDto> CreatePlaceReviewAsync(int placeId, int userId, CreateReviewDto dto)
     {
-        ValidateReview(dto);
+        await ValidateReviewAsync(dto);
 
         if (!await _db.Places.AnyAsync(p => p.Id == placeId))
             throw new KeyNotFoundException("Place not found");
@@ -88,12 +101,12 @@ public class ReviewService : IReviewService
 
         var user = await _db.Users.FindAsync(userId);
         review.User = user!;
-        return MapReview(review);
+        return MapReview(review, false);
     }
 
     public async Task<ReviewDto> CreateEventReviewAsync(int eventId, int userId, CreateReviewDto dto)
     {
-        ValidateReview(dto);
+        await ValidateReviewAsync(dto);
 
         if (!await _db.Events.AnyAsync(e => e.Id == eventId))
             throw new KeyNotFoundException("Event not found");
@@ -124,11 +137,12 @@ public class ReviewService : IReviewService
             Rating = (int)review.Rating,
             TimeAgo = "just now",
             Body = review.Comment,
-            HelpfulCount = 0
+            HelpfulCount = 0,
+            ReportedByCurrentUser = false
         };
     }
 
-    private static ReviewDto MapReview(PlaceReview r) => new()
+    private static ReviewDto MapReview(PlaceReview r, bool reportedByCurrentUser) => new()
     {
         Id = r.Id,
         AuthorName = GetAuthorName(r.User),
@@ -136,16 +150,43 @@ public class ReviewService : IReviewService
         Rating = (int)r.Rating,
         TimeAgo = FormatTimeAgo(r.CreatedAt),
         Body = r.Comment,
-        HelpfulCount = 0
+        HelpfulCount = 0,
+        ReportedByCurrentUser = reportedByCurrentUser
     };
 
-    private static void ValidateReview(CreateReviewDto dto)
+    private async Task ValidateReviewAsync(CreateReviewDto dto)
     {
         if (dto.Rating < 1 || dto.Rating > 5)
             throw new InvalidOperationException("Rating must be between 1 and 5");
 
         if ((dto.Comment ?? string.Empty).Length > 1000)
             throw new InvalidOperationException("Comment is too long");
+
+        await _contentModeration.EnsureAllowedReviewTextAsync(dto.Comment);
+    }
+
+    private async Task<HashSet<int>> GetReportedReviewIdsAsync(
+        int? currentUserId,
+        ReviewReportTargetType targetType,
+        IEnumerable<int> reviewIds)
+    {
+        if (!currentUserId.HasValue)
+            return new HashSet<int>();
+
+        var ids = reviewIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return new HashSet<int>();
+
+        var reportedIds = await _db.ReviewReports
+            .AsNoTracking()
+            .Where(report =>
+                report.ReporterUserId == currentUserId.Value &&
+                report.TargetType == targetType &&
+                ids.Contains(report.ReviewId))
+            .Select(report => report.ReviewId)
+            .ToListAsync();
+
+        return reportedIds.ToHashSet();
     }
 
     private static string GetAuthorName(Domain.Entities.Users.User user)

@@ -37,6 +37,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     });
+builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -84,6 +85,10 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IAnalyticsReadService, AnalyticsReadService>();
 builder.Services.AddScoped<IUserInterestSignalUpdater, UserInterestSignalUpdater>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<IModerationTermCache, ModerationTermCache>();
+builder.Services.AddScoped<IModerationTermService, ModerationTermService>();
+builder.Services.AddScoped<IReviewContentModerationService, ReviewContentModerationService>();
+builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IExploreService, ExploreService>();
