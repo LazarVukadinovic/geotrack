@@ -46,6 +46,7 @@ export class AuthService {
       sessionStorage.removeItem('mapLocation');
       sessionStorage.removeItem('mapFilters');
       sessionStorage.removeItem('mapViewState');
+      sessionStorage.removeItem('mapOpenedThisSession');
     } catch {
       // Storage may be unavailable; ignore.
     }

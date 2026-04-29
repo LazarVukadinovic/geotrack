@@ -16,10 +16,10 @@ export class FavoriteButtonComponent {
   protected readonly ariaLabel = computed(() => {
     const label = this.itemLabel().trim();
     if (this.saved()) {
-      return 'Remove from saved';
+      return 'Saved. Choose collection';
     }
 
-    return label ? `Save ${label}` : 'Save';
+    return label ? `Save ${label} to collection` : 'Save to collection';
   });
 
   protected onClick(): void {

@@ -37,4 +37,21 @@ export class FavoriteStateService {
       },
     }));
   }
+
+  setMany(entityType: FavoriteEntityType, ids: Iterable<string | number>, saved: boolean): void {
+    const nextEntries: Record<string, boolean> = {};
+    for (const id of ids) {
+      nextEntries[String(id)] = saved;
+    }
+
+    if (Object.keys(nextEntries).length === 0) return;
+
+    this._state.update((state) => ({
+      ...state,
+      [entityType]: {
+        ...state[entityType],
+        ...nextEntries,
+      },
+    }));
+  }
 }
