@@ -11,6 +11,7 @@ public class ReviewDto
     public string? TimeAgo { get; set; }
     public string Body { get; set; } = string.Empty;
     public int HelpfulCount { get; set; }
+    public bool ReportedByCurrentUser { get; set; }
 }
 
 public class CreateReviewDto
