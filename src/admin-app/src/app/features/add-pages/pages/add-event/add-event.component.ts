@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, NgZone, ChangeDetectorRef, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, ElementRef, ViewChild, NgZone, ChangeDetectorRef, AfterViewInit, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
@@ -10,6 +10,8 @@ interface ClassItem {
   label: string;
   checked: boolean;
 }
+
+const CX = 110, CY = 110, R = 80;
 
 @Component({
   selector: 'app-new-event',
@@ -32,35 +34,39 @@ interface ClassItem {
   `]
 })
 export class NewEventComponent implements AfterViewInit, OnDestroy {
- 
+
   constructor(private zone: NgZone, private cdr: ChangeDetectorRef) {}
- 
+
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
- 
-  // ── Basic fields ──────────────────────────────────────────────
+
+  //Basic fields
   eventTitle = 'Summer Festival';
   venueType  = 'location';
   allDay     = false;
   freeEvent  = false;
   recurring  = false;
- 
-  // ── Rich text editor ─────────────────────────────────────────
+  startDate  = '2024-10-24';
+  endDate    = '2024-10-26';
+  startTime  = '21:00';
+  endTime    = '05:00';
+
+  //Rich text editor
   isBold        = false;
   isItalic      = false;
   isUnderline   = false;
   editorIsEmpty = true;
- 
+
   execFormat(command: 'bold' | 'italic' | 'underline'): void {
     document.execCommand(command, false, undefined);
     this.editorRef.nativeElement.focus();
     this.syncToolbarState();
   }
- 
+
   onEditorChange(): void { this.syncToolbarState(); this.syncEmptyState(); }
-  onEditorFocus(): void  { this.syncToolbarState(); this.syncEmptyState(); }
-  onEditorBlur(): void {
+  onEditorFocus():  void { this.syncToolbarState(); this.syncEmptyState(); }
+  onEditorBlur():   void {
     this.syncToolbarState();
     const el = this.editorRef?.nativeElement;
     if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
@@ -68,24 +74,24 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     }
     this.syncEmptyState();
   }
- 
+
   private syncEmptyState(): void {
     const el = this.editorRef?.nativeElement;
     if (!el) return;
     const text = el.innerText ?? el.textContent ?? '';
     this.editorIsEmpty = text.trim() === '' && el.innerHTML !== '<img' && !el.querySelector('img');
   }
- 
+
   private syncToolbarState(): void {
     this.isBold      = document.queryCommandState('bold');
     this.isItalic    = document.queryCommandState('italic');
     this.isUnderline = document.queryCommandState('underline');
   }
- 
-  // ── Cover image ───────────────────────────────────────────────
+
+  //Cover image
   coverImageUrl : string | null = null;
   coverImageName: string        = '';
- 
+
   onCoverImageSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file  = input.files?.[0];
@@ -94,16 +100,16 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this.coverImageName = file.name;
     input.value = '';
   }
- 
+
   removeCoverImage(): void {
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     this.coverImageUrl  = null;
     this.coverImageName = '';
   }
- 
-  // ── Gallery ───────────────────────────────────────────────────
+
+  //Gallery
   galleryImages: { url: string; name: string }[] = [];
- 
+
   onGalleryImagesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
@@ -112,18 +118,18 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     }
     input.value = '';
   }
- 
+
   removeGalleryImage(index: number): void {
     URL.revokeObjectURL(this.galleryImages[index].url);
     this.galleryImages.splice(index, 1);
   }
- 
-  // ── Lightbox ──────────────────────────────────────────────────
+
+  //Lightbox
   private lightboxEl: HTMLElement | null = null;
   private _lightboxKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _currentImages: { url: string; name: string }[] = [];
   private _currentIndex = 0;
- 
+
   openLightbox(images: { url: string; name: string }[], index: number): void {
     this.zone.run(() => {
       this.closeLightbox();
@@ -139,46 +145,46 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       document.body.style.overflow = 'hidden';
     });
   }
- 
+
   private _renderLightbox(): void {
     if (this.lightboxEl) document.body.removeChild(this.lightboxEl);
     const imgs = this._currentImages, idx = this._currentIndex, single = imgs.length === 1;
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;';
     overlay.addEventListener('click', () => this.closeLightbox());
- 
+
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&times;';
     closeBtn.style.cssText = 'position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
     closeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.closeLightbox(); });
     overlay.appendChild(closeBtn);
- 
+
     if (!single) {
       const counter = document.createElement('div');
       counter.textContent = `${idx + 1} / ${imgs.length}`;
       counter.style.cssText = 'position:absolute;top:16px;left:50%;transform:translateX(-50%);color:white;font-size:14px;font-weight:500;background:rgba(0,0,0,0.4);padding:4px 12px;border-radius:20px;z-index:1;';
       overlay.appendChild(counter);
- 
+
       const prev = document.createElement('button');
       prev.innerHTML = '&#8249;';
       prev.style.cssText = 'position:absolute;left:16px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
       prev.addEventListener('click', (e) => { e.stopPropagation(); this._currentIndex = (idx - 1 + imgs.length) % imgs.length; this._renderLightbox(); });
       overlay.appendChild(prev);
     }
- 
+
     const img = document.createElement('img');
     img.src = imgs[idx].url; img.alt = imgs[idx].name;
     img.style.cssText = 'max-width:88vw;max-height:80vh;object-fit:contain;border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.5);';
     img.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(img);
- 
+
     if (!single) {
       const next = document.createElement('button');
       next.innerHTML = '&#8250;';
       next.style.cssText = 'position:absolute;right:16px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
       next.addEventListener('click', (e) => { e.stopPropagation(); this._currentIndex = (idx + 1) % imgs.length; this._renderLightbox(); });
       overlay.appendChild(next);
- 
+
       const thumbRow = document.createElement('div');
       thumbRow.style.cssText = 'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:1;';
       thumbRow.addEventListener('click', (e) => e.stopPropagation());
@@ -192,35 +198,238 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       });
       overlay.appendChild(thumbRow);
     }
- 
+
     document.body.appendChild(overlay);
     this.lightboxEl = overlay;
   }
- 
+
   closeLightbox(): void {
     if (this.lightboxEl) { document.body.removeChild(this.lightboxEl); this.lightboxEl = null; }
     if (this._lightboxKeyHandler) { document.removeEventListener('keydown', this._lightboxKeyHandler); this._lightboxKeyHandler = null; }
     document.body.style.overflow = '';
   }
- 
-  // ── Geographic pin / Leaflet ──────────────────────────────────
+
+  activePicker: string | null = null;
+
+  calendarYear  = new Date().getFullYear();
+  calendarMonth = new Date().getMonth();
+
+  readonly monthNames = [
+    'January','February','March','April','May','June',
+    'July','August','September','October','November','December'
+  ];
+  readonly weekDays = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+  get calendarDays(): number[] {
+    const firstDay = new Date(this.calendarYear, this.calendarMonth, 1).getDay();
+    const daysInMonth = new Date(this.calendarYear, this.calendarMonth + 1, 0).getDate();
+    const cells: number[] = [];
+    for (let i = 0; i < firstDay; i++) cells.push(0);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  }
+
+  prevMonth(): void {
+    if (this.calendarMonth === 0) { this.calendarMonth = 11; this.calendarYear--; }
+    else { this.calendarMonth--; }
+  }
+
+  nextMonth(): void {
+    if (this.calendarMonth === 11) { this.calendarMonth = 0; this.calendarYear++; }
+    else { this.calendarMonth++; }
+  }
+
+  selectDate(day: number, field: 'startDate' | 'endDate'): void {
+    if (!day) return;
+    const m = String(this.calendarMonth + 1).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    const iso = `${this.calendarYear}-${m}-${d}`;
+    if (field === 'startDate') this.startDate = iso;
+    else                       this.endDate   = iso;
+    this.activePicker = null;
+  }
+
+  isSelectedDate(day: number, isoDate: string): boolean {
+    if (!day || !isoDate) return false;
+    const [y, mo, d] = isoDate.split('-').map(Number);
+    return y === this.calendarYear && mo === this.calendarMonth + 1 && d === day;
+  }
+
+  isToday(day: number): boolean {
+    if (!day) return false;
+    const now = new Date();
+    return now.getFullYear() === this.calendarYear &&
+           now.getMonth()    === this.calendarMonth &&
+           now.getDate()     === day;
+  }
+
+  formatDisplayDate(iso: string): string {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-').map(Number);
+    return `${this.monthNames[m - 1].slice(0, 3)} ${d}, ${y}`;
+  }
+
+  clockMode: 'hour' | 'minute' = 'hour';
+  selectedHour   = 12;
+  selectedMinute = 0;
+  selectedAmPm: 'AM' | 'PM' = 'AM';
+
+  readonly clockCX = CX;
+  readonly clockCY = CY;
+  readonly clockR  = R;
+
+  get clockHourMarkers(): { value: number; x: number; y: number; selected: boolean }[] {
+    return Array.from({ length: 12 }, (_, i) => {
+      const h = i + 1;
+      const angle = (h / 12) * Math.PI * 2 - Math.PI / 2;
+      return { value: h, x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle), selected: h === this.selectedHour };
+    });
+  }
+
+  get clockMinuteMarkers(): { value: number; x: number; y: number; selected: boolean }[] {
+    return Array.from({ length: 12 }, (_, i) => {
+      const m = i * 5;
+      const angle = (m / 60) * Math.PI * 2 - Math.PI / 2;
+      return { value: m, x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle), selected: m === this.selectedMinute };
+    });
+  }
+
+  get clockHandEnd(): { x: number; y: number } {
+    if (this.clockMode === 'hour') {
+      const angle = (this.selectedHour / 12) * Math.PI * 2 - Math.PI / 2;
+      return { x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle) };
+    }
+    const angle = (this.selectedMinute / 60) * Math.PI * 2 - Math.PI / 2;
+    return { x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle) };
+  }
+
+  setClockMode(m: 'hour' | 'minute'): void { this.clockMode = m; }
+  setClockAmPm(ap: 'AM' | 'PM'): void { this.selectedAmPm = ap; }
+
+  onClockInteraction(event: MouseEvent | TouchEvent, svgEl: Element): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const rect  = svgEl.getBoundingClientRect();
+    const clientX = event instanceof TouchEvent ? event.touches[0].clientX : event.clientX;
+    const clientY = event instanceof TouchEvent ? event.touches[0].clientY : event.clientY;
+
+    const svgX = (clientX - rect.left)  / rect.width  * 220;
+    const svgY = (clientY - rect.top)   / rect.height * 220;
+    const angle = Math.atan2(svgY - CY, svgX - CX);
+
+    if (this.clockMode === 'hour') {
+      let h = Math.round((angle + Math.PI / 2) / (Math.PI * 2) * 12);
+      if (h <= 0) h += 12;
+      if (h > 12) h -= 12;
+      this.selectedHour = h;
+    } else {
+      let m = Math.round((angle + Math.PI / 2) / (Math.PI * 2) * 12) * 5;
+      if (m < 0)   m += 60;
+      if (m >= 60) m -= 60;
+      this.selectedMinute = m;
+    }
+    this.cdr.detectChanges();
+  }
+
+  private _clockDragging = false;
+  private _clockSvgEl: Element | null = null;
+
+  onClockMouseDown(event: MouseEvent, svgEl: Element): void {
+    this._clockDragging = true;
+    this._clockSvgEl = svgEl;
+    this.onClockInteraction(event, svgEl);
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  onDocumentMouseMove(event: MouseEvent): void {
+    if (this._clockDragging && this._clockSvgEl) {
+      this.onClockInteraction(event, this._clockSvgEl);
+    }
+  }
+
+  @HostListener('document:mouseup')
+  onDocumentMouseUp(): void { this._clockDragging = false; this._clockSvgEl = null; }
+
+  confirmTime(field: 'startTime' | 'endTime'): void {
+    let h = this.selectedHour;
+    if (this.selectedAmPm === 'AM' && h === 12) h = 0;
+    if (this.selectedAmPm === 'PM' && h !== 12) h += 12;
+    const timeStr = `${String(h).padStart(2, '0')}:${String(this.selectedMinute).padStart(2, '0')}`;
+    if (field === 'startTime') this.startTime = timeStr;
+    else                       this.endTime   = timeStr;
+    this.activePicker = null;
+  }
+
+  formatDisplayTime(time24: string): string {
+    if (!time24) return '';
+    const [hh, mm] = time24.split(':').map(Number);
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    let h = hh % 12;
+    if (h === 0) h = 12;
+    return `${h}:${String(mm).padStart(2, '0')} ${ampm}`;
+  }
+
+
+  togglePicker(name: string, event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.activePicker === name) { this.activePicker = null; return; }
+    this.activePicker = name;
+
+    if (name === 'startDate' || name === 'endDate') {
+      const iso = name === 'startDate' ? this.startDate : this.endDate;
+      if (iso) {
+        const [y, m] = iso.split('-').map(Number);
+        this.calendarYear  = y;
+        this.calendarMonth = m - 1;
+      } else {
+        const now = new Date();
+        this.calendarYear  = now.getFullYear();
+        this.calendarMonth = now.getMonth();
+      }
+    }
+
+    if (name === 'startTime' || name === 'endTime') {
+      const t = name === 'startTime' ? this.startTime : this.endTime;
+      this._loadClockState(t);
+      this.clockMode = 'hour';
+    }
+  }
+
+  private _loadClockState(time24: string): void {
+    if (!time24) { this.selectedHour = 12; this.selectedMinute = 0; this.selectedAmPm = 'AM'; return; }
+    let [hh, mm] = time24.split(':').map(Number);
+    this.selectedAmPm   = hh >= 12 ? 'PM' : 'AM';
+    hh = hh % 12;
+    this.selectedHour   = hh === 0 ? 12 : hh;
+    this.selectedMinute = Math.floor(mm / 5) * 5;
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    if (this._clockDragging) return;
+    if (this.activePicker) {
+      this.activePicker = null;
+      this.cdr.detectChanges();
+    }
+  }
+
+  //Geographic pin / Leaflet
   pinModalOpen = false;
   pinConfirmed = false;
- 
   pinLat: string = '';
   pinLng: string = '';
   streetAddress: string = '';
   isGeocodingAddress = false;
- 
   modalPinLat: number | null = null;
   modalPinLng: number | null = null;
- 
+
   private miniMap    : any = null;
   private modalMap   : any = null;
   private miniMarker : any = null;
   private modalMarker: any = null;
   private _geocodeDebounce: any = null;
- 
+
   private makePinIcon(): any {
     return L.divIcon({
       html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
@@ -230,7 +439,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       iconSize: [24, 32], iconAnchor: [12, 32], className: '',
     });
   }
- 
+
   private initMiniMap(): void {
     if (this.miniMap) return;
     const el = this.miniMapContainer?.nativeElement;
@@ -241,7 +450,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     }).setView([44.0, 20.9], 8);
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.miniMap);
   }
- 
+
   openPinModal(): void {
     this.pinModalOpen = true;
     const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
@@ -249,20 +458,18 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     else { this.modalPinLat = null; this.modalPinLng = null; }
     setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
   }
- 
+
   closePinModal(): void { this.pinModalOpen = false; this.destroyModalMap(); }
   onPinModalBackdropClick(_event: MouseEvent): void { this.closePinModal(); }
- 
+
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap) return;
     const center: [number, number] = (this.modalPinLat !== null && this.modalPinLng !== null)
       ? [this.modalPinLat, this.modalPinLng] : [44.0, 20.9];
     const zoom = this.modalPinLat !== null ? 14 : 9;
- 
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false }).setView(center, zoom);
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.modalMap);
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
- 
     if (this.modalPinLat !== null && this.modalPinLng !== null) {
       this.modalMarker = L.marker([this.modalPinLat, this.modalPinLng], { icon: this.makePinIcon(), draggable: true }).addTo(this.modalMap);
       this.modalMarker.on('dragend', (e: any) => {
@@ -270,7 +477,6 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
         this.zone.run(() => { this.modalPinLat = pos.lat; this.modalPinLng = pos.lng; });
       });
     }
- 
     this.modalMap.on('click', (e: any) => {
       this.zone.run(() => { this.modalPinLat = e.latlng.lat; this.modalPinLng = e.latlng.lng; });
       if (this.modalMarker) {
@@ -284,11 +490,11 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       }
     });
   }
- 
+
   private destroyModalMap(): void {
     if (this.modalMap) { this.modalMap.remove(); this.modalMap = null; this.modalMarker = null; }
   }
- 
+
   confirmPin(): void {
     if (this.modalPinLat === null || this.modalPinLng === null) {
       alert('Please click on the map to place a pin first.');
@@ -301,7 +507,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this.reverseGeocode(this.modalPinLat, this.modalPinLng);
     this.closePinModal();
   }
- 
+
   onCoordInputChange(): void {
     const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
     if (isNaN(lat) || isNaN(lng)) return;
@@ -310,7 +516,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
     this._geocodeDebounce = setTimeout(() => this.reverseGeocode(lat, lng), 300);
   }
- 
+
   private async reverseGeocode(lat: number, lng: number): Promise<void> {
     this.isGeocodingAddress = true;
     try {
@@ -334,30 +540,27 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       this.zone.run(() => { this.isGeocodingAddress = false; this.cdr.detectChanges(); });
     }
   }
- 
+
   private updateMiniMapPin(lat: number, lng: number): void {
     if (!this.miniMap) this.initMiniMap();
     if (!this.miniMap) return;
-    if (this.miniMarker) {
-      this.miniMarker.setLatLng([lat, lng]);
-    } else {
-      this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.miniMap);
-    }
+    if (this.miniMarker) this.miniMarker.setLatLng([lat, lng]);
+    else this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.miniMap);
     this.miniMap.setView([lat, lng], 14);
   }
- 
-  // ── Classification ────────────────────────────────────────────
+
+  //Classification
   classItems: ClassItem[] = [
-    { label: 'Music',           checked: false  },
-    { label: 'Outdoor',         checked: false  },
+    { label: 'Music',           checked: false },
+    { label: 'Outdoor',         checked: false },
     { label: 'Culture',         checked: false },
     { label: 'Family Friendly', checked: false },
   ];
- 
-  // ── Tags ──────────────────────────────────────────────────────
+
+  //Tags
   tags    : string[] = [];
   tagInput: string   = '';
- 
+
   addTag(event: Event): void {
     event.preventDefault();
     const value = this.tagInput.trim();
@@ -365,16 +568,14 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this.tags     = [...this.tags, value];
     this.tagInput = '';
   }
- 
+
   removeTag(tag: string): void {
     this.tags = this.tags.filter(t => t !== tag);
   }
- 
-  // ── Lifecycle ─────────────────────────────────────────────────
-  ngAfterViewInit(): void {
-    setTimeout(() => this.initMiniMap(), 0);
-  }
- 
+
+  //Lifecycle
+  ngAfterViewInit(): void { setTimeout(() => this.initMiniMap(), 0); }
+
   ngOnDestroy(): void {
     this.destroyModalMap();
     this.closeLightbox();

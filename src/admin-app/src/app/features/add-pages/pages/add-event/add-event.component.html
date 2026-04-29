@@ -13,11 +13,7 @@
           <!-- Event Title Hero Card -->
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
             <span class="block text-[10px] font-bold tracking-widest text-gray-400 mb-1">EVENT TITLE</span>
-            <input
-              class="w-full text-2xl font-bold text-gray-900 border-none outline-none bg-transparent placeholder-gray-300 font-sans"
-              [(ngModel)]="eventTitle"
-              placeholder="e.g. Summer Festival"
-            />
+            <input class="w-full text-2xl font-bold text-gray-900 border-none outline-none bg-transparent placeholder-gray-300 font-sans" [(ngModel)]="eventTitle" placeholder="e.g. Summer Festival" />
             <div class="grid grid-cols-2 gap-3 mt-4">
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Assigned Region (Locked)</label>
@@ -34,24 +30,18 @@
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
             <h3 class="text-sm font-bold text-gray-900 mb-0.5">Basic Information</h3>
             <p class="text-xs text-gray-500 mb-4">Core details about the event.</p>
-
             <div class="mb-3">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Event Title <span class="text-red-500">*</span></label>
               <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" [(ngModel)]="eventTitle" />
             </div>
-
             <div class="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Event Category/Type <span class="text-red-500">*</span></label>
                 <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none"
                         style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;">
                   <option value="">Select Event Category/Type...</option>
-                  <option>Festival</option>
-                  <option>Concert</option>
-                  <option>Exhibition</option>
-                  <option>Sports</option>
-                  <option>Workshop</option>
-                  <option>Market</option>
+                  <option>Festival</option><option>Concert</option><option>Exhibition</option>
+                  <option>Sports</option><option>Workshop</option><option>Market</option>
                 </select>
               </div>
               <div>
@@ -59,39 +49,21 @@
                 <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" value="EVT-PNW-001" />
               </div>
             </div>
-
             <div class="mb-3">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Short Excerpt/Summary <span class="text-red-500">*</span></label>
               <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans" placeholder="A brief, engaging summary (max 160 characters)..." rows="2" maxlength="160"></textarea>
             </div>
-
-            <!-- Rich text editor -->
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Full Description</label>
               <div class="border border-gray-300 rounded-lg overflow-hidden">
                 <div class="flex gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200">
-                  <button type="button" class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors"
-                    [class.bg-blue-100]="isBold" [class.text-blue-700]="isBold" [class.bg-transparent]="!isBold"
-                    (mousedown)="$event.preventDefault(); execFormat('bold')" title="Bold"><strong>B</strong></button>
-                  <button type="button" class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors"
-                    [class.bg-blue-100]="isItalic" [class.text-blue-700]="isItalic" [class.bg-transparent]="!isItalic"
-                    (mousedown)="$event.preventDefault(); execFormat('italic')" title="Italic"><em>I</em></button>
-                  <button type="button" class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors"
-                    [class.bg-blue-100]="isUnderline" [class.text-blue-700]="isUnderline" [class.bg-transparent]="!isUnderline"
-                    (mousedown)="$event.preventDefault(); execFormat('underline')" title="Underline"><u>U</u></button>
+                  <button type="button" class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors" [class.bg-blue-100]="isBold" [class.text-blue-700]="isBold" [class.bg-transparent]="!isBold" (mousedown)="$event.preventDefault(); execFormat('bold')"><strong>B</strong></button>
+                  <button type="button" class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors" [class.bg-blue-100]="isItalic" [class.text-blue-700]="isItalic" [class.bg-transparent]="!isItalic" (mousedown)="$event.preventDefault(); execFormat('italic')"><em>I</em></button>
+                  <button type="button" class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors" [class.bg-blue-100]="isUnderline" [class.text-blue-700]="isUnderline" [class.bg-transparent]="!isUnderline" (mousedown)="$event.preventDefault(); execFormat('underline')"><u>U</u></button>
                 </div>
                 <div class="relative rte-field">
-                  @if (editorIsEmpty) {
-                    <span class="rte-ph">Provide a comprehensive description of what visitors can expect...</span>
-                  }
-                  <div #editorRef contenteditable="true"
-                    class="w-full px-3 py-2 text-sm min-h-[100px] outline-none text-gray-700"
-                    style="font-family: inherit;"
-                    (keyup)="onEditorChange()"
-                    (input)="onEditorChange()"
-                    (mouseup)="onEditorChange()"
-                    (focus)="onEditorFocus()"
-                    (blur)="onEditorBlur()"></div>
+                  @if (editorIsEmpty) { <span class="rte-ph">Provide a comprehensive description of what visitors can expect...</span> }
+                  <div #editorRef contenteditable="true" class="w-full px-3 py-2 text-sm min-h-[100px] outline-none text-gray-700" style="font-family: inherit;" (keyup)="onEditorChange()" (input)="onEditorChange()" (mouseup)="onEditorChange()" (focus)="onEditorFocus()" (blur)="onEditorBlur()"></div>
                 </div>
               </div>
             </div>
@@ -103,12 +75,8 @@
             <p class="text-xs text-gray-500 mb-4">Determine where this event structurally belongs.</p>
             <p class="text-sm text-gray-700 mb-2">Event happens at:</p>
             <div class="flex gap-4 mb-3">
-              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input type="radio" name="venueType" value="location" [(ngModel)]="venueType" class="accent-blue-700" /> Location
-              </label>
-              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input type="radio" name="venueType" value="place" [(ngModel)]="venueType" class="accent-blue-700" /> Place
-              </label>
+              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="radio" name="venueType" value="location" [(ngModel)]="venueType" class="accent-blue-700" /> Location</label>
+              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="radio" name="venueType" value="place" [(ngModel)]="venueType" class="accent-blue-700" /> Place</label>
             </div>
             <div class="mb-3">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Location Selector <span class="text-red-500">*</span></label>
@@ -126,62 +94,283 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               <h3 class="text-sm font-bold text-gray-900">Date &amp; Time</h3>
             </div>
+
+            <!-- All-day toggle -->
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
               <div class="flex items-center justify-between">
                 <div>
                   <p class="text-sm font-semibold text-gray-700 mb-0.5">All-day Event</p>
                   <p class="text-[11px] text-gray-400">Does not require specific start and end times.</p>
                 </div>
-                <div
-                  class="relative cursor-pointer flex-shrink-0"
-                  style="width: 44px; height: 24px;"
-                  (click)="allDay = !allDay"
-                >
-                  <div
-                    class="absolute inset-0 rounded-full transition-colors duration-200"
-                    [class.bg-blue-600]="allDay"
-                    [class.bg-gray-300]="!allDay"
-                  ></div>
-                  <div
-                    class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200"
-                    style="width: 20px; height: 20px;"
-                    [style.left]="allDay ? '22px' : '2px'"
-                  ></div>
+                <div class="relative cursor-pointer flex-shrink-0" style="width: 44px; height: 24px;" (click)="allDay = !allDay">
+                  <div class="absolute inset-0 rounded-full transition-colors duration-200" [class.bg-blue-600]="allDay" [class.bg-gray-300]="!allDay"></div>
+                  <div class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200" style="width: 20px; height: 20px;" [style.left]="allDay ? '22px' : '2px'"></div>
                 </div>
               </div>
             </div>
+
             <div class="grid grid-cols-2 gap-3 mb-3">
-              <div>
+
+              <!-- ── Start Date picker ── -->
+              <div class="relative">
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Start Date <span class="text-red-500">*</span></label>
-                <div class="relative">
-                  <span class="absolute left-3 top-1/2 -translate-y-1/2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
-                  <input class="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" value="10/24/2024" />
-                </div>
+                <button type="button"
+                  class="w-full flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm bg-white cursor-pointer hover:border-blue-400 transition-colors outline-none text-left"
+                  [class.border-blue-500]="activePicker === 'startDate'"
+                  [class.border-gray-300]="activePicker !== 'startDate'"
+                  (click)="togglePicker('startDate', $event)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span class="flex-1" [class.text-gray-700]="startDate" [class.text-gray-400]="!startDate">{{ startDate ? formatDisplayDate(startDate) : 'Pick date' }}</span>
+                </button>
+                @if (activePicker === 'startDate') {
+                  <div class="picker-dropdown" (click)="$event.stopPropagation()">
+                    <div class="picker-header">
+                      <button type="button" class="picker-nav" (click)="prevMonth()">&#8249;</button>
+                      <span class="picker-month-year">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
+                      <button type="button" class="picker-nav" (click)="nextMonth()">&#8250;</button>
+                    </div>
+                    <div class="picker-weekdays">
+                      <span *ngFor="let d of weekDays">{{ d }}</span>
+                    </div>
+                    <div class="picker-days">
+                      <button *ngFor="let day of calendarDays" type="button"
+                        class="picker-day"
+                        [class.empty]="day === 0"
+                        [class.selected]="isSelectedDate(day, startDate)"
+                        [class.today]="isToday(day)"
+                        [disabled]="day === 0"
+                        (click)="selectDate(day, 'startDate')">
+                        {{ day !== 0 ? day : '' }}
+                      </button>
+                    </div>
+                  </div>
+                }
               </div>
-              <div>
+
+              <!-- ── End Date picker ── -->
+              <div class="relative">
                 <label class="block text-xs font-semibold text-gray-600 mb-1">End Date <span class="text-red-500">*</span></label>
-                <div class="relative">
-                  <span class="absolute left-3 top-1/2 -translate-y-1/2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
-                  <input class="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" value="10/26/2024" />
-                </div>
+                <button type="button"
+                  class="w-full flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm bg-white cursor-pointer hover:border-blue-400 transition-colors outline-none text-left"
+                  [class.border-blue-500]="activePicker === 'endDate'"
+                  [class.border-gray-300]="activePicker !== 'endDate'"
+                  (click)="togglePicker('endDate', $event)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span class="flex-1" [class.text-gray-700]="endDate" [class.text-gray-400]="!endDate">{{ endDate ? formatDisplayDate(endDate) : 'Pick date' }}</span>
+                </button>
+                @if (activePicker === 'endDate') {
+                  <div class="picker-dropdown" (click)="$event.stopPropagation()">
+                    <div class="picker-header">
+                      <button type="button" class="picker-nav" (click)="prevMonth()">&#8249;</button>
+                      <span class="picker-month-year">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
+                      <button type="button" class="picker-nav" (click)="nextMonth()">&#8250;</button>
+                    </div>
+                    <div class="picker-weekdays">
+                      <span *ngFor="let d of weekDays">{{ d }}</span>
+                    </div>
+                    <div class="picker-days">
+                      <button *ngFor="let day of calendarDays" type="button"
+                        class="picker-day"
+                        [class.empty]="day === 0"
+                        [class.selected]="isSelectedDate(day, endDate)"
+                        [class.today]="isToday(day)"
+                        [disabled]="day === 0"
+                        (click)="selectDate(day, 'endDate')">
+                        {{ day !== 0 ? day : '' }}
+                      </button>
+                    </div>
+                  </div>
+                }
               </div>
+
               @if (!allDay) {
-                <div>
+
+                <!-- ── Start Time picker ── -->
+                <div class="relative">
                   <label class="block text-xs font-semibold text-gray-600 mb-1">Start Time <span class="text-red-500">*</span></label>
-                  <div class="relative">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                    <input class="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" value="09:00 PM" />
-                  </div>
+                  <button type="button"
+                    class="w-full flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm bg-white cursor-pointer hover:border-blue-400 transition-colors outline-none text-left"
+                    [class.border-blue-500]="activePicker === 'startTime'"
+                    [class.border-gray-300]="activePicker !== 'startTime'"
+                    (click)="togglePicker('startTime', $event)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="flex-1" [class.text-gray-700]="startTime" [class.text-gray-400]="!startTime">{{ startTime ? formatDisplayTime(startTime) : 'Pick time' }}</span>
+                  </button>
+                  @if (activePicker === 'startTime') {
+                    <div class="clock-dropdown" (click)="$event.stopPropagation()">
+
+                      <!-- Hour / Minute tabs -->
+                      <div class="clock-tabs">
+                        <button type="button" class="clock-tab" [class.active]="clockMode === 'hour'"
+                          (click)="setClockMode('hour')">Hour</button>
+                        <button type="button" class="clock-tab" [class.active]="clockMode === 'minute'"
+                          (click)="setClockMode('minute')">Minute</button>
+                      </div>
+
+                      <div class="clock-face-wrap">
+                        <svg #clockSvg width="220" height="220" viewBox="0 0 220 220"
+                          style="cursor:pointer; display:block;"
+                          (mousedown)="onClockMouseDown($event, clockSvg)"
+                          (touchstart)="onClockInteraction($event, clockSvg)"
+                          (touchmove)="onClockInteraction($event, clockSvg)">
+
+                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="108"
+                            fill="white" stroke="#e5e7eb" stroke-width="1"/>
+                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="88"
+                            fill="#f9fafb" stroke="#e5e7eb" stroke-width="0.5"/>
+
+                          <line [attr.x1]="clockCX" [attr.y1]="clockCY"
+                                [attr.x2]="clockHandEnd.x" [attr.y2]="clockHandEnd.y"
+                                stroke="#1d4ed8" stroke-width="2.5" stroke-linecap="round"/>
+
+                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="4" fill="#1d4ed8"/>
+
+                          @if (clockMode === 'hour') {
+                            @for (m of clockHourMarkers; track m.value) {
+                              <g>
+                                @if (m.selected) {
+                                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="16" fill="#1d4ed8"/>
+                                }
+                                <text [attr.x]="m.x" [attr.y]="m.y"
+                                  text-anchor="middle" dominant-baseline="central"
+                                  font-size="13" font-family="inherit"
+                                  [attr.fill]="m.selected ? 'white' : '#374151'"
+                                  [attr.font-weight]="m.selected ? '600' : '400'">{{ m.value }}</text>
+                              </g>
+                            }
+                          }
+
+                          @if (clockMode === 'minute') {
+                            @for (m of clockMinuteMarkers; track m.value) {
+                              <g>
+                                @if (m.selected) {
+                                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="16" fill="#1d4ed8"/>
+                                }
+                                <text [attr.x]="m.x" [attr.y]="m.y"
+                                  text-anchor="middle" dominant-baseline="central"
+                                  font-size="12" font-family="inherit"
+                                  [attr.fill]="m.selected ? 'white' : '#374151'"
+                                  [attr.font-weight]="m.selected ? '600' : '400'">{{ m.value | number:'2.0-0' }}</text>
+                              </g>
+                            }
+                          }
+
+                          <circle [attr.cx]="clockHandEnd.x" [attr.cy]="clockHandEnd.y"
+                            r="10" fill="#1d4ed8"/>
+                        </svg>
+                      </div>
+
+                      <!-- AM/PM + Confirm -->
+                      <div class="clock-footer">
+                        <div class="clock-ampm">
+                          <button type="button" [class.active]="selectedAmPm === 'AM'"
+                            (click)="setClockAmPm('AM')">AM</button>
+                          <button type="button" [class.active]="selectedAmPm === 'PM'"
+                            (click)="setClockAmPm('PM')">PM</button>
+                        </div>
+                        <button type="button" class="clock-confirm"
+                          (click)="confirmTime('startTime')">Confirm</button>
+                      </div>
+                    </div>
+                  }
                 </div>
-                <div>
+
+                <!-- ── End Time picker ── -->
+                <div class="relative">
                   <label class="block text-xs font-semibold text-gray-600 mb-1">End Time <span class="text-red-500">*</span></label>
-                  <div class="relative">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                    <input class="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" value="05:00 AM" />
-                  </div>
+                  <button type="button"
+                    class="w-full flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm bg-white cursor-pointer hover:border-blue-400 transition-colors outline-none text-left"
+                    [class.border-blue-500]="activePicker === 'endTime'"
+                    [class.border-gray-300]="activePicker !== 'endTime'"
+                    (click)="togglePicker('endTime', $event)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="flex-1" [class.text-gray-700]="endTime" [class.text-gray-400]="!endTime">{{ endTime ? formatDisplayTime(endTime) : 'Pick time' }}</span>
+                  </button>
+                  @if (activePicker === 'endTime') {
+
+                    <div class="clock-dropdown" (click)="$event.stopPropagation()">
+
+                      <!-- Hour / Minute tabs -->
+                      <div class="clock-tabs">
+                        <button type="button" class="clock-tab" [class.active]="clockMode === 'hour'"
+                          (click)="setClockMode('hour')">Hour</button>
+                        <button type="button" class="clock-tab" [class.active]="clockMode === 'minute'"
+                          (click)="setClockMode('minute')">Minute</button>
+                      </div>
+
+                      <div class="clock-face-wrap">
+                        <svg #clockSvg width="220" height="220" viewBox="0 0 220 220"
+                          style="cursor:pointer; display:block;"
+                          (mousedown)="onClockMouseDown($event, clockSvg)"
+                          (touchstart)="onClockInteraction($event, clockSvg)"
+                          (touchmove)="onClockInteraction($event, clockSvg)">
+
+                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="108"
+                            fill="white" stroke="#e5e7eb" stroke-width="1"/>
+
+                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="88"
+                            fill="#f9fafb" stroke="#e5e7eb" stroke-width="0.5"/>
+
+                          <line [attr.x1]="clockCX" [attr.y1]="clockCY"
+                                [attr.x2]="clockHandEnd.x" [attr.y2]="clockHandEnd.y"
+                                stroke="#1d4ed8" stroke-width="2.5" stroke-linecap="round"/>
+
+                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="4" fill="#1d4ed8"/>
+
+                          <!-- Hour markers -->
+                          @if (clockMode === 'hour') {
+                            @for (m of clockHourMarkers; track m.value) {
+                              <g>
+                                @if (m.selected) {
+                                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="16" fill="#1d4ed8"/>
+                                }
+                                <text [attr.x]="m.x" [attr.y]="m.y"
+                                  text-anchor="middle" dominant-baseline="central"
+                                  font-size="13" font-family="inherit"
+                                  [attr.fill]="m.selected ? 'white' : '#374151'"
+                                  [attr.font-weight]="m.selected ? '600' : '400'">{{ m.value }}</text>
+                              </g>
+                            }
+                          }
+
+                          <!-- Minute markers -->
+                          @if (clockMode === 'minute') {
+                            @for (m of clockMinuteMarkers; track m.value) {
+                              <g>
+                                @if (m.selected) {
+                                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="16" fill="#1d4ed8"/>
+                                }
+                                <text [attr.x]="m.x" [attr.y]="m.y"
+                                  text-anchor="middle" dominant-baseline="central"
+                                  font-size="12" font-family="inherit"
+                                  [attr.fill]="m.selected ? 'white' : '#374151'"
+                                  [attr.font-weight]="m.selected ? '600' : '400'">{{ m.value | number:'2.0-0' }}</text>
+                              </g>
+                            }
+                          }
+
+                          <circle [attr.cx]="clockHandEnd.x" [attr.cy]="clockHandEnd.y"
+                            r="10" fill="#1d4ed8"/>
+                        </svg>
+                      </div>
+
+                      <!-- AM/PM + Confirm -->
+                      <div class="clock-footer">
+                        <div class="clock-ampm">
+                          <button type="button" [class.active]="selectedAmPm === 'AM'"
+                            (click)="setClockAmPm('AM')">AM</button>
+                          <button type="button" [class.active]="selectedAmPm === 'PM'"
+                            (click)="setClockAmPm('PM')">PM</button>
+                        </div>
+                        <button type="button" class="clock-confirm"
+                          (click)="confirmTime('endTime')">Confirm</button>
+                      </div>
+                    </div>
+                  }
                 </div>
               }
             </div>
+
             <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
               <input type="checkbox" [(ngModel)]="recurring" class="w-3.5 h-3.5 accent-blue-700" /> This is a recurring event
             </label>
@@ -196,21 +385,9 @@
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
               <div class="flex items-center justify-between">
                 <span class="text-sm text-gray-700">This is a free event</span>
-                <div
-                  class="relative cursor-pointer flex-shrink-0"
-                  style="width: 44px; height: 24px;"
-                  (click)="freeEvent = !freeEvent"
-                >
-                  <div
-                    class="absolute inset-0 rounded-full transition-colors duration-200"
-                    [class.bg-blue-600]="freeEvent"
-                    [class.bg-gray-300]="!freeEvent"
-                  ></div>
-                  <div
-                    class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200"
-                    style="width: 20px; height: 20px;"
-                    [style.left]="freeEvent ? '22px' : '2px'"
-                  ></div>
+                <div class="relative cursor-pointer flex-shrink-0" style="width: 44px; height: 24px;" (click)="freeEvent = !freeEvent">
+                  <div class="absolute inset-0 rounded-full transition-colors duration-200" [class.bg-blue-600]="freeEvent" [class.bg-gray-300]="!freeEvent"></div>
+                  <div class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200" style="width: 20px; height: 20px;" [style.left]="freeEvent ? '22px' : '2px'"></div>
                 </div>
               </div>
             </div>
@@ -241,7 +418,7 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Age Restriction</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" />
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g., 18+ or All ages" />
               </div>
             </div>
           </div>
@@ -255,7 +432,6 @@
               </div>
               <button type="button" class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 cursor-pointer">Library</button>
             </div>
-
             @if (!coverImageUrl) {
               <label class="border-2 border-dashed border-gray-300 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors" for="coverImageInput">
                 <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
@@ -265,7 +441,6 @@
                 <span class="text-xs text-gray-400">PNG, JPG, WEBP</span>
               </label>
             }
-
             @if (coverImageUrl) {
               <div class="relative rounded-xl overflow-hidden group">
                 <img [src]="coverImageUrl" alt="Cover preview" class="w-full object-cover rounded-xl cursor-zoom-in" style="max-height: 280px;" (click)="openLightbox([{ url: coverImageUrl!, name: coverImageName }], 0)" />
@@ -276,17 +451,14 @@
               </div>
               <p class="text-xs text-gray-400 mt-2 mb-4">{{ coverImageName }}</p>
             }
-
             <input id="coverImageInput" type="file" accept="image/*" class="hidden" (change)="onCoverImageSelected($event)" />
             <div class="border-t border-gray-100 my-4"></div>
-
             <div class="flex items-center justify-between mb-2">
               <p class="text-xs font-semibold text-gray-600">Gallery Images <span class="text-gray-400 font-normal">(Optional)</span></p>
               @if (galleryImages.length > 0) {
                 <label for="galleryInput" class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1 cursor-pointer hover:bg-blue-100">+ Add</label>
               }
             </div>
-
             @if (galleryImages.length > 0) {
               <div class="overflow-y-auto mb-2" style="max-height: 316px; scrollbar-width: thin;">
                 <div class="grid grid-cols-3 gap-2">
@@ -302,7 +474,6 @@
               </div>
               <p class="text-xs text-gray-400 mb-1">{{ galleryImages.length }} image{{ galleryImages.length !== 1 ? 's' : '' }} added</p>
             }
-
             @if (galleryImages.length === 0) {
               <label for="galleryInput" class="border-2 border-dashed border-gray-300 rounded-xl py-6 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors">
                 <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
@@ -312,7 +483,6 @@
                 <span class="text-xs text-gray-400">PNG, JPG, WEBP · Multiple selection allowed</span>
               </label>
             }
-
             <input id="galleryInput" type="file" accept="image/*" multiple class="hidden" (change)="onGalleryImagesSelected($event)" />
           </div>
 
@@ -320,33 +490,17 @@
 
         <!-- ═══ RIGHT PANEL ═══ -->
         <div class="w-64 min-w-[256px]">
-
-          <!-- Publishing -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
             <h4 class="text-sm font-bold text-gray-900 mb-3">Publishing</h4>
             <button class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors">Publish</button>
           </div>
-
-          <!-- Geographic Context — pin mode -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
             <div class="flex items-center justify-between mb-2">
               <h4 class="text-sm font-bold text-gray-900">Geographic Context</h4>
-              <button type="button" (click)="openPinModal()"
-                class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2 py-1 cursor-pointer">
-                Pin on map
-              </button>
+              <button type="button" (click)="openPinModal()" class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2 py-1 cursor-pointer">Pin on map</button>
             </div>
-            <p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3">
-              <strong>Note:</strong> Pin the exact location of this event on the map.
-            </p>
-
-            <!-- Mini map -->
-            <div
-              class="relative rounded-lg overflow-hidden mb-3 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-              style="height: 112px;"
-              (click)="openPinModal()"
-              title="Click to pin location"
-            >
+            <p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3"><strong>Note:</strong> Pin the exact location of this event on the map.</p>
+            <div class="relative rounded-lg overflow-hidden mb-3 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all" style="height: 112px;" (click)="openPinModal()" title="Click to pin location">
               <div #miniMapContainer class="w-full h-full"></div>
               @if (!pinConfirmed) {
                 <div class="absolute inset-0 flex items-center justify-center bg-blue-50/60">
@@ -354,38 +508,28 @@
                 </div>
               }
             </div>
-
             <div class="grid grid-cols-2 gap-2 mb-3">
               <div>
                 <label class="block text-[11px] font-semibold text-gray-600 mb-1">Latitude</label>
-                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500"
-                  placeholder="e.g. 44.0165" [(ngModel)]="pinLat" (change)="onCoordInputChange()" />
+                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. 44.0165" [(ngModel)]="pinLat" (change)="onCoordInputChange()" />
               </div>
               <div>
                 <label class="block text-[11px] font-semibold text-gray-600 mb-1">Longitude</label>
-                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500"
-                  placeholder="e.g. 20.9114" [(ngModel)]="pinLng" (change)="onCoordInputChange()" />
+                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. 20.9114" [(ngModel)]="pinLng" (change)="onCoordInputChange()" />
               </div>
             </div>
-
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Street Address</label>
               <div class="relative">
-                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500"
-                  [class.pr-6]="isGeocodingAddress" placeholder="123 Main Street" [(ngModel)]="streetAddress" />
+                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" [class.pr-6]="isGeocodingAddress" placeholder="123 Main Street" [(ngModel)]="streetAddress" />
                 @if (isGeocodingAddress) {
                   <div class="absolute right-2 top-1/2 -translate-y-1/2">
-                    <svg class="animate-spin w-3 h-3 text-blue-500" viewBox="0 0 24 24" fill="none">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                    </svg>
+                    <svg class="animate-spin w-3 h-3 text-blue-500" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
                   </div>
                 }
               </div>
             </div>
           </div>
-
-          <!-- Classification + Tags -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
             <h4 class="text-sm font-bold text-gray-900 mb-3">Classification</h4>
             @for (item of classItems; track item.label) {
@@ -395,27 +539,19 @@
             }
             <div class="mt-3">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Additional Tags</label>
-              <input
-                class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500"
-                placeholder="Type and press Enter..."
-                [(ngModel)]="tagInput"
-                (keydown.enter)="addTag($event)"
-              />
+              <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="Type and press Enter..." [(ngModel)]="tagInput" (keydown.enter)="addTag($event)" />
               @if (tags.length > 0) {
                 <div class="flex gap-1.5 mt-2 overflow-x-auto pb-1" style="scrollbar-width: thin;">
                   @for (tag of tags; track tag) {
                     <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5 whitespace-nowrap flex-shrink-0">
                       {{ tag }}
-                      <button type="button" (click)="removeTag(tag)"
-                        class="border-none bg-transparent text-blue-500 hover:text-blue-800 cursor-pointer p-0 leading-none text-sm">&times;</button>
+                      <button type="button" (click)="removeTag(tag)" class="border-none bg-transparent text-blue-500 hover:text-blue-800 cursor-pointer p-0 leading-none text-sm">&times;</button>
                     </span>
                   }
                 </div>
               }
             </div>
           </div>
-
-          <!-- Metadata -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
             <h4 class="text-sm font-bold text-gray-900 mb-3">Metadata</h4>
             <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs"><span class="text-gray-500">Created By</span><span class="text-gray-900 font-semibold">Sarah J.</span></div>
@@ -423,50 +559,30 @@
             <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs"><span class="text-gray-500">Parent Dest.</span><span class="text-gray-900 font-semibold">Kragujevac</span></div>
             <div class="flex justify-between items-center py-1.5 text-xs"><span class="text-gray-500">Created</span><span class="text-gray-900 font-semibold">Oct 12, 2023</span></div>
           </div>
-
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ═══ PIN MODAL ═══ -->
-<div
-  class="fixed inset-0 z-50 flex items-center justify-center"
-  style="background: rgba(0,0,0,0.55);"
-  [style.display]="pinModalOpen ? 'flex' : 'none'"
-  (click)="onPinModalBackdropClick($event)">
-
-  <div class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-    style="width: 760px; max-width: 95vw; max-height: 90vh;"
-    (click)="$event.stopPropagation()">
-
+<!-- PIN MODAL -->
+<div class="fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(0,0,0,0.55);" [style.display]="pinModalOpen ? 'flex' : 'none'" (click)="onPinModalBackdropClick($event)">
+  <div class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" style="width: 760px; max-width: 95vw; max-height: 90vh;" (click)="$event.stopPropagation()">
     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-      <div>
-        <h4 class="text-sm font-bold text-gray-900">Pin Location on Map</h4>
-        <p class="text-xs text-gray-500 mt-0.5">Click anywhere on the map to place the pin.</p>
-      </div>
-      <button type="button" (click)="closePinModal()"
-        class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">&times;</button>
+      <div><h4 class="text-sm font-bold text-gray-900">Pin Location on Map</h4><p class="text-xs text-gray-500 mt-0.5">Click anywhere on the map to place the pin.</p></div>
+      <button type="button" (click)="closePinModal()" class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">&times;</button>
     </div>
-
     <div #modalMapContainer style="height: 420px; width: 100%; cursor: crosshair;"></div>
-
     <div class="px-5 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center gap-4">
       @if (modalPinLat !== null && modalPinLng !== null) {
-        <span class="text-xs text-gray-600">
-          📍 <strong>{{ modalPinLat | number:'1.4-6' }}</strong>, <strong>{{ modalPinLng | number:'1.4-6' }}</strong>
-        </span>
+        <span class="text-xs text-gray-600">📍 <strong>{{ modalPinLat | number:'1.4-6' }}</strong>, <strong>{{ modalPinLng | number:'1.4-6' }}</strong></span>
       } @else {
         <span class="text-xs text-gray-400">No pin placed yet — click on the map</span>
       }
     </div>
-
     <div class="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200">
-      <button type="button" (click)="closePinModal()"
-        class="text-sm text-gray-600 font-medium px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">Cancel</button>
-      <button type="button" (click)="confirmPin()"
-        class="text-sm text-white font-semibold px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer">Confirm Pin</button>
+      <button type="button" (click)="closePinModal()" class="text-sm text-gray-600 font-medium px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">Cancel</button>
+      <button type="button" (click)="confirmPin()" class="text-sm text-white font-semibold px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer">Confirm Pin</button>
     </div>
   </div>
 </div>
