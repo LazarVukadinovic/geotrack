@@ -4,6 +4,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
+import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import type {
   RecommendationFilter,
   RecommendationItem,
@@ -22,6 +23,7 @@ export class RecommendationsService {
   private readonly analytics = inject(AnalyticsService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
+  private readonly saveToCollection = inject(SaveToCollectionService);
 
   private readonly _items = signal<RecommendationItem[]>([]);
   private readonly _filters = signal<RecommendationFilter[]>([]);
@@ -94,22 +96,19 @@ export class RecommendationsService {
   }
 
   toggleSaved(id: string): void {
-    if (!this.auth.isLoggedIn()) return;
-
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
 
-    const current = this.items().find((item) => item.id === id)?.isSaved ?? false;
-    const next = !current;
-    this.favoriteState.set('place', id, next);
-    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', {
+    const item = this.items().find((entry) => entry.id === id);
+    if (!item) return;
+
+    this.saveToCollection.open({
       entityType: 'place',
       entityId: numId,
-      metadata: { surface: 'recommendations' },
-    });
-
-    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
-      error: () => this.favoriteState.set('place', id, current),
+      title: item.title,
+      imageUrl: item.image,
+      surface: 'recommendations',
+      analyticsEntityType: 'place',
     });
   }
 

@@ -1,11 +1,10 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
-import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
-import { AnalyticsService } from '../../../core/services/analytics.service';
+import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { PlaceCategoryItem } from '../models/local-places.model';
 
@@ -28,11 +27,10 @@ interface ApiPlaceListItem {
 @Injectable({ providedIn: 'root' })
 export class LocalPlacesCategoryService {
   private readonly http = inject(HttpClient);
-  private readonly auth = inject(AuthService);
   private readonly destinationSvc = inject(DestinationService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
-  private readonly analytics = inject(AnalyticsService);
+  private readonly saveToCollection = inject(SaveToCollectionService);
   private readonly exploreSvc = inject(ExploreService);
   private readonly _apiItems = signal<Record<string, PlaceCategoryItem[]>>({});
   private readonly _loadErrorByKey = signal<Record<string, string>>({});
@@ -129,19 +127,17 @@ export class LocalPlacesCategoryService {
   }
 
   toggleSaved(id: string, categoryKey: string): void {
-    if (!this.auth.isLoggedIn()) return;
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    const current = this.getItems(categoryKey).find((item) => item.id === id)?.isSaved ?? false;
-    const next = !current;
-    this.favoriteState.set('place', id, next);
-    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', {
+    const item = this.getItems(categoryKey).find((entry) => entry.id === id);
+    if (!item) return;
+    this.saveToCollection.open({
       entityType: 'place',
       entityId: numId,
-      metadata: { surface: 'local_places_category', category: categoryKey },
-    });
-    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
-      error: () => this.favoriteState.set('place', id, current),
+      title: item.title,
+      imageUrl: item.image,
+      surface: `local_places_category:${categoryKey}`,
+      analyticsEntityType: 'place',
     });
   }
 }

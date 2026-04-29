@@ -1,11 +1,10 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
-import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
-import { AnalyticsService } from '../../../core/services/analytics.service';
+import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import { ExploreService } from '../../explore/services/explore.service';
 import type { HotelListItem } from '../models/hotels-listing.model';
 
@@ -29,11 +28,10 @@ interface ApiPlaceListItem {
 @Injectable({ providedIn: 'root' })
 export class HotelsListingService {
   private readonly http = inject(HttpClient);
-  private readonly auth = inject(AuthService);
   private readonly destinationSvc = inject(DestinationService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly locationSvc = inject(LocationService);
-  private readonly analytics = inject(AnalyticsService);
+  private readonly saveToCollection = inject(SaveToCollectionService);
   // Ensure ExploreService is instantiated so its LocationService effect can resolve
   // the destination id on a deep-link cold-start.
   private readonly exploreSvc = inject(ExploreService);
@@ -101,19 +99,17 @@ export class HotelsListingService {
   }
 
   toggleSaved(id: string): void {
-    if (!this.auth.isLoggedIn()) return;
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    const current = this.hotels().find((h) => h.id === id)?.isSaved ?? false;
-    const next = !current;
-    this.favoriteState.set('place', id, next);
-    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', {
-      entityType: 'hotel',
+    const hotel = this.hotels().find((entry) => entry.id === id);
+    if (!hotel) return;
+    this.saveToCollection.open({
+      entityType: 'place',
       entityId: numId,
-      metadata: { surface: 'hotels_listing' },
-    });
-    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
-      error: () => this.favoriteState.set('place', id, current),
+      title: hotel.title,
+      imageUrl: hotel.image,
+      surface: 'hotels_listing',
+      analyticsEntityType: 'hotel',
     });
   }
 }

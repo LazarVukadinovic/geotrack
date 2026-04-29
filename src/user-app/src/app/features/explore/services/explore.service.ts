@@ -1,11 +1,10 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
-import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { FavoriteEntityType, FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
-import { AnalyticsService } from '../../../core/services/analytics.service';
+import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import type { ExploreItem } from '../../../core/models/explore-item.model';
 import type {
   ExploreAttraction,
@@ -49,10 +48,9 @@ const AUTH_PROMO_CARD: ExplorePromoCard = {
 export class ExploreService {
   private readonly http = inject(HttpClient);
   private readonly locationSvc = inject(LocationService);
-  private readonly auth = inject(AuthService);
   private readonly destinationSvc = inject(DestinationService);
   private readonly favoriteState = inject(FavoriteStateService);
-  private readonly analytics = inject(AnalyticsService);
+  private readonly saveToCollection = inject(SaveToCollectionService);
 
   private readonly _curatedForYou = signal<ExploreCuratedItem[]>([]);
   private readonly _localFavorites = signal<ExploreItem[]>([]);
@@ -265,38 +263,36 @@ export class ExploreService {
   }
 
   toggleSaved(id: string, list: 'curatedForYou' | 'localFavorites' | 'popularNearby' | 'topStays'): void {
-    if (!this.auth.isLoggedIn()) return;
-
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    const current = this.currentSavedStateForList(list, id);
-    const next = !current;
-    this.favoriteState.set('place', id, next);
-    this.analytics.track(next ? 'favorite_added' : 'favorite_removed', {
-      entityType: list === 'topStays' ? 'hotel' : 'place',
-      entityId: numId,
-      metadata: { surface: `explore_${list}` },
-    });
 
-    this.http.post('/api/favorites/toggle', { entityType: 'place', entityId: numId }).subscribe({
-      error: () => this.favoriteState.set('place', id, current),
+    const item = this.itemForList(list, id);
+    if (!item) return;
+
+    this.saveToCollection.open({
+      entityType: 'place',
+      entityId: numId,
+      title: item.title,
+      imageUrl: item.image,
+      surface: `explore_${list}`,
+      analyticsEntityType: list === 'topStays' ? 'hotel' : 'place',
     });
   }
 
-  private currentSavedStateForList(
+  private itemForList(
     list: 'curatedForYou' | 'localFavorites' | 'popularNearby' | 'topStays',
     id: string,
-  ): boolean {
+  ): { title: string; image?: string } | undefined {
     if (list === 'curatedForYou') {
-      return this.curatedForYou().find((item) => item.id === id)?.isSaved ?? false;
+      return this.curatedForYou().find((item) => item.id === id);
     }
     if (list === 'localFavorites') {
-      return this.localFavorites().find((item) => item.id === id)?.isSaved ?? false;
+      return this.localFavorites().find((item) => item.id === id);
     }
     if (list === 'popularNearby') {
-      return this.popularNearby().find((item) => item.id === id)?.isSaved ?? false;
+      return this.popularNearby().find((item) => item.id === id);
     }
-    return this.topStays().find((item) => item.id === id)?.isSaved ?? false;
+    return this.topStays().find((item) => item.id === id);
   }
 
   private withSavedState<T extends { id: string; isSaved: boolean }>(

@@ -164,7 +164,7 @@
                   <button
                     type="button"
                     class="rec-card__save"
-                    [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save recommendation'"
+                    [attr.aria-label]="item.isSaved ? 'Saved. Choose collection' : 'Save recommendation to collection'"
                     (click)="toggleSaved($event, item.id)"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -244,7 +244,7 @@
                   <button
                     type="button"
                     class="rec-card__save"
-                    [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save recommendation'"
+                    [attr.aria-label]="item.isSaved ? 'Saved. Choose collection' : 'Save recommendation to collection'"
                     (click)="toggleSaved($event, item.id)"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
