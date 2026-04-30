@@ -12,6 +12,8 @@ namespace Geotrack.Infrastructure.Services;
 
 public class PlaceService : IPlaceService
 {
+    private const int ListingMaxTake = 50;
+
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
     private readonly IReviewContentModerationService _contentModeration;
@@ -28,23 +30,25 @@ public class PlaceService : IPlaceService
 
     // --- Frontend-facing methods ---
 
-    public async Task<DestinationScopedResult<List<PlaceListItemDto>>> GetPlacesAsync(
+    public async Task<DestinationScopedResult<PlaceListingResponseDto>> GetPlacesAsync(
         int? destinationId,
         string? type = null,
         string? tags = null,
         string? category = null,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        int skip = 0,
+        int? take = null)
     {
         if (!destinationId.HasValue || destinationId.Value <= 0)
         {
-            return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.InvalidDestination };
+            return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.InvalidDestination };
         }
 
         if (!await _db.Destinations.AsNoTracking().AnyAsync(d => d.Id == destinationId.Value))
         {
-            return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.DestinationNotFound };
+            return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.DestinationNotFound };
         }
 
         var userPoint = BuildUserPoint(latitude, longitude);
@@ -83,9 +87,11 @@ public class PlaceService : IPlaceService
         var items = await BuildPlaceListItemsAsync(
             query,
             userId,
-            userPoint);
+            userPoint,
+            skip,
+            take);
 
-        return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.Success, Data = items };
+        return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.Success, Data = items };
     }
 
     public async Task<PlaceDetailDto?> GetPlaceDetailAsync(
@@ -269,21 +275,23 @@ public class PlaceService : IPlaceService
         };
     }
 
-    public async Task<DestinationScopedResult<List<PlaceListItemDto>>> GetHotelsAsync(
+    public async Task<DestinationScopedResult<PlaceListingResponseDto>> GetHotelsAsync(
         int? destinationId,
         string? tag = null,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        int skip = 0,
+        int? take = null)
     {
         if (!destinationId.HasValue || destinationId.Value <= 0)
         {
-            return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.InvalidDestination };
+            return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.InvalidDestination };
         }
 
         if (!await _db.Destinations.AsNoTracking().AnyAsync(d => d.Id == destinationId.Value))
         {
-            return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.DestinationNotFound };
+            return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.DestinationNotFound };
         }
 
         var userPoint = BuildUserPoint(latitude, longitude);
@@ -302,9 +310,11 @@ public class PlaceService : IPlaceService
         var items = await BuildPlaceListItemsAsync(
             query,
             userId,
-            userPoint);
+            userPoint,
+            skip,
+            take);
 
-        return new DestinationScopedResult<List<PlaceListItemDto>> { Status = DestinationScopedStatus.Success, Data = items };
+        return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.Success, Data = items };
     }
 
     // --- Master detail/review methods ---
@@ -466,20 +476,27 @@ public class PlaceService : IPlaceService
         };
     }
 
-    private async Task<List<PlaceListItemDto>> BuildPlaceListItemsAsync(
+    private async Task<PlaceListingResponseDto> BuildPlaceListItemsAsync(
         IQueryable<Place> query,
         int? userId,
-        Point? userPoint)
+        Point? userPoint,
+        int skip,
+        int? take)
     {
+        var normalizedSkip = Math.Max(0, skip);
+        var normalizedTake = take.HasValue
+            ? Math.Clamp(take.Value, 1, ListingMaxTake)
+            : (int?)null;
+
         var favoriteIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
 
-        List<PlaceListProjection> places;
+        IQueryable<PlaceListProjection> orderedQuery;
 
         if (userPoint is null)
         {
-            places = await query
+            orderedQuery = query
                 .Select(p => new PlaceListProjection
                 {
                     Id = p.Id,
@@ -496,11 +513,11 @@ public class PlaceService : IPlaceService
                 })
                 .OrderByDescending(p => p.Rating ?? 0)
                 .ThenBy(p => p.Title)
-                .ToListAsync();
+                .ThenBy(p => p.Id);
         }
         else
         {
-            places = await query
+            orderedQuery = query
                 .Where(p => EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Select(p => new PlaceListProjection
                 {
@@ -519,10 +536,28 @@ public class PlaceService : IPlaceService
                 })
                 .OrderBy(p => p.DistanceMeters)
                 .ThenByDescending(p => p.Rating ?? 0)
-                .ToListAsync();
+                .ThenBy(p => p.Title)
+                .ThenBy(p => p.Id);
         }
 
-        return places.Select((place, index) => new PlaceListItemDto
+        if (normalizedSkip > 0)
+        {
+            orderedQuery = orderedQuery.Skip(normalizedSkip);
+        }
+
+        if (normalizedTake.HasValue)
+        {
+            orderedQuery = orderedQuery.Take(normalizedTake.Value + 1);
+        }
+
+        var places = await orderedQuery.ToListAsync();
+        var pageSize = normalizedTake ?? places.Count;
+        var hasMore = normalizedTake.HasValue && places.Count > pageSize;
+        var pagePlaces = hasMore
+            ? places.Take(pageSize).ToList()
+            : places;
+
+        var items = pagePlaces.Select((place, index) => new PlaceListItemDto
         {
             Id = place.Id,
             Title = place.Title,
@@ -536,9 +571,18 @@ public class PlaceService : IPlaceService
             Distance = SpatialDistanceFormatter.Format(place.DistanceMeters),
             PricePerNight = place.PricePerNight,
             Tags = place.Tags,
-            Variant = index == 0 ? "large" : "compact",
+            Variant = normalizedSkip + index == 0 ? "large" : "compact",
             IsSaved = favoriteIds.Contains(place.Id)
         }).ToList();
+
+        return new PlaceListingResponseDto
+        {
+            Items = items,
+            Skip = normalizedSkip,
+            Take = normalizedTake ?? items.Count,
+            NextSkip = normalizedSkip + items.Count,
+            HasMore = hasMore
+        };
     }
 
     private static Point? BuildUserPoint(double? latitude, double? longitude)

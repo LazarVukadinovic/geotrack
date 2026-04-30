@@ -10,7 +10,9 @@ public interface IEventService
         bool? upcoming = null,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null);
+        double? longitude = null,
+        int skip = 0,
+        int? take = null);
     Task<EventDetailDto?> GetEventDetailAsync(
         int id,
         int? userId = null,

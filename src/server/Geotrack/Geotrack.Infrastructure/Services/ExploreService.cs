@@ -18,6 +18,8 @@ public class ExploreService : IExploreService
     private const int RecommendationDefaultTake = 8;
     private const int RecommendationMaxTake = 20;
     private const int RecommendationFilterLimit = 10;
+    private const int LocalCategoryDefaultTake = 10;
+    private const int LocalCategoryMaxTake = 50;
 
     private static readonly string[] FoodMusicTagSlugs =
     [
@@ -405,21 +407,25 @@ public class ExploreService : IExploreService
         };
     }
 
-    public async Task<DestinationScopedResult<List<LocalPlacesCategoryDto>>> GetLocalPlacesCategoriesAsync(
+    public async Task<DestinationScopedResult<LocalPlacesCategoriesPageDto>> GetLocalPlacesCategoriesAsync(
         int? destinationId,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        int skip = 0,
+        int take = LocalCategoryDefaultTake)
     {
         if (!destinationId.HasValue || destinationId.Value <= 0)
         {
-            return new DestinationScopedResult<List<LocalPlacesCategoryDto>> { Status = DestinationScopedStatus.InvalidDestination };
+            return new DestinationScopedResult<LocalPlacesCategoriesPageDto> { Status = DestinationScopedStatus.InvalidDestination };
         }
 
         if (!await _db.Destinations.AsNoTracking().AnyAsync(d => d.Id == destinationId.Value))
         {
-            return new DestinationScopedResult<List<LocalPlacesCategoryDto>> { Status = DestinationScopedStatus.DestinationNotFound };
+            return new DestinationScopedResult<LocalPlacesCategoriesPageDto> { Status = DestinationScopedStatus.DestinationNotFound };
         }
 
+        var normalizedSkip = Math.Max(0, skip);
+        var normalizedTake = Math.Clamp(take, 1, LocalCategoryMaxTake);
         var userPoint = latitude.HasValue && longitude.HasValue
             ? SpatialPointFactory.Create(latitude.Value, longitude.Value)
             : null;
@@ -468,10 +474,26 @@ public class ExploreService : IExploreService
                 });
         }
 
-        return new DestinationScopedResult<List<LocalPlacesCategoryDto>>
+        var categories = await query
+            .Skip(normalizedSkip)
+            .Take(normalizedTake + 1)
+            .ToListAsync();
+        var hasMore = categories.Count > normalizedTake;
+        var pageItems = hasMore
+            ? categories.Take(normalizedTake).ToList()
+            : categories;
+
+        return new DestinationScopedResult<LocalPlacesCategoriesPageDto>
         {
             Status = DestinationScopedStatus.Success,
-            Data = await query.Take(10).ToListAsync()
+            Data = new LocalPlacesCategoriesPageDto
+            {
+                Items = pageItems,
+                Skip = normalizedSkip,
+                Take = normalizedTake,
+                NextSkip = normalizedSkip + pageItems.Count,
+                HasMore = hasMore
+            }
         };
     }
 

@@ -24,13 +24,22 @@ public class PlacesController : ControllerBase
         [FromQuery] string? tags = null,
         [FromQuery] string? category = null,
         [FromQuery] double? latitude = null,
-        [FromQuery] double? longitude = null)
+        [FromQuery] double? longitude = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int? take = null)
     {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
         var userId = GetUserId();
-        var result = await _placeService.GetPlacesAsync(destinationId, type, tags, category, userId, latitude, longitude);
+        var result = await _placeService.GetPlacesAsync(destinationId, type, tags, category, userId, latitude, longitude, skip, take);
+        var wantsPagedResponse = Request.Query.ContainsKey("skip") || Request.Query.ContainsKey("take");
         return result.Status switch
         {
-            DestinationScopedStatus.Success => Ok(result.Data),
+            DestinationScopedStatus.Success => Ok(wantsPagedResponse ? result.Data! : result.Data!.Items),
             DestinationScopedStatus.InvalidDestination => BadRequest(new { error = "destinationId is required and must be positive." }),
             DestinationScopedStatus.DestinationNotFound => NotFound(new { error = "Destination not found." }),
             _ => StatusCode(500)
@@ -54,13 +63,22 @@ public class PlacesController : ControllerBase
         [FromQuery] int? destinationId = null,
         [FromQuery] string? tag = null,
         [FromQuery] double? latitude = null,
-        [FromQuery] double? longitude = null)
+        [FromQuery] double? longitude = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int? take = null)
     {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
         var userId = GetUserId();
-        var result = await _placeService.GetHotelsAsync(destinationId, tag, userId, latitude, longitude);
+        var result = await _placeService.GetHotelsAsync(destinationId, tag, userId, latitude, longitude, skip, take);
+        var wantsPagedResponse = Request.Query.ContainsKey("skip") || Request.Query.ContainsKey("take");
         return result.Status switch
         {
-            DestinationScopedStatus.Success => Ok(result.Data),
+            DestinationScopedStatus.Success => Ok(wantsPagedResponse ? result.Data! : result.Data!.Items),
             DestinationScopedStatus.InvalidDestination => BadRequest(new { error = "destinationId is required and must be positive." }),
             DestinationScopedStatus.DestinationNotFound => NotFound(new { error = "Destination not found." }),
             _ => StatusCode(500)
@@ -130,6 +148,21 @@ public class PlacesController : ControllerBase
     {
         var claim = User.FindFirst("userId")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private ActionResult? ValidatePaging(int skip, int? take)
+    {
+        if (skip < 0)
+        {
+            return BadRequest(new { error = "skip must be zero or greater." });
+        }
+
+        if (take.HasValue && take.Value <= 0)
+        {
+            return BadRequest(new { error = "take must be greater than zero." });
+        }
+
+        return null;
     }
 
     private IActionResult MapException(Exception ex)

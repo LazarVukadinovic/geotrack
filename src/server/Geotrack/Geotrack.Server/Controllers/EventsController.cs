@@ -23,10 +23,18 @@ public class EventsController : ControllerBase
         [FromQuery] string? tags = null,
         [FromQuery] bool? upcoming = null,
         [FromQuery] double? latitude = null,
-        [FromQuery] double? longitude = null)
+        [FromQuery] double? longitude = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int? take = null)
     {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
         var userId = GetUserId();
-        var result = await _eventService.GetEventsAsync(destinationId, tags, upcoming, userId, latitude, longitude);
+        var result = await _eventService.GetEventsAsync(destinationId, tags, upcoming, userId, latitude, longitude, skip, take);
         return result.Status switch
         {
             DestinationScopedStatus.Success => Ok(result.Data),
@@ -99,6 +107,21 @@ public class EventsController : ControllerBase
     {
         var claim = User.FindFirst("userId")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private ActionResult? ValidatePaging(int skip, int? take)
+    {
+        if (skip < 0)
+        {
+            return BadRequest(new { error = "skip must be zero or greater." });
+        }
+
+        if (take.HasValue && take.Value <= 0)
+        {
+            return BadRequest(new { error = "take must be greater than zero." });
+        }
+
+        return null;
     }
 
     private IActionResult MapException(Exception ex)

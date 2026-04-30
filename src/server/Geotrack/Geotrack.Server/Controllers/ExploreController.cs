@@ -40,12 +40,25 @@ public class ExploreController : ControllerBase
     public async Task<ActionResult> GetLocalPlacesCategories(
         [FromQuery] int? destinationId = null,
         [FromQuery] double? latitude = null,
-        [FromQuery] double? longitude = null)
+        [FromQuery] double? longitude = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int? take = null)
     {
-        var result = await _exploreService.GetLocalPlacesCategoriesAsync(destinationId, latitude, longitude);
+        if (skip < 0)
+        {
+            return BadRequest(new { error = "skip must be zero or greater." });
+        }
+
+        if (take.HasValue && take.Value <= 0)
+        {
+            return BadRequest(new { error = "take must be greater than zero." });
+        }
+
+        var result = await _exploreService.GetLocalPlacesCategoriesAsync(destinationId, latitude, longitude, skip, take ?? 10);
+        var wantsPagedResponse = Request.Query.ContainsKey("skip") || Request.Query.ContainsKey("take");
         return result.Status switch
         {
-            DestinationScopedStatus.Success => Ok(result.Data),
+            DestinationScopedStatus.Success => Ok(wantsPagedResponse ? result.Data! : result.Data!.Items),
             DestinationScopedStatus.InvalidDestination => BadRequest(new { error = "destinationId is required and must be positive." }),
             DestinationScopedStatus.DestinationNotFound => NotFound(new { error = "Destination not found." }),
             _ => StatusCode(500)

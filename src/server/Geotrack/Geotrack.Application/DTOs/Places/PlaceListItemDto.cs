@@ -17,3 +17,12 @@ public class PlaceListItemDto
     public string Variant { get; set; } = "large";
     public bool IsSaved { get; set; }
 }
+
+public class PlaceListingResponseDto
+{
+    public List<PlaceListItemDto> Items { get; set; } = new();
+    public int Skip { get; set; }
+    public int Take { get; set; }
+    public int NextSkip { get; set; }
+    public bool HasMore { get; set; }
+}

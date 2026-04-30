@@ -11,6 +11,8 @@ namespace Geotrack.Infrastructure.Services;
 
 public class EventService : IEventService
 {
+    private const int ListingMaxTake = 50;
+
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
     private readonly IReviewContentModerationService _contentModeration;
@@ -33,7 +35,9 @@ public class EventService : IEventService
         bool? upcoming = null,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        int skip = 0,
+        int? take = null)
     {
         if (!destinationId.HasValue || destinationId.Value <= 0)
         {
@@ -64,11 +68,15 @@ public class EventService : IEventService
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
             : new HashSet<int>();
 
-        List<EventListProjection> events;
+        var normalizedSkip = Math.Max(0, skip);
+        var normalizedTake = take.HasValue
+            ? Math.Clamp(take.Value, 1, ListingMaxTake)
+            : (int?)null;
+        IQueryable<EventListProjection> orderedQuery;
 
         if (userPoint is null)
         {
-            events = await query
+            orderedQuery = query
                 .Select(e => new EventListProjection
                 {
                     Id = e.Id,
@@ -82,11 +90,12 @@ public class EventService : IEventService
                     Tags = e.EventTags.OrderBy(et => et.Tag.Name).Select(et => et.Tag.Name).ToList()
                 })
                 .OrderBy(e => e.StartDate)
-                .ToListAsync();
+                .ThenBy(e => e.Title)
+                .ThenBy(e => e.Id);
         }
         else
         {
-            events = await query
+            orderedQuery = query
                 .Where(e => EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Select(e => new EventListProjection
                 {
@@ -103,10 +112,28 @@ public class EventService : IEventService
                 })
                 .OrderBy(e => e.DistanceMeters)
                 .ThenBy(e => e.StartDate)
-                .ToListAsync();
+                .ThenBy(e => e.Title)
+                .ThenBy(e => e.Id);
         }
 
-        var items = events.Select((e, index) => new EventListItemDto
+        if (normalizedSkip > 0)
+        {
+            orderedQuery = orderedQuery.Skip(normalizedSkip);
+        }
+
+        if (normalizedTake.HasValue)
+        {
+            orderedQuery = orderedQuery.Take(normalizedTake.Value + 1);
+        }
+
+        var events = await orderedQuery.ToListAsync();
+        var pageSize = normalizedTake ?? events.Count;
+        var hasMore = normalizedTake.HasValue && events.Count > pageSize;
+        var pageEvents = hasMore
+            ? events.Take(pageSize).ToList()
+            : events;
+
+        var items = pageEvents.Select((e, index) => new EventListItemDto
         {
             Id = e.Id,
             Title = e.Title,
@@ -116,14 +143,14 @@ public class EventService : IEventService
             Image = e.Image,
             DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
             Tags = e.Tags,
-            Variant = index == 0 ? "large" : "compact",
+            Variant = normalizedSkip + index == 0 ? "large" : "compact",
             IsSaved = favoriteIds.Contains(e.Id)
         }).ToList();
 
         EventsFeaturedDto? featured = null;
-        if (events.Count > 0)
+        if (pageEvents.Count > 0)
         {
-            var first = events.First();
+            var first = pageEvents.First();
             featured = new EventsFeaturedDto
             {
                 Title = first.Title,
@@ -136,7 +163,15 @@ public class EventService : IEventService
         return new DestinationScopedResult<EventsListingResponseDto>
         {
             Status = DestinationScopedStatus.Success,
-            Data = new EventsListingResponseDto { Items = items, Featured = featured }
+            Data = new EventsListingResponseDto
+            {
+                Items = items,
+                Featured = featured,
+                Skip = normalizedSkip,
+                Take = normalizedTake ?? items.Count,
+                NextSkip = normalizedSkip + items.Count,
+                HasMore = hasMore
+            }
         };
     }
 

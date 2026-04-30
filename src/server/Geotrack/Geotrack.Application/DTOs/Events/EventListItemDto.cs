@@ -26,4 +26,8 @@ public class EventsListingResponseDto
 {
     public List<EventListItemDto> Items { get; set; } = new();
     public EventsFeaturedDto? Featured { get; set; }
+    public int Skip { get; set; }
+    public int Take { get; set; }
+    public int NextSkip { get; set; }
+    public bool HasMore { get; set; }
 }

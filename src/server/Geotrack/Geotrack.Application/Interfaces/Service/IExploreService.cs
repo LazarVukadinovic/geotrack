@@ -13,8 +13,10 @@ public interface IExploreService
         int? tagId = null,
         int skip = 0,
         int take = 8);
-    Task<DestinationScopedResult<List<LocalPlacesCategoryDto>>> GetLocalPlacesCategoriesAsync(
+    Task<DestinationScopedResult<LocalPlacesCategoriesPageDto>> GetLocalPlacesCategoriesAsync(
         int? destinationId,
         double? latitude = null,
-        double? longitude = null);
+        double? longitude = null,
+        int skip = 0,
+        int take = 10);
 }

@@ -133,3 +133,12 @@ public class LocalPlacesCategoryDto
     public string CategoryKey { get; set; } = string.Empty;
     public string? Subtitle { get; set; }
 }
+
+public class LocalPlacesCategoriesPageDto
+{
+    public List<LocalPlacesCategoryDto> Items { get; set; } = new();
+    public int Skip { get; set; }
+    public int Take { get; set; }
+    public int NextSkip { get; set; }
+    public bool HasMore { get; set; }
+}
