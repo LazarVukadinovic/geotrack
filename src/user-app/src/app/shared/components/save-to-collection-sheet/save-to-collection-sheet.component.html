@@ -47,6 +47,7 @@
           @for (collection of collections(); track collection.id) {
             @let savedItem = savedItemForCollection(collection);
             @let membershipLoading = isMembershipLoading(collection);
+            @let membershipUnavailable = isMembershipUnavailable(collection);
             <div
               class="sc__collection"
               role="listitem"
@@ -68,6 +69,8 @@
                 <span class="sc__collection-meta">
                   @if (membershipLoading) {
                     Checking save status...
+                  } @else if (membershipUnavailable) {
+                    Save status unavailable
                   } @else if (savedItem) {
                     Saved here
                   } @else {
@@ -79,7 +82,7 @@
                 type="button"
                 class="sc__collection-action"
                 [class.sc__collection-action--remove]="savedItem !== undefined"
-                [disabled]="isBusy() || membershipLoading"
+                [disabled]="isBusy() || membershipLoading || membershipUnavailable"
                 (click)="toggleCollectionMembership(collection)"
               >
                 @if (isCollectionBusy(collection)) {
@@ -87,6 +90,8 @@
                   <span>{{ savedItem ? 'Removing' : 'Adding' }}</span>
                 } @else if (membershipLoading) {
                   <span>Checking</span>
+                } @else if (membershipUnavailable) {
+                  <span>Unavailable</span>
                 } @else {
                   <span>{{ savedItem ? 'Remove' : 'Add' }}</span>
                 }

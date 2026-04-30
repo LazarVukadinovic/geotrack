@@ -1,10 +1,10 @@
 import { Location } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { vi } from 'vitest';
 import { CollectionDetailComponent } from './collection-detail.component';
-import { CollectionsService } from '../../services/collections';
+import { Collection, CollectionsService } from '../../services/collections';
 
 describe('CollectionDetail', () => {
   let component: CollectionDetailComponent;
@@ -14,8 +14,12 @@ describe('CollectionDetail', () => {
     back: vi.fn(),
   };
 
+  const router = {
+    navigateByUrl: vi.fn(),
+  };
+
   const collectionsService = {
-    collections: signal([
+    collections: signal<Collection[]>([
       {
         id: 1,
         title: 'Weekend Trip',
@@ -48,6 +52,7 @@ describe('CollectionDetail', () => {
             },
           },
         },
+        { provide: Router, useValue: router },
         { provide: CollectionsService, useValue: collectionsService },
       ],
     }).compileComponents();
@@ -59,5 +64,33 @@ describe('CollectionDetail', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should navigate collection item cards to their detail route', () => {
+    collectionsService.collections.set([
+      {
+        id: 1,
+        title: 'Weekend Trip',
+        itemsCount: 1,
+        coverImages: [],
+        places: [
+          {
+            itemId: 7,
+            entityType: 'place',
+            entityId: 20,
+            placeId: 20,
+            title: 'Villa Adriatica',
+            image: '',
+            detailRoute: '/stays/20',
+          },
+        ],
+      },
+    ]);
+    fixture.detectChanges();
+
+    const openButton = fixture.nativeElement.querySelector('button[aria-label="Open Villa Adriatica"]') as HTMLButtonElement;
+    openButton.click();
+
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/stays/20');
   });
 });

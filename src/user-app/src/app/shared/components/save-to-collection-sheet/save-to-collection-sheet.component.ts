@@ -45,7 +45,7 @@ export class SaveToCollectionSheetComponent {
 
       untracked(() => {
         this.resetSheetState();
-        this.collectionsService.ensureLoaded(true);
+        this.collectionsService.refreshMembershipDetails();
       });
     });
 
@@ -54,7 +54,15 @@ export class SaveToCollectionSheetComponent {
       const collections = this.collections();
       if (!target) return;
 
-      const key = `${target.entityType}:${target.entityId}:${collections.map(collection => collection.id).join(',')}`;
+      const key = `${target.entityType}:${target.entityId}:${collections
+        .map(collection => {
+          const status = collection.places == null ? 'unknown' : collection.places
+            .map(item => `${item.entityType}:${item.entityId}`)
+            .sort()
+            .join('|');
+          return `${collection.id}:${collection.itemsCount}:${status}`;
+        })
+        .join(',')}`;
       if (key === this.hydratedKey) return;
       this.hydratedKey = key;
 
@@ -92,12 +100,12 @@ export class SaveToCollectionSheetComponent {
   }
 
   protected retryCollections(): void {
-    this.collectionsService.ensureLoaded(true);
+    this.collectionsService.refreshMembershipDetails();
   }
 
   protected toggleCollectionMembership(collection: Collection): void {
     const target = this.target();
-    if (!target || this.isBusy() || this.isMembershipLoading(collection)) return;
+    if (!target || this.isBusy() || !this.isMembershipKnown(collection)) return;
 
     const savedItem = this.savedItemForCollection(collection);
     if (savedItem) {
@@ -191,7 +199,16 @@ export class SaveToCollectionSheetComponent {
   }
 
   protected isMembershipLoading(collection: Collection): boolean {
-    return collection.places == null && this.collectionsService.getDetailLoadState(collection.id) === 'loading';
+    return collection.places == null && !this.isMembershipUnavailable(collection);
+  }
+
+  protected isMembershipUnavailable(collection: Collection): boolean {
+    const state = this.collectionsService.getDetailLoadState(collection.id);
+    return collection.places == null && (state === 'error' || state === 'notFound');
+  }
+
+  private isMembershipKnown(collection: Collection): boolean {
+    return collection.places != null;
   }
 
   private isAlreadySavedForTarget(collection: Collection, target: SaveToCollectionTarget): boolean {

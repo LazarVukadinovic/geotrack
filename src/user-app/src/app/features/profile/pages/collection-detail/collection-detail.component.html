@@ -100,10 +100,18 @@
 
       @for (place of places; track place.itemId) {
         <div class="bg-white rounded-2xl shadow-sm overflow-hidden flex items-center gap-4 px-4 py-3.5 mb-3">
-          <img appImageFallback [src]="place.image" class="w-16 h-16 rounded-xl object-cover flex-none"/>
-          <div class="flex-1 min-w-0">
-            <p class="text-base font-semibold text-slate-800 truncate">{{ place.title }}</p>
-          </div>
+          <button
+            type="button"
+            class="flex-1 min-w-0 flex items-center gap-4 text-left rounded-xl active:bg-slate-50 transition-colors disabled:active:bg-transparent disabled:cursor-default"
+            [attr.aria-label]="'Open ' + place.title"
+            [disabled]="!canOpenItem(place)"
+            (click)="openItem(place)"
+          >
+            <img appImageFallback [src]="place.image" class="w-16 h-16 rounded-xl object-cover flex-none"/>
+            <span class="flex-1 min-w-0">
+              <span class="block text-base font-semibold text-slate-800 truncate">{{ place.title }}</span>
+            </span>
+          </button>
           <button type="button" (click)="onRemovePlace(place.itemId)"
             class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center flex-none active:bg-red-50 transition-colors">
             <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">

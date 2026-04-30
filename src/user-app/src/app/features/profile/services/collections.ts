@@ -16,6 +16,7 @@ export interface CollectionPlace {
   placeId: number;
   title: string;
   image: string;
+  detailRoute?: string | null;
 }
 
 export interface Collection {
@@ -55,6 +56,7 @@ interface CollectionItemDto {
   name: string;
   description: string;
   imageUrl?: string | null;
+  detailRoute?: string | null;
 }
 
 interface GetCollectionDetailsResponseDto {
@@ -98,10 +100,12 @@ interface AddCollectionItemRequestDto {
 interface AddCollectionItemResponseDto {
   id: number;
   collectionId: number;
+  entityType?: string | null;
   destinationId?: number | null;
   locationId?: number | null;
   placeId?: number | null;
   eventId?: number | null;
+  detailRoute?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -142,21 +146,41 @@ export class CollectionsService {
     this.loadFromApi();
   }
 
-  private loadFromApi(): void {
+  refreshMembershipDetails(): void {
+    if (!this.authService.isLoggedIn()) return;
+    this.loadFromApi({ refreshDetails: true });
+  }
+
+  private loadFromApi(options: { refreshDetails?: boolean } = {}): void {
     this._loaded = true;
     this._listLoadState.set('loading');
     this.http.get<GetCollectionsResponseDto>('/api/user/me/collections').subscribe({
       next: (res) => {
-        this._collections.set(
-          res.collections.map(c => ({
+        const previousById = new Map(this._collections().map(collection => [collection.id, collection]));
+        const collections = res.collections.map(c => {
+          const previous = previousById.get(c.id);
+          const previousPlaces = previous?.places;
+          const canKeepLoadedPlaces = previousPlaces != null && previousPlaces.length === c.itemsCount;
+
+          return {
             id: c.id,
             title: c.name,
             description: c.description,
             itemsCount: c.itemsCount,
             coverImages: c.coverImages ?? [],
-          })),
-        );
+            ...(canKeepLoadedPlaces ? { places: previousPlaces } : {}),
+          };
+        });
+
+        this._collections.set(collections);
+        this.reconcileDetailLoadStates(collections);
         this._listLoadState.set('loaded');
+
+        if (options.refreshDetails) {
+          for (const collection of collections) {
+            this.loadDetails(collection.id);
+          }
+        }
       },
       error: () => {
         this._loaded = false;
@@ -193,6 +217,7 @@ export class CollectionsService {
                 placeId: entityId,
                 title: i.name,
                 image: i.imageUrl ?? '',
+                detailRoute: i.detailRoute ?? this.detailRouteFor(entityType, entityId),
               };
             });
             const loaded: Collection = {
@@ -291,6 +316,7 @@ export class CollectionsService {
           placeId: item.entityId,
           title: item.title,
           image: item.image ?? '',
+          detailRoute: res.detailRoute ?? this.detailRouteFor(item.entityType, item.entityId, item.analyticsEntityType),
         })),
         tap((savedItem) => {
           this._collections.update(cols =>
@@ -376,10 +402,18 @@ export class CollectionsService {
     const affectedItems = removedCollection?.places ?? [];
 
     this._collections.update(cols => cols.filter(c => c.id !== id));
+    this._detailLoadStates.update(states => {
+      const next = { ...states };
+      delete next[id];
+      return next;
+    });
 
     this.http.delete<void>(`/api/user/me/collections/${id}`).subscribe({
       next: () => this.refreshFavoriteMemberships(affectedItems),
-      error: () => this._collections.set(snapshot),
+      error: () => {
+        this._collections.set(snapshot);
+        this.reconcileDetailLoadStates(snapshot);
+      },
     });
   }
 
@@ -426,6 +460,17 @@ export class CollectionsService {
     return undefined;
   }
 
+  private detailRouteFor(
+    entityType: CollectionEntityType,
+    entityId: number,
+    analyticsEntityType?: CollectionAnalyticsEntityType,
+  ): string | null {
+    if (entityId <= 0) return null;
+    if (entityType === 'event') return `/events/${entityId}`;
+    if (entityType === 'place') return analyticsEntityType === 'hotel' ? `/stays/${entityId}` : `/places/${entityId}`;
+    return null;
+  }
+
   private markItemsSaved(items: CollectionPlace[]): void {
     const byType = new Map<FavoriteEntityType, Set<number>>();
     for (const item of items) {
@@ -461,6 +506,7 @@ export class CollectionsService {
       this.http.get<number[]>(`/api/favorites?entityType=${type}`).subscribe({
         next: (savedIds) => {
           const savedSet = new Set(savedIds.map(String));
+          this.favoriteState.reconcileKnown(type, savedIds);
           for (const id of ids) {
             this.favoriteState.set(type, String(id), savedSet.has(String(id)));
           }
@@ -487,6 +533,23 @@ export class CollectionsService {
       return entityType;
     }
     return undefined;
+  }
+
+  private reconcileDetailLoadStates(collections: Collection[]): void {
+    this._detailLoadStates.update(current => {
+      const next: Record<number, CollectionDetailLoadState> = {};
+      for (const collection of collections) {
+        const currentState = current[collection.id];
+        if (collection.places != null) {
+          next[collection.id] = currentState === 'loading' ? 'loading' : 'loaded';
+        } else if (currentState === 'loading') {
+          next[collection.id] = 'loading';
+        } else {
+          next[collection.id] = 'idle';
+        }
+      }
+      return next;
+    });
   }
 
   private setDetailLoadState(collectionId: number, state: CollectionDetailLoadState): void {

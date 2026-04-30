@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal, NgZone, OnDestroy } from '@angular/core';
 import { Location } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
-import { CollectionsService } from '../../services/collections';
+import { ActivatedRoute, Router } from '@angular/router';
+import { CollectionPlace, CollectionsService } from '../../services/collections';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 
 const DISMISS_THRESHOLD = 120;
@@ -15,6 +15,7 @@ const DISMISS_THRESHOLD = 120;
 export class CollectionDetailComponent {
   private readonly location    = inject(Location);
   private readonly route       = inject(ActivatedRoute);
+  private readonly router      = inject(Router);
   private readonly collService = inject(CollectionsService);
   private readonly ngZone      = inject(NgZone);
 
@@ -62,6 +63,16 @@ export class CollectionDetailComponent {
 
   protected onRemovePlace(itemId: number): void {
     this.collService.removePlace(this.id, itemId);
+  }
+
+  protected canOpenItem(item: CollectionPlace): boolean {
+    return this.detailRouteFor(item) !== null;
+  }
+
+  protected openItem(item: CollectionPlace): void {
+    const detailRoute = this.detailRouteFor(item);
+    if (!detailRoute) return;
+    void this.router.navigateByUrl(detailRoute);
   }
 
   protected onMenuOpen(): void {
@@ -143,5 +154,15 @@ export class CollectionDetailComponent {
       }
       this.activeDrag = null;
     });
+  }
+
+  private detailRouteFor(item: CollectionPlace): string | null {
+    if (item.detailRoute?.trim()) {
+      return item.detailRoute;
+    }
+
+    if (item.entityType === 'event') return `/events/${item.entityId}`;
+    if (item.entityType === 'place') return `/places/${item.entityId}`;
+    return null;
   }
 }

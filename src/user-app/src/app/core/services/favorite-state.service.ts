@@ -54,4 +54,25 @@ export class FavoriteStateService {
       },
     }));
   }
+
+  reconcileKnown(entityType: FavoriteEntityType, savedIds: Iterable<string | number>): void {
+    const savedSet = new Set(Array.from(savedIds, id => String(id)));
+
+    this._state.update((state) => {
+      const knownIds = new Set([
+        ...Object.keys(state[entityType]),
+        ...savedSet,
+      ]);
+
+      const nextEntries: Record<string, boolean> = {};
+      for (const id of knownIds) {
+        nextEntries[id] = savedSet.has(id);
+      }
+
+      return {
+        ...state,
+        [entityType]: nextEntries,
+      };
+    });
+  }
 }
