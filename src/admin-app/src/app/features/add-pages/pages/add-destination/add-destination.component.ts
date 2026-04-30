@@ -36,7 +36,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   // ── ViewChild refs ──────────────────────────────────────────────────────────
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
-  
+  @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
+  @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
   // ── Basic fields ────────────────────────────────────────────────────────────
   destinationName = '';
@@ -110,6 +111,239 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   removeGalleryImage(index: number): void {
     URL.revokeObjectURL(this.galleryImages[index].url);
     this.galleryImages.splice(index, 1);
+  }
+   // ── Classification ──────────────────────────────────────────────────────────
+  classItems: ClassItem[] = [
+    { label: 'Nature & Outdoors', checked: false },
+    { label: 'Culture & Heritage', checked: false },
+    { label: 'Urban & City',       checked: false },
+    { label: 'Adventure & Sport',  checked: false },
+    { label: 'Family Friendly',    checked: false },
+  ];
+   // ── Tags ────────────────────────────────────────────────────────────────────
+  tags    : string[] = [];
+  tagInput: string   = '';
+ 
+  addTag(event: Event): void {
+    event.preventDefault();
+    const value = this.tagInput.trim();
+    if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
+    this.tags     = [...this.tags, value];
+    this.tagInput = '';
+  }
+ 
+  removeTag(tag: string): void {
+    this.tags = this.tags.filter(t => t !== tag);
+  }
+   // ── Geographic zone / Leaflet ───────────────────────────────────────────────
+  zoneModalOpen = false;
+  zoneConfirmed = false;
+  zoneAreaKm2: number | null = null;
+ 
+  drawTool: 'polygon' | 'rectangle' | 'circle' = 'polygon';
+ 
+  get drawHint(): string {
+    const hints: Record<string, string> = {
+      polygon:   'Click to add points. Double-click to close the polygon.',
+      rectangle: 'Click and drag to draw a rectangle.',
+      circle:    'Click the centre point, then drag to set the radius.',
+    };
+    return hints[this.drawTool];
+  }
+ 
+  private miniMap      : any = null;
+  private modalMap     : any = null;
+  private drawnLayer   : any = null;
+  private confirmedLayer: any = null;
+  private drawControl  : any = null;
+ 
+  private initMiniMap(): void {
+    if (this.miniMap) return;
+    const el = this.miniMapContainer?.nativeElement;
+    if (!el) return;
+ 
+    this.miniMap = L.map(el, {
+      zoomControl: false, dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, touchZoom: false, attributionControl: false,
+    }).setView([44.0, 20.9], 8);
+ 
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+    }).addTo(this.miniMap);
+  }
+ 
+  openZoneModal(): void {
+    this.zoneModalOpen = true;
+    setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
+  }
+ 
+  closeZoneModal(): void {
+    this.zoneModalOpen = false;
+    this.destroyModalMap();
+  }
+ 
+  onModalBackdropClick(_event: MouseEvent): void {
+    this.closeZoneModal();
+  }
+ 
+  private initModalMap(el: HTMLDivElement): void {
+    if (this.modalMap) return;
+ 
+    this.modalMap = L.map(el, {
+      zoomControl: true,
+      attributionControl: false,
+    }).setView([44.0, 20.9], 9);
+ 
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+    }).addTo(this.modalMap);
+ 
+    setTimeout(() => this.modalMap?.invalidateSize(), 200);
+ 
+    if (this.confirmedLayer) {
+      const layerCopy = this.cloneLayer(this.confirmedLayer);
+      if (layerCopy) {
+        layerCopy.addTo(this.modalMap);
+        this.drawnLayer = layerCopy;
+        this.modalMap.fitBounds(layerCopy.getBounds(), { padding: [30, 30] });
+      }
+    }
+ 
+    this.activateDrawTool();
+  }
+ 
+  private destroyModalMap(): void {
+    if (this.modalMap) {
+      this.modalMap.remove();
+      this.modalMap    = null;
+      this.drawnLayer  = null;
+      this.drawControl = null;
+    }
+  }
+ 
+  setDrawTool(tool: 'polygon' | 'rectangle' | 'circle'): void {
+    this.drawTool = tool;
+    if (this.modalMap) { this.clearZone(); this.activateDrawTool(); }
+  }
+ 
+  private activateDrawTool(): void {
+    if (!this.modalMap) return;
+ 
+    if (this.drawControl) { this.drawControl.disable(); this.drawControl = null; }
+ 
+    const shapeOptions = {
+      color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
+    };
+ 
+    let handler: any;
+    switch (this.drawTool) {
+      case 'polygon':
+        handler = new L.Draw.Polygon(this.modalMap, {
+          shapeOptions, showArea: true, allowIntersection: false,
+        });
+        break;
+      case 'rectangle':
+        handler = new L.Draw.Rectangle(this.modalMap, { shapeOptions });
+        break;
+      case 'circle':
+        handler = new L.Draw.Circle(this.modalMap, { shapeOptions });
+        break;
+    }
+ 
+    if (handler) {
+      this.drawControl = handler;
+      handler.enable();
+ 
+      this.modalMap.once('draw:created', (e: any) => {
+        if (this.drawnLayer) this.modalMap.removeLayer(this.drawnLayer);
+        this.drawnLayer = e.layer;
+        this.modalMap.addLayer(this.drawnLayer);
+      });
+    }
+  }
+ 
+  clearZone(): void {
+    if (this.drawnLayer && this.modalMap) {
+      this.modalMap.removeLayer(this.drawnLayer);
+      this.drawnLayer = null;
+    }
+    if (this.drawControl) { this.drawControl.disable(); this.drawControl = null; }
+    this.activateDrawTool();
+  }
+ 
+  confirmZone(): void {
+    if (!this.drawnLayer) {
+      alert('Please draw a zone on the map first.');
+      return;
+    }
+ 
+    let areaM2 = 0;
+ 
+    if (this.drawnLayer instanceof L.Circle) {
+      const r = this.drawnLayer.getRadius();
+      areaM2  = Math.PI * r * r;
+    } else if (
+      this.drawnLayer instanceof L.Polygon ||
+      this.drawnLayer instanceof L.Rectangle
+    ) {
+      if ((L as any).GeometryUtil?.geodesicArea) {
+        areaM2 = (L as any).GeometryUtil.geodesicArea(
+          this.drawnLayer.getLatLngs()[0],
+        );
+      } else {
+        areaM2 = this.shoelaceAreaM2(this.drawnLayer.getLatLngs()[0]);
+      }
+    }
+ 
+    this.zoneAreaKm2    = areaM2 / 1_000_000;
+    this.zoneConfirmed  = true;
+    this.confirmedLayer = this.drawnLayer;
+ 
+    this.showZoneOnMiniMap();
+    this.closeZoneModal();
+  }
+ 
+  private showZoneOnMiniMap(): void {
+    if (!this.miniMap) this.initMiniMap();
+    if (!this.miniMap || !this.confirmedLayer) return;
+ 
+    this.miniMap.eachLayer((layer: any) => {
+      if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
+    });
+ 
+    const clone = this.cloneLayer(this.confirmedLayer);
+    if (!clone) return;
+ 
+    (clone as any)._isConfirmedZone = true;
+    clone.addTo(this.miniMap);
+ 
+    try {
+      this.miniMap.fitBounds(clone.getBounds(), { padding: [10, 10] });
+    } catch {}
+  }
+ 
+  private cloneLayer(layer: any): any {
+    const style = { color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.25, weight: 2 };
+    if (layer instanceof L.Circle)    return L.circle(layer.getLatLng(),    { ...style, radius: layer.getRadius() });
+    if (layer instanceof L.Rectangle) return L.rectangle(layer.getBounds(), style);
+    if (layer instanceof L.Polygon)   return L.polygon(layer.getLatLngs(),  style);
+    return null;
+  }
+ 
+  private shoelaceAreaM2(latlngs: any[]): number {
+    const flat = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
+    const R    = 6_371_000;
+    let area   = 0;
+    const n    = flat.length;
+    for (let i = 0; i < n; i++) {
+      const j    = (i + 1) % n;
+      const lat1 = (flat[i].lat * Math.PI) / 180;
+      const lat2 = (flat[j].lat * Math.PI) / 180;
+      const lng1 = (flat[i].lng * Math.PI) / 180;
+      const lng2 = (flat[j].lng * Math.PI) / 180;
+      area      += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+    }
+    return Math.abs((area * R * R) / 2);
   }
   // ── Lightbox ────────────────────────────────────────────────────────────────
   private lightboxEl: HTMLElement | null = null;
@@ -254,11 +488,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   ngOnInit(): void {}
 
   ngAfterViewInit(): void {
-    
+    setTimeout(() => this.initMiniMap(), 0);
   }
 
   ngOnDestroy(): void {
+    this.destroyModalMap();
+    this.closeLightbox();
    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
+    if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
   }
 }
