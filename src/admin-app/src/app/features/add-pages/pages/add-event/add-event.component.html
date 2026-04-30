@@ -191,29 +191,6 @@
                 (blur)="onDateTextBlur($event, 'startDate')"
                 (click)="$event.stopPropagation()" />
             </div>
-            @if (activePicker === 'startDate') {
-              <div class="picker-dropdown" (click)="$event.stopPropagation()">
-                <div class="picker-header">
-                  <button type="button" class="picker-nav" (click)="prevMonth()">&#8249;</button>
-                  <span class="picker-month-year">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
-                  <button type="button" class="picker-nav" (click)="nextMonth()">&#8250;</button>
-                </div>
-                <div class="picker-weekdays">
-                  <span *ngFor="let d of weekDays">{{ d }}</span>
-                </div>
-                <div class="picker-days">
-                  <button *ngFor="let day of calendarDays" type="button"
-                    class="picker-day"
-                    [class.empty]="day === 0"
-                    [class.selected]="isSelectedDate(day, startDate)"
-                    [class.today]="isToday(day)"
-                    [disabled]="day === 0"
-                    (click)="selectDate(day, 'startDate')">
-                    {{ day !== 0 ? day : '' }}
-                  </button>
-                </div>
-              </div>
-            }
           </div>
 
           <!-- ── End Date picker ── -->
@@ -236,29 +213,7 @@
                 (blur)="onDateTextBlur($event, 'endDate')"
                 (click)="$event.stopPropagation()" />
               </div>
-              @if (activePicker === 'endDate') {
-                <div class="picker-dropdown" (click)="$event.stopPropagation()">
-                  <div class="picker-header">
-                    <button type="button" class="picker-nav" (click)="prevMonth()">&#8249;</button>
-                    <span class="picker-month-year">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
-                    <button type="button" class="picker-nav" (click)="nextMonth()">&#8250;</button>
-                  </div>
-                  <div class="picker-weekdays">
-                    <span *ngFor="let d of weekDays">{{ d }}</span>
-                  </div>
-                  <div class="picker-days">
-                    <button *ngFor="let day of calendarDays" type="button"
-                      class="picker-day"
-                      [class.empty]="day === 0"
-                      [class.selected]="isSelectedDate(day, endDate)"
-                      [class.today]="isToday(day)"
-                      [disabled]="day === 0"
-                      (click)="selectDate(day, 'endDate')">
-                      {{ day !== 0 ? day : '' }}
-                    </button>
-                  </div>
-                </div>
-              }
+
             </div>
 
               @if (!allDay) {
@@ -679,3 +634,74 @@
     </div>
   </div>
 </div>
+<!-- ═══ DATE PICKER MODAL ═══ -->
+@if (activePicker === 'startDate' || activePicker === 'endDate') {
+  <div class="fixed inset-0 z-50 flex items-center justify-center"
+       style="background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
+       (click)="activePicker = null">
+
+    <div class="bg-white rounded-2xl shadow-2xl overflow-hidden"
+         style="width: 320px;"
+         (click)="$event.stopPropagation()">
+
+      <!-- Header -->
+      <div class="bg-blue-700 px-5 pt-5 pb-4">
+        <p class="text-[11px] font-semibold tracking-widest text-blue-200 uppercase mb-1">
+          {{ activePicker === 'startDate' ? 'Start Date' : 'End Date' }}
+        </p>
+        <p class="text-2xl font-bold text-white">
+          {{ activePicker === 'startDate'
+              ? (startDate ? formatDisplayDate(startDate) : 'Pick a date')
+              : (endDate   ? formatDisplayDate(endDate)   : 'Pick a date') }}
+        </p>
+      </div>
+
+      <!-- Month nav -->
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <button type="button"
+                class="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 border-none bg-transparent cursor-pointer text-lg"
+                (click)="prevMonth()">&#8249;</button>
+        <span class="text-sm font-semibold text-gray-800">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
+        <button type="button"
+                class="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 border-none bg-transparent cursor-pointer text-lg"
+                (click)="nextMonth()">&#8250;</button>
+      </div>
+
+      <!-- Weekdays -->
+      <div class="grid grid-cols-7 px-3 pt-2 pb-1">
+        @for (d of weekDays; track d) {
+          <div class="text-center text-[11px] font-semibold text-gray-400 py-1">{{ d }}</div>
+        }
+      </div>
+
+      <!-- Days grid -->
+      <div class="grid grid-cols-7 px-3 pb-3">
+        @for (day of calendarDays; track $index) {
+          <button type="button"
+            class="aspect-square flex items-center justify-center text-sm rounded-full border-none cursor-pointer transition-all mx-auto"
+            style="width: 36px; height: 36px;"
+            [class.bg-blue-700]="isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.text-white]="isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.font-bold]="isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.text-blue-700]="isToday(day) && !isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.font-semibold]="isToday(day)"
+            [class.text-gray-700]="day !== 0 && !isToday(day) && !isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.hover:bg-blue-50]="day !== 0 && !isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.text-transparent]="day === 0"
+            [class.pointer-events-none]="day === 0"
+            [class.bg-transparent]="!isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            (click)="day !== 0 && selectDate(day, activePicker === 'startDate' ? 'startDate' : 'endDate')">
+            {{ day !== 0 ? day : '' }}
+          </button>
+        }
+      </div>
+
+      <!-- Footer -->
+      <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-100">
+        <button type="button"
+                class="text-sm text-gray-500 px-4 py-1.5 rounded-lg hover:bg-gray-100 border-none bg-transparent cursor-pointer"
+                (click)="activePicker = null">Cancel</button>
+      </div>
+    </div>
+  </div>
+}
