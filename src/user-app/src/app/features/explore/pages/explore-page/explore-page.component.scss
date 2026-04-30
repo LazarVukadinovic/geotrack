@@ -16,3 +16,41 @@
   color: var(--color-muted);
   font-size: var(--text-sm);
 }
+
+.explore-page__destination-mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid rgba(26, 43, 76, 0.1);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  box-shadow: var(--shadow-subtle);
+
+  span {
+    min-width: 0;
+    color: var(--color-primary-navy);
+    font-size: var(--text-sm);
+    font-weight: 700;
+  }
+
+  button {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 var(--space-4);
+    border: none;
+    border-radius: var(--radius-pill);
+    background: #e8570a;
+    color: #ffffff;
+    font-size: var(--text-sm);
+    font-weight: 700;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid #e8570a;
+      outline-offset: 2px;
+    }
+  }
+}

@@ -67,7 +67,8 @@ export class ExploreService {
   /** Coordinates used for the last successful load. */
   private loadedLat = 0;
   private loadedLng = 0;
-  private loadedSource: 'gps' | 'ip' | 'manual' | null = null;
+  private loadedSource: 'gps' | 'ip' | 'manual' | 'destination' | null = null;
+  private loadedDestinationId: number | null = null;
 
   /** Reactive lists for templates that prefer signals. */
   readonly curatedForYou = computed(() => this.withSavedState(this._curatedForYou(), 'place'));
@@ -83,8 +84,16 @@ export class ExploreService {
   readonly loadError = computed(() => this._loadError());
 
   constructor() {
+    effect(() => {
+      if (this.destinationSvc.mode() !== 'destination') return;
+      const destinationId = this.destinationSvc.id();
+      if (destinationId == null) return;
+      if (this._loaded() && this.loadedSource === 'destination' && this.loadedDestinationId === destinationId) return;
+      this.loadDestinationFromApi(destinationId);
+    });
     // React to location changes — reload explore data when city meaningfully changes
     effect(() => {
+      if (this.destinationSvc.mode() === 'destination') return;
       const loc = this.locationSvc.location();
       if (!loc) return;
 
@@ -93,7 +102,7 @@ export class ExploreService {
       // First load (0,0 → real) always triggers. After that we still reload when
       // the source changes, so a fresh GPS fix can replace an approximate IP load
       // even if both coordinates are within the same city.
-      if (this._loaded() && dist < RELOAD_THRESHOLD_KM && !sourceChanged) return;
+      if (this._loaded() && dist < RELOAD_THRESHOLD_KM && !sourceChanged && this.loadedSource !== 'destination') return;
 
       this.loadFromApi(loc.latitude, loc.longitude, undefined, loc.source);
     });
@@ -115,6 +124,32 @@ export class ExploreService {
     });
   }
 
+  loadForDestination(destinationId: number): Promise<void> {
+    if (destinationId <= 0) return Promise.resolve();
+    if (this._loaded() && this.loadedSource === 'destination' && this.loadedDestinationId === destinationId) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      this.loadDestinationFromApi(destinationId, resolve);
+    });
+  }
+
+  useCurrentLocation(): void {
+    this.destinationSvc.useLocationMode();
+    const loc = this.locationSvc.location();
+    if (!loc) {
+      void this.locationSvc.ensureIpFallback().then((resolved) => {
+        if (resolved) {
+          this.loadFromApi(resolved.latitude, resolved.longitude, undefined, resolved.source);
+        }
+      });
+      return;
+    }
+
+    this.loadFromApi(loc.latitude, loc.longitude, undefined, loc.source);
+  }
+
   private loadFromApi(
     lat: number,
     lng: number,
@@ -129,6 +164,7 @@ export class ExploreService {
         this.loadedLat = lat;
         this.loadedLng = lng;
         this.loadedSource = source ?? this.locationSvc.location()?.source ?? null;
+        this.loadedDestinationId = res.selectedDestination?.id ?? null;
         this._loadError.set(null);
         this._loaded.set(true);
         onComplete?.();
@@ -144,7 +180,39 @@ export class ExploreService {
         this.loadedLat = lat;
         this.loadedLng = lng;
         this.loadedSource = source ?? this.locationSvc.location()?.source ?? null;
+        this.loadedDestinationId = null;
         this._loadError.set("We couldn't load the Explore feed. Check your connection and try again.");
+        this._loaded.set(true);
+        onComplete?.();
+      },
+    });
+  }
+
+  private loadDestinationFromApi(destinationId: number, onComplete?: () => void): void {
+    this._loadError.set(null);
+
+    this.http.get<ExploreApiResponse>(`/api/explore?destinationId=${destinationId}`).subscribe({
+      next: (res) => {
+        this.applyResponse(res);
+        this.loadedSource = 'destination';
+        this.loadedDestinationId = destinationId;
+        this.loadedLat = res.selectedDestination?.latitude ?? 0;
+        this.loadedLng = res.selectedDestination?.longitude ?? 0;
+        this._loadError.set(null);
+        this._loaded.set(true);
+        onComplete?.();
+      },
+      error: () => {
+        this._eventsThisWeek.set([]);
+        this._topStays.set([]);
+        this._popularNearby.set([]);
+        this._mustSeeAttractions.set([]);
+        this._landmarkCategories.set([]);
+        this._curatedForYou.set([]);
+        this._localFavorites.set([]);
+        this.loadedSource = 'destination';
+        this.loadedDestinationId = destinationId;
+        this._loadError.set("We couldn't load that destination. Check your connection and try again.");
         this._loaded.set(true);
         onComplete?.();
       },
@@ -222,6 +290,8 @@ export class ExploreService {
       this.destinationSvc.set({
         id: res.selectedDestination.id,
         name: res.selectedDestination.name,
+        latitude: res.selectedDestination.latitude,
+        longitude: res.selectedDestination.longitude,
       });
     }
   }

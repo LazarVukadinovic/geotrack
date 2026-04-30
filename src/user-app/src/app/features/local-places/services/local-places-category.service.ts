@@ -52,13 +52,18 @@ export class LocalPlacesCategoryService {
   private readonly _loadingMoreByKey = signal<Record<string, boolean>>({});
   private readonly _loadedKeys = new Set<string>();
   private readonly _pendingKeys = signal<string[]>([]);
+  private loadedDestinationId: number | null = null;
 
   constructor() {
     void this.exploreSvc;
     effect(() => {
-      const pending = this._pendingKeys();
       const destId = this.destinationSvc.id();
-      if (pending.length === 0 || destId == null) return;
+      if (destId == null) return;
+      if (destId !== this.loadedDestinationId) {
+        this.resetForDestination(destId);
+      }
+      const pending = this._pendingKeys();
+      if (pending.length === 0) return;
       for (const key of pending) {
         if (this._loadedKeys.has(key)) continue;
         this._loadedKeys.add(key);
@@ -73,6 +78,18 @@ export class LocalPlacesCategoryService {
     const queued = this._pendingKeys();
     if (queued.includes(categoryKey)) return;
     this._pendingKeys.set([...queued, categoryKey]);
+  }
+
+  private resetForDestination(destinationId: number): void {
+    this.loadedDestinationId = destinationId;
+    this._apiItems.set({});
+    this._loadErrorByKey.set({});
+    this._loadMoreErrorByKey.set({});
+    this._hasMoreByKey.set({});
+    this._nextSkipByKey.set({});
+    this._loadingByKey.set({});
+    this._loadingMoreByKey.set({});
+    this._loadedKeys.clear();
   }
 
   loadMore(categoryKey: string): void {

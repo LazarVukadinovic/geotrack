@@ -165,6 +165,14 @@ export class FoodMusicService {
   }
 
   private captureLocationContext(): void {
+    if (this.destinationSvc.isDestinationMode() &&
+      this.destinationSvc.latitude() != null &&
+      this.destinationSvc.longitude() != null) {
+      this.requestLatitude = this.destinationSvc.latitude();
+      this.requestLongitude = this.destinationSvc.longitude();
+      return;
+    }
+
     const loc = this.locationSvc.location();
     this.requestLatitude = loc?.latitude ?? null;
     this.requestLongitude = loc?.longitude ?? null;

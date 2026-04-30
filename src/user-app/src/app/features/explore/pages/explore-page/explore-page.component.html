@@ -21,6 +21,13 @@
 
     <p class="explore-page__context">{{ contextLine() }}</p>
 
+    @if (isDestinationMode()) {
+      <div class="explore-page__destination-mode">
+        <span>Selected destination: {{ heroCity() }}</span>
+        <button type="button" (click)="useCurrentLocation()">Use my location</button>
+      </div>
+    }
+
     @if (loadError()) {
       <app-empty-state
         title="Something went wrong"

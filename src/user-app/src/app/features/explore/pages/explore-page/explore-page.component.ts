@@ -1,6 +1,7 @@
 import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
+import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
 import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
@@ -42,8 +43,10 @@ import { AppNotificationsService } from '../../../../core/services/app-notificat
 export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly explore     = inject(ExploreService);
   private readonly auth        = inject(AuthService);
+  private readonly destinationSvc = inject(DestinationService);
   private readonly locationSvc = inject(LocationService);
   private readonly router      = inject(Router);
+  private readonly route       = inject(ActivatedRoute);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
   private readonly analytics   = inject(AnalyticsService);
@@ -54,12 +57,29 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected readonly loadError  = this.explore.loadError;
 
   constructor() {
+    const routeDestinationId = Number(this.route.snapshot.queryParamMap.get('destinationId'));
+    if (Number.isFinite(routeDestinationId) &&
+      routeDestinationId > 0 &&
+      (!this.destinationSvc.isDestinationMode() || this.destinationSvc.id() !== routeDestinationId)) {
+      this.destinationSvc.setDestinationOverride({
+        id: routeDestinationId,
+        name: this.destinationSvc.name(),
+      });
+    }
+
     // For returning users, silently attempt to upgrade location via GPS in background.
     // This handles "allow once" and re-granted permissions without blocking.
     this.locationSvc.tryBackgroundGpsRefresh();
   }
 
   private readonly heroLocation = computed(() => {
+    if (this.destinationSvc.isDestinationMode()) {
+      return {
+        city: this.destinationSvc.name() || 'Explore',
+        country: '',
+      };
+    }
+
     const loc = this.locationSvc.location();
     const label = loc?.displayLabel ?? (this.locationSvc.loading() ? 'Explore' : this.locationSvc.displayLabel());
     const displayLabel = this.splitDisplayLabel(label);
@@ -78,6 +98,11 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected readonly heroCity    = computed(() => this.heroLocation().city);
   protected readonly heroCountry = computed(() => this.heroLocation().country);
   protected readonly contextLine = computed(() => {
+    if (this.destinationSvc.isDestinationMode()) {
+      const name = this.destinationSvc.name() || 'this destination';
+      return `Exploring ${name}. Results are based on this destination.`;
+    }
+
     const source = this.locationSvc.location()?.source;
     if (source === 'gps') return 'Using exact location.';
     if (source === 'manual') return 'Using selected location.';
@@ -87,6 +112,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   });
 
   protected readonly searchQuery = signal('');
+  protected readonly isDestinationMode = computed(() => this.destinationSvc.isDestinationMode());
 
   protected readonly promo        = computed(() => this.explore.promo());
   protected readonly curatedItems = computed(() => this.explore.curatedForYou());
@@ -114,6 +140,12 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected onSearchChange(value: string): void {
     this.searchQuery.set(value);
+  }
+
+  protected useCurrentLocation(): void {
+    this.searchQuery.set('');
+    this.explore.useCurrentLocation();
+    this.router.navigate(['/explore'], { replaceUrl: true });
   }
 
   private splitDisplayLabel(label: string): { city: string; country: string } {

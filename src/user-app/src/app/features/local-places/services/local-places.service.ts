@@ -152,6 +152,14 @@ export class LocalPlacesService {
   }
 
   private captureLocationContext(): void {
+    if (this.destinationSvc.isDestinationMode() &&
+      this.destinationSvc.latitude() != null &&
+      this.destinationSvc.longitude() != null) {
+      this.requestLatitude = this.destinationSvc.latitude();
+      this.requestLongitude = this.destinationSvc.longitude();
+      return;
+    }
+
     const loc = this.locationSvc.location();
     this.requestLatitude = loc?.latitude ?? null;
     this.requestLongitude = loc?.longitude ?? null;
@@ -177,6 +185,24 @@ export class LocalPlacesService {
   getCategoryMeta(key: string): CategoryMeta {
     const found = this._categories().find(c => c.categoryKey === key);
     if (found) return { title: found.title, subtitle: found.subtitle };
-    return CATEGORY_META[key] ?? { title: key, subtitle: '' };
+    return CATEGORY_META[key] ?? { title: this.humanizeCategoryKey(key), subtitle: '' };
+  }
+
+  private humanizeCategoryKey(key: string): string {
+    const cleaned = key
+      .replace(/[0-9a-f]{12,}/gi, ' ')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleaned || /^[0-9a-f\s]+$/i.test(cleaned)) {
+      return 'Local Places';
+    }
+
+    return cleaned
+      .split(' ')
+      .filter(Boolean)
+      .map(word => word.length === 1 ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   }
 }

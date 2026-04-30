@@ -167,6 +167,7 @@ export class EventsListingService {
   private buildParams(destinationId: number, skip: number, take: number): HttpParams {
     let params = new HttpParams()
       .set('destinationId', destinationId)
+      .set('upcoming', true)
       .set('skip', skip)
       .set('take', take);
 
@@ -184,6 +185,14 @@ export class EventsListingService {
   }
 
   private captureLocationContext(): void {
+    if (this.destinationSvc.isDestinationMode() &&
+      this.destinationSvc.latitude() != null &&
+      this.destinationSvc.longitude() != null) {
+      this.requestLatitude = this.destinationSvc.latitude();
+      this.requestLongitude = this.destinationSvc.longitude();
+      return;
+    }
+
     const loc = this.locationSvc.location();
     this.requestLatitude = loc?.latitude ?? null;
     this.requestLongitude = loc?.longitude ?? null;

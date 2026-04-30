@@ -150,7 +150,7 @@ export class RecommendationsService {
         if (requestId !== this.requestVersion) return;
 
         const mapped = res.items.map((item) => this.mapItem(item));
-        this._items.set(append ? [...this._items(), ...mapped] : mapped);
+        this._items.set(append ? this.mergeItems(this._items(), mapped) : this.mergeItems([], mapped));
         this._filters.set(res.filters ?? []);
         this._destination.set(res.selectedDestination ?? null);
         this._hasSignals.set(res.hasSignals);
@@ -203,6 +203,19 @@ export class RecommendationsService {
       matchedTagId: item.matchedTagId,
       isSaved: item.isSaved,
     };
+  }
+
+  private mergeItems(current: RecommendationItem[], next: RecommendationItem[]): RecommendationItem[] {
+    const existingIds = new Set(current.map((item) => item.id));
+    const merged = [...current];
+
+    for (const item of next) {
+      if (existingIds.has(item.id)) continue;
+      existingIds.add(item.id);
+      merged.push(item);
+    }
+
+    return merged;
   }
 
   private buildRequestKey(latitude: number, longitude: number): string {
