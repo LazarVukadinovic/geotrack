@@ -5,6 +5,7 @@ import { catchError, forkJoin, of } from 'rxjs';
 import { TagService } from '../../../../core/services/tag.service';
 import { UserService } from '../../../../core/services/user.service';
 import { Tag } from '../../../../core/models/tag.model';
+import { SettingsSubpageShellComponent } from '../../components/settings-subpage-shell/settings-subpage-shell.component';
 import type {
   InferredInterestItem,
   UserInterestItem,
@@ -13,11 +14,12 @@ import type {
 
 @Component({
   selector: 'app-my-interests',
-  imports: [CommonModule],
+  imports: [CommonModule, SettingsSubpageShellComponent],
   templateUrl: './my-interests.component.html',
   styleUrl: './my-interests.component.css',
 })
 export class MyInterestsComponent {
+  readonly returnTo = signal('/settings');
   readonly isLoading = signal(true);
   readonly isSaving = signal(false);
   readonly loadError = signal('');
@@ -35,7 +37,6 @@ export class MyInterestsComponent {
     const inferredIds = new Set(this.visibleInferredTags().map(tag => tag.tagId));
     return this.tags().filter(tag => !selectedIds.has(tag.id) && !inferredIds.has(tag.id));
   });
-  private returnTo = '/settings';
 
   constructor(
     private router: Router,
@@ -44,7 +45,7 @@ export class MyInterestsComponent {
     private userService: UserService,
   ) {
     this.route.queryParams.subscribe(p => {
-      if (p['from']) this.returnTo = '/' + p['from'];
+      if (p['from']) this.returnTo.set('/' + p['from']);
     });
 
     this.loadInterests();
@@ -115,11 +116,11 @@ export class MyInterestsComponent {
         this.userService.load().subscribe({
           next: () => {
             this.isSaving.set(false);
-            this.router.navigate([this.returnTo]);
+            this.router.navigate([this.returnTo()]);
           },
           error: () => {
             this.isSaving.set(false);
-            this.router.navigate([this.returnTo]);
+            this.router.navigate([this.returnTo()]);
           },
         });
       },
@@ -131,7 +132,7 @@ export class MyInterestsComponent {
   }
 
   goBack(): void {
-    this.router.navigate([this.returnTo]);
+    this.router.navigate([this.returnTo()]);
   }
 
   retryLoad(): void {
