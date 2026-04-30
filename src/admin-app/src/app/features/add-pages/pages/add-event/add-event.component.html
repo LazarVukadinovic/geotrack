@@ -75,17 +75,73 @@
             <p class="text-xs text-gray-500 mb-4">Determine where this event structurally belongs.</p>
             <p class="text-sm text-gray-700 mb-2">Event happens at:</p>
             <div class="flex gap-4 mb-3">
-              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="radio" name="venueType" value="location" [(ngModel)]="venueType" class="accent-blue-700" /> Location</label>
-              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="radio" name="venueType" value="place" [(ngModel)]="venueType" class="accent-blue-700" /> Place</label>
+              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="radio" name="venueType" value="location" [(ngModel)]="venueType" class="accent-blue-700" (change)="onVenueTypeChange()" /> Location
+              </label>
+              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="radio" name="venueType" value="place" [(ngModel)]="venueType" class="accent-blue-700" (change)="onVenueTypeChange()" /> Place
+              </label>
             </div>
-            <div class="mb-3">
+            <div class="mb-3 relative">
               <label class="block text-xs font-semibold text-gray-600 mb-1">
                 {{ venueType === 'place' ? 'Place Selector' : 'Location Selector' }}
                 <span class="text-red-500">*</span>
               </label>
-              <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                    [placeholder]="venueType === 'place' ? 'Search places...' : 'Search locations...'" />
+              <div class="relative">
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  [placeholder]="venueType === 'place' ? 'Search places...' : 'Search locations...'"
+                  [(ngModel)]="venueSearchQuery"
+                  (input)="onVenueSearch()"
+                  (focus)="onVenueSearchFocus()"
+                  autocomplete="off" />
+                @if (isSearchingVenue) {
+                  <div class="absolute right-3 top-1/2 -translate-y-1/2">
+                    <svg class="animate-spin w-3.5 h-3.5 text-blue-500" viewBox="0 0 24 24" fill="none">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                  </div>
+                }
+              </div>
+              @if (venueDropdownOpen && filteredVenueResults.length > 0) {
+                <div class="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                  @for (item of filteredVenueResults; track item.id) {
+                    <button type="button"
+                      class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 border-none bg-transparent cursor-pointer transition-colors flex items-center gap-2"
+                      (click)="selectVenue(item)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                        @if (venueType === 'place') {
+                          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                        } @else {
+                          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        }
+                      </svg>
+                      <div>
+                        <div class="font-medium">{{ item.name }}</div>
+                        <div class="text-xs text-gray-400">{{ item.address }}</div>
+                      </div>
+                    </button>
+                  }
+                </div>
+              }
+              @if (venueDropdownOpen && filteredVenueResults.length === 0 && venueSearchQuery.length > 1 && !isSearchingVenue) {
+                <div class="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 text-sm text-gray-400">
+                  No {{ venueType === 'place' ? 'places' : 'locations' }} found for "{{ venueSearchQuery }}"
+                </div>
+              }
             </div>
+
+            @if (selectedVenue) {
+              <div class="mb-3 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-semibold text-blue-700">{{ selectedVenue.name }}</p>
+                  <p class="text-xs text-blue-500">{{ selectedVenue.address }}</p>
+                </div>
+                <button type="button" (click)="clearVenue()" class="text-blue-400 hover:text-blue-700 border-none bg-transparent cursor-pointer text-lg leading-none">&times;</button>
+              </div>
+            }
+
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Venue Name <span class="text-gray-400 font-normal">(Optional)</span></label>
               <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. Seattle Convention Center" />
@@ -517,41 +573,49 @@
             <button class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors">Publish</button>
           </div>
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
-            <div class="flex items-center justify-between mb-2">
-              <h4 class="text-sm font-bold text-gray-900">Geographic Context</h4>
-              <button type="button" (click)="openPinModal()" class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2 py-1 cursor-pointer">Pin on map</button>
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-sm font-bold text-gray-900">Geographical Context</h4>
+        </div>
+        @if (!selectedVenue) {
+          <p class="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3">
+            Select a location or place to see it on the map.
+          </p>
+        }
+        <div class="relative rounded-lg overflow-hidden mb-3 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all" 
+            style="height: 112px;"
+            [class.opacity-40]="!selectedVenue"
+            (click)="selectedVenue ? openMapModal() : null"
+            [title]="selectedVenue ? 'Click to expand map' : ''">
+          <div #miniMapContainer class="w-full h-full"></div>
+          @if (!selectedVenue) {
+            <div class="absolute inset-0 flex items-center justify-center bg-gray-100/80">
+              <span class="text-xs text-gray-400 font-medium">No location selected</span>
             </div>
-            <p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3"><strong>Note:</strong> Pin the exact location of this event on the map.</p>
-            <div class="relative rounded-lg overflow-hidden mb-3 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all" style="height: 112px;" (click)="openPinModal()" title="Click to pin location">
-              <div #miniMapContainer class="w-full h-full"></div>
-              @if (!pinConfirmed) {
-                <div class="absolute inset-0 flex items-center justify-center bg-blue-50/60">
-                  <span class="text-xs text-blue-600 font-medium bg-white/80 px-2 py-1 rounded-md">Click to pin location</span>
-                </div>
-              }
+          }
+          @if (selectedVenue) {
+            <div class="absolute bottom-2 right-2 bg-white/80 text-[10px] text-gray-500 px-1.5 py-0.5 rounded backdrop-blur-sm">
+              Click to expand
             </div>
-            <div class="grid grid-cols-2 gap-2 mb-3">
-              <div>
-                <label class="block text-[11px] font-semibold text-gray-600 mb-1">Latitude</label>
-                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. 44.0165" [(ngModel)]="pinLat" (change)="onCoordInputChange()" />
-              </div>
-              <div>
-                <label class="block text-[11px] font-semibold text-gray-600 mb-1">Longitude</label>
-                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. 20.9114" [(ngModel)]="pinLng" (change)="onCoordInputChange()" />
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Street Address</label>
-              <div class="relative">
-                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" [class.pr-6]="isGeocodingAddress" placeholder="123 Main Street" [(ngModel)]="streetAddress" />
-                @if (isGeocodingAddress) {
-                  <div class="absolute right-2 top-1/2 -translate-y-1/2">
-                    <svg class="animate-spin w-3 h-3 text-blue-500" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-                  </div>
-                }
-              </div>
-            </div>
+          }
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Latitude</label>
+            <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 bg-gray-50 outline-none" 
+                  [value]="pinLat || '—'" readonly />
           </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Longitude</label>
+            <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 bg-gray-50 outline-none" 
+                  [value]="pinLng || '—'" readonly />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Street Address</label>
+          <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 bg-gray-50 outline-none" 
+                [value]="streetAddress || '—'" readonly />
+        </div>
+      </div>
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
             <h4 class="text-sm font-bold text-gray-900 mb-3">Classification</h4>
             @for (item of classItems; track item.label) {
@@ -587,24 +651,31 @@
   </div>
 </div>
 
-<!-- PIN MODAL -->
-<div class="fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(0,0,0,0.55);" [style.display]="pinModalOpen ? 'flex' : 'none'" (click)="onPinModalBackdropClick($event)">
-  <div class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" style="width: 760px; max-width: 95vw; max-height: 90vh;" (click)="$event.stopPropagation()">
+<!-- MAP VIEW MODAL -->
+<div class="fixed inset-0 z-50 flex items-center justify-center" 
+     style="background: rgba(0,0,0,0.55);" 
+     [style.display]="mapModalOpen ? 'flex' : 'none'" 
+     (click)="closeMapModal()">
+  <div class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" 
+       style="width: 760px; max-width: 95vw; max-height: 90vh;" 
+       (click)="$event.stopPropagation()">
     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-      <div><h4 class="text-sm font-bold text-gray-900">Pin Location on Map</h4><p class="text-xs text-gray-500 mt-0.5">Click anywhere on the map to place the pin.</p></div>
-      <button type="button" (click)="closePinModal()" class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">&times;</button>
+      <div>
+        <h4 class="text-sm font-bold text-gray-900">{{ selectedVenue?.name || 'Location' }}</h4>
+        <p class="text-xs text-gray-500 mt-0.5">{{ selectedVenue?.address }}</p>
+      </div>
+      <button type="button" (click)="closeMapModal()" 
+              class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">&times;</button>
     </div>
-    <div #modalMapContainer style="height: 420px; width: 100%; cursor: crosshair;"></div>
-    <div class="px-5 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center gap-4">
-      @if (modalPinLat !== null && modalPinLng !== null) {
-        <span class="text-xs text-gray-600">📍 <strong>{{ modalPinLat | number:'1.4-6' }}</strong>, <strong>{{ modalPinLng | number:'1.4-6' }}</strong></span>
-      } @else {
-        <span class="text-xs text-gray-400">No pin placed yet — click on the map</span>
-      }
-    </div>
-    <div class="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200">
-      <button type="button" (click)="closePinModal()" class="text-sm text-gray-600 font-medium px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">Cancel</button>
-      <button type="button" (click)="confirmPin()" class="text-sm text-white font-semibold px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer">Confirm Pin</button>
+    <div #modalMapContainer style="height: 460px; width: 100%;"></div>
+    <div class="flex items-center justify-between px-5 py-3 bg-gray-50 border-t border-gray-100">
+      <span class="text-xs text-gray-500">
+        📍 <strong>{{ pinLat }}</strong>, <strong>{{ pinLng }}</strong>
+      </span>
+      <button type="button" (click)="closeMapModal()" 
+              class="text-sm text-gray-600 font-medium px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">
+        Close
+      </button>
     </div>
   </div>
 </div>

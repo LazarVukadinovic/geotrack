@@ -502,94 +502,22 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.miniMap);
   }
 
-  openPinModal(): void {
-    this.pinModalOpen = true;
-    const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
-    if (!isNaN(lat) && !isNaN(lng)) { this.modalPinLat = lat; this.modalPinLng = lng; }
-    else { this.modalPinLat = null; this.modalPinLng = null; }
-    setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
-  }
-
-  closePinModal(): void { this.pinModalOpen = false; this.destroyModalMap(); }
-  onPinModalBackdropClick(_event: MouseEvent): void { this.closePinModal(); }
 
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap) return;
-    const center: [number, number] = (this.modalPinLat !== null && this.modalPinLng !== null)
-      ? [this.modalPinLat, this.modalPinLng] : [44.0, 20.9];
-    const zoom = this.modalPinLat !== null ? 14 : 9;
+    const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
+    const center: [number, number] = (!isNaN(lat) && !isNaN(lng)) ? [lat, lng] : [44.0, 20.9];
+    const zoom = !isNaN(lat) ? 15 : 9;
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false }).setView(center, zoom);
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.modalMap);
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
-    if (this.modalPinLat !== null && this.modalPinLng !== null) {
-      this.modalMarker = L.marker([this.modalPinLat, this.modalPinLng], { icon: this.makePinIcon(), draggable: true }).addTo(this.modalMap);
-      this.modalMarker.on('dragend', (e: any) => {
-        const pos = e.target.getLatLng();
-        this.zone.run(() => { this.modalPinLat = pos.lat; this.modalPinLng = pos.lng; });
-      });
+    if (!isNaN(lat) && !isNaN(lng)) {
+      this.modalMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.modalMap);
     }
-    this.modalMap.on('click', (e: any) => {
-      this.zone.run(() => { this.modalPinLat = e.latlng.lat; this.modalPinLng = e.latlng.lng; });
-      if (this.modalMarker) {
-        this.modalMarker.setLatLng(e.latlng);
-      } else {
-        this.modalMarker = L.marker(e.latlng, { icon: this.makePinIcon(), draggable: true }).addTo(this.modalMap);
-        this.modalMarker.on('dragend', (ev: any) => {
-          const pos = ev.target.getLatLng();
-          this.zone.run(() => { this.modalPinLat = pos.lat; this.modalPinLng = pos.lng; });
-        });
-      }
-    });
   }
 
   private destroyModalMap(): void {
     if (this.modalMap) { this.modalMap.remove(); this.modalMap = null; this.modalMarker = null; }
-  }
-
-  confirmPin(): void {
-    if (this.modalPinLat === null || this.modalPinLng === null) {
-      alert('Please click on the map to place a pin first.');
-      return;
-    }
-    this.pinLat = this.modalPinLat.toFixed(6);
-    this.pinLng = this.modalPinLng.toFixed(6);
-    this.pinConfirmed = true;
-    this.updateMiniMapPin(this.modalPinLat, this.modalPinLng);
-    this.reverseGeocode(this.modalPinLat, this.modalPinLng);
-    this.closePinModal();
-  }
-
-  onCoordInputChange(): void {
-    const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
-    if (isNaN(lat) || isNaN(lng)) return;
-    this.pinConfirmed = true;
-    this.updateMiniMapPin(lat, lng);
-    if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
-    this._geocodeDebounce = setTimeout(() => this.reverseGeocode(lat, lng), 300);
-  }
-
-  private async reverseGeocode(lat: number, lng: number): Promise<void> {
-    this.isGeocodingAddress = true;
-    try {
-      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`;
-      const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'TourismCMS/1.0' } });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data?.display_name) {
-        this.zone.run(() => {
-          const a = data.address || {}, parts: string[] = [];
-          if (a.road) parts.push(a.road + (a.house_number ? ' ' + a.house_number : ''));
-          if (a.city || a.town || a.village || a.municipality) parts.push(a.city ?? a.town ?? a.village ?? a.municipality);
-          if (a.postcode) parts.push(a.postcode);
-          if (a.country)  parts.push(a.country);
-          this.streetAddress = parts.length ? parts.join(', ') : data.display_name;
-          this.cdr.detectChanges();
-        });
-      }
-    } catch (_) {
-    } finally {
-      this.zone.run(() => { this.isGeocodingAddress = false; this.cdr.detectChanges(); });
-    }
   }
 
   private updateMiniMapPin(lat: number, lng: number): void {
@@ -634,5 +562,98 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
     if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
+  }
+  // Mock data
+  private readonly mockLocations = [
+    { id: 'l1', name: 'Šumarice Memorial Park', address: 'Kragujevac, Serbia', lat: 44.0213, lng: 20.8943 },
+    { id: 'l2', name: 'City Center Kragujevac', address: 'Trg Radomira Putnika, Kragujevac', lat: 44.011028, lng: 20.916156 },
+    { id: 'l3', name: 'Veliki Park', address: 'Kragujevackog oktobra bb, Kragujevac', lat: 44.0178, lng: 20.9042 },
+    { id: 'l4', name: 'Bubanj Lake', address: 'Lepenicki bulevar bb, Kragujevac', lat: 44.0169, lng: 20.9258 },
+  ];
+
+  private readonly mockPlaces = [
+    { id: 'p1', name: 'Sumadija sajam', address: 'Save Kovacevica bb, Kragujevac', lat: 44.024755, lng: 20.930476 },
+    { id: 'p2', name: 'Knjazevsko-srpski teatar', address: 'Daniciceva 3, Kragujevac', lat: 44.0106, lng: 20.9103 },
+    { id: 'p3', name: 'Hala Jezero', address: 'Grada Sirena 15, Kragujevac', lat: 44.013856, lng: 20.924125 },
+    { id: 'p4', name: 'Stadion Cika Daca', address: 'Kralja Milana 4, Kragujevac', lat: 44.021171, lng: 20.899104 },
+  ];
+
+  // Venue search state
+  venueSearchQuery    = '';
+  venueDropdownOpen   = false;
+  isSearchingVenue    = false;
+  filteredVenueResults: { id: string; name: string; address: string; lat: number; lng: number }[] = [];
+  selectedVenue: { id: string; name: string; address: string; lat: number; lng: number } | null = null;
+
+  // Map modal
+  mapModalOpen = false;
+
+  private _venueSearchDebounce: any = null;
+
+  onVenueTypeChange(): void {
+    this.venueSearchQuery = '';
+    this.filteredVenueResults = [];
+    this.venueDropdownOpen = false;
+    this.selectedVenue = null;
+    this.clearGeoFields();
+  }
+
+  onVenueSearch(): void {
+    if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
+    const q = this.venueSearchQuery.trim().toLowerCase();
+    if (q.length < 1) { this.venueDropdownOpen = false; this.filteredVenueResults = []; return; }
+    this.isSearchingVenue = true;
+    this.venueDropdownOpen = true;
+    this._venueSearchDebounce = setTimeout(() => {
+      const source = this.venueType === 'place' ? this.mockPlaces : this.mockLocations;
+      this.filteredVenueResults = source.filter(
+        item => item.name.toLowerCase().includes(q) || item.address.toLowerCase().includes(q)
+      );
+      this.isSearchingVenue = false;
+      this.cdr.detectChanges();
+    }, 300);
+  }
+
+  onVenueSearchFocus(): void {
+    if (this.venueSearchQuery.trim().length > 0) {
+      this.venueDropdownOpen = true;
+    }
+  }
+
+  selectVenue(item: { id: string; name: string; address: string; lat: number; lng: number }): void {
+    this.selectedVenue     = item;
+    this.venueSearchQuery  = item.name;
+    this.venueDropdownOpen = false;
+    this.pinLat            = item.lat.toFixed(6);
+    this.pinLng            = item.lng.toFixed(6);
+    this.streetAddress     = item.address;
+    this.pinConfirmed      = true;
+    this.updateMiniMapPin(item.lat, item.lng);
+  }
+
+  clearVenue(): void {
+    this.selectedVenue    = null;
+    this.venueSearchQuery = '';
+    this.clearGeoFields();
+    if (this.miniMarker) { this.miniMap?.removeLayer(this.miniMarker); this.miniMarker = null; }
+    if (this.miniMap) this.miniMap.setView([44.0, 20.9], 8);
+    this.pinConfirmed = false;
+  }
+
+  private clearGeoFields(): void {
+    this.pinLat       = '';
+    this.pinLng       = '';
+    this.streetAddress = '';
+  }
+
+  openMapModal(): void {
+    if (!this.selectedVenue) return;
+    this.mapModalOpen = true;
+    setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
+  }
+
+  closeMapModal(): void {
+    this.mapModalOpen = false;
+    this.destroyModalMap();
   }
 }
