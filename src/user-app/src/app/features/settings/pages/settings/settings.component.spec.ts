@@ -63,6 +63,7 @@ describe('Settings', () => {
     component.changePassword();
     component.openNotifications();
     component.openPrivacy();
+    component.openAnalytics();
     component.openHelp();
     component.contactSupport();
     component.openTerms();
@@ -70,6 +71,7 @@ describe('Settings', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/settings/change-password']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/notifications']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/privacy-settings']);
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/analytics']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/help-center']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/contact-support']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/terms-and-privacy']);

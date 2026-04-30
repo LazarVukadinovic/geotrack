@@ -1,0 +1,64 @@
+<app-settings-subpage-shell
+  title="Analytics"
+  description="GeoTrack uses first-party product analytics to understand which travel screens, searches, maps, and recommendations are useful. You can turn this off at any time.">
+  <div class="flex flex-col gap-4">
+    @if (errorMessage()) {
+      <div class="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+        {{ errorMessage() }}
+      </div>
+    }
+
+    @if (feedbackMessage()) {
+      <div class="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        {{ feedbackMessage() }}
+      </div>
+    }
+
+    <div class="rounded-[1.5rem] bg-white p-4 shadow-sm">
+      <p class="mb-3 text-[12px] font-bold uppercase tracking-[0.15em] text-slate-500">Product Analytics</p>
+
+      @if (isLoading()) {
+        <div class="rounded-2xl bg-slate-50 px-4 py-5 text-sm text-slate-500">
+          Loading your analytics preference...
+        </div>
+      } @else {
+        <button
+          type="button"
+          class="analytics-page__toggle"
+          [attr.aria-pressed]="preference().analyticsEnabled"
+          [disabled]="isSaving()"
+          (click)="toggleAnalytics()">
+          <span class="analytics-page__toggle-copy">
+            <span class="analytics-page__toggle-title">
+              Analytics is {{ preference().analyticsEnabled ? 'enabled' : 'disabled' }}
+            </span>
+            <span class="analytics-page__toggle-description">
+              {{ preference().analyticsEnabled
+                ? 'Optional usage events help improve discovery, maps, filters, and recommendations.'
+                : 'Optional usage events are no longer sent from this app for your account.' }}
+            </span>
+          </span>
+
+          <span
+            class="analytics-page__switch"
+            [class.analytics-page__switch--on]="preference().analyticsEnabled">
+            <span class="analytics-page__switch-knob"></span>
+          </span>
+        </button>
+
+        @if (isSaving()) {
+          <p class="mt-3 text-sm text-slate-500">Saving your preference...</p>
+        }
+      }
+    </div>
+
+    <div class="rounded-[1.5rem] bg-white p-4 shadow-sm">
+      <p class="mb-3 text-[12px] font-bold uppercase tracking-[0.15em] text-slate-500">What This Controls</p>
+      <div class="flex flex-col gap-3 text-sm leading-relaxed text-slate-600">
+        <p>When analytics is enabled, GeoTrack may collect optional events such as page and detail views, searches, filters, map marker opens, directions starts, outbound booking-link clicks, favorites, collections, and review actions.</p>
+        <p>Those events can also update inferred interests, which help personalize the Curated for You and recommendation surfaces.</p>
+        <p>When analytics is disabled, the app stops sending those optional events and the backend ignores authenticated analytics events for your account.</p>
+      </div>
+    </div>
+  </div>
+</app-settings-subpage-shell>

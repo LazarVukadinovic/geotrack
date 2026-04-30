@@ -140,6 +140,13 @@ export const routes: Routes = [
         data: { hideBottomNav: true },
       },
       {
+        path: 'settings/analytics',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/settings/pages/analytics-settings-page/analytics-settings-page.component').then(m => m.AnalyticsSettingsPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
         path: 'settings/help-center',
         canActivate: [authGuard],
         loadComponent: () =>
