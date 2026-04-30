@@ -17,6 +17,7 @@ import { LocalFavoritesListComponent } from '../../components/local-favorites-li
 import { ExploreService } from '../../services/explore.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
+import { AppNotificationsService } from '../../../../core/services/app-notifications.service';
 
 @Component({
   selector: 'app-explore-page',
@@ -46,8 +47,10 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly elRef       = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
   private readonly analytics   = inject(AnalyticsService);
+  private readonly notifications = inject(AppNotificationsService);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
+  protected readonly hasUnreadNotifications = computed(() => this.notifications.unreadCount() > 0);
   protected readonly loadError  = this.explore.loadError;
 
   constructor() {
@@ -195,6 +198,10 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected onPromoCta(): void {
     this.router.navigate(['/profile']);
+  }
+
+  protected onNotifications(): void {
+    this.router.navigate(['/notifications']);
   }
 
   protected toggleCuratedSaved(id: string): void {
