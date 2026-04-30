@@ -7,12 +7,114 @@
     <div class="flex-1 overflow-y-auto px-8 py-6">
       <div class="flex gap-5 items-start">
 
+        <!-- ═══ LEFT COLUMN ═══ -->
         <div class="flex-1 min-w-0">
+
+          <!-- Basic Information -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <h3 class="text-sm font-bold text-gray-900 mb-0.5">Basic Information</h3>
+            <p class="text-xs text-gray-500 mb-4">Core details and hierarchy of the destination.</p>
+
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Region (Locked)</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none"
+                       value="Šumadija, Srbija" readonly />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  Internal Reference ID <span class="text-gray-400 font-normal">(Optional)</span>
+                </label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                       placeholder="e.g. REG-SUM-001" />
+              </div>
+              <div class="col-span-2">
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  Destination Name <span class="text-red-500">*</span>
+                </label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                       placeholder="Enter destination name"
+                       [(ngModel)]="destinationName" />
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">
+                Short Excerpt / Summary <span class="text-gray-400 font-normal">(Max 160 chars)</span>
+              </label>
+              <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
+                        placeholder="Brief summary of the destination..."
+                        rows="2" maxlength="160"></textarea>
+            </div>
+
+            <!-- Full Description RTE -->
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Full Description</label>
+              <div class="border border-gray-300 rounded-lg overflow-hidden">
+                <div class="flex gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200">
+                  <button
+                    type="button"
+                    class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors"
+                    [class.bg-blue-100]="isBold"
+                    [class.text-blue-700]="isBold"
+                    [class.bg-transparent]="!isBold"
+                    (mousedown)="$event.preventDefault(); execFormat('bold')"
+                    title="Bold (Ctrl+B)"
+                  ><strong>B</strong></button>
+                  <button
+                    type="button"
+                    class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors"
+                    [class.bg-blue-100]="isItalic"
+                    [class.text-blue-700]="isItalic"
+                    [class.bg-transparent]="!isItalic"
+                    (mousedown)="$event.preventDefault(); execFormat('italic')"
+                    title="Italic (Ctrl+I)"
+                  ><em>I</em></button>
+                  <button
+                    type="button"
+                    class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors"
+                    [class.bg-blue-100]="isUnderline"
+                    [class.text-blue-700]="isUnderline"
+                    [class.bg-transparent]="!isUnderline"
+                    (mousedown)="$event.preventDefault(); execFormat('underline')"
+                    title="Underline (Ctrl+U)"
+                  ><u>U</u></button>
+                </div>
+                <div class="relative rte-field">
+                  @if (editorIsEmpty) {
+                    <span class="rte-ph">Provide a comprehensive description of this destination...</span>
+                  }
+                  <div
+                    #editorRef
+                    contenteditable="true"
+                    class="w-full px-3 py-2 text-sm min-h-[100px] outline-none text-gray-700"
+                    style="font-family: inherit;"
+                    (keyup)="onEditorChange()"
+                    (input)="onEditorChange()"
+                    (mouseup)="onEditorChange()"
+                    (focus)="onEditorFocus()"
+                    (blur)="onEditorBlur()"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+
         </div>
 
+        <!-- ═══ RIGHT PANEL ═══ -->
         <div class="w-64 min-w-[256px]">
-        </div>
 
+          <!-- Publishing -->
+          <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Publishing</h4>
+            <button type="button"
+                    class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors">
+              Publish
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
