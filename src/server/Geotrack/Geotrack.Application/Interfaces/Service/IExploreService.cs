@@ -6,6 +6,7 @@ namespace Geotrack.Application.Interfaces.Service;
 public interface IExploreService
 {
     Task<ExplorePageDto> GetExplorePageAsync(double latitude, double longitude, int? userId = null);
+    Task<ExplorePageDto> GetExplorePageForDestinationAsync(int destinationId, int? userId = null);
     Task<ExploreRecommendationsPageDto> GetRecommendationsAsync(
         double latitude,
         double longitude,

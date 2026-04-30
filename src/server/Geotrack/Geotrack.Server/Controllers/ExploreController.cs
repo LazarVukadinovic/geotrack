@@ -19,8 +19,25 @@ public class ExploreController : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetExplorePage(
         [FromQuery] double? latitude,
-        [FromQuery] double? longitude)
+        [FromQuery] double? longitude,
+        [FromQuery] int? destinationId = null)
     {
+        if (destinationId.HasValue)
+        {
+            if (destinationId.Value <= 0)
+            {
+                return BadRequest(new { error = "destinationId must be positive when provided." });
+            }
+
+            var destinationResult = await _exploreService.GetExplorePageForDestinationAsync(destinationId.Value, GetUserId());
+            if (destinationResult.SelectedDestination is null)
+            {
+                return NotFound(new { error = "Destination not found." });
+            }
+
+            return Ok(destinationResult);
+        }
+
         if (!latitude.HasValue || !longitude.HasValue)
         {
             return BadRequest(new { error = "latitude and longitude are required." });

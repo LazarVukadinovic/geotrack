@@ -43,25 +43,32 @@ public class EventService : IEventService
         {
             return new DestinationScopedResult<EventsListingResponseDto> { Status = DestinationScopedStatus.InvalidDestination };
         }
-        if (!await _db.Destinations.AsNoTracking().AnyAsync(d => d.Id == destinationId.Value))
+        var destination = await _db.Destinations
+            .AsNoTracking()
+            .Where(d => d.Id == destinationId.Value)
+            .Select(d => new { d.Id, d.Latitude, d.Longitude })
+            .SingleOrDefaultAsync();
+
+        if (destination is null)
         {
             return new DestinationScopedResult<EventsListingResponseDto> { Status = DestinationScopedStatus.DestinationNotFound };
         }
 
-        var userPoint = BuildUserPoint(latitude, longitude);
+        var userPoint = BuildUserPoint(latitude, longitude)
+            ?? BuildUserPoint(destination.Latitude, destination.Longitude);
         var query = _db.Events.AsNoTracking();
-
-        query = query.Where(e => e.Location.DestinationId == destinationId.Value);
 
         if (upcoming == true)
             query = query.Where(e => e.EndDate >= DateTime.UtcNow);
 
-        if (!string.IsNullOrEmpty(tags) && tags.ToLower() != "all")
+        if (!string.IsNullOrWhiteSpace(tags) && !IsAllFilter(tags))
         {
-            var tagList = tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-                .Select(t => t.ToLowerInvariant())
-                .ToList();
-            query = query.Where(e => e.EventTags.Any(et => tagList.Contains(et.Tag.Slug.ToLower()) || tagList.Contains(et.Tag.Name.ToLower())));
+            var tagTerms = BuildFilterTerms(tags);
+            query = query.Where(e =>
+                e.EventTags.Any(et =>
+                    tagTerms.Contains(et.Tag.Slug.ToLower()) ||
+                    tagTerms.Contains(et.Tag.Name.ToLower())) ||
+                tagTerms.Contains(e.EventType.Name.ToLower()));
         }
 
         var favoriteIds = userId.HasValue
@@ -87,9 +94,11 @@ public class EventService : IEventService
                     Image = e.ImageUrl,
                     StartDate = e.StartDate,
                     EndDate = e.EndDate,
+                    DestinationPriority = e.Location.DestinationId == destination.Id ? 0 : 1,
                     Tags = e.EventTags.OrderBy(et => et.Tag.Name).Select(et => et.Tag.Name).ToList()
                 })
-                .OrderBy(e => e.StartDate)
+                .OrderBy(e => e.DestinationPriority)
+                .ThenBy(e => e.StartDate)
                 .ThenBy(e => e.Title)
                 .ThenBy(e => e.Id);
         }
@@ -108,9 +117,11 @@ public class EventService : IEventService
                     StartDate = e.StartDate,
                     EndDate = e.EndDate,
                     Tags = e.EventTags.OrderBy(et => et.Tag.Name).Select(et => et.Tag.Name).ToList(),
+                    DestinationPriority = e.Location.DestinationId == destination.Id ? 0 : 1,
                     DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
                 })
-                .OrderBy(e => e.DistanceMeters)
+                .OrderBy(e => e.DestinationPriority)
+                .ThenBy(e => e.DistanceMeters)
                 .ThenBy(e => e.StartDate)
                 .ThenBy(e => e.Title)
                 .ThenBy(e => e.Id);
@@ -469,6 +480,55 @@ public class EventService : IEventService
         return SpatialPointFactory.Create(latitude!.Value, longitude!.Value);
     }
 
+    private static bool IsAllFilter(string value) =>
+        string.Equals(value.Trim(), "all", StringComparison.OrdinalIgnoreCase);
+
+    private static List<string> BuildFilterTerms(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue) ||
+            string.Equals(rawValue.Trim(), "all", StringComparison.OrdinalIgnoreCase))
+        {
+            return [];
+        }
+
+        var terms = new HashSet<string>();
+
+        foreach (var rawTerm in rawValue.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            var normalized = rawTerm.ToLowerInvariant();
+            AddTermVariants(terms, normalized);
+            AddTermVariants(terms, normalized.Replace(" ", "-"));
+            AddTermVariants(terms, normalized.Replace("-", " "));
+        }
+
+        return terms.ToList();
+    }
+
+    private static void AddTermVariants(HashSet<string> terms, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        var normalized = value.Trim();
+        terms.Add(normalized);
+
+        if (normalized.EndsWith("ies", StringComparison.Ordinal) && normalized.Length > 3)
+        {
+            terms.Add(normalized[..^3] + "y");
+            return;
+        }
+
+        if (normalized.EndsWith("s", StringComparison.Ordinal) && normalized.Length > 1)
+        {
+            terms.Add(normalized[..^1]);
+            return;
+        }
+
+        terms.Add(normalized + "s");
+    }
+
     private sealed class EventListProjection
     {
         public int Id { get; set; }
@@ -479,6 +539,7 @@ public class EventService : IEventService
         public string? Image { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
+        public int DestinationPriority { get; set; }
         public double? DistanceMeters { get; set; }
         public List<string> Tags { get; set; } = new();
     }

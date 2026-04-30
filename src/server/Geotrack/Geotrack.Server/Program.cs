@@ -92,6 +92,7 @@ builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IExploreService, ExploreService>();
+builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IStayContributionService, StayContributionService>();
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>();

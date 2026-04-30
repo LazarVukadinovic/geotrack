@@ -46,46 +46,57 @@ public class PlaceService : IPlaceService
             return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.InvalidDestination };
         }
 
-        if (!await _db.Destinations.AsNoTracking().AnyAsync(d => d.Id == destinationId.Value))
+        var destination = await _db.Destinations
+            .AsNoTracking()
+            .Where(d => d.Id == destinationId.Value)
+            .Select(d => new { d.Id, d.Latitude, d.Longitude })
+            .SingleOrDefaultAsync();
+
+        if (destination is null)
         {
             return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.DestinationNotFound };
         }
 
-        var userPoint = BuildUserPoint(latitude, longitude);
+        var userPoint = BuildUserPoint(latitude, longitude)
+            ?? BuildUserPoint(destination.Latitude, destination.Longitude);
         var query = _db.Places.AsNoTracking();
 
-        query = query.Where(p => p.Location.DestinationId == destinationId.Value);
-
-        if (!string.IsNullOrEmpty(type))
+        var hasTypeFilter = !string.IsNullOrWhiteSpace(type) && !IsAllFilter(type);
+        if (hasTypeFilter)
         {
-            var normalizedType = type.Trim().ToLowerInvariant();
-            query = query.Where(p => p.PlaceType.Name.ToLower() == normalizedType);
+            var typeTerms = BuildFilterTerms(type);
+            query = query.Where(p => typeTerms.Contains(p.PlaceType.Name.ToLower()));
         }
 
-        if (!string.IsNullOrEmpty(tags) && tags.ToLower() != "all")
+        if (!string.IsNullOrWhiteSpace(tags) && !IsAllFilter(tags))
         {
-            var tagList = tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-                .Select(t => t.ToLowerInvariant())
-                .ToList();
-            query = query.Where(p => p.PlaceTags.Any(pt => tagList.Contains(pt.Tag.Slug.ToLower()) || tagList.Contains(pt.Tag.Name.ToLower())));
-        }
-
-        if (!string.IsNullOrEmpty(category))
-        {
-            var normalizedCategory = category.Trim().ToLowerInvariant();
+            var tagTerms = BuildFilterTerms(tags);
             query = query.Where(p =>
-                p.PlaceTags.Any(pt => pt.Tag.Slug.ToLower() == normalizedCategory) ||
-                p.PlaceType.Name.ToLower() == normalizedCategory);
+                p.PlaceTags.Any(pt =>
+                    tagTerms.Contains(pt.Tag.Slug.ToLower()) ||
+                    tagTerms.Contains(pt.Tag.Name.ToLower())) ||
+                tagTerms.Contains(p.PlaceType.Name.ToLower()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(category) && !IsAllFilter(category))
+        {
+            var categoryTerms = BuildFilterTerms(category);
+            query = query.Where(p =>
+                p.PlaceTags.Any(pt =>
+                    categoryTerms.Contains(pt.Tag.Slug.ToLower()) ||
+                    categoryTerms.Contains(pt.Tag.Name.ToLower())) ||
+                categoryTerms.Contains(p.PlaceType.Name.ToLower()));
         }
 
         // Exclude hotels from generic place listings
-        if (string.IsNullOrEmpty(type))
+        if (!hasTypeFilter)
         {
             query = query.Where(p => p.PricePerNight == null);
         }
 
         var items = await BuildPlaceListItemsAsync(
             query,
+            destination.Id,
             userId,
             userPoint,
             skip,
@@ -136,17 +147,19 @@ public class PlaceService : IPlaceService
         return new PlaceDetailDto
         {
             Id = place.Id,
-            Title = place.Name,
-            Location = place.Location?.Name,
+            Title = DisplayTextSafety.CleanRequired(place.Name, "Place"),
+            Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
             HeroImage = place.ImageUrl,
-            Tags = place.PlaceTags.Select(pt => new TagLabelDto { Label = pt.Tag.Name }).ToList(),
+            Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
+                .Select(label => new TagLabelDto { Label = label })
+                .ToList(),
             Rating = averageRating,
             ReviewCount = FormatReviewCountLabel(reviewCount),
             Distance = detailDistance,
             OpenStatus = DeriveOpenStatus(place.OpeningHours),
-            About = place.Description,
+            About = DisplayTextSafety.CleanOptional(place.Description),
             Reviews = place.PlaceReviews.OrderByDescending(r => r.CreatedAt).Take(10).Select(r => new ReviewDto
             {
                 Id = r.Id,
@@ -161,7 +174,7 @@ public class PlaceService : IPlaceService
             Similar = similar.Select(s => new SimilarPlaceDto
             {
                 Id = s.Id,
-                Title = s.Name,
+                Title = DisplayTextSafety.CleanRequired(s.Name, "Similar place"),
                 Image = s.ImageUrl,
                 Rating = CalculateAverageRating(s.PlaceReviews),
                 Distance = SpatialDistanceFormatter.FormatBetween(
@@ -173,7 +186,7 @@ public class PlaceService : IPlaceService
             }).ToList(),
             IsSaved = isSaved,
             ContentType = "place",
-            Category = place.PlaceType?.Name?.ToLower()
+            Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant()
         };
     }
 
@@ -221,17 +234,19 @@ public class PlaceService : IPlaceService
         return new HotelDetailDto
         {
             Id = place.Id,
-            Title = place.Name,
-            Location = place.Location?.Name,
+            Title = DisplayTextSafety.CleanRequired(place.Name, "Stay"),
+            Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
             HeroImage = place.ImageUrl,
-            Tags = place.PlaceTags.Select(pt => new TagLabelDto { Label = pt.Tag.Name }).ToList(),
+            Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
+                .Select(label => new TagLabelDto { Label = label })
+                .ToList(),
             Rating = averageRating,
             ReviewCount = FormatReviewCountLabel(reviewCount),
             Distance = detailDistance,
             PricePerNight = place.PricePerNight,
-            About = place.Description,
+            About = DisplayTextSafety.CleanOptional(place.Description),
             ContactEmail = place.ContactEmail,
             PhoneNumber = place.Number,
             BookingPartners = place.PlaceBookingPartners.Select(pb => new BookingPartnerDto
@@ -261,7 +276,7 @@ public class PlaceService : IPlaceService
             Similar = similar.Select(s => new SimilarPlaceDto
             {
                 Id = s.Id,
-                Title = s.Name,
+                Title = DisplayTextSafety.CleanRequired(s.Name, "Similar stay"),
                 Image = s.ImageUrl,
                 Rating = CalculateAverageRating(s.PlaceReviews),
                 Distance = SpatialDistanceFormatter.FormatBetween(
@@ -289,26 +304,36 @@ public class PlaceService : IPlaceService
             return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.InvalidDestination };
         }
 
-        if (!await _db.Destinations.AsNoTracking().AnyAsync(d => d.Id == destinationId.Value))
+        var destination = await _db.Destinations
+            .AsNoTracking()
+            .Where(d => d.Id == destinationId.Value)
+            .Select(d => new { d.Id, d.Latitude, d.Longitude })
+            .SingleOrDefaultAsync();
+
+        if (destination is null)
         {
             return new DestinationScopedResult<PlaceListingResponseDto> { Status = DestinationScopedStatus.DestinationNotFound };
         }
 
-        var userPoint = BuildUserPoint(latitude, longitude);
+        var userPoint = BuildUserPoint(latitude, longitude)
+            ?? BuildUserPoint(destination.Latitude, destination.Longitude);
         var query = _db.Places
             .AsNoTracking()
             .Where(p => p.PricePerNight != null);
 
-        query = query.Where(p => p.Location.DestinationId == destinationId.Value);
-
-        if (!string.IsNullOrEmpty(tag) && tag.ToLower() != "all")
+        if (!string.IsNullOrWhiteSpace(tag) && !IsAllFilter(tag))
         {
-            var normalizedTag = tag.Trim().ToLowerInvariant();
-            query = query.Where(p => p.PlaceTags.Any(pt => pt.Tag.Slug.ToLower() == normalizedTag || pt.Tag.Name.ToLower() == normalizedTag));
+            var tagTerms = BuildFilterTerms(tag);
+            query = query.Where(p =>
+                p.PlaceTags.Any(pt =>
+                    tagTerms.Contains(pt.Tag.Slug.ToLower()) ||
+                    tagTerms.Contains(pt.Tag.Name.ToLower())) ||
+                tagTerms.Contains(p.PlaceType.Name.ToLower()));
         }
 
         var items = await BuildPlaceListItemsAsync(
             query,
+            destination.Id,
             userId,
             userPoint,
             skip,
@@ -478,6 +503,7 @@ public class PlaceService : IPlaceService
 
     private async Task<PlaceListingResponseDto> BuildPlaceListItemsAsync(
         IQueryable<Place> query,
+        int destinationId,
         int? userId,
         Point? userPoint,
         int skip,
@@ -509,9 +535,11 @@ public class PlaceService : IPlaceService
                     ReviewCount = p.PlaceReviews.Count(),
                     OpeningHours = p.OpeningHours,
                     PricePerNight = p.PricePerNight,
+                    DestinationPriority = p.Location.DestinationId == destinationId ? 0 : 1,
                     Tags = p.PlaceTags.OrderBy(pt => pt.Tag.Name).Select(pt => pt.Tag.Name).ToList()
                 })
-                .OrderByDescending(p => p.Rating ?? 0)
+                .OrderBy(p => p.DestinationPriority)
+                .ThenByDescending(p => p.Rating ?? 0)
                 .ThenBy(p => p.Title)
                 .ThenBy(p => p.Id);
         }
@@ -531,10 +559,12 @@ public class PlaceService : IPlaceService
                     ReviewCount = p.PlaceReviews.Count(),
                     OpeningHours = p.OpeningHours,
                     PricePerNight = p.PricePerNight,
+                    DestinationPriority = p.Location.DestinationId == destinationId ? 0 : 1,
                     DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
                     Tags = p.PlaceTags.OrderBy(pt => pt.Tag.Name).Select(pt => pt.Tag.Name).ToList()
                 })
-                .OrderBy(p => p.DistanceMeters)
+                .OrderBy(p => p.DestinationPriority)
+                .ThenBy(p => p.DistanceMeters)
                 .ThenByDescending(p => p.Rating ?? 0)
                 .ThenBy(p => p.Title)
                 .ThenBy(p => p.Id);
@@ -557,20 +587,22 @@ public class PlaceService : IPlaceService
             ? places.Take(pageSize).ToList()
             : places;
 
-        var items = pagePlaces.Select((place, index) => new PlaceListItemDto
+        var items = pagePlaces
+            .DistinctBy(place => place.Id)
+            .Select((place, index) => new PlaceListItemDto
         {
             Id = place.Id,
-            Title = place.Title,
-            Subtitle = place.Subtitle,
-            Description = place.Description.Length > 150 ? place.Description[..150] + "..." : place.Description,
-            Location = place.Location,
+            Title = DisplayTextSafety.CleanRequired(place.Title, "Place"),
+            Subtitle = DisplayTextSafety.CleanOptional(place.Subtitle),
+            Description = TrimDescription(place.Description, 150),
+            Location = DisplayTextSafety.CleanOptional(place.Location),
             Image = place.Image,
             Rating = place.Rating,
             ReviewCount = FormatReviewCountLabel(place.ReviewCount),
             OpeningHours = place.OpeningHours,
             Distance = SpatialDistanceFormatter.Format(place.DistanceMeters),
             PricePerNight = place.PricePerNight,
-            Tags = place.Tags,
+            Tags = DisplayTextSafety.CleanLabels(place.Tags),
             Variant = normalizedSkip + index == 0 ? "large" : "compact",
             IsSaved = favoriteIds.Contains(place.Id)
         }).ToList();
@@ -590,6 +622,55 @@ public class PlaceService : IPlaceService
         return latitude.HasValue && longitude.HasValue && HasUsableCoordinates(latitude.Value, longitude.Value)
             ? SpatialPointFactory.Create(latitude.Value, longitude.Value)
             : null;
+    }
+
+    private static bool IsAllFilter(string value) =>
+        string.Equals(value.Trim(), "all", StringComparison.OrdinalIgnoreCase);
+
+    private static List<string> BuildFilterTerms(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue) ||
+            string.Equals(rawValue.Trim(), "all", StringComparison.OrdinalIgnoreCase))
+        {
+            return [];
+        }
+
+        var terms = new HashSet<string>();
+
+        foreach (var rawTerm in rawValue.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            var normalized = rawTerm.ToLowerInvariant();
+            AddTermVariants(terms, normalized);
+            AddTermVariants(terms, normalized.Replace(" ", "-"));
+            AddTermVariants(terms, normalized.Replace("-", " "));
+        }
+
+        return terms.ToList();
+    }
+
+    private static void AddTermVariants(HashSet<string> terms, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        var normalized = value.Trim();
+        terms.Add(normalized);
+
+        if (normalized.EndsWith("ies", StringComparison.Ordinal) && normalized.Length > 3)
+        {
+            terms.Add(normalized[..^3] + "y");
+            return;
+        }
+
+        if (normalized.EndsWith("s", StringComparison.Ordinal) && normalized.Length > 1)
+        {
+            terms.Add(normalized[..^1]);
+            return;
+        }
+
+        terms.Add(normalized + "s");
     }
 
     private static bool HasUsableCoordinates(double latitude, double longitude) =>
@@ -625,6 +706,19 @@ public class PlaceService : IPlaceService
 
     private static string? DeriveOpenStatus(string? hours) =>
         string.IsNullOrEmpty(hours) ? null : "Open";
+
+    private static string? TrimDescription(string? description, int maxLength)
+    {
+        var cleaned = DisplayTextSafety.CleanOptional(description);
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            return null;
+        }
+
+        return cleaned.Length > maxLength
+            ? cleaned[..maxLength] + "..."
+            : cleaned;
+    }
 
     private static string FormatTimeAgo(DateTime date)
     {
@@ -672,6 +766,7 @@ public class PlaceService : IPlaceService
         public int ReviewCount { get; set; }
         public string? OpeningHours { get; set; }
         public decimal? PricePerNight { get; set; }
+        public int DestinationPriority { get; set; }
         public double? DistanceMeters { get; set; }
         public List<string> Tags { get; set; } = new();
     }
