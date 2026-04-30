@@ -31,11 +31,16 @@ public class StayContributionService : IStayContributionService
 
     private readonly AppDbContext _db;
     private readonly IContributionMediaStorageService _mediaStorage;
+    private readonly IUserNotificationService _notificationService;
 
-    public StayContributionService(AppDbContext db, IContributionMediaStorageService mediaStorage)
+    public StayContributionService(
+        AppDbContext db,
+        IContributionMediaStorageService mediaStorage,
+        IUserNotificationService notificationService)
     {
         _db = db;
         _mediaStorage = mediaStorage;
+        _notificationService = notificationService;
     }
 
     public async Task<GetStayContributionsResponseDto> GetMineAsync(int userId)
@@ -247,12 +252,14 @@ public class StayContributionService : IStayContributionService
         await using var transaction = await _db.Database.BeginTransactionAsync();
 
         var place = await PublishPlaceAsync(contribution);
+        var now = DateTime.UtcNow;
         contribution.PublishedPlaceId = place.Id;
         contribution.Status = StayContributionStatus.Approved;
         contribution.ReviewedByUserId = reviewerUserId;
-        contribution.ReviewedAt = DateTime.UtcNow;
+        contribution.ReviewedAt = now;
         contribution.ReviewNote = NormalizeReviewNote(request.Note);
-        contribution.UpdatedAt = DateTime.UtcNow;
+        contribution.UpdatedAt = now;
+        _notificationService.AddContributionDecisionNotification(contribution);
 
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
@@ -271,11 +278,13 @@ public class StayContributionService : IStayContributionService
 
         await EnsureRegionalManagerCanReviewAsync(reviewerUserId, contribution);
 
+        var now = DateTime.UtcNow;
         contribution.Status = StayContributionStatus.Rejected;
         contribution.ReviewedByUserId = reviewerUserId;
-        contribution.ReviewedAt = DateTime.UtcNow;
+        contribution.ReviewedAt = now;
         contribution.ReviewNote = NormalizeReviewNote(request.Note);
-        contribution.UpdatedAt = DateTime.UtcNow;
+        contribution.UpdatedAt = now;
+        _notificationService.AddContributionDecisionNotification(contribution);
 
         await _db.SaveChangesAsync();
 

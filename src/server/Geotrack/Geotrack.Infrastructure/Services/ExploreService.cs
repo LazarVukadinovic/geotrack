@@ -620,7 +620,6 @@ public class ExploreService : IExploreService
         var candidates = await _db.Places
             .AsNoTracking()
             .Where(p =>
-                p.Location.DestinationId == destinationId &&
                 p.PricePerNight == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 p.PlaceTags.Any(pt => curationTagIds.Contains(pt.TagId)))
@@ -631,6 +630,7 @@ public class ExploreService : IExploreService
                 Description = p.Description,
                 Location = p.Location.Name,
                 Image = p.ImageUrl,
+                DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
                 DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
@@ -647,7 +647,8 @@ public class ExploreService : IExploreService
                     })
                     .ToList()
             })
-            .OrderByDescending(p => p.ExplicitMatchCount)
+            .OrderBy(p => p.DestinationId == destinationId ? 0 : 1)
+            .ThenByDescending(p => p.ExplicitMatchCount)
             .ThenByDescending(p => p.InferredMatchCount)
             .ThenBy(p => p.DistanceMeters)
             .ThenByDescending(p => p.AverageRating ?? 0)
@@ -658,9 +659,11 @@ public class ExploreService : IExploreService
             .Select(candidate => RankCuratedCandidate(
                 candidate,
                 signalByTagId,
-                duplicatePlaceIds.Contains(candidate.Id)))
+                duplicatePlaceIds.Contains(candidate.Id),
+                destinationId))
             .Where(candidate => candidate.Score > 0)
-            .OrderByDescending(candidate => candidate.Score)
+            .OrderBy(candidate => candidate.IsOutsideCurrentDestination)
+            .ThenByDescending(candidate => candidate.Score)
             .ThenBy(candidate => candidate.IsDuplicateWithOtherSection)
             .ThenBy(candidate => candidate.DistanceMeters)
             .ThenByDescending(candidate => candidate.AverageRating ?? 0)
@@ -672,7 +675,8 @@ public class ExploreService : IExploreService
     private static RankedCuratedPlace RankCuratedCandidate(
         CuratedPlaceCandidate candidate,
         IReadOnlyDictionary<int, CuratedInterestSignal> signalByTagId,
-        bool isDuplicateWithOtherSection)
+        bool isDuplicateWithOtherSection,
+        int currentDestinationId)
     {
         var score = 0.0;
         CuratedTagMatch? bestTag = null;
@@ -717,7 +721,8 @@ public class ExploreService : IExploreService
             ReviewCount = candidate.ReviewCount,
             OpeningHours = candidate.OpeningHours,
             MatchedTags = candidate.MatchedTags,
-            IsDuplicateWithOtherSection = isDuplicateWithOtherSection
+            IsDuplicateWithOtherSection = isDuplicateWithOtherSection,
+            IsOutsideCurrentDestination = candidate.DestinationId != currentDestinationId
         };
     }
 
@@ -851,6 +856,7 @@ public class ExploreService : IExploreService
         public string? Description { get; set; }
         public string? Location { get; set; }
         public string? Image { get; set; }
+        public int DestinationId { get; set; }
         public string PlaceTypeName { get; set; } = string.Empty;
         public string? OpeningHours { get; set; }
         public double DistanceMeters { get; set; }
@@ -884,5 +890,6 @@ public class ExploreService : IExploreService
         public string? OpeningHours { get; set; }
         public List<CuratedTagMatch> MatchedTags { get; set; } = new();
         public bool IsDuplicateWithOtherSection { get; set; }
+        public bool IsOutsideCurrentDestination { get; set; }
     }
 }

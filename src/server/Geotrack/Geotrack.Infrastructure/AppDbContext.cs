@@ -55,6 +55,7 @@ public class AppDbContext : DbContext
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
     public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<StayContribution> StayContributions => Set<StayContribution>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -822,6 +823,43 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<UserNotification>(entity =>
+        {
+            entity.ToTable("UserNotifications");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Type)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Title)
+                .IsRequired()
+                .HasMaxLength(160);
+
+            entity.Property(x => x.Message)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.RelatedEntityType)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.ActionUrl)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.Notifications)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+            entity.HasIndex(x => new { x.UserId, x.ReadAt });
+            entity.HasIndex(x => new { x.RelatedEntityType, x.RelatedEntityId });
         });
 
         modelBuilder.Entity<StayContribution>(entity =>

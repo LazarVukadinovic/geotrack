@@ -4,6 +4,8 @@ using System.Net;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Domain.Entities.Analytics;
+using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Tags;
 using Geotrack.Infrastructure;
 using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -231,6 +233,33 @@ public sealed class ExploreRatingsTests
         });
     }
 
+    [Fact]
+    public async Task Explore_curated_for_you_expands_to_nearby_relevant_content_when_destination_has_no_matches()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var (client, _) = await RegisterFreshUserAsync(app);
+
+        int tagId;
+        await using (var setup = app.Services.CreateAsyncScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<AppDbContext>();
+            tagId = await CreateNearbyFallbackPlaceAsync(db);
+        }
+
+        var update = await client.PutAsJsonAsync(
+            "/api/user/me/interests",
+            new UpdateUserInterestsRequestDto
+            {
+                TagIds = new List<int> { tagId }
+            });
+        update.EnsureSuccessStatusCode();
+
+        var response = await client.GetFromJsonAsync<ExploreFeedDto>(ExploreUrl);
+
+        Assert.NotNull(response);
+        Assert.Contains(response!.CuratedForYou, item => item.Title == "Nearby Orchid Garden");
+    }
+
     private sealed class ExploreFeedDto
     {
         public List<ExploreCardDto> TopStays { get; set; } = [];
@@ -305,5 +334,73 @@ public sealed class ExploreRatingsTests
             .SingleAsync();
 
         return (client, userId);
+    }
+
+    private static async Task<int> CreateNearbyFallbackPlaceAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+
+        var destinationTypeId = await db.DestinationTypes.Select(type => type.Id).FirstAsync();
+        var locationTypeId = await db.LocationTypes.Select(type => type.Id).FirstAsync();
+        var placeTypeId = await db.PlaceTypes.Select(type => type.Id).FirstAsync();
+        var regionId = await db.Regions.Select(region => region.Id).FirstAsync();
+        var uniqueName = $"Orchid Walks {Guid.NewGuid():N}";
+
+        var tag = new Tag
+        {
+            Name = uniqueName,
+            Slug = $"orchid-walks-{Guid.NewGuid():N}",
+            Description = "Integration-test interest for nearby fallback recommendations.",
+            ForPlace = true,
+            CreatedAt = now
+        };
+
+        var destination = new Destination
+        {
+            Name = $"Fallback Coast {Guid.NewGuid():N}",
+            DestinationTypeId = destinationTypeId,
+            RegionId = regionId,
+            Description = "Nearby fallback recommendation destination.",
+            Latitude = 43.05,
+            Longitude = 18.45,
+            CreatedAt = now
+        };
+
+        var location = new Location
+        {
+            Name = "Fallback Gardens",
+            Destination = destination,
+            LocationTypeId = locationTypeId,
+            Latitude = 43.05,
+            Longitude = 18.45,
+            CreatedAt = now
+        };
+
+        var place = new Place
+        {
+            Name = "Nearby Orchid Garden",
+            Description = "A nearby place used to verify destination expansion for personalized recommendations.",
+            ImageUrl = "/media/seed/orchid-garden.jpg",
+            PlaceTypeId = placeTypeId,
+            Location = location,
+            Latitude = 43.05,
+            Longitude = 18.45,
+            CreatedAt = now
+        };
+
+        db.Tags.Add(tag);
+        db.Destinations.Add(destination);
+        db.Locations.Add(location);
+        db.Places.Add(place);
+        await db.SaveChangesAsync();
+
+        db.PlaceTags.Add(new PlaceTag
+        {
+            PlaceId = place.Id,
+            TagId = tag.Id
+        });
+        await db.SaveChangesAsync();
+
+        return tag.Id;
     }
 }

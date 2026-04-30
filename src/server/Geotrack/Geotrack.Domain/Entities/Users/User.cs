@@ -20,6 +20,8 @@ public class User
 
     public ICollection<UserTag> UserTags { get; set; } = new List<UserTag>(); // NAVIGATIONAL
 
+    public ICollection<UserNotification> Notifications { get; set; } = new List<UserNotification>(); // NAVIGATIONAL
+
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
 

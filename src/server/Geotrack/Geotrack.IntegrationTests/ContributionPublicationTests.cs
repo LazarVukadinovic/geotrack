@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Contributions;
+using Geotrack.Application.DTOs.Notifications;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure;
@@ -69,6 +70,44 @@ public sealed class ContributionPublicationTests
         Assert.Contains(
             publicHotelDetail.BookingPartners,
             partner => partner.Name == "Booking.com" && partner.Url == "https://partners.example/booking/beta-villa");
+
+        var notifications = await contributorClient.GetFromJsonAsync<GetUserNotificationsResponseDto>("/api/notifications");
+        Assert.NotNull(notifications);
+        var approvalNotification = Assert.Single(
+            notifications!.Notifications,
+            notification => notification.RelatedEntityId == createdContribution.Contribution.Id);
+        Assert.Equal("contribution_approved", approvalNotification.Type);
+        Assert.Equal(createdContribution.Contribution.Id, approvalNotification.RelatedEntityId);
+        Assert.False(approvalNotification.IsRead);
+        Assert.True(notifications.UnreadCount >= 1);
+    }
+
+    [Fact]
+    public async Task Rejecting_a_stay_contribution_creates_a_notification_for_the_contributor()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var createdContribution = await CreateStayContributionAsync(contributorClient);
+
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+
+        using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
+        var rejectionResponse = await reviewerClient.PostAsJsonAsync(
+            $"/api/contributions/{createdContribution.Contribution.Id}/reject",
+            new ReviewStayContributionRequestDto { Note = "Please add clearer booking details." });
+        rejectionResponse.EnsureSuccessStatusCode();
+
+        var notifications = await contributorClient.GetFromJsonAsync<GetUserNotificationsResponseDto>("/api/notifications");
+        Assert.NotNull(notifications);
+        var rejectionNotification = Assert.Single(
+            notifications!.Notifications,
+            notification => notification.RelatedEntityId == createdContribution.Contribution.Id);
+        Assert.Equal("contribution_rejected", rejectionNotification.Type);
+        Assert.Equal("contribution", rejectionNotification.RelatedEntityType);
+        Assert.Equal(createdContribution.Contribution.Id, rejectionNotification.RelatedEntityId);
+        Assert.Equal($"/contributions/{createdContribution.Contribution.Id}", rejectionNotification.ActionUrl);
+        Assert.False(rejectionNotification.IsRead);
     }
 
     private static async Task<HttpClient> LoginAsync(GeotrackApiFactory app, string email, string password)
