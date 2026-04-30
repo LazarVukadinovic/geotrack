@@ -17,6 +17,7 @@ export interface BottomNavTab {
 })
 export class BottomNavComponent {
   protected readonly tabs: BottomNavTab[] = [
+    { label: 'Search', path: '/search', exact: true },
     { label: 'Explore', path: '/explore', exact: true },
     { label: 'Map', path: '/map', exact: true },
     { label: 'Ask Agent', path: '/agent', exact: true },

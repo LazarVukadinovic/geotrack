@@ -15,6 +15,11 @@ export const routes: Routes = [
           import('./features/home/pages/home/home.component').then((m) => m.Home),
       },
       {
+        path: 'search',
+        loadComponent: () =>
+          import('./features/search/pages/search-page/search-page.component').then(m => m.SearchPageComponent),
+      },
+      {
         path: 'explore',
         loadComponent: () =>
           import('./features/explore/pages/explore-page/explore-page.component').then(m => m.ExplorePageComponent),
