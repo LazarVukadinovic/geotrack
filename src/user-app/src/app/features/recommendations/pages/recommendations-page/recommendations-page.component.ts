@@ -8,26 +8,25 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { LocationService } from '../../../../core/services/location.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
+import { PageTopNavComponent } from '../../../../shared/components/page-top-nav/page-top-nav.component';
 import { RecommendationsScrollStateService } from '../../services/recommendations-scroll-state.service';
 import { RecommendationsService } from '../../services/recommendations.service';
 
 @Component({
   selector: 'app-recommendations-page',
   standalone: true,
-  imports: [EmptyStateComponent],
+  imports: [EmptyStateComponent, PageTopNavComponent],
   templateUrl: './recommendations-page.component.html',
   styleUrl: './recommendations-page.component.scss',
 })
 export class RecommendationsPageComponent implements AfterViewInit {
   private readonly recommendations = inject(RecommendationsService);
   private readonly scrollState = inject(RecommendationsScrollStateService);
-  private readonly location = inject(Location);
   private readonly locationSvc = inject(LocationService);
   private readonly router = inject(Router);
   private readonly elRef = inject(ElementRef<HTMLElement>);
@@ -106,10 +105,6 @@ export class RecommendationsPageComponent implements AfterViewInit {
         }
       });
     });
-  }
-
-  protected goBack(): void {
-    this.location.back();
   }
 
   protected setFilter(tagId: number | null): void {
