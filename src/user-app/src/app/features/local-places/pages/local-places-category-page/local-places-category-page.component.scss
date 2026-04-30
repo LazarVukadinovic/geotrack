@@ -12,59 +12,6 @@
 }
 
 // ── Fixed top bar ─────────────────────────────────────────────────────────────
-.lpc-page__topbar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
-  padding-bottom: 14px;
-  padding-inline: var(--page-gutter);
-  background: #1a2b4c;
-}
-
-.lpc-page__back {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-
-  svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  &:focus-visible {
-    outline: 2px solid rgba(255, 255, 255, 0.6);
-    outline-offset: 2px;
-  }
-}
-
-.lpc-page__topbar-title {
-  flex: 1;
-  text-align: center;
-  font-size: var(--text-base);
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: -0.01em;
-}
-
-.lpc-page__topbar-spacer {
-  width: 36px;
-  flex-shrink: 0;
-}
-
 // ── Scrollable area ───────────────────────────────────────────────────────────
 .lpc-page__scroll {
   position: absolute;
@@ -72,7 +19,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding-top: calc(env(safe-area-inset-top, 0px) + 64px);
+  padding-top: calc(env(safe-area-inset-top, 0px) + 84px);
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-10));
 }
 
@@ -402,4 +349,39 @@
   margin: 0;
   font-size: var(--text-base);
   color: var(--color-muted);
+}
+
+.lpc-page__pagination {
+  padding: var(--space-5) var(--page-gutter) 0;
+  text-align: center;
+}
+
+.lpc-page__load-more {
+  width: 100%;
+  padding: 12px 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: #e8570a;
+  color: #ffffff;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.68;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}
+
+.lpc-page__load-error,
+.lpc-page__end {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  line-height: 1.5;
 }

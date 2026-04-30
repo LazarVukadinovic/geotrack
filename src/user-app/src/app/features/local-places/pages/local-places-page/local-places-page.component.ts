@@ -6,29 +6,32 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { LocalPlacesService } from '../../services/local-places.service';
 import { LocalPlacesScrollStateService } from '../../services/local-places-scroll-state.service';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
+import { PageTopNavComponent } from '../../../../shared/components/page-top-nav/page-top-nav.component';
 
 @Component({
   selector: 'app-local-places-page',
   standalone: true,
-  imports: [EmptyStateComponent],
+  imports: [EmptyStateComponent, PageTopNavComponent],
   templateUrl: './local-places-page.component.html',
   styleUrl: './local-places-page.component.scss',
 })
 export class LocalPlacesPageComponent implements AfterViewInit {
   private readonly service     = inject(LocalPlacesService);
-  private readonly location    = inject(Location);
   private readonly router      = inject(Router);
   private readonly scrollState = inject(LocalPlacesScrollStateService);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
 
   protected readonly categories = this.service.categories;
   protected readonly loadError  = this.service.loadError;
+  protected readonly loadMoreError = this.service.loadMoreError;
+  protected readonly loading = this.service.loading;
+  protected readonly loadingMore = this.service.loadingMore;
+  protected readonly hasMore = this.service.hasMore;
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -78,7 +81,7 @@ export class LocalPlacesPageComponent implements AfterViewInit {
     this.router.navigate(['/local-places', categoryKey]);
   }
 
-  protected goBack(): void {
-    this.location.back();
+  protected loadMore(): void {
+    this.service.loadMore();
   }
 }
