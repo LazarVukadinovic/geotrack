@@ -5,11 +5,13 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AnalyticsService } from './analytics.service';
+import { AnalyticsPreferencesService } from './analytics-preferences.service';
 import { DestinationService } from './destination.service';
 
 describe('AnalyticsService', () => {
   let service: AnalyticsService;
   let httpMock: HttpTestingController;
+  let analyticsPreferences: AnalyticsPreferencesService;
 
   beforeEach(() => {
     sessionStorage.clear();
@@ -23,6 +25,7 @@ describe('AnalyticsService', () => {
     });
     service = TestBed.inject(AnalyticsService);
     httpMock = TestBed.inject(HttpTestingController);
+    analyticsPreferences = TestBed.inject(AnalyticsPreferencesService);
   });
 
   afterEach(() => {
@@ -55,6 +58,29 @@ describe('AnalyticsService', () => {
   });
 
   it('flushNow is a no-op when the queue is empty', () => {
+    service.flushNow();
+    httpMock.expectNone('/api/analytics/events');
+  });
+
+  it('does not queue or post events when analytics is disabled', () => {
+    analyticsPreferences.setEnabled(false);
+    TestBed.inject(ApplicationRef).tick();
+
+    service.track('page_view');
+    expect(service.queueSize()).toBe(0);
+
+    service.flushNow();
+    httpMock.expectNone('/api/analytics/events');
+  });
+
+  it('clears already queued events when analytics is disabled', () => {
+    service.track('page_view');
+    expect(service.queueSize()).toBe(1);
+
+    analyticsPreferences.setEnabled(false);
+    TestBed.inject(ApplicationRef).tick();
+
+    expect(service.queueSize()).toBe(0);
     service.flushNow();
     httpMock.expectNone('/api/analytics/events');
   });

@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { finalize, shareReplay, tap } from 'rxjs/operators';
 import { AuthService } from './auth.service';
+import { AnalyticsPreferencesService } from './analytics-preferences.service';
 
 export interface UserProfile {
   id: number;
@@ -14,6 +15,7 @@ export interface UserProfile {
   avatarUrl?: string;
   location?: string;
   needsInterestsOnboarding: boolean;
+  analyticsEnabled?: boolean;
 }
 
 /**
@@ -29,11 +31,13 @@ export interface UserProfile {
 export class UserService {
   private readonly http        = inject(HttpClient);
   private readonly authService = inject(AuthService);
+  private readonly analyticsPreferences = inject(AnalyticsPreferencesService);
 
   private readonly _profile = signal<UserProfile | null>(null);
   private loadInFlight$: Observable<UserProfile> | null = null;
   readonly profile = computed(() => this._profile());
   readonly needsInterestsOnboarding = computed(() => this._profile()?.needsInterestsOnboarding ?? false);
+  readonly analyticsEnabled = computed(() => this._profile()?.analyticsEnabled ?? true);
   readonly avatarUrl = computed(() => this._profile()?.avatarUrl ?? '');
 
   /** Display name: "First Last", falling back to email if names are blank. */
@@ -51,6 +55,7 @@ export class UserService {
     effect(() => {
       if (!this.authService.isLoggedIn()) {
         this._profile.set(null);
+        this.analyticsPreferences.resetForGuest();
       }
     });
   }
@@ -61,7 +66,7 @@ export class UserService {
    */
   load(): Observable<UserProfile> {
     return this.http.get<UserProfile>('/api/user/me').pipe(
-      tap(profile => this._profile.set(profile))
+      tap(profile => this.setProfile(profile))
     );
   }
 
@@ -69,10 +74,15 @@ export class UserService {
     const existingProfile = this._profile();
     if (!existingProfile) return;
 
-    this._profile.set({
+    this.setProfile({
       ...existingProfile,
       ...patch,
     });
+  }
+
+  setAnalyticsEnabled(enabled: boolean): void {
+    this.analyticsPreferences.setEnabled(enabled);
+    this.patchProfile({ analyticsEnabled: enabled });
   }
 
   /**
@@ -97,5 +107,10 @@ export class UserService {
     );
 
     return this.loadInFlight$;
+  }
+
+  private setProfile(profile: UserProfile): void {
+    this._profile.set(profile);
+    this.analyticsPreferences.setEnabled(profile.analyticsEnabled ?? true);
   }
 }

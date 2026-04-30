@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
+  AnalyticsPreferences,
   ChangePasswordRequest,
   ChangePasswordResponse,
   CreateSupportRequestRequest,
@@ -20,6 +21,14 @@ export class UserSettingsService {
 
   updateNotificationPreferences(preferences: NotificationPreferences): Observable<NotificationPreferences> {
     return this.http.put<NotificationPreferences>('/api/user/me/notifications', preferences);
+  }
+
+  getAnalyticsPreferences(): Observable<AnalyticsPreferences> {
+    return this.http.get<AnalyticsPreferences>('/api/user/me/analytics');
+  }
+
+  updateAnalyticsPreferences(preferences: AnalyticsPreferences): Observable<AnalyticsPreferences> {
+    return this.http.put<AnalyticsPreferences>('/api/user/me/analytics', preferences);
   }
 
   changePassword(payload: ChangePasswordRequest): Observable<ChangePasswordResponse> {

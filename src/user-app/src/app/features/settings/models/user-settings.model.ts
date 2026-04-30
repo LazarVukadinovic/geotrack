@@ -15,6 +15,10 @@ export interface NotificationPreferences {
   emailNotifications: boolean;
 }
 
+export interface AnalyticsPreferences {
+  analyticsEnabled: boolean;
+}
+
 export interface SupportRequestItem {
   id: number;
   referenceCode: string;

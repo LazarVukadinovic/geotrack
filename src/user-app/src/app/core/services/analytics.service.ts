@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { DestinationService } from './destination.service';
+import { AnalyticsPreferencesService } from './analytics-preferences.service';
 import {
   AnalyticsEventBatch,
   AnalyticsEventEnvelope,
@@ -70,6 +71,7 @@ export class AnalyticsService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly destinationService = inject(DestinationService);
+  private readonly analyticsPreferences = inject(AnalyticsPreferencesService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly zone = inject(NgZone);
 
@@ -90,6 +92,12 @@ export class AnalyticsService {
     effect(() => {
       if (this._queue().length >= MAX_BATCH) {
         this.flushNow();
+      }
+    });
+
+    effect(() => {
+      if (!this.analyticsPreferences.enabled()) {
+        this.clearQueuedEvents();
       }
     });
 
@@ -119,6 +127,10 @@ export class AnalyticsService {
   }
 
   track(eventType: AnalyticsEventType, payload?: TrackPayload): void {
+    if (!this.analyticsPreferences.enabled()) {
+      return;
+    }
+
     const envelope: AnalyticsEventEnvelope = {
       eventType,
       entityType: payload?.entityType,
@@ -178,6 +190,11 @@ export class AnalyticsService {
   flushNow(): void {
     this.clearScheduledFlush();
 
+    if (!this.analyticsPreferences.enabled()) {
+      this.clearQueuedEvents();
+      return;
+    }
+
     const queued = this._queue();
     if (queued.length === 0) return;
 
@@ -205,6 +222,11 @@ export class AnalyticsService {
    */
   private beaconFlush(): void {
     this.clearScheduledFlush();
+
+    if (!this.analyticsPreferences.enabled()) {
+      this.clearQueuedEvents();
+      return;
+    }
 
     const queued = this._queue();
     if (queued.length === 0) return;
@@ -331,6 +353,13 @@ export class AnalyticsService {
       clearTimeout(this.scheduledFlushTimer);
       this.scheduledFlushTimer = null;
       this.scheduledFlushDelayMs = null;
+    }
+  }
+
+  private clearQueuedEvents(): void {
+    this.clearScheduledFlush();
+    if (this._queue().length > 0) {
+      this._queue.set([]);
     }
   }
 
