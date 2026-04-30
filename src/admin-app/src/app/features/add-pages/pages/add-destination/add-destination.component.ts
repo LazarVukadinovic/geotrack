@@ -1,4 +1,12 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit, NgZone } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  AfterViewInit,
+  NgZone,
+} from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
@@ -77,10 +85,11 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.isItalic    = document.queryCommandState('italic');
     this.isUnderline = document.queryCommandState('underline');
   }
-// ── Cover image ─────────────────────────────────────────────────────────────
+
+  // ── Cover image ─────────────────────────────────────────────────────────────
   coverImageUrl : string | null = null;
   coverImageName: string        = '';
- 
+
   onCoverImageSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file  = input.files?.[0];
@@ -89,16 +98,16 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.coverImageName = file.name;
     input.value = '';
   }
- 
+
   removeCoverImage(): void {
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     this.coverImageUrl  = null;
     this.coverImageName = '';
   }
- 
+
   // ── Gallery ─────────────────────────────────────────────────────────────────
   galleryImages: { url: string; name: string }[] = [];
- 
+
   onGalleryImagesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
@@ -107,12 +116,13 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     }
     input.value = '';
   }
- 
+
   removeGalleryImage(index: number): void {
     URL.revokeObjectURL(this.galleryImages[index].url);
     this.galleryImages.splice(index, 1);
   }
-   // ── Classification ──────────────────────────────────────────────────────────
+
+  // ── Classification ──────────────────────────────────────────────────────────
   classItems: ClassItem[] = [
     { label: 'Nature & Outdoors', checked: false },
     { label: 'Culture & Heritage', checked: false },
@@ -120,10 +130,11 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     { label: 'Adventure & Sport',  checked: false },
     { label: 'Family Friendly',    checked: false },
   ];
-   // ── Tags ────────────────────────────────────────────────────────────────────
+
+  // ── Tags ────────────────────────────────────────────────────────────────────
   tags    : string[] = [];
   tagInput: string   = '';
- 
+
   addTag(event: Event): void {
     event.preventDefault();
     const value = this.tagInput.trim();
@@ -131,17 +142,18 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.tags     = [...this.tags, value];
     this.tagInput = '';
   }
- 
+
   removeTag(tag: string): void {
     this.tags = this.tags.filter(t => t !== tag);
   }
-   // ── Geographic zone / Leaflet ───────────────────────────────────────────────
+
+  // ── Geographic zone / Leaflet ───────────────────────────────────────────────
   zoneModalOpen = false;
   zoneConfirmed = false;
   zoneAreaKm2: number | null = null;
- 
+
   drawTool: 'polygon' | 'rectangle' | 'circle' = 'polygon';
- 
+
   get drawHint(): string {
     const hints: Record<string, string> = {
       polygon:   'Click to add points. Double-click to close the polygon.',
@@ -150,56 +162,56 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     };
     return hints[this.drawTool];
   }
- 
+
   private miniMap      : any = null;
   private modalMap     : any = null;
   private drawnLayer   : any = null;
   private confirmedLayer: any = null;
   private drawControl  : any = null;
- 
+
   private initMiniMap(): void {
     if (this.miniMap) return;
     const el = this.miniMapContainer?.nativeElement;
     if (!el) return;
- 
+
     this.miniMap = L.map(el, {
       zoomControl: false, dragging: false, scrollWheelZoom: false,
       doubleClickZoom: false, touchZoom: false, attributionControl: false,
     }).setView([44.0, 20.9], 8);
- 
+
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.miniMap);
   }
- 
+
   openZoneModal(): void {
     this.zoneModalOpen = true;
     setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
   }
- 
+
   closeZoneModal(): void {
     this.zoneModalOpen = false;
     this.destroyModalMap();
   }
- 
+
   onModalBackdropClick(_event: MouseEvent): void {
     this.closeZoneModal();
   }
- 
+
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap) return;
- 
+
     this.modalMap = L.map(el, {
       zoomControl: true,
       attributionControl: false,
     }).setView([44.0, 20.9], 9);
- 
+
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.modalMap);
- 
+
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
- 
+
     if (this.confirmedLayer) {
       const layerCopy = this.cloneLayer(this.confirmedLayer);
       if (layerCopy) {
@@ -208,10 +220,10 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         this.modalMap.fitBounds(layerCopy.getBounds(), { padding: [30, 30] });
       }
     }
- 
+
     this.activateDrawTool();
   }
- 
+
   private destroyModalMap(): void {
     if (this.modalMap) {
       this.modalMap.remove();
@@ -220,21 +232,21 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       this.drawControl = null;
     }
   }
- 
+
   setDrawTool(tool: 'polygon' | 'rectangle' | 'circle'): void {
     this.drawTool = tool;
     if (this.modalMap) { this.clearZone(); this.activateDrawTool(); }
   }
- 
+
   private activateDrawTool(): void {
     if (!this.modalMap) return;
- 
+
     if (this.drawControl) { this.drawControl.disable(); this.drawControl = null; }
- 
+
     const shapeOptions = {
       color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
     };
- 
+
     let handler: any;
     switch (this.drawTool) {
       case 'polygon':
@@ -249,11 +261,11 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         handler = new L.Draw.Circle(this.modalMap, { shapeOptions });
         break;
     }
- 
+
     if (handler) {
       this.drawControl = handler;
       handler.enable();
- 
+
       this.modalMap.once('draw:created', (e: any) => {
         if (this.drawnLayer) this.modalMap.removeLayer(this.drawnLayer);
         this.drawnLayer = e.layer;
@@ -261,7 +273,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       });
     }
   }
- 
+
   clearZone(): void {
     if (this.drawnLayer && this.modalMap) {
       this.modalMap.removeLayer(this.drawnLayer);
@@ -270,15 +282,15 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     if (this.drawControl) { this.drawControl.disable(); this.drawControl = null; }
     this.activateDrawTool();
   }
- 
+
   confirmZone(): void {
     if (!this.drawnLayer) {
       alert('Please draw a zone on the map first.');
       return;
     }
- 
+
     let areaM2 = 0;
- 
+
     if (this.drawnLayer instanceof L.Circle) {
       const r = this.drawnLayer.getRadius();
       areaM2  = Math.PI * r * r;
@@ -294,34 +306,34 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         areaM2 = this.shoelaceAreaM2(this.drawnLayer.getLatLngs()[0]);
       }
     }
- 
+
     this.zoneAreaKm2    = areaM2 / 1_000_000;
     this.zoneConfirmed  = true;
     this.confirmedLayer = this.drawnLayer;
- 
+
     this.showZoneOnMiniMap();
     this.closeZoneModal();
   }
- 
+
   private showZoneOnMiniMap(): void {
     if (!this.miniMap) this.initMiniMap();
     if (!this.miniMap || !this.confirmedLayer) return;
- 
+
     this.miniMap.eachLayer((layer: any) => {
       if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
     });
- 
+
     const clone = this.cloneLayer(this.confirmedLayer);
     if (!clone) return;
- 
+
     (clone as any)._isConfirmedZone = true;
     clone.addTo(this.miniMap);
- 
+
     try {
       this.miniMap.fitBounds(clone.getBounds(), { padding: [10, 10] });
     } catch {}
   }
- 
+
   private cloneLayer(layer: any): any {
     const style = { color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.25, weight: 2 };
     if (layer instanceof L.Circle)    return L.circle(layer.getLatLng(),    { ...style, radius: layer.getRadius() });
@@ -329,7 +341,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     if (layer instanceof L.Polygon)   return L.polygon(layer.getLatLngs(),  style);
     return null;
   }
- 
+
   private shoelaceAreaM2(latlngs: any[]): number {
     const flat = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
     const R    = 6_371_000;
@@ -345,19 +357,20 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     }
     return Math.abs((area * R * R) / 2);
   }
+
   // ── Lightbox ────────────────────────────────────────────────────────────────
   private lightboxEl: HTMLElement | null = null;
   private _lightboxKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _currentImages: { url: string; name: string }[] = [];
   private _currentIndex  = 0;
- 
+
   openLightbox(images: { url: string; name: string }[], index: number): void {
     this.zone.run(() => {
       this.closeLightbox();
       this._currentImages = [...images];
       this._currentIndex  = index;
       this._renderLightbox();
- 
+
       this._lightboxKeyHandler = (e: KeyboardEvent) => {
         if (e.key === 'Escape')     { this.closeLightbox(); }
         if (e.key === 'ArrowRight') {
@@ -373,20 +386,20 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       document.body.style.overflow = 'hidden';
     });
   }
- 
+
   private _renderLightbox(): void {
     if (this.lightboxEl) document.body.removeChild(this.lightboxEl);
- 
+
     const imgs   = this._currentImages;
     const idx    = this._currentIndex;
     const single = imgs.length === 1;
- 
+
     const overlay = document.createElement('div');
     overlay.style.cssText =
       'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);' +
       'display:flex;align-items:center;justify-content:center;';
     overlay.addEventListener('click', () => this.closeLightbox());
- 
+
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&times;';
     closeBtn.style.cssText =
@@ -395,7 +408,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       'cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
     closeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.closeLightbox(); });
     overlay.appendChild(closeBtn);
- 
+
     if (!single) {
       const counter = document.createElement('div');
       counter.textContent = `${idx + 1} / ${imgs.length}`;
@@ -404,7 +417,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         'font-size:14px;font-weight:500;background:rgba(0,0,0,0.4);' +
         'padding:4px 12px;border-radius:20px;z-index:1;';
       overlay.appendChild(counter);
- 
+
       const prev = document.createElement('button');
       prev.innerHTML = '&#8249;';
       prev.style.cssText =
@@ -418,7 +431,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       });
       overlay.appendChild(prev);
     }
- 
+
     const img = document.createElement('img');
     img.src = imgs[idx].url;
     img.alt = imgs[idx].name;
@@ -427,7 +440,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       'border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.5);';
     img.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(img);
- 
+
     if (!single) {
       const next = document.createElement('button');
       next.innerHTML = '&#8250;';
@@ -441,13 +454,13 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         this._renderLightbox();
       });
       overlay.appendChild(next);
- 
+
       const thumbRow = document.createElement('div');
       thumbRow.style.cssText =
         'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);' +
         'display:flex;gap:8px;z-index:1;';
       thumbRow.addEventListener('click', (e) => e.stopPropagation());
- 
+
       imgs.forEach((im, ti) => {
         const thumb = document.createElement('div');
         thumb.style.cssText =
@@ -467,11 +480,11 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       });
       overlay.appendChild(thumbRow);
     }
- 
+
     document.body.appendChild(overlay);
     this.lightboxEl = overlay;
   }
- 
+
   closeLightbox(): void {
     if (this.lightboxEl) {
       document.body.removeChild(this.lightboxEl);
@@ -494,7 +507,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   ngOnDestroy(): void {
     this.destroyModalMap();
     this.closeLightbox();
-   this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
+    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
   }
