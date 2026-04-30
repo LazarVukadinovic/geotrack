@@ -391,6 +391,16 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this._clockSvgEl = svgEl;
     this.onClockInteraction(event, svgEl);
   }
+  isClockHourNear(h: number): boolean {
+    const diff = Math.abs(h - this.selectedHour);
+    return diff === 1 || diff === 11;
+  }
+
+  isClockMinuteNear(m: number): boolean {
+    const curr = this.selectedMinute;
+    const diff = Math.abs(m - curr);
+    return diff === 5 || diff === 55;
+  }
 
   @HostListener('document:mousemove', ['$event'])
   onDocumentMouseMove(event: MouseEvent): void {

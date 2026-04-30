@@ -229,83 +229,7 @@
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     <span class="flex-1" [class.text-gray-700]="startTime" [class.text-gray-400]="!startTime">{{ startTime ? formatDisplayTime(startTime) : 'Pick time' }}</span>
                   </button>
-                  @if (activePicker === 'startTime') {
-                    <div class="clock-dropdown" (click)="$event.stopPropagation()">
-
-                      <!-- Hour / Minute tabs -->
-                      <div class="clock-tabs">
-                        <button type="button" class="clock-tab" [class.active]="clockMode === 'hour'"
-                          (click)="setClockMode('hour')">Hour</button>
-                        <button type="button" class="clock-tab" [class.active]="clockMode === 'minute'"
-                          (click)="setClockMode('minute')">Minute</button>
-                      </div>
-
-                      <div class="clock-face-wrap">
-                        <svg #clockSvg width="220" height="220" viewBox="0 0 220 220"
-                          style="cursor:pointer; display:block;"
-                          (mousedown)="onClockMouseDown($event, clockSvg)"
-                          (touchstart)="onClockInteraction($event, clockSvg)"
-                          (touchmove)="onClockInteraction($event, clockSvg)">
-
-                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="108"
-                            fill="white" stroke="#e5e7eb" stroke-width="1"/>
-                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="88"
-                            fill="#f9fafb" stroke="#e5e7eb" stroke-width="0.5"/>
-
-                          <line [attr.x1]="clockCX" [attr.y1]="clockCY"
-                                [attr.x2]="clockHandEnd.x" [attr.y2]="clockHandEnd.y"
-                                stroke="#1d4ed8" stroke-width="2.5" stroke-linecap="round"/>
-
-                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="4" fill="#1d4ed8"/>
-
-                          @if (clockMode === 'hour') {
-                            @for (m of clockHourMarkers; track m.value) {
-                              <g>
-                                @if (m.selected) {
-                                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="16" fill="#1d4ed8"/>
-                                }
-                                <text [attr.x]="m.x" [attr.y]="m.y"
-                                  text-anchor="middle" dominant-baseline="central"
-                                  font-size="13" font-family="inherit"
-                                  [attr.fill]="m.selected ? 'white' : '#374151'"
-                                  [attr.font-weight]="m.selected ? '600' : '400'">{{ m.value }}</text>
-                              </g>
-                            }
-                          }
-
-                          @if (clockMode === 'minute') {
-                            @for (m of clockMinuteMarkers; track m.value) {
-                              <g>
-                                @if (m.selected) {
-                                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="16" fill="#1d4ed8"/>
-                                }
-                                <text [attr.x]="m.x" [attr.y]="m.y"
-                                  text-anchor="middle" dominant-baseline="central"
-                                  font-size="12" font-family="inherit"
-                                  [attr.fill]="m.selected ? 'white' : '#374151'"
-                                  [attr.font-weight]="m.selected ? '600' : '400'">{{ m.value | number:'2.0-0' }}</text>
-                              </g>
-                            }
-                          }
-
-                          <circle [attr.cx]="clockHandEnd.x" [attr.cy]="clockHandEnd.y"
-                            r="10" fill="#1d4ed8"/>
-                        </svg>
-                      </div>
-
-                      <!-- AM/PM + Confirm -->
-                      <div class="clock-footer">
-                        <div class="clock-ampm">
-                          <button type="button" [class.active]="selectedAmPm === 'AM'"
-                            (click)="setClockAmPm('AM')">AM</button>
-                          <button type="button" [class.active]="selectedAmPm === 'PM'"
-                            (click)="setClockAmPm('PM')">PM</button>
-                        </div>
-                        <button type="button" class="clock-confirm"
-                          (click)="confirmTime('startTime')">Confirm</button>
-                      </div>
-                    </div>
-                  }
+                  
                 </div>
 
                 <!-- ── End Time picker ── -->
@@ -319,87 +243,7 @@
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     <span class="flex-1" [class.text-gray-700]="endTime" [class.text-gray-400]="!endTime">{{ endTime ? formatDisplayTime(endTime) : 'Pick time' }}</span>
                   </button>
-                  @if (activePicker === 'endTime') {
-
-                    <div class="clock-dropdown" (click)="$event.stopPropagation()">
-
-                      <!-- Hour / Minute tabs -->
-                      <div class="clock-tabs">
-                        <button type="button" class="clock-tab" [class.active]="clockMode === 'hour'"
-                          (click)="setClockMode('hour')">Hour</button>
-                        <button type="button" class="clock-tab" [class.active]="clockMode === 'minute'"
-                          (click)="setClockMode('minute')">Minute</button>
-                      </div>
-
-                      <div class="clock-face-wrap">
-                        <svg #clockSvg width="220" height="220" viewBox="0 0 220 220"
-                          style="cursor:pointer; display:block;"
-                          (mousedown)="onClockMouseDown($event, clockSvg)"
-                          (touchstart)="onClockInteraction($event, clockSvg)"
-                          (touchmove)="onClockInteraction($event, clockSvg)">
-
-                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="108"
-                            fill="white" stroke="#e5e7eb" stroke-width="1"/>
-
-                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="88"
-                            fill="#f9fafb" stroke="#e5e7eb" stroke-width="0.5"/>
-
-                          <line [attr.x1]="clockCX" [attr.y1]="clockCY"
-                                [attr.x2]="clockHandEnd.x" [attr.y2]="clockHandEnd.y"
-                                stroke="#1d4ed8" stroke-width="2.5" stroke-linecap="round"/>
-
-                          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="4" fill="#1d4ed8"/>
-
-                          <!-- Hour markers -->
-                          @if (clockMode === 'hour') {
-                            @for (m of clockHourMarkers; track m.value) {
-                              <g>
-                                @if (m.selected) {
-                                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="16" fill="#1d4ed8"/>
-                                }
-                                <text [attr.x]="m.x" [attr.y]="m.y"
-                                  text-anchor="middle" dominant-baseline="central"
-                                  font-size="13" font-family="inherit"
-                                  [attr.fill]="m.selected ? 'white' : '#374151'"
-                                  [attr.font-weight]="m.selected ? '600' : '400'">{{ m.value }}</text>
-                              </g>
-                            }
-                          }
-
-                          <!-- Minute markers -->
-                          @if (clockMode === 'minute') {
-                            @for (m of clockMinuteMarkers; track m.value) {
-                              <g>
-                                @if (m.selected) {
-                                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="16" fill="#1d4ed8"/>
-                                }
-                                <text [attr.x]="m.x" [attr.y]="m.y"
-                                  text-anchor="middle" dominant-baseline="central"
-                                  font-size="12" font-family="inherit"
-                                  [attr.fill]="m.selected ? 'white' : '#374151'"
-                                  [attr.font-weight]="m.selected ? '600' : '400'">{{ m.value | number:'2.0-0' }}</text>
-                              </g>
-                            }
-                          }
-
-                          <circle [attr.cx]="clockHandEnd.x" [attr.cy]="clockHandEnd.y"
-                            r="10" fill="#1d4ed8"/>
-                        </svg>
-                      </div>
-
-                      <!-- AM/PM + Confirm -->
-                      <div class="clock-footer">
-                        <div class="clock-ampm">
-                          <button type="button" [class.active]="selectedAmPm === 'AM'"
-                            (click)="setClockAmPm('AM')">AM</button>
-                          <button type="button" [class.active]="selectedAmPm === 'PM'"
-                            (click)="setClockAmPm('PM')">PM</button>
-                        </div>
-                        <button type="button" class="clock-confirm"
-                          (click)="confirmTime('endTime')">Confirm</button>
-                      </div>
-                    </div>
-                  }
+                  
                 </div>
               }
             </div>
@@ -701,6 +545,151 @@
         <button type="button"
                 class="text-sm text-gray-500 px-4 py-1.5 rounded-lg hover:bg-gray-100 border-none bg-transparent cursor-pointer"
                 (click)="activePicker = null">Cancel</button>
+      </div>
+    </div>
+  </div>
+}
+<!-- ═══ CLOCK PICKER MODAL ═══ -->
+@if (activePicker === 'startTime' || activePicker === 'endTime') {
+  <div class="fixed inset-0 z-50 flex items-center justify-center"
+       style="background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
+       (click)="activePicker = null">
+
+    <div class="bg-white rounded-2xl shadow-2xl overflow-hidden"
+         style="width: 300px;"
+         (click)="$event.stopPropagation()">
+
+      <!-- Header -->
+      <div class="bg-blue-700 px-5 pt-5 pb-4">
+        <p class="text-[11px] font-semibold tracking-widest text-blue-200 uppercase mb-1">
+          {{ activePicker === 'startTime' ? 'Start Time' : 'End Time' }}
+        </p>
+        <div class="flex items-end gap-1">
+          <span class="text-5xl font-bold tracking-tight"
+                [class.text-white]="clockMode === 'hour'"
+                [class.text-blue-300]="clockMode !== 'hour'"
+                style="cursor:pointer; line-height:1;"
+                (click)="setClockMode('hour')">{{ selectedHour | number:'2.0-0' }}</span>
+          <span class="text-5xl font-bold text-blue-300" style="line-height:1;">:</span>
+          <span class="text-5xl font-bold tracking-tight"
+                [class.text-white]="clockMode === 'minute'"
+                [class.text-blue-300]="clockMode !== 'minute'"
+                style="cursor:pointer; line-height:1;"
+                (click)="setClockMode('minute')">{{ selectedMinute | number:'2.0-0' }}</span>
+          <div class="flex flex-col gap-0.5 ml-2 mb-1">
+            <button type="button"
+                    class="text-xs font-bold px-2 py-0.5 rounded border-none cursor-pointer transition-colors"
+                    [class.bg-white]="selectedAmPm === 'AM'"
+                    [class.text-blue-700]="selectedAmPm === 'AM'"
+                    [class.bg-blue-600]="selectedAmPm !== 'AM'"
+                    [class.text-blue-200]="selectedAmPm !== 'AM'"
+                    (click)="setClockAmPm('AM')">AM</button>
+            <button type="button"
+                    class="text-xs font-bold px-2 py-0.5 rounded border-none cursor-pointer transition-colors"
+                    [class.bg-white]="selectedAmPm === 'PM'"
+                    [class.text-blue-700]="selectedAmPm === 'PM'"
+                    [class.bg-blue-600]="selectedAmPm !== 'PM'"
+                    [class.text-blue-200]="selectedAmPm !== 'PM'"
+                    (click)="setClockAmPm('PM')">PM</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hour / Minute tab pills -->
+      <div class="flex gap-2 px-5 pt-4 pb-2">
+        <button type="button"
+                class="text-xs font-semibold px-3 py-1 rounded-full border-none cursor-pointer transition-colors"
+                [class.bg-blue-100]="clockMode === 'hour'"
+                [class.text-blue-700]="clockMode === 'hour'"
+                [class.bg-gray-100]="clockMode !== 'hour'"
+                [class.text-gray-500]="clockMode !== 'hour'"
+                (click)="setClockMode('hour')">Hour</button>
+        <button type="button"
+                class="text-xs font-semibold px-3 py-1 rounded-full border-none cursor-pointer transition-colors"
+                [class.bg-blue-100]="clockMode === 'minute'"
+                [class.text-blue-700]="clockMode === 'minute'"
+                [class.bg-gray-100]="clockMode !== 'minute'"
+                [class.text-gray-500]="clockMode !== 'minute'"
+                (click)="setClockMode('minute')">Minute</button>
+      </div>
+
+      <!-- Clock face -->
+      <div class="flex justify-center px-4 pb-2">
+        <svg #clockSvg width="220" height="220" viewBox="0 0 220 220"
+             style="cursor:pointer; display:block;"
+             (mousedown)="onClockMouseDown($event, clockSvg)"
+             (touchstart)="onClockInteraction($event, clockSvg)"
+             (touchmove)="onClockInteraction($event, clockSvg)">
+
+          <!-- Outer ring -->
+          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="108"
+                  fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+          <!-- Inner ring -->
+          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="88"
+                  fill="#f1f5f9" stroke="#e2e8f0" stroke-width="0.5"/>
+
+          <!-- Hand -->
+          <line [attr.x1]="clockCX" [attr.y1]="clockCY"
+                [attr.x2]="clockHandEnd.x" [attr.y2]="clockHandEnd.y"
+                stroke="#1d4ed8" stroke-width="2.5" stroke-linecap="round"/>
+
+          <!-- Center dot -->
+          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="4" fill="#1d4ed8"/>
+
+          <!-- Hour markers -->
+          @if (clockMode === 'hour') {
+            @for (m of clockHourMarkers; track m.value) {
+              <g>
+                @if (m.selected) {
+                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="18" fill="#1d4ed8"/>
+                }
+                @if (!m.selected && isClockHourNear(m.value)) {
+                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="18" fill="#dbeafe" opacity="0.7"/>
+                }
+                <text [attr.x]="m.x" [attr.y]="m.y"
+                      text-anchor="middle" dominant-baseline="central"
+                      font-size="14" font-family="inherit"
+                      [attr.fill]="m.selected ? 'white' : '#374151'"
+                      [attr.font-weight]="m.selected ? '700' : '400'">{{ m.value }}</text>
+              </g>
+            }
+          }
+
+          <!-- Minute markers -->
+          @if (clockMode === 'minute') {
+            @for (m of clockMinuteMarkers; track m.value) {
+              <g>
+                @if (m.selected) {
+                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="18" fill="#1d4ed8"/>
+                }
+                @if (!m.selected && isClockMinuteNear(m.value)) {
+                  <circle [attr.cx]="m.x" [attr.cy]="m.y" r="18" fill="#dbeafe" opacity="0.7"/>
+                }
+                <text [attr.x]="m.x" [attr.y]="m.y"
+                      text-anchor="middle" dominant-baseline="central"
+                      font-size="13" font-family="inherit"
+                      [attr.fill]="m.selected ? 'white' : '#374151'"
+                      [attr.font-weight]="m.selected ? '700' : '400'">{{ m.value | number:'2.0-0' }}</text>
+              </g>
+            }
+          }
+
+          <!-- Hand tip circle -->
+          <circle [attr.cx]="clockHandEnd.x" [attr.cy]="clockHandEnd.y"
+                  r="11" fill="#1d4ed8"/>
+        </svg>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-100">
+        <button type="button"
+                class="text-sm text-gray-500 px-4 py-1.5 rounded-lg hover:bg-gray-100 border-none bg-transparent cursor-pointer"
+                (click)="activePicker = null">Cancel</button>
+        <button type="button"
+                class="text-sm text-white font-semibold px-5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer"
+                (click)="confirmTime(activePicker === 'startTime' ? 'startTime' : 'endTime')">
+          Confirm
+        </button>
       </div>
     </div>
   </div>
