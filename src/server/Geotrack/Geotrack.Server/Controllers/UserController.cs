@@ -110,6 +110,32 @@ public class UserController : ControllerBase
         }
     }
 
+    [HttpGet("me/analytics")]
+    public async Task<ActionResult<GetAnalyticsSettingsResponseDto>> GetAnalyticsSettings()
+    {
+        try
+        {
+            return Ok(await _userService.GetAnalyticsSettingsAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("me/analytics")]
+    public async Task<ActionResult<UpdateAnalyticsSettingsResponseDto>> UpdateAnalyticsSettings([FromBody] UpdateAnalyticsSettingsRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.UpdateAnalyticsSettingsAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("me/interests")]
     public async Task<ActionResult<GetUserInterestsResponseDto>> GetUserInterests()
     {

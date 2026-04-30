@@ -3,6 +3,7 @@ using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
@@ -85,6 +86,7 @@ public class UserService : IUserService
             AvatarUrl = user.AvatarUrl,
             Location = user.Location,
             NeedsInterestsOnboarding = user.NeedsInterestsOnboarding,
+            AnalyticsEnabled = user.AnalyticsEnabled,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt,
             Collections = collections
@@ -203,6 +205,27 @@ public class UserService : IUserService
         await _userRepository.SaveChangesAsync();
 
         return MapUpdatedNotificationSettings(user);
+    }
+
+    public async Task<GetAnalyticsSettingsResponseDto> GetAnalyticsSettingsAsync(int userId)
+    {
+        var user = await _userRepository.GetByIDAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        return MapAnalyticsSettings(user);
+    }
+
+    public async Task<UpdateAnalyticsSettingsResponseDto> UpdateAnalyticsSettingsAsync(int userId, UpdateAnalyticsSettingsRequestDto request)
+    {
+        var user = await _userRepository.GetByIDAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        user.AnalyticsEnabled = request.AnalyticsEnabled;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        return MapUpdatedAnalyticsSettings(user);
     }
 
     public async Task<GetUserInterestsResponseDto> GetUserInterestsAsync(int userId)
@@ -541,10 +564,12 @@ public class UserService : IUserService
         {
             Id = item.Id,
             CollectionId = item.CollectionId,
+            EntityType = entityType,
             DestinationId = item.DestinationId,
             LocationId = item.LocationId,
             PlaceId = item.PlaceId,
             EventId = item.EventId,
+            DetailRoute = await ResolveCollectionItemDetailRouteAsync(entityType, request.EntityId),
             CreatedAt = item.CreatedAt,
             UpdatedAt = item.UpdatedAt
         };
@@ -636,6 +661,22 @@ public class UserService : IUserService
         };
     }
 
+    private static GetAnalyticsSettingsResponseDto MapAnalyticsSettings(User user)
+    {
+        return new GetAnalyticsSettingsResponseDto
+        {
+            AnalyticsEnabled = user.AnalyticsEnabled
+        };
+    }
+
+    private static UpdateAnalyticsSettingsResponseDto MapUpdatedAnalyticsSettings(User user)
+    {
+        return new UpdateAnalyticsSettingsResponseDto
+        {
+            AnalyticsEnabled = user.AnalyticsEnabled
+        };
+    }
+
     private static CreateSupportRequestResponseDto MapCreatedSupportRequest(SupportRequest supportRequest)
     {
         return new CreateSupportRequestResponseDto
@@ -679,6 +720,7 @@ public class UserService : IUserService
                 Name = item.Destination.Name,
                 Description = item.Destination.Description,
                 ImageUrl = item.Destination.ImageUrl,
+                DetailRoute = null,
                 Latitude = item.Destination.Latitude,
                 Longitude = item.Destination.Longitude,
                 CreatedAt = item.Destination.CreatedAt,
@@ -696,6 +738,7 @@ public class UserService : IUserService
                 LocationId = item.LocationId,
                 Name = item.Location.Name,
                 ImageUrl = item.Location.ImageUrl,
+                DetailRoute = null,
                 Latitude = item.Location.Latitude,
                 Longitude = item.Location.Longitude,
                 CreatedAt = item.Location.CreatedAt,
@@ -714,6 +757,7 @@ public class UserService : IUserService
                 Name = item.Place.Name,
                 Description = item.Place.Description,
                 ImageUrl = item.Place.ImageUrl,
+                DetailRoute = BuildPlaceDetailRoute(item.Place),
                 Latitude = item.Place.Latitude,
                 Longitude = item.Place.Longitude,
                 ContactEmail = item.Place.ContactEmail,
@@ -734,6 +778,7 @@ public class UserService : IUserService
                 Name = item.Event.Name,
                 Description = item.Event.Description,
                 ImageUrl = item.Event.ImageUrl,
+                DetailRoute = $"/events/{item.Event.Id}",
                 StartDate = item.Event.StartDate,
                 EndDate = item.Event.EndDate,
                 CreatedAt = item.Event.CreatedAt,
@@ -758,6 +803,25 @@ public class UserService : IUserService
 
         return null;
     }
+
+    private async Task<string?> ResolveCollectionItemDetailRouteAsync(string entityType, int entityId)
+    {
+        if (entityType == "event")
+        {
+            return $"/events/{entityId}";
+        }
+
+        if (entityType == "place")
+        {
+            var place = await _placeRepository.GetByIDAsync(entityId);
+            return place is null ? null : BuildPlaceDetailRoute(place);
+        }
+
+        return null;
+    }
+
+    private static string BuildPlaceDetailRoute(Place place) =>
+        place.PricePerNight.HasValue ? $"/stays/{place.Id}" : $"/places/{place.Id}";
 
     private static void ValidateProfileFields(string firstName, string lastName, string phoneNumber)
     {

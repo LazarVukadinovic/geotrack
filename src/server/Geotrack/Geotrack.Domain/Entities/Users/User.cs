@@ -36,6 +36,7 @@ public class User
     public bool NearbyEventsEnabled { get; set; } = true;
     public bool CollectionUpdatesEnabled { get; set; } = true;
     public bool EmailNotificationsEnabled { get; set; }
+    public bool AnalyticsEnabled { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

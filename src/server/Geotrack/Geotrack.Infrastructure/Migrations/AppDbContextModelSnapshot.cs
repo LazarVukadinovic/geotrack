@@ -1596,6 +1596,11 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<bool>("AnalyticsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("CollectionUpdatesEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

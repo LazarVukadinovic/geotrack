@@ -10,6 +10,8 @@ public interface IUserService
     Task<ChangePasswordResponseDto> ChangePasswordAsync(int userId, ChangePasswordRequestDto request);
     Task<GetNotificationSettingsResponseDto> GetNotificationSettingsAsync(int userId);
     Task<UpdateNotificationSettingsResponseDto> UpdateNotificationSettingsAsync(int userId, UpdateNotificationSettingsRequestDto request);
+    Task<GetAnalyticsSettingsResponseDto> GetAnalyticsSettingsAsync(int userId);
+    Task<UpdateAnalyticsSettingsResponseDto> UpdateAnalyticsSettingsAsync(int userId, UpdateAnalyticsSettingsRequestDto request);
 
     Task<GetUserInterestsResponseDto> GetUserInterestsAsync(int userId);
     Task<UpdateUserInterestsResponseDto> UpdateUserInterestsAsync(int userId, UpdateUserInterestsRequestDto request);

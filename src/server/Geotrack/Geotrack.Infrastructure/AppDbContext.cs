@@ -1042,6 +1042,7 @@ public class AppDbContext : DbContext
             entity.Property(x => x.NearbyEventsEnabled).HasDefaultValue(true);
             entity.Property(x => x.CollectionUpdatesEnabled).HasDefaultValue(true);
             entity.Property(x => x.EmailNotificationsEnabled).HasDefaultValue(false);
+            entity.Property(x => x.AnalyticsEnabled).HasDefaultValue(true);
         });
 
         // ImageUrl fields for other entities
