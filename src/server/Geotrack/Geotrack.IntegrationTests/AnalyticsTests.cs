@@ -69,6 +69,90 @@ public sealed class AnalyticsTests
     }
 
     [Fact]
+    public async Task Authenticated_analytics_preference_disables_raw_events_and_inferred_signals()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var (client, userId) = await RegisterFreshUserAsync(app);
+
+        int placeId;
+        await using (var setup = app.Services.CreateAsyncScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<AppDbContext>();
+            placeId = await db.Places.Where(p => p.Name == "Banje Beach").Select(p => p.Id).FirstAsync();
+        }
+
+        var disableResponse = await client.PutAsJsonAsync(
+            "/api/user/me/analytics",
+            new UpdateAnalyticsSettingsRequestDto
+            {
+                AnalyticsEnabled = false,
+            });
+        disableResponse.EnsureSuccessStatusCode();
+
+        var disabledSessionId = Guid.NewGuid();
+        var disabledBatch = new
+        {
+            anonymousSessionId = disabledSessionId,
+            events = new object[]
+            {
+                new
+                {
+                    eventType = AnalyticsEventTypes.PageView,
+                    route = "/explore",
+                },
+                new
+                {
+                    eventType = AnalyticsEventTypes.FavoriteAdded,
+                    entityType = AnalyticsEntityTypes.Place,
+                    entityId = placeId,
+                },
+            },
+        };
+
+        var disabledIngest = await client.PostAsJsonAsync("/api/analytics/events", disabledBatch);
+        Assert.Equal(HttpStatusCode.NoContent, disabledIngest.StatusCode);
+
+        await using (var verifyDisabled = app.Services.CreateAsyncScope())
+        {
+            var db = verifyDisabled.ServiceProvider.GetRequiredService<AppDbContext>();
+            Assert.False(await db.AnonymousSessions.AnyAsync(session => session.Id == disabledSessionId));
+            Assert.False(await db.AnalyticsEvents.AnyAsync(e => e.UserId == userId || e.AnonymousSessionId == disabledSessionId));
+            Assert.False(await db.UserInterestSignals.AnyAsync(signal => signal.UserId == userId));
+        }
+
+        var enableResponse = await client.PutAsJsonAsync(
+            "/api/user/me/analytics",
+            new UpdateAnalyticsSettingsRequestDto
+            {
+                AnalyticsEnabled = true,
+            });
+        enableResponse.EnsureSuccessStatusCode();
+
+        var enabledSessionId = Guid.NewGuid();
+        var enabledBatch = new
+        {
+            anonymousSessionId = enabledSessionId,
+            events = new object[]
+            {
+                new
+                {
+                    eventType = AnalyticsEventTypes.PageView,
+                    route = "/explore",
+                },
+            },
+        };
+
+        var enabledIngest = await client.PostAsJsonAsync("/api/analytics/events", enabledBatch);
+        Assert.Equal(HttpStatusCode.NoContent, enabledIngest.StatusCode);
+
+        await using var verifyEnabled = app.Services.CreateAsyncScope();
+        var verifyDb = verifyEnabled.ServiceProvider.GetRequiredService<AppDbContext>();
+        var storedEvent = await verifyDb.AnalyticsEvents.SingleAsync(e => e.AnonymousSessionId == enabledSessionId);
+        Assert.Equal(userId, storedEvent.UserId);
+        Assert.Equal(AnalyticsEventTypes.PageView, storedEvent.EventType);
+    }
+
+    [Fact]
     public async Task Anonymous_batch_creates_session_row_and_links_events()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();

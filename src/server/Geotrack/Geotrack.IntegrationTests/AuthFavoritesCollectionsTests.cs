@@ -241,6 +241,8 @@ public sealed class AuthFavoritesCollectionsTests
         Assert.NotNull(details);
         Assert.Single(details.Items);
         Assert.Equal(1, details.Items[0].PlaceId);
+        Assert.Equal("place", details.Items[0].EntityType);
+        Assert.Equal("/places/1", details.Items[0].DetailRoute);
 
         var removeResponse = await client.DeleteAsync(
             $"/api/user/me/collections/{createdCollection.Id}/items/{addedItem.Id}");
@@ -265,6 +267,56 @@ public sealed class AuthFavoritesCollectionsTests
         var favoritesAfterCollectionDelete = await client.GetFromJsonAsync<HashSet<int>>("/api/favorites?entityType=place");
         Assert.NotNull(favoritesAfterCollectionDelete);
         Assert.DoesNotContain(1, favoritesAfterCollectionDelete);
+    }
+
+    [Fact]
+    public async Task Deleting_one_of_multiple_collections_keeps_remaining_membership_favorited()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app);
+
+        var firstCollection = await CreateCollectionAsync(client, "First saved set");
+        var secondCollection = await CreateCollectionAsync(client, "Second saved set");
+
+        var firstAdd = await client.PostAsJsonAsync(
+            $"/api/user/me/collections/{firstCollection.Id}/items",
+            new AddCollectionItemRequestDto { EntityType = "place", EntityId = 1 });
+        firstAdd.EnsureSuccessStatusCode();
+
+        var secondAdd = await client.PostAsJsonAsync(
+            $"/api/user/me/collections/{secondCollection.Id}/items",
+            new AddCollectionItemRequestDto { EntityType = "place", EntityId = 1 });
+        secondAdd.EnsureSuccessStatusCode();
+
+        var favoritesAfterBothAdds = await client.GetFromJsonAsync<HashSet<int>>("/api/favorites?entityType=place");
+        Assert.NotNull(favoritesAfterBothAdds);
+        Assert.Contains(1, favoritesAfterBothAdds);
+
+        var deleteFirst = await client.DeleteAsync($"/api/user/me/collections/{firstCollection.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteFirst.StatusCode);
+
+        var favoritesAfterDeletingOne = await client.GetFromJsonAsync<HashSet<int>>("/api/favorites?entityType=place");
+        Assert.NotNull(favoritesAfterDeletingOne);
+        Assert.Contains(1, favoritesAfterDeletingOne);
+
+        var remainingDetails = await client.GetFromJsonAsync<GetCollectionDetailsResponseDto>(
+            $"/api/user/me/collections/{secondCollection.Id}");
+        Assert.NotNull(remainingDetails);
+        var remainingItem = Assert.Single(remainingDetails.Items);
+        Assert.Equal(1, remainingItem.PlaceId);
+        Assert.Equal("/places/1", remainingItem.DetailRoute);
+
+        var duplicateInRemaining = await client.PostAsJsonAsync(
+            $"/api/user/me/collections/{secondCollection.Id}/items",
+            new AddCollectionItemRequestDto { EntityType = "place", EntityId = 1 });
+        Assert.Equal(HttpStatusCode.BadRequest, duplicateInRemaining.StatusCode);
+
+        var deleteSecond = await client.DeleteAsync($"/api/user/me/collections/{secondCollection.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteSecond.StatusCode);
+
+        var favoritesAfterDeletingLast = await client.GetFromJsonAsync<HashSet<int>>("/api/favorites?entityType=place");
+        Assert.NotNull(favoritesAfterDeletingLast);
+        Assert.DoesNotContain(1, favoritesAfterDeletingLast);
     }
 
     [Fact]
@@ -453,6 +505,22 @@ public sealed class AuthFavoritesCollectionsTests
             new AuthenticationHeaderValue("Bearer", login.AccessToken);
 
         return client;
+    }
+
+    private static async Task<CreateCollectionResponseDto> CreateCollectionAsync(HttpClient client, string name)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/user/me/collections",
+            new CreateCollectionRequestDto
+            {
+                Name = name,
+                Description = "Integration test collection",
+            });
+        response.EnsureSuccessStatusCode();
+
+        var created = await response.Content.ReadFromJsonAsync<CreateCollectionResponseDto>();
+        Assert.NotNull(created);
+        return created;
     }
 
     private static MultipartFormDataContent CreateAvatarUploadContent(byte[] bytes, string fileName, string contentType)

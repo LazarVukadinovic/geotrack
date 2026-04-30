@@ -24,6 +24,42 @@ public sealed class UserSettingsTests
         Assert.True(currentNotifications.CollectionUpdates);
         Assert.False(currentNotifications.EmailNotifications);
 
+        var me = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
+        Assert.NotNull(me);
+        Assert.True(me.AnalyticsEnabled);
+
+        var currentAnalytics = await client.GetFromJsonAsync<GetAnalyticsSettingsResponseDto>("/api/user/me/analytics");
+        Assert.NotNull(currentAnalytics);
+        Assert.True(currentAnalytics.AnalyticsEnabled);
+
+        var disableAnalyticsResponse = await client.PutAsJsonAsync(
+            "/api/user/me/analytics",
+            new UpdateAnalyticsSettingsRequestDto
+            {
+                AnalyticsEnabled = false,
+            });
+        disableAnalyticsResponse.EnsureSuccessStatusCode();
+
+        var disabledAnalytics = await disableAnalyticsResponse.Content.ReadFromJsonAsync<UpdateAnalyticsSettingsResponseDto>();
+        Assert.NotNull(disabledAnalytics);
+        Assert.False(disabledAnalytics.AnalyticsEnabled);
+
+        var persistedDisabledAnalytics = await client.GetFromJsonAsync<GetAnalyticsSettingsResponseDto>("/api/user/me/analytics");
+        Assert.NotNull(persistedDisabledAnalytics);
+        Assert.False(persistedDisabledAnalytics.AnalyticsEnabled);
+
+        var enableAnalyticsResponse = await client.PutAsJsonAsync(
+            "/api/user/me/analytics",
+            new UpdateAnalyticsSettingsRequestDto
+            {
+                AnalyticsEnabled = true,
+            });
+        enableAnalyticsResponse.EnsureSuccessStatusCode();
+
+        var persistedEnabledAnalytics = await client.GetFromJsonAsync<GetAnalyticsSettingsResponseDto>("/api/user/me/analytics");
+        Assert.NotNull(persistedEnabledAnalytics);
+        Assert.True(persistedEnabledAnalytics.AnalyticsEnabled);
+
         var updateResponse = await client.PutAsJsonAsync(
             "/api/user/me/notifications",
             new UpdateNotificationSettingsRequestDto

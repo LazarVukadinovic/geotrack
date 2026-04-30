@@ -89,6 +89,12 @@ public class AnalyticsService : IAnalyticsService
             return;
         }
 
+        if (context.UserId is { } analyticsUserId &&
+            !await IsAnalyticsEnabledForUserAsync(analyticsUserId, cancellationToken))
+        {
+            return;
+        }
+
         if (batch.Events.Count > MaxBatchSize)
         {
             _logger.LogWarning(
@@ -188,6 +194,15 @@ public class AnalyticsService : IAnalyticsService
                 session.CoarseCountry = Truncate(context.CoarseCountry, 120);
             }
         }
+    }
+
+    private async Task<bool> IsAnalyticsEnabledForUserAsync(int userId, CancellationToken ct)
+    {
+        return await _db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => (bool?)user.AnalyticsEnabled)
+            .SingleOrDefaultAsync(ct) ?? false;
     }
 
     private AnalyticsEvent? TryEnrich(AnalyticsEventDto dto, AnalyticsContext context, DateTime now)
