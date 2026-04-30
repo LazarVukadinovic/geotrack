@@ -1,12 +1,4 @@
-import {
-  Component,
-  ElementRef,
-  OnDestroy,
-  OnInit,
-  ViewChild,
-  AfterViewInit,
-  NgZone,
-} from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit, NgZone } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
@@ -42,15 +34,15 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   constructor(private zone: NgZone) {}
 
-  // ── ViewChild refs ──────────────────────────────────────────────────────────
+  //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
-  // ── Basic fields ────────────────────────────────────────────────────────────
+  //Basic fields
   destinationName = '';
 
-  // ── Rich text editor ────────────────────────────────────────────────────────
+  //Rich text editor
   isBold        = false;
   isItalic      = false;
   isUnderline   = false;
@@ -86,7 +78,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.isUnderline = document.queryCommandState('underline');
   }
 
-  // ── Cover image ─────────────────────────────────────────────────────────────
+  //Cover image
   coverImageUrl : string | null = null;
   coverImageName: string        = '';
 
@@ -105,7 +97,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.coverImageName = '';
   }
 
-  // ── Gallery ─────────────────────────────────────────────────────────────────
+  //Gallery
   galleryImages: { url: string; name: string }[] = [];
 
   onGalleryImagesSelected(event: Event): void {
@@ -121,33 +113,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     URL.revokeObjectURL(this.galleryImages[index].url);
     this.galleryImages.splice(index, 1);
   }
-
-  // ── Classification ──────────────────────────────────────────────────────────
-  classItems: ClassItem[] = [
-    { label: 'Nature & Outdoors', checked: false },
-    { label: 'Culture & Heritage', checked: false },
-    { label: 'Urban & City',       checked: false },
-    { label: 'Adventure & Sport',  checked: false },
-    { label: 'Family Friendly',    checked: false },
-  ];
-
-  // ── Tags ────────────────────────────────────────────────────────────────────
-  tags    : string[] = [];
-  tagInput: string   = '';
-
-  addTag(event: Event): void {
-    event.preventDefault();
-    const value = this.tagInput.trim();
-    if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
-    this.tags     = [...this.tags, value];
-    this.tagInput = '';
-  }
-
-  removeTag(tag: string): void {
-    this.tags = this.tags.filter(t => t !== tag);
-  }
-
-  // ── Geographic zone / Leaflet ───────────────────────────────────────────────
+  //Geographic zone / Leaflet
   zoneModalOpen = false;
   zoneConfirmed = false;
   zoneAreaKm2: number | null = null;
@@ -357,8 +323,31 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     }
     return Math.abs((area * R * R) / 2);
   }
+  //Classification
+    classItems: ClassItem[] = [
+      { label: 'Nature & Outdoors', checked: false },
+      { label: 'Culture & Heritage', checked: false },
+      { label: 'Urban & City',       checked: false },
+      { label: 'Adventure & Sport',  checked: false },
+      { label: 'Family Friendly',    checked: false },
+    ];
 
-  // ── Lightbox ────────────────────────────────────────────────────────────────
+    //Tags
+    tags    : string[] = [];
+    tagInput: string   = '';
+
+    addTag(event: Event): void {
+      event.preventDefault();
+      const value = this.tagInput.trim();
+      if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
+      this.tags     = [...this.tags, value];
+      this.tagInput = '';
+    }
+
+    removeTag(tag: string): void {
+      this.tags = this.tags.filter(t => t !== tag);
+    }
+  //Lightbox
   private lightboxEl: HTMLElement | null = null;
   private _lightboxKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _currentImages: { url: string; name: string }[] = [];
@@ -497,7 +486,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     document.body.style.overflow = '';
   }
 
-  // ── Lifecycle ────────────────────────────────────────────────────────────────
+  //Lifecycle
   ngOnInit(): void {}
 
   ngAfterViewInit(): void {
