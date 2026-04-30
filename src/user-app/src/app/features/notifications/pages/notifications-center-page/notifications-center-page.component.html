@@ -1,0 +1,124 @@
+<div class="notifications-page">
+  <app-page-top-nav title="Notifications" fallbackRoute="/explore" />
+
+  <main class="notifications-page__scroll">
+    <section class="notifications-page__hero" aria-labelledby="notifications-title">
+      <span class="notifications-page__eyebrow">Updates</span>
+      <h1 id="notifications-title" class="notifications-page__title">Your Notifications</h1>
+      <div class="notifications-page__title-accent" aria-hidden="true"></div>
+      @if (unreadCount() > 0) {
+        <p class="notifications-page__subtitle">{{ unreadCount() }} unread</p>
+      } @else {
+        <p class="notifications-page__subtitle">All caught up</p>
+      }
+    </section>
+
+    @if (hasUnread()) {
+      <div class="notifications-page__toolbar">
+        <button type="button" class="notifications-page__mark-all" (click)="markAllRead()">
+          Mark all read
+        </button>
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="notifications-page__list" aria-hidden="true">
+        @for (slot of [1, 2, 3]; track slot) {
+          <article class="notification-card notification-card--skeleton">
+            <span class="notification-card__icon notification-card__icon--skeleton"></span>
+            <div class="notification-card__content">
+              <span class="notification-card__line notification-card__line--title"></span>
+              <span class="notification-card__line"></span>
+              <span class="notification-card__line notification-card__line--short"></span>
+            </div>
+          </article>
+        }
+      </div>
+    } @else if (loadError()) {
+      <div class="notifications-page__state">
+        <app-empty-state
+          title="Something went wrong"
+          [message]="loadError()!"
+        />
+        <button type="button" class="notifications-page__retry" (click)="retry()">Try Again</button>
+      </div>
+    } @else if (items().length === 0) {
+      <div class="notifications-page__state">
+        <app-empty-state
+          title="No notifications yet"
+          message="Contribution decisions and account updates will appear here."
+        />
+      </div>
+    } @else {
+      <div class="notifications-page__list" aria-label="Notifications">
+        @for (notification of items(); track notification.id) {
+          <article
+            class="notification-card"
+            [class.notification-card--unread]="!notification.isRead"
+            [class.notification-card--clickable]="notification.actionUrl"
+            role="button"
+            tabindex="0"
+            [attr.aria-label]="notification.title"
+            (click)="openNotification(notification)"
+            (keydown.enter)="openNotification(notification)"
+            (keydown.space)="$event.preventDefault(); openNotification(notification)"
+          >
+            <div
+              class="notification-card__icon"
+              [class.notification-card__icon--approved]="iconKind(notification) === 'approved'"
+              [class.notification-card__icon--rejected]="iconKind(notification) === 'rejected'"
+            >
+              @switch (iconKind(notification)) {
+                @case ('approved') {
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M20 6 9 17l-5-5" />
+                  </svg>
+                }
+                @case ('rejected') {
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                }
+                @default {
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Z" />
+                    <path stroke-linecap="round" d="M10 20h4" />
+                  </svg>
+                }
+              }
+            </div>
+
+            <div class="notification-card__content">
+              <div class="notification-card__topline">
+                <h2 class="notification-card__title">{{ notification.title }}</h2>
+                @if (!notification.isRead) {
+                  <span class="notification-card__unread-dot" aria-label="Unread"></span>
+                }
+              </div>
+              <p class="notification-card__message">{{ notification.message }}</p>
+              <div class="notification-card__meta">
+                <span>{{ timeLabel(notification.createdAt) }}</span>
+                @if (notification.actionUrl) {
+                  <span class="notification-card__action">View</span>
+                }
+              </div>
+            </div>
+          </article>
+        }
+      </div>
+
+      @if (hasMore()) {
+        <div class="notifications-page__pagination">
+          <button
+            type="button"
+            class="notifications-page__load-more"
+            [disabled]="loadingMore()"
+            (click)="loadMore()"
+          >
+            {{ loadingMore() ? 'Loading...' : 'Load More' }}
+          </button>
+        </div>
+      }
+    }
+  </main>
+</div>

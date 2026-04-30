@@ -177,6 +177,13 @@ export const routes: Routes = [
         data: { hideBottomNav: true },
       },
       {
+        path: 'notifications',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/notifications/pages/notifications-center-page/notifications-center-page.component').then(m => m.NotificationsCenterPageComponent),
+        data: { hideBottomNav: true },
+      },
+      {
         path: 'reviews/:entityType/:id',
         loadComponent: () =>
           import('./features/reviews/pages/reviews-page/reviews-page.component').then(m => m.ReviewsPageComponent),
