@@ -7,7 +7,6 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { HotelsListingService } from '../../services/hotels-listing.service';
 import { HotelsScrollStateService } from '../../services/hotels-scroll-state.service';
@@ -15,17 +14,17 @@ import { HOTEL_FILTERS } from '../../models/hotels-listing.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
+import { PageTopNavComponent } from '../../../../shared/components/page-top-nav/page-top-nav.component';
 
 @Component({
   selector: 'app-hotels-listing-page',
   standalone: true,
-  imports: [EmptyStateComponent],
+  imports: [EmptyStateComponent, PageTopNavComponent],
   templateUrl: './hotels-listing-page.component.html',
   styleUrl: './hotels-listing-page.component.scss',
 })
 export class HotelsListingPageComponent implements AfterViewInit {
   private readonly service     = inject(HotelsListingService);
-  private readonly location    = inject(Location);
   private readonly router      = inject(Router);
   private readonly scrollState = inject(HotelsScrollStateService);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
@@ -34,13 +33,12 @@ export class HotelsListingPageComponent implements AfterViewInit {
   protected readonly filters = HOTEL_FILTERS;
   protected readonly activeFilter = signal('all');
   protected readonly loadError = this.service.loadError;
+  protected readonly loadMoreError = this.service.loadMoreError;
+  protected readonly loading = this.service.loading;
+  protected readonly loadingMore = this.service.loadingMore;
+  protected readonly hasMore = this.service.hasMore;
 
-  protected readonly filteredHotels = computed(() => {
-    const filter = this.activeFilter();
-    const hotels = this.service.hotels();
-    if (filter === 'all') return hotels;
-    return hotels.filter((h) => h.tags.includes(filter));
-  });
+  protected readonly filteredHotels = computed(() => this.service.hotels());
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -108,6 +106,7 @@ export class HotelsListingPageComponent implements AfterViewInit {
   protected setFilter(id: string): void {
     if (this.activeFilter() === id) return;
     this.activeFilter.set(id);
+    this.service.setFilter(id);
     this.analytics.track('filter_applied', {
       entityType: 'hotel',
       metadata: { surface: 'hotels_listing', filter: id },
@@ -136,7 +135,7 @@ export class HotelsListingPageComponent implements AfterViewInit {
     this.router.navigate(['/stays', id]);
   }
 
-  protected goBack(): void {
-    this.location.back();
+  protected loadMore(): void {
+    this.service.loadMore();
   }
 }

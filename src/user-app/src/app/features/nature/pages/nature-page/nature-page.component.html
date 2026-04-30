@@ -1,17 +1,7 @@
 <div class="nat-page">
 
   <!-- ── Fixed top bar ────────────────────────────────────────────────────── -->
-  <header class="nat-page__topbar">
-    <button type="button" class="nat-page__back" aria-label="Go back" (click)="goBack()">
-      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"
-           stroke="currentColor" stroke-width="2.5"
-           stroke-linecap="round" stroke-linejoin="round">
-        <path d="M19 12H5M12 5l-7 7 7 7" />
-      </svg>
-    </button>
-    <span class="nat-page__topbar-title">Nature</span>
-    <div class="nat-page__topbar-spacer"></div>
-  </header>
+  <app-page-top-nav title="Nature" fallbackRoute="/explore" />
 
   <!-- ── Scrollable content ───────────────────────────────────────────────── -->
   <div class="nat-page__scroll">
@@ -225,12 +215,32 @@
         }
       }
 
-      @if (filteredItems().length === 0) {
+      @if (!loading() && filteredItems().length === 0) {
         <div class="nat-page__empty">
           <p class="nat-page__empty-text">No spots match this filter.</p>
         </div>
       }
 
     </div>
+
+    @if (!loadError() && filteredItems().length > 0) {
+      <div class="nat-page__pagination" aria-live="polite">
+        @if (loadMoreError()) {
+          <p class="nat-page__load-error">{{ loadMoreError() }}</p>
+        }
+
+        @if (hasMore()) {
+          <button
+            type="button"
+            class="nat-page__load-more"
+            [disabled]="loadingMore()"
+            (click)="loadMore()">
+            {{ loadingMore() ? 'Loading...' : 'Load More' }}
+          </button>
+        } @else {
+          <p class="nat-page__end">You're caught up for now.</p>
+        }
+      </div>
+    }
   </div>
 </div>

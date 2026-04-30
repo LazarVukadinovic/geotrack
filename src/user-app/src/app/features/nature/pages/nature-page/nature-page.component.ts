@@ -7,7 +7,6 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { NatureService } from '../../services/nature.service';
 import { NatureScrollStateService } from '../../services/nature-scroll-state.service';
@@ -15,17 +14,17 @@ import { NATURE_FILTERS } from '../../models/nature.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
+import { PageTopNavComponent } from '../../../../shared/components/page-top-nav/page-top-nav.component';
 
 @Component({
   selector: 'app-nature-page',
   standalone: true,
-  imports: [EmptyStateComponent],
+  imports: [EmptyStateComponent, PageTopNavComponent],
   templateUrl: './nature-page.component.html',
   styleUrl: './nature-page.component.scss',
 })
 export class NaturePageComponent implements AfterViewInit {
   private readonly service     = inject(NatureService);
-  private readonly location    = inject(Location);
   private readonly router      = inject(Router);
   private readonly scrollState = inject(NatureScrollStateService);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
@@ -34,13 +33,12 @@ export class NaturePageComponent implements AfterViewInit {
   protected readonly filters      = NATURE_FILTERS;
   protected readonly activeFilter = signal('all');
   protected readonly loadError    = this.service.loadError;
+  protected readonly loadMoreError = this.service.loadMoreError;
+  protected readonly loading = this.service.loading;
+  protected readonly loadingMore = this.service.loadingMore;
+  protected readonly hasMore = this.service.hasMore;
 
-  protected readonly filteredItems = computed(() => {
-    const filter = this.activeFilter();
-    const items  = this.service.items();
-    if (filter === 'all') return items;
-    return items.filter((item) => item.tags.includes(filter));
-  });
+  protected readonly filteredItems = computed(() => this.service.items());
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -102,6 +100,7 @@ export class NaturePageComponent implements AfterViewInit {
   protected setFilter(id: string): void {
     if (this.activeFilter() === id) return;
     this.activeFilter.set(id);
+    this.service.setFilter(id);
     this.analytics.track('filter_applied', {
       entityType: 'place',
       metadata: { surface: 'nature_listing', filter: id },
@@ -129,7 +128,7 @@ export class NaturePageComponent implements AfterViewInit {
     this.router.navigate(['/places', id]);
   }
 
-  protected goBack(): void {
-    this.location.back();
+  protected loadMore(): void {
+    this.service.loadMore();
   }
 }
