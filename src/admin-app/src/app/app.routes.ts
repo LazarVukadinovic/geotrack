@@ -47,6 +47,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/requests/pages/requests-queue/requests-queue.component').then(m => m.ReviewQueueComponent),
       },
+      {
+        path: 'request/detail/:id',
+        loadComponent: () =>
+          import('./features/requests/pages/request-detail/request-detail.component').then(m => m.RequestDetailComponent),
+      },
     //   {
     //     path: 'map',
     //     loadComponent: () =>

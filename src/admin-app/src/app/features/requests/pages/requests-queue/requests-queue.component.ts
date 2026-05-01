@@ -195,8 +195,7 @@ export class ReviewQueueComponent {
   }
 
   previewRequest(req: ReviewRequest): void {
-    // Navigate to detail/preview page or open modal
-    console.log('Preview:', req);
+    this.router.navigate(['/request/detail', req.id]);
   }
 
   // Context menu
