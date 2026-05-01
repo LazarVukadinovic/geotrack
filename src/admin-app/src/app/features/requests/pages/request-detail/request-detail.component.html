@@ -18,10 +18,9 @@
         <span class="text-gray-400">ID: {{ request.reqId }}</span>
       </div>
 
-      <!-- Two-column layout -->
       <div class="flex gap-6 items-start">
 
-        <!-- LEFT: Hero card -->
+        <!-- LEFT -->
         <div class="flex-1 min-w-0 flex flex-col gap-5">
           <div class="bg-white rounded-xl border border-gray-200 overflow-hidden"
                style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
@@ -74,7 +73,7 @@
             </div>
 
             <!-- Tags -->
-            <div *ngIf="request.tags?.length" class="px-6 py-5">
+            <div *ngIf="request.tags?.length" class="px-6 py-5 border-b border-gray-100">
               <h3 class="text-sm font-semibold text-gray-700 mb-3">Characteristics</h3>
               <div class="flex flex-wrap gap-2">
                 <span *ngFor="let tag of request.tags"
@@ -84,6 +83,138 @@
                   </svg>
                   {{ tag }}
                 </span>
+              </div>
+            </div>
+
+            <!-- Amenities -->
+            <div *ngIf="request.amenities?.length" class="px-6 py-5 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-700 mb-3">Available Amenities</h3>
+              <div class="grid grid-cols-2 gap-2">
+                <div *ngFor="let id of request.amenities"
+                  class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+                  <ng-container *ngIf="id === 'pool'">
+                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12c1.5 0 1.5-1.5 3-1.5S8.5 12 10 12s1.5-1.5 3-1.5S14.5 12 16 12s1.5-1.5 3-1.5S20.5 12 22 12M3 17c1.5 0 1.5-1.5 3-1.5S8.5 17 10 17s1.5-1.5 3-1.5S14.5 17 16 17s1.5-1.5 3-1.5S20.5 17 22 17M7 8V4m5 4V4m5 4V4"/>
+                    </svg>
+                  </ng-container>
+                  <ng-container *ngIf="id === 'wifi'">
+                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
+                    </svg>
+                  </ng-container>
+                  <ng-container *ngIf="id === 'breakfast'">
+                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9V6.5M12 9V6.5M16 9V6.5"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 11h12v5a4 4 0 01-4 4H10a4 4 0 01-4-4v-5z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18 13h1a2 2 0 010 4h-1"/>
+                    </svg>
+                  </ng-container>
+                  <ng-container *ngIf="id === 'parking'">
+                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7v10m0-10h4a3 3 0 010 6H8m0-6"/>
+                      <rect x="3" y="3" width="18" height="18" rx="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>
+                    </svg>
+                  </ng-container>
+                  <ng-container *ngIf="id === 'spa'">
+                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3c0 0-4 4-4 8s4 8 4 8m0-16c0 0 4 4 4 8s-4 8-4 8m0-13c0 0-6 2-6 6M12 3c0 0 6 2 6 6"/>
+                    </svg>
+                  </ng-container>
+                  <ng-container *ngIf="id === 'gym'">
+                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <line x1="7" y1="12" x2="17" y2="12" stroke-width="3.5" stroke-linecap="round"/>
+                      <line x1="5" y1="10" x2="5" y2="14" stroke-width="3.5" stroke-linecap="round"/>
+                      <line x1="3.5" y1="9.5" x2="3.5" y2="14.5" stroke-width="3" stroke-linecap="round"/>
+                      <line x1="19" y1="10" x2="19" y2="14" stroke-width="3.5" stroke-linecap="round"/>
+                      <line x1="20.5" y1="9.5" x2="20.5" y2="14.5" stroke-width="3" stroke-linecap="round"/>
+                    </svg>
+                  </ng-container>
+                  <ng-container *ngIf="id === 'dining'">
+                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 2v7c0 1.1.9 2 2 2h1v11h2V11h1a2 2 0 002-2V2h-2v5H7V2H5v5H4V2H3zM19 2v20h-2V13h-1.5C14.67 13 14 12.33 14 11.5V6c0-2.21 1.79-4 4-4h1z"/>
+                    </svg>
+                  </ng-container>
+                  <ng-container *ngIf="id === 'ac'">
+                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1010 16H2m15.73-8.27A2 2 0 1019 12H2"/>
+                    </svg>
+                  </ng-container>
+                  <span class="text-xs font-medium text-gray-700">{{ getAmenityLabel(id) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Contact Information -->
+            <div *ngIf="request.phone || request.website" class="px-6 py-5 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-700 mb-3">Contact Information</h3>
+              <div class="grid grid-cols-2 gap-3">
+                <div *ngIf="request.phone" class="flex items-start gap-2.5">
+                  <svg class="w-4 h-4 text-gray-400 mt-0.5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                  </svg>
+                  <div>
+                    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Contact Phone</p>
+                    <p class="text-sm text-gray-800">{{ request.phone }}</p>
+                  </div>
+                </div>
+                <div *ngIf="request.website" class="flex items-start gap-2.5">
+                  <svg class="w-4 h-4 text-gray-400 mt-0.5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064"/>
+                  </svg>
+                  <div>
+                    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Website</p>
+                    <a [href]="request.website" target="_blank"
+                       class="text-sm text-blue-700 hover:underline truncate block max-w-[160px]">
+                      {{ request.website }}
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Booking Partners -->
+            <div *ngIf="request.bookingPartners?.length" class="px-6 py-5 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-700 mb-3">Booking Partners</h3>
+              <div class="flex flex-wrap gap-2">
+                <ng-container *ngFor="let partner of request.bookingPartners">
+                  <a *ngIf="partner.url; else noLink"
+                    [href]="partner.url" target="_blank"
+                    class="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                    <span class="text-xs font-semibold text-blue-700">{{ getPartnerLabel(partner.id) }}</span>
+                    <svg class="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                    </svg>
+                  </a>
+                  <ng-template #noLink>
+                    <div class="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg">
+                      <span class="text-xs font-semibold text-gray-600">{{ getPartnerLabel(partner.id) }}</span>
+                    </div>
+                  </ng-template>
+                </ng-container>
+              </div>
+            </div>
+
+            <!-- Location -->
+            <div *ngIf="request.address || request.lat" class="px-6 py-5">
+              <h3 class="text-sm font-semibold text-gray-700 mb-3">Location</h3>
+              <div class="flex gap-4">
+                <div class="flex-1 flex flex-col gap-2">
+                  <div *ngIf="request.address" class="flex items-start gap-2">
+                    <svg class="w-4 h-4 text-blue-600 flex-none mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                    </svg>
+                    <div>
+                      <p class="text-sm text-gray-700">{{ request.address }}</p>
+                      <p *ngIf="request.region" class="text-xs text-gray-400 mt-0.5">{{ request.region }}</p>
+                    </div>
+                  </div>
+                  <div *ngIf="request.lat && request.lng" class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-gray-400 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+                    </svg>
+                    <span class="text-xs font-mono text-gray-500">{{ request.lat.toFixed(5) }}° N, {{ request.lng.toFixed(5) }}° W</span>
+                  </div>
+                </div>
               </div>
             </div>
 
