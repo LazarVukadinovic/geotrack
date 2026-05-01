@@ -1,4 +1,5 @@
 import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
+import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DestinationService } from '../../../../core/services/destination.service';
@@ -19,6 +20,7 @@ import { ExploreService } from '../../services/explore.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { AppNotificationsService } from '../../../../core/services/app-notifications.service';
+import { SearchPageComponent } from '../../../search/pages/search-page/search-page.component';
 
 @Component({
   selector: 'app-explore-page',
@@ -36,6 +38,7 @@ import { AppNotificationsService } from '../../../../core/services/app-notificat
     LandmarksSliderComponent,
     LocalFavoritesListComponent,
     EmptyStateComponent,
+    SearchPageComponent,
   ],
   templateUrl: './explore-page.component.html',
   styleUrl: './explore-page.component.scss',
@@ -47,6 +50,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly locationSvc = inject(LocationService);
   private readonly router      = inject(Router);
   private readonly route       = inject(ActivatedRoute);
+  private readonly location    = inject(Location);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
   private readonly analytics   = inject(AnalyticsService);
@@ -113,6 +117,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected readonly searchQuery = signal('');
   protected readonly isDestinationMode = computed(() => this.destinationSvc.isDestinationMode());
+  protected readonly searchOverlayOpen = signal(this.route.snapshot.data['searchOverlay'] === true);
 
   protected readonly promo        = computed(() => this.explore.promo());
   protected readonly curatedItems = computed(() => this.explore.curatedForYou());
@@ -138,8 +143,21 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     );
   });
 
-  protected onSearchChange(value: string): void {
-    this.searchQuery.set(value);
+  protected openSearch(): void {
+    this.router.navigate(['/search'], { state: { searchFromExplore: true } });
+  }
+
+  protected closeSearch(): void {
+    this.searchOverlayOpen.set(false);
+
+    if (this.router.url.startsWith('/search') && history.state?.searchFromExplore) {
+      this.location.back();
+      return;
+    }
+
+    if (this.router.url.startsWith('/search')) {
+      this.router.navigate(['/explore'], { replaceUrl: true });
+    }
   }
 
   protected useCurrentLocation(): void {

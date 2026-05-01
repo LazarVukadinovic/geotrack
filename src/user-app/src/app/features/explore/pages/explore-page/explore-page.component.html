@@ -15,7 +15,7 @@
         controlId="explore-search"
         controlName="exploreSearch"
         label="Search destinations or activities"
-        (valueChange)="onSearchChange($event)"
+        (focused)="openSearch()"
       />
     </div>
 
@@ -88,4 +88,8 @@
       (sectionMore)="onNatureMore()"
     />
   </div>
+
+  @if (searchOverlayOpen()) {
+    <app-search-page (closed)="closeSearch()" />
+  }
 </div>

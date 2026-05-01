@@ -22,6 +22,7 @@
             (click)="tileActivated.emit(item.categoryKey)"
           >
             <img
+              appImageFallback
               class="landmarks-slider__img"
               [src]="imgSrcById()[item.id]"
               [alt]="''"
