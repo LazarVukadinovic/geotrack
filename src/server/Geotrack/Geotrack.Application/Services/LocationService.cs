@@ -113,7 +113,7 @@ public class LocationService : ILocationService
 
     public async Task<GetLocationReviewsResponseDto> GetLocationReviewsAsync(int locationId)
     {
-        var location = await _locationRepository.GetByIDAsync(locationId);
+        var location = await _locationRepository.GetByIdAsync(locationId);
         if (location == null)
             throw new KeyNotFoundException("Locations not found");
 
@@ -145,7 +145,7 @@ public class LocationService : ILocationService
         if ((request.Comment ?? string.Empty).Length > 1000)
             throw new InvalidOperationException("Comment is too long");
 
-        var location = await _locationRepository.GetByIDAsync(locationId);
+        var location = await _locationRepository.GetByIdAsync(locationId);
         if (location == null)
             throw new KeyNotFoundException("Locations not found");
 

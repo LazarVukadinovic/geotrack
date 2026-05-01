@@ -14,6 +14,7 @@ public class DestinationService : IDestinationService
 
     private readonly IDestinationRepository _destinationRepository;
     private readonly IUserRepository _userRepository;
+    private static readonly HashSet<string> AllTypes = new() { "location", "place", "event" };
 
     public DestinationService(IDestinationRepository destinationRepository, IUserRepository userRepository)
     {
@@ -183,7 +184,7 @@ public class DestinationService : IDestinationService
 
     public async Task<GetDestinationReviewsResponseDto> GetDestinationReviewsAsync(int destinationId)
     {
-        var destination = await _destinationRepository.GetByIDAsync(destinationId);
+        var destination = await _destinationRepository.GetByIdAsync(destinationId);
         if (destination == null)
             throw new KeyNotFoundException("Destination not found");
 
@@ -215,7 +216,7 @@ public class DestinationService : IDestinationService
         if ((request.Comment ?? string.Empty).Length > 1000)
             throw new InvalidOperationException("Comment is too long");
 
-        var destination = await _destinationRepository.GetByIDAsync(destinationId);
+        var destination = await _destinationRepository.GetByIdAsync(destinationId);
         if (destination == null)
             throw new KeyNotFoundException("Destination not found");
 
@@ -558,6 +559,87 @@ public class DestinationService : IDestinationService
     private static double DegreesToRadians(double degrees)
     {
         return degrees * Math.PI / 180.0;
+    }
+
+    public async Task<List<DestinationSearchResultDto>> SearchAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return new List<DestinationSearchResultDto>();
+
+        var destinations = await _destinationRepository.SearchByNameAsync(query);
+
+        return destinations.Select(d => new DestinationSearchResultDto
+        {
+            Id = d.Id,
+            Name = d.Name,
+            Description = d.Description,
+            Latitude = d.Latitude,
+            Longitude = d.Longitude,
+        }).ToList();
+    }
+
+    public async Task<List<DestinationSearchItemDto>> SearchWithinDestinationAsync(int destinationId, string query, IEnumerable<string>? types)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return new List<DestinationSearchItemDto>();
+
+        var exists = await _destinationRepository.ExistsAsync(destinationId);
+
+        if (!exists)
+            throw new KeyNotFoundException($"Destinacija {destinationId} nije pronadjena.");
+
+        var typesToSearch = types?.Select(t => t.ToLower().Trim()).Where(t => AllTypes.Contains(t)).ToHashSet();
+
+        if (typesToSearch == null || typesToSearch.Count == 0)
+            typesToSearch = AllTypes;
+
+        var results = new List<DestinationSearchItemDto>();
+
+        if (typesToSearch.Contains("location"))
+        {
+            var locations = await _destinationRepository.SearchLocationsAsync(destinationId, query);
+            results.AddRange(locations.Select(l => new DestinationSearchItemDto
+            {
+                Id = l.Id,
+                Type = "location",
+                Name = l.Name,
+                Latitude = l.Latitude,
+                Longitude = l.Longitude,
+                ParentName = null
+            }));
+        }
+
+        if (typesToSearch.Contains("place"))
+        {
+            var places = await _destinationRepository.SearchPlacesAsync(destinationId, query);
+            results.AddRange(places.Select(p => new DestinationSearchItemDto
+            {
+                Id = p.Id,
+                Type = "place",
+                Name = p.Name,
+                Description = p.Description,
+                Latitude = p.Latitude,
+                Longitude = p.Longitude,
+                ParentName = p.Location?.Name
+            }));
+        }
+
+        if (typesToSearch.Contains("event"))
+        {
+            var events = await _destinationRepository.SearchEventsAsync(destinationId, query);
+            results.AddRange(events.Select(e => new DestinationSearchItemDto
+            {
+                Id = e.Id,
+                Type = "event",
+                Name = e.Name,
+                Description = e.Description,
+                Latitude = e.Place?.Latitude ?? e.Location.Latitude,
+                Longitude = e.Place?.Longitude ?? e.Location.Longitude,
+                ParentName = e.Place?.Name ?? e.Location.Name
+            }));
+        }
+
+        return results;
     }
 
     private sealed class UserExploreContext

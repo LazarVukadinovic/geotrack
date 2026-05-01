@@ -20,6 +20,13 @@ public class MapService : IMapService
         "stays",
         "events",
     };
+    private static readonly HashSet<string> SearchTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "destination",
+        "location",
+        "place",
+        "event",
+    };
     private static readonly GeometryFactory ViewportGeometryFactory = new(new PrecisionModel(), 4326);
 
     private readonly HttpClient _httpClient;
@@ -59,6 +66,122 @@ public class MapService : IMapService
                 Latitude = ParseCoordinate(result.Lat),
                 Longitude = ParseCoordinate(result.Lon),
             })
+            .ToList();
+    }
+
+    public async Task<List<MapSearchResultDto>> SearchAsync(
+        string query,
+        IEnumerable<string>? types,
+        CancellationToken cancellationToken = default)
+    {
+        var trimmed = query.Trim();
+        if (trimmed.Length < 2)
+            return new List<MapSearchResultDto>();
+
+        var requestedTypes = (types ?? Enumerable.Empty<string>())
+            .Select(type => type.Trim().ToLowerInvariant())
+            .Where(type => SearchTypes.Contains(type))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (requestedTypes.Count == 0)
+        {
+            requestedTypes = SearchTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var loweredQuery = trimmed.ToLowerInvariant();
+        var results = new List<MapSearchResultDto>();
+
+        if (requestedTypes.Contains("destination"))
+        {
+            results.AddRange(await _db.Destinations
+                .AsNoTracking()
+                .Where(destination => destination.Name.ToLower().Contains(loweredQuery))
+                .OrderBy(destination => destination.Name)
+                .Take(10)
+                .Select(destination => new MapSearchResultDto
+                {
+                    Id = destination.Id,
+                    Type = "destination",
+                    Name = destination.Name,
+                    Description = destination.Description,
+                    Subtitle = destination.Region.Name,
+                    Latitude = destination.Latitude,
+                    Longitude = destination.Longitude,
+                    ParentName = destination.Region.Name,
+                })
+                .ToListAsync(cancellationToken));
+        }
+
+        if (requestedTypes.Contains("location"))
+        {
+            results.AddRange(await _db.Locations
+                .AsNoTracking()
+                .Include(location => location.Destination)
+                .Where(location => location.Name.ToLower().Contains(loweredQuery))
+                .OrderBy(location => location.Name)
+                .Take(10)
+                .Select(location => new MapSearchResultDto
+                {
+                    Id = location.Id,
+                    Type = "location",
+                    Name = location.Name,
+                    Subtitle = location.Destination.Name,
+                    Latitude = location.Latitude,
+                    Longitude = location.Longitude,
+                    ParentName = location.Destination.Name,
+                })
+                .ToListAsync(cancellationToken));
+        }
+
+        if (requestedTypes.Contains("place"))
+        {
+            results.AddRange(await _db.Places
+                .AsNoTracking()
+                .Include(place => place.Location)
+                .Where(place => place.Name.ToLower().Contains(loweredQuery))
+                .OrderBy(place => place.Name)
+                .Take(10)
+                .Select(place => new MapSearchResultDto
+                {
+                    Id = place.Id,
+                    Type = "place",
+                    Name = place.Name,
+                    Description = place.Description,
+                    Subtitle = place.Location.Name,
+                    Latitude = place.Latitude,
+                    Longitude = place.Longitude,
+                    ParentName = place.Location.Name,
+                })
+                .ToListAsync(cancellationToken));
+        }
+
+        if (requestedTypes.Contains("event"))
+        {
+            results.AddRange(await _db.Events
+                .AsNoTracking()
+                .Include(@event => @event.Location)
+                .Include(@event => @event.Place)
+                .Where(@event => @event.Name.ToLower().Contains(loweredQuery))
+                .OrderBy(@event => @event.Name)
+                .Take(10)
+                .Select(@event => new MapSearchResultDto
+                {
+                    Id = @event.Id,
+                    Type = "event",
+                    Name = @event.Name,
+                    Description = @event.Description,
+                    Subtitle = @event.Place != null ? @event.Place.Name : @event.Location.Name,
+                    Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
+                    Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
+                    ParentName = @event.Place != null ? @event.Place.Name : @event.Location.Name,
+                })
+                .ToListAsync(cancellationToken));
+        }
+
+        return results
+            .OrderBy(result => result.Type)
+            .ThenBy(result => result.Name)
+            .Take(30)
             .ToList();
     }
 

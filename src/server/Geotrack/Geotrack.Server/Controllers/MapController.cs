@@ -15,10 +15,19 @@ public class MapController : ControllerBase
     }
 
     [HttpGet("search")]
-    public async Task<IActionResult> Search([FromQuery] string? query, CancellationToken cancellationToken)
+    public async Task<IActionResult> Search(
+        [FromQuery] string? query,
+        [FromQuery] string? types,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(query))
             return Ok(Array.Empty<object>());
+
+        if (!string.IsNullOrWhiteSpace(types))
+        {
+            var typeList = types.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            return Ok(await _mapService.SearchAsync(query, typeList, cancellationToken));
+        }
 
         return Ok(await _mapService.SearchAsync(query, cancellationToken));
     }

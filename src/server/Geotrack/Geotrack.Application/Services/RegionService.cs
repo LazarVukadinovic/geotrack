@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Geotrack.Application.DTOs.Region;
+﻿using Geotrack.Application.DTOs.Region;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
@@ -14,10 +9,12 @@ namespace Geotrack.Application.Services
     public class RegionService : IRegionService
     {
         private readonly IRegionRepository _regionRepository;
+        private readonly ITerritoryRepository _territoryRepository;
 
-        public RegionService(IRegionRepository regionRepository)
+        public RegionService(IRegionRepository regionRepository, ITerritoryRepository territoryRepository)
         {
             _regionRepository = regionRepository;
+            _territoryRepository = territoryRepository;
         }
 
         public async Task<GetRegionsResponseDto> GetRegionsAsync()
@@ -53,8 +50,6 @@ namespace Geotrack.Application.Services
                     })
                     .ToList()
             };
-
-
         }
 
         public async Task<CreateRegionResponseDto> CreateRegionAsync(CreateRegionRequestDto request)
@@ -62,14 +57,24 @@ namespace Geotrack.Application.Services
             if (string.IsNullOrWhiteSpace(request.Name))
                 throw new InvalidOperationException("Region name cannot be empty.");
 
-            bool exists = await _regionRepository.ExistsAsync(request.Name);
+            if (request.TerritoryId <= 0)
+                throw new InvalidOperationException("A valid territory id is required.");
+
+            var name = request.Name.Trim();
+            var territory = await _territoryRepository.GetByIdAsync(request.TerritoryId);
+            if (territory == null)
+                throw new KeyNotFoundException($"Territory with id '{request.TerritoryId}' was not found.");
+
+            var exists = await _regionRepository.ExistsInTerritoryAsync(request.TerritoryId, name);
 
             if (exists)
-                throw new InvalidOperationException($"Region with name '{request.Name}' already exists.");
+                throw new InvalidOperationException($"Region with name '{name}' already exists in this territory.");
 
             var region = new Region
             {
-                Name = request.Name
+                Name = name,
+                TerritoryId = request.TerritoryId,
+                CreatedAt = DateTime.UtcNow
             };
 
             await _regionRepository.AddAsync(region);
@@ -81,6 +86,7 @@ namespace Geotrack.Application.Services
                 Name = region.Name
             };
         }
+
         public async Task DeleteRegionAsync(int regionId)
         {
             var region = await _regionRepository.GetByIdAsync(regionId);
@@ -88,7 +94,7 @@ namespace Geotrack.Application.Services
             if (region == null)
                 throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
 
-            bool hasDestinations = await _regionRepository.HasDestinationsAsync(regionId);
+            var hasDestinations = await _regionRepository.HasDestinationsAsync(regionId);
 
             if (hasDestinations)
                 throw new InvalidOperationException("Cannot delete region because it has existing destinations.");

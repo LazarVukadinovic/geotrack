@@ -1,4 +1,4 @@
-﻿using Geotrack.Application.DTOs.Destinations;
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
@@ -29,6 +29,35 @@ public class DestinationController : ControllerBase
 
         var result = await _destinationService.ExploreByLocationAsync(query);
         return Ok(result);
+    }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] string? query)
+    {
+        var results = await _destinationService.SearchAsync(query ?? string.Empty);
+        return Ok(results);
+    }
+
+    [HttpGet("{destinationId}/search")]
+    public async Task<IActionResult> SearchWithinDestination(
+        [FromRoute] int destinationId,
+        [FromQuery] string? query,
+        [FromQuery] string? types)
+    {
+        try
+        {
+            var typeList = types?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var results = await _destinationService.SearchWithinDestinationAsync(
+                destinationId,
+                query ?? string.Empty,
+                typeList);
+
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
     }
 
     [HttpGet("{id}")]

@@ -1,0 +1,151 @@
+﻿using Geotrack.Application.DTOs.Territories;
+using Geotrack.Application.Interfaces.Repository;
+using Geotrack.Application.Interfaces.Service;
+using Geotrack.Domain.Entities.Core;
+
+namespace Geotrack.Application.Services;
+
+public class TerritoryService : ITerritoryService
+{
+    private readonly ITerritoryRepository _territoryRepository;
+    private readonly IRegionRepository _regionRepository;
+
+    public TerritoryService(
+        ITerritoryRepository territoryRepository,
+        IRegionRepository regionRepository)
+    {
+        _territoryRepository = territoryRepository;
+        _regionRepository = regionRepository;
+    }
+
+    public async Task<GetTerritoriesResponseDto> GetTerritoriesAsync()
+    {
+        var territories = await _territoryRepository.GetAllAsync();
+
+        return new GetTerritoriesResponseDto
+        {
+            Territories = territories.Select(t => new TerritoryItemDto
+            {
+                Id = t.Id,
+                Name = t.Name
+            }).ToList()
+        };
+    }
+
+    public async Task<GetTerritoryDetailsResponseDto> GetTerritoryDetailsAsync(int territoryId)
+    {
+        var territory = await _territoryRepository.GetByIdWithRegionsAsync(territoryId);
+
+        if (territory == null)
+            throw new KeyNotFoundException($"Territory with id '{territoryId}' was not found.");
+
+        return new GetTerritoryDetailsResponseDto
+        {
+            Id = territory.Id,
+            Name = territory.Name,
+            Regions = territory.Regions.Select(r => new TerritoryRegionItemDto
+            {
+                Id = r.Id,
+                Name = r.Name
+            }).ToList()
+        };
+    }
+
+    public async Task<CreateTerritoryResponseDto> CreateTerritoryAsync(CreateTerritoryRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new InvalidOperationException("Territory name cannot be empty.");
+
+        var name = request.Name.Trim();
+
+        var exists = await _territoryRepository.ExistsAsync(name);
+
+        if (exists)
+            throw new InvalidOperationException($"Territory with name '{name}' already exists.");
+
+        var territory = new Territory
+        {
+            Name = name,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _territoryRepository.AddAsync(territory);
+        await _territoryRepository.SaveChangesAsync();
+
+        return new CreateTerritoryResponseDto
+        {
+            Id = territory.Id,
+            Name = territory.Name
+        };
+    }
+
+    public async Task DeleteTerritoryAsync(int territoryId)
+    {
+        var territory = await _territoryRepository.GetByIdWithRegionsAsync(territoryId);
+
+        if (territory == null)
+            throw new KeyNotFoundException($"Territory with id '{territoryId}' was not found.");
+
+        if (territory.Regions.Any())
+            throw new InvalidOperationException("Cannot delete territory because it has existing regions.");
+
+        await _territoryRepository.DeleteAsync(territory);
+        await _territoryRepository.SaveChangesAsync();
+    }
+
+    public async Task<CreateRegionInTerritoryResponseDto> CreateRegionAsync(
+        int territoryId,
+        CreateRegionInTerritoryRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new InvalidOperationException("Region name cannot be empty.");
+
+        var territory = await _territoryRepository.GetByIdAsync(territoryId);
+
+        if (territory == null)
+            throw new KeyNotFoundException($"Territory with id '{territoryId}' was not found.");
+
+        var name = request.Name.Trim();
+
+        var exists = await _regionRepository.ExistsInTerritoryAsync(territoryId, name);
+
+        if (exists)
+            throw new InvalidOperationException($"Region with name '{name}' already exists in this territory.");
+
+        var region = new Region
+        {
+            Name = name,
+            TerritoryId = territoryId,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _regionRepository.AddAsync(region);
+        await _regionRepository.SaveChangesAsync();
+
+        return new CreateRegionInTerritoryResponseDto
+        {
+            Id = region.Id,
+            Name = region.Name,
+            TerritoryId = region.TerritoryId
+        };
+    }
+
+    public async Task DeleteRegionAsync(int territoryId, int regionId)
+    {
+        var region = await _regionRepository.GetByIdAsync(regionId);
+
+        if (region == null)
+            throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
+
+        if (region.TerritoryId != territoryId)
+            throw new InvalidOperationException("Region does not belong to this territory.");
+
+        var hasDestinations = await _regionRepository.HasDestinationsAsync(regionId);
+
+        if (hasDestinations)
+            throw new InvalidOperationException("Cannot delete region because it has existing destinations.");
+
+        await _regionRepository.DeleteAsync(region);
+        await _regionRepository.SaveChangesAsync();
+    }
+}

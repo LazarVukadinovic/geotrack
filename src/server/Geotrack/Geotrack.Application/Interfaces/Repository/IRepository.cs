@@ -10,7 +10,7 @@ namespace Geotrack.Application.Interfaces.Repository
     {
         public Task<IEnumerable<T>> GetAllAsync();
 
-        public Task<T?> GetByIDAsync(int id);
+        public Task<T?> GetByIdAsync(int id);
 
         public Task AddAsync(T obj);
 

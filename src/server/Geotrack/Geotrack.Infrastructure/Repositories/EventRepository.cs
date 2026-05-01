@@ -59,4 +59,14 @@ public class EventRepository : Repository<Event>, IEventRepository
     {
         await _context.EventReviews.AddAsync(review);
     }
+
+    public async Task<List<Event>> SearchByNameAsync(string query)
+    {
+        var normalizedQuery = query.ToLower();
+        return await _context.Events
+            .Include(e => e.Location)
+            .Include(e => e.Place)
+            .Where(e => e.Name.ToLower().Contains(normalizedQuery))
+            .ToListAsync();
+    }
 }

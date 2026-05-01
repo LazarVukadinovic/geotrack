@@ -97,7 +97,7 @@ public class UserService : IUserService
     {
         ValidateProfileFields(request.FirstName, request.LastName, request.PhoneNumber);
 
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         user.FirstName = request.FirstName?.Trim() ?? string.Empty;
@@ -125,7 +125,7 @@ public class UserService : IUserService
 
     public async Task<UpdateAvatarResponseDto> UpdateAvatarAsync(int userId, byte[] fileBytes)
     {
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         var previousAvatarUrl = user.AvatarUrl;
@@ -160,7 +160,7 @@ public class UserService : IUserService
     {
         ValidatePasswordChangeRequest(request);
 
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         var currentPasswordResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.CurrentPassword);
@@ -184,7 +184,7 @@ public class UserService : IUserService
 
     public async Task<GetNotificationSettingsResponseDto> GetNotificationSettingsAsync(int userId)
     {
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         return MapNotificationSettings(user);
@@ -192,7 +192,7 @@ public class UserService : IUserService
 
     public async Task<UpdateNotificationSettingsResponseDto> UpdateNotificationSettingsAsync(int userId, UpdateNotificationSettingsRequestDto request)
     {
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         user.GeneralNotificationsEnabled = request.GeneralNotifications;
@@ -209,7 +209,7 @@ public class UserService : IUserService
 
     public async Task<GetAnalyticsSettingsResponseDto> GetAnalyticsSettingsAsync(int userId)
     {
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         return MapAnalyticsSettings(user);
@@ -217,7 +217,7 @@ public class UserService : IUserService
 
     public async Task<UpdateAnalyticsSettingsResponseDto> UpdateAnalyticsSettingsAsync(int userId, UpdateAnalyticsSettingsRequestDto request)
     {
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         user.AnalyticsEnabled = request.AnalyticsEnabled;
@@ -329,7 +329,7 @@ public class UserService : IUserService
 
     public async Task<GetSupportRequestsResponseDto> GetSupportRequestsAsync(int userId)
     {
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         _ = user;
@@ -346,7 +346,7 @@ public class UserService : IUserService
 
     public async Task<CreateSupportRequestResponseDto> CreateSupportRequestAsync(int userId, CreateSupportRequestRequestDto request)
     {
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         _ = user;
@@ -529,25 +529,25 @@ public class UserService : IUserService
         switch (entityType)
         {
             case "destination":
-                if (await _destinationRepository.GetByIDAsync(request.EntityId) == null)
+                if (await _destinationRepository.GetByIdAsync(request.EntityId) == null)
                     throw new KeyNotFoundException("Destinations not found");
                 item.DestinationId = request.EntityId;
                 break;
 
             case "location":
-                if (await _locationRepository.GetByIDAsync(request.EntityId) == null)
+                if (await _locationRepository.GetByIdAsync(request.EntityId) == null)
                     throw new KeyNotFoundException("Locations not found");
                 item.LocationId = request.EntityId;
                 break;
 
             case "place":
-                if (await _placeRepository.GetByIDAsync(request.EntityId) == null)
+                if (await _placeRepository.GetByIdAsync(request.EntityId) == null)
                     throw new KeyNotFoundException("Places not found");
                 item.PlaceId = request.EntityId;
                 break;
 
             case "event":
-                if (await _eventRepository.GetByIDAsync(request.EntityId) == null)
+                if (await _eventRepository.GetByIdAsync(request.EntityId) == null)
                     throw new KeyNotFoundException("Events not found");
                 item.EventId = request.EntityId;
                 break;
@@ -813,7 +813,7 @@ public class UserService : IUserService
 
         if (entityType == "place")
         {
-            var place = await _placeRepository.GetByIDAsync(entityId);
+            var place = await _placeRepository.GetByIdAsync(entityId);
             return place is null ? null : BuildPlaceDetailRoute(place);
         }
 

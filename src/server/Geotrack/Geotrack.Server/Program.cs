@@ -78,6 +78,8 @@ builder.Services.AddScoped<IPlaceService, PlaceService>();
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<IRegionService, RegionService>();
+builder.Services.AddScoped<ITerritoryRepository, TerritoryRepository>();
+builder.Services.AddScoped<ITerritoryService, TerritoryService>();
 builder.Services.AddScoped<IFavoriteService, FavoriteService>();
 builder.Services.AddSingleton<IAnalyticsProcessingQueue, AnalyticsProcessingQueue>();
 builder.Services.AddHostedService<AnalyticsEventProcessingWorker>();

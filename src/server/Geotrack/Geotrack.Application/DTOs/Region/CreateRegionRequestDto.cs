@@ -9,5 +9,6 @@ namespace Geotrack.Application.DTOs.Region
     public class CreateRegionRequestDto
     {
         public string Name { get; set; } = string.Empty;
+        public int TerritoryId { get; set; }
     }
 }

@@ -2,10 +2,14 @@ namespace Geotrack.Application.DTOs.Map;
 
 public class MapSearchResultDto
 {
+    public int? Id { get; set; }
+    public string? Type { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public string? Subtitle { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+    public string? ParentName { get; set; }
 }
 
 public class MapReverseGeocodeDto

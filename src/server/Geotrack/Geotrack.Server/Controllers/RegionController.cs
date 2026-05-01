@@ -1,4 +1,4 @@
-﻿using Geotrack.Application.DTOs.Region;
+using Geotrack.Application.DTOs.Region;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -60,6 +60,10 @@ namespace Geotrack.Server.Controllers
             catch (InvalidOperationException ex)
             {
                 return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
             }
             catch (Exception ex)
             {

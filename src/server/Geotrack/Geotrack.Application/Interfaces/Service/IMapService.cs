@@ -5,6 +5,7 @@ namespace Geotrack.Application.Interfaces.Service;
 public interface IMapService
 {
     Task<List<MapSearchResultDto>> SearchAsync(string query, CancellationToken cancellationToken = default);
+    Task<List<MapSearchResultDto>> SearchAsync(string query, IEnumerable<string>? types, CancellationToken cancellationToken = default);
     Task<MapReverseGeocodeDto?> ReverseGeocodeAsync(double latitude, double longitude, CancellationToken cancellationToken = default);
     Task<MapRouteResponseDto?> GetWalkingRouteAsync(
         double originLatitude,

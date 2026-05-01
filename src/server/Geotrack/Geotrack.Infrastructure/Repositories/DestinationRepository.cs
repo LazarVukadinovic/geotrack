@@ -90,4 +90,34 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
     {
         await _context.DestinationReviews.AddAsync(review);
     }
+
+    public async Task<List<Destination>> SearchByNameAsync(string query)
+    {
+        return await _context.Destinations.Where(d => d.Name.ToLower().Contains(query.ToLower())).ToListAsync();
+    }
+
+    public async Task<bool> ExistsAsync(int destinationId)
+    {
+        return await _context.Destinations.AnyAsync(d => d.Id == destinationId);
+    }
+
+    public async Task<List<Location>> SearchLocationsAsync(int destinationId, string query)
+    {
+        return await _context.Locations.Where(l => l.DestinationId == destinationId && l.Name.ToLower().Contains(query.ToLower())).ToListAsync();
+    }
+
+    public async Task<List<Place>> SearchPlacesAsync(int destinationId, string query)
+    {
+        return await _context.Places.Include(p => p.Location).Where(p => p.Location.DestinationId == destinationId && p.Name.ToLower().Contains(query.ToLower())).ToListAsync();
+    }
+
+    public async Task<List<Event>> SearchEventsAsync(int destinationId, string query)
+    {
+        var normalizedQuery = query.ToLower();
+        return await _context.Events
+            .Include(e => e.Location)
+            .Include(e => e.Place)
+            .Where(e => e.Location.DestinationId == destinationId && e.Name.ToLower().Contains(normalizedQuery))
+            .ToListAsync();
+    }
 }
