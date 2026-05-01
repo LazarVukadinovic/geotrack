@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
@@ -21,6 +22,7 @@ export interface ReviewRequest {
   status: RequestStatus;
   imageBg: string;
 }
+
 interface Tab {
   key: string;
   label: string;
@@ -30,7 +32,7 @@ interface Tab {
 @Component({
   selector: 'app-review-queue',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
   templateUrl: './requests-queue.component.html',
 })
 export class ReviewQueueComponent {
@@ -42,69 +44,34 @@ export class ReviewQueueComponent {
 
   requests: ReviewRequest[] = [
     {
-      id: '1',
-      title: 'Olympic National Park Trails Update',
-      type: 'Destination',
-      region: 'Pacific Northwest',
-      reqId: 'REQ-001',
-      author: 'David Chen',
-      authorInitials: 'DC',
-      authorBg: '#bfdbfe',
-      date: 'Oct 24, 2023',
-      status: 'Pending',
-      imageBg: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)',
+      id: '1', title: 'Olympic National Park Trails Update', type: 'Destination',
+      region: 'Pacific Northwest', reqId: 'REQ-001', author: 'David Chen',
+      authorInitials: 'DC', authorBg: '#bfdbfe', date: 'Oct 24, 2023',
+      status: 'Pending', imageBg: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)',
     },
     {
-      id: '2',
-      title: 'Pike Place Market Artisan Directory',
-      type: 'Place',
-      region: 'Pacific Northwest',
-      reqId: 'REQ-002',
-      author: 'Elena Rodriguez',
-      authorInitials: 'ER',
-      authorBg: '#fde68a',
-      date: 'Oct 23, 2023',
-      status: 'Pending',
-      imageBg: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+      id: '2', title: 'Pike Place Market Artisan Directory', type: 'Place',
+      region: 'Pacific Northwest', reqId: 'REQ-002', author: 'Elena Rodriguez',
+      authorInitials: 'ER', authorBg: '#fde68a', date: 'Oct 23, 2023',
+      status: 'Pending', imageBg: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
     },
     {
-      id: '3',
-      title: 'Seattle Summer Solstice Festival',
-      type: 'Event',
-      region: 'Pacific Northwest',
-      reqId: 'REQ-003',
-      author: 'Marcus Johnson',
-      authorInitials: 'MJ',
-      authorBg: '#a7f3d0',
-      date: 'Oct 22, 2023',
-      status: 'Pending',
-      imageBg: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+      id: '3', title: 'Seattle Summer Solstice Festival', type: 'Event',
+      region: 'Pacific Northwest', reqId: 'REQ-003', author: 'Marcus Johnson',
+      authorInitials: 'MJ', authorBg: '#a7f3d0', date: 'Oct 22, 2023',
+      status: 'Pending', imageBg: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
     },
     {
-      id: '4',
-      title: 'Mount Rainier Basecamp Facilities',
-      type: 'Place',
-      region: 'Pacific Northwest',
-      reqId: 'REQ-004',
-      author: 'Sarah Jenkins',
-      authorInitials: 'SJ',
-      authorBg: '#fbcfe8',
-      date: 'Oct 21, 2023',
-      status: 'Pending',
-      imageBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      id: '4', title: 'Mount Rainier Basecamp Facilities', type: 'Place',
+      region: 'Pacific Northwest', reqId: 'REQ-004', author: 'Sarah Jenkins',
+      authorInitials: 'SJ', authorBg: '#fbcfe8', date: 'Oct 21, 2023',
+      status: 'Pending', imageBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
     },
     {
-      id: '5',
-      title: 'San Juan Islands Ferry Routes',
-      type: 'Destination',
-      region: 'Pacific Northwest',
-      reqId: 'REQ-005',
-      author: 'David Chen',
-      authorInitials: 'DC',
-      authorBg: '#bfdbfe',
-      date: 'Oct 20, 2023',
-      status: 'Pending',
-      imageBg: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+      id: '5', title: 'San Juan Islands Ferry Routes', type: 'Destination',
+      region: 'Pacific Northwest', reqId: 'REQ-005', author: 'David Chen',
+      authorInitials: 'DC', authorBg: '#bfdbfe', date: 'Oct 20, 2023',
+      status: 'Pending', imageBg: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
     },
   ];
 
@@ -116,5 +83,45 @@ export class ReviewQueueComponent {
     { key: 'Event',       label: 'Events',        count: null },
   ];
 
-  activeTab = 'all';
+  activeTab   = 'all';
+  searchQuery = '';
+  sortOpen    = false;
+  currentSort = 'Newest First';
+  sortOptions = ['Newest First', 'Oldest First', 'A–Z', 'Z–A'];
+
+  get filteredRequests(): ReviewRequest[] {
+    let list = [...this.requests];
+
+    if (this.activeTab !== 'all') {
+      list = list.filter(r => r.type === this.activeTab);
+    }
+
+    if (this.searchQuery.trim()) {
+      const q = this.searchQuery.toLowerCase();
+      list = list.filter(r =>
+        r.title.toLowerCase().includes(q) ||
+        r.author.toLowerCase().includes(q) ||
+        r.reqId.toLowerCase().includes(q)
+      );
+    }
+
+    switch (this.currentSort) {
+      case 'Newest First': list.sort((a, b) => b.reqId.localeCompare(a.reqId)); break;
+      case 'Oldest First': list.sort((a, b) => a.reqId.localeCompare(b.reqId)); break;
+      case 'A–Z':          list.sort((a, b) => a.title.localeCompare(b.title));  break;
+      case 'Z–A':          list.sort((a, b) => b.title.localeCompare(a.title));  break;
+    }
+
+    return list;
+  }
+
+  typeBadgeClass(type: RequestType): string {
+    const map: Record<RequestType, string> = {
+      Destination: 'bg-green-50 text-green-700 border border-green-200',
+      Place:       'bg-blue-50 text-blue-700 border border-blue-200',
+      Location:    'bg-indigo-50 text-indigo-700 border border-indigo-200',
+      Event:       'bg-yellow-50 text-yellow-700 border border-yellow-200',
+    };
+    return map[type] ?? 'bg-gray-100 text-gray-600';
+  }
 }
