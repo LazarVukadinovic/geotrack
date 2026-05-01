@@ -195,7 +195,7 @@ export class ReviewQueueComponent {
   }
 
   previewRequest(req: ReviewRequest): void {
-    this.router.navigate(['/request/detail', req.id]);
+    this.router.navigate(['/request/detail', req.id], { state: req });
   }
 
   // Context menu

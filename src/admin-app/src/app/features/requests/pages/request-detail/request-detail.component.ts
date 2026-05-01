@@ -15,7 +15,6 @@ export interface ReviewRequestDetail {
   reqId: string;
   internalId?: string;
 
-  // Basics (Step 1)
   title: string;
   stayType: string;
   imageUrl?: string;
@@ -27,17 +26,14 @@ export interface ReviewRequestDetail {
   lat?: number | null;
   lng?: number | null;
 
-  // Features (Step 2)
   tags?: string[];
   amenities?: string[];
 
-  // Details (Step 3)
   description?: string;
   phone?: string;
   website?: string;
   bookingPartners?: BookingPartner[];
 
-  // Meta
   type: 'Destination' | 'Place' | 'Location' | 'Event';
   author: string;
   authorInitials: string;
@@ -68,11 +64,11 @@ export class RequestDetailComponent implements OnInit {
     internalId: 'REG-SC-042',
 
     title: 'Emerald Cove Secret Beach',
-    stayType: 'Villa',
+    stayType: 'Nature Location',
     imageBg: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)',
     address: '14 Mile Marker, Coastal Highway 1',
     city: 'South Region',
-    region: 'Pacific Northwest',
+    region: 'Sumadija',
     country: 'United States',
     lat: 34.0522,
     lng: 118.2437,
@@ -80,9 +76,9 @@ export class RequestDetailComponent implements OnInit {
     tags: ['Beach', 'Nature', 'Hidden Gem', 'Snorkeling', 'Hiking'],
     amenities: ['wifi', 'parking', 'pool'],
 
-    description: 'A pristine, secluded beach accessible only via a short hike through the coastal forest. Known for its crystal-clear emerald waters and unique rock formations. Perfect for snorkeling and escaping the crowds.',
-    phone: '+1 (555) 123-4567',
-    website: 'https://www.example.com',
+    description: 'A pristine, secluded beach accessible only via a short hike through the coastal forest. Known for its crystal-clear emerald waters and unique rock formations. Perfect for snorkeling and escaping the crowds. Please note there are no immediate facilities on the beach itself, so visitors should bring their own water and supplies. The path can be steep in sections.',
+    phone: '+1 (555) 123-4567 (Park Ranger)',
+    website: 'N/A',
     bookingPartners: [
       { id: 'booking', url: 'https://www.booking.com/example' },
       { id: 'airbnb', url: '' },
@@ -115,17 +111,18 @@ export class RequestDetailComponent implements OnInit {
   };
 
   ngOnInit(): void {
-    // const id = this.route.snapshot.paramMap.get('id');
-    // this.requestService.getById(id).subscribe(r => this.request = r);
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) {
+      // Ovde će doći servis
+      const nav = history.state as ReviewRequestDetail;
+      if (nav?.reqId) {
+        this.request = { ...this.request, ...nav };
+      }
+    }
   }
 
-  getAmenityLabel(id: string): string {
-    return this.amenityMap[id] ?? id;
-  }
-
-  getPartnerLabel(id: string): string {
-    return this.partnerMap[id] ?? id;
-  }
+  getAmenityLabel(id: string): string { return this.amenityMap[id] ?? id; }
+  getPartnerLabel(id: string): string { return this.partnerMap[id] ?? id; }
 
   goBack(): void {
     this.router.navigate(['../'], { relativeTo: this.route });
