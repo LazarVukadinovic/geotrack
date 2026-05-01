@@ -3,13 +3,18 @@ import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
+import { LocationService } from '../../../../core/services/location.service';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { EventDetailService } from '../../services/event-detail.service';
+import type { EventDetail } from '../../models/event-detail.model';
+import type { MapEntityMarker } from '../../../../core/services/map-api.service';
 
 @Component({
   selector: 'app-event-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent],
+  imports: [SectionHeaderComponent, ImageFallbackDirective],
   templateUrl: './event-detail-page.component.html',
   styleUrl: './event-detail-page.component.scss',
 })
@@ -17,6 +22,8 @@ export class EventDetailPageComponent {
   private readonly route    = inject(ActivatedRoute);
   private readonly router   = inject(Router);
   private readonly location = inject(Location);
+  private readonly locationSvc = inject(LocationService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly service  = inject(EventDetailService);
 
   protected readonly eventId = toSignal(
@@ -27,37 +34,49 @@ export class EventDetailPageComponent {
   protected readonly event = computed(() =>
     this.service.getEventDetailPageData(this.eventId()),
   );
+  protected readonly loadState = computed(() =>
+    this.service.getLoadState(this.eventId()),
+  );
 
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by ed__scroll. */
   protected readonly scrollProgress = signal(0);
 
+  protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
+    this.event()?.latitude ?? null,
+    this.event()?.longitude ?? null,
+  ));
+
+  protected readonly hasMapCoordinates = computed(() => this.hasUsableCoordinates(
+    this.event()?.latitude ?? null,
+    this.event()?.longitude ?? null,
+  ));
+
+  private readonly locationRequestKey = computed(() => {
+    const loc = this.locationSvc.location();
+    if (!loc) return 'none';
+    return `${loc.latitude}:${loc.longitude}:${loc.source}`;
+  });
+
   private readonly edScroll = viewChild<ElementRef<HTMLElement>>('edScroll');
 
   constructor() {
-    // Reset scroll when the route param changes (same component instance reused).
     effect(() => {
       this.eventId();
       this.scrollProgress.set(0);
       const el = this.edScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
-  }
 
-  /** Local saved state for similar-event cards (transient, not persisted). */
-  private readonly _similarSaved = signal<Record<string, boolean>>({});
+    effect(() => {
+      const id = this.eventId();
+      this.locationRequestKey();
+      if (id) this.service.loadEventDetail(id);
+    });
+  }
 
   protected onScroll(event: Event): void {
     const scrollTop = (event.currentTarget as Element).scrollTop;
     this.scrollProgress.set(Math.min(scrollTop / 200, 1));
-  }
-
-  protected isSimilarSaved(id: string): boolean {
-    return this._similarSaved()[id] ?? false;
-  }
-
-  protected toggleSimilarSaved(event: Event, id: string): void {
-    event.stopPropagation();
-    this._similarSaved.update((m) => ({ ...m, [id]: !m[id] }));
   }
 
   protected goBack(): void {
@@ -73,15 +92,59 @@ export class EventDetailPageComponent {
     this.router.navigate(['/events', id]);
   }
 
-  protected onHeroImgError(event: Event): void {
-    (event.target as HTMLImageElement).src = '/images/explore-image-fallback.svg';
+  protected viewOnMap(): void {
+    const event = this.event();
+    if (!event) return;
+
+    const mapFocus = this.buildMapFocus(event);
+    if (!mapFocus) return;
+
+    void this.router.navigate(['/map'], {
+      state: { mapFocus },
+    });
   }
 
-  protected onGetDirections(): void {
-    /* future: open maps / directions integration */
+  protected onDirectionsClick(): void {
+    const numId = parseInt(this.eventId(), 10);
+    if (isNaN(numId)) return;
+    this.analytics.track('directions_started', {
+      entityType: 'event',
+      entityId: numId,
+      metadata: { provider: 'google_maps', context: 'event_detail' },
+    });
   }
 
-  protected onViewOnMap(): void {
-    /* future: navigate to /map with this event highlighted */
+  private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {
+    if (!this.hasUsableCoordinates(latitude, longitude)) return null;
+    return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
+  }
+
+  private hasUsableCoordinates(latitude: number | null, longitude: number | null): boolean {
+    return latitude != null &&
+      longitude != null &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      (latitude !== 0 || longitude !== 0);
+  }
+
+  private buildMapFocus(event: EventDetail): MapEntityMarker | null {
+    const entityId = parseInt(event.id, 10);
+    const latitude = event.latitude ?? null;
+    const longitude = event.longitude ?? null;
+    if (isNaN(entityId) || !this.hasUsableCoordinates(latitude, longitude)) return null;
+
+    return {
+      entityType: 'event',
+      entityId,
+      title: event.title,
+      subtitle: event.info.venue || event.location || null,
+      categoryLabel: event.tags[0]?.label ?? 'Event',
+      imageUrl: event.heroImage || null,
+      detailRoute: `/events/${event.id}`,
+      latitude: latitude as number,
+      longitude: longitude as number,
+      distance: event.distance || null,
+      isSaved: event.isSaved,
+    };
   }
 }

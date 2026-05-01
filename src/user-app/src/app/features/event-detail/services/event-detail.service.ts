@@ -1,25 +1,141 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { FavoriteStateService } from '../../../core/services/favorite-state.service';
+import { LocationService } from '../../../core/services/location.service';
+import { AnalyticsService } from '../../../core/services/analytics.service';
+import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import type { EventDetail } from '../models/event-detail.model';
-import { MOCK_EVENT_DETAIL_MAP } from '../data/mock-event-detail.data';
+import type { DetailLoadState } from '../../place-detail/services/place-detail.service';
+
+interface ApiEventDetail {
+  id: number;
+  title: string;
+  location?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  heroImage?: string;
+  tags: { label: string }[];
+  distance?: string;
+  about?: string;
+  info: { date?: string; timeRange?: string; venue?: string; ticket?: string; duration?: string; hostedBy?: string };
+  venueInfo: { description?: string; arrivalTips?: string; accessibility?: string };
+  similar: { id: number; title: string; subtitle?: string; image?: string; isSaved: boolean }[];
+  isSaved: boolean;
+}
 
 @Injectable({ providedIn: 'root' })
 export class EventDetailService {
-  private readonly _savedOverrides = signal<Record<string, boolean>>({});
+  private readonly http = inject(HttpClient);
+  private readonly favoriteState = inject(FavoriteStateService);
+  private readonly locationSvc = inject(LocationService);
+  private readonly analytics = inject(AnalyticsService);
+  private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly _cache = signal<Record<string, EventDetail>>({});
+  private readonly _loadState = signal<Record<string, DetailLoadState>>({});
+  private readonly lastRequestKeyById = new Map<string, string>();
 
-  /** Returns the event for the given id, merging any transient saved-state overrides. */
   getEventDetailPageData(id: string): EventDetail | null {
-    const base = MOCK_EVENT_DETAIL_MAP[id];
-    if (!base) return null;
-    const overrides = this._savedOverrides();
-    return {
-      ...base,
-      isSaved: overrides[id] ?? base.isSaved,
-    };
+    const cached = this._cache()[id];
+    if (cached) {
+      return {
+        ...cached,
+        isSaved: this.favoriteState.resolve('event', id, cached.isSaved),
+      };
+    }
+    return null;
+  }
+
+  getLoadState(id: string): DetailLoadState {
+    return this._loadState()[id] ?? 'idle';
+  }
+
+  loadEventDetail(id: string): void {
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) {
+      this.setLoadState(id, 'notFound');
+      return;
+    }
+    const locationQuery = this.buildLocationQuery();
+    const requestKey = `${numId}${locationQuery}`;
+    if (this.lastRequestKeyById.get(id) === requestKey) return;
+    this.lastRequestKeyById.set(id, requestKey);
+    this.setLoadState(id, 'loading');
+
+    this.http.get<ApiEventDetail>(`/api/events/${numId}${locationQuery}`).subscribe({
+      next: (dto) => {
+        if (this.lastRequestKeyById.get(id) !== requestKey) {
+          return;
+        }
+
+        const detail: EventDetail = {
+          id: String(dto.id),
+          title: dto.title,
+          location: dto.location ?? '',
+          latitude: dto.latitude ?? null,
+          longitude: dto.longitude ?? null,
+          heroImage: dto.heroImage ?? '',
+          tags: dto.tags,
+          distance: dto.distance ?? '',
+          about: dto.about ?? '',
+          info: {
+            date: dto.info.date ?? '',
+            timeRange: dto.info.timeRange ?? '',
+            venue: dto.info.venue ?? '',
+            ticket: dto.info.ticket ?? '',
+            duration: dto.info.duration ?? '',
+            hostedBy: dto.info.hostedBy ?? '',
+          },
+          venueInfo: {
+            description: dto.venueInfo.description ?? '',
+            arrivalTips: dto.venueInfo.arrivalTips ?? '',
+            accessibility: dto.venueInfo.accessibility ?? '',
+          },
+          similar: dto.similar.map(s => ({
+            id: String(s.id),
+            title: s.title,
+            subtitle: s.subtitle ?? '',
+            image: s.image ?? '',
+            isSaved: s.isSaved,
+          })),
+          isSaved: dto.isSaved,
+        };
+        this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
+        this.setLoadState(id, 'loaded');
+        this.lastRequestKeyById.delete(id);
+        this.analytics.track('detail_view', { entityType: 'event', entityId: dto.id });
+      },
+      error: (err) => {
+        if (this.lastRequestKeyById.get(id) === requestKey) {
+          this.setLoadState(id, err?.status === 404 ? 'notFound' : 'error');
+          this.lastRequestKeyById.delete(id);
+        }
+      },
+    });
+  }
+
+  private buildLocationQuery(): string {
+    const loc = this.locationSvc.location();
+    if (!loc) return '';
+    return `?latitude=${loc.latitude}&longitude=${loc.longitude}`;
+  }
+
+  private setLoadState(id: string, state: DetailLoadState): void {
+    this._loadState.update(current => ({ ...current, [id]: state }));
   }
 
   toggleSaved(id: string): void {
     const current = this.getEventDetailPageData(id);
     if (!current) return;
-    this._savedOverrides.update((m) => ({ ...m, [id]: !current.isSaved }));
+
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) return;
+    this.saveToCollection.open({
+      entityType: 'event',
+      entityId: numId,
+      title: current.title,
+      imageUrl: current.heroImage,
+      surface: 'event_detail',
+      analyticsEntityType: 'event',
+    });
   }
 }

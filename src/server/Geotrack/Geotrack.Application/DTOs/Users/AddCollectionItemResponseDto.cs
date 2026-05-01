@@ -9,10 +9,12 @@ public class AddCollectionItemResponseDto
 {
     public int Id { get; set; }
     public int CollectionId { get; set; }
+    public string EntityType { get; set; } = string.Empty;
     public int? DestinationId { get; set; }
     public int? LocationId { get; set; }
     public int? PlaceId { get; set; }
     public int? EventId { get; set; }
+    public string? DetailRoute { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

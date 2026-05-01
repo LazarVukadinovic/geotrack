@@ -595,61 +595,49 @@ public class DestinationService : IDestinationService
 
         var results = new List<DestinationSearchItemDto>();
 
-        var tasks = new List<Task>();
-
         if (typesToSearch.Contains("location"))
-            tasks.Add(Task.Run(async () =>
+        {
+            var locations = await _destinationRepository.SearchLocationsAsync(destinationId, query);
+            results.AddRange(locations.Select(l => new DestinationSearchItemDto
             {
-                var locations = await _destinationRepository.SearchLocationsAsync(destinationId,query);
-
-                lock (results)
-                    results.AddRange(locations.Select(l => new DestinationSearchItemDto
-                    {
-                        Id = l.Id,
-                        Type = "location",
-                        Name = l.Name,
-                        Description = null,
-                        Latitude = l.Latitude,
-                        Longitude = l.Longitude,
-                        ParentName = null
-                    }));
-
+                Id = l.Id,
+                Type = "location",
+                Name = l.Name,
+                Latitude = l.Latitude,
+                Longitude = l.Longitude,
+                ParentName = null
             }));
+        }
+
         if (typesToSearch.Contains("place"))
-            tasks.Add(Task.Run(async () =>
+        {
+            var places = await _destinationRepository.SearchPlacesAsync(destinationId, query);
+            results.AddRange(places.Select(p => new DestinationSearchItemDto
             {
-                var places = await _destinationRepository.SearchPlacesAsync(destinationId, query);
-                lock (results)
-                    results.AddRange(places.Select(p => new DestinationSearchItemDto
-                    {
-                        Id = p.Id,
-                        Type = "place",
-                        Name = p.Name,
-                        Description = p.Description,
-                        Latitude = p.Latitude,
-                        Longitude = p.Longitude,
-                        ParentName = p.Location?.Name
-                    }));
+                Id = p.Id,
+                Type = "place",
+                Name = p.Name,
+                Description = p.Description,
+                Latitude = p.Latitude,
+                Longitude = p.Longitude,
+                ParentName = p.Location?.Name
             }));
+        }
 
         if (typesToSearch.Contains("event"))
-            tasks.Add(Task.Run(async () =>
+        {
+            var events = await _destinationRepository.SearchEventsAsync(destinationId, query);
+            results.AddRange(events.Select(e => new DestinationSearchItemDto
             {
-                var events = await _destinationRepository.SearchEventsAsync(destinationId, query);
-                lock (results)
-                    results.AddRange(events.Select(e => new DestinationSearchItemDto
-                    {
-                        Id = e.Id,
-                        Type = "event",
-                        Name = e.Name,
-                        Description = e.Description,
-                        Latitude = e.Place?.Latitude ?? 0,
-                        Longitude = e.Place?.Longitude ?? 0,
-                        ParentName = e.Place?.Name
-                    }));
+                Id = e.Id,
+                Type = "event",
+                Name = e.Name,
+                Description = e.Description,
+                Latitude = e.Place?.Latitude ?? e.Location.Latitude,
+                Longitude = e.Place?.Longitude ?? e.Location.Longitude,
+                ParentName = e.Place?.Name ?? e.Location.Name
             }));
-
-        await Task.WhenAll(tasks);
+        }
 
         return results;
     }

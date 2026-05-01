@@ -22,8 +22,8 @@ export interface ExploreNearbyItem {
   title: string;
   categoryLabel: string;
   image: string;
-  rating: number;
-  reviewCount: string;
+  rating?: number;
+  reviewCount?: string;
   distance: string;
   isSaved: boolean;
 }
@@ -32,7 +32,7 @@ export interface ExploreStay {
   id: string;
   title: string;
   image: string;
-  rating: number;
+  rating?: number;
   reviewCount?: string;
   distance: string;
   pricePerNight: number;

@@ -6,14 +6,13 @@
   <div #imgContainer
     class="relative h-48 rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-slate-300"
     [class.border-0]="previewUrl()">
-    
+
 
     <div *ngIf="previewUrl()"
       class="absolute inset-0"
-      [style.background-image]="'url(' + previewUrl() + ')'"
-      [style.background-size]="bgSize()"
-      [style.background-position]="bgPosition()"
-      [style.background-repeat]="'no-repeat'">
+      [appBackgroundImageFallback]="previewUrl()"
+      [backgroundImageFallbackSize]="bgSize()"
+      [backgroundImageFallbackPosition]="bgPosition()">
     </div>
 
     <div *ngIf="!previewUrl()" class="absolute inset-0 flex flex-col items-center justify-center gap-2">
@@ -23,7 +22,7 @@
       <span class="text-sm text-slate-400">Tap to add photo</span>
     </div>
 
-    <label *ngIf="previewUrl()" 
+    <label *ngIf="previewUrl()"
       class="change-label absolute top-2 right-2 bg-white/90 rounded-xl px-3 py-1.5 flex items-center gap-1.5 z-10 cursor-pointer">
       <svg class="w-3.5 h-3.5 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -35,7 +34,7 @@
       <span class="text-[10px] text-white font-medium">Drag or pinch to adjust</span>
     </div>
 
-    <input *ngIf="!previewUrl()" type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-20" 
+    <input *ngIf="!previewUrl()" type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-20"
       (change)="onImageSelected($event)"/>
   </div>
 </div>
@@ -113,10 +112,10 @@
           d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
       </svg>
       <span class="text-sm font-semibold text-slate-600">Pin Coordinates</span>
-      <span *ngIf="form.lat && form.lng" class="text-xs text-[#e8722a] font-medium">
+      <span *ngIf="form.lat !== null && form.lng !== null" class="text-xs text-[#e8722a] font-medium">
         {{ form.lat.toFixed(5) }}, {{ form.lng.toFixed(5) }}
       </span>
-      <span *ngIf="!form.lat" class="text-xs text-slate-400">Tap to set exact location on map</span>
+      <span *ngIf="form.lat === null || form.lng === null" class="text-xs text-slate-400">Tap to set exact location on map</span>
     </button>
   </div>
     <div class="mt-auto">
@@ -145,7 +144,7 @@
         </button>
       </div>
 
-      <p class="text-xs text-slate-500 text-center px-5 py-2">Tap anywhere on the map to place your pin</p>
+      <p class="text-xs text-slate-500 text-center px-5 py-2">Tap the map or drag it until the pin marks the exact spot</p>
 
       <!-- Map placeholder -->
       <div class="flex-1 relative bg-slate-100 overflow-hidden">

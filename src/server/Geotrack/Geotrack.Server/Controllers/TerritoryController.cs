@@ -1,5 +1,6 @@
-﻿using Geotrack.Application.DTOs.Territories;
+using Geotrack.Application.DTOs.Territories;
 using Geotrack.Application.Interfaces.Service;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Geotrack.Server.Controllers;
@@ -48,6 +49,7 @@ public class TerritoryController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateTerritory([FromBody] CreateTerritoryRequestDto request)
     {
         try
@@ -66,6 +68,7 @@ public class TerritoryController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteTerritory([FromRoute] int id)
     {
         try
@@ -88,6 +91,7 @@ public class TerritoryController : ControllerBase
     }
 
     [HttpPost("{territoryId}/regions")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateRegion(
         [FromRoute] int territoryId,
         [FromBody] CreateRegionInTerritoryRequestDto request)
@@ -112,6 +116,7 @@ public class TerritoryController : ControllerBase
     }
 
     [HttpDelete("{territoryId}/regions/{regionId}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteRegion(
         [FromRoute] int territoryId,
         [FromRoute] int regionId)

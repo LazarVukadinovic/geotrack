@@ -1,9 +1,13 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Observable } from 'rxjs';
+import { UserService } from '../../../core/services/user.service';
 
 export interface ReviewDraft {
   rating: number;
   body: string;
 }
+
+let nextReviewBodyId = 0;
 
 @Component({
   selector: 'app-review-entry',
@@ -15,13 +19,18 @@ export class ReviewEntryComponent {
   readonly isLoggedIn  = input.required<boolean>();
   readonly entityName  = input.required<string>();
 
+  /**
+   * Factory for the submit HTTP call. Returning an `Observable` lets this
+   * presentational component own popup / form state while the parent page
+   * owns endpoint shape and post-success refresh.
+   */
+  readonly submitRequest = input.required<(draft: ReviewDraft) => Observable<unknown>>();
+
   /** Emitted when the logged-out "Log In" button is clicked. */
   readonly loginRequested   = output<void>();
-  /**
-   * Emitted when the user submits a review.
-   * Currently frontend-only — wire to your review API when ready.
-   */
+  /** Emitted only after a successful submit. */
   readonly reviewSubmitted  = output<ReviewDraft>();
+  protected readonly avatarUrl = inject(UserService).avatarUrl;
 
   // ─── Popup state ────────────────────────────────────────────────────────────
   protected readonly popupOpen   = signal(false);
@@ -29,8 +38,16 @@ export class ReviewEntryComponent {
   protected readonly hoverRating = signal(0);
   protected readonly draftBody   = signal('');
 
+  protected readonly isSubmitting = signal(false);
+  protected readonly submitError  = signal('');
+  protected readonly reviewBodyId = `review-body-${++nextReviewBodyId}`;
+
   protected readonly effectiveRating = computed(() =>
     this.hoverRating() || this.draftRating(),
+  );
+
+  protected readonly canSubmit = computed(() =>
+    this.draftRating() > 0 && !this.isSubmitting(),
   );
 
   protected starFilled(index: number): boolean {
@@ -42,10 +59,12 @@ export class ReviewEntryComponent {
   }
 
   protected closePopup(): void {
+    if (this.isSubmitting()) return;
     this.popupOpen.set(false);
     this.draftRating.set(0);
     this.hoverRating.set(0);
     this.draftBody.set('');
+    this.submitError.set('');
   }
 
   protected onStarClick(n: number): void {
@@ -65,10 +84,26 @@ export class ReviewEntryComponent {
   }
 
   protected onSubmit(): void {
-    this.reviewSubmitted.emit({
+    if (!this.canSubmit()) return;
+    const draft: ReviewDraft = {
       rating: this.draftRating(),
       body:   this.draftBody(),
+    };
+    this.submitError.set('');
+    this.isSubmitting.set(true);
+    this.submitRequest()(draft).subscribe({
+      next: () => {
+        this.isSubmitting.set(false);
+        this.reviewSubmitted.emit(draft);
+        this.popupOpen.set(false);
+        this.draftRating.set(0);
+        this.hoverRating.set(0);
+        this.draftBody.set('');
+      },
+      error: (err) => {
+        this.isSubmitting.set(false);
+        this.submitError.set(err?.error?.message || 'Could not submit your review. Please try again.');
+      },
     });
-    this.closePopup();
   }
 }

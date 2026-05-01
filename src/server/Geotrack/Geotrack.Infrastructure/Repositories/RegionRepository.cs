@@ -29,12 +29,6 @@ namespace Geotrack.Infrastructure.Repositories
                 .AnyAsync(d => d.RegionId == regionId);
         }
 
-        public async Task<Region?> GetByIdAsync(int regionId)
-        {
-            return await _context.Regions
-                .FirstOrDefaultAsync(r => r.Id == regionId);
-        }
-
         public Task DeleteAsync(Region region)
         {
             _context.Regions.Remove(region);

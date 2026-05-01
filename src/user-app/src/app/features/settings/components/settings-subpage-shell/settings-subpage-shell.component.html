@@ -1,0 +1,27 @@
+<div class="settings-shell">
+  <div class="settings-shell__header">
+    <div class="settings-shell__header-row">
+      <button
+        type="button"
+        class="settings-shell__back"
+        aria-label="Go back"
+        (click)="goBack()">
+        <svg class="settings-shell__back-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <span class="settings-shell__title">{{ title() }}</span>
+      <div class="settings-shell__spacer" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <div class="settings-shell__body">
+    <div class="settings-shell__content">
+      @if (description()) {
+        <p class="settings-shell__description">{{ description() }}</p>
+      }
+
+      <ng-content />
+    </div>
+  </div>
+</div>

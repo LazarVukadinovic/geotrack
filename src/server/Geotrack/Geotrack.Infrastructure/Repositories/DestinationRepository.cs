@@ -113,6 +113,11 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
 
     public async Task<List<Event>> SearchEventsAsync(int destinationId, string query)
     {
-        return await _context.Events.Include(e => e.Place).Where(e => e.Place.Location.DestinationId == destinationId && e.Name.ToLower().Contains(query.ToLower())).ToListAsync();
+        var normalizedQuery = query.ToLower();
+        return await _context.Events
+            .Include(e => e.Location)
+            .Include(e => e.Place)
+            .Where(e => e.Location.DestinationId == destinationId && e.Name.ToLower().Contains(normalizedQuery))
+            .ToListAsync();
     }
 }

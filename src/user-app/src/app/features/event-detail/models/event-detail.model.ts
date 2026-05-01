@@ -29,6 +29,8 @@ export interface EventDetail {
   id: string;
   title: string;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   heroImage: string;
   tags: EventTag[];
   distance: string;

@@ -1,17 +1,7 @@
 <div class="ev-page">
 
   <!-- ── Fixed top bar ────────────────────────────────────────────────────── -->
-  <header class="ev-page__topbar">
-    <button type="button" class="ev-page__back" aria-label="Go back" (click)="goBack()">
-      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"
-           stroke="currentColor" stroke-width="2.5"
-           stroke-linecap="round" stroke-linejoin="round">
-        <path d="M19 12H5M12 5l-7 7 7 7" />
-      </svg>
-    </button>
-    <span class="ev-page__topbar-title">Events</span>
-    <div class="ev-page__topbar-spacer"></div>
-  </header>
+  <app-page-top-nav title="Events" fallbackRoute="/explore" />
 
   <!-- ── Scrollable content ───────────────────────────────────────────────── -->
   <div class="ev-page__scroll">
@@ -37,6 +27,13 @@
         }
       </div>
     </div>
+
+    @if (loadError()) {
+      <app-empty-state
+        title="Something went wrong"
+        [message]="loadError()!"
+      />
+    }
 
     <!-- Event card list -->
     <div class="ev-page__list" aria-label="Events">
@@ -108,7 +105,7 @@
                 <button
                   type="button"
                   class="evc__save"
-                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  [attr.aria-label]="item.isSaved ? 'Saved. Choose collection' : 'Save to collection'"
                   (click)="toggleSaved($event, item.id)"
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -174,7 +171,7 @@
                 <button
                   type="button"
                   class="evc__save"
-                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  [attr.aria-label]="item.isSaved ? 'Saved. Choose collection' : 'Save to collection'"
                   (click)="toggleSaved($event, item.id)"
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -195,12 +192,32 @@
         }
       }
 
-      @if (filteredItems().length === 0) {
+      @if (!loading() && filteredItems().length === 0) {
         <div class="ev-page__empty">
           <p class="ev-page__empty-text">No events match this filter.</p>
         </div>
       }
 
     </div>
+
+    @if (!loadError() && filteredItems().length > 0) {
+      <div class="ev-page__pagination" aria-live="polite">
+        @if (loadMoreError()) {
+          <p class="ev-page__load-error">{{ loadMoreError() }}</p>
+        }
+
+        @if (hasMore()) {
+          <button
+            type="button"
+            class="ev-page__load-more"
+            [disabled]="loadingMore()"
+            (click)="loadMore()">
+            {{ loadingMore() ? 'Loading...' : 'Load More' }}
+          </button>
+        } @else {
+          <p class="ev-page__end">You're caught up for now.</p>
+        }
+      </div>
+    }
   </div>
 </div>

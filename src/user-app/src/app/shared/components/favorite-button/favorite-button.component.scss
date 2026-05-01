@@ -1,0 +1,10 @@
+:host {
+  display: block;
+}
+
+.favorite-button__icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transition: color 0.15s ease, transform 0.15s ease;
+}

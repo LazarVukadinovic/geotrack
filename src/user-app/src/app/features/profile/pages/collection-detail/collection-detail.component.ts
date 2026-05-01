@@ -1,28 +1,36 @@
 import { Component, computed, inject, signal, NgZone, OnDestroy } from '@angular/core';
 import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CollectionsService } from '../../services/collections';
+import { CollectionPlace, CollectionsService } from '../../services/collections';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 
 const DISMISS_THRESHOLD = 120;
 
 @Component({
   selector: 'app-collection-detail',
   standalone: true,
-  imports: [],
+  imports: [ImageFallbackDirective],
   templateUrl: './collection-detail.component.html',
 })
 export class CollectionDetailComponent {
   private readonly location    = inject(Location);
-  private readonly router      = inject(Router);
   private readonly route       = inject(ActivatedRoute);
+  private readonly router      = inject(Router);
   private readonly collService = inject(CollectionsService);
   private readonly ngZone      = inject(NgZone);
 
-  private readonly id = this.route.snapshot.paramMap.get('id') ?? '';
+  private readonly id = Number(this.route.snapshot.paramMap.get('id') ?? 0);
 
   protected readonly collection = computed(() =>
     this.collService.collections().find(c => c.id === this.id)
   );
+  protected readonly loadState = computed(() =>
+    this.collService.getDetailLoadState(this.id)
+  );
+
+  constructor() {
+    if (this.id > 0) this.collService.loadDetails(this.id);
+  }
 
   protected readonly menuOpen   = signal(false);
   protected readonly renameOpen = signal(false);
@@ -53,13 +61,18 @@ export class CollectionDetailComponent {
   }
   protected goBack(): void { this.location.back(); }
 
-  protected onRemovePlace(placeId: string): void {
-    this.collService.removePlace(this.id, placeId);
+  protected onRemovePlace(itemId: number): void {
+    this.collService.removePlace(this.id, itemId);
   }
 
-  protected onAddPlace(): void {
-    //ekran za dodavanje mesta
-    this.router.navigate(['/profile/collections', this.id, 'add-place']);
+  protected canOpenItem(item: CollectionPlace): boolean {
+    return this.detailRouteFor(item) !== null;
+  }
+
+  protected openItem(item: CollectionPlace): void {
+    const detailRoute = this.detailRouteFor(item);
+    if (!detailRoute) return;
+    void this.router.navigateByUrl(detailRoute);
   }
 
   protected onMenuOpen(): void {
@@ -89,6 +102,12 @@ export class CollectionDetailComponent {
     this.collService.deleteCollection(this.id);
     this.menuOpen.set(false);
     this.location.back();
+  }
+
+  protected reloadCollection(): void {
+    if (this.id > 0) {
+      this.collService.loadDetails(this.id);
+    }
   }
   protected onMenuTouchStart(e: TouchEvent): void {
     this.activeDrag = 'menu';
@@ -135,5 +154,15 @@ export class CollectionDetailComponent {
       }
       this.activeDrag = null;
     });
+  }
+
+  private detailRouteFor(item: CollectionPlace): string | null {
+    if (item.detailRoute?.trim()) {
+      return item.detailRoute;
+    }
+
+    if (item.entityType === 'event') return `/events/${item.entityId}`;
+    if (item.entityType === 'place') return `/places/${item.entityId}`;
+    return null;
   }
 }

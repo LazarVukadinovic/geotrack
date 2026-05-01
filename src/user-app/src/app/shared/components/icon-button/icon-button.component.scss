@@ -25,20 +25,26 @@
 .icon-button--on-media {
   width: 40px;
   height: 40px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.76);
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.12),
-    0 8px 20px rgba(0, 0, 0, 0.18);
-  color: var(--color-primary-navy);
+    0 2px 5px rgba(26, 43, 76, 0.09),
+    0 6px 14px rgba(26, 43, 76, 0.12);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--color-primary-navy);
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
 
   &:active {
     background: rgba(255, 255, 255, 0.88);
+    transform: scale(0.95);
+    box-shadow:
+      0 1px 3px rgba(26, 43, 76, 0.09),
+      0 3px 10px rgba(26, 43, 76, 0.11);
   }
 
   &.icon-button--compact {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
   }
 }

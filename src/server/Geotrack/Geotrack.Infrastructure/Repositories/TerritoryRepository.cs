@@ -26,12 +26,6 @@ public class TerritoryRepository : Repository<Territory>, ITerritoryRepository
             .FirstOrDefaultAsync(t => t.Id == territoryId);
     }
 
-    public async Task<Territory?> GetByIdAsync(int territoryId)
-    {
-        return await _context.Set<Territory>()
-            .FirstOrDefaultAsync(t => t.Id == territoryId);
-    }
-
     public Task DeleteAsync(Territory territory)
     {
         _context.Set<Territory>().Remove(territory);

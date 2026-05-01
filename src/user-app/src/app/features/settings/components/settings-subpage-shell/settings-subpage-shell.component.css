@@ -1,0 +1,74 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.settings-shell {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+.settings-shell__header {
+  flex: none;
+  background: #1a2b4a;
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 1.5rem 1.5rem;
+  border-radius: 0 0 1.5rem 1.5rem;
+}
+
+.settings-shell__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.settings-shell__back,
+.settings-shell__spacer {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+}
+
+.settings-shell__back {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-shell__back-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.settings-shell__title {
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.settings-shell__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings-shell__content {
+  padding: 1.5rem 1.25rem calc(env(safe-area-inset-bottom, 0px) + 2rem);
+}
+
+.settings-shell__description {
+  margin: 0 0 1.5rem;
+  color: #64748b;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}

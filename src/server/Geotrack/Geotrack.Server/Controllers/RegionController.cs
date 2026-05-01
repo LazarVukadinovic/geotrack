@@ -1,9 +1,11 @@
-﻿using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.DTOs.Region;
+using Geotrack.Application.Interfaces.Service;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Geotrack.Server.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/regions")]
     [ApiController]
     public class RegionController : ControllerBase
     {
@@ -24,7 +26,7 @@ namespace Geotrack.Server.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return MapUnexpected(ex);
             }
         }
 
@@ -42,8 +44,59 @@ namespace Geotrack.Server.Controllers
             }
             catch (Exception ex)
             {
+                return MapUnexpected(ex);
+            }
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> CreateRegion([FromBody] CreateRegionRequestDto request)
+        {
+            try
+            {
+                var result = await _regionService.CreateRegionAsync(request);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
                 return BadRequest(new { message = ex.Message });
             }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return MapUnexpected(ex);
+            }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteRegion([FromRoute] int id)
+        {
+            try
+            {
+                await _regionService.DeleteRegionAsync(id);
+                return NoContent();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return MapUnexpected(ex);
+            }
+        }
+
+        private IActionResult MapUnexpected(Exception _)
+        {
+            return StatusCode(500, new { message = "An unexpected error occurred." });
         }
     }
 }

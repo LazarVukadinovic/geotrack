@@ -14,13 +14,13 @@ public class User
     public string Email { get; set; } = string.Empty;
 
     public ICollection<Collection> Collections { get; set; } = new List<Collection>(); // NAVIGATIONAL
+    public ICollection<SupportRequest> SupportRequests { get; set; } = new List<SupportRequest>(); // NAVIGATIONAL
 
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>(); // NAVIGATIONAL
 
     public ICollection<UserTag> UserTags { get; set; } = new List<UserTag>(); // NAVIGATIONAL
-    public bool EmailConfirmed { get; set; }
-    public string? EmailConfirmationToken { get; set; }
-    public DateTime? EmailConfirmationTokenExpiresAt { get; set; }
+
+    public ICollection<UserNotification> Notifications { get; set; } = new List<UserNotification>(); // NAVIGATIONAL
 
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
@@ -28,10 +28,20 @@ public class User
     public string PasswordHash { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
 
+    // Profile fields
+    public string? AvatarUrl { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Location { get; set; }
+    public bool NeedsInterestsOnboarding { get; set; }
+    public bool GeneralNotificationsEnabled { get; set; } = true;
+    public bool TravelRecommendationsEnabled { get; set; } = true;
+    public bool NearbyEventsEnabled { get; set; } = true;
+    public bool CollectionUpdatesEnabled { get; set; } = true;
+    public bool EmailNotificationsEnabled { get; set; }
+    public bool AnalyticsEnabled { get; set; } = true;
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    public RegionalOrganization? RegionalOrganization { get; set; } // NAVIGATIONAL
-
-
+    public RegionalOrganization? RegionalOrganization { get; set; }
 }

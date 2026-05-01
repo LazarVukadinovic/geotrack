@@ -1,0 +1,52 @@
+<app-settings-subpage-shell
+  title="Help Center"
+  description="Quick answers for the parts of GeoTrack people use most while planning a day out: maps, saved places, travel recommendations, and Ask Agent.">
+  <div class="flex flex-col gap-4">
+    <div class="rounded-[1.5rem] bg-white p-4 shadow-sm">
+      <p class="mb-3 text-[12px] font-bold uppercase tracking-[0.15em] text-slate-500">Popular Help</p>
+      <div class="flex flex-col gap-3">
+        <button
+          type="button"
+          (click)="openSupport()"
+          class="rounded-2xl border border-slate-200 px-4 py-3 text-left transition-colors active:bg-slate-50">
+          <span class="block text-sm font-semibold text-slate-800">Contact the GeoTrack team</span>
+          <span class="mt-1 block text-sm text-slate-500">Send a real support request tied to your account and trip flow.</span>
+        </button>
+        <button
+          type="button"
+          (click)="openPrivacy()"
+          class="rounded-2xl border border-slate-200 px-4 py-3 text-left transition-colors active:bg-slate-50">
+          <span class="block text-sm font-semibold text-slate-800">Review privacy controls</span>
+          <span class="mt-1 block text-sm text-slate-500">Clear stored location data on this device or review how GeoTrack uses it.</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="rounded-[1.5rem] bg-white shadow-sm">
+      @for (topic of topics; track topic.id) {
+        <button
+          type="button"
+          (click)="toggleTopic(topic.id)"
+          class="w-full px-4 py-4 text-left transition-colors active:bg-slate-50"
+          [class.border-b]="!$last"
+          [class.border-slate-100]="!$last">
+          <div class="flex items-start gap-3">
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-slate-800">{{ topic.question }}</p>
+              @if (openTopicId() === topic.id) {
+                <p class="mt-3 text-sm leading-relaxed text-slate-500">{{ topic.answer }}</p>
+              }
+            </div>
+            <span class="mt-1 text-slate-400">
+              @if (openTopicId() === topic.id) {
+                -
+              } @else {
+                +
+              }
+            </span>
+          </div>
+        </button>
+      }
+    </div>
+  </div>
+</app-settings-subpage-shell>

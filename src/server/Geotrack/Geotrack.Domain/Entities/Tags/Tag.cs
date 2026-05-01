@@ -16,7 +16,7 @@ public class Tag
     public bool ForPlace { get; set; }
     public bool ForEvent { get; set; }
     public int? PlaceTypeId { get; set; }
-    public TagType TagType { get; set; } = null!;
+    public string? ImageUrl { get; set; }
 
     public ICollection<DestinationTag> DestinationTags { get; set; } = new List<DestinationTag>(); // NAVIGATIONAL
     public ICollection<PlaceTag> PlaceTags { get; set; } = new List<PlaceTag>(); // NAVIGATIONAL

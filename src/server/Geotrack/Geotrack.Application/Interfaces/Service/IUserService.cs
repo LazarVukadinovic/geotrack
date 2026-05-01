@@ -1,4 +1,4 @@
-﻿using Geotrack.Application.DTOs.Users;
+using Geotrack.Application.DTOs.Users;
 
 namespace Geotrack.Application.Interfaces.Service;
 
@@ -6,9 +6,18 @@ public interface IUserService
 {
     Task<GetMeResponseDto> GetMeAsync(int userId);
     Task<UpdateMeResponseDto> UpdateMeAsync(int userId, UpdateMeRequestDto request);
+    Task<UpdateAvatarResponseDto> UpdateAvatarAsync(int userId, byte[] fileBytes);
+    Task<ChangePasswordResponseDto> ChangePasswordAsync(int userId, ChangePasswordRequestDto request);
+    Task<GetNotificationSettingsResponseDto> GetNotificationSettingsAsync(int userId);
+    Task<UpdateNotificationSettingsResponseDto> UpdateNotificationSettingsAsync(int userId, UpdateNotificationSettingsRequestDto request);
+    Task<GetAnalyticsSettingsResponseDto> GetAnalyticsSettingsAsync(int userId);
+    Task<UpdateAnalyticsSettingsResponseDto> UpdateAnalyticsSettingsAsync(int userId, UpdateAnalyticsSettingsRequestDto request);
 
     Task<GetUserInterestsResponseDto> GetUserInterestsAsync(int userId);
     Task<UpdateUserInterestsResponseDto> UpdateUserInterestsAsync(int userId, UpdateUserInterestsRequestDto request);
+    Task DismissInferredInterestAsync(int userId, int tagId);
+    Task<GetSupportRequestsResponseDto> GetSupportRequestsAsync(int userId);
+    Task<CreateSupportRequestResponseDto> CreateSupportRequestAsync(int userId, CreateSupportRequestRequestDto request);
 
     Task<GetCollectionsResponseDto> GetCollectionsAsync(int userId);
     Task<CreateCollectionResponseDto> CreateCollectionAsync(int userId, CreateCollectionRequestDto request);

@@ -1,7 +1,70 @@
+:host {
+  display: block;
+  height: calc(100vh - var(--shell-bottom-pad, 0px));
+  height: calc(100dvh - var(--shell-bottom-pad, 0px));
+  overflow: hidden;
+
+  /*
+   * The app shell already subtracts the fixed bottom nav and safe-area inset
+   * through --shell-bottom-pad, so map overlays only need the visual gap above
+   * that nav-aware edge.
+   */
+  --map-bottom-gap: var(--space-3, 0.75rem);
+  --map-card-gutter: var(--space-3, 0.75rem);
+  --map-status-gutter: var(--space-4, 1rem);
+  --map-layer-info: 8;
+  --map-layer-floating-control: 18;
+  --map-layer-preview: 28;
+}
+
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+.map-page__status-card {
+  left: var(--map-status-gutter);
+  right: var(--map-status-gutter);
+  bottom: var(--map-bottom-gap);
+  z-index: var(--map-layer-info);
+  animation: map-bottom-card-enter 160ms ease-out both;
+}
+
+.map-page__preview-card {
+  left: var(--map-card-gutter);
+  right: var(--map-card-gutter);
+  bottom: var(--map-bottom-gap);
+  z-index: var(--map-layer-preview);
+  animation: map-bottom-card-enter 160ms ease-out both;
+}
+
+.map-page__locate-button {
+  bottom: var(--map-bottom-gap);
+  z-index: var(--map-layer-floating-control);
+}
+
+.map-page__loading-pill {
+  z-index: var(--map-layer-info);
+}
+
+@keyframes map-bottom-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-page__status-card,
+  .map-page__preview-card {
+    animation: none;
+  }
 }

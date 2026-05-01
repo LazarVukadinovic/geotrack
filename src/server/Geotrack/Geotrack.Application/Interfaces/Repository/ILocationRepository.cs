@@ -13,5 +13,4 @@ public interface ILocationRepository : IRepository<Location>
     Task<bool> HasUserReviewedLocationAsync(int locationId, int userId);
     Task AddReviewAsync(LocationReview review);
     Task<List<Location>> SearchByNameAsync(string query);
-    
 }

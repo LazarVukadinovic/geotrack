@@ -24,13 +24,14 @@ export interface PlaceReview {
   timeAgo: string;
   body: string;
   helpfulCount: number;
+  reportedByCurrentUser: boolean;
 }
 
 export interface PlaceSimilar {
   id: string;
   title: string;
   image: string;
-  rating: number;
+  rating?: number;
   distance: string;
   isSaved: boolean;
 }
@@ -40,10 +41,12 @@ export interface PlaceDetail {
   id: string;
   title: string;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   heroImage: string;
   tags: PlaceTag[];
-  rating: number;
-  reviewCount: string;
+  rating?: number;
+  reviewCount?: string;
   distance: string;
   openStatus: string;
   about: string;

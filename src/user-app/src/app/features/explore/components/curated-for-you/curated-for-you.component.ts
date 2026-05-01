@@ -1,12 +1,14 @@
 import { Component, effect, input, output, signal } from '@angular/core';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import type { ExploreCuratedItem } from '../../models/explore-extras.model';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
+import { FavoriteButtonComponent } from '../../../../shared/components/favorite-button/favorite-button.component';
 
 @Component({
   selector: 'app-curated-for-you',
   standalone: true,
-  imports: [SectionHeaderComponent],
+  imports: [SectionHeaderComponent, EmptyStateComponent, FavoriteButtonComponent],
   templateUrl: './curated-for-you.component.html',
   styleUrl: './curated-for-you.component.scss',
 })
@@ -35,8 +37,7 @@ export class CuratedForYouComponent {
     this.cardActivated.emit(id);
   }
 
-  protected onBookmarkClick(event: MouseEvent, id: string): void {
-    event.stopPropagation();
+  protected onBookmarkClick(id: string): void {
     this.bookmarkToggled.emit(id);
   }
 

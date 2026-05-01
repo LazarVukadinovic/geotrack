@@ -1,10 +1,13 @@
 ﻿using System;
 using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
+using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
+using Point = NetTopologySuite.Geometries.Point;
 
 namespace Geotrack.Infrastructure;
 
@@ -25,11 +28,16 @@ public class AppDbContext : DbContext
 
     public DbSet<Place> Places => Set<Place>();
     public DbSet<PlaceType> PlaceTypes => Set<PlaceType>();
+    public DbSet<Amenity> Amenities => Set<Amenity>();
+    public DbSet<PlaceAmenity> PlaceAmenities => Set<PlaceAmenity>();
+    public DbSet<BookingPartner> BookingPartners => Set<BookingPartner>();
+    public DbSet<PlaceBookingPartner> PlaceBookingPartners => Set<PlaceBookingPartner>();
 
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<UserTag> UserTags => Set<UserTag>();
+    public DbSet<Favorite> Favorites => Set<Favorite>();
 
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<DestinationTag> DestinationTags => Set<DestinationTag>();
@@ -41,9 +49,20 @@ public class AppDbContext : DbContext
     public DbSet<LocationReview> LocationReviews => Set<LocationReview>();
     public DbSet<PlaceReview> PlaceReviews => Set<PlaceReview>();
     public DbSet<EventReview> EventReviews => Set<EventReview>();
+    public DbSet<ReviewReport> ReviewReports => Set<ReviewReport>();
+    public DbSet<ModerationTerm> ModerationTerms => Set<ModerationTerm>();
 
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
+    public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
+    public DbSet<StayContribution> StayContributions => Set<StayContribution>();
+
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
+    public DbSet<AnonymousSession> AnonymousSessions => Set<AnonymousSession>();
+    public DbSet<UserInterestSignal> UserInterestSignals => Set<UserInterestSignal>();
 
     public DbSet<Territory> Territories => Set<Territory>();
 
@@ -51,9 +70,34 @@ public class AppDbContext : DbContext
     {
     }
 
+    public override int SaveChanges()
+    {
+        SyncSpatialColumns();
+        return base.SaveChanges();
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        SyncSpatialColumns();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        SyncSpatialColumns();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        SyncSpatialColumns();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.HasPostgresExtension("postgis");
 
         modelBuilder.Entity<Territory>(entity =>
         {
@@ -148,6 +192,10 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.DestinationTypeId);
             entity.HasIndex(x => x.RegionId);
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<DestinationType>(entity =>
@@ -196,6 +244,10 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.EventTypeId);
             entity.HasIndex(x => x.LocationId);
             entity.HasIndex(x => x.PlaceId);
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<EventType>(entity =>
@@ -235,6 +287,10 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.DestinationId);
             entity.HasIndex(x => x.LocationTypeId);
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<LocationType>(entity =>
@@ -283,6 +339,10 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.PlaceTypeId);
             entity.HasIndex(x => x.LocationId);
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<PlaceType>(entity =>
@@ -576,6 +636,136 @@ public class AppDbContext : DbContext
                 .IsUnique();
         });
 
+        modelBuilder.Entity<ReviewReport>(entity =>
+        {
+            entity.ToTable("ReviewReports");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.TargetType)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Reason)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Decision)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Note)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.DecisionNote)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.EntityName)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.RegionName)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.ReviewAuthorName)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.ReviewCommentSnapshot)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.ReporterUser)
+                .WithMany()
+                .HasForeignKey(x => x.ReporterUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ReviewedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.PlaceReview)
+                .WithMany()
+                .HasForeignKey(x => x.PlaceReviewId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.EventReview)
+                .WithMany()
+                .HasForeignKey(x => x.EventReviewId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => new { x.ReporterUserId, x.TargetType, x.ReviewId })
+                .IsUnique();
+
+            entity.HasIndex(x => new { x.TargetType, x.ReviewId });
+            entity.HasIndex(x => new { x.RegionId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.PlaceReviewId);
+            entity.HasIndex(x => x.EventReviewId);
+            entity.HasIndex(x => x.ReviewedByUserId);
+        });
+
+        modelBuilder.Entity<ModerationTerm>(entity =>
+        {
+            entity.ToTable("ModerationTerms");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Term)
+                .IsRequired()
+                .HasMaxLength(160);
+
+            entity.Property(x => x.NormalizedTerm)
+                .IsRequired()
+                .HasMaxLength(160);
+
+            entity.Property(x => x.LanguageCode)
+                .IsRequired()
+                .HasMaxLength(10);
+
+            entity.Property(x => x.Category)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.MatchType)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.IsActive)
+                .IsRequired();
+
+            entity.Property(x => x.Severity)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.CreatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.UpdatedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => new { x.LanguageCode, x.NormalizedTerm, x.Category, x.MatchType })
+                .IsUnique()
+                .HasDatabaseName("IX_ModerationTerms_UQ_NormalizedRule");
+
+            entity.HasIndex(x => new { x.IsActive, x.LanguageCode });
+            entity.HasIndex(x => x.Category);
+            entity.HasIndex(x => x.MatchType);
+            entity.HasIndex(x => x.CreatedByUserId);
+            entity.HasIndex(x => x.UpdatedByUserId);
+        });
+
         modelBuilder.Entity<Collection>(entity =>
         {
             entity.ToTable("Collections");
@@ -633,6 +823,160 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
+        modelBuilder.Entity<SupportRequest>(entity =>
+        {
+            entity.ToTable("SupportRequests");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Category)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Subject)
+                .HasMaxLength(160);
+
+            entity.Property(x => x.Message)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(40);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.SupportRequests)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<UserNotification>(entity =>
+        {
+            entity.ToTable("UserNotifications");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Type)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Title)
+                .IsRequired()
+                .HasMaxLength(160);
+
+            entity.Property(x => x.Message)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.RelatedEntityType)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.ActionUrl)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.Notifications)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+            entity.HasIndex(x => new { x.UserId, x.ReadAt });
+            entity.HasIndex(x => new { x.RelatedEntityType, x.RelatedEntityId });
+        });
+
+        modelBuilder.Entity<StayContribution>(entity =>
+        {
+            entity.ToTable("StayContributions");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(x => x.StayType)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Address)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.City)
+                .IsRequired()
+                .HasMaxLength(120);
+
+            entity.Property(x => x.Region)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.Country)
+                .IsRequired()
+                .HasMaxLength(120);
+
+            entity.Property(x => x.CoverImageUrl)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.ImagePosition)
+                .HasMaxLength(40);
+
+            entity.Property(x => x.ImageSize)
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Phone)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.ContactEmail)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.Website)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.PricePerNight)
+                .HasColumnType("decimal(10,2)");
+
+            entity.Property(x => x.ReviewNote)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.TagsJson)
+                .HasColumnType("jsonb");
+
+            entity.Property(x => x.AmenitiesJson)
+                .HasColumnType("jsonb");
+
+            entity.Property(x => x.BookingPartnersJson)
+                .HasColumnType("jsonb");
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ReviewedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.PublishedPlace)
+                .WithMany()
+                .HasForeignKey(x => x.PublishedPlaceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => new { x.UserId, x.SubmittedAt });
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.PublishedPlaceId);
+        });
+
         modelBuilder.Entity<UserTag>(entity =>
         {
             entity.ToTable("UserTags");
@@ -651,8 +995,334 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.UserTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Defense-in-depth: the application layer already de-dupes via
+            // .Distinct() in UpdateUserInterestsAsync, but a DB-level unique
+            // index guarantees no duplicate (UserId, TagId) rows can land
+            // even under concurrent writes.
+            entity.HasIndex(x => new { x.UserId, x.TagId }).IsUnique();
+        });
+
+        // New entities for frontend support
+
+        modelBuilder.Entity<Amenity>(entity =>
+        {
+            entity.ToTable("Amenities");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100);
+            entity.Property(x => x.Icon).HasMaxLength(50);
+            entity.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<PlaceAmenity>(entity =>
+        {
+            entity.ToTable("PlaceAmenities");
+            entity.HasKey(x => new { x.PlaceId, x.AmenityId });
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.PlaceAmenities)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Amenity)
+                .WithMany(x => x.PlaceAmenities)
+                .HasForeignKey(x => x.AmenityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BookingPartner>(entity =>
+        {
+            entity.ToTable("BookingPartners");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100);
+            entity.Property(x => x.Variant).HasMaxLength(20);
+            entity.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<PlaceBookingPartner>(entity =>
+        {
+            entity.ToTable("PlaceBookingPartners");
+            entity.HasKey(x => new { x.PlaceId, x.BookingPartnerId });
+
+            entity.Property(x => x.Url)
+                .HasMaxLength(500);
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.PlaceBookingPartners)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.BookingPartner)
+                .WithMany(x => x.PlaceBookingPartners)
+                .HasForeignKey(x => x.BookingPartnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Favorite>(entity =>
+        {
+            entity.ToTable("Favorites");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EntityType).HasMaxLength(50);
+            entity.Property(x => x.CreatedAt).IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.EntityType, x.EntityId }).IsUnique();
+        });
+
+        // Extended field configurations for Place
+        modelBuilder.Entity<Place>(entity =>
+        {
+            entity.Property(x => x.Subtitle).HasMaxLength(500);
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+            entity.Property(x => x.Address).HasMaxLength(500);
+            entity.Property(x => x.OpeningHours).HasMaxLength(200);
+            entity.Property(x => x.PricePerNight).HasColumnType("decimal(10,2)");
+        });
+
+        // Extended field configurations for Event
+        modelBuilder.Entity<Event>(entity =>
+        {
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+            entity.Property(x => x.TicketPrice).HasMaxLength(100);
+            entity.Property(x => x.Duration).HasMaxLength(100);
+            entity.Property(x => x.HostedBy).HasMaxLength(200);
+            entity.Property(x => x.VenueDescription).HasMaxLength(2000);
+            entity.Property(x => x.ArrivalTips).HasMaxLength(2000);
+            entity.Property(x => x.Accessibility).HasMaxLength(1000);
+        });
+
+        // Extended field configurations for User
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.Property(x => x.AvatarUrl).HasMaxLength(1000);
+            entity.Property(x => x.DisplayName).HasMaxLength(100);
+            entity.Property(x => x.Location).HasMaxLength(200);
+            entity.Property(x => x.NeedsInterestsOnboarding).HasDefaultValue(false);
+            entity.Property(x => x.GeneralNotificationsEnabled).HasDefaultValue(true);
+            entity.Property(x => x.TravelRecommendationsEnabled).HasDefaultValue(true);
+            entity.Property(x => x.NearbyEventsEnabled).HasDefaultValue(true);
+            entity.Property(x => x.CollectionUpdatesEnabled).HasDefaultValue(true);
+            entity.Property(x => x.EmailNotificationsEnabled).HasDefaultValue(false);
+            entity.Property(x => x.AnalyticsEnabled).HasDefaultValue(true);
+        });
+
+        // ImageUrl fields for other entities
+        modelBuilder.Entity<Destination>(entity =>
+        {
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<Location>(entity =>
+        {
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("RefreshTokens");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.TokenHash)
+                .IsRequired()
+                .HasMaxLength(64);
+
+            entity.Property(x => x.IsPersistent)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.ExpiresAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Fast lookup by token hash
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            // Fast lookup of active tokens per user
+            entity.HasIndex(x => new { x.UserId, x.IsRevoked, x.ExpiresAt });
+        });
+
+        modelBuilder.Entity<AnonymousSession>(entity =>
+        {
+            entity.ToTable("AnonymousSessions");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.LastSeenAt).IsRequired();
+
+            entity.Property(x => x.EntryRoute).HasMaxLength(300);
+            entity.Property(x => x.CoarseRegion).HasMaxLength(120);
+            entity.Property(x => x.CoarseCountry).HasMaxLength(120);
+
+            entity.Property(x => x.UserAgentFamily)
+                .IsRequired()
+                .HasMaxLength(40)
+                .HasDefaultValue("other");
+
+            entity.HasIndex(x => x.LastSeenAt);
+        });
+
+        modelBuilder.Entity<AnalyticsEvent>(entity =>
+        {
+            entity.ToTable("AnalyticsEvents");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.EventType)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.EntityType).HasMaxLength(40);
+            entity.Property(x => x.Route).HasMaxLength(300);
+
+            entity.Property(x => x.MetadataJson)
+                .IsRequired()
+                .HasColumnType("jsonb")
+                .HasDefaultValue("{}");
+
+            entity.Property(x => x.OccurredAt).IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.AnonymousSession)
+                .WithMany()
+                .HasForeignKey(x => x.AnonymousSessionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.Destination)
+                .WithMany()
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.OccurredAt);
+            entity.HasIndex(x => new { x.UserId, x.OccurredAt });
+            entity.HasIndex(x => new { x.AnonymousSessionId, x.OccurredAt });
+            entity.HasIndex(x => new { x.EventType, x.OccurredAt });
+            entity.HasIndex(x => new { x.EntityType, x.EntityId, x.OccurredAt });
+            entity.HasIndex(x => new { x.DestinationId, x.OccurredAt });
+        });
+
+        modelBuilder.Entity<UserInterestSignal>(entity =>
+        {
+            entity.ToTable("UserInterestSignals");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Score).IsRequired();
+
+            entity.Property(x => x.Source)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue("inferred");
+
+            entity.Property(x => x.LastInteractionAt).IsRequired();
+            entity.Property(x => x.LastReason).HasMaxLength(80);
+            entity.Property(x => x.IsDismissed).HasDefaultValue(false);
+            entity.Property(x => x.EvidenceSinceDismissal).HasDefaultValue(0.0);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany()
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.TagId }).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.Score });
         });
 
 
+    }
+
+    private void SyncSpatialColumns()
+    {
+        foreach (var entry in ChangeTracker.Entries<Destination>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
+                    SpatialPointFactory.Create(entry.Entity.Latitude, entry.Entity.Longitude);
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Location>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
+                    SpatialPointFactory.Create(entry.Entity.Latitude, entry.Entity.Longitude);
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Place>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
+                    SpatialPointFactory.Create(entry.Entity.Latitude, entry.Entity.Longitude);
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Event>())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified))
+            {
+                continue;
+            }
+
+            entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
+                ResolveEventCoordinates(entry.Entity);
+        }
+    }
+
+    private Point? ResolveEventCoordinates(Event entity)
+    {
+        if (entity.Place is not null)
+        {
+            return SpatialPointFactory.Create(entity.Place.Latitude, entity.Place.Longitude);
+        }
+
+        if (entity.Location is not null)
+        {
+            return SpatialPointFactory.Create(entity.Location.Latitude, entity.Location.Longitude);
+        }
+
+        if (entity.PlaceId.HasValue)
+        {
+            var localPlace = Places.Local.FirstOrDefault(place => place.Id == entity.PlaceId.Value);
+            if (localPlace is not null)
+            {
+                return SpatialPointFactory.Create(localPlace.Latitude, localPlace.Longitude);
+            }
+        }
+
+        var localLocation = Locations.Local.FirstOrDefault(location => location.Id == entity.LocationId);
+        if (localLocation is not null)
+        {
+            return SpatialPointFactory.Create(localLocation.Latitude, localLocation.Longitude);
+        }
+
+        return null;
     }
 }

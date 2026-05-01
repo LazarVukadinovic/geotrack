@@ -31,39 +31,73 @@
     <div class="flex items-center justify-between mb-3">
       <span class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase">Suggested Topics</span>
       <span class="text-[12px] font-bold text-slate-600">
-        {{ selectedInterests.length }} selected
+        {{ selectedCount() }} selected
       </span>
     </div>
 
-    <!-- Interest chips -->
-    <div class="flex flex-wrap justify-center gap-2 mt-3 mb-8 max-w-md mx-auto">
-      @for (interest of interests; track interest) {
+    @if (isLoadingTags()) {
+      <div class="flex flex-wrap justify-center gap-2 mt-3 mb-8 max-w-md mx-auto">
+        @for (pillIndex of loadingPillIndexes; track pillIndex) {
+          <div class="h-10 rounded-full bg-white/80 border border-slate-200 animate-pulse"
+            [style.width.px]="pillIndex % 2 === 0 ? 116 : 92"></div>
+        }
+      </div>
+    } @else if (loadError()) {
+      <div class="mt-3 mb-8 rounded-[1.75rem] border border-red-200 bg-red-50 px-5 py-5 text-center">
+        <p class="text-sm font-semibold text-red-600">{{ loadError() }}</p>
         <button
           type="button"
-          (click)="toggleInterest(interest)"
-          class="flex items-center justify-center px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-150"
-          [style.background-color]="isSelected(interest) ? '#1a2b4a' : '#ffffff'"
-          [style.border-color]="isSelected(interest) ? '#1a2b4a' : '#e2e8f0'"
-          [style.color]="isSelected(interest) ? '#ffffff' : '#4b5563'">
-          {{ interest }}
+          (click)="retryLoad()"
+          class="mt-3 inline-flex items-center justify-center rounded-full border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100">
+          Try again
         </button>
-      }
-    </div>
+      </div>
+    } @else if (tags().length === 0) {
+      <div class="mt-3 mb-8 rounded-[1.75rem] border border-slate-200 bg-white px-5 py-6 text-center shadow-sm">
+        <p class="text-sm font-semibold text-slate-700">No interests are available yet.</p>
+        <p class="mt-1 text-sm text-slate-500">You can skip this step for now and come back later from Settings.</p>
+      </div>
+    } @else {
+      <!-- Interest chips -->
+      <div class="flex flex-wrap justify-center gap-2 mt-3 mb-8 max-w-md mx-auto">
+        @for (tag of tags(); track tag.id) {
+          <button
+            type="button"
+            (click)="toggleTag(tag)"
+            class="flex items-center justify-center px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-150"
+            [style.background-color]="isSelected(tag) ? '#1a2b4a' : '#ffffff'"
+            [style.border-color]="isSelected(tag) ? '#1a2b4a' : '#e2e8f0'"
+            [style.color]="isSelected(tag) ? '#ffffff' : '#4b5563'">
+            {{ tag.name }}
+          </button>
+        }
+      </div>
+    }
 
-    <!-- Finish button — mt-auto pushes the action block to the bottom of available space -->
+    @if (saveError()) {
+      <div class="mt-auto mb-3 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 text-center">
+        {{ saveError() }}
+      </div>
+    }
+
+    <!-- Finish button -->
     <button
       type="button"
       (click)="onFinish()"
-      [disabled]="selectedInterests.length === 0"
-      class="mt-auto w-full py-3.5 rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200 active:scale-[0.98]"
-      [style.background-color]="selectedInterests.length > 0 ? '#e8570a' : '#e2e8f0'">
-      Finish & Go to App
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
-      </svg>
+      [disabled]="selectedCount() === 0 || isLoadingTags() || isSaving() || tags().length === 0"
+      class="mt-auto w-full py-3.5 rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none"
+      [style.background-color]="selectedCount() > 0 && !isLoadingTags() && !isSaving() && tags().length > 0 ? '#e8570a' : '#e2e8f0'">
+      @if (isSaving()) {
+        Saving...
+      } @else {
+        Finish & Go to App
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      }
     </button>
 
-    <button type="button" (click)="onSkip()" class="text-center text-base text-slate-500 font-medium mt-4">
+    <button type="button" (click)="onSkip()" [disabled]="isSaving()" class="text-center text-base text-slate-500 font-medium mt-4 disabled:opacity-60">
       Skip for now
     </button>
 

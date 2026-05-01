@@ -1,7 +1,10 @@
-import { Component, input, output, signal, OnDestroy, effect, ElementRef, viewChild } from '@angular/core';
+import { Component, input, output, signal, OnDestroy, effect, ElementRef, viewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
+import { firstValueFrom } from 'rxjs';
+import { MapApiService } from '../../../../../../core/services/map-api.service';
+import { BackgroundImageFallbackDirective } from '../../../../../../shared/directives/background-image-fallback.directive';
 
 export interface BasicsData {
   name: string;
@@ -11,19 +14,21 @@ export interface BasicsData {
   region: string;
   country: string;
   imageUrl: string;
+  coverImageFile?: File | null;
   lat: number | null;
   lng: number | null;
   imgBgPosition: string;
-  imgBgSize: string; 
+  imgBgSize: string;
 }
 
 @Component({
   selector: 'app-step-basics',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, BackgroundImageFallbackDirective],
   templateUrl: './step-basics.component.html',
 })
 export class StepBasicsComponent implements OnDestroy {
+  private readonly mapApi = inject(MapApiService);
   data = input<BasicsData | null>(null);
   saved = output<BasicsData>();
 
@@ -37,7 +42,7 @@ export class StepBasicsComponent implements OnDestroy {
 
   form: BasicsData = {
     name: '', stayType: 'Hotel', address: '', city: '',
-    region: '', country: '', imageUrl: '', lat: null, lng: null,
+    region: '', country: '', imageUrl: '', coverImageFile: null, lat: null, lng: null,
     imgBgPosition: '50% 50%',
     imgBgSize: 'cover'
   };
@@ -49,6 +54,7 @@ export class StepBasicsComponent implements OnDestroy {
     reader.onload = () => {
       this.previewUrl.set(reader.result as string);
       this.form.imageUrl = this.previewUrl();
+      this.form.coverImageFile = file;
     };
     reader.readAsDataURL(file);
   }
@@ -68,13 +74,14 @@ export class StepBasicsComponent implements OnDestroy {
 
     const lat = this.pickerLat();
     const lng = this.pickerLng();
-    const center: [number, number] = lat ? [lng!, lat] : [20.46, 44.82];
+    const hasCoordinates = lat !== null && lng !== null;
+    const center: [number, number] = hasCoordinates ? [lng, lat] : [20.46, 44.82];
 
     this.pickerMap = new maplibregl.Map({
       container,
       style: '/map-style.json',
       center,
-      zoom: lat ? 13 : 6,
+      zoom: hasCoordinates ? 13 : 6,
       attributionControl: false,
       fadeDuration: 0,
     });
@@ -90,6 +97,12 @@ export class StepBasicsComponent implements OnDestroy {
       this.pickerLat.set(c.lat);
       this.pickerLng.set(c.lng);
     });
+
+    this.pickerMap.on('click', (event) => {
+      this.pickerLat.set(event.lngLat.lat);
+      this.pickerLng.set(event.lngLat.lng);
+      this.pickerMap!.easeTo({ center: event.lngLat, duration: 200 });
+    });
   }
 
   async confirmCoordinates(): Promise<void> {
@@ -102,15 +115,11 @@ export class StepBasicsComponent implements OnDestroy {
     this.isGeocoding.set(true);
 
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
-      );
-      const data = await res.json();
-      const a = data.address ?? {};
-      this.form.address = [a.road, a.house_number].filter(Boolean).join(' ');
-      this.form.city    = a.city ?? a.town ?? a.village ?? a.municipality ?? '';
-      this.form.region  = a.state ?? a.county ?? '';
-      this.form.country = a.country ?? '';
+      const data = await firstValueFrom(this.mapApi.reverseGeocode(lat, lng));
+      this.form.address = data.address ?? '';
+      this.form.city = data.city ?? '';
+      this.form.region = data.region ?? '';
+      this.form.country = data.country ?? '';
     } catch {
     } finally {
       this.isGeocoding.set(false);
@@ -118,7 +127,7 @@ export class StepBasicsComponent implements OnDestroy {
       this.pickerMap = undefined;
       this.showMapPicker.set(false);
     }
-  } 
+  }
 
   isValid(): boolean {
     return !!this.form.name.trim() && !!this.form.city.trim() && !!this.form.country.trim();
@@ -150,6 +159,7 @@ export class StepBasicsComponent implements OnDestroy {
       if (d) {
         Object.assign(this.form, d);
         if (d.imageUrl) this.previewUrl.set(d.imageUrl);
+        this.form.coverImageFile = d.coverImageFile ?? null;
         if (d.lat) {
           this.pickerLat.set(d.lat);
           this.pickerLng.set(d.lng);

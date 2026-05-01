@@ -1,5 +1,6 @@
 ﻿using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
@@ -15,16 +16,18 @@ namespace Geotrack.Infrastructure.Repositories
             _context = context;
         }
 
-        public async Task<bool> ExistsAsync(string username, string email)
+        public async Task<bool> ExistsByEmailAsync(string email)
         {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
             return await _context.Users
-                .AnyAsync(u => u.Username == username || u.Email == email);
+                .AnyAsync(u => u.Email.ToLower() == normalizedEmail);
         }
 
-        public async Task<User?> GetByUsernameAsync(string username)
+        public async Task<User?> GetByEmailAsync(string email)
         {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
             return await _context.Users
-                .FirstOrDefaultAsync(u => u.Username == username);
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
         }
 
         public async Task<User?> GetByIdWithCollectionsAsync(int userId)
@@ -83,6 +86,27 @@ namespace Geotrack.Infrastructure.Repositories
         {
             return await _context.CollectionItems
                 .CountAsync(ci => ci.CollectionId == collectionId);
+        }
+
+        public async Task<List<string>> GetCollectionCoverImagesAsync(int collectionId, int maxCount)
+        {
+            if (maxCount <= 0) return new List<string>();
+
+            var urls = await _context.CollectionItems
+                .Where(ci => ci.CollectionId == collectionId)
+                .OrderByDescending(ci => ci.CreatedAt)
+                .Select(ci =>
+                    ci.Place != null ? ci.Place.ImageUrl :
+                    ci.Event != null ? ci.Event.ImageUrl :
+                    ci.Destination != null ? ci.Destination.ImageUrl :
+                    ci.Location != null ? ci.Location.ImageUrl : null)
+                .ToListAsync();
+
+            return urls
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Select(u => u!)
+                .Take(maxCount)
+                .ToList();
         }
 
         public async Task<List<Tag>> GetTagsByIdsAsync(IEnumerable<int> tagIds)
@@ -157,6 +181,20 @@ namespace Geotrack.Infrastructure.Repositories
             await _context.CollectionItems.AddAsync(item);
         }
 
+        public async Task<List<SupportRequest>> GetSupportRequestsByUserIdAsync(int userId, int take)
+        {
+            return await _context.SupportRequests
+                .Where(request => request.UserId == userId)
+                .OrderByDescending(request => request.CreatedAt)
+                .Take(take)
+                .ToListAsync();
+        }
+
+        public async Task AddSupportRequestAsync(SupportRequest supportRequest)
+        {
+            await _context.SupportRequests.AddAsync(supportRequest);
+        }
+
         public async Task AddUserTagAsync(UserTag userTag)
         {
             await _context.UserTags.AddAsync(userTag);
@@ -166,6 +204,35 @@ namespace Geotrack.Infrastructure.Repositories
         {
             _context.UserTags.RemoveRange(userTags);
             return Task.CompletedTask;
+        }
+
+        public async Task<List<UserInterestSignal>> GetVisibleInferredInterestSignalsAsync(int userId, double minimumScore)
+        {
+            var explicitTagIds = _context.UserTags
+                .Where(ut => ut.UserId == userId)
+                .Select(ut => ut.TagId);
+
+            return await _context.UserInterestSignals
+                .Include(signal => signal.Tag)
+                .Where(signal =>
+                    signal.UserId == userId &&
+                    signal.Source == "inferred" &&
+                    !signal.IsDismissed &&
+                    signal.Score >= minimumScore &&
+                    !explicitTagIds.Contains(signal.TagId))
+                .OrderByDescending(signal => signal.Score)
+                .ThenBy(signal => signal.Tag.Name)
+                .ToListAsync();
+        }
+
+        public async Task<UserInterestSignal?> GetUserInterestSignalAsync(int userId, int tagId)
+        {
+            return await _context.UserInterestSignals
+                .Include(signal => signal.Tag)
+                .FirstOrDefaultAsync(signal =>
+                    signal.UserId == userId &&
+                    signal.TagId == tagId &&
+                    signal.Source == "inferred");
         }
 
         public async Task<User?> GetByIdWithRolesAsync(int userId)
@@ -231,5 +298,4 @@ namespace Geotrack.Infrastructure.Repositories
             return Task.CompletedTask;
         }
     }
-
 }

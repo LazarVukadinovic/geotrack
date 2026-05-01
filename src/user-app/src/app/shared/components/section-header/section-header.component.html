@@ -5,8 +5,10 @@
       <p class="section-header__subtitle">{{ subtitle() }}</p>
     }
   </div>
-  <button type="button" class="section-header__action" (click)="onAction()">
-    {{ actionLabel() }}
-    <span class="section-header__chevron" aria-hidden="true">›</span>
-  </button>
+  @if (actionLabel(); as label) {
+    <button type="button" class="section-header__action" (click)="onAction()">
+      {{ label }}
+      <span class="section-header__chevron" aria-hidden="true">&rsaquo;</span>
+    </button>
+  }
 </div>

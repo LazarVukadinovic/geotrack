@@ -1,5 +1,10 @@
 <div class="explore-page">
-  <app-header title="Explore" [showBell]="isLoggedIn()" [showNotificationDot]="true" />
+  <app-header
+    title="Explore"
+    [showBell]="isLoggedIn()"
+    [showNotificationDot]="hasUnreadNotifications()"
+    (notifications)="onNotifications()"
+  />
 
   <div class="explore-page__main">
     <app-welcome-hero [city]="heroCity()" [country]="heroCountry()" />
@@ -7,9 +12,28 @@
     <div class="explore-page__search">
       <app-search-bar
         [value]="searchQuery()"
-        (valueChange)="onSearchChange($event)"
+        controlId="explore-search"
+        controlName="exploreSearch"
+        label="Search destinations or activities"
+        (focused)="openSearch()"
       />
     </div>
+
+    <p class="explore-page__context">{{ contextLine() }}</p>
+
+    @if (isDestinationMode()) {
+      <div class="explore-page__destination-mode">
+        <span>Selected destination: {{ heroCity() }}</span>
+        <button type="button" (click)="useCurrentLocation()">Use my location</button>
+      </div>
+    }
+
+    @if (loadError()) {
+      <app-empty-state
+        title="Something went wrong"
+        [message]="loadError()!"
+      />
+    }
 
     @if (isLoggedIn()) {
       <app-curated-for-you
@@ -30,6 +54,7 @@
 
     <app-top-stays-slider
       [items]="topStays()"
+      [showFavoriteButton]="isLoggedIn()"
       (bookmarkToggled)="toggleStaySaved($event)"
       (cardActivated)="onStayCard($event)"
       (sectionMore)="onStaysMore()"
@@ -43,6 +68,7 @@
 
     <app-local-favorites-list
       [items]="filteredLocalFavorites()"
+      [showFavoriteButton]="isLoggedIn()"
       (bookmarkToggled)="toggleLocalSaved($event)"
       (cardActivated)="onLocalCard($event)"
       (sectionMore)="onLocalMore()"
@@ -56,9 +82,14 @@
 
     <app-popular-nearby-slider
       [items]="popularNearby()"
+      [showFavoriteButton]="isLoggedIn()"
       (bookmarkToggled)="toggleNearbySaved($event)"
       (cardActivated)="onNearbyCard($event)"
       (sectionMore)="onNatureMore()"
     />
   </div>
+
+  @if (searchOverlayOpen()) {
+    <app-search-page (closed)="closeSearch()" />
+  }
 </div>

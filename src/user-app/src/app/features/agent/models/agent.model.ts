@@ -3,12 +3,14 @@ export type ChatMessageType = 'text' | 'suggestion_cards';
 
 export interface AgentRecommendationCard {
   id: string;
+  entityType: string;
+  detailUrl: string | null;
   title: string;
   description: string;
   image: string;
-  rating: number;
-  durationHours: number;
-  distanceKm: number;
+  rating: number | null;
+  durationHours: number | null;
+  distanceKm: number | null;
   isFavorite: boolean;
 }
 

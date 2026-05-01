@@ -1,17 +1,7 @@
 <div class="hotels-page">
 
   <!-- ── Fixed top bar ────────────────────────────────────────────────────── -->
-  <header class="hotels-page__topbar">
-    <button type="button" class="hotels-page__back" aria-label="Go back" (click)="goBack()">
-      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"
-           stroke="currentColor" stroke-width="2.5"
-           stroke-linecap="round" stroke-linejoin="round">
-        <path d="M19 12H5M12 5l-7 7 7 7" />
-      </svg>
-    </button>
-    <span class="hotels-page__topbar-title">Top Stays</span>
-    <div class="hotels-page__topbar-spacer"></div>
-  </header>
+  <app-page-top-nav title="Top Stays" fallbackRoute="/explore" />
 
   <!-- ── Scrollable content ───────────────────────────────────────────────── -->
   <div class="hotels-page__scroll">
@@ -37,6 +27,13 @@
         }
       </div>
     </div>
+
+    @if (loadError()) {
+      <app-empty-state
+        title="Something went wrong"
+        [message]="loadError()!"
+      />
+    }
 
     <!-- Hotel card list -->
     <div class="hotels-page__list" aria-label="Hotels list">
@@ -90,12 +87,16 @@
               </div>
 
               <div class="hcard__meta">
-                <svg class="hcard__star" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
-                </svg>
-                <span class="hcard__rating">{{ item.rating.toFixed(1) }}</span>
-                @if (item.reviewCount) {
-                  <span class="hcard__reviews">&middot; {{ item.reviewCount }} reviews</span>
+                @if (item.rating != null) {
+                  <svg class="hcard__star" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                  </svg>
+                  <span class="hcard__rating">{{ item.rating!.toFixed(1) }}</span>
+                  @if (item.reviewCount) {
+                    <span class="hcard__reviews">&middot; {{ item.reviewCount }}</span>
+                  }
+                } @else {
+                  <span class="hcard__no-rating">No reviews yet</span>
                 }
               </div>
 
@@ -108,7 +109,7 @@
                 <button
                   type="button"
                   class="hcard__save"
-                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  [attr.aria-label]="item.isSaved ? 'Saved. Choose collection' : 'Save to collection'"
                   (click)="toggleSaved($event, item.id)"
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -166,12 +167,16 @@
               </div>
 
               <div class="hcard__meta">
-                <svg class="hcard__star" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
-                </svg>
-                <span class="hcard__rating">{{ item.rating.toFixed(1) }}</span>
-                @if (item.reviewCount) {
-                  <span class="hcard__reviews">&middot; {{ item.reviewCount }}</span>
+                @if (item.rating != null) {
+                  <svg class="hcard__star" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+                  </svg>
+                  <span class="hcard__rating">{{ item.rating!.toFixed(1) }}</span>
+                  @if (item.reviewCount) {
+                    <span class="hcard__reviews">&middot; {{ item.reviewCount }}</span>
+                  }
+                } @else {
+                  <span class="hcard__no-rating">No reviews yet</span>
                 }
               </div>
 
@@ -182,7 +187,7 @@
                 <button
                   type="button"
                   class="hcard__save"
-                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  [attr.aria-label]="item.isSaved ? 'Saved. Choose collection' : 'Save to collection'"
                   (click)="toggleSaved($event, item.id)"
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -203,12 +208,32 @@
         }
       }
 
-      @if (filteredHotels().length === 0) {
+      @if (!loading() && filteredHotels().length === 0) {
         <div class="hotels-page__empty">
           <p class="hotels-page__empty-text">No stays match this filter.</p>
         </div>
       }
 
     </div>
+
+    @if (!loadError() && filteredHotels().length > 0) {
+      <div class="hotels-page__pagination" aria-live="polite">
+        @if (loadMoreError()) {
+          <p class="hotels-page__load-error">{{ loadMoreError() }}</p>
+        }
+
+        @if (hasMore()) {
+          <button
+            type="button"
+            class="hotels-page__load-more"
+            [disabled]="loadingMore()"
+            (click)="loadMore()">
+            {{ loadingMore() ? 'Loading...' : 'Load More' }}
+          </button>
+        } @else {
+          <p class="hotels-page__end">You're caught up for now.</p>
+        }
+      </div>
+    }
   </div>
 </div>

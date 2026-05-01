@@ -226,6 +226,10 @@
   font-weight: 400;
 }
 
+.hd__stat-sub--empty {
+  font-weight: 500;
+}
+
 .hd__stat-dot {
   width: 3px;
   height: 3px;
@@ -252,7 +256,10 @@
   font-weight: 700;
   border: none;
   cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
   padding: 13px 0;
+  text-decoration: none;
   transition: opacity 0.15s ease, transform 0.1s ease;
 
   svg {
@@ -287,6 +294,13 @@
 }
 
 // ─── Divider ──────────────────────────────────────────────────────────────────
+
+.hd__cta .hd__cta-external-icon {
+  width: 14px;
+  height: 14px;
+  margin-left: -2px;
+  opacity: 0.95;
+}
 
 .hd__divider {
   height: 1px;
@@ -501,6 +515,27 @@
   gap: 12px;
 }
 
+.hd__review-notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+
+  &--success {
+    color: #166534;
+    background: #ecfdf3;
+    border: 1px solid #bbf7d0;
+  }
+
+  &--error {
+    color: #b42318;
+    background: #fdecec;
+    border: 1px solid #f5c2c2;
+  }
+}
+
 // ─── Review card ──────────────────────────────────────────────────────────────
 
 .hd__review {
@@ -576,7 +611,7 @@
   margin: 0 0 11px;
 }
 
-.hd__review-helpful {
+.hd__review-report {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -595,6 +630,22 @@
   }
 
   &:hover { color: #1a2b4c; }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.72;
+  }
+
+  &--reported {
+    color: #0d9488;
+    font-weight: 700;
+  }
 }
 
 // ─── Similar Stays ────────────────────────────────────────────────────────────

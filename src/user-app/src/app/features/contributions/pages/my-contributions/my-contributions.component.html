@@ -1,181 +1,183 @@
-<div class="min-h-screen bg-[#fafafa] pb-24">
+<div class="h-full flex flex-col bg-[#fafafa]">
 
   <!-- Header -->
-  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem]">
+  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem] flex-none">
     <div class="flex items-center justify-between">
-      <button (click)="goBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+      <button type="button" (click)="goBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
-      <span class="text-[16] font-bold text-white tracking-wide">My Contributions</span>
+      <span class="text-[16px] font-bold text-white tracking-wide">My Contributions</span>
       <div class="w-9"></div>
     </div>
   </div>
 
-  <p class="text-slate-500 text-sm text-center mt-5 px-6">Manage your Contributions</p>
+  <div class="flex-1 min-h-0 overflow-y-auto pb-24">
+    <p class="text-slate-500 text-sm text-center mt-5 px-6">Manage your Contributions</p>
 
-  <!-- Cards -->
-  <div class="px-5 mt-6 flex flex-col gap-4">
-    <div *ngFor="let item of items"
-      class="bg-white rounded-2xl overflow-hidden shadow-sm" (click)="openDetail(item)">
-
-      <!-- Image -->
-      <div class="relative h-44 overflow-hidden">
-        <img [src]="item.imageUrl" [alt]="item.name" class="w-full h-full object-cover"/>
-
-        <!-- Type badge  -->
-        <div class="absolute top-3 left-3 flex items-center gap-1 bg-orange-50 rounded-full px-3 py-1">
-          <svg class="w-3.5 h-3.5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-          </svg>
-          <span class="text-[11px] font-bold text-slate-800">{{ item.entityType }}</span>
-        </div>
-
-        <!-- Status badge -->
-        <div class="absolute top-3 right-3 flex items-center gap-1 rounded-full px-2.5 py-1 backdrop-blur-sm bg-white/50"
-            [class.bg-red-500/30]="item.status === 'REJECTED'"
-            [class.bg-white/50]="item.status !== 'REJECTED'">
-
-            <!-- APPROVED -->
-            <ng-container *ngIf="item.status === 'APPROVED'">
-                <svg class="w-3 h-3 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                <circle cx="12" cy="12" r="10"/>
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8 12l3 3 5-5"/>
-                </svg>
-            </ng-container>
-
-            <!-- UNDER REVIEW -->
-            <ng-container *ngIf="item.status === 'UNDER REVIEW'">
-                <svg class="w-3 h-3 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/>
-                </svg>
-            </ng-container>
-
-            <!-- REJECTED  -->
-            <ng-container *ngIf="item.status === 'REJECTED'">
-                <svg class="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                <circle cx="12" cy="12" r="10"/>
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 9l-6 6M9 9l6 6"/>
-                </svg>
-            </ng-container>
-
-
-            <span class="text-[10px] font-bold"
-                [class.text-slate-800]="item.status !== 'REJECTED'"
-                [class.text-red-500]="item.status === 'REJECTED'">
-                {{ item.status }}
-            </span>
-        </div>
+    <!-- Loading -->
+    @if (isLoading()) {
+      <div class="flex flex-col items-center justify-center py-16 gap-3">
+        <div class="w-8 h-8 border-2 border-[#e8722a] border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-sm text-slate-400">Loading contributions...</p>
       </div>
+    }
 
-      <!-- Info -->
-      <div class="px-4 pt-3 pb-4">
-        <h3 class="text-base font-bold text-slate-800 mb-1">{{ item.name }}</h3>
-        <div class="flex items-center gap-1 mb-1.5">
-          <svg class="w-3.5 h-3.5 text-slate-500" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-          </svg>
-          <span class="text-sm text-slate-500">{{ item.location }}</span>
-        </div>
-        <div class="flex items-center gap-1 mb-4">
-          <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-          <span class="text-sm text-slate-400">{{ item.updatedLabel }}</span>
-        </div>
-
-        <div class="flex gap-3">
-          <button (click)="editItem(item)"
-            class="flex-1 flex items-center justify-center gap-2 py-2.5 border-2 border-[#e8722a] rounded-xl text-[#e8722a] text-sm font-bold active:bg-orange-50 transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-            </svg>
-            Edit
-          </button>
-          <button (click)="deleteItem(item)"
-            class="flex-1 flex items-center justify-center gap-2 py-2.5 border border-slate-200 rounded-xl text-slate-500 text-sm font-semibold active:bg-slate-50 transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-            </svg>
-            Delete
-          </button>
-        </div>
+    <!-- Error -->
+    @if (loadError()) {
+      <div class="mx-5 mt-6 bg-white rounded-2xl px-5 py-8 flex flex-col items-center gap-3 shadow-sm text-center">
+        <svg class="w-10 h-10 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        <p class="text-sm text-slate-400">{{ loadError() }}</p>
+        <button type="button" (click)="reload()" class="px-5 py-2.5 bg-[#e8722a] rounded-xl text-white text-sm font-bold">
+          Retry
+        </button>
       </div>
-    </div>
+    }
 
-    <!-- Empty state -->
-    <div *ngIf="items.length === 0"
-      class="bg-white rounded-2xl px-5 py-12 flex flex-col items-center gap-3 shadow-sm">
-      <svg class="w-10 h-10 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-      </svg>
-      <p class="text-sm text-slate-400 text-center">No contributions found.</p>
-    </div>
+    <!-- Cards -->
+    @if (!isLoading() && !loadError()) {
+      <div class="px-5 mt-6 flex flex-col gap-4">
+        @for (item of items(); track item.id) {
+          <div role="button" tabindex="0"
+            class="bg-white rounded-2xl overflow-hidden shadow-sm text-left active:scale-[0.99] transition-transform"
+            (click)="openDetail(item)"
+            (keydown.enter)="openDetail(item)"
+            (keydown.space)="openDetail(item); $event.preventDefault()">
+
+            <!-- Image -->
+            <div class="relative h-44 overflow-hidden">
+              @if (item.coverImageUrl) {
+                <img appImageFallback [src]="item.coverImageUrl" [alt]="item.name" class="w-full h-full object-cover"/>
+              } @else {
+                <div class="w-full h-full bg-slate-100 flex items-center justify-center">
+                  <svg class="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                  </svg>
+                </div>
+              }
+
+              <!-- Type badge -->
+              <div class="absolute top-3 left-3 flex items-center gap-1 bg-orange-50 rounded-full px-3 py-1">
+                <svg class="w-3.5 h-3.5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                </svg>
+                <span class="text-[11px] font-bold text-slate-800">{{ item.entityType }}</span>
+              </div>
+
+              <!-- Status badge -->
+              <div class="absolute top-3 right-3 flex items-center gap-1 rounded-full px-2.5 py-1 backdrop-blur-sm"
+                [class.bg-red-500/20]="item.status === 'Rejected'"
+                [class.bg-white/70]="item.status !== 'Rejected'">
+                @if (item.status === 'Approved') {
+                  <svg class="w-3 h-3 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 12l3 3 5-5"/>
+                  </svg>
+                }
+                @if (item.status === 'PendingReview') {
+                  <svg class="w-3 h-3 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/>
+                  </svg>
+                }
+                @if (item.status === 'Rejected') {
+                  <svg class="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 9l-6 6M9 9l6 6"/>
+                  </svg>
+                }
+
+                <span class="text-[10px] font-bold"
+                  [class.text-slate-800]="item.status !== 'Rejected'"
+                  [class.text-red-500]="item.status === 'Rejected'">
+                  {{ item.statusLabel }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Info -->
+            <div class="px-4 pt-3 pb-4">
+              <h3 class="text-base font-bold text-slate-800 mb-1">{{ item.name }}</h3>
+              <div class="flex items-center gap-1 mb-1.5">
+                <svg class="w-3.5 h-3.5 text-slate-500" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                <span class="text-sm text-slate-500">{{ item.location }}</span>
+              </div>
+              <div class="flex items-center gap-1 mb-4">
+                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="text-sm text-slate-400">{{ item.updatedLabel }}</span>
+              </div>
+
+              <div class="flex gap-3">
+                <button type="button" (click)="editItem($event, item)"
+                  class="flex-1 flex items-center justify-center gap-2 py-2.5 border-2 border-[#e8722a] rounded-xl text-[#e8722a] text-sm font-bold active:bg-orange-50 transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                  </svg>
+                  Edit
+                </button>
+                <button type="button" (click)="requestDelete($event, item)"
+                  class="flex-1 flex items-center justify-center gap-2 py-2.5 border border-slate-200 rounded-xl text-slate-500 text-sm font-semibold active:bg-slate-50 transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- Empty state -->
+        @if (items().length === 0) {
+          <div class="bg-white rounded-2xl px-5 py-12 flex flex-col items-center gap-3 shadow-sm">
+            <svg class="w-10 h-10 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+            <p class="text-sm text-slate-400 text-center">No contributions yet.</p>
+            <button type="button" (click)="startContribution()" class="px-5 py-2.5 bg-[#e8722a] rounded-xl text-white text-sm font-bold">
+              Add New Stay
+            </button>
+          </div>
+        }
+      </div>
+    }
   </div>
 
   <!-- FAB -->
-  <button (click)="startContribution('Stay')"
+  <button type="button" (click)="startContribution()"
     class="fixed bottom-8 right-6 w-14 h-14 bg-[#e8722a] rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform z-20">
     <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
       <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/>
     </svg>
   </button>
 
-  <!-- Entity Picker Sheet  -->
-  <!--
-  @if (showEntityPicker()) {
-    <div class="fixed inset-0 bg-black/40 z-[60]" (click)="showEntityPicker.set(false)"></div>
-    <div class="fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-[2rem] px-5 pt-2 pb-10 shadow-2xl">
-      <div class="w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6"></div>
-      <h2 class="text-lg font-bold text-slate-800 mb-1">Add a Contribution</h2>
-      <p class="text-sm text-slate-500 mb-5">What would you like to add?</p>
-
-      <div class="flex flex-col gap-3">
-        <button (click)="startContribution('Stay')"
-          class="flex items-center gap-4 px-4 py-3.5 bg-orange-50 border border-orange-100 rounded-2xl active:bg-orange-100 transition-colors">
-          <div class="w-10 h-10 bg-[#e8722a] rounded-xl flex items-center justify-center flex-none">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-            </svg>
-          </div>
-          <div class="text-left">
-            <p class="text-sm font-bold text-slate-800">Stay</p>
-            <p class="text-xs text-slate-500">Hotel, villa, apartment, resort</p>
-          </div>
-          <svg class="w-4 h-4 text-slate-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
+  @if (pendingDelete(); as item) {
+    <div class="fixed inset-0 bg-black/40 z-[60]" (click)="cancelDelete()"></div>
+    <div class="fixed left-5 right-5 bottom-6 z-[70] bg-white rounded-2xl px-5 py-5 shadow-2xl">
+      <h2 class="text-base font-bold text-slate-800 mb-1">Delete contribution?</h2>
+      <p class="text-sm text-slate-500 leading-relaxed mb-4">
+        This removes "{{ item.name }}" from your contributions. Approved public listings are not removed by this action.
+      </p>
+      @if (deleteError()) {
+        <p class="text-sm text-red-500 mb-3">{{ deleteError() }}</p>
+      }
+      <div class="flex gap-3">
+        <button type="button" (click)="cancelDelete()" [disabled]="isDeleting()"
+          class="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 text-sm font-bold disabled:opacity-50">
+          Cancel
         </button>
-
-        <button disabled
-          class="flex items-center gap-4 px-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl opacity-50 cursor-not-allowed">
-          <div class="w-10 h-10 bg-slate-300 rounded-xl flex items-center justify-center flex-none">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-            </svg>
-          </div>
-          <div class="text-left">
-            <p class="text-sm font-bold text-slate-800">Place <span class="ml-1 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full">Coming Soon</span></p>
-            <p class="text-xs text-slate-500">Restaurant, café, attraction</p>
-          </div>
-        </button>
-
-        <button disabled
-          class="flex items-center gap-4 px-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl opacity-50 cursor-not-allowed">
-          <div class="w-10 h-10 bg-slate-300 rounded-xl flex items-center justify-center flex-none">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-            </svg>
-          </div>
-          <div class="text-left">
-            <p class="text-sm font-bold text-slate-800">Event <span class="ml-1 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full">Coming Soon</span></p>
-            <p class="text-xs text-slate-500">Concert, festival, exhibition</p>
-          </div>
+        <button type="button" (click)="confirmDelete()" [disabled]="isDeleting()"
+          class="flex-1 py-3 bg-red-500 rounded-xl text-white text-sm font-bold disabled:opacity-50">
+          {{ isDeleting() ? 'Deleting...' : 'Delete' }}
         </button>
       </div>
     </div>
   }
-  -->
 </div>

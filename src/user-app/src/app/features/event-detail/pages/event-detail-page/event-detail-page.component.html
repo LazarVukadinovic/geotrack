@@ -18,19 +18,11 @@
       <span class="ed__top-bar-title" aria-hidden="true">Event</span>
 
       <div class="ed__hero-actions">
-        <button type="button" class="ed__hero-btn" aria-label="Share this event">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>
-          </svg>
-        </button>
-
         <button
           type="button"
           class="ed__hero-btn"
           [class.ed__hero-btn--saved]="ev.isSaved"
-          [attr.aria-label]="ev.isSaved ? 'Remove from saved' : 'Save event'"
+          [attr.aria-label]="ev.isSaved ? 'Saved. Choose collection' : 'Save event to collection'"
           (click)="toggleSaved()"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -50,6 +42,7 @@
     <!-- ── Hero image: absolute backdrop, never scrolls ──────────────────── -->
     <div class="ed__hero" aria-hidden="true">
       <img
+        appImageFallback
         class="ed__hero-img"
         [src]="ev.heroImage"
         alt=""
@@ -57,7 +50,6 @@
         height="480"
         loading="eager"
         decoding="async"
-        (error)="onHeroImgError($event)"
       />
     </div>
 
@@ -87,33 +79,56 @@
         <h1 class="ed__title">{{ ev.title }}</h1>
 
         <!-- Distance -->
-        <div class="ed__distance">
-          <svg class="ed__distance-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke="currentColor" fill="none" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round"
-                  d="M3 18l9-9 9 9"/>
-          </svg>
-          <span>{{ ev.distance }}</span>
-        </div>
-
-        <!-- CTA buttons -->
-        <div class="ed__ctas">
-          <button type="button" class="ed__cta ed__cta--primary" (click)="onGetDirections()">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path fill="currentColor"
-                    d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-            Get Directions
-          </button>
-          <button type="button" class="ed__cta ed__cta--outline" (click)="onViewOnMap()">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
+        @if (ev.distance) {
+          <div class="ed__distance">
+            <svg class="ed__distance-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke="currentColor" fill="none" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round"
-                    d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+                    d="M3 18l9-9 9 9"/>
             </svg>
-            View on Map
-          </button>
-        </div>
+            <span>{{ ev.distance }}</span>
+          </div>
+        }
+
+        <!-- CTA buttons -->
+        @if (directionsUrl() || hasMapCoordinates()) {
+          <div class="ed__ctas">
+            @if (directionsUrl(); as directionsHref) {
+              <a
+                class="ed__cta ed__cta--primary"
+                [href]="directionsHref"
+                target="_blank"
+                rel="noreferrer"
+                (click)="onDirectionsClick()"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor"
+                        d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                Get Directions
+                <svg class="ed__cta-external-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                </svg>
+              </a>
+            }
+            @if (hasMapCoordinates()) {
+              <button
+                type="button"
+                class="ed__cta ed__cta--outline"
+                (click)="viewOnMap()"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke="currentColor" fill="none" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+                </svg>
+                View on Map
+              </button>
+            }
+          </div>
+        }
 
         <!-- ── About the Event ─────────────────────────────────────────── -->
         <div class="ed__divider"></div>
@@ -266,15 +281,23 @@
         <section class="ed__section ed__section--last">
           <app-section-header
             title="You May Also Like"
-            actionLabel="More"
           />
 
           <div class="ed__similar-viewport">
             <div class="ed__similar-track" role="list">
               @for (s of ev.similar; track s.id) {
-                <article class="ed__similar-card" role="listitem">
+                <article
+                  class="ed__similar-card"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-label]="s.title"
+                  (click)="navigateToSimilar(s.id)"
+                  (keydown.enter)="navigateToSimilar(s.id)"
+                  (keydown.space)="$event.preventDefault(); navigateToSimilar(s.id)"
+                >
                   <div class="ed__similar-media">
                     <img
+                      appImageFallback
                       class="ed__similar-img"
                       [src]="s.image"
                       [alt]="s.title"
@@ -283,36 +306,11 @@
                       loading="lazy"
                       decoding="async"
                     />
-                    <button
-                      type="button"
-                      class="ed__similar-fav"
-                      [class.ed__similar-fav--saved]="isSimilarSaved(s.id)"
-                      [attr.aria-label]="isSimilarSaved(s.id) ? 'Remove from saved' : 'Save'"
-                      (click)="toggleSimilarSaved($event, s.id)"
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          [attr.fill]="isSimilarSaved(s.id) ? '#e8570a' : 'none'"
-                          [attr.stroke]="isSimilarSaved(s.id) ? 'none' : 'currentColor'"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-                        />
-                      </svg>
-                    </button>
                   </div>
 
                   <div class="ed__similar-body">
                     <h3 class="ed__similar-title">{{ s.title }}</h3>
                     <p class="ed__similar-sub">{{ s.subtitle }}</p>
-                    <button
-                      type="button"
-                      class="ed__similar-cta"
-                      (click)="navigateToSimilar(s.id)"
-                    >
-                      View more
-                    </button>
                   </div>
                 </article>
               }
@@ -325,6 +323,15 @@
 
   </article>
 
+} @else if (eventId() && loadState() === 'loading') {
+  <div class="ed__not-found">
+    <p>Loading event...</p>
+  </div>
+} @else if (eventId() && loadState() === 'error') {
+  <div class="ed__not-found">
+    <p>We couldn't load this event right now.</p>
+    <button type="button" class="ed__not-found-back" (click)="goBack()">Go back</button>
+  </div>
 } @else if (eventId()) {
   <div class="ed__not-found">
     <p>Event not found.</p>

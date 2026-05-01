@@ -18,7 +18,7 @@
 
     <!-- Icon -->
     <div class="w-11 h-11 bg-orange-50 rounded-full flex items-center justify-center mb-4">
-      <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+      <svg class="w-5 h-5 text-[#e8570a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round"
           d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
       </svg>
@@ -28,17 +28,19 @@
     <p class="text-sm text-slate-500 mb-5">Give your collection a name to get started.</p>
 
     <!-- Input -->
-    <label class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+    <label for="new-collection-name" class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
       Collection Name
     </label>
     <div class="bg-slate-50 border border-slate-300 rounded-2xl flex items-center gap-3 px-4 py-3.5 mb-6"
-         [class.border-[#e8722a]]="name().length > 0"
+         [class.border-[#e8570a]]="name().length > 0"
          [class.bg-orange-50]="name().length > 0">
       <svg class="w-4 h-4 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 12h12M3 17h8"/>
       </svg>
       <input
         #nameInput
+        id="new-collection-name"
+        name="collectionName"
         type="text"
         [value]="name()"
         (input)="onInput($event)"
@@ -59,7 +61,7 @@
     <!-- Save -->
     <button type="button" (click)="onSave()"
       [disabled]="name().trim().length === 0"
-      class="w-full py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base tracking-wide
+      class="w-full py-4 bg-[#e8570a] rounded-3xl text-white font-bold text-base tracking-wide
              transition-all duration-200 mb-3 disabled:opacity-45 active:scale-[0.98]">
       Create Collection
     </button>

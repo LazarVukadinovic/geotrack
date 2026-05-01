@@ -7,5 +7,7 @@ namespace Geotrack.Application.Interfaces.Service
     {
         Task<GetRegionsResponseDto> GetRegionsAsync();
         Task<GetRegionDetailsResponseDto> GetRegionDetailsAsync(int regionId);
+        Task<CreateRegionResponseDto> CreateRegionAsync(CreateRegionRequestDto request);
+        Task DeleteRegionAsync(int regionId);
     }
 }

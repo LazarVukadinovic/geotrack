@@ -13,9 +13,13 @@ export class IconButtonComponent {
   readonly variant = input<'default' | 'on-media'>('default');
   /** Slightly smaller tap target for dense cards. */
   readonly compact = input(false);
-  readonly clicked = output<void>();
+  readonly stopPropagation = input(false);
+  readonly clicked = output<MouseEvent>();
 
-  protected onClick(): void {
-    this.clicked.emit();
+  protected onClick(event: MouseEvent): void {
+    if (this.stopPropagation()) {
+      event.stopPropagation();
+    }
+    this.clicked.emit(event);
   }
 }
