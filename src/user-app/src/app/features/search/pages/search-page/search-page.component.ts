@@ -1,6 +1,5 @@
-import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, inject, output, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
-import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import { SearchBarComponent } from '../../../../shared/components/search-bar/search-bar.component';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
@@ -53,10 +52,12 @@ interface SearchSuggestion {
   source: 'recent' | 'category' | 'theme' | 'metadata';
 }
 
+type SearchOverlayMode = 'default' | 'focused' | 'results';
+
 @Component({
   selector: 'app-search-page',
   standalone: true,
-  imports: [AppHeaderComponent, EmptyStateComponent, SearchBarComponent],
+  imports: [EmptyStateComponent, SearchBarComponent],
   templateUrl: './search-page.component.html',
   styleUrl: './search-page.component.scss',
 })
@@ -68,6 +69,8 @@ export class SearchPageComponent implements OnDestroy {
   private readonly analytics = inject(AnalyticsService);
   private readonly router = inject(Router);
 
+  readonly closed = output<void>();
+
   protected readonly domains = SEARCH_DOMAINS;
   protected readonly query = signal('');
   protected readonly activeDomains = signal<SearchDomain[]>([]);
@@ -77,9 +80,20 @@ export class SearchPageComponent implements OnDestroy {
   protected readonly response = signal<GlobalSearchResponse | null>(null);
   protected readonly imgSrcByKey = signal<Record<string, string>>({});
   protected readonly searchFocused = signal(false);
+  protected readonly mode = signal<SearchOverlayMode>('default');
   protected readonly recentSearches = signal<string[]>(this.loadRecentSearches());
+  private readonly searchBar = viewChild(SearchBarComponent);
 
   protected readonly browseCategories: SearchBrowseCategory[] = [
+    {
+      id: 'destinations',
+      title: 'Destinations',
+      subtitle: 'Cities and regions to explore',
+      query: 'destinations',
+      icon: 'destinations',
+      iconBg: '#e0f2fe',
+      iconFg: '#0369a1',
+    },
     {
       id: 'places',
       title: 'Places',
@@ -115,15 +129,6 @@ export class SearchPageComponent implements OnDestroy {
       icon: 'activities',
       iconBg: '#dcfce7',
       iconFg: '#047857',
-    },
-    {
-      id: 'destinations',
-      title: 'Destinations',
-      subtitle: 'Cities and regions to explore',
-      query: 'destinations',
-      icon: 'destinations',
-      iconBg: '#e0f2fe',
-      iconFg: '#0369a1',
     },
   ];
 
@@ -184,23 +189,13 @@ export class SearchPageComponent implements OnDestroy {
   private searchTimeout?: ReturnType<typeof setTimeout>;
   private requestVersion = 0;
 
-  protected readonly topResult = computed(() => this.response()?.topResult ?? null);
-  protected readonly resultGroups = computed(() => this.response()?.groups ?? []);
-  protected readonly totalCount = computed(() => this.response()?.totalCount ?? 0);
-  protected readonly hasSearched = computed(() => this.query().trim().length >= MIN_QUERY_LENGTH);
-  protected readonly showLanding = computed(() =>
-    !this.hasSearched() && !this.searchFocused() && this.query().trim().length === 0);
-  protected readonly showAssisted = computed(() =>
-    !this.hasSearched() && (this.searchFocused() || this.query().trim().length > 0));
+  protected readonly topResult = computed(() => this.mode() === 'results' ? this.response()?.topResult ?? null : null);
+  protected readonly resultGroups = computed(() => this.mode() === 'results' ? this.response()?.groups ?? [] : []);
+  protected readonly totalCount = computed(() => this.mode() === 'results' ? this.response()?.totalCount ?? 0 : 0);
+  protected readonly showLanding = computed(() => this.mode() === 'default');
+  protected readonly showAssisted = computed(() => this.mode() === 'focused');
   protected readonly showEmptyResults = computed(() =>
-    this.hasSearched() && !this.loading() && !this.error() && this.totalCount() === 0);
-  protected readonly resultSummary = computed(() => {
-    const count = this.totalCount();
-    if (this.loading()) return 'Searching GeoTrack';
-    if (count === 1) return '1 match';
-    return `${count} matches`;
-  });
-
+    this.mode() === 'results' && !this.loading() && !this.error() && this.totalCount() === 0);
   protected readonly availableThemes = computed(() => {
     const options = this.metadataGroups()
       .filter(group => group.key !== 'domains')
@@ -304,11 +299,58 @@ export class SearchPageComponent implements OnDestroy {
 
   protected onSearchFocus(): void {
     this.searchFocused.set(true);
+    this.mode.set('focused');
+  }
+
+  protected close(): void {
+    this.closed.emit();
+  }
+
+  protected onBack(): void {
+    if (this.mode() === 'focused' || this.mode() === 'results') {
+      this.resetToDefaultOverlay();
+      return;
+    }
+
+    this.close();
+  }
+
+  protected onSearchBlur(): void {
+    globalThis.setTimeout(() => {
+      if (this.query().trim().length === 0 && this.mode() === 'focused') {
+        this.searchFocused.set(false);
+        this.mode.set('default');
+      }
+    }, 120);
   }
 
   protected onSearchChange(value: string): void {
     this.query.set(value);
-    this.scheduleSearch();
+    this.clearPendingSearch();
+
+    if (this.searchFocused()) {
+      this.mode.set('focused');
+      this.clearResultState();
+      return;
+    }
+
+    if (value.trim().length === 0) {
+      this.resetToDefaultOverlay();
+    }
+  }
+
+  protected onSearchCleared(): void {
+    this.query.set('');
+    this.activeDomains.set([]);
+    this.clearPendingSearch();
+    this.clearResultState();
+
+    if (this.searchFocused()) {
+      this.mode.set('focused');
+      return;
+    }
+
+    this.mode.set('default');
   }
 
   protected onSearchSubmit(value: string): void {
@@ -316,6 +358,9 @@ export class SearchPageComponent implements OnDestroy {
     if (nextQuery.length < MIN_QUERY_LENGTH) return;
     this.query.set(nextQuery);
     this.saveRecentSearch(nextQuery);
+    this.searchFocused.set(false);
+    this.searchBar()?.blurInput();
+    this.mode.set('results');
     this.scheduleSearch(0);
   }
 
@@ -364,6 +409,8 @@ export class SearchPageComponent implements OnDestroy {
 
   protected clearRecentSearches(): void {
     this.recentSearches.set([]);
+    this.searchFocused.set(true);
+    this.mode.set('focused');
     try {
       localStorage.removeItem(RECENT_SEARCHES_KEY);
     } catch {
@@ -439,30 +486,29 @@ export class SearchPageComponent implements OnDestroy {
     this.query.set(nextQuery);
     this.activeDomains.set(domains);
     this.saveRecentSearch(nextQuery);
+    this.searchFocused.set(false);
+    this.searchBar()?.blurInput();
+    this.mode.set('results');
     this.scheduleSearch(0);
   }
 
   private scheduleSearch(delayMs = 260): void {
-    if (this.searchTimeout) {
-      clearTimeout(this.searchTimeout);
-    }
+    this.clearPendingSearch();
 
     if (this.query().trim().length < MIN_QUERY_LENGTH) {
       this.requestVersion++;
-      this.loading.set(false);
-      this.error.set(null);
-      this.response.set(null);
-      this.imgSrcByKey.set({});
-      this.fallbackUsed.clear();
+      this.clearResultState();
       return;
     }
 
+    this.mode.set('results');
     this.searchTimeout = setTimeout(() => this.runSearch(), delayMs);
   }
 
   private async runSearch(): Promise<void> {
     const q = this.query().trim();
     if (q.length < MIN_QUERY_LENGTH) return;
+    this.mode.set('results');
 
     const requestId = ++this.requestVersion;
     this.loading.set(true);
@@ -588,5 +634,30 @@ export class SearchPageComponent implements OnDestroy {
       value === 'stays' ||
       value === 'events' ||
       value === 'activities';
+  }
+
+  private resetToDefaultOverlay(): void {
+    this.clearPendingSearch();
+    this.requestVersion++;
+    this.query.set('');
+    this.activeDomains.set([]);
+    this.clearResultState();
+    this.searchFocused.set(false);
+    this.mode.set('default');
+    this.searchBar()?.blurInput();
+  }
+
+  private clearPendingSearch(): void {
+    if (!this.searchTimeout) return;
+    clearTimeout(this.searchTimeout);
+    this.searchTimeout = undefined;
+  }
+
+  private clearResultState(): void {
+    this.loading.set(false);
+    this.error.set(null);
+    this.response.set(null);
+    this.imgSrcByKey.set({});
+    this.fallbackUsed.clear();
   }
 }

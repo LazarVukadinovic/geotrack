@@ -17,7 +17,8 @@ export const routes: Routes = [
       {
         path: 'search',
         loadComponent: () =>
-          import('./features/search/pages/search-page/search-page.component').then(m => m.SearchPageComponent),
+          import('./features/explore/pages/explore-page/explore-page.component').then(m => m.ExplorePageComponent),
+        data: { hideBottomNav: true, searchOverlay: true },
       },
       {
         path: 'explore',

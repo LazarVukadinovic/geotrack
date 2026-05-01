@@ -1,9 +1,14 @@
 <div class="search-page">
-  <app-header title="Search" [showBell]="false" />
+  <div class="search-page__backdrop" aria-hidden="true" (click)="close()"></div>
 
-  <main class="search-page__main">
+  <main class="search-page__sheet" role="dialog" aria-modal="true" aria-label="Search GeoTrack">
     <section class="search-page__top">
-      <div class="search-page__search" (focusin)="onSearchFocus()">
+      <button type="button" class="search-page__back" aria-label="Back" (click)="onBack()">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M15 18 9 12l6-6" />
+        </svg>
+      </button>
+      <div class="search-page__search">
         <app-search-bar
           [value]="query()"
           placeholder="Search destinations, activities, hotels, events..."
@@ -12,35 +17,14 @@
           label="Search GeoTrack"
           (valueChange)="onSearchChange($event)"
           (searchSubmit)="onSearchSubmit($event)"
+          (focused)="onSearchFocus()"
+          (blurred)="onSearchBlur()"
+          (cleared)="onSearchCleared()"
         />
       </div>
     </section>
 
     @if (showLanding()) {
-      @if (recentSearches().length > 0) {
-        <section class="search-page__section search-page__section--compact" aria-labelledby="recent-searches-title">
-          <div class="search-page__section-head">
-            <h2 id="recent-searches-title">Recent searches</h2>
-            <button type="button" class="search-page__text-action" (click)="clearRecentSearches()">Clear</button>
-          </div>
-
-          <div class="search-page__recent-list">
-            @for (recent of recentSearches(); track recent) {
-              <button type="button" class="search-page__recent" (click)="applyRecentSearch(recent)">
-                <span class="search-page__recent-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M12 7v5l3 2" />
-                    <path d="M5 4v5h5" />
-                    <path d="M5.5 9a7 7 0 1 1 1.7 7.1" />
-                  </svg>
-                </span>
-                <span>{{ recent }}</span>
-              </button>
-            }
-          </div>
-        </section>
-      }
-
       <section class="search-page__section" aria-labelledby="browse-categories-title">
         <div class="search-page__section-head">
           <h2 id="browse-categories-title">Browse categories</h2>
@@ -136,6 +120,16 @@
       <section class="search-page__section search-page__assist" aria-labelledby="search-suggestions-title">
         <div class="search-page__section-head">
           <h2 id="search-suggestions-title">Suggestions</h2>
+          @if (recentSearches().length > 0) {
+            <button
+              type="button"
+              class="search-page__text-action"
+              (pointerdown)="$event.preventDefault()"
+              (click)="clearRecentSearches()"
+            >
+              Clear
+            </button>
+          }
         </div>
 
         @if (suggestions().length > 0) {
@@ -156,33 +150,6 @@
               </button>
             }
           </div>
-        }
-      </section>
-    }
-
-    @if (hasSearched()) {
-      <section class="search-page__results-head" aria-live="polite">
-        <div>
-          <h2>Results for "{{ query() }}"</h2>
-          <p>{{ resultSummary() }}</p>
-        </div>
-      </section>
-
-      <section class="search-page__domains" aria-label="Search result filters">
-        <button
-          type="button"
-          class="search-page__domain"
-          [class.search-page__domain--active]="activeDomains().length === 0"
-          (click)="clearDomains()"
-        >All</button>
-
-        @for (domain of domains; track domain.id) {
-          <button
-            type="button"
-            class="search-page__domain"
-            [class.search-page__domain--active]="isDomainActive(domain.id) && activeDomains().length > 0"
-            (click)="toggleDomain(domain.id)"
-          >{{ domain.label }}</button>
         }
       </section>
     }

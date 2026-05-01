@@ -7,16 +7,6 @@
       [routerLinkActiveOptions]="{ exact: tab.exact ?? false }"
     >
       @switch (tab.path) {
-        @case ('/search') {
-          <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.6"
-              d="M10.75 18.5a7.75 7.75 0 1 1 0-15.5 7.75 7.75 0 0 1 0 15.5Zm5.48-1.52L21 21"
-            />
-          </svg>
-        }
         @case ('/explore') {
           <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
             <circle cx="12" cy="12" r="9" stroke-width="1.5" />
