@@ -21,6 +21,11 @@ export interface ReviewRequest {
   status: RequestStatus;
   imageBg: string;
 }
+interface Tab {
+  key: string;
+  label: string;
+  count: number | null;
+}
 
 @Component({
   selector: 'app-review-queue',
@@ -35,5 +40,81 @@ export class ReviewQueueComponent {
   userName = 'Sarah Jenkins';
   userRole = 'Regional Manager';
 
-  requests: ReviewRequest[] = [];
+  requests: ReviewRequest[] = [
+    {
+      id: '1',
+      title: 'Olympic National Park Trails Update',
+      type: 'Destination',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-001',
+      author: 'David Chen',
+      authorInitials: 'DC',
+      authorBg: '#bfdbfe',
+      date: 'Oct 24, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)',
+    },
+    {
+      id: '2',
+      title: 'Pike Place Market Artisan Directory',
+      type: 'Place',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-002',
+      author: 'Elena Rodriguez',
+      authorInitials: 'ER',
+      authorBg: '#fde68a',
+      date: 'Oct 23, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+    },
+    {
+      id: '3',
+      title: 'Seattle Summer Solstice Festival',
+      type: 'Event',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-003',
+      author: 'Marcus Johnson',
+      authorInitials: 'MJ',
+      authorBg: '#a7f3d0',
+      date: 'Oct 22, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+    },
+    {
+      id: '4',
+      title: 'Mount Rainier Basecamp Facilities',
+      type: 'Place',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-004',
+      author: 'Sarah Jenkins',
+      authorInitials: 'SJ',
+      authorBg: '#fbcfe8',
+      date: 'Oct 21, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+    },
+    {
+      id: '5',
+      title: 'San Juan Islands Ferry Routes',
+      type: 'Destination',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-005',
+      author: 'David Chen',
+      authorInitials: 'DC',
+      authorBg: '#bfdbfe',
+      date: 'Oct 20, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+    },
+  ];
+
+  tabs: Tab[] = [
+    { key: 'all',         label: 'All Requests',  count: 5 },
+    { key: 'Destination', label: 'Destinations',  count: null },
+    { key: 'Location',    label: 'Locations',     count: null },
+    { key: 'Place',       label: 'Places',        count: null },
+    { key: 'Event',       label: 'Events',        count: null },
+  ];
+
+  activeTab = 'all';
 }

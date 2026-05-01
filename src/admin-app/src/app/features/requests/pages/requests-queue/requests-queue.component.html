@@ -7,6 +7,24 @@
         <h1 class="text-2xl font-bold text-gray-900">Review Requests Queue</h1>
         <p class="text-sm text-gray-500 mt-0.5">Manage and process incoming content submissions from regional contributors.</p>
       </div>
+      <!-- Filter tabs -->
+      <div class="flex gap-2 mb-5">
+        <button
+          *ngFor="let tab of tabs"
+          (click)="activeTab = tab.key"
+          class="px-4 py-2 rounded-full text-sm font-semibold transition-all"
+          [ngClass]="activeTab === tab.key
+            ? 'bg-blue-700 text-white shadow-sm'
+            : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-300 hover:text-blue-700'"
+        >
+          {{ tab.label }}
+          <span
+            *ngIf="tab.count !== null"
+            class="ml-1.5 text-xs font-bold px-1.5 py-0.5 rounded-full"
+            [ngClass]="activeTab === tab.key ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'"
+          >{{ tab.count }}</span>
+        </button>
+      </div>
     </div>
   </div>
 </div>
