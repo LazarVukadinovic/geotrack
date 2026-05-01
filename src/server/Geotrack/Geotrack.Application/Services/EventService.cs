@@ -114,7 +114,7 @@ public class EventService : IEventService
 
     public async Task<GetEventReviewsResponseDto> GetEventReviewsAsync(int eventId)
     {
-        var @event = await _eventRepository.GetByIDAsync(eventId);
+        var @event = await _eventRepository.GetByIdAsync(eventId);
         if (@event == null)
             throw new KeyNotFoundException("Events not found");
 
@@ -146,7 +146,7 @@ public class EventService : IEventService
         if ((request.Comment ?? string.Empty).Length > 1000)
             throw new InvalidOperationException("Comment is too long");
 
-        var @event = await _eventRepository.GetByIDAsync(eventId);
+        var @event = await _eventRepository.GetByIdAsync(eventId);
         if (@event == null)
             throw new KeyNotFoundException("Events not found");
 

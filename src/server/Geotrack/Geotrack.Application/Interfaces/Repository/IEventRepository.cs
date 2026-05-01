@@ -10,4 +10,5 @@ public interface IEventRepository : IRepository<Event>
     Task<List<EventReview>> GetReviewsByEventIdAsync(int eventId);
     Task<bool> HasUserReviewedEventAsync(int eventId, int userId);
     Task AddReviewAsync(EventReview review);
+    Task<List<Event>> SearchByNameAsync(string query);
 }

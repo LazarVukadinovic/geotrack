@@ -67,7 +67,7 @@ public class UserService : IUserService
     {
         ValidateProfileFields(request.FirstName, request.LastName, request.PhoneNumber);
 
-        var user = await _userRepository.GetByIDAsync(userId)
+        var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
         user.FirstName = request.FirstName?.Trim() ?? string.Empty;
@@ -301,25 +301,25 @@ public class UserService : IUserService
         switch (entityType)
         {
             case "destination":
-                if (await _destinationRepository.GetByIDAsync(request.EntityId) == null)
+                if (await _destinationRepository.GetByIdAsync(request.EntityId) == null)
                     throw new KeyNotFoundException("Destinations not found");
                 item.DestinationId = request.EntityId;
                 break;
 
             case "location":
-                if (await _locationRepository.GetByIDAsync(request.EntityId) == null)
+                if (await _locationRepository.GetByIdAsync(request.EntityId) == null)
                     throw new KeyNotFoundException("Locations not found");
                 item.LocationId = request.EntityId;
                 break;
 
             case "place":
-                if (await _placeRepository.GetByIDAsync(request.EntityId) == null)
+                if (await _placeRepository.GetByIdAsync(request.EntityId) == null)
                     throw new KeyNotFoundException("Places not found");
                 item.PlaceId = request.EntityId;
                 break;
 
             case "event":
-                if (await _eventRepository.GetByIDAsync(request.EntityId) == null)
+                if (await _eventRepository.GetByIdAsync(request.EntityId) == null)
                     throw new KeyNotFoundException("Events not found");
                 item.EventId = request.EntityId;
                 break;

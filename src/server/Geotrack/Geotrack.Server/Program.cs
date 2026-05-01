@@ -82,8 +82,12 @@ builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<IRegionRepository, RegionRepository>();
 builder.Services.AddScoped<IRegionService, RegionService>();
+<<<<<<< HEAD
+builder.Services.AddScoped<IMapService, MapService>();
+=======
 builder.Services.AddScoped<ITerritoryService, TerritoryService>();
 builder.Services.AddScoped<ITerritoryRepository, TerritoryRepository>();
+>>>>>>> 80fc32d5c14c04f1eb7580f8a02a7048efe84159
 //builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
