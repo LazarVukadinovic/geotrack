@@ -2,7 +2,98 @@
   <app-sidebar [region]="region" />
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
     <app-topbar [userName]="userName" [userRole]="userRole" title="Review Request" />
+
     <div class="flex-1 overflow-y-auto px-8 py-6">
+
+      <!-- Back + ID breadcrumb -->
+      <div class="flex items-center gap-2 mb-5 text-sm text-gray-500">
+        <button (click)="goBack()"
+          class="flex items-center gap-1.5 hover:text-blue-700 transition-colors cursor-pointer border-none bg-transparent p-0 font-medium">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Back to Requests
+        </button>
+        <span class="text-gray-300">•</span>
+        <span class="text-gray-400">ID: {{ request.reqId }}</span>
+      </div>
+
+      <!-- Two-column layout -->
+      <div class="flex gap-6 items-start">
+
+        <!-- LEFT: Hero card -->
+        <div class="flex-1 min-w-0 flex flex-col gap-5">
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden"
+               style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
+
+            <!-- Cover image -->
+            <div class="relative h-64 overflow-hidden"
+                 [style.background]="request.imageUrl
+                   ? 'url(' + request.imageUrl + ') center/cover no-repeat'
+                   : request.imageBg">
+              <div class="absolute bottom-4 left-5">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold text-white"
+                      style="background: rgba(0,0,0,0.45); backdrop-filter: blur(6px);">
+                  <svg *ngIf="request.type === 'Destination'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+                  </svg>
+                  <svg *ngIf="request.type === 'Place'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                  </svg>
+                  <svg *ngIf="request.type === 'Location'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                  </svg>
+                  <svg *ngIf="request.type === 'Event'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  {{ request.type }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Title + location -->
+            <div class="px-6 py-5 border-b border-gray-100">
+              <h2 class="text-2xl font-bold text-gray-900 mb-1.5">{{ request.title }}</h2>
+              <div class="flex items-center gap-1.5 text-sm text-gray-500">
+                <svg class="w-3.5 h-3.5 text-blue-600 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                </svg>
+                <span>{{ request.city }}<ng-container *ngIf="request.city && request.country">, </ng-container>{{ request.country }}</span>
+                <ng-container *ngIf="request.stayType">
+                  <span class="text-gray-300 mx-1">·</span>
+                  <span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold">{{ request.stayType }}</span>
+                </ng-container>
+              </div>
+            </div>
+
+            <!-- About -->
+            <div *ngIf="request.description" class="px-6 py-5 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-700 mb-2">About this stay</h3>
+              <p class="text-sm text-gray-600 leading-relaxed">{{ request.description }}</p>
+            </div>
+
+            <!-- Tags -->
+            <div *ngIf="request.tags?.length" class="px-6 py-5">
+              <h3 class="text-sm font-semibold text-gray-700 mb-3">Characteristics</h3>
+              <div class="flex flex-wrap gap-2">
+                <span *ngFor="let tag of request.tags"
+                  class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">
+                  <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>
+                  </svg>
+                  {{ tag }}
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- RIGHT: placeholder -->
+        <div class="w-72 flex-shrink-0"></div>
+
+      </div>
     </div>
   </div>
 </div>
