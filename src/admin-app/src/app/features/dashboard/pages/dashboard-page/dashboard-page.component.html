@@ -144,7 +144,7 @@
         <div>
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-base font-semibold text-gray-900">Requests Queue</h2>
-            <a href="#" class="text-blue-600 text-xs font-medium hover:text-blue-800 no-underline">Go to queue →</a>
+            <a (click)="navigateToQueue()" class="text-blue-600 text-xs font-medium hover:text-blue-800 no-underline">Go to queue →</a>
           </div>
 
           <!-- Queue card -->
@@ -183,7 +183,7 @@
             </div>
           </div>
 
-          <button class="w-full rounded-lg border border-gray-200 text-sm text-blue-600 font-medium py-2.5 bg-white hover:bg-blue-50 transition-colors cursor-pointer">
+          <button (click)="navigateToQueue()" class="w-full rounded-lg border border-gray-200 text-sm text-blue-600 font-medium py-2.5 bg-white hover:bg-blue-50 transition-colors cursor-pointer">
             Review All Requests →
           </button>
         </div>

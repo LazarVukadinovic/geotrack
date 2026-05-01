@@ -42,12 +42,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/add-pages/pages/add-event/add-event.component').then(m => m.NewEventComponent),
       },
-    //   {
-    //     path: 'requests',
-    //     loadComponent: () =>
-    //       import('./features/requests/pages/requests-queue/requests-queue.component')
-    //         .then(m => m.RequestsQueueComponent),
-    //   },
+      {
+        path: 'requests',
+        loadComponent: () =>
+          import('./features/requests/pages/requests-queue/requests-queue.component').then(m => m.ReviewQueueComponent),
+      },
     //   {
     //     path: 'map',
     //     loadComponent: () =>

@@ -94,4 +94,7 @@ export class DashboardComponent {
   navigate(route: string) {
     this.router.navigate([route]);
   }
+  navigateToQueue(): void {
+    this.router.navigate(['/requests']);
+  }
 }
