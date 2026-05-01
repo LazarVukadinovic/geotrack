@@ -28,6 +28,7 @@ const MAP_STYLE_URL = '/map-style.json';
 const DESTINATION_ZOOM_THRESHOLD = 10;
 const VIEWPORT_DEBOUNCE_MS = 250;
 const VIEWPORT_CACHE_PADDING = 0.1;
+const LOCATION_CACHE_TTL_MS = 60 * 60 * 1000;
 const MAP_VIEW_STATE_KEY = 'mapViewState';
 const MAP_OPENED_THIS_SESSION_KEY = 'mapOpenedThisSession';
 const INITIAL_LOCATION_ZOOM = 13;
@@ -185,6 +186,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.isDestroyed = true;
+    this.locationSvc.stopMapLocationUpdates();
 
     if (this.viewportLoadTimeout) {
       clearTimeout(this.viewportLoadTimeout);
@@ -469,6 +471,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       const exactLocation = this.getExactUserLocation();
       if (exactLocation) {
         this.placeUserMarker(exactLocation.latitude, exactLocation.longitude);
+        this.locationSvc.startMapLocationUpdates((loc) => this.handleMapLocationUpdate(loc));
       }
 
       this.scheduleViewportLoad(0);
@@ -487,6 +490,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private async resolveInitialMapView(): Promise<MapInitialView> {
+    const exactLocation = await this.locationSvc.refreshExactLocationForMap();
+
     if (this.initialMapFocus) {
       return {
         center: [this.initialMapFocus.longitude, this.initialMapFocus.latitude],
@@ -499,7 +504,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       return savedView;
     }
 
-    const origin = await this.locationSvc.resolveRoutingOrigin();
+    const origin = exactLocation ?? await this.locationSvc.resolveRoutingOrigin();
     if (origin && this.hasUsableCoordinates(origin.latitude, origin.longitude)) {
       return {
         center: [origin.longitude, origin.latitude],
@@ -897,7 +902,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private getExactUserLocation(): ResolvedLocation | null {
     const loc = this.locationSvc.location();
-    return loc?.source === 'gps' && this.hasUsableCoordinates(loc.latitude, loc.longitude)
+    const cachedAt = typeof loc?.cachedAt === 'number' ? loc.cachedAt : 0;
+    return loc?.source === 'gps' &&
+      Date.now() - cachedAt < LOCATION_CACHE_TTL_MS &&
+      this.hasUsableCoordinates(loc.latitude, loc.longitude)
       ? loc
       : null;
   }
@@ -1042,6 +1050,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     } else {
       this.map.once('load', () => this.placeUserMarker(lat, lon));
     }
+    this.locationSvc.startMapLocationUpdates((loc) => this.handleMapLocationUpdate(loc));
 
     sessionStorage.setItem('mapLocation', JSON.stringify({
       name: 'My Location',
@@ -1053,6 +1062,25 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.isLocating = false;
     this.invalidateMarkerCache();
     this.cdr.detectChanges();
+  }
+
+  private handleMapLocationUpdate(loc: ResolvedLocation): void {
+    if (!this.map || this.isDestroyed) return;
+
+    if (this.map.isStyleLoaded()) {
+      this.placeUserMarker(loc.latitude, loc.longitude);
+    }
+
+    if (this.isUserLocation) {
+      this.destinationLat = loc.latitude;
+      this.destinationLon = loc.longitude;
+      sessionStorage.setItem('mapLocation', JSON.stringify({
+        name: 'My Location',
+        lat: loc.latitude,
+        lon: loc.longitude,
+        isUserLocation: true,
+      }));
+    }
   }
 
   private readSessionJson<T>(key: string): T | null {
