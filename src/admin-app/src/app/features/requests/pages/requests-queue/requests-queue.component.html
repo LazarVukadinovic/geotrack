@@ -1,14 +1,24 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
+
+  <!-- Sidebar -->
   <app-sidebar [region]="region" />
+
+  <!-- Main -->
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+    <!-- Topbar -->
     <app-topbar [userName]="userName" [userRole]="userRole" title="Review Queue" />
+
+    <!-- Scrollable content -->
     <div class="flex-1 overflow-y-auto px-8 py-6">
 
+      <!-- Page heading -->
       <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Review Requests Queue</h1>
         <p class="text-sm text-gray-500 mt-0.5">Manage and process incoming content submissions from regional contributors.</p>
       </div>
 
+      <!-- Filter tabs -->
       <div class="flex gap-2 mb-5">
         <button
           *ngFor="let tab of tabs"
@@ -27,21 +37,73 @@
         </button>
       </div>
 
+      <!-- Table card -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden"
            style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
 
-        <!-- Toolbar (search + sort only) -->
+        <!-- Toolbar -->
         <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+          <input
+            type="checkbox"
+            class="w-4 h-4 accent-blue-700 cursor-pointer"
+            [checked]="allSelected"
+            (change)="toggleSelectAll($event)"
+          />
+          <span class="text-sm text-gray-600 font-medium">Select All</span>
+
+          <button
+            [disabled]="selectedIds.size === 0"
+            (click)="approveSelected()"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all"
+            [ngClass]="selectedIds.size > 0
+              ? 'bg-blue-700 text-white hover:bg-blue-800 cursor-pointer'
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed'"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Approve Selected
+          </button>
+
+          <button
+            [disabled]="selectedIds.size === 0"
+            (click)="rejectSelected()"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all"
+            [ngClass]="selectedIds.size > 0
+              ? 'bg-white text-gray-600 border border-gray-200 hover:border-red-300 hover:text-red-600 cursor-pointer'
+              : 'bg-white text-gray-300 border border-gray-100 cursor-not-allowed'"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Reject
+          </button>
+
+          <button class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors cursor-pointer border-none bg-transparent">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+            </svg>
+          </button>
+
+          <!-- Search -->
           <div class="ml-auto flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 w-52">
             <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
-            <input type="text" placeholder="Search requests..." [(ngModel)]="searchQuery"
-              class="bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 w-full" />
+            <input
+              type="text"
+              placeholder="Search requests..."
+              [(ngModel)]="searchQuery"
+              class="bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 w-full"
+            />
           </div>
+
+          <!-- Sort -->
           <div class="relative">
-            <button (click)="sortOpen = !sortOpen"
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 cursor-pointer transition-colors">
+            <button
+              (click)="sortOpen = !sortOpen"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 cursor-pointer transition-colors"
+            >
               <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
               </svg>
@@ -50,45 +112,70 @@
                 <polyline points="6 9 12 15 18 9"/>
               </svg>
             </button>
-            <div *ngIf="sortOpen"
-              class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-40 py-1 overflow-hidden">
-              <button *ngFor="let opt of sortOptions" (click)="currentSort = opt; sortOpen = false"
+            <div
+              *ngIf="sortOpen"
+              class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-40 py-1 overflow-hidden"
+            >
+              <button
+                *ngFor="let opt of sortOptions"
+                (click)="currentSort = opt; sortOpen = false"
                 class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer border-none bg-transparent"
-                [ngClass]="currentSort === opt ? 'font-semibold text-blue-700 bg-blue-50' : ''">{{ opt }}</button>
+                [ngClass]="currentSort === opt ? 'font-semibold text-blue-700 bg-blue-50' : ''"
+              >{{ opt }}</button>
             </div>
           </div>
         </div>
 
         <!-- Rows -->
         <div class="divide-y divide-gray-50">
-          <div *ngFor="let req of filteredRequests"
-               class="flex items-center gap-4 px-4 py-3.5 hover:bg-gray-50/60 transition-colors group">
+          <div
+            *ngFor="let req of filteredRequests"
+            class="flex items-center gap-4 px-4 py-3.5 hover:bg-gray-50/60 transition-colors group"
+          >
+            <!-- Checkbox -->
+            <input
+              type="checkbox"
+              class="w-4 h-4 accent-blue-700 cursor-pointer flex-shrink-0"
+              [checked]="selectedIds.has(req.id)"
+              (change)="toggleSelect(req.id, $event)"
+            />
 
             <!-- Thumbnail -->
-            <div class="w-14 h-14 rounded-lg flex-shrink-0 bg-cover bg-center"
-                 [style.background]="req.imageBg" style="min-width: 56px;"></div>
+            <div
+              class="w-14 h-14 rounded-lg flex-shrink-0 bg-cover bg-center"
+              [style.background]="req.imageBg"
+              style="min-width: 56px;"
+            ></div>
 
             <!-- Title + meta -->
             <div class="flex-1 min-w-0">
               <p class="text-sm font-semibold text-gray-900 mb-0.5 truncate">{{ req.title }}</p>
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                      [ngClass]="typeBadgeClass(req.type)">
+                <!-- Type badge -->
+                <span
+                  class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                  [ngClass]="typeBadgeClass(req.type)"
+                >
+                  <!-- Destination icon -->
                   <svg *ngIf="req.type === 'Destination'" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
                   </svg>
+                  <!-- Place icon -->
                   <svg *ngIf="req.type === 'Place'" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
                   </svg>
+                  <!-- Location icon -->
                   <svg *ngIf="req.type === 'Location'" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
                   </svg>
+                  <!-- Event icon -->
                   <svg *ngIf="req.type === 'Event'" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="4" width="18" height="18" rx="2"/>
                     <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
                   </svg>
                   {{ req.type }}
                 </span>
+
                 <span class="text-xs text-gray-400">{{ req.region }}</span>
                 <span class="text-gray-300 text-xs">·</span>
                 <span class="text-xs text-gray-400">ID: {{ req.reqId }}</span>
@@ -97,12 +184,14 @@
 
             <!-- Author -->
             <div class="flex items-center gap-2.5 w-44 flex-shrink-0">
-              <div class="w-7 h-7 rounded-full flex-shrink-0 bg-cover bg-center border border-gray-200"
-                   [style.background]="req.authorBg">
-                <span *ngIf="!req.authorImg"
-                      class="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600">
-                  {{ req.authorInitials }}
-                </span>
+              <div
+                class="w-7 h-7 rounded-full flex-shrink-0 bg-cover bg-center border border-gray-200"
+                [style.background]="req.authorBg"
+              >
+                <span
+                  *ngIf="!req.authorImg"
+                  class="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600"
+                >{{ req.authorInitials }}</span>
               </div>
               <div class="min-w-0">
                 <p class="text-sm font-medium text-gray-800 truncate">{{ req.author }}</p>
@@ -118,6 +207,33 @@
                 </svg>
                 {{ req.status }}
               </span>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <button
+                (click)="previewRequest(req)"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-white border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                </svg>
+                Preview
+              </button>
+              <button
+                (click)="approveRequest(req)"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 cursor-pointer transition-colors border-none"
+              >
+                Approve
+              </button>
+              <button
+                (click)="openContextMenu(req, $event)"
+                class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 cursor-pointer transition-colors border-none bg-transparent opacity-0 group-hover:opacity-100"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+                </svg>
+              </button>
             </div>
           </div>
 
@@ -139,12 +255,43 @@
             of <span class="font-semibold text-gray-700">{{ requests.length }}</span> requests
           </p>
           <div class="flex items-center gap-2">
-            <button class="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer transition-colors">Previous</button>
-            <button class="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer transition-colors">Next</button>
+            <button class="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer transition-colors">
+              Previous
+            </button>
+            <button class="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer transition-colors">
+              Next
+            </button>
           </div>
         </div>
       </div>
 
     </div>
   </div>
+</div>
+
+<!-- Context menu (dropdown) -->
+<div
+  *ngIf="contextMenu"
+  class="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-36 overflow-hidden"
+  [style.top.px]="contextMenu.y"
+  [style.left.px]="contextMenu.x"
+  (mouseleave)="contextMenu = null"
+>
+  <button (click)="previewRequest(contextMenu.req); contextMenu = null"
+          class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer border-none bg-transparent">
+    Preview
+  </button>
+  <button (click)="approveRequest(contextMenu.req); contextMenu = null"
+          class="w-full text-left px-3 py-2 text-sm text-blue-700 font-medium hover:bg-blue-50 cursor-pointer border-none bg-transparent">
+    Approve
+  </button>
+  <button (click)="rejectRequest(contextMenu.req); contextMenu = null"
+          class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer border-none bg-transparent">
+    Reject
+  </button>
+  <div class="border-t border-gray-100 my-1"></div>
+  <button (click)="contextMenu = null"
+          class="w-full text-left px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 cursor-pointer border-none bg-transparent">
+    View Details
+  </button>
 </div>

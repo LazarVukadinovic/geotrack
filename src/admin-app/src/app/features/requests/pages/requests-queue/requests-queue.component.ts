@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -44,34 +44,69 @@ export class ReviewQueueComponent {
 
   requests: ReviewRequest[] = [
     {
-      id: '1', title: 'Olympic National Park Trails Update', type: 'Destination',
-      region: 'Pacific Northwest', reqId: 'REQ-001', author: 'David Chen',
-      authorInitials: 'DC', authorBg: '#bfdbfe', date: 'Oct 24, 2023',
-      status: 'Pending', imageBg: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)',
+      id: '1',
+      title: 'Olympic National Park Trails Update',
+      type: 'Destination',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-001',
+      author: 'David Chen',
+      authorInitials: 'DC',
+      authorBg: '#bfdbfe',
+      date: 'Oct 24, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)',
     },
     {
-      id: '2', title: 'Pike Place Market Artisan Directory', type: 'Place',
-      region: 'Pacific Northwest', reqId: 'REQ-002', author: 'Elena Rodriguez',
-      authorInitials: 'ER', authorBg: '#fde68a', date: 'Oct 23, 2023',
-      status: 'Pending', imageBg: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+      id: '2',
+      title: 'Pike Place Market Artisan Directory',
+      type: 'Place',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-002',
+      author: 'Elena Rodriguez',
+      authorInitials: 'ER',
+      authorBg: '#fde68a',
+      date: 'Oct 23, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
     },
     {
-      id: '3', title: 'Seattle Summer Solstice Festival', type: 'Event',
-      region: 'Pacific Northwest', reqId: 'REQ-003', author: 'Marcus Johnson',
-      authorInitials: 'MJ', authorBg: '#a7f3d0', date: 'Oct 22, 2023',
-      status: 'Pending', imageBg: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+      id: '3',
+      title: 'Seattle Summer Solstice Festival',
+      type: 'Event',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-003',
+      author: 'Marcus Johnson',
+      authorInitials: 'MJ',
+      authorBg: '#a7f3d0',
+      date: 'Oct 22, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
     },
     {
-      id: '4', title: 'Mount Rainier Basecamp Facilities', type: 'Place',
-      region: 'Pacific Northwest', reqId: 'REQ-004', author: 'Sarah Jenkins',
-      authorInitials: 'SJ', authorBg: '#fbcfe8', date: 'Oct 21, 2023',
-      status: 'Pending', imageBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      id: '4',
+      title: 'Mount Rainier Basecamp Facilities',
+      type: 'Place',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-004',
+      author: 'Sarah Jenkins',
+      authorInitials: 'SJ',
+      authorBg: '#fbcfe8',
+      date: 'Oct 21, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
     },
     {
-      id: '5', title: 'San Juan Islands Ferry Routes', type: 'Destination',
-      region: 'Pacific Northwest', reqId: 'REQ-005', author: 'David Chen',
-      authorInitials: 'DC', authorBg: '#bfdbfe', date: 'Oct 20, 2023',
-      status: 'Pending', imageBg: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+      id: '5',
+      title: 'San Juan Islands Ferry Routes',
+      type: 'Destination',
+      region: 'Pacific Northwest',
+      reqId: 'REQ-005',
+      author: 'David Chen',
+      authorInitials: 'DC',
+      authorBg: '#bfdbfe',
+      date: 'Oct 20, 2023',
+      status: 'Pending',
+      imageBg: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
     },
   ];
 
@@ -83,11 +118,18 @@ export class ReviewQueueComponent {
     { key: 'Event',       label: 'Events',        count: null },
   ];
 
-  activeTab   = 'all';
-  searchQuery = '';
-  sortOpen    = false;
-  currentSort = 'Newest First';
-  sortOptions = ['Newest First', 'Oldest First', 'A–Z', 'Z–A'];
+  activeTab    = 'all';
+  searchQuery  = '';
+  sortOpen     = false;
+  currentSort  = 'Newest First';
+  sortOptions  = ['Newest First', 'Oldest First', 'A–Z', 'Z–A'];
+
+  selectedIds = new Set<string>();
+
+  get allSelected(): boolean {
+    return this.filteredRequests.length > 0 &&
+           this.filteredRequests.every(r => this.selectedIds.has(r.id));
+  }
 
   get filteredRequests(): ReviewRequest[] {
     let list = [...this.requests];
@@ -113,6 +155,62 @@ export class ReviewQueueComponent {
     }
 
     return list;
+  }
+
+  toggleSelectAll(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    if (checked) {
+      this.filteredRequests.forEach(r => this.selectedIds.add(r.id));
+    } else {
+      this.selectedIds.clear();
+    }
+  }
+
+  toggleSelect(id: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    if (checked) this.selectedIds.add(id);
+    else         this.selectedIds.delete(id);
+  }
+
+  approveSelected(): void {
+    this.requests
+      .filter(r => this.selectedIds.has(r.id))
+      .forEach(r => r.status = 'Approved');
+    this.selectedIds.clear();
+  }
+
+  rejectSelected(): void {
+    this.requests
+      .filter(r => this.selectedIds.has(r.id))
+      .forEach(r => r.status = 'Rejected');
+    this.selectedIds.clear();
+  }
+
+  approveRequest(req: ReviewRequest): void {
+    req.status = 'Approved';
+  }
+
+  rejectRequest(req: ReviewRequest): void {
+    req.status = 'Rejected';
+  }
+
+  previewRequest(req: ReviewRequest): void {
+    // Navigate to detail/preview page or open modal
+    console.log('Preview:', req);
+  }
+
+  // Context menu
+  contextMenu: { req: ReviewRequest; x: number; y: number } | null = null;
+
+  openContextMenu(req: ReviewRequest, event: MouseEvent): void {
+    event.stopPropagation();
+    this.contextMenu = { req, x: event.clientX - 136, y: event.clientY + 8 };
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.contextMenu = null;
+    this.sortOpen    = false;
   }
 
   typeBadgeClass(type: RequestType): string {
