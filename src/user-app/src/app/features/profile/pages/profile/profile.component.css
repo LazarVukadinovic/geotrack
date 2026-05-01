@@ -1,6 +1,8 @@
 :host {
   display: block;
-  height: 100%;
+  height: calc(100vh - var(--shell-bottom-pad));
+  height: calc(100dvh - var(--shell-bottom-pad));
+  overflow: hidden;
   font-family: var(--font-sans);
 }
 
