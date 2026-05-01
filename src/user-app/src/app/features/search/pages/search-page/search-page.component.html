@@ -16,7 +16,7 @@
           controlName="globalSearch"
           label="Search GeoTrack"
           (valueChange)="onSearchChange($event)"
-          (searchSubmit)="onSearchSubmit($event)"
+          (searchSubmit)="onSearchSubmit($event.trim())"
           (focused)="onSearchFocus()"
           (blurred)="onSearchBlur()"
           (cleared)="onSearchCleared()"
