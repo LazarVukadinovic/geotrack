@@ -52,12 +52,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/requests/pages/request-detail/request-detail.component').then(m => m.RequestDetailComponent),
       },
-    //   {
-    //     path: 'map',
-    //     loadComponent: () =>
-    //       import('./features/map/pages/map-page/map-page.component')
-    //         .then(m => m.MapPageComponent),
-    //   },
+      {
+        path: 'map',
+        loadComponent: () =>
+          import('./features/map/pages/map-page/map-page.component').then(m => m.MapPageComponent),
+      },
     //   {
     //     path: 'destinations',
     //     loadComponent: () =>
