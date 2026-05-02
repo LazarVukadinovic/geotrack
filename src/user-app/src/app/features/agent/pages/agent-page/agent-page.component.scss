@@ -314,3 +314,48 @@
     transform: translateY(-4px);
   }
 }
+
+@media (min-width: 1024px) {
+  .agent {
+    padding: var(--space-6) 0;
+    background: transparent;
+  }
+
+  .agent__header {
+    padding: var(--space-6) var(--space-8);
+    border-radius: 24px 24px 0 0;
+  }
+
+  .agent__header-title {
+    font-size: 1.75rem;
+  }
+
+  .agent__messages {
+    padding: var(--space-6) var(--space-8) 0;
+    background: var(--color-page-bg);
+    border-inline: 1px solid var(--color-border);
+  }
+
+  .agent__bubble-row,
+  .agent__pills-row,
+  .agent__cards-section {
+    max-width: 640px;
+  }
+
+  .agent__bubble-row--user {
+    max-width: none;
+
+    app-agent-message-bubble {
+      max-width: 640px;
+      margin-left: auto;
+    }
+  }
+
+  .agent__input-area {
+    padding: var(--space-4) var(--space-8) var(--space-6);
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-top: none;
+    border-radius: 0 0 24px 24px;
+  }
+}

@@ -689,3 +689,62 @@
   font-weight: 700;
   cursor: pointer;
 }
+
+@media (min-width: 1024px) {
+  :host {
+    padding: var(--space-6);
+  }
+
+  .pd {
+    overflow: hidden;
+    border-radius: 28px;
+    background: #ffffff;
+    box-shadow: 0 24px 60px rgba(26, 43, 76, 0.16);
+  }
+
+  .pd__top-bar {
+    border-radius: 0;
+    padding: var(--space-5) var(--space-6);
+  }
+
+  .pd__hero {
+    height: 360px;
+  }
+
+  .pd__scroll-spacer {
+    height: 312px;
+  }
+
+  .pd__card {
+    max-width: 980px;
+    min-height: calc(100dvh - 280px);
+    margin-inline: auto;
+    padding: var(--space-8) var(--space-8) var(--space-10);
+    border-radius: 28px 28px 0 0;
+  }
+
+  .pd__title {
+    font-size: 2.25rem;
+  }
+
+  .pd__about,
+  .pd__review-body {
+    font-size: var(--text-base);
+  }
+
+  .pd__similar-viewport {
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .pd__similar-track {
+    width: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    padding-right: 0;
+  }
+
+  .pd__similar-card {
+    width: auto;
+  }
+}
