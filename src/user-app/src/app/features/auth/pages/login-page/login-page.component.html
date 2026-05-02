@@ -1,12 +1,12 @@
-<div class="min-h-full bg-white flex flex-col">
+<div class="auth-login min-h-full bg-white flex flex-col">
 
   <!-- Top dark header -->
-  <div class="bg-[#1a2b4a] flex flex-col items-center justify-center pt-6 pb-14 rounded-b-[2.5rem]">
+  <div class="auth-login__brand bg-[#1a2b4a] flex flex-col items-center justify-center pt-6 pb-14 rounded-b-[2.5rem]">
     <img src="images/logo.png" alt="Logo" class="w-28 h-28 object-contain" />
   </div>
 
   <!-- Off-white card overlapping header -->
-  <div class="mx-4 -mt-14 bg-[#fafaf9] rounded-[2rem] px-7 pt-8 pb-10 flex flex-col gap-2 shadow-sm">
+  <div class="auth-login__card mx-4 -mt-14 bg-[#fafaf9] rounded-[2rem] px-7 pt-8 pb-10 flex flex-col gap-2 shadow-sm">
 
     <!-- Centered heading -->
     <div class="text-center mb-6">
@@ -127,7 +127,7 @@
   </div>
 
   <!-- Create account -->
-  <p class="text-center text-base text-slate-400 mt-6 mb-4">
+  <p class="auth-login__footer text-center text-base text-slate-400 mt-6 mb-4">
     Don't have an account?
     <button type="button" (click)="goToRegister()" class="font-bold text-[#e8570a] ml-1">Create one</button>
   </p>

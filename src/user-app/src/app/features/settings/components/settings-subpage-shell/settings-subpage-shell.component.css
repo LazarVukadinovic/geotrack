@@ -72,3 +72,20 @@
   font-size: 0.9375rem;
   line-height: 1.65;
 }
+
+@media (min-width: 1024px) {
+  .settings-shell {
+    background: transparent;
+  }
+
+  .settings-shell__header {
+    margin: var(--space-6) var(--space-6) 0;
+    padding: var(--space-5) var(--space-6);
+    border-radius: 24px;
+    box-shadow: 0 14px 34px rgba(26, 43, 76, 0.14);
+  }
+
+  .settings-shell__content {
+    padding: var(--space-6);
+  }
+}

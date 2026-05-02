@@ -36,3 +36,37 @@ input::-webkit-credentials-auto-fill-button,
 input::-webkit-strong-password-auto-fill-button {
   display: none !important;
 }
+
+@media (min-width: 1024px) {
+  :host {
+    display: grid;
+    place-items: center;
+    min-height: 100dvh;
+    padding: var(--space-6);
+    background: var(--color-page-bg);
+  }
+
+  .auth-login {
+    width: min(100%, 520px);
+    min-height: auto;
+    border-radius: 32px;
+    box-shadow: 0 24px 60px rgba(26, 43, 76, 0.16);
+    overflow: hidden;
+  }
+
+  .auth-login__brand {
+    padding-top: var(--space-6);
+    padding-bottom: 4.5rem;
+    border-radius: 0 0 32px 32px;
+  }
+
+  .auth-login__card {
+    margin: -3.5rem var(--space-6) 0;
+    border: 1px solid rgba(26, 43, 76, 0.08);
+    box-shadow: 0 12px 36px rgba(26, 43, 76, 0.08);
+  }
+
+  .auth-login__footer {
+    margin-bottom: var(--space-6);
+  }
+}

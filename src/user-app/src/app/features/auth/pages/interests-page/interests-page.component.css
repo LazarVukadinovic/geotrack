@@ -5,3 +5,32 @@
   height: calc(100dvh - var(--shell-bottom-pad));
   background: #fafaf9;
 }
+
+@media (min-width: 1024px) {
+  :host {
+    display: grid;
+    place-items: center;
+    height: auto;
+    min-height: 100dvh;
+    padding: var(--space-6);
+    background: var(--color-page-bg);
+  }
+
+  .auth-interests {
+    width: min(100%, 560px);
+    min-height: auto;
+    max-height: calc(100dvh - var(--space-10));
+    border-radius: 32px;
+    box-shadow: 0 24px 60px rgba(26, 43, 76, 0.16);
+    overflow: auto;
+  }
+
+  .auth-interests__hero {
+    border-radius: 0 0 32px 32px;
+  }
+
+  .auth-interests__body {
+    flex: none;
+    padding: var(--space-6);
+  }
+}
