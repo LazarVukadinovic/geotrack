@@ -1,7 +1,20 @@
-<div class="app-shell" [class.app-shell--no-nav]="!showBottomNav()">
-  <div class="app-shell__viewport" #viewport>
-    <router-outlet />
-  </div>
+<div
+  class="app-shell"
+  [class.app-shell--no-nav]="!showBottomNav()"
+  [class.app-shell--desktop-wide]="desktopLayout() === 'wide'"
+  [class.app-shell--desktop-narrow]="desktopLayout() === 'narrow'"
+  [class.app-shell--desktop-full]="desktopLayout() === 'full'"
+>
+  <app-desktop-sidebar class="app-shell__desktop-sidebar" />
+
+  <main class="app-shell__main">
+    <div class="app-shell__viewport" #viewport>
+      <div class="app-shell__desktop-frame">
+        <router-outlet />
+      </div>
+    </div>
+  </main>
+
   <app-bottom-nav [class.nav-hidden]="!showBottomNav()" />
   <app-save-to-collection-sheet />
 </div>

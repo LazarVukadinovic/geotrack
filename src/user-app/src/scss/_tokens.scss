@@ -43,4 +43,10 @@
   --app-header-offset: calc(var(--app-header-height) + env(safe-area-inset-top, 0px));
   --bottom-nav-height: 72px;
   --page-gutter: var(--space-5);
+
+  --desktop-sidebar-width: 248px;
+  --desktop-content-max: 1120px;
+  --desktop-content-wide-max: 1360px;
+  --desktop-content-narrow-max: 760px;
+  --desktop-page-gutter: var(--space-8);
 }

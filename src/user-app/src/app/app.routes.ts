@@ -13,22 +13,25 @@ export const routes: Routes = [
         path: 'home',
         loadComponent: () =>
           import('./features/home/pages/home/home.component').then((m) => m.Home),
+        data: { desktopLayout: 'full' },
       },
       {
         path: 'search',
         loadComponent: () =>
           import('./features/explore/pages/explore-page/explore-page.component').then(m => m.ExplorePageComponent),
-        data: { hideBottomNav: true, searchOverlay: true },
+        data: { hideBottomNav: true, searchOverlay: true, desktopLayout: 'wide' },
       },
       {
         path: 'explore',
         loadComponent: () =>
           import('./features/explore/pages/explore-page/explore-page.component').then(m => m.ExplorePageComponent),
+        data: { desktopLayout: 'wide' },
       },
       {
         path: 'map',
         loadComponent: () =>
           import('./features/map/pages/map-page/map-page.component').then(m => m.MapPageComponent),
+        data: { desktopLayout: 'full' },
       },
       {
       path: 'filters',
@@ -42,6 +45,7 @@ export const routes: Routes = [
         path: 'agent',
         loadComponent: () =>
           import('./features/agent/pages/agent-page/agent-page.component').then(m => m.AgentPageComponent),
+        data: { desktopLayout: 'narrow' },
       },
 
       // ── Profile ──────────────────────────────────────────────────────────
@@ -49,6 +53,7 @@ export const routes: Routes = [
         path: 'profile',
         loadComponent: () =>
           import('./features/profile/pages/profile-tab/profile-tab.component').then(m => m.ProfileTabComponent),
+        data: { desktopLayout: 'narrow' },
       },
       {
         path: 'profile/edit',
@@ -180,7 +185,7 @@ export const routes: Routes = [
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/recommendations/pages/recommendations-page/recommendations-page.component').then(m => m.RecommendationsPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'notifications',
@@ -200,20 +205,21 @@ export const routes: Routes = [
         canActivate: [guestGuard],
         loadComponent: () =>
           import('./features/auth/pages/login-page/login-page.component').then(m => m.LoginPageComponent),
+        data: { desktopLayout: 'narrow' },
       },
       {
         path: 'register',
         canActivate: [guestGuard],
         loadComponent: () =>
           import('./features/auth/pages/register-page/register-page.component').then(m => m.RegisterPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'narrow' },
       },
       {
         path: 'register/interests',
         canActivate: [interestsOnboardingGuard],
         loadComponent: () =>
           import('./features/auth/pages/interests-page/interests-page.component').then(m => m.InterestsPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'narrow' },
       },
 
       // ── Ostale rute ───────────────────────────────────────────────────────
@@ -221,61 +227,61 @@ export const routes: Routes = [
         path: 'hotels',
         loadComponent: () =>
           import('./features/hotels/pages/hotels-listing-page/hotels-listing-page.component').then(m => m.HotelsListingPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'food-and-music',
         loadComponent: () =>
           import('./features/food-music/pages/food-music-page/food-music-page.component').then(m => m.FoodMusicPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'culture-and-history',
         loadComponent: () =>
           import('./features/culture-history/pages/culture-history-page/culture-history-page.component').then(m => m.CultureHistoryPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'nature',
         loadComponent: () =>
           import('./features/nature/pages/nature-page/nature-page.component').then(m => m.NaturePageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'local-places',
         loadComponent: () =>
           import('./features/local-places/pages/local-places-page/local-places-page.component').then(m => m.LocalPlacesPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'local-places/:category',
         loadComponent: () =>
           import('./features/local-places/pages/local-places-category-page/local-places-category-page.component').then(m => m.LocalPlacesCategoryPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'places/:id',
         loadComponent: () =>
           import('./features/place-detail/pages/place-detail-page/place-detail-page.component').then(m => m.PlaceDetailPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'stays/:id',
         loadComponent: () =>
           import('./features/hotel-detail/pages/hotel-detail-page/hotel-detail-page.component').then(m => m.HotelDetailPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'events',
         loadComponent: () =>
           import('./features/events-listing/pages/events-listing-page/events-listing-page.component').then(m => m.EventsListingPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'events/:id',
         loadComponent: () =>
           import('./features/event-detail/pages/event-detail-page/event-detail-page.component').then(m => m.EventDetailPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: '**',
