@@ -77,3 +77,31 @@
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
   padding: 0 var(--space-2);
 }
+
+@media (min-width: 1024px) {
+  .landmarks-slider__viewport {
+    margin-inline: 0;
+    overflow: visible;
+  }
+
+  .landmarks-slider__track {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    gap: var(--space-5);
+    padding-inline: 0;
+    padding-bottom: 0;
+    overflow: visible;
+    scroll-snap-type: none;
+
+    &::after {
+      display: none;
+    }
+  }
+
+  .landmarks-slider__tile {
+    width: auto;
+    height: auto;
+    aspect-ratio: 1;
+    scroll-snap-align: none;
+  }
+}

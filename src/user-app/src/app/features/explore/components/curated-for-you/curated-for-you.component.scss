@@ -123,3 +123,29 @@
   color: #e8570a;
   white-space: nowrap;
 }
+
+@media (min-width: 1024px) {
+  .curated__viewport {
+    margin-inline: 0;
+    overflow: visible;
+  }
+
+  .curated__track {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-5);
+    padding-inline: 0;
+    padding-bottom: 0;
+    overflow: visible;
+    scroll-snap-type: none;
+
+    &::after {
+      display: none;
+    }
+  }
+
+  .curated__card {
+    width: auto;
+    scroll-snap-align: none;
+  }
+}

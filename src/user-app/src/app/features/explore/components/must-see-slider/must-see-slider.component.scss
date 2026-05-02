@@ -89,3 +89,31 @@
   font-weight: 600;
   opacity: 0.88;
 }
+
+@media (min-width: 1024px) {
+  .mustsee-slider__viewport {
+    margin-inline: 0;
+    overflow: visible;
+  }
+
+  .mustsee-slider__track {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: var(--space-5);
+    padding-inline: 0;
+    padding-bottom: 0;
+    overflow: visible;
+    scroll-snap-type: none;
+
+    &::after {
+      display: none;
+    }
+  }
+
+  .mustsee-slider__card {
+    width: auto;
+    height: auto;
+    aspect-ratio: 1;
+    scroll-snap-align: none;
+  }
+}

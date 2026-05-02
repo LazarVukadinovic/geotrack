@@ -120,3 +120,34 @@
   font-size: var(--text-xs);
   color: var(--color-muted);
 }
+
+@media (min-width: 1024px) {
+  .stays-slider {
+    margin-bottom: var(--space-10);
+  }
+
+  .stays-slider__viewport {
+    margin-inline: 0;
+    overflow: visible;
+  }
+
+  .stays-slider__track {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+    gap: var(--space-5);
+    padding-inline: 0;
+    padding-bottom: 0;
+    overflow: visible;
+    scroll-snap-type: none;
+
+    &::after {
+      display: none;
+    }
+  }
+
+  .stays-slider__card {
+    width: auto;
+    min-width: 0;
+    scroll-snap-align: none;
+  }
+}

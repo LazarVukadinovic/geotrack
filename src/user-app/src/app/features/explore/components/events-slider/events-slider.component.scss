@@ -97,3 +97,29 @@
   height: 12px;
   flex-shrink: 0;
 }
+
+@media (min-width: 1024px) {
+  .events-slider__viewport {
+    margin-inline: 0;
+    overflow: visible;
+  }
+
+  .events-slider__track {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-5);
+    padding-inline: 0;
+    padding-bottom: 0;
+    overflow: visible;
+    scroll-snap-type: none;
+
+    &::after {
+      display: none;
+    }
+  }
+
+  .events-slider__card {
+    width: auto;
+    scroll-snap-align: none;
+  }
+}

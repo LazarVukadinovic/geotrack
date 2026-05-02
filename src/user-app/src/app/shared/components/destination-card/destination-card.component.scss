@@ -111,3 +111,12 @@
   flex-shrink: 0;
   opacity: 0.9;
 }
+
+@media (min-width: 1024px) {
+  .destination-card {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    aspect-ratio: 4 / 5;
+  }
+}

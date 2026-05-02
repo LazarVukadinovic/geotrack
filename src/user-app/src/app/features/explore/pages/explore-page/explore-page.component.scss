@@ -54,3 +54,25 @@
     }
   }
 }
+
+@media (min-width: 1024px) {
+  .explore-page {
+    min-height: 100%;
+  }
+
+  .explore-page__main {
+    padding: calc(76px + var(--space-8)) var(--desktop-page-gutter) var(--space-10);
+  }
+
+  .explore-page__search {
+    max-width: 760px;
+  }
+
+  .explore-page__context {
+    margin-bottom: var(--space-6);
+  }
+
+  .explore-page__destination-mode {
+    max-width: 760px;
+  }
+}

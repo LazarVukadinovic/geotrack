@@ -23,3 +23,19 @@
   letter-spacing: -0.02em;
   color: var(--color-accent-orange);
 }
+
+@media (min-width: 1024px) {
+  .welcome-hero {
+    margin-bottom: var(--space-8);
+    padding-top: 0;
+  }
+
+  .welcome-hero__line {
+    font-size: clamp(2.25rem, 4vw, 3.2rem);
+    max-width: 860px;
+  }
+
+  .welcome-hero__country {
+    font-size: 1.75rem;
+  }
+}
