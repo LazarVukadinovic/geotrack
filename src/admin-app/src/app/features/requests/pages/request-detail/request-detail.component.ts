@@ -86,8 +86,8 @@ export class RequestDetailComponent implements OnInit, AfterViewInit, OnDestroy 
     city: 'Kragujevac',
     region: 'Sumadija',
     country: 'Serbia',
-    lat: 44.0213,
-    lng: 20.8943,
+    lat: 44.013725,
+    lng: 20.915097,
 
     tags: ['Stay', 'Boutique', 'Peaceful', 'Garden', 'Breakfast Included'],
     amenities: ['wifi', 'breakfast', 'parking', 'ac'],
