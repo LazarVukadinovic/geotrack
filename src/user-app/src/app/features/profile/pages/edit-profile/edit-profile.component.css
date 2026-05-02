@@ -9,3 +9,20 @@
 textarea {
   field-sizing: content;
 }
+
+@media (min-width: 1024px) {
+  .edit-profile-page {
+    background: transparent;
+  }
+
+  .edit-profile-page > div:first-child {
+    margin: var(--space-6) var(--space-6) 0;
+    padding: var(--space-5) var(--space-6);
+    border-radius: 24px;
+    box-shadow: 0 14px 34px rgba(26, 43, 76, 0.14);
+  }
+
+  .edit-profile-page__scroll > div {
+    padding: var(--space-6);
+  }
+}

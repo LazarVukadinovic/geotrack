@@ -114,6 +114,23 @@
   }
 }
 
+@media (min-width: 1024px) {
+  .search-page__backdrop {
+    inset: 76px 0 0 var(--desktop-sidebar-width);
+  }
+
+  .search-page__sheet {
+    top: 76px;
+    left: calc(var(--desktop-sidebar-width) + var(--space-6));
+    right: var(--space-6);
+    bottom: var(--space-6);
+    width: min(760px, calc(100% - var(--desktop-sidebar-width) - (var(--space-6) * 2)));
+    margin-inline: 0;
+    border: 1px solid rgba(26, 43, 76, 0.1);
+    border-radius: 0 0 24px 24px;
+  }
+}
+
 .search-page__section {
   margin-top: var(--space-6);
 }

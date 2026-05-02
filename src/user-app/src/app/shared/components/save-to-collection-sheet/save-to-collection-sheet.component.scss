@@ -386,3 +386,20 @@
     transform: rotate(360deg);
   }
 }
+
+@media (min-width: 1024px) {
+  .sc__backdrop {
+    left: var(--desktop-sidebar-width);
+  }
+
+  .sc__sheet {
+    left: calc(var(--desktop-sidebar-width) + var(--space-6));
+    right: var(--space-6);
+    bottom: var(--space-6);
+    width: min(520px, calc(100% - var(--desktop-sidebar-width) - (var(--space-6) * 2)));
+    margin-inline: auto;
+    padding: var(--space-5);
+    border-radius: 24px;
+    box-shadow: 0 24px 60px rgba(26, 43, 76, 0.22);
+  }
+}
