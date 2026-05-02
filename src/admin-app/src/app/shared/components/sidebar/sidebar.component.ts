@@ -1,6 +1,7 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { ReviewRequestsService } from '../../../core/services/review-requests.service';
 
 export interface SidebarNavItem {
   label: string;
@@ -19,12 +20,16 @@ export interface SidebarNavItem {
 })
 export class SidebarComponent {
   @Input() region = 'Šumadija, Srbija';
+  constructor(private requestsService: ReviewRequestsService) {}
 
-  mainNav: SidebarNavItem[] = [
-    { label: 'Dashboard',      path: '/dashboard', icon: 'dashboard', exact: true },
-    { label: 'Requests Queue', path: '/requests',  icon: 'inbox',     badge: 5   },
-    { label: 'Map',            path: '/map',        icon: 'map'                   },
-  ];
+  get mainNav(): SidebarNavItem[] {
+    return [
+      { label: 'Dashboard',      path: '/dashboard', icon: 'dashboard', exact: true },
+      { label: 'Requests Queue', path: '/requests',  icon: 'inbox',
+        badge: this.requestsService.pendingCount || undefined },
+      { label: 'Map',            path: '/map',       icon: 'map' },
+    ];
+  }
 
   contentNav: SidebarNavItem[] = [
     { label: 'Destinations', path: '/destinations', icon: 'flag'     },

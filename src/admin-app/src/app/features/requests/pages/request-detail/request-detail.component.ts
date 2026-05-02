@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { ReviewRequestsService } from '../../../../core/services/review-requests.service';
 
 declare const L: any;
 
@@ -56,7 +57,8 @@ export class RequestDetailComponent implements OnInit, AfterViewInit, OnDestroy 
     private router: Router,
     private route: ActivatedRoute,
     private zone: NgZone,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private requestsService: ReviewRequestsService
   ) {}
 
   @ViewChild('miniMapContainer') miniMapContainer!: ElementRef<HTMLDivElement>;
@@ -221,12 +223,14 @@ export class RequestDetailComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   approveRequest(): void {
-    this.request.status = 'Approved';
+    const req = this.requestsService.requests.find(r => r.id === this.request.id);
+    if (req) req.status = 'Approved';
     this.goBack();
   }
 
   rejectRequest(): void {
-    this.request.status = 'Rejected';
+    const req = this.requestsService.requests.find(r => r.id === this.request.id);
+    if (req) req.status = 'Rejected';
     this.goBack();
   }
 }

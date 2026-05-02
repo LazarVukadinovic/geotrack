@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { ReviewRequest, ReviewRequestsService } from '../../../../core/services/review-requests.service'; 
 interface Activity {
   avatar: string;
   initials: string;
@@ -30,18 +31,11 @@ interface QueueItem {
   styleUrl: './dashboard-page.component.css'
 })
 export class DashboardComponent {
-  constructor(private router: Router) {}
+  constructor(private router: Router, public requestsService: ReviewRequestsService) {}
   sidebarOpen = true;
   region = 'Šumadija, Srbija';
   userName = 'Sarah Jenkins';
   userRole = 'Regional Manager';
-
-  stats = [
-    { label: 'Pending Requests', value: '5',    sub: 'Requires attention',   icon: 'inbox',   highlight: true },
-    { label: 'Total Destinations', value: '148',  sub: '12 this month',        icon: 'map',     highlight: false },
-    { label: 'Total Places',       value: '3,240', sub: '84 this month',       icon: 'pin',     highlight: false },
-    { label: 'Total Events',       value: '56',   sub: '12 this month',        icon: 'calendar',highlight: false },
-  ];
 
   quickActions = [
     { label: 'Create New Destination', desc: 'Define a new geographical area, route, or broader travel context.', icon: 'flag', route: '/destinations/new' },
@@ -58,13 +52,19 @@ export class DashboardComponent {
     { avatar: '', initials: 'SA', avatarColor: '#e5e7eb', description: 'System Admin completed weekly content sync for Pacific Northwest Region',        type: 'request',     timeAgo: 'Yesterday',   status: null        },
   ];
 
-  queue: QueueItem[] = [
-    { title: 'Pike Place Market',  type: 'Place',       author: 'Marcus Chen',     timeAgo: '15 mins ago', imageBg: '#bfdbfe', typeColor: 'bg-blue-100 text-blue-700'  },
-    { title: 'Olympic Peninsula',  type: 'Destination', author: 'Local Guides Co.', timeAgo: '3 hours ago', imageBg: '#d1fae5', typeColor: 'bg-green-100 text-green-700'},
-    { title: 'Summer Solstice P…', type: 'Event',       author: 'Elena Rodriguez',  timeAgo: '5 hours ago', imageBg: '#fde68a', typeColor: 'bg-yellow-100 text-yellow-700'},
-    { title: 'Crater Lake Lodge',  type: 'Place',       author: 'David Kim',        timeAgo: '1 day ago',   imageBg: '#e0e7ff', typeColor: 'bg-blue-100 text-blue-700'  },
-  ];
+  get queue() {
+    return this.requestsService.pendingRequests.slice(0, 4);
+  }
 
+  get stats() {
+    return [
+      { label: 'Pending Requests',   value: String(this.requestsService.pendingCount),
+        sub: 'Requires attention', icon: 'inbox', highlight: true },
+      { label: 'Total Destinations', value: '148', sub: '12 this month', icon: 'map',      highlight: false },
+      { label: 'Total Places',       value: '3,240', sub: '84 this month', icon: 'pin',    highlight: false },
+      { label: 'Total Events',       value: '56',  sub: '12 this month', icon: 'calendar', highlight: false },
+    ];
+  }
   navItems = [
     { label: 'Dashboard',          icon: 'grid',     route: '/dashboard',            active: true  },
     { label: 'Requests Queue',     icon: 'inbox',    route: '/requests',             badge: 5      },
