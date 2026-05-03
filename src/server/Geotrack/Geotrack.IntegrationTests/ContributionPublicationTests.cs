@@ -18,7 +18,7 @@ namespace Geotrack.IntegrationTests;
 public sealed class ContributionPublicationTests
 {
     [Fact]
-    public async Task Approving_a_stay_contribution_preserves_contact_price_type_and_partner_urls()
+    public async Task Approving_a_place_contribution_for_a_stay_preserves_contact_price_type_and_partner_urls()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
 
@@ -49,6 +49,7 @@ public sealed class ContributionPublicationTests
 
         var publishedPlace = await db.Places
             .Include(place => place.PlaceType)
+            .Include(place => place.Stay)
             .Include(place => place.PlaceBookingPartners)
                 .ThenInclude(partner => partner.BookingPartner)
             .SingleAsync(place => place.Id == approved.Contribution.PlaceId!.Value);
@@ -83,7 +84,7 @@ public sealed class ContributionPublicationTests
     }
 
     [Fact]
-    public async Task Rejecting_a_stay_contribution_creates_a_notification_for_the_contributor()
+    public async Task Rejecting_a_place_contribution_for_a_stay_creates_a_notification_for_the_contributor()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
 
