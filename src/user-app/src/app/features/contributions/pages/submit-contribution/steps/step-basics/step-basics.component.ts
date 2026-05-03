@@ -12,6 +12,7 @@ const DEFAULT_PICKER_LNG = 20.46;
 
 export interface BasicsData {
   name: string;
+  placeType: string;
   stayType: string;
   address: string;
   city: string;
@@ -36,6 +37,7 @@ export class StepBasicsComponent implements OnDestroy {
   data = input<BasicsData | null>(null);
   saved = output<BasicsData>();
 
+  placeTypes = ['Landmark', 'Restaurant', 'Cafe', 'Nature', 'Beach', 'Stay'];
   stayTypes = ['Hotel', 'Villa', 'Apartment', 'Resort', 'Cabin', 'Glamping', 'Hostel'];
   previewUrl = signal('');
   showMapPicker = signal(false);
@@ -49,7 +51,7 @@ export class StepBasicsComponent implements OnDestroy {
   private pickerMapResizeFrame: number | null = null;
 
   form: BasicsData = {
-    name: '', stayType: 'Hotel', address: '', city: '',
+    name: '', placeType: 'Landmark', stayType: 'Hotel', address: '', city: '',
     region: '', country: '', imageUrl: '', coverImageFile: null, lat: null, lng: null,
     imgBgPosition: '50% 50%',
     imgBgSize: 'cover'
@@ -237,6 +239,10 @@ export class StepBasicsComponent implements OnDestroy {
 
   hasConfirmedLocation(): boolean {
     return this.hasUsableCoordinates(this.form.lat, this.form.lng);
+  }
+
+  isAccommodationSelected(): boolean {
+    return this.form.placeType === 'Stay';
   }
 
   showLocationError(): boolean {

@@ -21,6 +21,7 @@ export interface DetailsData {
 })
 export class StepDetailsComponent {
   data = input<DetailsData | null>(null);
+  isAccommodation = input(false);
   saved = output<DetailsData>();
   back = output<void>();
   changed = output<DetailsData>();
@@ -54,7 +55,7 @@ export class StepDetailsComponent {
 
   isValid(): boolean {
     return !this.websiteError() &&
-      this.form.bookingPartners.every(partner => !this.partnerUrlError(partner.id));
+      (!this.isAccommodation() || this.form.bookingPartners.every(partner => !this.partnerUrlError(partner.id)));
   }
 
   websiteError(): string {
@@ -97,10 +98,10 @@ export class StepDetailsComponent {
       phone: this.form.phone.trim(),
       contactEmail: this.form.contactEmail.trim(),
       website: this.form.website.trim(),
-      bookingPartners: this.form.bookingPartners.map(partner => ({
+      bookingPartners: this.isAccommodation() ? this.form.bookingPartners.map(partner => ({
         id: partner.id,
         url: partner.url.trim(),
-      })),
+      })) : [],
     };
   }
 

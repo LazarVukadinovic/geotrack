@@ -18,6 +18,7 @@
 
     <div class="p-5">
       <h2 class="text-xl font-bold text-slate-800 mb-1">{{ draft().basics?.name }}</h2>
+      <p class="text-xs font-bold text-[#e8722a] mb-2">{{ draft().basics?.placeType }}</p>
 
       <!-- Pin -->
       <div class="flex items-center gap-1 mb-4">
@@ -37,7 +38,7 @@
 
       <!-- Description -->
       <div *ngIf="draft().details?.description" class="mb-5">
-        <p class="text-sm font-bold text-slate-800 mb-2">About this stay</p>
+        <p class="text-sm font-bold text-slate-800 mb-2">About this place</p>
         <p class="text-sm text-slate-600 leading-relaxed">{{ draft().details?.description }}</p>
       </div>
 
@@ -120,7 +121,7 @@
       </div>
 
       <!-- Booking partners -->
-      <div *ngIf="draft().details?.bookingPartners?.length" class="mb-2">
+      <div *ngIf="isAccommodation() && draft().details?.bookingPartners?.length" class="mb-2">
         <p class="text-sm font-bold text-slate-800 mb-3">Booking Partners</p>
         <div class="flex flex-wrap gap-2">
           <ng-container *ngFor="let partner of draft().details?.bookingPartners">

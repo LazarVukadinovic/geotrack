@@ -7,11 +7,13 @@ import { DetailsData } from '../pages/submit-contribution/steps/step-details/ste
 import { FeaturesData } from '../pages/submit-contribution/steps/step-features/step-features.component';
 
 export type ContributionStatus = 'PendingReview' | 'Approved' | 'Rejected';
+export type ContributionEntityType = 'Place';
 
 export interface ContributionListItem {
   id: number;
-  entityType: 'Stay';
+  entityType: ContributionEntityType;
   name: string;
+  placeType: string;
   stayType: string;
   location: string;
   coverImageUrl: string;
@@ -64,10 +66,11 @@ interface ContributionResponse {
 
 interface ApiContributionListItem {
   id: number;
-  entityType: 'Stay';
+  entityType?: string | null;
   name: string;
-  stayType: string;
-  location: string;
+  placeType?: string | null;
+  stayType?: string | null;
+  location?: string | null;
   coverImageUrl?: string | null;
   status: ContributionStatus;
   submittedAt: string;
@@ -96,8 +99,10 @@ interface ApiContributionDetail extends ApiContributionListItem {
 }
 
 interface UpsertPlaceContributionPayload {
+  type: 'CreatePlace';
   name: string;
-  stayType: string;
+  placeType: string;
+  stayType?: string;
   address: string;
   city: string;
   region: string;
@@ -151,8 +156,8 @@ export class ContributionsService {
     );
   }
 
-  createStay(draft: ContributionDraftData): Observable<ContributionDetail> {
-    return this.http.post<ContributionResponse>('/api/contributions/stays', this.toFormData(draft)).pipe(
+  createPlace(draft: ContributionDraftData): Observable<ContributionDetail> {
+    return this.http.post<ContributionResponse>('/api/contributions/places', this.toFormData(draft)).pipe(
       map(res => mapDetail(res.contribution)),
       tap(detail => {
         this.analytics.track('contribution_created', { entityId: detail.id });
@@ -161,8 +166,8 @@ export class ContributionsService {
     );
   }
 
-  updateStay(id: number, draft: ContributionDraftData): Observable<ContributionDetail> {
-    return this.http.put<ContributionResponse>(`/api/contributions/stays/${id}`, this.toFormData(draft)).pipe(
+  updatePlace(id: number, draft: ContributionDraftData): Observable<ContributionDetail> {
+    return this.http.put<ContributionResponse>(`/api/contributions/places/${id}`, this.toFormData(draft)).pipe(
       map(res => mapDetail(res.contribution)),
       tap(detail => {
         this.analytics.track('contribution_updated', { entityId: detail.id });
@@ -184,6 +189,7 @@ export class ContributionsService {
     return {
       basics: {
         name: detail.name,
+        placeType: detail.placeType || (detail.stayType ? 'Stay' : 'Place'),
         stayType: detail.stayType || 'Hotel',
         address: detail.address,
         city: detail.city,
@@ -214,10 +220,13 @@ export class ContributionsService {
     const basics = requireBasics(draft.basics);
     const features = normalizeFeatures(draft.features);
     const details = normalizeDetails(draft.details);
+    const isAccommodation = isAccommodationPlaceType(basics.placeType);
 
     const payload: UpsertPlaceContributionPayload = {
+      type: 'CreatePlace',
       name: basics.name,
-      stayType: basics.stayType,
+      placeType: basics.placeType || 'Place',
+      ...(isAccommodation ? { stayType: basics.stayType || 'Hotel' } : {}),
       address: basics.address,
       city: basics.city,
       region: basics.region,
@@ -232,7 +241,7 @@ export class ContributionsService {
       website: details.website,
       tags: features.tags,
       amenities: features.amenities,
-      bookingPartners: details.bookingPartners,
+      bookingPartners: isAccommodation ? details.bookingPartners : [],
     };
 
     const formData = new FormData();
@@ -248,7 +257,7 @@ export class ContributionsService {
 
 function requireBasics(basics: BasicsData | null): BasicsData {
   if (!basics) {
-    throw new Error('Stay basics are required before submitting.');
+    throw new Error('Place basics are required before submitting.');
   }
 
   return basics;
@@ -288,10 +297,11 @@ function mapListItem(item: ApiContributionListItem): ContributionListItem {
 
   return {
     id: item.id,
-    entityType: 'Stay',
+    entityType: normalizeContributionEntityType(item.entityType),
     name: item.name,
-    stayType: item.stayType,
-    location: item.location,
+    placeType: item.placeType ?? '',
+    stayType: item.stayType ?? '',
+    location: item.location ?? '',
     coverImageUrl: item.coverImageUrl ?? '',
     status: item.status,
     statusLabel: statusLabel(item.status),
@@ -300,6 +310,16 @@ function mapListItem(item: ApiContributionListItem): ContributionListItem {
     updatedLabel: timeLabel(isEdited ? updatedAt : item.submittedAt, isEdited ? 'Updated' : 'Submitted'),
     publishedPlaceId: item.publishedPlaceId ?? null,
   };
+}
+
+function normalizeContributionEntityType(entityType: string | null | undefined): ContributionEntityType {
+  // Older contribution responses used "Stay" for this user-submitted entity.
+  // The current PlaceContribution contract treats the contribution entity as a Place.
+  return 'Place';
+}
+
+function isAccommodationPlaceType(placeType: string | null | undefined): boolean {
+  return (placeType ?? '').trim().toLowerCase() === 'stay';
 }
 
 function mapDetail(item: ApiContributionDetail): ContributionDetail {

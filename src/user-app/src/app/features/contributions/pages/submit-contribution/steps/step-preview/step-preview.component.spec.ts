@@ -9,6 +9,7 @@ describe('StepPreviewComponent', () => {
   const draft: ContributionDraft = {
     basics: {
       name: 'Sunny Seaside Villa',
+      placeType: 'Stay',
       stayType: 'Villa',
       address: '1 Ocean Road',
       city: 'Malibu',

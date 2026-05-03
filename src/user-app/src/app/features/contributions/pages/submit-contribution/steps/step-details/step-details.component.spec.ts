@@ -13,6 +13,7 @@ describe('StepDetailsComponent', () => {
     .compileComponents();
 
     fixture = TestBed.createComponent(StepDetailsComponent);
+    fixture.componentRef.setInput('isAccommodation', true);
     component = fixture.componentInstance;
     await fixture.whenStable();
   });

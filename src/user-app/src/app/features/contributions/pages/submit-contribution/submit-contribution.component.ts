@@ -26,7 +26,7 @@ export class SubmitContributionComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly contributions = inject(ContributionsService);
 
-  protected readonly entityType = signal('Stay');
+  protected readonly entityType = signal('Place');
   protected readonly editId = signal<number | null>(null);
   protected readonly currentStep = signal(1);
   protected readonly isLoading = signal(false);
@@ -36,8 +36,9 @@ export class SubmitContributionComponent implements OnInit {
 
   protected readonly pageTitle = computed(() => {
     if (this.currentStep() === 5) return 'Submitted for Review';
-    return this.editId() ? 'Edit Stay' : 'Add New Stay';
+    return this.editId() ? 'Edit Place' : 'Add New Place';
   });
+  protected readonly isAccommodationDraft = computed(() => this.draft().basics?.placeType === 'Stay');
 
   protected readonly draft = signal<ContributionDraft>({
     basics: null,
@@ -86,7 +87,7 @@ export class SubmitContributionComponent implements OnInit {
   protected onSubmit(): void {
     const basics = this.draft().basics;
     if (!basics) {
-      this.submitError.set('Complete the stay basics before submitting.');
+      this.submitError.set('Complete the place basics before submitting.');
       this.currentStep.set(1);
       return;
     }
@@ -102,8 +103,8 @@ export class SubmitContributionComponent implements OnInit {
 
     const editId = this.editId();
     const request = editId
-      ? this.contributions.updateStay(editId, this.draft())
-      : this.contributions.createStay(this.draft());
+      ? this.contributions.updatePlace(editId, this.draft())
+      : this.contributions.createPlace(this.draft());
 
     request.subscribe({
       next: (detail) => {
@@ -134,6 +135,7 @@ export class SubmitContributionComponent implements OnInit {
       details: { description: '', phone: '', contactEmail: '', website: '', bookingPartners: [] },
     });
     this.editId.set(null);
+    this.entityType.set('Place');
     this.currentStep.set(1);
   }
 
@@ -155,6 +157,7 @@ export class SubmitContributionComponent implements OnInit {
     this.contributions.getDetail(id).subscribe({
       next: (detail) => {
         this.draft.set(this.contributions.detailToDraft(detail));
+        this.entityType.set(detail.entityType);
         this.isLoading.set(false);
       },
       error: () => {
