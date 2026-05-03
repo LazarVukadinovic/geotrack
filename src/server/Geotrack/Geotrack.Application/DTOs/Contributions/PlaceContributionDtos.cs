@@ -79,6 +79,7 @@ public class UpsertPlaceContributionDto
     public string Type { get; set; } = "CreatePlace";
     public int? PlaceId { get; set; }
     public int? PlaceTypeId { get; set; }
+    public string? PlaceType { get; set; }
     public int? LocationId { get; set; }
     public int? RestaurantTypeId { get; set; }
     public int? StayTypeId { get; set; }

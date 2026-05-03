@@ -257,6 +257,51 @@ public sealed class ContributionPublicationTests
     }
 
     [Fact]
+    public async Task Canonical_places_route_creates_place_contribution_without_stay_only_fields()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+
+        var payload = CreateGenericPlaceContributionPayload("Canonical Place Contribution Cafe");
+
+        var response = await PostContributionAsync(client, payload, "/api/contributions/places");
+
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        Assert.Equal("Place", created.Contribution.EntityType);
+        Assert.Equal("Cafe", created.Contribution.PlaceType);
+        Assert.Null(created.Contribution.StayType);
+        Assert.Null(created.Contribution.StayTypeId);
+        Assert.Null(created.Contribution.PricePerNight);
+        Assert.Empty(created.Contribution.BookingPartners);
+
+        var mine = await client.GetFromJsonAsync<GetPlaceContributionsResponseDto>("/api/contributions");
+        Assert.NotNull(mine);
+        var listItem = Assert.Single(mine!.Contributions, item => item.Id == created.Contribution.Id);
+        Assert.Equal("Place", listItem.EntityType);
+        Assert.Equal("Cafe", listItem.PlaceType);
+    }
+
+    [Fact]
+    public async Task Legacy_stays_route_remains_a_compatibility_alias_for_place_contributions()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+
+        var payload = CreateValidContributionPayload("Legacy Alias Place Contribution Villa");
+
+        var response = await PostContributionAsync(client, payload, "/api/contributions/stays");
+
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        Assert.Equal("Place", created.Contribution.EntityType);
+        Assert.Equal("Stay", created.Contribution.PlaceType);
+        Assert.Equal("Villa", created.Contribution.StayType);
+    }
+
+    [Fact]
     public async Task Create_rejects_contribution_without_confirmed_location_before_queueing()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -444,6 +489,30 @@ public sealed class ContributionPublicationTests
         };
     }
 
+    private static Dictionary<string, object?> CreateGenericPlaceContributionPayload(string name)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["name"] = name,
+            ["placeType"] = "Cafe",
+            ["address"] = "10 Market Lane",
+            ["city"] = "Dubrovnik",
+            ["region"] = "Dalmatia",
+            ["country"] = "Croatia",
+            ["latitude"] = 42.6413,
+            ["longitude"] = 18.1089,
+            ["imagePosition"] = "50% 50%",
+            ["imageSize"] = "cover",
+            ["description"] = "A generic place contribution used to validate the canonical route.",
+            ["phone"] = "+385111222",
+            ["contactEmail"] = "hello@canonical-cafe.example",
+            ["website"] = "https://canonical-cafe.example",
+            ["tags"] = new[] { "Coffee", "Local" },
+            ["amenities"] = new[] { "wifi" },
+            ["bookingPartners"] = Array.Empty<object>()
+        };
+    }
+
     private static async Task<PlaceContributionResponseDto> CreatePlaceContributionAsync(HttpClient client)
     {
         var payload = new
@@ -522,14 +591,17 @@ public sealed class ContributionPublicationTests
         return created;
     }
 
-    private static async Task<HttpResponseMessage> PostContributionAsync(HttpClient client, object payload)
+    private static async Task<HttpResponseMessage> PostContributionAsync(
+        HttpClient client,
+        object payload,
+        string endpoint = "/api/contributions")
     {
         using var formData = new MultipartFormDataContent();
         formData.Add(
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             "payload");
 
-        return await client.PostAsync("/api/contributions", formData);
+        return await client.PostAsync(endpoint, formData);
     }
 
     private static async Task AssertForbiddenAsync(HttpResponseMessage response)

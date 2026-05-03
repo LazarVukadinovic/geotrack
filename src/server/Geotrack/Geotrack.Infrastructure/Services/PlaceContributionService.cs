@@ -713,9 +713,19 @@ public class PlaceContributionService : IPlaceContributionService
         }
 
         var placeTypeId = request.PlaceTypeId;
+        if (!placeTypeId.HasValue && !string.IsNullOrWhiteSpace(request.PlaceType))
+        {
+            placeTypeId = await ResolvePlaceTypeIdAsync(request.PlaceType);
+        }
+
         if (!placeTypeId.HasValue && stayTypeId.HasValue)
         {
             placeTypeId = await ResolvePlaceTypeIdAsync("Stay");
+        }
+
+        if (!placeTypeId.HasValue)
+        {
+            placeTypeId = await ResolvePlaceTypeIdAsync("Place");
         }
 
         var location = await ResolveContributionLocationAsync(request);
@@ -771,7 +781,8 @@ public class PlaceContributionService : IPlaceContributionService
 
     private async Task<int?> ResolvePlaceTypeIdAsync(string name)
     {
-        var normalized = name.Trim().ToLowerInvariant();
+        var displayName = NormalizeRequiredName(name, "Place type", 100);
+        var normalized = displayName.ToLowerInvariant();
         var placeType = await _db.PlaceTypes
             .FirstOrDefaultAsync(x => x.Name.ToLower() == normalized);
 
@@ -780,8 +791,8 @@ public class PlaceContributionService : IPlaceContributionService
 
         placeType = new PlaceType
         {
-            Name = ToTitle(name),
-            Description = "Accommodation and stay listings",
+            Name = ToTitle(displayName),
+            Description = normalized == "stay" ? "Accommodation and stay listings" : $"{ToTitle(displayName)} listings",
             CreatedAt = DateTime.UtcNow
         };
 
@@ -1153,6 +1164,18 @@ public class PlaceContributionService : IPlaceContributionService
     private static string NormalizeDescription(string? description) =>
         description?.Trim() ?? string.Empty;
 
+    private static string NormalizeRequiredName(string? value, string fieldName, int maxLength)
+    {
+        var trimmed = value?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
+            throw new InvalidOperationException($"{fieldName} is required.");
+
+        if (trimmed.Length > maxLength)
+            throw new InvalidOperationException($"{fieldName} must be {maxLength} characters or fewer.");
+
+        return trimmed;
+    }
+
     private static string NormalizeContactEmail(string? email)
     {
         var trimmed = email?.Trim() ?? string.Empty;
@@ -1363,7 +1386,7 @@ public class PlaceContributionService : IPlaceContributionService
         {
             Id = contribution.Id,
             Type = contribution.Type.ToString(),
-            EntityType = IsAccommodationContribution(contribution) ? "Stay" : "Place",
+            EntityType = "Place",
             Name = contribution.Name,
             Subtitle = contribution.Subtitle,
             PlaceType = contribution.PlaceType?.Name,

@@ -56,7 +56,7 @@ Tabela ispod pokriva ono što je stvarno priključeno na ovoj grani.
 | Recenzije | `place-detail-page`, `hotel-detail-page` | `POST /api/places/:id/reviews` (validacija na backend-u: 1–5 ★, ≤ 1000 znakova, jedan korisnik jedna recenzija po entitetu) | Pun |
 | Omiljeno | `favorite-state.service.ts` | `POST /api/favorites/toggle` (polimorfno: `place`/`event`), `GET /api/favorites` | Pun |
 | Kolekcije | `features/profile/services/collections.ts` | Pun CRUD na `/api/user/me/collections` i `/items` | Pun |
-| Doprinosi (smeštaji) | `contributions.service.ts`, `submit-contribution`, `my-contributions`, `contribution-detail` | `GET/POST/PUT/DELETE /api/contributions`, `POST /api/contributions/stays` (multipart FormData sa cover slikom), `PUT /api/contributions/stays/:id` | Pun |
+| Doprinosi (mesta) | `contributions.service.ts`, `submit-contribution`, `my-contributions`, `contribution-detail` | `GET/POST/PUT/DELETE /api/contributions`, `POST /api/contributions/places` (multipart FormData sa cover slikom), `PUT /api/contributions/places/:id`; `/stays` je legacy alias | Pun |
 | Mapa | `map-api.service.ts`, `MapPageComponent` (maplibre-gl) | `GET /api/map/{search,reverse,route,markers,entities}` (svi pozivi ka Nominatim-u i OSRM-u idu kroz backend; markeri se traže po viewport bounds + zoom + kategorijama) | Pun |
 | Analitika | `analytics.service.ts` (eager init) | `POST /api/analytics/events` (batch envelope ≤ 50 događaja, dedup u skliznom prozoru); backend pipeline: `IAnalyticsProcessingQueue` → `AnalyticsEventProcessingWorker` → `UserInterestSignalUpdater` koji puni `UserInterestSignal` (implicitni interesi) | Pun |
 | Ask Agent | `agent.service.ts`, `agent-page` | `POST /api/agent/message` — wire postoji, ali backend trenutno odgovara keyword-stub-om | Delimičan |
@@ -130,7 +130,7 @@ Backend integracioni testovi prave privremenu PostgreSQL bazu na osnovu konfigur
 - **Auth interceptor** zakači `Authorization: Bearer` samo na same-origin `/api/*` URL-ove. Ovo je namerno — raniji bug je curio bearer ka eksternim servisima.
 - **Analitika je backend-first.** Server uvek puni `UserId` iz JWT-a; klijent ga ne podiže. Whitelist događaja (`AnalyticsEventTypes`) i entiteta (`AnalyticsEntityTypes`) je ugovor — mora se sinhronizovati i u `analytics.types.ts` na frontu, jer eventi van whitelist-a server tiho odbacuje.
 - **Mapa** je viewport-driven. Markeri se traže za trenutne `bbox + zoom + categories`, nikada "učitaj sve odjednom". Sve eksterne pozive (Nominatim, OSRM) izvršava backend; browser nema direktnu vezu ka tim servisima (zbog rate limits-a i security header-a).
-- **Doprinosi (smeštaji)** se šalju kao `multipart/form-data` (JSON `Payload` + `CoverImage` do 8 MB). Migracija `20260427003946` osigurava da kontakt email, cena po noći i URL-ovi booking partnera budu očuvani prilikom odobravanja doprinosa (kreiranja `Place` zapisa).
+- **Doprinosi (mesta)** se šalju kao `multipart/form-data` (JSON `Payload` + `CoverImage` do 8 MB) preko kanonskih `/api/contributions/places` ruta. Opcioni stay/accommodation podaci ostaju validni za smeštaje. Migracija `20260427003946` osigurava da kontakt email, cena po noći i URL-ovi booking partnera budu očuvani prilikom odobravanja doprinosa (kreiranja `Place` zapisa).
 - **Detail stranice** koriste sealed-viewport layout (`height: 100dvh; overflow: hidden`) i ne skroluju kroz `app-shell` — imaju sopstveni scroll container sa progresivnim fade-in top-bar-om.
 - **Auth stranice** (`login-page`, `register-page`, `interests-page`) namerno koriste starije Angular obrasce (constructor injection, `[(ngModel)]`, `.css` umesto `.scss`). Nije tehnički dug — preneto iz tuđeg rada i ne treba ga "popravljati" osim ako to nije eksplicitan zahtev.
 
@@ -139,7 +139,7 @@ Backend integracioni testovi prave privremenu PostgreSQL bazu na osnovu konfigur
 - **Ask Agent** — `POST /api/agent/message` postoji i frontend ga zaista poziva, ali backend trenutno generiše odgovore kroz keyword-matching stub. Provider/LLM apstrakcija, persistencija razgovora i tool registry nisu implementirani.
 - **Admin analitika** — `IAnalyticsReadService` postoji u backend-u (top entiteti, top destinacije, outbound clicks, search trends), ali nijedan kontroler ga još ne izlaže i ne postoji admin UI koji bi ga koristio.
 - **Recommendations ruta** — folder postoji, ali nije priključena na backend i nije dostupna u glavnom UI-ju.
-- **`admin-app`** — Angular skela bez ruta. Backend već ima primitive (`[Authorize(Roles="Admin")]` endpoint-i, `StayContribution` queue za odobravanje), ali UI još ne postoji.
+- **`admin-app`** — Angular skela bez ruta. Backend već ima primitive (`[Authorize(Roles="Admin")]` endpoint-i, `PlaceContribution` queue za odobravanje), ali UI još ne postoji.
 - **Settings statičke stranice** (`privacy-settings`, `help-center`, `terms-and-privacy`) — informativne, bez backend-a.
 - **Reset lozinke / brisanje naloga / privacy export** — još nisu implementirani.
 - **Object storage** — slike (avatari, doprinosi) se trenutno čuvaju lokalno u `/media/uploads/...` i serviraju kao statički fajlovi sa per-folder cache pravilima.
