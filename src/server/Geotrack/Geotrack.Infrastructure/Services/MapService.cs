@@ -1,9 +1,14 @@
 using System.Globalization;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Geotrack.Application.DTOs.Map;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Infrastructure.Spatial;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
@@ -14,6 +19,9 @@ public class MapService : IMapService
     private const string NominatimBaseUrl = "https://nominatim.openstreetmap.org";
     private const string OsrmBaseUrl = "https://router.project-osrm.org/route/v1/foot";
     private const double DestinationZoomThreshold = 10d;
+    private static readonly TimeSpan SearchCacheDuration = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan ReverseGeocodeCacheDuration = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan RouteCacheDuration = TimeSpan.FromMinutes(5);
 
     private static readonly HashSet<string> AllowedCategories = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -35,12 +43,21 @@ public class MapService : IMapService
     private readonly HttpClient _httpClient;
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
+    private readonly IMemoryCache _cache;
+    private readonly ILogger<MapService> _logger;
 
-    public MapService(HttpClient httpClient, AppDbContext db, IFavoriteService favoriteService)
+    public MapService(
+        HttpClient httpClient,
+        AppDbContext db,
+        IFavoriteService favoriteService,
+        IMemoryCache cache,
+        ILogger<MapService> logger)
     {
         _httpClient = httpClient;
         _db = db;
         _favoriteService = favoriteService;
+        _cache = cache;
+        _logger = logger;
 
         if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
         {
@@ -56,13 +73,28 @@ public class MapService : IMapService
             return new List<MapSearchResultDto>();
         }
 
+        var cacheKey = BuildCacheKey("map:search:v1", trimmed.ToLowerInvariant());
+        if (_cache.TryGetValue<List<MapSearchResultDto>>(cacheKey, out var cachedResults))
+        {
+            return cachedResults ?? new List<MapSearchResultDto>();
+        }
+
         var url =
             $"{NominatimBaseUrl}/search?format=jsonv2&q={Uri.EscapeDataString(trimmed)}&limit=5&accept-language=en&addressdetails=1&namedetails=0";
 
-        var results = await _httpClient.GetFromJsonAsync<List<NominatimSearchResult>>(url, cancellationToken)
-            ?? new List<NominatimSearchResult>();
+        List<NominatimSearchResult> results;
+        try
+        {
+            results = await _httpClient.GetFromJsonAsync<List<NominatimSearchResult>>(url, cancellationToken)
+                ?? new List<NominatimSearchResult>();
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            LogProviderFailure("nominatim-search", ex);
+            return new List<MapSearchResultDto>();
+        }
 
-        return results
+        var mappedResults = results
             .Where(result => TryParseCoordinate(result.Lat, out _) && TryParseCoordinate(result.Lon, out _))
             .Select(result => new MapSearchResultDto
             {
@@ -72,6 +104,16 @@ public class MapService : IMapService
                 Longitude = ParseCoordinate(result.Lon),
             })
             .ToList();
+
+        _cache.Set(
+            cacheKey,
+            mappedResults,
+            new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = SearchCacheDuration
+            });
+
+        return mappedResults;
     }
 
     public async Task<List<MapSearchResultDto>> SearchAsync(
@@ -193,10 +235,35 @@ public class MapService : IMapService
         double longitude,
         CancellationToken cancellationToken = default)
     {
-        var url =
-            $"{NominatimBaseUrl}/reverse?lat={FormatCoordinate(latitude)}&lon={FormatCoordinate(longitude)}&format=jsonv2&accept-language=en&addressdetails=1";
+        if (!HasValidCoordinates(latitude, longitude))
+        {
+            return null;
+        }
 
-        var result = await _httpClient.GetFromJsonAsync<NominatimReverseResult>(url, cancellationToken);
+        var normalizedLatitude = NormalizeCoordinate(latitude);
+        var normalizedLongitude = NormalizeCoordinate(longitude);
+        var cacheKey = BuildCacheKey(
+            "map:reverse:v1",
+            $"{FormatCoordinate(normalizedLatitude)},{FormatCoordinate(normalizedLongitude)}");
+        if (_cache.TryGetValue<MapReverseGeocodeDto>(cacheKey, out var cachedResult))
+        {
+            return cachedResult;
+        }
+
+        var url =
+            $"{NominatimBaseUrl}/reverse?lat={FormatCoordinate(normalizedLatitude)}&lon={FormatCoordinate(normalizedLongitude)}&format=jsonv2&accept-language=en&addressdetails=1";
+
+        NominatimReverseResult? result;
+        try
+        {
+            result = await _httpClient.GetFromJsonAsync<NominatimReverseResult>(url, cancellationToken);
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            LogProviderFailure("nominatim-reverse", ex);
+            return null;
+        }
+
         if (result is null)
         {
             return null;
@@ -214,7 +281,7 @@ public class MapService : IMapService
         var region = FirstNonEmpty(address.State, address.County);
         var country = address.Country ?? string.Empty;
 
-        return new MapReverseGeocodeDto
+        var reverseGeocode = new MapReverseGeocodeDto
         {
             Address = string.Join(" ", new[] { address.Road, address.HouseNumber }.Where(x => !string.IsNullOrWhiteSpace(x))),
             City = city,
@@ -222,6 +289,16 @@ public class MapService : IMapService
             Country = country,
             DisplayLabel = BuildDisplayLabel(city, region, country),
         };
+
+        _cache.Set(
+            cacheKey,
+            reverseGeocode,
+            new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = ReverseGeocodeCacheDuration
+            });
+
+        return reverseGeocode;
     }
 
     public async Task<MapRouteResponseDto?> GetWalkingRouteAsync(
@@ -231,10 +308,41 @@ public class MapService : IMapService
         double destinationLongitude,
         CancellationToken cancellationToken = default)
     {
-        var url =
-            $"{OsrmBaseUrl}/{FormatCoordinate(originLongitude)},{FormatCoordinate(originLatitude)};{FormatCoordinate(destinationLongitude)},{FormatCoordinate(destinationLatitude)}?overview=full&geometries=geojson";
+        if (!HasValidCoordinates(originLatitude, originLongitude) ||
+            !HasValidCoordinates(destinationLatitude, destinationLongitude))
+        {
+            return null;
+        }
 
-        var result = await _httpClient.GetFromJsonAsync<OsrmRouteResponse>(url, cancellationToken);
+        var normalizedOriginLatitude = NormalizeCoordinate(originLatitude);
+        var normalizedOriginLongitude = NormalizeCoordinate(originLongitude);
+        var normalizedDestinationLatitude = NormalizeCoordinate(destinationLatitude);
+        var normalizedDestinationLongitude = NormalizeCoordinate(destinationLongitude);
+        var cacheKey = BuildCacheKey(
+            "map:route:v1",
+            string.Join(
+                ";",
+                $"{FormatCoordinate(normalizedOriginLatitude)},{FormatCoordinate(normalizedOriginLongitude)}",
+                $"{FormatCoordinate(normalizedDestinationLatitude)},{FormatCoordinate(normalizedDestinationLongitude)}"));
+        if (_cache.TryGetValue<MapRouteResponseDto>(cacheKey, out var cachedRoute))
+        {
+            return cachedRoute;
+        }
+
+        var url =
+            $"{OsrmBaseUrl}/{FormatCoordinate(normalizedOriginLongitude)},{FormatCoordinate(normalizedOriginLatitude)};{FormatCoordinate(normalizedDestinationLongitude)},{FormatCoordinate(normalizedDestinationLatitude)}?overview=full&geometries=geojson";
+
+        OsrmRouteResponse? result;
+        try
+        {
+            result = await _httpClient.GetFromJsonAsync<OsrmRouteResponse>(url, cancellationToken);
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            LogProviderFailure("osrm-route", ex);
+            return null;
+        }
+
         var route = result?.Routes?.FirstOrDefault();
         if (!string.Equals(result?.Code, "Ok", StringComparison.OrdinalIgnoreCase) ||
             route?.Geometry?.Coordinates is not { Count: > 1 })
@@ -242,7 +350,7 @@ public class MapService : IMapService
             return null;
         }
 
-        return new MapRouteResponseDto
+        var mappedRoute = new MapRouteResponseDto
         {
             Coordinates = route.Geometry.Coordinates
                 .Where(pair => pair.Count >= 2)
@@ -251,10 +359,27 @@ public class MapService : IMapService
                     Latitude = pair[1],
                     Longitude = pair[0],
                 })
+                .Where(point => HasValidCoordinates(point.Latitude, point.Longitude))
+                .Take(5_000)
                 .ToList(),
             DistanceMeters = route.Distance,
             DurationSeconds = route.Duration,
         };
+
+        if (mappedRoute.Coordinates.Count <= 1)
+        {
+            return null;
+        }
+
+        _cache.Set(
+            cacheKey,
+            mappedRoute,
+            new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = RouteCacheDuration
+            });
+
+        return mappedRoute;
     }
 
     public async Task<GetMapEntitiesResponseDto> GetEntitiesAsync(
@@ -576,6 +701,43 @@ public class MapService : IMapService
         }
 
         return Math.Clamp(radiusKm.Value, 0.5d, 25d);
+    }
+
+    private void LogProviderFailure(string provider, Exception exception)
+    {
+        _logger.LogWarning(
+            "Map provider {Provider} request failed with {ExceptionType}.",
+            provider,
+            exception.GetType().Name);
+    }
+
+    private static bool IsProviderFailure(Exception exception, CancellationToken cancellationToken) =>
+        !cancellationToken.IsCancellationRequested &&
+        (exception is HttpRequestException ||
+         exception is TaskCanceledException ||
+         exception is JsonException ||
+         exception is NotSupportedException);
+
+    private static bool HasValidCoordinates(double latitude, double longitude)
+    {
+        return !double.IsNaN(latitude) &&
+               !double.IsNaN(longitude) &&
+               !double.IsInfinity(latitude) &&
+               !double.IsInfinity(longitude) &&
+               latitude >= -90 &&
+               latitude <= 90 &&
+               longitude >= -180 &&
+               longitude <= 180 &&
+               (latitude != 0d || longitude != 0d);
+    }
+
+    private static double NormalizeCoordinate(double value) =>
+        Math.Round(value, 5, MidpointRounding.AwayFromZero);
+
+    private static string BuildCacheKey(string prefix, string value)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return $"{prefix}:{Convert.ToHexString(hash)}";
     }
 
     private static string BuildSearchTitle(NominatimSearchResult result)

@@ -2,6 +2,7 @@
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Geotrack.Server.Controllers;
 
@@ -26,6 +27,7 @@ public class LocationController : ControllerBase
     }
 
     [HttpGet("approximate")]
+    [EnableRateLimiting("approximateLocation")]
     public async Task<IActionResult> GetApproximateLocation(CancellationToken cancellationToken)
     {
         var location = await _clientLocationResolver.ResolveApproximateLocationAsync(

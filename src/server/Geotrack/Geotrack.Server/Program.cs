@@ -109,7 +109,11 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IPlaceContributionService, PlaceContributionService>();
 builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionRepository>();
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
-builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>();
+builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("GeoTrack/1.0");
+});
 builder.Services.AddHttpClient<IMapService, MapService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
@@ -184,6 +188,56 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    // Backend-mediated map providers and spatial queries are public, so keep
+    // separate budgets for normal viewport loads and costlier external lookups.
+    options.AddPolicy("map", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserOrIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("mapSearch", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserOrIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("mapExternalLookup", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserOrIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("approximateLocation", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserOrIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
@@ -365,6 +419,17 @@ static bool ConfigureForwardedHeaders(WebApplicationBuilder builder)
     });
 
     return true;
+}
+
+static string GetUserOrIpRateLimitPartition(HttpContext httpContext)
+{
+    var userId = httpContext.User.FindFirst("userId")?.Value;
+    if (!string.IsNullOrWhiteSpace(userId))
+    {
+        return $"user:{userId}";
+    }
+
+    return $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
 }
 
 static bool TryParseNetwork(string value, out Microsoft.AspNetCore.HttpOverrides.IPNetwork network)
