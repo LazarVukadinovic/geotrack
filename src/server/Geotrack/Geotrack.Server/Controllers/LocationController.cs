@@ -9,15 +9,20 @@ namespace Geotrack.Server.Controllers;
 [Route("api/locations")]
 public class LocationController : ControllerBase
 {
+    private const string UnexpectedErrorMessage = "An unexpected error occurred.";
+
     private readonly ILocationService _locationService;
     private readonly IClientLocationResolverService _clientLocationResolver;
+    private readonly ILogger<LocationController> _logger;
 
     public LocationController(
         ILocationService locationService,
-        IClientLocationResolverService clientLocationResolver)
+        IClientLocationResolverService clientLocationResolver,
+        ILogger<LocationController> logger)
     {
         _locationService = locationService;
         _clientLocationResolver = clientLocationResolver;
+        _logger = logger;
     }
 
     [HttpGet("approximate")]
@@ -113,7 +118,19 @@ public class LocationController : ControllerBase
         {
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
-            _ => StatusCode(500, new { message = ex.Message })
+            _ => HandleUnexpectedException(ex)
         };
+    }
+
+    private IActionResult HandleUnexpectedException(Exception ex)
+    {
+        var httpContext = ControllerContext.HttpContext;
+        _logger.LogError(
+            ex,
+            "Unexpected exception while handling {Method} {Path}.",
+            httpContext?.Request.Method ?? "unknown",
+            httpContext?.Request.Path.Value ?? "unknown");
+
+        return StatusCode(StatusCodes.Status500InternalServerError, new { message = UnexpectedErrorMessage });
     }
 }

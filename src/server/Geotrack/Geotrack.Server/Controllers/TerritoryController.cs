@@ -9,11 +9,17 @@ namespace Geotrack.Server.Controllers;
 [ApiController]
 public class TerritoryController : ControllerBase
 {
-    private readonly ITerritoryService _territoryService;
+    private const string UnexpectedErrorMessage = "An unexpected error occurred.";
 
-    public TerritoryController(ITerritoryService territoryService)
+    private readonly ITerritoryService _territoryService;
+    private readonly ILogger<TerritoryController> _logger;
+
+    public TerritoryController(
+        ITerritoryService territoryService,
+        ILogger<TerritoryController> logger)
     {
         _territoryService = territoryService;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -26,7 +32,7 @@ public class TerritoryController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return MapException(ex);
         }
     }
 
@@ -38,13 +44,9 @@ public class TerritoryController : ControllerBase
             var result = await _territoryService.GetTerritoryDetailsAsync(id);
             return Ok(result);
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return MapException(ex);
         }
     }
 
@@ -57,13 +59,9 @@ public class TerritoryController : ControllerBase
             var result = await _territoryService.CreateTerritoryAsync(request);
             return Ok(result);
         }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return MapException(ex);
         }
     }
 
@@ -76,17 +74,9 @@ public class TerritoryController : ControllerBase
             await _territoryService.DeleteTerritoryAsync(id);
             return NoContent();
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return MapException(ex);
         }
     }
 
@@ -101,17 +91,9 @@ public class TerritoryController : ControllerBase
             var result = await _territoryService.CreateRegionAsync(territoryId, request);
             return Ok(result);
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return MapException(ex);
         }
     }
 
@@ -126,17 +108,31 @@ public class TerritoryController : ControllerBase
             await _territoryService.DeleteRegionAsync(territoryId, regionId);
             return NoContent();
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return MapException(ex);
         }
+    }
+
+    private IActionResult MapException(Exception ex)
+    {
+        return ex switch
+        {
+            KeyNotFoundException => NotFound(new { message = ex.Message }),
+            InvalidOperationException => BadRequest(new { message = ex.Message }),
+            _ => HandleUnexpectedException(ex)
+        };
+    }
+
+    private IActionResult HandleUnexpectedException(Exception ex)
+    {
+        var httpContext = ControllerContext.HttpContext;
+        _logger.LogError(
+            ex,
+            "Unexpected exception while handling territory request {Method} {Path}.",
+            httpContext?.Request.Method ?? "unknown",
+            httpContext?.Request.Path.Value ?? "unknown");
+
+        return StatusCode(StatusCodes.Status500InternalServerError, new { message = UnexpectedErrorMessage });
     }
 }
