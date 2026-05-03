@@ -1,6 +1,7 @@
 import { Component, ElementRef, ViewChild, NgZone, ChangeDetectorRef, AfterViewInit, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 
@@ -12,6 +13,18 @@ interface ClassItem {
 }
 
 const CX = 110, CY = 110, R = 80;
+
+// Mock data types
+interface VenueItem {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  // For locations: zone polygon latlngs; for places: just a pin
+  zone?: [number, number][];
+  radius?: number; // for circle zones
+}
 
 @Component({
   selector: 'app-new-event',
@@ -35,13 +48,17 @@ const CX = 110, CY = 110, R = 80;
 })
 export class NewEventComponent implements AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private cdr: ChangeDetectorRef) {}
+  constructor(
+    private zone: NgZone,
+    private cdr: ChangeDetectorRef,
+    private router: Router
+  ) {}
 
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
-  //Basic fields
+  // Basic fields
   eventTitle = 'Summer Festival';
   venueType  = 'location';
   allDay     = false;
@@ -52,7 +69,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   startTime  = '21:00';
   endTime    = '05:00';
 
-  //Rich text editor
+  // Rich text editor
   isBold        = false;
   isItalic      = false;
   isUnderline   = false;
@@ -88,7 +105,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this.isUnderline = document.queryCommandState('underline');
   }
 
-  //Cover image
+  // Cover image
   coverImageUrl : string | null = null;
   coverImageName: string        = '';
 
@@ -107,7 +124,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this.coverImageName = '';
   }
 
-  //Gallery
+  // Gallery
   galleryImages: { url: string; name: string }[] = [];
 
   onGalleryImagesSelected(event: Event): void {
@@ -124,7 +141,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this.galleryImages.splice(index, 1);
   }
 
-  //Lightbox
+  // Lightbox
   private lightboxEl: HTMLElement | null = null;
   private _lightboxKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _currentImages: { url: string; name: string }[] = [];
@@ -152,39 +169,33 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;';
     overlay.addEventListener('click', () => this.closeLightbox());
-
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&times;';
     closeBtn.style.cssText = 'position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
     closeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.closeLightbox(); });
     overlay.appendChild(closeBtn);
-
     if (!single) {
       const counter = document.createElement('div');
       counter.textContent = `${idx + 1} / ${imgs.length}`;
       counter.style.cssText = 'position:absolute;top:16px;left:50%;transform:translateX(-50%);color:white;font-size:14px;font-weight:500;background:rgba(0,0,0,0.4);padding:4px 12px;border-radius:20px;z-index:1;';
       overlay.appendChild(counter);
-
       const prev = document.createElement('button');
       prev.innerHTML = '&#8249;';
       prev.style.cssText = 'position:absolute;left:16px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
       prev.addEventListener('click', (e) => { e.stopPropagation(); this._currentIndex = (idx - 1 + imgs.length) % imgs.length; this._renderLightbox(); });
       overlay.appendChild(prev);
     }
-
     const img = document.createElement('img');
     img.src = imgs[idx].url; img.alt = imgs[idx].name;
     img.style.cssText = 'max-width:88vw;max-height:80vh;object-fit:contain;border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.5);';
     img.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(img);
-
     if (!single) {
       const next = document.createElement('button');
       next.innerHTML = '&#8250;';
       next.style.cssText = 'position:absolute;right:16px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
       next.addEventListener('click', (e) => { e.stopPropagation(); this._currentIndex = (idx + 1) % imgs.length; this._renderLightbox(); });
       overlay.appendChild(next);
-
       const thumbRow = document.createElement('div');
       thumbRow.style.cssText = 'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:1;';
       thumbRow.addEventListener('click', (e) => e.stopPropagation());
@@ -198,7 +209,6 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       });
       overlay.appendChild(thumbRow);
     }
-
     document.body.appendChild(overlay);
     this.lightboxEl = overlay;
   }
@@ -209,15 +219,12 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     document.body.style.overflow = '';
   }
 
+  // Date/time pickers
   activePicker: string | null = null;
-
   calendarYear  = new Date().getFullYear();
   calendarMonth = new Date().getMonth();
 
-  readonly monthNames = [
-    'January','February','March','April','May','June',
-    'July','August','September','October','November','December'
-  ];
+  readonly monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   readonly weekDays = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
   get calendarDays(): number[] {
@@ -243,9 +250,8 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (!day) return;
     const m = String(this.calendarMonth + 1).padStart(2, '0');
     const d = String(day).padStart(2, '0');
-    const iso = `${this.calendarYear}-${m}-${d}`;
-    if (field === 'startDate') this.startDate = iso;
-    else                       this.endDate   = iso;
+    if (field === 'startDate') this.startDate = `${this.calendarYear}-${m}-${d}`;
+    else                       this.endDate   = `${this.calendarYear}-${m}-${d}`;
     this.activePicker = null;
   }
 
@@ -258,9 +264,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   isToday(day: number): boolean {
     if (!day) return false;
     const now = new Date();
-    return now.getFullYear() === this.calendarYear &&
-           now.getMonth()    === this.calendarMonth &&
-           now.getDate()     === day;
+    return now.getFullYear() === this.calendarYear && now.getMonth() === this.calendarMonth && now.getDate() === day;
   }
 
   formatDisplayDate(iso: string): string {
@@ -268,13 +272,12 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     const [y, m, d] = iso.split('-').map(Number);
     return `${this.monthNames[m - 1].slice(0, 3)} ${d}, ${y}`;
   }
+
   private todayIso(): string {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   }
+
   get startDateDisplay(): string { return this.isoToDisplay(this.startDate); }
   get endDateDisplay():   string { return this.isoToDisplay(this.endDate); }
 
@@ -285,28 +288,18 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   }
 
   private displayToIso(display: string): string | null {
-    const clean = display.replace(/[\/\-\s]/g, '.');
-    const parts = clean.split('.');
+    const parts = display.replace(/[\/\-\s]/g, '.').split('.');
     if (parts.length !== 3) return null;
     const [d, m, y] = parts.map(p => p.padStart(2, '0'));
     if (!d || !m || !y || y.length < 4) return null;
     const day = parseInt(d), month = parseInt(m), year = parseInt(y);
-    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    if (isNaN(day) || isNaN(month) || isNaN(year) || month < 1 || month > 12 || day < 1 || day > 31) return null;
     return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
   }
 
   onDateTextInput(event: Event, field: 'startDate' | 'endDate'): void {
     const input = event.target as HTMLInputElement;
-    let val = input.value.replace(/[^\d\.\/]/g, '');
-    const digits = val.replace(/\D/g, '');
-    if (digits.length >= 3 && digits.length <= 4 && !val.includes('.')) {
-      val = digits.slice(0, 2) + '.' + digits.slice(2);
-    } else if (digits.length >= 5 && val.split('.').length < 3) {
-      const d = digits.slice(0, 2), m = digits.slice(2, 4), y = digits.slice(4);
-      val = `${d}.${m}.${y ? '.' + y : ''}`.replace('..', '.');
-    }
-    input.value = val;
+    input.value = input.value.replace(/[^\d\.\/]/g, '');
   }
 
   onDateTextBlur(event: Event, field: 'startDate' | 'endDate'): void {
@@ -320,6 +313,8 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       input.value = field === 'startDate' ? this.startDateDisplay : this.endDateDisplay;
     }
   }
+
+  // Clock
   clockMode: 'hour' | 'minute' = 'hour';
   selectedHour   = 12;
   selectedMinute = 0;
@@ -329,7 +324,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   readonly clockCY = CY;
   readonly clockR  = R;
 
-  get clockHourMarkers(): { value: number; x: number; y: number; selected: boolean }[] {
+  get clockHourMarkers() {
     return Array.from({ length: 12 }, (_, i) => {
       const h = i + 1;
       const angle = (h / 12) * Math.PI * 2 - Math.PI / 2;
@@ -337,7 +332,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  get clockMinuteMarkers(): { value: number; x: number; y: number; selected: boolean }[] {
+  get clockMinuteMarkers() {
     return Array.from({ length: 12 }, (_, i) => {
       const m = i * 5;
       const angle = (m / 60) * Math.PI * 2 - Math.PI / 2;
@@ -346,11 +341,9 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   }
 
   get clockHandEnd(): { x: number; y: number } {
-    if (this.clockMode === 'hour') {
-      const angle = (this.selectedHour / 12) * Math.PI * 2 - Math.PI / 2;
-      return { x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle) };
-    }
-    const angle = (this.selectedMinute / 60) * Math.PI * 2 - Math.PI / 2;
+    const angle = this.clockMode === 'hour'
+      ? (this.selectedHour / 12) * Math.PI * 2 - Math.PI / 2
+      : (this.selectedMinute / 60) * Math.PI * 2 - Math.PI / 2;
     return { x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle) };
   }
 
@@ -360,15 +353,12 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   onClockInteraction(event: MouseEvent | TouchEvent, svgEl: Element): void {
     event.preventDefault();
     event.stopPropagation();
-
-    const rect  = svgEl.getBoundingClientRect();
+    const rect    = svgEl.getBoundingClientRect();
     const clientX = event instanceof TouchEvent ? event.touches[0].clientX : event.clientX;
     const clientY = event instanceof TouchEvent ? event.touches[0].clientY : event.clientY;
-
-    const svgX = (clientX - rect.left)  / rect.width  * 220;
-    const svgY = (clientY - rect.top)   / rect.height * 220;
-    const angle = Math.atan2(svgY - CY, svgX - CX);
-
+    const svgX    = (clientX - rect.left) / rect.width  * 220;
+    const svgY    = (clientY - rect.top)  / rect.height * 220;
+    const angle   = Math.atan2(svgY - CY, svgX - CX);
     if (this.clockMode === 'hour') {
       let h = Math.round((angle + Math.PI / 2) / (Math.PI * 2) * 12);
       if (h <= 0) h += 12;
@@ -391,22 +381,20 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this._clockSvgEl = svgEl;
     this.onClockInteraction(event, svgEl);
   }
+
   isClockHourNear(h: number): boolean {
     const diff = Math.abs(h - this.selectedHour);
     return diff === 1 || diff === 11;
   }
 
   isClockMinuteNear(m: number): boolean {
-    const curr = this.selectedMinute;
-    const diff = Math.abs(m - curr);
+    const diff = Math.abs(m - this.selectedMinute);
     return diff === 5 || diff === 55;
   }
 
   @HostListener('document:mousemove', ['$event'])
   onDocumentMouseMove(event: MouseEvent): void {
-    if (this._clockDragging && this._clockSvgEl) {
-      this.onClockInteraction(event, this._clockSvgEl);
-    }
+    if (this._clockDragging && this._clockSvgEl) this.onClockInteraction(event, this._clockSvgEl);
   }
 
   @HostListener('document:mouseup')
@@ -416,7 +404,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     let h = this.selectedHour;
     if (this.selectedAmPm === 'AM' && h === 12) h = 0;
     if (this.selectedAmPm === 'PM' && h !== 12) h += 12;
-    const timeStr = `${String(h).padStart(2, '0')}:${String(this.selectedMinute).padStart(2, '0')}`;
+    const timeStr = `${String(h).padStart(2,'0')}:${String(this.selectedMinute).padStart(2,'0')}`;
     if (field === 'startTime') this.startTime = timeStr;
     else                       this.endTime   = timeStr;
     this.activePicker = null;
@@ -428,31 +416,20 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     const ampm = hh >= 12 ? 'PM' : 'AM';
     let h = hh % 12;
     if (h === 0) h = 12;
-    return `${h}:${String(mm).padStart(2, '0')} ${ampm}`;
+    return `${h}:${String(mm).padStart(2,'0')} ${ampm}`;
   }
-
 
   togglePicker(name: string, event: MouseEvent): void {
     event.stopPropagation();
     if (this.activePicker === name) { this.activePicker = null; return; }
     this.activePicker = name;
-
     if (name === 'startDate' || name === 'endDate') {
       const iso = name === 'startDate' ? this.startDate : this.endDate;
-      if (iso) {
-        const [y, m] = iso.split('-').map(Number);
-        this.calendarYear  = y;
-        this.calendarMonth = m - 1;
-      } else {
-        const now = new Date();
-        this.calendarYear  = now.getFullYear();
-        this.calendarMonth = now.getMonth();
-      }
+      if (iso) { const [y, m] = iso.split('-').map(Number); this.calendarYear = y; this.calendarMonth = m - 1; }
+      else { const now = new Date(); this.calendarYear = now.getFullYear(); this.calendarMonth = now.getMonth(); }
     }
-
     if (name === 'startTime' || name === 'endTime') {
-      const t = name === 'startTime' ? this.startTime : this.endTime;
-      this._loadClockState(t);
+      this._loadClockState(name === 'startTime' ? this.startTime : this.endTime);
       this.clockMode = 'hour';
     }
   }
@@ -469,27 +446,157 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   @HostListener('document:click')
   onDocumentClick(): void {
     if (this._clockDragging) return;
-    if (this.activePicker) {
-      this.activePicker = null;
-      this.cdr.detectChanges();
-    }
+    if (this.activePicker) { this.activePicker = null; this.cdr.detectChanges(); }
+    if (this.venueDropdownOpen) { this.venueDropdownOpen = false; this.cdr.detectChanges(); }
   }
 
-  //Geographic pin / Leaflet
-  pinModalOpen = false;
-  pinConfirmed = false;
+  // Mock data
+
+  private readonly mockLocations: VenueItem[] = [
+    {
+      id: 'l1', name: 'Šumarice Memorial Park', address: 'Kragujevac, Serbia',
+      lat: 44.0213, lng: 20.8943,
+      zone: [[44.0250, 20.8890], [44.0270, 20.8980], [44.0240, 20.9020], [44.0200, 20.9010], [44.0185, 20.8950], [44.0200, 20.8890]],
+    },
+    {
+      id: 'l2', name: 'City Center Kragujevac', address: 'Trg Radomira Putnika, Kragujevac',
+      lat: 44.011028, lng: 20.916156,
+      zone: [[44.0135, 20.9090], [44.0140, 20.9200], [44.0100, 20.9220], [44.0085, 20.9130], [44.0110, 20.9080]],
+    },
+    {
+      id: 'l3', name: 'Veliki Park', address: 'Kragujevackog oktobra bb, Kragujevac',
+      lat: 44.0178, lng: 20.9042,
+      zone: [[44.0195, 20.9010], [44.0200, 20.9075], [44.0165, 20.9080], [44.0155, 20.9015]],
+    },
+    {
+      id: 'l4', name: 'Bubanj Lake', address: 'Lepenicki bulevar bb, Kragujevac',
+      lat: 44.0169, lng: 20.9258,
+      zone: [[44.0185, 20.9220], [44.0190, 20.9310], [44.0155, 20.9315], [44.0148, 20.9225]],
+    },
+  ];
+
+  private readonly mockPlaces: VenueItem[] = [
+    { id: 'p1', name: 'Sumadija sajam', address: 'Save Kovacevica bb, Kragujevac', lat: 44.024755, lng: 20.930476 },
+    { id: 'p2', name: 'Knjazevsko-srpski teatar', address: 'Daniciceva 3, Kragujevac', lat: 44.0106, lng: 20.9103 },
+    { id: 'p3', name: 'Hala Jezero', address: 'Grada Sirena 15, Kragujevac', lat: 44.013856, lng: 20.924125 },
+    { id: 'p4', name: 'Stadion Cika Daca', address: 'Kralja Milana 4, Kragujevac', lat: 44.021171, lng: 20.899104 },
+  ];
+
+  // Venue search state
+  venueSearchQuery     = '';
+  venueDropdownOpen    = false;
+  isSearchingVenue     = false;
+  filteredVenueResults: VenueItem[] = [];
+  selectedVenue: VenueItem | null   = null;
+  selectedVenueAreaKm2: number | null = null;
+
+  // Geo fields
   pinLat: string = '';
   pinLng: string = '';
   streetAddress: string = '';
-  isGeocodingAddress = false;
-  modalPinLat: number | null = null;
-  modalPinLng: number | null = null;
+  pinConfirmed = false;
+
+  // Map modal
+  mapModalOpen = false;
 
   private miniMap    : any = null;
   private modalMap   : any = null;
   private miniMarker : any = null;
+  private miniZoneLayer: any = null;
+  private modalZoneLayer: any = null;
   private modalMarker: any = null;
-  private _geocodeDebounce: any = null;
+
+  private _venueSearchDebounce: any = null;
+
+
+  navigateToAddVenue(): void {
+    this.venueDropdownOpen = false;
+    this.router.navigate([this.venueType === 'place' ? '/places/new' : '/locations/new']);
+  }
+
+  // Venue search
+
+  onVenueTypeChange(): void {
+    this.venueSearchQuery = '';
+    this.filteredVenueResults = [];
+    this.venueDropdownOpen = false;
+    this.selectedVenue = null;
+    this.selectedVenueAreaKm2 = null;
+    this.clearGeoFields();
+    this.clearMiniMapLayers();
+    if (this.miniMap) this.miniMap.setView([44.0, 20.9], 8);
+  }
+
+  onVenueSearch(): void {
+    if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
+    const q = this.venueSearchQuery.trim().toLowerCase();
+    this.venueDropdownOpen = true;
+    if (q.length < 1) {
+      this.filteredVenueResults = (this.venueType === 'place' ? this.mockPlaces : this.mockLocations);
+      return;
+    }
+    this.isSearchingVenue = true;
+    this._venueSearchDebounce = setTimeout(() => {
+      const source = this.venueType === 'place' ? this.mockPlaces : this.mockLocations;
+      this.filteredVenueResults = source.filter(
+        item => item.name.toLowerCase().includes(q) || item.address.toLowerCase().includes(q)
+      );
+      this.isSearchingVenue = false;
+      this.cdr.detectChanges();
+    }, 200);
+  }
+
+  onVenueSearchFocus(): void {
+    const q = this.venueSearchQuery.trim().toLowerCase();
+    const source = this.venueType === 'place' ? this.mockPlaces : this.mockLocations;
+    this.filteredVenueResults = q.length === 0
+      ? source
+      : source.filter(item => item.name.toLowerCase().includes(q) || item.address.toLowerCase().includes(q));
+    this.venueDropdownOpen = true;
+  }
+
+  selectVenue(item: VenueItem): void {
+    this.selectedVenue    = item;
+    this.venueSearchQuery = item.name;
+    this.venueDropdownOpen = false;
+    this.pinConfirmed = true;
+
+    if (this.venueType === 'place') {
+      this.pinLat       = item.lat.toFixed(6);
+      this.pinLng       = item.lng.toFixed(6);
+      this.streetAddress = item.address;
+      this.updateMiniMapPin(item.lat, item.lng);
+    } else {
+      this.pinLat = '';
+      this.pinLng = '';
+      this.streetAddress = '';
+      if (item.zone) {
+        this.updateMiniMapZone(item.zone);
+        this.selectedVenueAreaKm2 = this.shoelaceAreaKm2(item.zone);
+      }
+    }
+  }
+
+  clearVenue(): void {
+    this.selectedVenue    = null;
+    this.venueSearchQuery = '';
+    this.selectedVenueAreaKm2 = null;
+    this.clearGeoFields();
+    this.clearMiniMapLayers();
+    if (this.miniMap) this.miniMap.setView([44.0, 20.9], 8);
+    this.pinConfirmed = false;
+  }
+
+  private clearGeoFields(): void {
+    this.pinLat       = '';
+    this.pinLng       = '';
+    this.streetAddress = '';
+  }
+
+  private clearMiniMapLayers(): void {
+    if (this.miniMarker   && this.miniMap) { this.miniMap.removeLayer(this.miniMarker);    this.miniMarker    = null; }
+    if (this.miniZoneLayer && this.miniMap) { this.miniMap.removeLayer(this.miniZoneLayer); this.miniZoneLayer = null; }
+  }
 
   private makePinIcon(): any {
     return L.divIcon({
@@ -512,148 +619,70 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.miniMap);
   }
 
+  private updateMiniMapPin(lat: number, lng: number): void {
+    if (!this.miniMap) this.initMiniMap();
+    if (!this.miniMap) return;
+    this.clearMiniMapLayers();
+    this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.miniMap);
+    this.miniMap.setView([lat, lng], 14);
+  }
+
+  private updateMiniMapZone(zone: [number, number][]): void {
+    if (!this.miniMap) this.initMiniMap();
+    if (!this.miniMap) return;
+    this.clearMiniMapLayers();
+    this.miniZoneLayer = L.polygon(zone, {
+      color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
+    }).addTo(this.miniMap);
+    try { this.miniMap.fitBounds(this.miniZoneLayer.getBounds(), { padding: [10, 10] }); } catch {}
+  }
+
+  // Modal map
 
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap) return;
-    const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
-    const center: [number, number] = (!isNaN(lat) && !isNaN(lng)) ? [lat, lng] : [44.0, 20.9];
-    const zoom = !isNaN(lat) ? 15 : 9;
+
+    let center: [number, number] = [44.0, 20.9];
+    let zoom = 9;
+
+    if (this.selectedVenue) {
+      if (this.venueType === 'place') {
+        const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
+        if (!isNaN(lat) && !isNaN(lng)) { center = [lat, lng]; zoom = 15; }
+      } else if (this.selectedVenue.zone && this.selectedVenue.zone.length) {
+        const lats = this.selectedVenue.zone.map(p => p[0]);
+        const lngs = this.selectedVenue.zone.map(p => p[1]);
+        center = [(Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2];
+        zoom = 13;
+      }
+    }
+
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false }).setView(center, zoom);
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.modalMap);
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
-    if (!isNaN(lat) && !isNaN(lng)) {
-      this.modalMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.modalMap);
+
+    if (this.selectedVenue) {
+      if (this.venueType === 'place') {
+        const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          this.modalMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.modalMap);
+        }
+      } else if (this.selectedVenue.zone) {
+        this.modalZoneLayer = L.polygon(this.selectedVenue.zone, {
+          color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
+        }).addTo(this.modalMap);
+        try { this.modalMap.fitBounds(this.modalZoneLayer.getBounds(), { padding: [30, 30] }); } catch {}
+      }
     }
   }
 
   private destroyModalMap(): void {
-    if (this.modalMap) { this.modalMap.remove(); this.modalMap = null; this.modalMarker = null; }
-  }
-
-  private updateMiniMapPin(lat: number, lng: number): void {
-    if (!this.miniMap) this.initMiniMap();
-    if (!this.miniMap) return;
-    if (this.miniMarker) this.miniMarker.setLatLng([lat, lng]);
-    else this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.miniMap);
-    this.miniMap.setView([lat, lng], 14);
-  }
-
-  //Classification
-  classItems: ClassItem[] = [
-    { label: 'Music',           checked: false },
-    { label: 'Outdoor',         checked: false },
-    { label: 'Culture',         checked: false },
-    { label: 'Family Friendly', checked: false },
-  ];
-
-  //Tags
-  tags    : string[] = [];
-  tagInput: string   = '';
-
-  addTag(event: Event): void {
-    event.preventDefault();
-    const value = this.tagInput.trim();
-    if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
-    this.tags     = [...this.tags, value];
-    this.tagInput = '';
-  }
-
-  removeTag(tag: string): void {
-    this.tags = this.tags.filter(t => t !== tag);
-  }
-
-  //Lifecycle
-  ngAfterViewInit(): void { setTimeout(() => this.initMiniMap(), 0); }
-
-  ngOnDestroy(): void {
-    this.destroyModalMap();
-    this.closeLightbox();
-    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
-    if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
-    if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
-  }
-  // Mock data
-  private readonly mockLocations = [
-    { id: 'l1', name: 'Šumarice Memorial Park', address: 'Kragujevac, Serbia', lat: 44.0213, lng: 20.8943 },
-    { id: 'l2', name: 'City Center Kragujevac', address: 'Trg Radomira Putnika, Kragujevac', lat: 44.011028, lng: 20.916156 },
-    { id: 'l3', name: 'Veliki Park', address: 'Kragujevackog oktobra bb, Kragujevac', lat: 44.0178, lng: 20.9042 },
-    { id: 'l4', name: 'Bubanj Lake', address: 'Lepenicki bulevar bb, Kragujevac', lat: 44.0169, lng: 20.9258 },
-  ];
-
-  private readonly mockPlaces = [
-    { id: 'p1', name: 'Sumadija sajam', address: 'Save Kovacevica bb, Kragujevac', lat: 44.024755, lng: 20.930476 },
-    { id: 'p2', name: 'Knjazevsko-srpski teatar', address: 'Daniciceva 3, Kragujevac', lat: 44.0106, lng: 20.9103 },
-    { id: 'p3', name: 'Hala Jezero', address: 'Grada Sirena 15, Kragujevac', lat: 44.013856, lng: 20.924125 },
-    { id: 'p4', name: 'Stadion Cika Daca', address: 'Kralja Milana 4, Kragujevac', lat: 44.021171, lng: 20.899104 },
-  ];
-
-  // Venue search state
-  venueSearchQuery    = '';
-  venueDropdownOpen   = false;
-  isSearchingVenue    = false;
-  filteredVenueResults: { id: string; name: string; address: string; lat: number; lng: number }[] = [];
-  selectedVenue: { id: string; name: string; address: string; lat: number; lng: number } | null = null;
-
-  // Map modal
-  mapModalOpen = false;
-
-  private _venueSearchDebounce: any = null;
-
-  onVenueTypeChange(): void {
-    this.venueSearchQuery = '';
-    this.filteredVenueResults = [];
-    this.venueDropdownOpen = false;
-    this.selectedVenue = null;
-    this.clearGeoFields();
-  }
-
-  onVenueSearch(): void {
-    if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
-    const q = this.venueSearchQuery.trim().toLowerCase();
-    if (q.length < 1) { this.venueDropdownOpen = false; this.filteredVenueResults = []; return; }
-    this.isSearchingVenue = true;
-    this.venueDropdownOpen = true;
-    this._venueSearchDebounce = setTimeout(() => {
-      const source = this.venueType === 'place' ? this.mockPlaces : this.mockLocations;
-      this.filteredVenueResults = source.filter(
-        item => item.name.toLowerCase().includes(q) || item.address.toLowerCase().includes(q)
-      );
-      this.isSearchingVenue = false;
-      this.cdr.detectChanges();
-    }, 300);
-  }
-
-  onVenueSearchFocus(): void {
-    if (this.venueSearchQuery.trim().length > 0) {
-      this.venueDropdownOpen = true;
+    if (this.modalMap) {
+      this.modalMap.remove();
+      this.modalMap = null;
+      this.modalMarker = null;
+      this.modalZoneLayer = null;
     }
-  }
-
-  selectVenue(item: { id: string; name: string; address: string; lat: number; lng: number }): void {
-    this.selectedVenue     = item;
-    this.venueSearchQuery  = item.name;
-    this.venueDropdownOpen = false;
-    this.pinLat            = item.lat.toFixed(6);
-    this.pinLng            = item.lng.toFixed(6);
-    this.streetAddress     = item.address;
-    this.pinConfirmed      = true;
-    this.updateMiniMapPin(item.lat, item.lng);
-  }
-
-  clearVenue(): void {
-    this.selectedVenue    = null;
-    this.venueSearchQuery = '';
-    this.clearGeoFields();
-    if (this.miniMarker) { this.miniMap?.removeLayer(this.miniMarker); this.miniMarker = null; }
-    if (this.miniMap) this.miniMap.setView([44.0, 20.9], 8);
-    this.pinConfirmed = false;
-  }
-
-  private clearGeoFields(): void {
-    this.pinLat       = '';
-    this.pinLng       = '';
-    this.streetAddress = '';
   }
 
   openMapModal(): void {
@@ -665,5 +694,57 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   closeMapModal(): void {
     this.mapModalOpen = false;
     this.destroyModalMap();
+  }
+
+  // Area calculation
+
+  private shoelaceAreaKm2(zone: [number, number][]): number {
+    const R = 6_371_000;
+    let area = 0;
+    const n = zone.length;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const lat1 = (zone[i][0] * Math.PI) / 180;
+      const lat2 = (zone[j][0] * Math.PI) / 180;
+      const lng1 = (zone[i][1] * Math.PI) / 180;
+      const lng2 = (zone[j][1] * Math.PI) / 180;
+      area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+    }
+    return Math.abs((area * R * R) / 2) / 1_000_000;
+  }
+
+  // Classification & Tags
+  classItems: ClassItem[] = [
+    { label: 'Music',           checked: false },
+    { label: 'Outdoor',         checked: false },
+    { label: 'Culture',         checked: false },
+    { label: 'Family Friendly', checked: false },
+  ];
+
+  tags    : string[] = [];
+  tagInput: string   = '';
+
+  addTag(event: Event): void {
+    event.preventDefault();
+    const value = this.tagInput.trim();
+    if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
+    this.tags = [...this.tags, value];
+    this.tagInput = '';
+  }
+
+  removeTag(tag: string): void {
+    this.tags = this.tags.filter(t => t !== tag);
+  }
+
+  // Lifecycle
+  ngAfterViewInit(): void { setTimeout(() => this.initMiniMap(), 0); }
+
+  ngOnDestroy(): void {
+    this.destroyModalMap();
+    this.closeLightbox();
+    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
+    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
+    if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
+    if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
   }
 }
