@@ -2,6 +2,7 @@ using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Infrastructure.Spatial;
@@ -247,8 +248,6 @@ public class PlaceService : IPlaceService
                 .ThenInclude(pt => pt.Tag)
             .Include(p => p.PlaceReviews)
                 .ThenInclude(r => r.User)
-            .Include(p => p.PlaceAmenities)
-                .ThenInclude(pa => pa.Amenity)
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(pb => pb.BookingPartner)
             .FirstOrDefaultAsync(p => p.Id == id && p.Stay != null);
@@ -290,14 +289,6 @@ public class PlaceService : IPlaceService
             place.Latitude,
             place.Longitude);
 
-        var placeAmenities = place.PlaceAmenities
-            .Select(pa => new AmenityDto
-            {
-                Id = pa.Amenity.Id,
-                Label = pa.Amenity.Name,
-                Icon = pa.Amenity.Icon
-            });
-
         var stayAmenities = place.Stay?.StayAmenities
             .Select(sa => new AmenityDto
             {
@@ -333,8 +324,7 @@ public class PlaceService : IPlaceService
                     Url = pb.Url
                 })
                 .ToList(),
-            Amenities = placeAmenities
-                .Concat(stayAmenities)
+            Amenities = stayAmenities
                 .GroupBy(a => new { a.Label, a.Icon })
                 .Select(g => g.First())
                 .ToList(),

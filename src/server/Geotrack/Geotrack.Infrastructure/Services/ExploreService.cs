@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;

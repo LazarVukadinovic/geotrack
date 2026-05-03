@@ -1,3 +1,4 @@
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
@@ -10,6 +11,8 @@ namespace Geotrack.Server;
 
 public static class SeedData
 {
+    private static readonly System.Threading.SemaphoreSlim InitializationLock = new(1, 1);
+
     private sealed record SeedTagDefinition(
         string Name,
         string Slug,
@@ -27,6 +30,19 @@ public static class SeedData
 
     public static async Task InitializeAsync(AppDbContext db)
     {
+        await InitializationLock.WaitAsync();
+        try
+        {
+            await InitializeCoreAsync(db);
+        }
+        finally
+        {
+            InitializationLock.Release();
+        }
+    }
+
+    private static async Task InitializeCoreAsync(AppDbContext db)
+    {
         await db.Database.MigrateAsync();
 
         if (await db.Destinations.AnyAsync())
@@ -34,6 +50,7 @@ public static class SeedData
             await EnsureRolesAsync(db);
             await EnsureDemoUsersAsync(db);
             await EnsureSeedTagsAsync(db);
+            await EnsureDefaultModerationTermsAsync(db);
             return;
         }
 
@@ -524,11 +541,7 @@ public static class SeedData
         // Place amenities and booking partners
         db.PlaceAmenities.AddRange(
             new PlaceAmenity { PlaceId = nautika.Id, AmenityId = A("wifi").Id },
-            new PlaceAmenity { PlaceId = cogito.Id, AmenityId = A("wifi").Id },
-            new PlaceAmenity { PlaceId = villaAdriatica.Id, AmenityId = A("wifi").Id },
-            new PlaceAmenity { PlaceId = villaAdriatica.Id, AmenityId = A("parking").Id },
-            new PlaceAmenity { PlaceId = hotelExcelsior.Id, AmenityId = A("wifi").Id },
-            new PlaceAmenity { PlaceId = oldTownApartment.Id, AmenityId = A("wifi").Id }
+            new PlaceAmenity { PlaceId = cogito.Id, AmenityId = A("wifi").Id }
         );
 
         db.PlaceBookingPartners.AddRange(
@@ -726,8 +739,8 @@ public static class SeedData
 
         await db.SaveChangesAsync();
 
-        // Demo pending update contribution for an existing stay
-        var updateStayContribution = new PlaceContribution
+        // Demo pending place contribution that updates an existing stay.
+        var updatePlaceContribution = new PlaceContribution
         {
             Type = PlaceContributionType.UpdatePlace,
             Status = PlaceContributionStatus.PendingReview,
@@ -767,13 +780,13 @@ public static class SeedData
             CreatedAt = now
         };
 
-        db.PlaceContributions.Add(updateStayContribution);
+        db.PlaceContributions.Add(updatePlaceContribution);
         await db.SaveChangesAsync();
 
         db.PlaceContributionImages.AddRange(
             new PlaceContributionImage
             {
-                PlaceContributionId = updateStayContribution.Id,
+                PlaceContributionId = updatePlaceContribution.Id,
                 Url = U("1566073771259-6a6300d8226c"),
                 IsMain = true,
                 SortOrder = 0,
@@ -781,7 +794,7 @@ public static class SeedData
             },
             new PlaceContributionImage
             {
-                PlaceContributionId = updateStayContribution.Id,
+                PlaceContributionId = updatePlaceContribution.Id,
                 Url = U("1564501049412-61c2a3083791"),
                 IsMain = false,
                 SortOrder = 1,
@@ -790,6 +803,7 @@ public static class SeedData
         );
 
         await db.SaveChangesAsync();
+        await EnsureDefaultModerationTermsAsync(db);
     }
 
     private static void AddEntityImage(
@@ -882,6 +896,49 @@ public static class SeedData
         });
 
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureDefaultModerationTermsAsync(AppDbContext db)
+    {
+        var defaults = new (string Term, string LanguageCode, ModerationTermCategory Category, ModerationTermMatchType MatchType, int Severity)[]
+        {
+            ("shit", "en", ModerationTermCategory.Profanity, ModerationTermMatchType.Exact, 2),
+            ("jebeno", "sr", ModerationTermCategory.Profanity, ModerationTermMatchType.Exact, 2)
+        };
+
+        var now = DateTime.UtcNow;
+        var changed = false;
+
+        foreach (var rule in defaults)
+        {
+            var normalized = ModerationTextNormalizer.NormalizeForModeration(rule.Term);
+            var exists = await db.ModerationTerms.AnyAsync(term =>
+                term.LanguageCode == rule.LanguageCode &&
+                term.NormalizedTerm == normalized &&
+                term.Category == rule.Category &&
+                term.MatchType == rule.MatchType);
+
+            if (exists)
+                continue;
+
+            db.ModerationTerms.Add(new ModerationTerm
+            {
+                Term = rule.Term,
+                NormalizedTerm = normalized,
+                LanguageCode = rule.LanguageCode,
+                Category = rule.Category,
+                MatchType = rule.MatchType,
+                IsActive = true,
+                Severity = rule.Severity,
+                CreatedAt = now
+            });
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task EnsureDemoUsersAsync(AppDbContext db)

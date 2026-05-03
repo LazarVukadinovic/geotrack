@@ -16,7 +16,14 @@ internal static class PostgisStartup
         {
             if (attemptEnable)
             {
-                await db.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS postgis", cancellationToken);
+                try
+                {
+                    await db.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS postgis", cancellationToken);
+                }
+                catch (PostgresException ex) when (IsDuplicateExtensionName(ex))
+                {
+                    // A parallel test/dev bootstrap may already have created it; verify below.
+                }
             }
 
             await using var connection = db.Database.GetDbConnection();
@@ -48,5 +55,11 @@ internal static class PostgisStartup
         return ex.MessageText.Contains("postgis", StringComparison.OrdinalIgnoreCase)
             || ex.Detail?.Contains("postgis", StringComparison.OrdinalIgnoreCase) == true
             || ex.Hint?.Contains("postgis", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static bool IsDuplicateExtensionName(PostgresException ex)
+    {
+        return ex.SqlState == PostgresErrorCodes.UniqueViolation
+            && string.Equals(ex.ConstraintName, "pg_extension_name_index", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -28,9 +28,20 @@ if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException(
         "ConnectionStrings:DefaultConnection is required. Set via user-secrets, environment variable, or appsettings.*.json.");
 
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(
-    connectionString,
-    npgsqlOptions => npgsqlOptions.UseNetTopologySuite()));
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+{
+    var configuredConnectionString = serviceProvider
+        .GetRequiredService<IConfiguration>()
+        .GetConnectionString("DefaultConnection");
+
+    if (string.IsNullOrWhiteSpace(configuredConnectionString))
+        throw new InvalidOperationException(
+            "ConnectionStrings:DefaultConnection is required. Set via user-secrets, environment variable, or appsettings.*.json.");
+
+    options.UseNpgsql(
+        configuredConnectionString,
+        npgsqlOptions => npgsqlOptions.UseNetTopologySuite());
+});
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -98,7 +109,6 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IPlaceContributionService, PlaceContributionService>();
 builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionRepository>();
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
-builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionRepository>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>();
 builder.Services.AddHttpClient<IMapService, MapService>(client =>
 {

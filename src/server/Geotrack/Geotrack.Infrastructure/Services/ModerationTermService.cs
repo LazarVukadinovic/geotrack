@@ -1,5 +1,6 @@
 using Geotrack.Application.DTOs.Moderation;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Reviews;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
