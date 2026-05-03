@@ -26,7 +26,6 @@ describe('StepPreviewComponent', () => {
       phone: '',
       contactEmail: '',
       website: '',
-      pricePerNight: '',
       bookingPartners: [],
     },
   };

@@ -42,7 +42,7 @@ export class SubmitContributionComponent implements OnInit {
   protected readonly draft = signal<ContributionDraft>({
     basics: null,
     features: { tags: [], amenities: [] },
-    details: { description: '', phone: '', contactEmail: '', website: '', pricePerNight: '', bookingPartners: [] },
+    details: { description: '', phone: '', contactEmail: '', website: '', bookingPartners: [] },
   });
 
   ngOnInit(): void {
@@ -124,7 +124,7 @@ export class SubmitContributionComponent implements OnInit {
     this.draft.set({
       basics: null,
       features: { tags: [], amenities: [] },
-      details: { description: '', phone: '', contactEmail: '', website: '', pricePerNight: '', bookingPartners: [] },
+      details: { description: '', phone: '', contactEmail: '', website: '', bookingPartners: [] },
     });
     this.editId.set(null);
     this.currentStep.set(1);

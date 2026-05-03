@@ -1,10 +1,14 @@
 import { Component, input, output, signal, OnDestroy, effect, ElementRef, viewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
+import maplibregl, { Map as MapLibreMap, MapStyleImageMissingEvent } from 'maplibre-gl';
 import { firstValueFrom } from 'rxjs';
 import { MapApiService } from '../../../../../../core/services/map-api.service';
 import { BackgroundImageFallbackDirective } from '../../../../../../shared/directives/background-image-fallback.directive';
+
+const MAP_STYLE_URL = '/map-style.json';
+const DEFAULT_PICKER_LAT = 44.82;
+const DEFAULT_PICKER_LNG = 20.46;
 
 export interface BasicsData {
   name: string;
@@ -39,6 +43,9 @@ export class StepBasicsComponent implements OnDestroy {
   pickerLng = signal<number | null>(null);
   isGeocoding = signal(false);
   private pickerMap?: MapLibreMap;
+  private pickerResizeObserver?: ResizeObserver;
+  private pickerMapInitFrame: number | null = null;
+  private pickerMapResizeFrame: number | null = null;
 
   form: BasicsData = {
     name: '', stayType: 'Hotel', address: '', city: '',
@@ -60,42 +67,74 @@ export class StepBasicsComponent implements OnDestroy {
   }
 
   openMapPicker(): void {
-    this.pickerLat.set(this.form.lat);
-    this.pickerLng.set(this.form.lng);
-    this.pickerMap?.remove();
-    this.pickerMap = undefined;
+    const hasCoordinates = this.hasUsableCoordinates(this.form.lat, this.form.lng);
+    this.pickerLat.set(hasCoordinates ? this.form.lat : DEFAULT_PICKER_LAT);
+    this.pickerLng.set(hasCoordinates ? this.form.lng : DEFAULT_PICKER_LNG);
+    this.destroyPickerMap();
     this.showMapPicker.set(true);
-    setTimeout(() => this.initPickerMap(), 150);
+    this.schedulePickerMapInit();
   }
 
-  private initPickerMap(): void {
-    const container = document.getElementById('coord-map');
-    if (!container || this.pickerMap) return;
+  closeMapPicker(): void {
+    this.destroyPickerMap();
+    this.showMapPicker.set(false);
+  }
+
+  private schedulePickerMapInit(attempt = 0): void {
+    this.cancelPickerMapInit();
+
+    this.pickerMapInitFrame = requestAnimationFrame(() => {
+      this.pickerMapInitFrame = null;
+      if (!this.showMapPicker() || this.pickerMap) return;
+
+      const container = this.pickerMapContainer()?.nativeElement;
+      const rect = container?.getBoundingClientRect();
+
+      if (!container || !rect || rect.width < 1 || rect.height < 1) {
+        if (attempt < 10) this.schedulePickerMapInit(attempt + 1);
+        return;
+      }
+
+      this.initPickerMap(container);
+    });
+  }
+
+  private initPickerMap(container: HTMLElement): void {
+    if (this.pickerMap) return;
 
     const lat = this.pickerLat();
     const lng = this.pickerLng();
-    const hasCoordinates = lat !== null && lng !== null;
-    const center: [number, number] = hasCoordinates ? [lng, lat] : [20.46, 44.82];
+    const hasCoordinates = this.hasUsableCoordinates(lat, lng);
+    const center: [number, number] = hasCoordinates
+      ? [lng as number, lat as number]
+      : [DEFAULT_PICKER_LNG, DEFAULT_PICKER_LAT];
 
     this.pickerMap = new maplibregl.Map({
       container,
-      style: '/map-style.json',
+      style: MAP_STYLE_URL,
       center,
       zoom: hasCoordinates ? 13 : 6,
       attributionControl: false,
       fadeDuration: 0,
+      trackResize: true,
     });
 
+    this.pickerResizeObserver = new ResizeObserver(() => this.schedulePickerMapResize());
+    this.pickerResizeObserver.observe(container);
+
     this.pickerMap.on('load', () => {
-      const c = this.pickerMap!.getCenter();
-      this.pickerLat.set(c.lat);
-      this.pickerLng.set(c.lng);
+      this.schedulePickerMapResize();
+      this.syncPickerCoordinatesFromCenter();
+    });
+
+    this.pickerMap.on('styleimagemissing', (event: MapStyleImageMissingEvent) => {
+      const map = this.pickerMap;
+      if (!map || map.hasImage(event.id)) return;
+      map.addImage(event.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
     });
 
     this.pickerMap.on('move', () => {
-      const c = this.pickerMap!.getCenter();
-      this.pickerLat.set(c.lat);
-      this.pickerLng.set(c.lng);
+      this.syncPickerCoordinatesFromCenter();
     });
 
     this.pickerMap.on('click', (event) => {
@@ -103,19 +142,80 @@ export class StepBasicsComponent implements OnDestroy {
       this.pickerLng.set(event.lngLat.lng);
       this.pickerMap!.easeTo({ center: event.lngLat, duration: 200 });
     });
+
+    this.schedulePickerMapResize();
+  }
+
+  private schedulePickerMapResize(): void {
+    if (this.pickerMapResizeFrame !== null) {
+      cancelAnimationFrame(this.pickerMapResizeFrame);
+    }
+
+    this.pickerMapResizeFrame = requestAnimationFrame(() => {
+      this.pickerMapResizeFrame = null;
+      if (!this.pickerMap || !this.showMapPicker()) return;
+
+      this.pickerMap.resize();
+      this.syncPickerCoordinatesFromCenter();
+    });
+  }
+
+  private syncPickerCoordinatesFromCenter(): void {
+    if (!this.pickerMap) return;
+
+    const c = this.pickerMap.getCenter();
+    if (!this.hasUsableCoordinates(c.lat, c.lng)) return;
+
+    this.pickerLat.set(c.lat);
+    this.pickerLng.set(c.lng);
+  }
+
+  private destroyPickerMap(): void {
+    this.cancelPickerMapInit();
+    if (this.pickerMapResizeFrame !== null) {
+      cancelAnimationFrame(this.pickerMapResizeFrame);
+      this.pickerMapResizeFrame = null;
+    }
+
+    this.pickerResizeObserver?.disconnect();
+    this.pickerResizeObserver = undefined;
+    this.pickerMap?.remove();
+    this.pickerMap = undefined;
+  }
+
+  private cancelPickerMapInit(): void {
+    if (this.pickerMapInitFrame === null) return;
+
+    cancelAnimationFrame(this.pickerMapInitFrame);
+    this.pickerMapInitFrame = null;
+  }
+
+  private hasUsableCoordinates(latitude: number | null | undefined, longitude: number | null | undefined): boolean {
+    return typeof latitude === 'number' &&
+      typeof longitude === 'number' &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      (latitude !== 0 || longitude !== 0);
   }
 
   async confirmCoordinates(): Promise<void> {
     const lat = this.pickerLat();
     const lng = this.pickerLng();
-    if (lat === null || lng === null) return;
+    if (!this.hasUsableCoordinates(lat, lng)) return;
 
-    this.form.lat = lat;
-    this.form.lng = lng;
+    const confirmedLat = lat as number;
+    const confirmedLng = lng as number;
+
+    this.form.lat = confirmedLat;
+    this.form.lng = confirmedLng;
     this.isGeocoding.set(true);
 
     try {
-      const data = await firstValueFrom(this.mapApi.reverseGeocode(lat, lng));
+      const data = await firstValueFrom(this.mapApi.reverseGeocode(confirmedLat, confirmedLng));
       this.form.address = data.address ?? '';
       this.form.city = data.city ?? '';
       this.form.region = data.region ?? '';
@@ -123,9 +223,7 @@ export class StepBasicsComponent implements OnDestroy {
     } catch {
     } finally {
       this.isGeocoding.set(false);
-      this.pickerMap?.remove();
-      this.pickerMap = undefined;
-      this.showMapPicker.set(false);
+      this.closeMapPicker();
     }
   }
 
@@ -140,6 +238,7 @@ export class StepBasicsComponent implements OnDestroy {
     this.saved.emit({ ...this.form });
   }
   imgContainer = viewChild<ElementRef<HTMLDivElement>>('imgContainer');
+  private readonly pickerMapContainer = viewChild<ElementRef<HTMLDivElement>>('coordMap');
   bgPosition = signal('50% 50%');
   bgSize = signal('cover');
 
@@ -160,9 +259,14 @@ export class StepBasicsComponent implements OnDestroy {
         Object.assign(this.form, d);
         if (d.imageUrl) this.previewUrl.set(d.imageUrl);
         this.form.coverImageFile = d.coverImageFile ?? null;
-        if (d.lat) {
+        if (this.hasUsableCoordinates(d.lat, d.lng)) {
           this.pickerLat.set(d.lat);
           this.pickerLng.set(d.lng);
+        } else {
+          this.form.lat = null;
+          this.form.lng = null;
+          this.pickerLat.set(null);
+          this.pickerLng.set(null);
         }
         if (d.imgBgPosition) this.bgPosition.set(d.imgBgPosition);
         if (d.imgBgSize) this.bgSize.set(d.imgBgSize);
@@ -252,7 +356,7 @@ export class StepBasicsComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
-    this.pickerMap?.remove();
+    this.destroyPickerMap();
     const el = this.imgContainer()?.nativeElement;
     if (el && this.boundTouchStart) {
       el.removeEventListener('touchstart', this.boundTouchStart);

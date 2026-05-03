@@ -36,7 +36,6 @@ export interface ContributionDetail extends ContributionListItem {
   phone: string;
   contactEmail: string;
   website: string;
-  pricePerNight: number | null;
   tags: string[];
   amenities: string[];
   bookingPartners: ContributionBookingPartner[];
@@ -89,7 +88,6 @@ interface ApiContributionDetail extends ApiContributionListItem {
   phone: string;
   contactEmail: string;
   website: string;
-  pricePerNight?: number | null;
   tags: string[];
   amenities: string[];
   bookingPartners: ContributionBookingPartner[];
@@ -97,7 +95,7 @@ interface ApiContributionDetail extends ApiContributionListItem {
   reviewedAt?: string | null;
 }
 
-interface UpsertStayContributionPayload {
+interface UpsertPlaceContributionPayload {
   name: string;
   stayType: string;
   address: string;
@@ -112,7 +110,6 @@ interface UpsertStayContributionPayload {
   phone: string;
   contactEmail: string;
   website: string;
-  pricePerNight: number | null;
   tags: string[];
   amenities: string[];
   bookingPartners: ContributionBookingPartner[];
@@ -208,7 +205,6 @@ export class ContributionsService {
         phone: detail.phone ?? '',
         contactEmail: detail.contactEmail ?? '',
         website: detail.website ?? '',
-        pricePerNight: detail.pricePerNight != null ? String(detail.pricePerNight) : '',
         bookingPartners: detail.bookingPartners ?? [],
       },
     };
@@ -219,7 +215,7 @@ export class ContributionsService {
     const features = normalizeFeatures(draft.features);
     const details = normalizeDetails(draft.details);
 
-    const payload: UpsertStayContributionPayload = {
+    const payload: UpsertPlaceContributionPayload = {
       name: basics.name,
       stayType: basics.stayType,
       address: basics.address,
@@ -234,7 +230,6 @@ export class ContributionsService {
       phone: details.phone,
       contactEmail: details.contactEmail,
       website: details.website,
-      pricePerNight: details.pricePerNight,
       tags: features.tags,
       amenities: features.amenities,
       bookingPartners: details.bookingPartners,
@@ -271,7 +266,6 @@ interface NormalizedDetailsData {
   phone: string;
   contactEmail: string;
   website: string;
-  pricePerNight: number | null;
   bookingPartners: ContributionBookingPartner[];
 }
 
@@ -281,7 +275,6 @@ function normalizeDetails(details: DetailsData | null): NormalizedDetailsData {
     phone: details?.phone ?? '',
     contactEmail: details?.contactEmail?.trim() ?? '',
     website: details?.website ?? '',
-    pricePerNight: normalizePricePerNight(details?.pricePerNight ?? ''),
     bookingPartners: details?.bookingPartners ?? [],
   };
 }
@@ -321,27 +314,12 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     phone: item.phone ?? '',
     contactEmail: item.contactEmail ?? '',
     website: item.website ?? '',
-    pricePerNight: item.pricePerNight ?? null,
     tags: item.tags ?? [],
     amenities: item.amenities ?? [],
     bookingPartners: item.bookingPartners ?? [],
     reviewNote: item.reviewNote ?? null,
     reviewedAt: item.reviewedAt ?? null,
   };
-}
-
-function normalizePricePerNight(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const parsed = Number(trimmed.replace(',', '.'));
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return null;
-  }
-
-  return Math.round(parsed * 100) / 100;
 }
 
 function statusLabel(status: ContributionStatus): string {

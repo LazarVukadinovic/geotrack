@@ -210,18 +210,9 @@
         }
 
         <!-- Contact -->
-        @if (d.phone || d.contactEmail || d.website || d.pricePerNight !== null) {
+        @if (d.phone || d.contactEmail || d.website) {
           <div>
             <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Contact</p>
-            @if (d.pricePerNight !== null) {
-              <div class="flex items-center gap-2 text-sm text-slate-600 mb-1.5">
-                <svg class="w-3.5 h-3.5 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                    d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4m0-8c1.657 0 3 1.343 3 3m-3-3V6m0 10v2m0-2c-1.657 0-3-1.343-3-3m3 3c1.657 0 3-1.343 3-3m-6 0H7m8 0h2"/>
-                </svg>
-                ${{ d.pricePerNight }} per night
-              </div>
-            }
             @if (d.phone) {
               <div class="flex items-center gap-2 text-sm text-slate-600 mb-1.5">
                 <svg class="w-3.5 h-3.5 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">

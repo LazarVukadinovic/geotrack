@@ -136,7 +136,7 @@
       <div class="px-5 pt-4 pb-3 flex items-center justify-between border-b border-slate-100">
         <div class="w-9 h-1 bg-slate-300 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-4"></div>
         <p class="text-base font-bold text-slate-800 mt-2">Set Location</p>
-        <button (click)="showMapPicker.set(false)"
+        <button (click)="closeMapPicker()"
           class="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center mt-2">
           <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -147,11 +147,11 @@
       <p class="text-xs text-slate-500 text-center px-5 py-2">Tap the map or drag it until the pin marks the exact spot</p>
 
       <!-- Map placeholder -->
-      <div class="flex-1 relative bg-slate-100 overflow-hidden">
-        <div id="coord-map" class="absolute inset-0"></div>
+      <div class="flex-1 min-h-0 relative bg-slate-100 overflow-hidden isolate">
+        <div #coordMap id="coord-map" class="absolute inset-0 z-0 w-full h-full"></div>
 
         <!-- Center crosshair -->
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div class="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
           <div class="relative">
             <svg class="w-8 h-8 text-[#e8722a] drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
@@ -162,7 +162,7 @@
 
         <!-- Coords display -->
         <div *ngIf="pickerLat() !== null"
-          class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white rounded-2xl px-4 py-2 shadow-lg flex items-center gap-2">
+          class="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 bg-white rounded-2xl px-4 py-2 shadow-lg flex items-center gap-2">
           <svg class="w-3.5 h-3.5 text-[#e8722a]" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
           </svg>

@@ -11,7 +11,6 @@ export interface DetailsData {
   phone: string;
   contactEmail: string;
   website: string;
-  pricePerNight: string;
   bookingPartners: BookingPartner[];
 }
 @Component({
@@ -42,7 +41,6 @@ export class StepDetailsComponent {
     phone: '',
     contactEmail: '',
     website: '',
-    pricePerNight: '',
     bookingPartners: [],
   };
   onContinue(): void { this.saved.emit({ ...this.form }); }
