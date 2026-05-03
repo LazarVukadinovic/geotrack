@@ -2,11 +2,13 @@ import { Component, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
+import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
   templateUrl: './settings-page.component.html',
   styleUrl: './settings-page.component.css'
 })
@@ -32,29 +34,15 @@ export class SettingsComponent {
   readonly memberSince     = 'October 12, 2023';
 
   // ── Preferences ───────────────────────────────────────────────
-  readonly language                = signal('English (US)');
-  readonly timezone                = signal('Central European Time (CET)');
-  readonly notifyRequests          = signal(true);
-  readonly notifyPublished         = signal(false);
-  readonly notifyWeeklyDigest      = signal(true);
+  readonly language           = signal('English (US)');
+  readonly timezone           = signal('Central European Time (CET)');
+  readonly notifyRequests     = signal(true);
+  readonly notifyNewReview    = signal(false);
 
   // ── UI state ───────────────────────────────────────────────────
   readonly isSaving       = signal(false);
   readonly saveSuccess    = signal(false);
   readonly avatarPreview  = signal<string | null>(null);
-
-  // ── Nav ────────────────────────────────────────────────────────
-  navItems = [
-    { label: 'Dashboard',      icon: 'grid',     route: '/dashboard',  badge: null },
-    { label: 'Requests Queue', icon: 'inbox',    route: '/requests',   badge: 5    },
-    { label: 'Map',            icon: 'map',      route: '/map',        badge: null },
-  ];
-  contentItems = [
-    { label: 'Destinations', icon: 'flag',     route: '/destinations' },
-    { label: 'Locations',    icon: 'pin',      route: '/locations'    },
-    { label: 'Places',       icon: 'home',     route: '/places'       },
-    { label: 'Events',       icon: 'calendar', route: '/events'       },
-  ];
 
   constructor(private readonly router: Router) {}
 
@@ -83,8 +71,6 @@ export class SettingsComponent {
     this.saveSuccess.set(false);
     this.isSaving.set(true);
 
-    // Replace with real API call, e.g.:
-    // this.profileService.save({ ... }).subscribe({ next: ..., error: ... });
     setTimeout(() => {
       this.isSaving.set(false);
       this.saveSuccess.set(true);
@@ -94,9 +80,5 @@ export class SettingsComponent {
 
   onCancel(): void {
     this.router.navigate(['/dashboard']);
-  }
-
-  navigateTo(route: string): void {
-    this.router.navigate([route]);
   }
 }

@@ -1,169 +1,13 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
 
   <!-- ════════════════ SIDEBAR ════════════════ -->
-  <aside
-    class="flex flex-col h-full overflow-y-auto border-r border-white/10"
-    style="width:200px; min-width:200px; background: linear-gradient(180deg, #1a2d8f 0%, #1c3199 60%, #1b2e91 100%);"
-  >
-    <!-- Brand -->
-    <div class="flex items-center gap-2 px-5 py-5 border-b border-white/10 mb-3">
-      <img
-        src="images/logo.png"
-        alt="GeoTrack logo"
-        class="w-8 h-8 object-contain rounded-md"
-        style="filter: drop-shadow(0 0 6px rgba(0,200,255,0.45));"
-      />
-      <span class="text-white font-bold text-base tracking-wide">GeoTrack</span>
-    </div>
-
-    <!-- Region picker -->
-    <div class="px-4 mb-2">
-      <span class="block text-white/40 text-[10px] font-semibold tracking-widest mb-1.5">REGION</span>
-      <button
-        class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-white/90 text-xs font-medium border border-white/12 transition-colors hover:bg-white/15 cursor-pointer"
-        style="background: rgba(255,255,255,0.1);"
-      >
-        <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-        </svg>
-        <span class="truncate">{{ region }}</span>
-        <svg class="w-3 h-3 text-white/40 ml-auto flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 9l6 6 6-6"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- Navigation -->
-    <nav class="flex-1 px-3 mt-1">
-      <!-- Main -->
-      <a (click)="navigateTo('/dashboard')" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 text-xs font-medium mb-0.5 no-underline transition-colors cursor-pointer">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-          <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-        </svg>
-        Dashboard
-      </a>
-
-      <a href="#" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 text-xs font-medium mb-0.5 no-underline transition-colors">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 12h-6l-2 3H10l-2-3H2"/>
-          <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
-        </svg>
-        Requests Queue
-        <span class="ml-auto rounded-full text-[10px] font-bold text-white px-1.5 py-px" style="background:#ef4444;">5</span>
-      </a>
-
-      <a href="#" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 text-xs font-medium mb-0.5 no-underline transition-colors">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="2" y1="12" x2="22" y2="12"/>
-          <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
-        </svg>
-        Map
-      </a>
-
-      <!-- Content Management -->
-      <div class="text-white/35 text-[9px] font-bold tracking-widest px-2 mt-5 mb-1.5">CONTENT MANAGEMENT</div>
-
-      <a href="#" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 text-xs font-medium mb-0.5 no-underline transition-colors">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-          <line x1="4" y1="22" x2="4" y2="15"/>
-        </svg>
-        Destinations
-      </a>
-
-      <a href="#" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 text-xs font-medium mb-0.5 no-underline transition-colors">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-        </svg>
-        Locations
-      </a>
-
-      <a href="#" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 text-xs font-medium mb-0.5 no-underline transition-colors">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-        Places
-      </a>
-
-      <a href="#" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 text-xs font-medium mb-0.5 no-underline transition-colors">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="4" width="18" height="18" rx="2"/>
-          <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-        </svg>
-        Events
-      </a>
-
-      <!-- Analytics -->
-      <div class="text-white/35 text-[9px] font-bold tracking-widest px-2 mt-5 mb-1.5">ANALYTICS</div>
-      <a href="#" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 text-xs font-medium mb-0.5 no-underline transition-colors">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="20" x2="18" y2="10"/>
-          <line x1="12" y1="20" x2="12" y2="4"/>
-          <line x1="6"  y1="20" x2="6"  y2="14"/>
-          <line x1="2"  y1="20" x2="22" y2="20"/>
-        </svg>
-        Analytics &amp; Insights
-      </a>
-    </nav>
-
-    <!-- Bottom -->
-    <div class="px-3 pt-2 border-t border-white/10 mt-3">
-      <!-- Settings — active state -->
-      <a href="#" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white text-xs font-semibold mb-0.5 no-underline"
-         style="background: rgba(255,255,255,0.2);">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="4"  y1="6"  x2="20" y2="6"/>
-          <line x1="4"  y1="12" x2="20" y2="12"/>
-          <line x1="4"  y1="18" x2="20" y2="18"/>
-          <circle cx="8"  cy="6"  r="2" fill="currentColor" stroke="none"/>
-          <circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/>
-          <circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/>
-        </svg>
-        Settings
-      </a>
-      <a href="#" class="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs font-medium no-underline transition-colors">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-          <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-        Sign out
-      </a>
-    </div>
-  </aside>
+  <app-sidebar [region]="region" />
 
   <!-- ════════════════ MAIN ════════════════ -->
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
     <!-- Topbar -->
-    <header class="flex items-center justify-between px-8 py-3 bg-white border-b border-gray-100 min-h-[56px]">
-      <div></div>
-      <div class="flex items-center gap-4">
-        <!-- Notification bell -->
-        <button class="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition bg-transparent border-0 cursor-pointer">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 01-3.46 0"/>
-          </svg>
-          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500"></span>
-        </button>
-        <!-- User -->
-        <div class="flex items-center gap-3">
-          <div class="text-right">
-            <p class="text-sm font-semibold text-gray-800">{{ userName }}</p>
-            <p class="text-xs text-gray-500">{{ userRole }}</p>
-          </div>
-          <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 ring-2 ring-white" style="box-shadow: 0 0 0 2px #e5e7eb;">
-            <svg class="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="8" r="4"/>
-              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-            </svg>
-          </div>
-          <span class="w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-white block -ml-5 mt-5 flex-shrink-0"></span>
-        </div>
-      </div>
-    </header>
+    <app-topbar [userName]="userName" [userRole]="userRole" title="Settings &amp; Profile" />
 
     <!-- Scrollable content -->
     <div class="flex-1 overflow-y-auto px-8 py-6">
@@ -186,7 +30,6 @@
         <div class="px-6 py-5">
           <!-- Avatar row -->
           <div class="flex items-center gap-4 mb-6">
-            <!-- Avatar -->
             <div class="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex-shrink-0 ring-2 ring-gray-200">
               <img
                 *ngIf="avatarPreview()"
@@ -202,7 +45,6 @@
               </div>
             </div>
 
-            <!-- Upload / Remove -->
             <div>
               <div class="flex items-center gap-2 mb-1.5">
                 <label
@@ -301,7 +143,6 @@
 
         <div class="px-6 py-5">
           <div class="grid grid-cols-3 gap-3">
-            <!-- Current Role -->
             <div class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50">
               <div class="flex items-center gap-1.5 mb-1.5">
                 <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -312,7 +153,6 @@
               </div>
               <p class="text-sm font-semibold text-gray-800">{{ currentRole }}</p>
             </div>
-            <!-- Assigned Region -->
             <div class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50">
               <div class="flex items-center gap-1.5 mb-1.5">
                 <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -323,7 +163,6 @@
               </div>
               <p class="text-sm font-semibold text-gray-800">{{ assignedRegion }}</p>
             </div>
-            <!-- Member Since -->
             <div class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50">
               <div class="flex items-center gap-1.5 mb-1.5">
                 <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -424,36 +263,18 @@
               </button>
             </div>
 
-            <!-- Toggle row: Published -->
-            <div class="flex items-center justify-between py-3 border-b border-gray-50">
-              <div>
-                <p class="text-sm font-medium text-gray-800">Content Published</p>
-                <p class="text-xs text-gray-500 mt-0.5">Get notified when your submitted content goes live.</p>
-              </div>
-              <button
-                type="button"
-                class="toggle-track"
-                [class.on]="notifyPublished()"
-                (click)="notifyPublished.update(v => !v)"
-                [attr.aria-checked]="notifyPublished()"
-                role="switch"
-              >
-                <span class="toggle-thumb"></span>
-              </button>
-            </div>
-
-            <!-- Toggle row: Weekly digest -->
+            <!-- Toggle row: New Review -->
             <div class="flex items-center justify-between py-3">
               <div>
-                <p class="text-sm font-medium text-gray-800">Weekly Digest</p>
-                <p class="text-xs text-gray-500 mt-0.5">Receive a weekly summary of activity in your region.</p>
+                <p class="text-sm font-medium text-gray-800">New Review</p>
+                <p class="text-xs text-gray-500 mt-0.5">Get notified when someone leaves a review on your content.</p>
               </div>
               <button
                 type="button"
                 class="toggle-track"
-                [class.on]="notifyWeeklyDigest()"
-                (click)="notifyWeeklyDigest.update(v => !v)"
-                [attr.aria-checked]="notifyWeeklyDigest()"
+                [class.on]="notifyNewReview()"
+                (click)="notifyNewReview.update(v => !v)"
+                [attr.aria-checked]="notifyNewReview()"
                 role="switch"
               >
                 <span class="toggle-thumb"></span>
@@ -465,7 +286,6 @@
 
       <!-- ══ Action bar ══ -->
       <div class="flex items-center justify-between">
-        <!-- Success toast -->
         <div
           *ngIf="saveSuccess()"
           class="toast-success flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5"
@@ -509,7 +329,7 @@
       <footer class="mt-8 pb-2 text-center text-gray-400 text-xs">
         © 2026 GeoTrack Regional Organization &nbsp;·&nbsp; v2.1.4
       </footer>
-      </div> <!-- /max-width wrapper -->
+      </div>
     </div>
   </div>
 
