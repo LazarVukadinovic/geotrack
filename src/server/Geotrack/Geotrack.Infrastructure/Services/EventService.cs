@@ -1,7 +1,10 @@
 using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Events;
+using Geotrack.Application.DTOs.Images;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Services;
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
@@ -91,7 +94,13 @@ public class EventService : IEventService
                     Subtitle = e.EventType.Name,
                     Description = e.Description,
                     Location = e.Location.Name,
-                    Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+                    Image = e.Images
+                        .OrderByDescending(image => image.IsMain)
+                        .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
+                        .Select(image => image.Url)
+                        .FirstOrDefault(),
                     StartDate = e.StartDate,
                     EndDate = e.EndDate,
                     DestinationPriority = e.Location.DestinationId == destination.Id ? 0 : 1,
@@ -113,7 +122,13 @@ public class EventService : IEventService
                     Subtitle = e.EventType.Name,
                     Description = e.Description,
                     Location = e.Location.Name,
-                    Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+                    Image = e.Images
+                        .OrderByDescending(image => image.IsMain)
+                        .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
+                        .Select(image => image.Url)
+                        .FirstOrDefault(),
                     StartDate = e.StartDate,
                     EndDate = e.EndDate,
                     Tags = e.EventTags.OrderBy(et => et.Tag.Name).Select(et => et.Tag.Name).ToList(),
@@ -193,11 +208,11 @@ public class EventService : IEventService
         double? longitude = null)
     {
         var evt = await _db.Events
+            .AsNoTracking()
             .Include(e => e.EventType)
             .Include(e => e.Images)
             .Include(e => e.Location)
             .Include(e => e.Place)
-            .Include(e => e.Images)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
             .FirstOrDefaultAsync(e => e.Id == id);
 
@@ -206,7 +221,9 @@ public class EventService : IEventService
         var isSaved = userId.HasValue && await _favoriteService.IsFavoriteAsync(userId.Value, "event", id);
 
         var similar = await _db.Events
+            .AsNoTracking()
             .Include(e => e.EventType)
+            .Include(e => e.Images)
             .Where(e => e.Id != id && e.Location.DestinationId == evt.Location.DestinationId)
             .Take(5)
             .ToListAsync();
@@ -215,6 +232,7 @@ public class EventService : IEventService
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
             : new HashSet<int>();
         var (eventLatitude, eventLongitude) = ResolveCoordinates(evt);
+        var images = ToImageDtos(evt.Images);
 
         return new EventDetailDto
         {
@@ -223,7 +241,8 @@ public class EventService : IEventService
             Location = evt.Location?.Name,
             Latitude = eventLatitude,
             Longitude = eventLongitude,
-            HeroImage = evt.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+            HeroImage = images.FirstOrDefault()?.Url,
+            Images = images,
             Tags = evt.EventTags.Select(et => new TagLabelDto { Label = et.Tag.Name }).ToList(),
             Distance = SpatialDistanceFormatter.FormatBetween(
                 latitude,
@@ -251,7 +270,7 @@ public class EventService : IEventService
                 Id = s.Id,
                 Title = s.Name,
                 Subtitle = s.EventType?.Name,
-                Image = s.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+                Image = GetMainImageUrl(s.Images),
                 IsSaved = favoriteIds.Contains(s.Id)
             }).ToList(),
             IsSaved = isSaved
@@ -265,7 +284,6 @@ public class EventService : IEventService
         var evt = await _db.Events
             .Include(e => e.Images)
             .Include(e => e.EventReviews)
-            .Include(e => e.Images)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
             .FirstOrDefaultAsync(e => e.Id == eventId)
             ?? throw new KeyNotFoundException("Event not found");
@@ -316,7 +334,6 @@ public class EventService : IEventService
         var evt = await _db.Events
             .Include(e => e.Images)
             .Include(e => e.EventReviews)
-            .Include(e => e.Images)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
             .FirstOrDefaultAsync(e => e.Id == eventId)
             ?? throw new KeyNotFoundException("Event not found");
@@ -463,6 +480,37 @@ public class EventService : IEventService
         }
 
         return (null, null);
+    }
+
+    private static string? GetMainImageUrl(IEnumerable<EntityImage> images)
+    {
+        return OrderImages(images)
+            .Select(image => image.Url)
+            .FirstOrDefault();
+    }
+
+    private static List<EntityImageDto> ToImageDtos(IEnumerable<EntityImage> images)
+    {
+        return OrderImages(images)
+            .Select(image => new EntityImageDto
+            {
+                Id = image.Id,
+                Url = image.Url,
+                AltText = DisplayTextSafety.CleanOptional(image.AltText),
+                Caption = DisplayTextSafety.CleanOptional(image.Caption),
+                IsMain = image.IsMain,
+                SortOrder = image.SortOrder
+            })
+            .ToList();
+    }
+
+    private static IOrderedEnumerable<EntityImage> OrderImages(IEnumerable<EntityImage> images)
+    {
+        return images
+            .OrderByDescending(image => image.IsMain)
+            .ThenBy(image => image.SortOrder)
+            .ThenBy(image => image.CreatedAt)
+            .ThenBy(image => image.Id);
     }
 
     private static bool HasUsableCoordinates(double? latitude, double? longitude)

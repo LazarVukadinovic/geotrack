@@ -828,6 +828,8 @@ public class UserService : IUserService
         images
             .OrderByDescending(image => image.IsMain)
             .ThenBy(image => image.SortOrder)
+            .ThenBy(image => image.CreatedAt)
+            .ThenBy(image => image.Id)
             .Select(image => image.Url)
             .FirstOrDefault();
 

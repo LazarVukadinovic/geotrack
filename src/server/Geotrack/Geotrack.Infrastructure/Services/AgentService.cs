@@ -97,9 +97,23 @@ public class AgentService : IAgentService
     private async Task<List<AgentRecommendationCardDto>> GetPlaceCards(string category, int count, int? userId)
     {
         var places = await _db.Places
-            .Include(p => p.PlaceTags).ThenInclude(pt => pt.Tag)
+            .AsNoTracking()
             .Where(p => p.PlaceTags.Any(pt => pt.Tag.Slug.ToLower().Contains(category) || pt.Tag.Name.ToLower().Contains(category))
                         || p.PlaceType.Name.ToLower().Contains(category))
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Description,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                p.AverageRating
+            })
             .Take(count)
             .ToListAsync();
         var favoriteIds = userId.HasValue
@@ -112,8 +126,8 @@ public class AgentService : IAgentService
             EntityType = "place",
             DetailUrl = $"/places/{p.Id}",
             Title = p.Name,
-            Description = p.Description.Length > 100 ? p.Description[..100] + "..." : p.Description,
-            Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+            Description = TruncateDescription(p.Description),
+            Image = p.Image,
             Rating = p.AverageRating,
             DurationHours = null,
             DistanceKm = null,
@@ -124,7 +138,22 @@ public class AgentService : IAgentService
     private async Task<List<AgentRecommendationCardDto>> GetHotelCards(int count, int? userId)
     {
         var hotels = await _db.Places
+            .AsNoTracking()
             .Where(p => p.Stay != null)
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Description,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                p.AverageRating
+            })
             .Take(count)
             .ToListAsync();
         var favoriteIds = userId.HasValue
@@ -137,8 +166,8 @@ public class AgentService : IAgentService
             EntityType = "place",
             DetailUrl = $"/stays/{p.Id}",
             Title = p.Name,
-            Description = p.Description.Length > 100 ? p.Description[..100] + "..." : p.Description,
-            Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+            Description = TruncateDescription(p.Description),
+            Image = p.Image,
             Rating = p.AverageRating,
             DurationHours = null,
             DistanceKm = null,
@@ -149,7 +178,23 @@ public class AgentService : IAgentService
     private async Task<List<AgentRecommendationCardDto>> GetEventCards(int count, int? userId)
     {
         var events = await _db.Events
+            .AsNoTracking()
             .Where(e => e.EndDate >= DateTime.UtcNow)
+            .Select(e => new
+            {
+                e.Id,
+                e.Name,
+                e.Description,
+                Image = e.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                e.StartDate,
+                e.EndDate
+            })
             .Take(count)
             .ToListAsync();
         var favoriteIds = userId.HasValue
@@ -162,8 +207,8 @@ public class AgentService : IAgentService
             EntityType = "event",
             DetailUrl = $"/events/{e.Id}",
             Title = e.Name,
-            Description = e.Description.Length > 100 ? e.Description[..100] + "..." : e.Description,
-            Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+            Description = TruncateDescription(e.Description),
+            Image = e.Image,
             Rating = null,
             DurationHours = (e.EndDate - e.StartDate).TotalHours,
             DistanceKm = null,
@@ -174,7 +219,23 @@ public class AgentService : IAgentService
     private async Task<List<AgentRecommendationCardDto>> GetMixedCards(int count, int? userId)
     {
         var places = await _db.Places
+            .AsNoTracking()
             .OrderByDescending(p => p.AverageRating)
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Description,
+                IsStay = p.Stay != null,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                p.AverageRating
+            })
             .Take(count)
             .ToListAsync();
         var favoriteIds = userId.HasValue
@@ -185,10 +246,10 @@ public class AgentService : IAgentService
         {
             Id = p.Id,
             EntityType = "place",
-            DetailUrl = p.Stay != null ? $"/stays/{p.Id}" : $"/places/{p.Id}",
+            DetailUrl = p.IsStay ? $"/stays/{p.Id}" : $"/places/{p.Id}",
             Title = p.Name,
-            Description = p.Description.Length > 100 ? p.Description[..100] + "..." : p.Description,
-            Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+            Description = TruncateDescription(p.Description),
+            Image = p.Image,
             Rating = p.AverageRating,
             DurationHours = null,
             DistanceKm = null,
@@ -198,6 +259,13 @@ public class AgentService : IAgentService
 
     private static bool ContainsAny(string text, params string[] keywords) =>
         keywords.Any(k => text.Contains(k));
+
+    private static string? TruncateDescription(string? description)
+    {
+        return description is { Length: > 100 }
+            ? description[..100] + "..."
+            : description;
+    }
 
     private static List<SuggestionPillDto> GetDefaultPills() => new()
     {

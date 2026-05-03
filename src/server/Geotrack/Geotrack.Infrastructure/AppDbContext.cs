@@ -130,6 +130,7 @@ public class AppDbContext : DbContext
         ConfigureCollections(modelBuilder);
         ConfigureSupportAndNotifications(modelBuilder);
         ConfigurePlaceContributions(modelBuilder);
+        ConfigureEntityImages(modelBuilder);
         ConfigureAnalytics(modelBuilder);
     }
 
@@ -1608,6 +1609,95 @@ public class AppDbContext : DbContext
         });
     }
 
+    private static void ConfigureEntityImages(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EntityImage>(entity =>
+        {
+            entity.ToTable("EntityImages");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.TargetType)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .IsRequired();
+
+            entity.Property(x => x.Url)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.AltText)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.Caption)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Event)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.EventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Region)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.RegionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Destination)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Territory)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.TerritoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Location)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.PlaceId);
+            entity.HasIndex(x => x.EventId);
+            entity.HasIndex(x => x.RegionId);
+            entity.HasIndex(x => x.DestinationId);
+            entity.HasIndex(x => x.TerritoryId);
+            entity.HasIndex(x => x.LocationId);
+
+            entity.HasIndex(x => x.PlaceId)
+                .IsUnique()
+                .HasFilter("\"PlaceId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.EventId)
+                .IsUnique()
+                .HasFilter("\"EventId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.RegionId)
+                .IsUnique()
+                .HasFilter("\"RegionId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.DestinationId)
+                .IsUnique()
+                .HasFilter("\"DestinationId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.TerritoryId)
+                .IsUnique()
+                .HasFilter("\"TerritoryId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.LocationId)
+                .IsUnique()
+                .HasFilter("\"LocationId\" IS NOT NULL AND \"IsMain\" = true");
+        });
+    }
+
     private static void ConfigureAnalytics(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AnonymousSession>(entity =>
@@ -1728,91 +1818,6 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.UserId, x.Score });
         });
 
-        modelBuilder.Entity<EntityImage>(entity =>
-        {
-            entity.ToTable("EntityImages");
-
-            entity.HasKey(x => x.Id);
-
-            entity.Property(x => x.TargetType)
-                .HasConversion<string>()
-                .HasMaxLength(40)
-                .IsRequired();
-
-            entity.Property(x => x.Url)
-                .IsRequired()
-                .HasMaxLength(1000);
-
-            entity.Property(x => x.AltText)
-                .HasMaxLength(300);
-
-            entity.Property(x => x.Caption)
-                .HasMaxLength(500);
-
-            entity.Property(x => x.CreatedAt)
-                .IsRequired();
-
-            entity.HasOne(x => x.Place)
-                .WithMany(x => x.Images)
-                .HasForeignKey(x => x.PlaceId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.Event)
-                .WithMany(x => x.Images)
-                .HasForeignKey(x => x.EventId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.Region)
-                .WithMany(x => x.Images)
-                .HasForeignKey(x => x.RegionId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.Destination)
-                .WithMany(x => x.Images)
-                .HasForeignKey(x => x.DestinationId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.Territory)
-                .WithMany(x => x.Images)
-                .HasForeignKey(x => x.TerritoryId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.Location)
-                .WithMany(x => x.Images)
-                .HasForeignKey(x => x.LocationId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => x.PlaceId);
-            entity.HasIndex(x => x.EventId);
-            entity.HasIndex(x => x.RegionId);
-            entity.HasIndex(x => x.DestinationId);
-            entity.HasIndex(x => x.TerritoryId);
-            entity.HasIndex(x => x.LocationId);
-
-            entity.HasIndex(x => x.PlaceId)
-                .IsUnique()
-                .HasFilter("\"PlaceId\" IS NOT NULL AND \"IsMain\" = true");
-
-            entity.HasIndex(x => x.EventId)
-                .IsUnique()
-                .HasFilter("\"EventId\" IS NOT NULL AND \"IsMain\" = true");
-
-            entity.HasIndex(x => x.RegionId)
-                .IsUnique()
-                .HasFilter("\"RegionId\" IS NOT NULL AND \"IsMain\" = true");
-
-            entity.HasIndex(x => x.DestinationId)
-                .IsUnique()
-                .HasFilter("\"DestinationId\" IS NOT NULL AND \"IsMain\" = true");
-
-            entity.HasIndex(x => x.TerritoryId)
-                .IsUnique()
-                .HasFilter("\"TerritoryId\" IS NOT NULL AND \"IsMain\" = true");
-
-            entity.HasIndex(x => x.LocationId)
-                .IsUnique()
-                .HasFilter("\"LocationId\" IS NOT NULL AND \"IsMain\" = true");
-        });
     }
 
     private void SyncSpatialColumns()

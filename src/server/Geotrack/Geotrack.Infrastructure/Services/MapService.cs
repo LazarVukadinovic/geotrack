@@ -420,6 +420,8 @@ public class MapService : IMapService
                     ImageUrl = place.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
                     Latitude = place.Latitude,
@@ -466,6 +468,8 @@ public class MapService : IMapService
                     ImageUrl = @event.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
                     Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
@@ -558,6 +562,8 @@ public class MapService : IMapService
                     ImageUrl = destination.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
                     DetailRoute = null,
@@ -602,6 +608,8 @@ public class MapService : IMapService
                     ImageUrl = place.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
                     Latitude = place.Latitude,
@@ -648,6 +656,8 @@ public class MapService : IMapService
                     ImageUrl = @event.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
                     Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,

@@ -1,4 +1,5 @@
 using Geotrack.Application.DTOs.Destinations;
+using Geotrack.Application.DTOs.Images;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
@@ -130,6 +131,7 @@ public class PlaceService : IPlaceService
         double? longitude = null)
     {
         var place = await _db.Places
+            .AsNoTracking()
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
             .Include(p => p.Images)
@@ -176,6 +178,7 @@ public class PlaceService : IPlaceService
             longitude,
             place.Latitude,
             place.Longitude);
+        var images = ToImageDtos(place.Images);
 
         return new PlaceDetailDto
         {
@@ -184,7 +187,8 @@ public class PlaceService : IPlaceService
             Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = GetMainImageUrl(place.Images),
+            HeroImage = images.FirstOrDefault()?.Url,
+            Images = images,
             Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
                 .ToList(),
@@ -236,6 +240,7 @@ public class PlaceService : IPlaceService
         double? longitude = null)
     {
         var place = await _db.Places
+            .AsNoTracking()
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
             .Include(p => p.Images)
@@ -296,6 +301,7 @@ public class PlaceService : IPlaceService
                 Label = sa.StayAmenity.Name,
                 Icon = sa.StayAmenity.IconKey ?? string.Empty
             }) ?? Enumerable.Empty<AmenityDto>();
+        var images = ToImageDtos(place.Images);
 
         return new HotelDetailDto
         {
@@ -304,7 +310,8 @@ public class PlaceService : IPlaceService
             Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = GetMainImageUrl(place.Images),
+            HeroImage = images.FirstOrDefault()?.Url,
+            Images = images,
             Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
                 .ToList(),
@@ -641,6 +648,8 @@ public class PlaceService : IPlaceService
                     Image = p.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
                     Rating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
@@ -672,6 +681,8 @@ public class PlaceService : IPlaceService
                     Image = p.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
                     Rating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
@@ -758,11 +769,33 @@ public class PlaceService : IPlaceService
 
     private static string? GetMainImageUrl(IEnumerable<EntityImage> images)
     {
+        return OrderImages(images)
+            .Select(image => image.Url)
+            .FirstOrDefault();
+    }
+
+    private static List<EntityImageDto> ToImageDtos(IEnumerable<EntityImage> images)
+    {
+        return OrderImages(images)
+            .Select(image => new EntityImageDto
+            {
+                Id = image.Id,
+                Url = image.Url,
+                AltText = DisplayTextSafety.CleanOptional(image.AltText),
+                Caption = DisplayTextSafety.CleanOptional(image.Caption),
+                IsMain = image.IsMain,
+                SortOrder = image.SortOrder
+            })
+            .ToList();
+    }
+
+    private static IOrderedEnumerable<EntityImage> OrderImages(IEnumerable<EntityImage> images)
+    {
         return images
             .OrderByDescending(image => image.IsMain)
             .ThenBy(image => image.SortOrder)
-            .Select(image => image.Url)
-            .FirstOrDefault();
+            .ThenBy(image => image.CreatedAt)
+            .ThenBy(image => image.Id);
     }
 
     private static List<string> BuildFilterTerms(string? rawValue)
