@@ -9,7 +9,7 @@
         </svg>
       </button>
       <span class="text-base font-bold text-white tracking-wide">
-        {{ detail()?.entityType ?? 'Stay' }} Detail
+        {{ detail()?.entityType ?? 'Place' }} Detail
       </span>
       <div class="w-9"></div>
     </div>
@@ -104,8 +104,13 @@
         <div>
           <div class="flex items-center gap-2 mb-1.5">
             <span class="bg-orange-50 text-[#e8722a] text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-              {{ d.stayType }}
+              {{ d.placeType || 'Place' }}
             </span>
+            @if (d.stayType) {
+              <span class="bg-slate-100 text-slate-600 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+                {{ d.stayType }}
+              </span>
+            }
           </div>
           <h2 class="text-xl font-bold text-slate-800 mb-1.5">{{ d.name }}</h2>
           <div class="flex items-center gap-1.5">
@@ -147,7 +152,7 @@
         <!-- Description -->
         @if (d.description) {
           <div>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">About this stay</p>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">About this place</p>
             <p class="text-sm text-slate-600 leading-relaxed">{{ d.description }}</p>
           </div>
           <div class="h-px bg-slate-100"></div>
