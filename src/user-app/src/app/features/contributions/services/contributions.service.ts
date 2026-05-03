@@ -274,8 +274,11 @@ function normalizeDetails(details: DetailsData | null): NormalizedDetailsData {
     description: details?.description ?? '',
     phone: details?.phone ?? '',
     contactEmail: details?.contactEmail?.trim() ?? '',
-    website: details?.website ?? '',
-    bookingPartners: details?.bookingPartners ?? [],
+    website: details?.website?.trim() ?? '',
+    bookingPartners: (details?.bookingPartners ?? []).map(partner => ({
+      id: partner.id,
+      url: partner.url.trim(),
+    })),
   };
 }
 

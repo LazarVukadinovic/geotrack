@@ -24,6 +24,7 @@ export class StepDetailsComponent {
   saved = output<DetailsData>();
   back = output<void>();
   changed = output<DetailsData>();
+  submitted = false;
 
   bookingPartners = [
     { id: 'booking', label: 'Booking.com' },
@@ -43,7 +44,28 @@ export class StepDetailsComponent {
     website: '',
     bookingPartners: [],
   };
-  onContinue(): void { this.saved.emit({ ...this.form }); }
+
+  onContinue(): void {
+    this.submitted = true;
+    if (!this.isValid()) return;
+
+    this.saved.emit(this.normalizedForm());
+  }
+
+  isValid(): boolean {
+    return !this.websiteError() &&
+      this.form.bookingPartners.every(partner => !this.partnerUrlError(partner.id));
+  }
+
+  websiteError(): string {
+    return this.validateOptionalUrl(this.form.website, 'Website URL');
+  }
+
+  partnerUrlError(id: string): string {
+    if (!this.isPartnerSelected(id)) return '';
+
+    return this.validateRequiredUrl(this.getPartnerUrl(id), 'Booking partner URL');
+  }
 
   togglePartner(id: string): void {
     if (this.isPartnerSelected(id)) {
@@ -67,5 +89,47 @@ export class StepDetailsComponent {
       p.id === id ? { ...p, url } : p
     );
     this.changed.emit({ ...this.form });
+  }
+
+  private normalizedForm(): DetailsData {
+    return {
+      description: this.form.description.trim(),
+      phone: this.form.phone.trim(),
+      contactEmail: this.form.contactEmail.trim(),
+      website: this.form.website.trim(),
+      bookingPartners: this.form.bookingPartners.map(partner => ({
+        id: partner.id,
+        url: partner.url.trim(),
+      })),
+    };
+  }
+
+  private validateOptionalUrl(value: string, label: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+
+    return this.validateUrl(trimmed, label);
+  }
+
+  private validateRequiredUrl(value: string, label: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) return `${label} is required.`;
+
+    return this.validateUrl(trimmed, label);
+  }
+
+  private validateUrl(value: string, label: string): string {
+    if (value.length > 500) return `${label} must be 500 characters or fewer.`;
+
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== 'https:' || !parsed.hostname || parsed.username || parsed.password) {
+        return `${label} must be a valid https URL.`;
+      }
+    } catch {
+      return `${label} must be a valid https URL.`;
+    }
+
+    return '';
   }
 }

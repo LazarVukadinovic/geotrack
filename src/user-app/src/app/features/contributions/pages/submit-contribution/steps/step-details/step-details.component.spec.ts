@@ -20,4 +20,27 @@ describe('StepDetailsComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('rejects malformed website URLs', () => {
+    component.form.website = 'javascript:alert(1)';
+
+    component.onContinue();
+
+    expect(component.isValid()).toBe(false);
+    expect(component.websiteError()).toBe('Website URL must be a valid https URL.');
+    expect(component.submitted).toBe(true);
+  });
+
+  it('requires selected booking partners to have valid https URLs', () => {
+    component.togglePartner('booking');
+
+    component.onContinue();
+
+    expect(component.isValid()).toBe(false);
+    expect(component.partnerUrlError('booking')).toBe('Booking partner URL is required.');
+
+    component.updatePartnerUrl('booking', 'https://booking.example/stays/validation-villa');
+
+    expect(component.isValid()).toBe(true);
+  });
 });

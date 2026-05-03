@@ -84,8 +84,15 @@ export class SubmitContributionComponent implements OnInit {
   }
 
   protected onSubmit(): void {
-    if (!this.draft().basics) {
+    const basics = this.draft().basics;
+    if (!basics) {
       this.submitError.set('Complete the stay basics before submitting.');
+      this.currentStep.set(1);
+      return;
+    }
+
+    if (!hasValidContributionLocation(basics)) {
+      this.submitError.set('Please choose a valid location before submitting.');
       this.currentStep.set(1);
       return;
     }
@@ -156,4 +163,18 @@ export class SubmitContributionComponent implements OnInit {
       },
     });
   }
+}
+
+function hasValidContributionLocation(basics: BasicsData): boolean {
+  return typeof basics.lat === 'number' &&
+    typeof basics.lng === 'number' &&
+    Number.isFinite(basics.lat) &&
+    Number.isFinite(basics.lng) &&
+    basics.lat >= -90 &&
+    basics.lat <= 90 &&
+    basics.lng >= -180 &&
+    basics.lng <= 180 &&
+    (basics.lat !== 0 || basics.lng !== 0) &&
+    !!basics.city.trim() &&
+    !!basics.country.trim();
 }

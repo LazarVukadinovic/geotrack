@@ -42,6 +42,7 @@ export class StepBasicsComponent implements OnDestroy {
   pickerLat = signal<number | null>(null);
   pickerLng = signal<number | null>(null);
   isGeocoding = signal(false);
+  submitAttempted = signal(false);
   private pickerMap?: MapLibreMap;
   private pickerResizeObserver?: ResizeObserver;
   private pickerMapInitFrame: number | null = null;
@@ -228,11 +229,28 @@ export class StepBasicsComponent implements OnDestroy {
   }
 
   isValid(): boolean {
-    return !!this.form.name.trim() && !!this.form.city.trim() && !!this.form.country.trim();
+    return !!this.form.name.trim() &&
+      !!this.form.city.trim() &&
+      !!this.form.country.trim() &&
+      this.hasConfirmedLocation();
+  }
+
+  hasConfirmedLocation(): boolean {
+    return this.hasUsableCoordinates(this.form.lat, this.form.lng);
+  }
+
+  showLocationError(): boolean {
+    return this.submitAttempted() && !this.hasConfirmedLocation();
+  }
+
+  canConfirmPickerLocation(): boolean {
+    return this.hasUsableCoordinates(this.pickerLat(), this.pickerLng()) && !this.isGeocoding();
   }
 
   onContinue(): void {
+    this.submitAttempted.set(true);
     if (!this.isValid()) return;
+
     this.form.imgBgPosition = this.bgPosition();
     this.form.imgBgSize = this.bgSize();
     this.saved.emit({ ...this.form });
