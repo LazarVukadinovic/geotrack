@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.Text;
 
-namespace Geotrack.Infrastructure.Services;
+namespace Geotrack.Application.Services;
 
-internal static class ModerationTextNormalizer
+public static class ModerationTextNormalizer
 {
-    internal static string NormalizeForModeration(string? value)
+    public static string NormalizeForModeration(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;

@@ -2,9 +2,8 @@ using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Moderation;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Reviews;
-using Microsoft.Extensions.Caching.Memory;
 
-namespace Geotrack.Infrastructure.Services;
+namespace Geotrack.Application.Services;
 
 public class ReviewContentModerationService : IReviewContentModerationService
 {
@@ -12,12 +11,10 @@ public class ReviewContentModerationService : IReviewContentModerationService
         "Review text contains language that violates GeoTrack content rules. Please edit it and try again.";
 
     private readonly IModerationTermCache _termCache;
-    private readonly IMemoryCache _memoryCache;
 
-    public ReviewContentModerationService(IModerationTermCache termCache, IMemoryCache memoryCache)
+    public ReviewContentModerationService(IModerationTermCache termCache)
     {
         _termCache = termCache;
-        _memoryCache = memoryCache;
     }
 
     public async Task EnsureAllowedReviewTextAsync(string? text)
@@ -29,35 +26,14 @@ public class ReviewContentModerationService : IReviewContentModerationService
         if (string.IsNullOrWhiteSpace(normalized))
             return;
 
-        var matcher = await GetMatcherAsync();
+        var activeRules = await _termCache.GetActiveRulesAsync();
+        var matcher = ModerationMatcher.Build(activeRules);
         if (matcher.IsViolation(normalized))
             throw new InvalidOperationException(ViolationMessage);
     }
 
-    private async Task<ModerationMatcher> GetMatcherAsync()
-    {
-        var matcher = await _memoryCache.GetOrCreateAsync(
-            ModerationCacheKeys.CompiledReviewContentMatcher,
-            async entry =>
-            {
-                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
-                entry.SlidingExpiration = TimeSpan.FromMinutes(1);
-
-                var activeRules = await _termCache.GetActiveRulesAsync();
-                return ModerationMatcher.Build(activeRules);
-            });
-
-        return matcher ?? ModerationMatcher.Empty;
-    }
-
     private sealed class ModerationMatcher
     {
-        internal static readonly ModerationMatcher Empty = new(
-            new HashSet<string>(StringComparer.Ordinal),
-            Array.Empty<string>(),
-            Array.Empty<Regex>(),
-            Array.Empty<Regex>());
-
         private readonly HashSet<string> _exactTerms;
         private readonly string[] _prefixTerms;
         private readonly Regex[] _exactObfuscatedPatterns;

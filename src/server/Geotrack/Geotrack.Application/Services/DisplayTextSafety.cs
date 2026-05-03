@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
 
-namespace Geotrack.Infrastructure.Services;
+namespace Geotrack.Application.Services;
 
-internal static class DisplayTextSafety
+public static class DisplayTextSafety
 {
     private static readonly Regex WhitespacePattern = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex OpaqueTokenPattern = new(
