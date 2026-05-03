@@ -3,6 +3,7 @@ import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { ActivatedRoute } from '@angular/router';
 
 declare const L: any;
 
@@ -39,7 +40,7 @@ interface DayHours {
 })
 export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private cdr: ChangeDetectorRef) {}
+  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private route: ActivatedRoute) {}
 
   //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -522,10 +523,40 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     document.body.style.overflow = '';
   }
-
+  isEditMode = false;
+  editPlaceId: string | null = null;
   //Lifecycle
-  ngOnInit(): void {}
+  ngOnInit(): void {
+     const nav = history.state?.place;
+    if (nav) {
+      this.isEditMode = true;
+      this.editPlaceId = nav.id;
+      this.populateFromPlace(nav);
+    } else {
+      this.route.paramMap.subscribe(params => {
+        const id = params.get('id');
+        if (id) {
+          this.isEditMode = true;
+          this.editPlaceId = id;
+          // Ovde bi išao servis lookup
+        }
+      });
+    }
+  }
+  placeName = '';
+  private populateFromPlace(place: any): void {
+    this.placeName = place.name ?? '';
+    this.placeType = place.category ?? '';
+    this.pinLat    = place.lat?.toFixed(6) ?? '';
+    this.pinLng    = place.lng?.toFixed(6) ?? '';
 
+    setTimeout(() => {
+      if (place.lat && place.lng) {
+        this.updateMiniMapPin(place.lat, place.lng);
+        this.pinConfirmed = true;
+      }
+    }, 200);
+  }
   ngAfterViewInit(): void {
     setTimeout(() => this.initMiniMap(), 0);
   }

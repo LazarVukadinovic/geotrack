@@ -182,4 +182,10 @@ export class MapPageComponent implements OnInit, OnDestroy {
     if (type === 'Destination') return 'bg-purple-900/60 text-purple-300 border-purple-700';
     return 'bg-blue-900/60 text-blue-300 border-blue-700';
   }
+  editPlace(place: MockPlace): void {
+    this.router.navigate(['/places/edit', place.id], {
+      state: { place }
+    });
+    this.closePopup();
+  }
 }
