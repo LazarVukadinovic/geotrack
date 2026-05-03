@@ -67,7 +67,7 @@ export class ExploreService {
   /** Coordinates used for the last successful load. */
   private loadedLat = 0;
   private loadedLng = 0;
-  private loadedSource: 'gps' | 'ip' | 'manual' | 'destination' | null = null;
+  private loadedSource: 'gps' | 'approximate' | 'manual' | 'destination' | 'default' | 'unknown' | null = null;
   private loadedDestinationId: number | null = null;
 
   /** Reactive lists for templates that prefer signals. */
@@ -100,7 +100,7 @@ export class ExploreService {
       const dist = this.haversineKm(this.loadedLat, this.loadedLng, loc.latitude, loc.longitude);
       const sourceChanged = this.loadedSource !== loc.source;
       // First load (0,0 → real) always triggers. After that we still reload when
-      // the source changes, so a fresh GPS fix can replace an approximate IP load
+      // the source changes, so a fresh GPS fix can replace an approximate load
       // even if both coordinates are within the same city.
       if (this._loaded() && dist < RELOAD_THRESHOLD_KM && !sourceChanged && this.loadedSource !== 'destination') return;
 
@@ -154,7 +154,7 @@ export class ExploreService {
     lat: number,
     lng: number,
     onComplete?: () => void,
-    source?: 'gps' | 'ip' | 'manual' | null,
+    source?: 'gps' | 'approximate' | 'manual' | 'default' | 'unknown' | null,
   ): void {
     this._loadError.set(null);
 

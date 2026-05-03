@@ -116,7 +116,7 @@ export class Home implements OnInit, OnDestroy {
     this.searchQuery = name;
     this.isLocating = true;
 
-    // Set manual destination in LocationService (IP fallback handles general context)
+    // Set manual destination in LocationService.
     this.locationSvc.setManualDestination(lat, lon, name);
     this.analytics.track('search_performed', {
       metadata: {
@@ -154,7 +154,7 @@ export class Home implements OnInit, OnDestroy {
    * GPS flow:
    * 1. Triggers browser permission popup via LocationService.requestGps()
    * 2. On success: preloads Explore data with real coords, marks entry complete, navigates
-   * 3. On denial: falls back to IP-based location, marks entry complete, navigates
+   * 3. On denial: offers approximate location, marks entry complete, navigates
    */
   async requestLocation(): Promise<void> {
     this.isLocating = true;
@@ -171,14 +171,14 @@ export class Home implements OnInit, OnDestroy {
       this.router.navigate(['/explore'], { replaceUrl: true });
 
     } catch {
-      // GPS denied or failed → fall back to IP-based location
-      const ipLoc = await this.locationSvc.ensureIpFallback();
+      // GPS denied or failed → offer approximate location before calling the backend fallback.
+      const approximateLoc = await this.locationSvc.ensureIpFallback();
 
       this.isLocating = false;
       this.locationSvc.markLocationEntryComplete();
 
-      if (ipLoc) {
-        await this.exploreSvc.loadForLocation(ipLoc.latitude, ipLoc.longitude);
+      if (approximateLoc) {
+        await this.exploreSvc.loadForLocation(approximateLoc.latitude, approximateLoc.longitude);
       }
 
       this.router.navigate(['/explore'], { replaceUrl: true });
