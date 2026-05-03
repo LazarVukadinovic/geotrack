@@ -13,11 +13,13 @@ public class Region
     public string Name { get; set; } = string.Empty;
 
     public ICollection<Destination> Destinations { get; set; } = new List<Destination>(); // NAVIGATIONAL
-    public ICollection<RegionalOrganizationRegion> RegionalOrganizationRegions { get; set; } = new List<RegionalOrganizationRegion>(); // NAVIGATIONAL
+    public ICollection<RegionalManagerRegion> RegionalManagerRegions { get; set; } = new List<RegionalManagerRegion>(); // NAVIGATIONAL
 
     public int TerritoryId { get; set; }
     public Territory Territory { get; set; } = null!; // NAVIGATIONAL
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+
+    public ICollection<EntityImage> Images { get; set; } = new List<EntityImage>();
 }

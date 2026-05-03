@@ -150,7 +150,7 @@ public class ExploreService : IExploreService
                 EventTypeName = e.EventType.Name,
                 e.StartDate,
                 e.EndDate,
-                e.ImageUrl,
+                Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
                 DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
             })
             .OrderBy(e => e.DestinationId == resolvedDestination.Id ? 0 : 1)
@@ -162,17 +162,17 @@ public class ExploreService : IExploreService
         var topStays = await _db.Places
             .AsNoTracking()
             .Where(p =>
-                p.PricePerNight != null &&
+                p.Stay != null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(p => new
             {
                 p.Id,
                 p.Name,
                 DestinationId = p.Location.DestinationId,
-                p.ImageUrl,
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
-                p.PricePerNight,
+                PricePerNight = p.Stay != null ? p.Stay.PricePerNight : null,
                 DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
             })
             .OrderBy(p => p.DestinationId == resolvedDestination.Id ? 0 : 1)
@@ -184,7 +184,7 @@ public class ExploreService : IExploreService
         var nearbyNature = await _db.Places
             .AsNoTracking()
             .Where(p =>
-                p.PricePerNight == null &&
+                p.Stay == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (NatureTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
                  p.PlaceTags.Any(pt => NatureTagSlugs.Contains(pt.Tag.Slug.ToLower()))))
@@ -194,7 +194,7 @@ public class ExploreService : IExploreService
                 p.Name,
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
-                p.ImageUrl,
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
@@ -208,7 +208,7 @@ public class ExploreService : IExploreService
         var cultureHistory = await _db.Places
             .AsNoTracking()
             .Where(p =>
-                p.PricePerNight == null &&
+                p.Stay == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (CultureHistoryTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
                  p.PlaceTags.Any(pt => CultureHistoryTagSlugs.Contains(pt.Tag.Slug.ToLower()))))
@@ -218,7 +218,7 @@ public class ExploreService : IExploreService
                 p.Name,
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
-                p.ImageUrl,
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
                 ReviewCount = p.PlaceReviews.Count(),
                 DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
             })
@@ -231,7 +231,7 @@ public class ExploreService : IExploreService
         var foodMusic = await _db.Places
             .AsNoTracking()
             .Where(p =>
-                p.PricePerNight == null &&
+                p.Stay == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (FoodMusicTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
                  p.PlaceTags.Any(pt => FoodMusicTagSlugs.Contains(pt.Tag.Slug.ToLower()))))
@@ -244,7 +244,7 @@ public class ExploreService : IExploreService
                 p.Description,
                 Category = p.PlaceType.Name,
                 LocationName = p.Location.Name,
-                p.ImageUrl,
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 p.OpeningHours,
@@ -285,13 +285,13 @@ public class ExploreService : IExploreService
                 Title = DisplayTextSafety.CleanRequired(e.Name, "Event"),
                 Subtitle = DisplayTextSafety.CleanOptional(e.EventTypeName),
                 DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
-                Image = e.ImageUrl
+                Image = e.Image
             }).ToList(),
             TopStays = topStays.Select(s => new ExploreStayDto
             {
                 Id = s.Id,
                 Title = DisplayTextSafety.CleanRequired(s.Name, "Stay"),
-                Image = s.ImageUrl,
+                Image = s.Image,
                 Rating = s.AverageRating.HasValue ? Math.Round(s.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(s.ReviewCount),
                 Distance = SpatialDistanceFormatter.Format(s.DistanceMeters),
@@ -303,7 +303,7 @@ public class ExploreService : IExploreService
                 Id = p.Id,
                 Title = DisplayTextSafety.CleanRequired(p.Name, "Nature spot"),
                 CategoryLabel = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
-                Image = p.ImageUrl,
+                Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
                 Distance = SpatialDistanceFormatter.Format(p.DistanceMeters),
@@ -314,7 +314,7 @@ public class ExploreService : IExploreService
                 Id = p.Id,
                 Title = DisplayTextSafety.CleanRequired(p.Name, "Attraction"),
                 Type = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
-                Image = p.ImageUrl
+                Image = p.Image
             }).ToList(),
             LandmarkCategories = landmarkCategories,
             CuratedForYou = curatedPlaces.Select(p => new ExploreCuratedItemDto
@@ -335,7 +335,7 @@ public class ExploreService : IExploreService
                 Category = DisplayTextSafety.CleanRequired(p.Category, "Local").ToLowerInvariant(),
                 Type = DisplayTextSafety.CleanRequired(p.Category, "Local"),
                 Location = DisplayTextSafety.CleanOptional(p.LocationName),
-                Image = p.ImageUrl,
+                Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
                 IsSaved = placeFavoriteIds.Contains(p.Id),
@@ -472,7 +472,7 @@ public class ExploreService : IExploreService
 
         var categoryQuery = _db.Places
             .AsNoTracking()
-            .Where(p => p.PricePerNight == null);
+            .Where(p => p.Stay == null);
 
         IQueryable<LocalCategoryProjection> orderedQuery;
 
@@ -546,7 +546,7 @@ public class ExploreService : IExploreService
         var categories = await _db.Places
             .AsNoTracking()
             .Where(p =>
-                p.PricePerNight == null &&
+                p.Stay == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
             .GroupBy(p => new { p.PlaceTypeId, p.PlaceType.Name })
             .Select(g => new
@@ -671,7 +671,7 @@ public class ExploreService : IExploreService
         var candidates = await _db.Places
             .AsNoTracking()
             .Where(p =>
-                p.PricePerNight == null &&
+                p.Stay == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 p.PlaceTags.Any(pt => curationTagIds.Contains(pt.TagId)))
             .Select(p => new CuratedPlaceCandidate
@@ -680,7 +680,7 @@ public class ExploreService : IExploreService
                 Title = p.Name,
                 Description = p.Description,
                 Location = p.Location.Name,
-                Image = p.ImageUrl,
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
@@ -1027,3 +1027,4 @@ public class ExploreService : IExploreService
         public bool IsOutsideCurrentDestination { get; set; }
     }
 }
+

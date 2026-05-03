@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 
 namespace Geotrack.Domain.Entities.Users;
 
-public class RegionalOrganization
+public class RegionalManager
 {
     public int UserId { get; set; } // FOREIGN KEY
     public User User { get; set; } = null!; // NAVIGATIONAL
 
-    public ICollection<RegionalOrganizationRegion> RegionalOrganizationRegions { get; set; } = new List<RegionalOrganizationRegion>(); // NAVIGATIONAL
+    public ICollection<RegionalManagerRegion> RegionalManagerRegions { get; set; } = new List<RegionalManagerRegion>(); // NAVIGATIONAL
 }

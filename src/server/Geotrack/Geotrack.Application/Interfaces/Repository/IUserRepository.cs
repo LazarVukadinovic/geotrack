@@ -1,4 +1,4 @@
-﻿using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
@@ -47,10 +47,11 @@ public interface IUserRepository : IRepository<User>
     Task RemoveUserRoleAsync(UserRole userRole);
     Task<User?> GetByIdWithRegionsAsync(int userId);
     Task<User?> GetByIdWithRolesAndRegionsAsync(int userId);
-    Task AddRegionalOrganizationAsync(RegionalOrganization regionalOrganization);
+    Task AddRegionalManagerAsync(RegionalManager regionalOrganization);
     Task<bool> RegionExistsAsync(int regionId);
     Task<bool> UserRegionExistsAsync(int userId, int regionId);
-    Task AddUserRegionAsync(RegionalOrganizationRegion region);
-    Task<RegionalOrganizationRegion?> GetUserRegionAsync(int userId, int regionId);
-    Task DeleteUserRegionAsync(RegionalOrganizationRegion region);
+    Task AddUserRegionAsync(RegionalManagerRegion region);
+    Task<RegionalManagerRegion?> GetUserRegionAsync(int userId, int regionId);
+    Task DeleteUserRegionAsync(RegionalManagerRegion region);
 }
+

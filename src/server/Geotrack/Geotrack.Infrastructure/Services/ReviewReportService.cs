@@ -323,8 +323,8 @@ public class ReviewReportService : IReviewReportService
     {
         var reviewer = await _db.Users
             .Include(user => user.UserRoles).ThenInclude(userRole => userRole.Role)
-            .Include(user => user.RegionalOrganization)
-                .ThenInclude(organization => organization!.RegionalOrganizationRegions)
+            .Include(user => user.RegionalManager)
+                .ThenInclude(organization => organization!.RegionalManagerRegions)
                 .ThenInclude(link => link.Region)
             .FirstOrDefaultAsync(user => user.Id == reviewerUserId)
             ?? throw new UnauthorizedAccessException("Invalid user token.");
@@ -345,7 +345,7 @@ public class ReviewReportService : IReviewReportService
             report.ReviewId == reviewId);
 
     private static List<int> GetAssignedRegionIds(User reviewer) =>
-        reviewer.RegionalOrganization?.RegionalOrganizationRegions
+        reviewer.RegionalManager?.RegionalManagerRegions
             .Select(link => link.RegionId)
             .Distinct()
             .ToList() ?? new List<int>();

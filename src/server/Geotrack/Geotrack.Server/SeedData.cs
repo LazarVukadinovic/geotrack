@@ -27,128 +27,300 @@ public static class SeedData
 
     public static async Task InitializeAsync(AppDbContext db)
     {
+        await db.Database.MigrateAsync();
+
         if (await db.Destinations.AnyAsync())
         {
-            await EnsureSeedTagsAsync(db);
-            await EnsureSeedMediaAsync(db);
             await EnsureRolesAsync(db);
             await EnsureDemoUsersAsync(db);
-            return; // Already seeded
+            await EnsureSeedTagsAsync(db);
+            return;
         }
 
-        // ── Region ──
-        var region = new Region { Name = "Dalmatia", CreatedAt = DateTime.UtcNow };
-        db.Regions.Add(region);
+        var now = DateTime.UtcNow;
+
+        // Territory and region
+        var croatia = new Territory
+        {
+            Name = "Croatia",
+            CreatedAt = now
+        };
+
+        db.Territories.Add(croatia);
         await db.SaveChangesAsync();
 
-        // ── Destination Type ──
-        var cityType = new DestinationType { Name = "City", Description = "Urban destination", CreatedAt = DateTime.UtcNow };
+        AddEntityImage(
+            db,
+            EntityImageTargetType.Territory,
+            U("1500530855697-b586d89ba3ee"),
+            isMain: true,
+            sortOrder: 0,
+            createdAt: now,
+            territoryId: croatia.Id);
+
+        var dalmatia = new Region
+        {
+            Name = "Dalmatia",
+            TerritoryId = croatia.Id,
+            CreatedAt = now
+        };
+
+        db.Regions.Add(dalmatia);
+        await db.SaveChangesAsync();
+
+        AddEntityImage(
+            db,
+            EntityImageTargetType.Region,
+            U("1507525428034-b723cf961d3e"),
+            isMain: true,
+            sortOrder: 0,
+            createdAt: now,
+            regionId: dalmatia.Id);
+
+        // Destination type
+        var cityType = new DestinationType
+        {
+            Name = "City",
+            Description = "Urban destination",
+            CreatedAt = now
+        };
+
         db.DestinationTypes.Add(cityType);
         await db.SaveChangesAsync();
 
-        // ── Destination ──
+        // Destination
         var dubrovnik = new Destination
         {
             Name = "Dubrovnik",
             DestinationTypeId = cityType.Id,
-            RegionId = region.Id,
-            Description = "The Pearl of the Adriatic, known for its distinctive Old Town walls and stunning coastal views.",
+            RegionId = dalmatia.Id,
+            Description = "The Pearl of the Adriatic, known for its Old Town walls and coastal views.",
             Latitude = 42.6507,
             Longitude = 18.0944,
-            ImageUrl = U("1555990793-77610ee3d7c2"),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = now
         };
+
         db.Destinations.Add(dubrovnik);
         await db.SaveChangesAsync();
 
-        // ── Location Types ──
-        var neighborhoodType = new LocationType { Name = "Neighborhood", Description = "City neighborhood", CreatedAt = DateTime.UtcNow };
-        var districtType = new LocationType { Name = "District", Description = "City district", CreatedAt = DateTime.UtcNow };
+        AddEntityImage(
+            db,
+            EntityImageTargetType.Destination,
+            U("1555990793-77610ee3d7c2"),
+            isMain: true,
+            sortOrder: 0,
+            createdAt: now,
+            destinationId: dubrovnik.Id);
+
+        AddEntityImage(
+            db,
+            EntityImageTargetType.Destination,
+            SeedMedia("dubrovnik-old-town"),
+            isMain: false,
+            sortOrder: 1,
+            createdAt: now,
+            destinationId: dubrovnik.Id);
+
+        // Location types
+        var neighborhoodType = new LocationType
+        {
+            Name = "Neighborhood",
+            Description = "City neighborhood",
+            CreatedAt = now
+        };
+
+        var districtType = new LocationType
+        {
+            Name = "District",
+            Description = "City district",
+            CreatedAt = now
+        };
+
         db.LocationTypes.AddRange(neighborhoodType, districtType);
         await db.SaveChangesAsync();
 
-        // ── Locations ──
-        var oldTown = new Location { Name = "Old Town", DestinationId = dubrovnik.Id, LocationTypeId = neighborhoodType.Id, Latitude = 42.6411, Longitude = 18.1083, ImageUrl = SeedMedia("dubrovnik-old-town"), CreatedAt = DateTime.UtcNow };
-        var lapad = new Location { Name = "Lapad", DestinationId = dubrovnik.Id, LocationTypeId = districtType.Id, Latitude = 42.6585, Longitude = 18.0686, ImageUrl = U("1596275281743-e4c30b6e0e27"), CreatedAt = DateTime.UtcNow };
-        var gruz = new Location { Name = "Gruž", DestinationId = dubrovnik.Id, LocationTypeId = districtType.Id, Latitude = 42.6597, Longitude = 18.0778, CreatedAt = DateTime.UtcNow };
+        // Locations
+        var oldTown = new Location
+        {
+            Name = "Old Town",
+            DestinationId = dubrovnik.Id,
+            LocationTypeId = neighborhoodType.Id,
+            Latitude = 42.6411,
+            Longitude = 18.1083,
+            CreatedAt = now
+        };
+
+        var lapad = new Location
+        {
+            Name = "Lapad",
+            DestinationId = dubrovnik.Id,
+            LocationTypeId = districtType.Id,
+            Latitude = 42.6585,
+            Longitude = 18.0686,
+            CreatedAt = now
+        };
+
+        var gruz = new Location
+        {
+            Name = "Gruz",
+            DestinationId = dubrovnik.Id,
+            LocationTypeId = districtType.Id,
+            Latitude = 42.6597,
+            Longitude = 18.0778,
+            CreatedAt = now
+        };
+
         db.Locations.AddRange(oldTown, lapad, gruz);
         await db.SaveChangesAsync();
 
-        // ── Place Types ──
-        var ptBeach = new PlaceType { Name = "Beach", Description = "Beaches and coastal areas", CreatedAt = DateTime.UtcNow };
-        var ptRestaurant = new PlaceType { Name = "Restaurant", Description = "Dining establishments", CreatedAt = DateTime.UtcNow };
-        var ptBar = new PlaceType { Name = "Bar", Description = "Bars and pubs", CreatedAt = DateTime.UtcNow };
-        var ptMuseum = new PlaceType { Name = "Museum", Description = "Museums and galleries", CreatedAt = DateTime.UtcNow };
-        var ptLandmark = new PlaceType { Name = "Landmark", Description = "Landmarks and monuments", CreatedAt = DateTime.UtcNow };
-        var ptHotel = new PlaceType { Name = "Hotel", Description = "Hotels and accommodations", CreatedAt = DateTime.UtcNow };
-        var ptAttraction = new PlaceType { Name = "Attraction", Description = "Tourist attractions", CreatedAt = DateTime.UtcNow };
-        var ptNature = new PlaceType { Name = "Nature", Description = "Nature spots", CreatedAt = DateTime.UtcNow };
-        var ptCafe = new PlaceType { Name = "Cafe", Description = "Cafes and coffee shops", CreatedAt = DateTime.UtcNow };
-        var ptActivity = new PlaceType { Name = "Activity", Description = "Activities and experiences", CreatedAt = DateTime.UtcNow };
-        db.PlaceTypes.AddRange(ptBeach, ptRestaurant, ptBar, ptMuseum, ptLandmark, ptHotel, ptAttraction, ptNature, ptCafe, ptActivity);
+        AddEntityImage(db, EntityImageTargetType.Location, SeedMedia("dubrovnik-old-town"), true, 0, now, locationId: oldTown.Id);
+        AddEntityImage(db, EntityImageTargetType.Location, U("1596275281743-e4c30b6e0e27"), true, 0, now, locationId: lapad.Id);
+        AddEntityImage(db, EntityImageTargetType.Location, U("1500530855697-b586d89ba3ee"), true, 0, now, locationId: gruz.Id);
+
+        // Place types
+        var ptBeach = new PlaceType { Name = "Beach", Description = "Beaches and coastal areas", CreatedAt = now };
+        var ptRestaurant = new PlaceType { Name = "Restaurant", Description = "Dining establishments", CreatedAt = now };
+        var ptCafe = new PlaceType { Name = "Cafe", Description = "Cafes and coffee shops", CreatedAt = now };
+        var ptLandmark = new PlaceType { Name = "Landmark", Description = "Landmarks and monuments", CreatedAt = now };
+        var ptNature = new PlaceType { Name = "Nature", Description = "Nature spots", CreatedAt = now };
+        var ptStay = new PlaceType { Name = "Stay", Description = "Hotels, apartments, villas and other accommodation", CreatedAt = now };
+
+        db.PlaceTypes.AddRange(ptBeach, ptRestaurant, ptCafe, ptLandmark, ptNature, ptStay);
         await db.SaveChangesAsync();
 
-        // ── Tags (interest tags + entity tags) ──
-        var tags = BuildSeedTags(DateTime.UtcNow);
-        db.Tags.AddRange(tags);
+        // Restaurant types
+        var rtFineDining = new RestaurantType
+        {
+            Name = "Fine Dining",
+            Slug = "fine-dining",
+            Description = "Upscale restaurant experience",
+            CreatedAt = now
+        };
+
+        var rtTraditional = new RestaurantType
+        {
+            Name = "Traditional",
+            Slug = "traditional",
+            Description = "Traditional local cuisine",
+            CreatedAt = now
+        };
+
+        var rtCafeBistro = new RestaurantType
+        {
+            Name = "Cafe Bistro",
+            Slug = "cafe-bistro",
+            Description = "Casual cafe or bistro",
+            CreatedAt = now
+        };
+
+        db.RestaurantTypes.AddRange(rtFineDining, rtTraditional, rtCafeBistro);
         await db.SaveChangesAsync();
 
-        // Helper to find tag by slug
-        Tag T(string slug) => tags.First(t => t.Slug == slug);
+        // Stay types
+        var hotelStayType = new StayType
+        {
+            Name = "Hotel",
+            Slug = "hotel",
+            Description = "Hotel accommodation",
+            CreatedAt = now
+        };
 
-        // ── Event Types ──
-        var etFestival = new EventType { Name = "Festival", Description = "Music and cultural festivals", CreatedAt = DateTime.UtcNow };
-        var etConcert = new EventType { Name = "Concert", Description = "Live music performances", CreatedAt = DateTime.UtcNow };
-        var etMarket = new EventType { Name = "Market", Description = "Food and craft markets", CreatedAt = DateTime.UtcNow };
-        var etCultural = new EventType { Name = "Cultural", Description = "Cultural events", CreatedAt = DateTime.UtcNow };
-        var etOutdoor = new EventType { Name = "Outdoor", Description = "Outdoor activities", CreatedAt = DateTime.UtcNow };
-        db.EventTypes.AddRange(etFestival, etConcert, etMarket, etCultural, etOutdoor);
+        var apartmentStayType = new StayType
+        {
+            Name = "Apartment",
+            Slug = "apartment",
+            Description = "Private apartment accommodation",
+            CreatedAt = now
+        };
+
+        var villaStayType = new StayType
+        {
+            Name = "Villa",
+            Slug = "villa",
+            Description = "Private villa accommodation",
+            CreatedAt = now
+        };
+
+        db.StayTypes.AddRange(hotelStayType, apartmentStayType, villaStayType);
         await db.SaveChangesAsync();
 
-        // ── Amenities ──
+        // Stay amenities
+        var stayAmenities = new List<StayAmenity>
+        {
+            new() { Name = "Free WiFi", Slug = "free-wifi", IconKey = "wifi", Description = "Wireless internet access", CreatedAt = now },
+            new() { Name = "Swimming Pool", Slug = "swimming-pool", IconKey = "pool", Description = "Pool available for guests", CreatedAt = now },
+            new() { Name = "Breakfast Included", Slug = "breakfast-included", IconKey = "breakfast", Description = "Breakfast included in the stay", CreatedAt = now },
+            new() { Name = "Parking", Slug = "parking", IconKey = "parking", Description = "Parking available", CreatedAt = now },
+            new() { Name = "Spa", Slug = "spa", IconKey = "spa", Description = "Spa and wellness facilities", CreatedAt = now },
+            new() { Name = "Fitness Center", Slug = "fitness-center", IconKey = "gym", Description = "Gym or fitness center available", CreatedAt = now },
+            new() { Name = "Restaurant", Slug = "restaurant", IconKey = "restaurant", Description = "On-site restaurant", CreatedAt = now },
+            new() { Name = "Air Conditioning", Slug = "air-conditioning", IconKey = "ac", Description = "Air-conditioned rooms", CreatedAt = now },
+            new() { Name = "Sea View", Slug = "sea-view", IconKey = "sea", Description = "Sea view from room or property", CreatedAt = now }
+        };
+
+        db.StayAmenities.AddRange(stayAmenities);
+        await db.SaveChangesAsync();
+
+        StayAmenity SA(string slug) => stayAmenities.First(x => x.Slug == slug);
+
+        // Generic place amenities
         var amenities = new List<Amenity>
         {
-            new() { Name = "Swimming Pool", Icon = "pool" },
             new() { Name = "Free WiFi", Icon = "wifi" },
-            new() { Name = "Breakfast Included", Icon = "breakfast" },
             new() { Name = "Parking", Icon = "parking" },
-            new() { Name = "Spa & Wellness", Icon = "spa" },
-            new() { Name = "Fitness Center", Icon = "gym" },
             new() { Name = "Restaurant", Icon = "restaurant" },
-            new() { Name = "Air Conditioning", Icon = "ac" },
+            new() { Name = "Air Conditioning", Icon = "ac" }
         };
+
         db.Amenities.AddRange(amenities);
         await db.SaveChangesAsync();
 
-        Amenity A(string icon) => amenities.First(a => a.Icon == icon);
+        Amenity A(string icon) => amenities.First(x => x.Icon == icon);
 
-        // ── Booking Partners ──
+        // Booking partners
         var bpBooking = new BookingPartner { Name = "Booking.com", Variant = "dark" };
         var bpAirbnb = new BookingPartner { Name = "Airbnb", Variant = "brand" };
         var bpExpedia = new BookingPartner { Name = "Expedia", Variant = "muted" };
+
         db.BookingPartners.AddRange(bpBooking, bpAirbnb, bpExpedia);
+        await db.SaveChangesAsync();
+
+        // Tags
+        var tags = BuildSeedTags(now);
+        db.Tags.AddRange(tags);
+        await db.SaveChangesAsync();
+
+        Tag T(string slug) => tags.First(t => t.Slug == slug);
+
+        // Event types
+        var etFestival = new EventType { Name = "Festival", Description = "Music and cultural festivals", CreatedAt = now };
+        var etMarket = new EventType { Name = "Market", Description = "Food and craft markets", CreatedAt = now };
+        var etOutdoor = new EventType { Name = "Outdoor", Description = "Outdoor activities", CreatedAt = now };
+
+        db.EventTypes.AddRange(etFestival, etMarket, etOutdoor);
         await db.SaveChangesAsync();
 
         await EnsureRolesAsync(db);
 
-        // ── Demo User ──
+        // Demo users
         var hasher = new PasswordHasher<User>();
-        var demoUser = new User
+
+        var marko = new User
         {
             Username = "marko",
             Email = "marko.p@example.com",
             FirstName = "Marko",
-            LastName = "Petrović",
+            LastName = "Petrovic",
             PasswordHash = "",
             AvatarUrl = U("1507003211169-0a1dd7228f2d", 200),
             DisplayName = "marko_p",
-            Location = "San Francisco, CA",
-            CreatedAt = DateTime.UtcNow
+            Location = "Belgrade, Serbia",
+            CreatedAt = now
         };
-        demoUser.PasswordHash = hasher.HashPassword(demoUser, "password123");
-        db.Users.Add(demoUser);
 
-        var reviewerElena = new User
+        marko.PasswordHash = hasher.HashPassword(marko, "password123");
+
+        var elena = new User
         {
             Username = "elena",
             Email = "elena@example.com",
@@ -156,562 +328,548 @@ public static class SeedData
             LastName = "Rossi",
             PasswordHash = "",
             AvatarUrl = U("1494790108377-be9c29b29330", 200),
-            CreatedAt = DateTime.UtcNow
+            DisplayName = "elena_r",
+            CreatedAt = now
         };
-        reviewerElena.PasswordHash = hasher.HashPassword(reviewerElena, "password123");
-        db.Users.Add(reviewerElena);
+
+        elena.PasswordHash = hasher.HashPassword(elena, "password123");
+
+        db.Users.AddRange(marko, elena);
         await db.SaveChangesAsync();
 
-        // ═══════════════════════════════════
-        // PLACES - Beaches
-        // ═══════════════════════════════════
+        // Places
         var banjeBeach = new Place
         {
-            Name = "Banje Beach", Subtitle = "Dubrovnik's Premier Beach", PlaceTypeId = ptBeach.Id, LocationId = oldTown.Id,
-            Description = "Known as one of the most beautiful beaches in Dubrovnik, Banje Beach offers stunning views of the Old Town and Lokrum Island. Enjoy crystal-clear waters, sun loungers, and a vibrant beachfront restaurant. Perfect for both relaxation and vibrant coastal nightlife.",
-            ImageUrl = U("1507525428034-b723cf961d3e"), Latitude = 42.6399, Longitude = 18.1131,
-            OpeningHours = "6:00 AM - 10:00 PM", AverageRating = 4.8, ReviewCount = 136, CreatedAt = DateTime.UtcNow
-        };
-        var svJakov = new Place
-        {
-            Name = "Sveti Jakov Beach", Subtitle = "Hidden gem south of Old Town", PlaceTypeId = ptBeach.Id, LocationId = oldTown.Id,
-            Description = "A secluded pebble beach with crystal-clear waters, accessible via a steep staircase from the road above. Less crowded than Banje, offering a more peaceful atmosphere with excellent views.",
-            ImageUrl = U("1519046904884-53103b34b206"), Latitude = 42.6369, Longitude = 18.1185,
-            OpeningHours = "Open 24h", AverageRating = 4.7, ReviewCount = 89, CreatedAt = DateTime.UtcNow
-        };
-        var lapadBeach = new Place
-        {
-            Name = "Lapad Beach", Subtitle = "Family-friendly sandy beach", PlaceTypeId = ptBeach.Id, LocationId = lapad.Id,
-            Description = "Lapad Beach is a popular sandy beach with shallow waters, making it ideal for families. The promenade is lined with cafes and restaurants.",
-            ImageUrl = U("1473116763249-2faaef81ccda"), Latitude = 42.6567, Longitude = 18.0618,
-            OpeningHours = "Open 24h", AverageRating = 4.5, ReviewCount = 72, CreatedAt = DateTime.UtcNow
+            Name = "Banje Beach",
+            Subtitle = "Dubrovnik's premier beach",
+            PlaceTypeId = ptBeach.Id,
+            LocationId = oldTown.Id,
+            Description = "A popular beach with clear water and views of the Old Town and Lokrum Island.",
+            Latitude = 42.6399,
+            Longitude = 18.1131,
+            OpeningHours = "06:00 - 22:00",
+            AverageRating = 4.8,
+            ReviewCount = 136,
+            CreatedAt = now
         };
 
-        // PLACES - Restaurants
         var nautika = new Place
         {
-            Name = "Nautika Restaurant", Subtitle = "Fine dining by the sea", PlaceTypeId = ptRestaurant.Id, LocationId = oldTown.Id,
-            Description = "One of Croatia's finest restaurants, Nautika offers exquisite Mediterranean cuisine with breathtaking views of the Adriatic Sea and Lovrijenac Fortress. Perfect for a special dining experience.",
-            ImageUrl = U("1414235077428-338989a2e8c0"), Latitude = 42.6414, Longitude = 18.1064,
-            OpeningHours = "12:00 PM - 11:00 PM", AverageRating = 4.9, ReviewCount = 205, CreatedAt = DateTime.UtcNow
+            Name = "Nautika Restaurant",
+            Subtitle = "Fine dining by the sea",
+            PlaceTypeId = ptRestaurant.Id,
+            LocationId = oldTown.Id,
+            Description = "Mediterranean fine dining with views of the Adriatic and Lovrijenac Fortress.",
+            Latitude = 42.6414,
+            Longitude = 18.1064,
+            OpeningHours = "12:00 - 23:00",
+            AverageRating = 4.9,
+            ReviewCount = 205,
+            CreatedAt = now
         };
-        var buzaBar = new Place
-        {
-            Name = "Buža Bar", Subtitle = "Cliff bar with stunning views", PlaceTypeId = ptBar.Id, LocationId = oldTown.Id,
-            Description = "Perched on the cliffs outside the Old Town walls, Buža Bar is famous for its incredible sunset views and unique ambiance. A must-visit for drinks with a view.",
-            ImageUrl = U("1528823872057-9c018a7a7553"), Latitude = 42.6389, Longitude = 18.1095,
-            OpeningHours = "9:00 AM - 2:00 AM", AverageRating = 4.7, ReviewCount = 312, CreatedAt = DateTime.UtcNow
-        };
+
         var cogito = new Place
         {
-            Name = "Cogito Coffee", Subtitle = "Specialty coffee in Old Town", PlaceTypeId = ptCafe.Id, LocationId = oldTown.Id,
-            Description = "Award-winning specialty coffee roaster in the heart of Old Town. Known for carefully sourced beans and expert preparation.",
-            ImageUrl = U("1495474472287-4d71bcdd2085"), Latitude = 42.6413, Longitude = 18.1089,
-            OpeningHours = "7:30 AM - 9:00 PM", AverageRating = 4.8, ReviewCount = 98, CreatedAt = DateTime.UtcNow
-        };
-        var kopun = new Place
-        {
-            Name = "Restaurant Kopun", Subtitle = "Traditional Dalmatian cuisine", PlaceTypeId = ptRestaurant.Id, LocationId = oldTown.Id,
-            Description = "Authentic Dalmatian restaurant specializing in traditional recipes with a modern twist. Famous for their signature roasted capon dish and local wines.",
-            ImageUrl = U("1555396273-367ea4eb4db5"), Latitude = 42.6413, Longitude = 18.1106,
-            OpeningHours = "11:00 AM - 11:00 PM", AverageRating = 4.6, ReviewCount = 167, CreatedAt = DateTime.UtcNow
-        };
-        var revelin = new Place
-        {
-            Name = "Culture Club Revelin", Subtitle = "Nightclub in a 16th-century fortress", PlaceTypeId = ptBar.Id, LocationId = oldTown.Id,
-            Description = "One of Europe's most unique nightclubs, set inside a 16th-century defensive fortress. Hosts world-renowned DJs and themed events throughout the summer.",
-            ImageUrl = SeedMedia("culture-club-revelin"), Latitude = 42.6423, Longitude = 18.1121,
-            OpeningHours = "11:00 PM - 5:00 AM", AverageRating = 4.4, ReviewCount = 143, CreatedAt = DateTime.UtcNow
-        };
-        var proto = new Place
-        {
-            Name = "Proto Restaurant", Subtitle = "Seafood fine dining", PlaceTypeId = ptRestaurant.Id, LocationId = oldTown.Id,
-            Description = "Elegant seafood restaurant known for fresh catches and innovative Mediterranean dishes. Stunning rooftop terrace with views.",
-            ImageUrl = U("1559339352-11d035aa65de"), Latitude = 42.6410, Longitude = 18.1100,
-            OpeningHours = "11:00 AM - 11:30 PM", AverageRating = 4.7, ReviewCount = 189, CreatedAt = DateTime.UtcNow
+            Name = "Cogito Coffee",
+            Subtitle = "Specialty coffee in Old Town",
+            PlaceTypeId = ptCafe.Id,
+            LocationId = oldTown.Id,
+            Description = "Specialty coffee shop in the heart of Old Town.",
+            Latitude = 42.6413,
+            Longitude = 18.1089,
+            OpeningHours = "07:30 - 21:00",
+            AverageRating = 4.8,
+            ReviewCount = 98,
+            CreatedAt = now
         };
 
-        // PLACES - Museums & Culture
         var oldTownWalls = new Place
         {
-            Name = "Dubrovnik Old Town Walls", Subtitle = "Iconic medieval fortifications", PlaceTypeId = ptLandmark.Id, LocationId = oldTown.Id,
-            Description = "Walk along the magnificent medieval walls that encircle the Old Town. These ancient fortifications offer breathtaking panoramic views of the city's terracotta rooftops and the sparkling Adriatic Sea.",
-            ImageUrl = SeedMedia("dubrovnik-old-town"), Latitude = 42.6411, Longitude = 18.1083,
-            OpeningHours = "8:00 AM - 6:30 PM", AverageRating = 4.9, ReviewCount = 423, CreatedAt = DateTime.UtcNow
-        };
-        var rectorsPlace = new Place
-        {
-            Name = "Rector's Palace", Subtitle = "Gothic-Renaissance masterpiece", PlaceTypeId = ptMuseum.Id, LocationId = oldTown.Id,
-            Description = "A stunning Gothic-Renaissance palace that once served as the seat of the Republic of Ragusa. Now houses a museum with period furniture, paintings, and artifacts.",
-            ImageUrl = SeedMedia("rectors-palace"), Latitude = 42.6407, Longitude = 18.1107,
-            OpeningHours = "9:00 AM - 6:00 PM", AverageRating = 4.6, ReviewCount = 187, CreatedAt = DateTime.UtcNow
-        };
-        var warPhotoMuseum = new Place
-        {
-            Name = "War Photo Limited", Subtitle = "Powerful photographic exhibition", PlaceTypeId = ptMuseum.Id, LocationId = oldTown.Id,
-            Description = "A moving exhibition of war photography documenting conflicts around the world, with a focus on the Croatian War of Independence.",
-            ImageUrl = U("1580060839134-75a5edca2e99"), Latitude = 42.6403, Longitude = 18.1089,
-            OpeningHours = "10:00 AM - 4:00 PM", AverageRating = 4.5, ReviewCount = 94, CreatedAt = DateTime.UtcNow
-        };
-        var lovrijenac = new Place
-        {
-            Name = "Fort Lovrijenac", Subtitle = "Dubrovnik's Gibraltar", PlaceTypeId = ptLandmark.Id, LocationId = oldTown.Id,
-            Description = "An imposing fortress perched on a 37-meter high cliff, offering spectacular views of the city and sea. Known as 'Dubrovnik's Gibraltar'.",
-            ImageUrl = U("1580587771525-78b9dba3b914"), Latitude = 42.6414, Longitude = 18.1050,
-            OpeningHours = "8:00 AM - 7:00 PM", AverageRating = 4.7, ReviewCount = 156, CreatedAt = DateTime.UtcNow
-        };
-        var stradun = new Place
-        {
-            Name = "Stradun", Subtitle = "Main street of the Old Town", PlaceTypeId = ptLandmark.Id, LocationId = oldTown.Id,
-            Description = "The famous limestone-paved main street of Dubrovnik Old Town, running from the Pile Gate to the Old Port. Lined with shops, cafes, and historic buildings.",
-            ImageUrl = U("1590502593747-42a996133562"), Latitude = 42.6414, Longitude = 18.1089,
-            AverageRating = 4.8, ReviewCount = 267, CreatedAt = DateTime.UtcNow
+            Name = "Dubrovnik Old Town Walls",
+            Subtitle = "Iconic medieval fortifications",
+            PlaceTypeId = ptLandmark.Id,
+            LocationId = oldTown.Id,
+            Description = "Medieval walls surrounding the Old Town with panoramic city and sea views.",
+            Latitude = 42.6411,
+            Longitude = 18.1083,
+            OpeningHours = "08:00 - 18:30",
+            AverageRating = 4.9,
+            ReviewCount = 423,
+            CreatedAt = now
         };
 
-        // PLACES - Nature
         var lokrumIsland = new Place
         {
-            Name = "Lokrum Island", Subtitle = "Nature paradise nearby", PlaceTypeId = ptNature.Id, LocationId = oldTown.Id,
-            Description = "A lush island nature reserve just a 15-minute boat ride from Old Town. Experience the stunning cliffs, vibrant cistern towers, and abundant wildlife in this authentic custard in the beautiful Adriatic.",
-            ImageUrl = U("1441974231531-c6227db76b6e"), Latitude = 42.6275, Longitude = 18.1208,
-            OpeningHours = "9:00 AM - 6:00 PM", AverageRating = 4.9, ReviewCount = 320, CreatedAt = DateTime.UtcNow
-        };
-        var mljetPark = new Place
-        {
-            Name = "Mljet National Park", Subtitle = "Croatia's greenest island", PlaceTypeId = ptNature.Id, LocationId = gruz.Id,
-            Description = "Discover majestic mountain peaks, abundant wildlife and stunning landscapes. A pristine destination for hiking and mountain exploration.",
-            ImageUrl = U("1469474968028-56623f02e42e"), Latitude = 42.7667, Longitude = 17.5500,
-            AverageRating = 4.8, ReviewCount = 210, CreatedAt = DateTime.UtcNow
-        };
-        var srdHill = new Place
-        {
-            Name = "Mount Srđ", Subtitle = "Panoramic city viewpoint", PlaceTypeId = ptNature.Id, LocationId = oldTown.Id,
-            Description = "Take the cable car or hike to the top for the most spectacular panoramic views of Dubrovnik, the Adriatic Sea, and surrounding islands.",
-            ImageUrl = U("1506905925346-21bda4d32df4"), Latitude = 42.6500, Longitude = 18.1100,
-            AverageRating = 4.7, ReviewCount = 178, CreatedAt = DateTime.UtcNow
-        };
-        var elaphitiIslands = new Place
-        {
-            Name = "Elaphiti Islands", Subtitle = "Island hopping paradise", PlaceTypeId = ptNature.Id, LocationId = gruz.Id,
-            Description = "A small archipelago northwest of Dubrovnik, perfect for day trips. Crystal-clear waters, peaceful villages, and beautiful Mediterranean vegetation.",
-            ImageUrl = U("1504646268844-76fa29ae5192"), Latitude = 42.7100, Longitude = 17.9400,
-            AverageRating = 4.6, ReviewCount = 145, CreatedAt = DateTime.UtcNow
-        };
-        var sunriseHike = new Place
-        {
-            Name = "Sunrise Hike Trail", Subtitle = "Dawn trail above Old Town", PlaceTypeId = ptActivity.Id, LocationId = oldTown.Id,
-            Description = "A guided sunrise hiking trail through the hills above Dubrovnik, offering breathtaking dawn views over the Old Town and sea.",
-            ImageUrl = U("1551632811-561732d1e306"), Latitude = 42.6500, Longitude = 18.1050,
-            OpeningHours = "5:30 AM - 9:00 AM", AverageRating = 4.8, ReviewCount = 67, CreatedAt = DateTime.UtcNow
+            Name = "Lokrum Island",
+            Subtitle = "Nature paradise nearby",
+            PlaceTypeId = ptNature.Id,
+            LocationId = oldTown.Id,
+            Description = "A small island nature reserve a short boat ride from Dubrovnik Old Town.",
+            Latitude = 42.6275,
+            Longitude = 18.1208,
+            OpeningHours = "09:00 - 18:00",
+            AverageRating = 4.9,
+            ReviewCount = 320,
+            CreatedAt = now
         };
 
-        // ═══════════════════════════════════
-        // PLACES - Hotels / Stays
-        // ═══════════════════════════════════
-        var grandVilla = new Place
+        var villaAdriatica = new Place
         {
-            Name = "Villa Adriatica Luxury Resort", Subtitle = "5-star luxury resort", PlaceTypeId = ptHotel.Id, LocationId = lapad.Id,
-            Description = "Perched on a cliff overlooking the Adriatic Sea, Villa Adriatica offers an unparalleled luxury experience. Enjoy breathtaking sunset views, exquisite on-site dining, and world-class spa facilities, all just minutes from the historic Old Town.",
-            ImageUrl = U("1566073771259-6a6300d8226c"), Latitude = 42.6560, Longitude = 18.0630,
-            PricePerNight = 189, AverageRating = 4.8, ReviewCount = 342, CreatedAt = DateTime.UtcNow
+            Name = "Villa Adriatica Luxury Resort",
+            Subtitle = "5-star luxury resort",
+            PlaceTypeId = ptStay.Id,
+            LocationId = lapad.Id,
+            Description = "Luxury resort overlooking the Adriatic Sea with spa, pool and sea-view rooms.",
+            Latitude = 42.6560,
+            Longitude = 18.0630,
+            AverageRating = 4.8,
+            ReviewCount = 342,
+            CreatedAt = now
         };
+
         var hotelExcelsior = new Place
         {
-            Name = "Hotel Excelsior", Subtitle = "Historic luxury hotel", PlaceTypeId = ptHotel.Id, LocationId = oldTown.Id,
-            Description = "A grand historic hotel offering luxurious rooms with stunning sea views. Located near the Old Town, it combines classic elegance with modern amenities.",
-            ImageUrl = SeedMedia("hotel-excelsior"), Latitude = 42.6395, Longitude = 18.1138,
-            PricePerNight = 165, AverageRating = 4.7, ReviewCount = 287, CreatedAt = DateTime.UtcNow
-        };
-        var grandHotelPark = new Place
-        {
-            Name = "Grand Hotel Park", Subtitle = "Elegant park-side hotel", PlaceTypeId = ptHotel.Id, LocationId = lapad.Id,
-            Description = "An elegant hotel surrounded by lush Mediterranean gardens, offering panoramic views and easy access to Lapad Beach.",
-            ImageUrl = U("1551882547-ff40c63fe5fa"), Latitude = 42.6570, Longitude = 18.0650,
-            PricePerNight = 120, AverageRating = 4.6, ReviewCount = 198, CreatedAt = DateTime.UtcNow
-        };
-        var rixos = new Place
-        {
-            Name = "Rixos Premium Dubrovnik", Subtitle = "Premium all-inclusive resort", PlaceTypeId = ptHotel.Id, LocationId = lapad.Id,
-            Description = "A premium all-inclusive resort offering world-class amenities, private beach access, and exceptional dining experiences with Adriatic views.",
-            ImageUrl = U("1584132967334-10e028bd69f7"), Latitude = 42.6575, Longitude = 18.0640,
-            PricePerNight = 155, AverageRating = 4.5, ReviewCount = 156, CreatedAt = DateTime.UtcNow
-        };
-        var boutiqueStariGrad = new Place
-        {
-            Name = "Boutique Hotel Stari Grad", Subtitle = "Charming Old Town boutique", PlaceTypeId = ptHotel.Id, LocationId = oldTown.Id,
-            Description = "A charming boutique hotel housed in a renovated medieval building in the heart of Old Town. Intimate atmosphere with uniquely decorated rooms.",
-            ImageUrl = U("1520250497591-112f2f40a3f4"), Latitude = 42.6412, Longitude = 18.1095,
-            PricePerNight = 95, AverageRating = 4.9, ReviewCount = 89, CreatedAt = DateTime.UtcNow
-        };
-        var hotelLero = new Place
-        {
-            Name = "Hotel Lero", Subtitle = "Modern comfort near Gruž", PlaceTypeId = ptHotel.Id, LocationId = gruz.Id,
-            Description = "A modern hotel with comfortable rooms and excellent facilities, close to Gruž port and with easy access to Old Town by bus.",
-            ImageUrl = U("1564501049412-61c2a3083791"), Latitude = 42.6590, Longitude = 18.0790,
-            PricePerNight = 65, AverageRating = 4.4, ReviewCount = 112, CreatedAt = DateTime.UtcNow
-        };
-        var hiltonImperial = new Place
-        {
-            Name = "Hilton Imperial Dubrovnik", Subtitle = "Hilton quality at the Pile Gate", PlaceTypeId = ptHotel.Id, LocationId = oldTown.Id,
-            Description = "Located right at the Pile Gate entrance to Old Town, offering the perfect blend of historic charm and Hilton luxury standards.",
-            ImageUrl = U("1571896349842-33c89424de2d"), Latitude = 42.6418, Longitude = 18.1068,
-            PricePerNight = 145, AverageRating = 4.6, ReviewCount = 234, CreatedAt = DateTime.UtcNow
+            Name = "Hotel Excelsior",
+            Subtitle = "Historic luxury hotel",
+            PlaceTypeId = ptStay.Id,
+            LocationId = oldTown.Id,
+            Description = "Historic luxury hotel near the Old Town with sea views and premium amenities.",
+            Latitude = 42.6395,
+            Longitude = 18.1138,
+            AverageRating = 4.7,
+            ReviewCount = 287,
+            CreatedAt = now
         };
 
-        var allPlaces = new[] { banjeBeach, svJakov, lapadBeach, nautika, buzaBar, cogito, kopun, revelin, proto,
-            oldTownWalls, rectorsPlace, warPhotoMuseum, lovrijenac, stradun,
-            lokrumIsland, mljetPark, srdHill, elaphitiIslands, sunriseHike,
-            grandVilla, hotelExcelsior, grandHotelPark, rixos, boutiqueStariGrad, hotelLero, hiltonImperial };
-        db.Places.AddRange(allPlaces);
+        var oldTownApartment = new Place
+        {
+            Name = "Old Town Stone Apartment",
+            Subtitle = "Private apartment inside the city walls",
+            PlaceTypeId = ptStay.Id,
+            LocationId = oldTown.Id,
+            Description = "A cozy private apartment in a renovated stone building inside Dubrovnik Old Town.",
+            Latitude = 42.6412,
+            Longitude = 18.1095,
+            AverageRating = 4.6,
+            ReviewCount = 74,
+            CreatedAt = now
+        };
+
+        db.Places.AddRange(
+            banjeBeach,
+            nautika,
+            cogito,
+            oldTownWalls,
+            lokrumIsland,
+            villaAdriatica,
+            hotelExcelsior,
+            oldTownApartment);
+
         await db.SaveChangesAsync();
 
-        // ── Place Tags ──
-        void AddPT(Place p, params Tag[] tgs) { foreach (var t in tgs) db.PlaceTags.Add(new PlaceTag { PlaceId = p.Id, TagId = t.Id }); }
+        // Public entity images
+        AddEntityImage(db, EntityImageTargetType.Place, U("1507525428034-b723cf961d3e"), true, 0, now, placeId: banjeBeach.Id);
+        AddEntityImage(db, EntityImageTargetType.Place, U("1519046904884-53103b34b206"), false, 1, now, placeId: banjeBeach.Id);
+        AddEntityImage(db, EntityImageTargetType.Place, U("1414235077428-338989a2e8c0"), true, 0, now, placeId: nautika.Id);
+        AddEntityImage(db, EntityImageTargetType.Place, U("1495474472287-4d71bcdd2085"), true, 0, now, placeId: cogito.Id);
+        AddEntityImage(db, EntityImageTargetType.Place, SeedMedia("dubrovnik-old-town"), true, 0, now, placeId: oldTownWalls.Id);
+        AddEntityImage(db, EntityImageTargetType.Place, U("1441974231531-c6227db76b6e"), true, 0, now, placeId: lokrumIsland.Id);
+        AddEntityImage(db, EntityImageTargetType.Place, U("1566073771259-6a6300d8226c"), true, 0, now, placeId: villaAdriatica.Id);
+        AddEntityImage(db, EntityImageTargetType.Place, U("1564501049412-61c2a3083791"), false, 1, now, placeId: villaAdriatica.Id);
+        AddEntityImage(db, EntityImageTargetType.Place, SeedMedia("hotel-excelsior"), true, 0, now, placeId: hotelExcelsior.Id);
+        AddEntityImage(db, EntityImageTargetType.Place, U("1520250497591-112f2f40a3f4"), true, 0, now, placeId: oldTownApartment.Id);
 
-        AddPT(banjeBeach, T("beaches"), T("outdoor"), T("scenic-views"));
-        AddPT(svJakov, T("beaches"), T("scenic-views"));
-        AddPT(lapadBeach, T("beaches"), T("family-friendly"));
-        AddPT(nautika, T("food-drink"), T("fine-dining"), T("sea-view"));
-        AddPT(buzaBar, T("food-drink"), T("nightlife"), T("scenic-views"), T("beach-bars"));
-        AddPT(cogito, T("food-drink"));
-        AddPT(kopun, T("food-drink"), T("culture"));
-        AddPT(revelin, T("nightlife"), T("culture"), T("live-music"));
-        AddPT(proto, T("food-drink"), T("fine-dining"), T("sea-view"));
-        AddPT(oldTownWalls, T("history"), T("landmarks"), T("scenic-views"), T("culture"), T("historic-sites"));
-        AddPT(rectorsPlace, T("history"), T("museums"), T("culture"));
-        AddPT(warPhotoMuseum, T("history"), T("museums"), T("culture"), T("exhibitions"));
-        AddPT(lovrijenac, T("history"), T("landmarks"), T("scenic-views"), T("culture"));
-        AddPT(stradun, T("history"), T("landmarks"), T("culture"), T("districts"));
-        AddPT(lokrumIsland, T("nature"), T("islands"), T("scenic-views"), T("outdoor"));
-        AddPT(mljetPark, T("nature"), T("parks"), T("islands"), T("hiking"));
-        AddPT(srdHill, T("nature"), T("scenic-views"), T("hiking"), T("mountains"));
-        AddPT(elaphitiIslands, T("nature"), T("islands"), T("beaches"));
-        AddPT(sunriseHike, T("nature"), T("adventure"), T("hiking"), T("scenic-views"));
-        // Hotels
-        AddPT(grandVilla, T("luxury"), T("spa"), T("pool"), T("sea-view"), T("breakfast"));
-        AddPT(hotelExcelsior, T("luxury"), T("sea-view"), T("spa"), T("pool"));
-        AddPT(grandHotelPark, T("pool"), T("breakfast"), T("family-friendly"));
-        AddPT(rixos, T("luxury"), T("pool"), T("spa"), T("breakfast"), T("sea-view"));
-        AddPT(boutiqueStariGrad, T("boutique"), T("breakfast"));
-        AddPT(hotelLero, T("budget"), T("breakfast"), T("family-friendly"));
-        AddPT(hiltonImperial, T("luxury"), T("pool"), T("spa"), T("breakfast"));
         await db.SaveChangesAsync();
 
-        // ── Hotel Amenities & Booking Partners ──
-        void AddAmenities(Place h, params Amenity[] ams)
-        { foreach (var a in ams) db.PlaceAmenities.Add(new PlaceAmenity { PlaceId = h.Id, AmenityId = a.Id }); }
-        void AddBP(Place h, params BookingPartner[] bps)
-        { foreach (var bp in bps) db.PlaceBookingPartners.Add(new PlaceBookingPartner { PlaceId = h.Id, BookingPartnerId = bp.Id }); }
+        // Stays
+        var villaStay = new Stay
+        {
+            PlaceId = villaAdriatica.Id,
+            StayTypeId = villaStayType.Id,
+            PricePerNight = 189,
+            CheckInTime = "14:00",
+            CheckOutTime = "11:00",
+            CreatedAt = now
+        };
 
-        AddAmenities(grandVilla, A("pool"), A("wifi"), A("breakfast"), A("spa"), A("gym"), A("restaurant"), A("ac"), A("parking"));
-        AddBP(grandVilla, bpBooking, bpAirbnb, bpExpedia);
-        AddAmenities(hotelExcelsior, A("pool"), A("wifi"), A("breakfast"), A("spa"), A("restaurant"), A("ac"));
-        AddBP(hotelExcelsior, bpBooking, bpExpedia);
-        AddAmenities(grandHotelPark, A("pool"), A("wifi"), A("breakfast"), A("parking"), A("restaurant"), A("ac"));
-        AddBP(grandHotelPark, bpBooking, bpAirbnb);
-        AddAmenities(rixos, A("pool"), A("wifi"), A("breakfast"), A("spa"), A("gym"), A("restaurant"), A("ac"), A("parking"));
-        AddBP(rixos, bpBooking, bpExpedia);
-        AddAmenities(boutiqueStariGrad, A("wifi"), A("breakfast"), A("ac"));
-        AddBP(boutiqueStariGrad, bpBooking, bpAirbnb);
-        AddAmenities(hotelLero, A("wifi"), A("breakfast"), A("parking"), A("ac"));
-        AddBP(hotelLero, bpBooking);
-        AddAmenities(hiltonImperial, A("pool"), A("wifi"), A("breakfast"), A("spa"), A("gym"), A("ac"), A("parking"));
-        AddBP(hiltonImperial, bpBooking, bpExpedia);
+        var excelsiorStay = new Stay
+        {
+            PlaceId = hotelExcelsior.Id,
+            StayTypeId = hotelStayType.Id,
+            PricePerNight = 165,
+            CheckInTime = "15:00",
+            CheckOutTime = "11:00",
+            CreatedAt = now
+        };
+
+        var apartmentStay = new Stay
+        {
+            PlaceId = oldTownApartment.Id,
+            StayTypeId = apartmentStayType.Id,
+            PricePerNight = 95,
+            CheckInTime = "14:00",
+            CheckOutTime = "10:00",
+            CreatedAt = now
+        };
+
+        db.Stays.AddRange(villaStay, excelsiorStay, apartmentStay);
         await db.SaveChangesAsync();
 
-        // ═══════════════════════════════════
-        // EVENTS
-        // ═══════════════════════════════════
+        AddStayAmenities(db, villaStay, SA("free-wifi"), SA("swimming-pool"), SA("breakfast-included"), SA("parking"), SA("spa"), SA("fitness-center"), SA("restaurant"), SA("air-conditioning"), SA("sea-view"));
+        AddStayAmenities(db, excelsiorStay, SA("free-wifi"), SA("breakfast-included"), SA("spa"), SA("restaurant"), SA("air-conditioning"), SA("sea-view"));
+        AddStayAmenities(db, apartmentStay, SA("free-wifi"), SA("air-conditioning"), SA("sea-view"));
+
+        await db.SaveChangesAsync();
+
+        // Place amenities and booking partners
+        db.PlaceAmenities.AddRange(
+            new PlaceAmenity { PlaceId = nautika.Id, AmenityId = A("wifi").Id },
+            new PlaceAmenity { PlaceId = cogito.Id, AmenityId = A("wifi").Id },
+            new PlaceAmenity { PlaceId = villaAdriatica.Id, AmenityId = A("wifi").Id },
+            new PlaceAmenity { PlaceId = villaAdriatica.Id, AmenityId = A("parking").Id },
+            new PlaceAmenity { PlaceId = hotelExcelsior.Id, AmenityId = A("wifi").Id },
+            new PlaceAmenity { PlaceId = oldTownApartment.Id, AmenityId = A("wifi").Id }
+        );
+
+        db.PlaceBookingPartners.AddRange(
+            new PlaceBookingPartner { PlaceId = villaAdriatica.Id, BookingPartnerId = bpBooking.Id, Url = "https://example.com/villa-adriatica-booking" },
+            new PlaceBookingPartner { PlaceId = villaAdriatica.Id, BookingPartnerId = bpExpedia.Id, Url = "https://example.com/villa-adriatica-expedia" },
+            new PlaceBookingPartner { PlaceId = hotelExcelsior.Id, BookingPartnerId = bpBooking.Id, Url = "https://example.com/hotel-excelsior-booking" },
+            new PlaceBookingPartner { PlaceId = hotelExcelsior.Id, BookingPartnerId = bpExpedia.Id, Url = "https://example.com/hotel-excelsior-expedia" },
+            new PlaceBookingPartner { PlaceId = oldTownApartment.Id, BookingPartnerId = bpAirbnb.Id, Url = "https://example.com/old-town-apartment-airbnb" }
+        );
+
+        await db.SaveChangesAsync();
+
+        // UserPlace - if row exists, user can manage this place
+        db.UserPlaces.AddRange(
+            new UserPlace
+            {
+                UserId = marko.Id,
+                PlaceId = villaAdriatica.Id,
+                CreatedAt = now
+            },
+            new UserPlace
+            {
+                UserId = marko.Id,
+                PlaceId = oldTownApartment.Id,
+                CreatedAt = now
+            }
+        );
+
+        await db.SaveChangesAsync();
+
+        // Place tags
+        AddPlaceTags(db, banjeBeach, T("beaches"), T("outdoor"), T("scenic-views"));
+        AddPlaceTags(db, nautika, T("food-drink"), T("fine-dining"), T("sea-view"));
+        AddPlaceTags(db, cogito, T("food-drink"));
+        AddPlaceTags(db, oldTownWalls, T("history"), T("landmarks"), T("scenic-views"), T("culture"));
+        AddPlaceTags(db, lokrumIsland, T("nature"), T("islands"), T("outdoor"));
+        AddPlaceTags(db, villaAdriatica, T("luxury"), T("spa"), T("pool"), T("sea-view"), T("breakfast"));
+        AddPlaceTags(db, hotelExcelsior, T("luxury"), T("sea-view"), T("spa"), T("breakfast"));
+        AddPlaceTags(db, oldTownApartment, T("boutique"), T("sea-view"), T("budget"));
+
+        await db.SaveChangesAsync();
+
+        // Events
         var summerFest = new Event
         {
-            Name = "Dubrovnik Summer Festival", EventTypeId = etFestival.Id, LocationId = oldTown.Id,
-            Description = "Experience an unforgettable evening under the stars. The Summer Festival brings together world-class talent, delicious street food, and an exclusive beachfront atmosphere. Whether you're here to dance barefoot in the sand or simply be captivated by the stage, this is the ultimate summer experience.",
-            ImageUrl = SeedMedia("dubrovnik-summer-festival"),
-            StartDate = DateTime.UtcNow.AddDays(5), EndDate = DateTime.UtcNow.AddDays(47),
-            TicketPrice = "€25 - €100", Duration = "42 days", HostedBy = "Dubrovnik Summer Festival Foundation",
-            VenueDescription = "Multiple venues across Old Town including Lovrijenac Fortress, Rector's Palace courtyard, and the Gradac Park amphitheatre.",
-            ArrivalTips = "Arrive 30 minutes before show starts. Parking is limited near Old Town — use public transport or walk from Pile Gate.",
-            Accessibility = "Most venues offer wheelchair accessibility. Contact the festival office 48 hours in advance for special seating arrangements.",
-            CreatedAt = DateTime.UtcNow
+            Name = "Dubrovnik Summer Festival",
+            EventTypeId = etFestival.Id,
+            LocationId = oldTown.Id,
+            Description = "A cultural summer festival with performances across historic venues in the Old Town.",
+            StartDate = now.AddDays(5),
+            EndDate = now.AddDays(47),
+            TicketPrice = "EUR 25 - EUR 100",
+            Duration = "42 days",
+            HostedBy = "Dubrovnik Summer Festival Foundation",
+            VenueDescription = "Multiple venues across Old Town.",
+            ArrivalTips = "Arrive early. Parking is limited near Old Town.",
+            Accessibility = "Some venues offer wheelchair accessibility.",
+            CreatedAt = now
         };
-        var jazzNight = new Event
-        {
-            Name = "Jazz Night at Lazareti", EventTypeId = etConcert.Id, LocationId = oldTown.Id,
-            Description = "An intimate evening of jazz performances in the historic Lazareti complex. Featuring local and international jazz artists in a unique courtyard setting.",
-            ImageUrl = U("1415201364774-f6f0bb35f28f"),
-            StartDate = DateTime.UtcNow.AddDays(3), EndDate = DateTime.UtcNow.AddDays(3).AddHours(4),
-            TicketPrice = "€15", Duration = "4 hours", HostedBy = "Dubrovnik Jazz Club",
-            VenueDescription = "Lazareti complex, a renovated quarantine building from the 14th century.",
-            ArrivalTips = "The venue is a short walk from Ploče Gate. Arrive early for the best seats.",
-            Accessibility = "Ground floor venue, wheelchair accessible.",
-            CreatedAt = DateTime.UtcNow
-        };
+
         var foodMarket = new Event
         {
-            Name = "Old Town Food Market", EventTypeId = etMarket.Id, LocationId = oldTown.Id,
-            Description = "A weekly open-air food market featuring local producers, artisan cheeses, olive oils, wines, and traditional Dalmatian delicacies. Taste the authentic flavors of the region.",
-            ImageUrl = U("1555939594-58d7cb561ad1"),
-            StartDate = DateTime.UtcNow.AddDays(2), EndDate = DateTime.UtcNow.AddDays(2).AddHours(8),
-            TicketPrice = "Free entry", Duration = "8 hours", HostedBy = "Dubrovnik City Market Association",
-            VenueDescription = "Gundulićeva Poljana, the charming open square in Old Town.",
-            ArrivalTips = "Mornings offer the freshest produce. Bring cash for small vendors.",
-            Accessibility = "Open-air market, accessible via Old Town gates.",
-            CreatedAt = DateTime.UtcNow
+            Name = "Old Town Food Market",
+            EventTypeId = etMarket.Id,
+            LocationId = oldTown.Id,
+            Description = "Open-air food market with local products, olive oils, cheeses and wines.",
+            StartDate = now.AddDays(2),
+            EndDate = now.AddDays(2).AddHours(8),
+            TicketPrice = "Free entry",
+            Duration = "8 hours",
+            HostedBy = "Dubrovnik City Market Association",
+            CreatedAt = now
         };
-        var fullMoonParty = new Event
-        {
-            Name = "Full Moon Party", EventTypeId = etConcert.Id, LocationId = lapad.Id,
-            Description = "Dance under the stars at Lapad's famous beach party. Live DJs, fire performers, and cocktails on the sand.",
-            ImageUrl = U("1504680177321-2acddfafcbed"),
-            StartDate = DateTime.UtcNow.AddDays(10), EndDate = DateTime.UtcNow.AddDays(10).AddHours(6),
-            TicketPrice = "€20", Duration = "6 hours", HostedBy = "Lapad Beach Events",
-            CreatedAt = DateTime.UtcNow
-        };
-        var acousticSunset = new Event
-        {
-            Name = "Acoustic Sunset Sessions", EventTypeId = etConcert.Id, LocationId = oldTown.Id,
-            Description = "Intimate acoustic performances on the Old Town walls as the sun sets over the Adriatic. Local musicians perform traditional and contemporary pieces.",
-            ImageUrl = U("1493225457124-a3eb161ffa5f"),
-            StartDate = DateTime.UtcNow.AddDays(7), EndDate = DateTime.UtcNow.AddDays(7).AddHours(2),
-            TicketPrice = "€10", Duration = "2 hours", HostedBy = "Walls Music Initiative",
-            CreatedAt = DateTime.UtcNow
-        };
-        var culturalWalk = new Event
-        {
-            Name = "Old Town Cultural Walking Tour", EventTypeId = etCultural.Id, LocationId = oldTown.Id,
-            Description = "A guided walking tour through the historic streets of Dubrovnik Old Town, exploring hidden courtyards, medieval churches, and stories of the Republic of Ragusa.",
-            ImageUrl = U("1590502593747-42a996133562"),
-            StartDate = DateTime.UtcNow.AddDays(1), EndDate = DateTime.UtcNow.AddDays(1).AddHours(3),
-            TicketPrice = "€12", Duration = "3 hours", HostedBy = "Dubrovnik Walking Tours",
-            CreatedAt = DateTime.UtcNow
-        };
+
         var kayakTour = new Event
         {
-            Name = "Sea Kayaking Adventure", EventTypeId = etOutdoor.Id, LocationId = oldTown.Id,
-            Description = "Paddle along the stunning Dubrovnik coastline, exploring sea caves, hidden beaches, and the walls from the sea. Includes snorkeling stop at Lokrum Island.",
-            ImageUrl = U("1544551763-46a013bb70d5"),
-            StartDate = DateTime.UtcNow.AddDays(4), EndDate = DateTime.UtcNow.AddDays(4).AddHours(4),
-            TicketPrice = "€35", Duration = "4 hours", HostedBy = "Adriatic Kayak Tours",
-            CreatedAt = DateTime.UtcNow
+            Name = "Sea Kayaking Adventure",
+            EventTypeId = etOutdoor.Id,
+            LocationId = oldTown.Id,
+            Description = "Guided sea kayaking tour along the Dubrovnik coastline.",
+            StartDate = now.AddDays(4),
+            EndDate = now.AddDays(4).AddHours(4),
+            TicketPrice = "EUR 35",
+            Duration = "4 hours",
+            HostedBy = "Adriatic Kayak Tours",
+            CreatedAt = now
         };
 
-        db.Events.AddRange(summerFest, jazzNight, foodMarket, fullMoonParty, acousticSunset, culturalWalk, kayakTour);
+        db.Events.AddRange(summerFest, foodMarket, kayakTour);
         await db.SaveChangesAsync();
 
-        // ── Event Tags ──
-        void AddET(Event e, params Tag[] tgs) { foreach (var t in tgs) db.EventTags.Add(new EventTag { EventId = e.Id, TagId = t.Id }); }
-        AddET(summerFest, T("festivals"), T("cultural"), T("live-music"), T("outdoor"));
-        AddET(jazzNight, T("live-music"), T("cultural"));
-        AddET(foodMarket, T("food-market"), T("food-drink"), T("outdoor"));
-        AddET(fullMoonParty, T("nightlife"), T("live-music"), T("outdoor"));
-        AddET(acousticSunset, T("live-music"), T("cultural"), T("outdoor"));
-        AddET(culturalWalk, T("cultural"), T("history"), T("outdoor"));
-        AddET(kayakTour, T("outdoor"), T("adventure"));
+        AddEntityImage(db, EntityImageTargetType.Event, SeedMedia("dubrovnik-summer-festival"), true, 0, now, eventId: summerFest.Id);
+        AddEntityImage(db, EntityImageTargetType.Event, U("1555939594-58d7cb561ad1"), true, 0, now, eventId: foodMarket.Id);
+        AddEntityImage(db, EntityImageTargetType.Event, U("1544551763-46a013bb70d5"), true, 0, now, eventId: kayakTour.Id);
+
         await db.SaveChangesAsync();
 
-        // ── Reviews ──
-        var now = DateTime.UtcNow;
+        AddEventTags(db, summerFest, T("festivals"), T("culture"), T("outdoor"));
+        AddEventTags(db, foodMarket, T("food-market"), T("food-drink"), T("outdoor"));
+        AddEventTags(db, kayakTour, T("outdoor"), T("adventure"));
+
+        await db.SaveChangesAsync();
+
+        // Reviews
         db.PlaceReviews.AddRange(
-            new PlaceReview { PlaceId = banjeBeach.Id, UserId = demoUser.Id, Rating = 5, Comment = "Absolutely breathtaking views! The water is pristine and the service at the beachfront restaurant is excellent. It gets busy, so arriving early is highly recommended.", CreatedAt = now.AddDays(-10) },
-            new PlaceReview { PlaceId = banjeBeach.Id, UserId = reviewerElena.Id, Rating = 4, Comment = "Beautiful beach with clear water. Can get crowded in summer but worth visiting. The sunset views are spectacular.", CreatedAt = now.AddDays(-25) },
-            new PlaceReview { PlaceId = oldTownWalls.Id, UserId = demoUser.Id, Rating = 5, Comment = "A must-do when visiting Dubrovnik! The views are absolutely spectacular from every angle. Go early morning to avoid crowds.", CreatedAt = now.AddDays(-15) },
-            new PlaceReview { PlaceId = oldTownWalls.Id, UserId = reviewerElena.Id, Rating = 5, Comment = "Walking along these walls was the highlight of our trip. Simply magical, especially at sunset.", CreatedAt = now.AddDays(-30) },
-            new PlaceReview { PlaceId = nautika.Id, UserId = demoUser.Id, Rating = 5, Comment = "The finest dining experience in Dubrovnik. Impeccable service and breathtaking views. The seafood risotto was divine.", CreatedAt = now.AddDays(-8) },
-            new PlaceReview { PlaceId = lokrumIsland.Id, UserId = reviewerElena.Id, Rating = 5, Comment = "A paradise just minutes from the city. The botanical gardens are beautiful and the Dead Sea salt lake is a unique experience.", CreatedAt = now.AddDays(-20) },
-            new PlaceReview { PlaceId = grandVilla.Id, UserId = demoUser.Id, Rating = 5, Comment = "Exceptional luxury resort. The infinity pool overlooking the sea is a highlight. Staff is incredibly attentive.", CreatedAt = now.AddDays(-12) },
-            new PlaceReview { PlaceId = grandVilla.Id, UserId = reviewerElena.Id, Rating = 4, Comment = "Beautiful property with amazing views. The spa is world-class. Only minor note is the restaurant can get busy.", CreatedAt = now.AddDays(-22) },
-            new PlaceReview { PlaceId = boutiqueStariGrad.Id, UserId = demoUser.Id, Rating = 5, Comment = "The most charming hotel in Old Town! Each room has its own character. The location cannot be beaten.", CreatedAt = now.AddDays(-5) }
+            new PlaceReview
+            {
+                PlaceId = banjeBeach.Id,
+                UserId = marko.Id,
+                Rating = 5,
+                Comment = "Beautiful beach with clear water and amazing views of the Old Town.",
+                CreatedAt = now.AddDays(-10)
+            },
+            new PlaceReview
+            {
+                PlaceId = oldTownWalls.Id,
+                UserId = elena.Id,
+                Rating = 5,
+                Comment = "Walking the walls was the highlight of the trip.",
+                CreatedAt = now.AddDays(-8)
+            },
+            new PlaceReview
+            {
+                PlaceId = villaAdriatica.Id,
+                UserId = elena.Id,
+                Rating = 5,
+                Comment = "Excellent stay, great sea view and very comfortable rooms.",
+                CreatedAt = now.AddDays(-6)
+            }
         );
+
         await db.SaveChangesAsync();
 
-        // ── Destination Tags ──
+        // Destination tags
         db.DestinationTags.AddRange(
             new DestinationTag { DestinationId = dubrovnik.Id, TagId = T("history").Id },
             new DestinationTag { DestinationId = dubrovnik.Id, TagId = T("culture").Id },
             new DestinationTag { DestinationId = dubrovnik.Id, TagId = T("nature").Id },
             new DestinationTag { DestinationId = dubrovnik.Id, TagId = T("beaches").Id }
         );
+
+        await db.SaveChangesAsync();
+
+        // Demo pending contribution for a new restaurant
+        var newRestaurantContribution = new PlaceContribution
+        {
+            Type = PlaceContributionType.CreatePlace,
+            Status = PlaceContributionStatus.PendingReview,
+            UserId = marko.Id,
+
+            PlaceTypeId = ptRestaurant.Id,
+            LocationId = oldTown.Id,
+            RestaurantTypeId = rtTraditional.Id,
+
+            Name = "Konoba Mare",
+            Subtitle = "Traditional Dalmatian restaurant",
+            Address = "Old Town, Dubrovnik",
+            OpeningHours = "11:00 - 23:00",
+            Description = "A proposed traditional restaurant with local seafood, olive oil and regional wines.",
+            Latitude = 42.6410,
+            Longitude = 18.1102,
+            ContactEmail = "info@konobamare.example",
+            PhoneNumber = "+385 20 000 000",
+            Website = "https://example.com/konoba-mare",
+
+            TagsJson = "[\"food-drink\",\"traditional\",\"sea-view\"]",
+            AmenitiesJson = "[\"wifi\",\"restaurant\"]",
+            BookingPartnersJson = "[]",
+
+            SubmittedAt = now,
+            CreatedAt = now
+        };
+
+        db.PlaceContributions.Add(newRestaurantContribution);
+        await db.SaveChangesAsync();
+
+        db.PlaceContributionImages.AddRange(
+            new PlaceContributionImage
+            {
+                PlaceContributionId = newRestaurantContribution.Id,
+                Url = U("1555396273-367ea4eb4db5"),
+                IsMain = true,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new PlaceContributionImage
+            {
+                PlaceContributionId = newRestaurantContribution.Id,
+                Url = U("1559339352-11d035aa65de"),
+                IsMain = false,
+                SortOrder = 1,
+                CreatedAt = now
+            }
+        );
+
+        await db.SaveChangesAsync();
+
+        // Demo pending update contribution for an existing stay
+        var updateStayContribution = new PlaceContribution
+        {
+            Type = PlaceContributionType.UpdatePlace,
+            Status = PlaceContributionStatus.PendingReview,
+            UserId = marko.Id,
+
+            PlaceId = villaAdriatica.Id,
+            PlaceTypeId = ptStay.Id,
+            LocationId = lapad.Id,
+            StayTypeId = villaStayType.Id,
+
+            OriginalSnapshotJson = """
+            {
+              "name": "Villa Adriatica Luxury Resort",
+              "pricePerNight": 189
+            }
+            """,
+
+            Name = "Villa Adriatica Luxury Resort & Spa",
+            Subtitle = "Updated luxury resort with wellness focus",
+            Address = "Lapad, Dubrovnik",
+            OpeningHours = "Open 24h",
+            Description = "Updated description proposed by the linked user. Luxury resort with spa, sea views and premium wellness services.",
+            Latitude = 42.6560,
+            Longitude = 18.0630,
+            ContactEmail = "reservations@villa-adriatica.example",
+            PhoneNumber = "+385 20 111 111",
+            Website = "https://example.com/villa-adriatica",
+            PricePerNight = 210,
+            CheckInTime = "15:00",
+            CheckOutTime = "11:00",
+
+            TagsJson = "[\"luxury\",\"spa\",\"sea-view\",\"breakfast\"]",
+            StayAmenitiesJson = "[\"free-wifi\",\"spa\",\"sea-view\",\"breakfast-included\",\"air-conditioning\"]",
+            BookingPartnersJson = "[\"booking\",\"expedia\"]",
+
+            SubmittedAt = now,
+            CreatedAt = now
+        };
+
+        db.PlaceContributions.Add(updateStayContribution);
+        await db.SaveChangesAsync();
+
+        db.PlaceContributionImages.AddRange(
+            new PlaceContributionImage
+            {
+                PlaceContributionId = updateStayContribution.Id,
+                Url = U("1566073771259-6a6300d8226c"),
+                IsMain = true,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new PlaceContributionImage
+            {
+                PlaceContributionId = updateStayContribution.Id,
+                Url = U("1564501049412-61c2a3083791"),
+                IsMain = false,
+                SortOrder = 1,
+                CreatedAt = now
+            }
+        );
+
         await db.SaveChangesAsync();
     }
 
-    private static async Task EnsureSeedTagsAsync(AppDbContext db)
+    private static void AddEntityImage(
+        AppDbContext db,
+        EntityImageTargetType targetType,
+        string url,
+        bool isMain,
+        int sortOrder,
+        DateTime createdAt,
+        int? placeId = null,
+        int? eventId = null,
+        int? regionId = null,
+        int? destinationId = null,
+        int? territoryId = null,
+        int? locationId = null)
     {
-        var existingSlugs = await db.Tags
-            .Select(tag => tag.Slug)
-            .ToListAsync();
-
-        var existingSlugSet = existingSlugs.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var missingTags = BuildSeedTags(DateTime.UtcNow)
-            .Where(tag => !existingSlugSet.Contains(tag.Slug))
-            .ToList();
-
-        if (missingTags.Count == 0)
+        db.EntityImages.Add(new EntityImage
         {
-            return;
-        }
-
-        db.Tags.AddRange(missingTags);
-        await db.SaveChangesAsync();
+            TargetType = targetType,
+            PlaceId = placeId,
+            EventId = eventId,
+            RegionId = regionId,
+            DestinationId = destinationId,
+            TerritoryId = territoryId,
+            LocationId = locationId,
+            Url = url,
+            IsMain = isMain,
+            SortOrder = sortOrder,
+            CreatedAt = createdAt
+        });
     }
 
-    private static async Task EnsureSeedMediaAsync(AppDbContext db)
+    private static void AddStayAmenities(AppDbContext db, Stay stay, params StayAmenity[] amenities)
     {
-        var changed = false;
-
-        async Task UpdateLocationImageAsync(string name, string imageUrl)
+        foreach (var amenity in amenities)
         {
-            var location = await db.Locations.FirstOrDefaultAsync(l => l.Name == name);
-            if (location is not null && ShouldReplaceSeedImage(location.ImageUrl, imageUrl))
+            db.StayStayAmenities.Add(new StayStayAmenity
             {
-                location.ImageUrl = imageUrl;
-                changed = true;
-            }
-        }
-
-        async Task UpdatePlaceImageAsync(string name, string imageUrl)
-        {
-            var place = await db.Places.FirstOrDefaultAsync(p => p.Name == name);
-            if (place is not null && ShouldReplaceSeedImage(place.ImageUrl, imageUrl))
-            {
-                place.ImageUrl = imageUrl;
-                changed = true;
-            }
-        }
-
-        async Task UpdateEventImageAsync(string name, string imageUrl)
-        {
-            var @event = await db.Events.FirstOrDefaultAsync(e => e.Name == name);
-            if (@event is not null && ShouldReplaceSeedImage(@event.ImageUrl, imageUrl))
-            {
-                @event.ImageUrl = imageUrl;
-                changed = true;
-            }
-        }
-
-        async Task UpdateTagImageAsync(string slug, string imageUrl)
-        {
-            var tag = await db.Tags.FirstOrDefaultAsync(t => t.Slug == slug);
-            if (tag is not null && ShouldReplaceSeedImage(tag.ImageUrl, imageUrl))
-            {
-                tag.ImageUrl = imageUrl;
-                changed = true;
-            }
-        }
-
-        await UpdateLocationImageAsync("Old Town", SeedMedia("dubrovnik-old-town"));
-        await UpdatePlaceImageAsync("Dubrovnik Old Town Walls", SeedMedia("dubrovnik-old-town"));
-        await UpdatePlaceImageAsync("Rector's Palace", SeedMedia("rectors-palace"));
-        await UpdatePlaceImageAsync("Culture Club Revelin", SeedMedia("culture-club-revelin"));
-        await UpdatePlaceImageAsync("Hotel Excelsior", SeedMedia("hotel-excelsior"));
-        await UpdateEventImageAsync("Dubrovnik Summer Festival", SeedMedia("dubrovnik-summer-festival"));
-        await UpdateTagImageAsync("history", SeedMedia("dubrovnik-old-town"));
-        await UpdateTagImageAsync("museums", SeedMedia("rectors-palace"));
-
-        if (changed)
-        {
-            await db.SaveChangesAsync();
+                StayPlaceId = stay.PlaceId,
+                StayAmenityId = amenity.Id
+            });
         }
     }
 
-    private static bool ShouldReplaceSeedImage(string? currentImageUrl, string replacementImageUrl)
+    private static void AddPlaceTags(AppDbContext db, Place place, params Tag[] tags)
     {
-        if (string.Equals(currentImageUrl, replacementImageUrl, StringComparison.OrdinalIgnoreCase))
+        foreach (var tag in tags)
         {
-            return false;
+            db.PlaceTags.Add(new PlaceTag
+            {
+                PlaceId = place.Id,
+                TagId = tag.Id
+            });
         }
-
-        return string.IsNullOrWhiteSpace(currentImageUrl) ||
-            currentImageUrl.StartsWith("https://images.unsplash.com/photo-", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task EnsureDemoUsersAsync(AppDbContext db)
+    private static void AddEventTags(AppDbContext db, Event eventEntity, params Tag[] tags)
     {
-        var hasher = new PasswordHasher<User>();
-        var now = DateTime.UtcNow;
-        var usersChanged = false;
-
-        var demoUser = await db.Users.FirstOrDefaultAsync(user => user.Email == "marko.p@example.com");
-        if (demoUser == null)
+        foreach (var tag in tags)
         {
-            demoUser = new User
+            db.EventTags.Add(new EventTag
             {
-                Username = "marko",
-                Email = "marko.p@example.com",
-                FirstName = "Marko",
-                LastName = "Petrovic",
-                PasswordHash = "",
-                AvatarUrl = U("1507003211169-0a1dd7228f2d", 200),
-                DisplayName = "marko_p",
-                Location = "San Francisco, CA",
-                CreatedAt = now
-            };
-            demoUser.PasswordHash = hasher.HashPassword(demoUser, "password123");
-            db.Users.Add(demoUser);
-            usersChanged = true;
-        }
-
-        if (NormalizeDemoUserDefaults(demoUser))
-        {
-            usersChanged = true;
-        }
-
-        if (hasher.VerifyHashedPassword(demoUser, demoUser.PasswordHash, "password123") == PasswordVerificationResult.Failed)
-        {
-            demoUser.PasswordHash = hasher.HashPassword(demoUser, "password123");
-            usersChanged = true;
-        }
-
-        var reviewerElena = await db.Users.FirstOrDefaultAsync(user => user.Email == "elena@example.com");
-        if (reviewerElena == null)
-        {
-            reviewerElena = new User
-            {
-                Username = "elena",
-                Email = "elena@example.com",
-                FirstName = "Elena",
-                LastName = "Rossi",
-                PasswordHash = "",
-                AvatarUrl = U("1494790108377-be9c29b29330", 200),
-                CreatedAt = now
-            };
-            reviewerElena.PasswordHash = hasher.HashPassword(reviewerElena, "password123");
-            db.Users.Add(reviewerElena);
-            usersChanged = true;
-        }
-
-        if (NormalizeDemoUserDefaults(reviewerElena))
-        {
-            usersChanged = true;
-        }
-
-        if (hasher.VerifyHashedPassword(reviewerElena, reviewerElena.PasswordHash, "password123") == PasswordVerificationResult.Failed)
-        {
-            reviewerElena.PasswordHash = hasher.HashPassword(reviewerElena, "password123");
-            usersChanged = true;
-        }
-
-        if (usersChanged)
-        {
-            await db.SaveChangesAsync();
+                EventId = eventEntity.Id,
+                TagId = tag.Id
+            });
         }
     }
 
     private static async Task EnsureRolesAsync(AppDbContext db)
     {
-        await EnsureRoleAsync(
-            db,
-            "Admin",
-            "Can manage users, regions, and administrative configuration.");
-
-        await EnsureRoleAsync(
-            db,
-            "RegionalManager",
-            "Can review and approve regional user contributions.");
+        await EnsureRoleAsync(db, "Admin", "Can manage users and administrative configuration.");
+        await EnsureRoleAsync(db, "RegionalManager", "Can review and approve regional user contributions.");
+        await EnsureRoleAsync(db, "TerritoryManager", "Can manage territories and assigned regions.");
+        await EnsureRoleAsync(db, "Publisher", "Can publish and manage assigned places.");
+        await EnsureRoleAsync(db, "RegisteredUser", "Regular authenticated user.");
     }
 
     private static async Task EnsureRoleAsync(AppDbContext db, string name, string description)
     {
-        if (await db.Roles.AnyAsync(role => role.Name == name))
+        if (await db.Roles.AnyAsync(x => x.Name == name))
         {
             return;
         }
@@ -723,61 +881,73 @@ public static class SeedData
             CreatedAt = DateTime.UtcNow
         });
 
-        try
-        {
-            await db.SaveChangesAsync();
-        }
-        catch (DbUpdateException)
-        {
-            db.ChangeTracker.Clear();
-            if (!await db.Roles.AnyAsync(role => role.Name == name))
-            {
-                throw;
-            }
-        }
+        await db.SaveChangesAsync();
     }
 
-    private static bool NormalizeDemoUserDefaults(User user)
+    private static async Task EnsureDemoUsersAsync(AppDbContext db)
     {
-        var changed = false;
+        var hasher = new PasswordHasher<User>();
+        var now = DateTime.UtcNow;
 
-        if (!user.GeneralNotificationsEnabled)
+        if (!await db.Users.AnyAsync(x => x.Email == "marko.p@example.com"))
         {
-            user.GeneralNotificationsEnabled = true;
-            changed = true;
+            var marko = new User
+            {
+                Username = "marko",
+                Email = "marko.p@example.com",
+                FirstName = "Marko",
+                LastName = "Petrovic",
+                PasswordHash = "",
+                AvatarUrl = U("1507003211169-0a1dd7228f2d", 200),
+                DisplayName = "marko_p",
+                Location = "Belgrade, Serbia",
+                CreatedAt = now
+            };
+
+            marko.PasswordHash = hasher.HashPassword(marko, "password123");
+            db.Users.Add(marko);
         }
 
-        if (!user.TravelRecommendationsEnabled)
+        if (!await db.Users.AnyAsync(x => x.Email == "elena@example.com"))
         {
-            user.TravelRecommendationsEnabled = true;
-            changed = true;
+            var elena = new User
+            {
+                Username = "elena",
+                Email = "elena@example.com",
+                FirstName = "Elena",
+                LastName = "Rossi",
+                PasswordHash = "",
+                AvatarUrl = U("1494790108377-be9c29b29330", 200),
+                DisplayName = "elena_r",
+                CreatedAt = now
+            };
+
+            elena.PasswordHash = hasher.HashPassword(elena, "password123");
+            db.Users.Add(elena);
         }
 
-        if (!user.NearbyEventsEnabled)
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureSeedTagsAsync(AppDbContext db)
+    {
+        var existingSlugs = await db.Tags
+            .Select(x => x.Slug)
+            .ToListAsync();
+
+        var existingSlugSet = existingSlugs.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missingTags = BuildSeedTags(DateTime.UtcNow)
+            .Where(x => !existingSlugSet.Contains(x.Slug))
+            .ToList();
+
+        if (missingTags.Count == 0)
         {
-            user.NearbyEventsEnabled = true;
-            changed = true;
+            return;
         }
 
-        if (!user.CollectionUpdatesEnabled)
-        {
-            user.CollectionUpdatesEnabled = true;
-            changed = true;
-        }
-
-        if (user.EmailNotificationsEnabled)
-        {
-            user.EmailNotificationsEnabled = false;
-            changed = true;
-        }
-
-        if (user.NeedsInterestsOnboarding)
-        {
-            user.NeedsInterestsOnboarding = false;
-            changed = true;
-        }
-
-        return changed;
+        db.Tags.AddRange(missingTags);
+        await db.SaveChangesAsync();
     }
 
     private static List<Tag> BuildSeedTags(DateTime createdAt)
@@ -793,7 +963,7 @@ public static class SeedData
                 ForEvent = definition.ForEvent,
                 Description = definition.Description,
                 ImageUrl = definition.ImageUrl,
-                CreatedAt = createdAt,
+                CreatedAt = createdAt
             })
             .ToList();
     }
@@ -804,40 +974,25 @@ public static class SeedData
         {
             new("Food & Drink", "food-drink", ForPlace: true, ForEvent: true, ImageUrl: U("1414235077428-338989a2e8c0")),
             new("History", "history", ForDestination: true, ForPlace: true, ImageUrl: SeedMedia("dubrovnik-old-town")),
-            new("Beaches", "beaches", ForPlace: true, ImageUrl: U("1507525428034-b723cf961d3e")),
-            new("Nature", "nature", ForPlace: true, ImageUrl: U("1441974231531-c6227db76b6e")),
-            new("Museums", "museums", ForPlace: true, ImageUrl: SeedMedia("rectors-palace")),
-            new("Local Events", "local-events", ForEvent: true),
-            new("Nightlife", "nightlife", ForPlace: true, ForEvent: true),
+            new("Beaches", "beaches", ForDestination: true, ForPlace: true, ImageUrl: U("1507525428034-b723cf961d3e")),
+            new("Nature", "nature", ForDestination: true, ForPlace: true, ImageUrl: U("1441974231531-c6227db76b6e")),
+            new("Culture", "culture", ForDestination: true, ForPlace: true, ForEvent: true),
+            new("Outdoor", "outdoor", ForPlace: true, ForEvent: true),
+            new("Adventure", "adventure", ForPlace: true, ForEvent: true),
             new("Festivals", "festivals", ForEvent: true),
-            new("Adventure", "adventure", ForPlace: true),
-            new("Scenic Walks", "scenic-walks", ForPlace: true),
-            new("Culture", "culture", ForDestination: true, ForPlace: true),
-            new("Shopping", "shopping", ForPlace: true),
+            new("Food & Market", "food-market", ForEvent: true),
+            new("Fine Dining", "fine-dining", ForPlace: true),
+            new("Landmarks", "landmarks", ForPlace: true),
+            new("Islands", "islands", ForPlace: true),
+            new("Scenic Views", "scenic-views", ForPlace: true),
             new("Luxury", "luxury", ForPlace: true),
             new("Budget", "budget", ForPlace: true),
-            new("Family Friendly", "family-friendly", ForPlace: true, ForEvent: true),
+            new("Boutique", "boutique", ForPlace: true),
             new("Spa", "spa", ForPlace: true),
             new("Pool", "pool", ForPlace: true),
             new("Breakfast", "breakfast", ForPlace: true),
             new("Sea View", "sea-view", ForPlace: true),
-            new("Live Music", "live-music", ForEvent: true),
-            new("Cultural", "cultural", ForPlace: true, ForEvent: true),
-            new("Outdoor", "outdoor", ForPlace: true, ForEvent: true),
-            new("Food & Market", "food-market", ForEvent: true),
-            new("Fine Dining", "fine-dining", ForPlace: true),
-            new("Beach Bars", "beach-bars", ForPlace: true),
-            new("Landmarks", "landmarks", ForPlace: true),
-            new("Districts", "districts", ForPlace: true),
-            new("Galleries", "galleries", ForPlace: true),
-            new("Exhibitions", "exhibitions", ForPlace: true),
-            new("Historic Sites", "historic-sites", ForPlace: true),
-            new("Islands", "islands", ForPlace: true),
-            new("Parks", "parks", ForPlace: true),
-            new("Mountains", "mountains", ForPlace: true),
-            new("Hiking", "hiking", ForPlace: true),
-            new("Scenic Views", "scenic-views", ForPlace: true),
-            new("Boutique", "boutique", ForPlace: true),
+            new("Traditional", "traditional", ForPlace: true)
         };
     }
 }

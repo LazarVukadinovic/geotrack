@@ -7,10 +7,10 @@ using Geotrack.Domain.Entities.Core;
 
 namespace Geotrack.Domain.Entities.Users;
 
-public class RegionalOrganizationRegion
+public class RegionalManagerRegion
 {
     public int UserId { get; set; }
-    public RegionalOrganization RegionalOrganization { get; set; } = null!; // NAVIGATIONAL
+    public RegionalManager RegionalManager { get; set; } = null!; // NAVIGATIONAL
     public int RegionId { get; set; }
     public Region Region { get; set; } = null!; // NAVIGATIONAL
 

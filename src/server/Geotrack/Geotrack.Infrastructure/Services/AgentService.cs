@@ -113,7 +113,7 @@ public class AgentService : IAgentService
             DetailUrl = $"/places/{p.Id}",
             Title = p.Name,
             Description = p.Description.Length > 100 ? p.Description[..100] + "..." : p.Description,
-            Image = p.ImageUrl,
+            Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
             Rating = p.AverageRating,
             DurationHours = null,
             DistanceKm = null,
@@ -124,7 +124,7 @@ public class AgentService : IAgentService
     private async Task<List<AgentRecommendationCardDto>> GetHotelCards(int count, int? userId)
     {
         var hotels = await _db.Places
-            .Where(p => p.PricePerNight != null)
+            .Where(p => p.Stay != null)
             .Take(count)
             .ToListAsync();
         var favoriteIds = userId.HasValue
@@ -138,7 +138,7 @@ public class AgentService : IAgentService
             DetailUrl = $"/stays/{p.Id}",
             Title = p.Name,
             Description = p.Description.Length > 100 ? p.Description[..100] + "..." : p.Description,
-            Image = p.ImageUrl,
+            Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
             Rating = p.AverageRating,
             DurationHours = null,
             DistanceKm = null,
@@ -163,7 +163,7 @@ public class AgentService : IAgentService
             DetailUrl = $"/events/{e.Id}",
             Title = e.Name,
             Description = e.Description.Length > 100 ? e.Description[..100] + "..." : e.Description,
-            Image = e.ImageUrl,
+            Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
             Rating = null,
             DurationHours = (e.EndDate - e.StartDate).TotalHours,
             DistanceKm = null,
@@ -185,10 +185,10 @@ public class AgentService : IAgentService
         {
             Id = p.Id,
             EntityType = "place",
-            DetailUrl = p.PricePerNight.HasValue ? $"/stays/{p.Id}" : $"/places/{p.Id}",
+            DetailUrl = p.Stay != null ? $"/stays/{p.Id}" : $"/places/{p.Id}",
             Title = p.Name,
             Description = p.Description.Length > 100 ? p.Description[..100] + "..." : p.Description,
-            Image = p.ImageUrl,
+            Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
             Rating = p.AverageRating,
             DurationHours = null,
             DistanceKm = null,

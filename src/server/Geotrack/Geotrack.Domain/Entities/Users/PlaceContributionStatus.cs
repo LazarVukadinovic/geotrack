@@ -1,6 +1,6 @@
 namespace Geotrack.Domain.Entities.Users;
 
-public enum StayContributionStatus
+public enum PlaceContributionStatus
 {
     PendingReview = 0,
     Approved = 1,

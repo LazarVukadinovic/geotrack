@@ -324,8 +324,8 @@ public sealed class ReviewModerationTests
         var reviewer = await db.Users
             .Include(user => user.UserRoles)
                 .ThenInclude(userRole => userRole.Role)
-            .Include(user => user.RegionalOrganization)
-                .ThenInclude(organization => organization!.RegionalOrganizationRegions)
+            .Include(user => user.RegionalManager)
+                .ThenInclude(organization => organization!.RegionalManagerRegions)
                 .ThenInclude(link => link.Region)
             .SingleAsync(user => user.Email == reviewerEmail);
 
@@ -341,16 +341,16 @@ public sealed class ReviewModerationTests
             });
         }
 
-        reviewer.RegionalOrganization ??= new RegionalOrganization
+        reviewer.RegionalManager ??= new RegionalManager
         {
             UserId = reviewer.Id,
             User = reviewer,
         };
 
         var region = await db.Regions.SingleAsync(existingRegion => existingRegion.Name == regionName);
-        if (!reviewer.RegionalOrganization.RegionalOrganizationRegions.Any(link => link.RegionId == region.Id))
+        if (!reviewer.RegionalManager.RegionalManagerRegions.Any(link => link.RegionId == region.Id))
         {
-            reviewer.RegionalOrganization.RegionalOrganizationRegions.Add(new RegionalOrganizationRegion
+            reviewer.RegionalManager.RegionalManagerRegions.Add(new RegionalManagerRegion
             {
                 UserId = reviewer.Id,
                 RegionId = region.Id,

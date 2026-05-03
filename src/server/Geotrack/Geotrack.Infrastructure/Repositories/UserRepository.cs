@@ -1,4 +1,4 @@
-﻿using Geotrack.Application.Interfaces.Repository;
+using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Tags;
@@ -73,12 +73,19 @@ namespace Geotrack.Infrastructure.Repositories
             return await _context.Collections
                 .Include(c => c.CollectionItems)
                     .ThenInclude(ci => ci.Destination)
+                    .ThenInclude(d => d!.Images)
                 .Include(c => c.CollectionItems)
                     .ThenInclude(ci => ci.Location)
+                    .ThenInclude(l => l!.Images)
                 .Include(c => c.CollectionItems)
                     .ThenInclude(ci => ci.Place)
+                    .ThenInclude(p => p!.Images)
+                .Include(c => c.CollectionItems)
+                    .ThenInclude(ci => ci.Place)
+                    .ThenInclude(p => p!.Stay)
                 .Include(c => c.CollectionItems)
                     .ThenInclude(ci => ci.Event)
+                    .ThenInclude(e => e!.Images)
                 .FirstOrDefaultAsync(c => c.Id == collectionId && c.UserId == userId);
         }
 
@@ -96,10 +103,10 @@ namespace Geotrack.Infrastructure.Repositories
                 .Where(ci => ci.CollectionId == collectionId)
                 .OrderByDescending(ci => ci.CreatedAt)
                 .Select(ci =>
-                    ci.Place != null ? ci.Place.ImageUrl :
-                    ci.Event != null ? ci.Event.ImageUrl :
-                    ci.Destination != null ? ci.Destination.ImageUrl :
-                    ci.Location != null ? ci.Location.ImageUrl : null)
+                    ci.Place != null ? ci.Place.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault() :
+                    ci.Event != null ? ci.Event.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault() :
+                    ci.Destination != null ? ci.Destination.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault() :
+                    ci.Location != null ? ci.Location.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault() : null)
                 .ToListAsync();
 
             return urls
@@ -253,7 +260,7 @@ namespace Geotrack.Infrastructure.Repositories
 
         public async Task<User?> GetByIdWithRegionsAsync(int userId)
         {
-            return await _context.Users.Include(u => u.RegionalOrganization).ThenInclude(ro => ro.RegionalOrganizationRegions).ThenInclude(ror => ror.Region).FirstOrDefaultAsync(u => u.Id == userId);
+            return await _context.Users.Include(u => u.RegionalManager).ThenInclude(ro => ro.RegionalManagerRegions).ThenInclude(ror => ror.Region).FirstOrDefaultAsync(u => u.Id == userId);
         }
 
         public async Task<User?> GetByIdWithRolesAndRegionsAsync(int userId)
@@ -261,14 +268,14 @@ namespace Geotrack.Infrastructure.Repositories
             return await _context.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
-                .Include(u => u.RegionalOrganization)
-                    .ThenInclude(ro => ro.RegionalOrganizationRegions)
+                .Include(u => u.RegionalManager)
+                    .ThenInclude(ro => ro.RegionalManagerRegions)
                 .FirstOrDefaultAsync(u => u.Id == userId);
         }
 
-        public async Task AddRegionalOrganizationAsync(RegionalOrganization regionalOrganization)
+        public async Task AddRegionalManagerAsync(RegionalManager regionalOrganization)
         {
-            await _context.RegionalOrganizations.AddAsync(regionalOrganization);
+            await _context.RegionalManagers.AddAsync(regionalOrganization);
         }
 
         public async Task<bool> RegionExistsAsync(int regionId)
@@ -278,24 +285,25 @@ namespace Geotrack.Infrastructure.Repositories
 
         public async Task<bool> UserRegionExistsAsync(int userId, int regionId)
         {
-            return await _context.RegionalOrganizationRegions.AnyAsync(ror => ror.UserId == userId && ror.RegionId == regionId);
+            return await _context.RegionalManagerRegions.AnyAsync(ror => ror.UserId == userId && ror.RegionId == regionId);
         }
 
-        public async Task AddUserRegionAsync(RegionalOrganizationRegion region)
+        public async Task AddUserRegionAsync(RegionalManagerRegion region)
         {
-            await _context.RegionalOrganizationRegions.AddAsync(region);
+            await _context.RegionalManagerRegions.AddAsync(region);
         }
 
-        public async Task<RegionalOrganizationRegion?> GetUserRegionAsync(int userId, int regionId)
+        public async Task<RegionalManagerRegion?> GetUserRegionAsync(int userId, int regionId)
         {
-            return await _context.RegionalOrganizationRegions
+            return await _context.RegionalManagerRegions
                 .FirstOrDefaultAsync(ror => ror.UserId == userId && ror.RegionId == regionId);
         }
 
-        public Task DeleteUserRegionAsync(RegionalOrganizationRegion region)
+        public Task DeleteUserRegionAsync(RegionalManagerRegion region)
         {
-            _context.RegionalOrganizationRegions.Remove(region);
+            _context.RegionalManagerRegions.Remove(region);
             return Task.CompletedTask;
         }
     }
 }
+

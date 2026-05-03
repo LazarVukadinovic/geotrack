@@ -1,7 +1,5 @@
 namespace Geotrack.Server.Requests;
 
-public class StayContributionFormRequest
+public class StayContributionFormRequest : PlaceContributionFormRequest
 {
-    public string Payload { get; set; } = string.Empty;
-    public IFormFile? CoverImage { get; set; }
 }

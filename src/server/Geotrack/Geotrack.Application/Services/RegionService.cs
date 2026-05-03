@@ -42,11 +42,11 @@ namespace Geotrack.Application.Services
             {
                 Id = region.Id,
                 Name = region.Name,
-                Managers = region.RegionalOrganizationRegions
+                Managers = region.RegionalManagerRegions
                     .Select(ror => new UserItemDto
                     {
-                        Id = ror.RegionalOrganization.User.Id,
-                        Email = ror.RegionalOrganization.User.Email
+                        Id = ror.RegionalManager.User.Id,
+                        Email = ror.RegionalManager.User.Email
                     })
                     .ToList()
             };

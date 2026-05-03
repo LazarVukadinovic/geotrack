@@ -43,5 +43,9 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    public RegionalOrganization? RegionalOrganization { get; set; }
+    public RegionalManager? RegionalManager { get; set; }
+
+    public ICollection<UserPlace> UserPlaces { get; set; } = new List<UserPlace>();
+    public ICollection<PlaceContribution> PlaceContributions { get; set; } = new List<PlaceContribution>();
+    public TerritoryManager? TerritoryManager { get; set; }
 }

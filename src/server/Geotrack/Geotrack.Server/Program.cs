@@ -95,8 +95,10 @@ builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IExploreService, ExploreService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
-builder.Services.AddScoped<IStayContributionService, StayContributionService>();
+builder.Services.AddScoped<IPlaceContributionService, PlaceContributionService>();
+builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionRepository>();
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
+builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionRepository>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>();
 builder.Services.AddHttpClient<IMapService, MapService>(client =>
 {

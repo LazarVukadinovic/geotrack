@@ -285,14 +285,14 @@ public class SearchService : ISearchService
                 Id = $"place-type:{type.Id}",
                 Label = type.Name,
                 Domain = SearchDomains.Places,
-                Count = type.Places.Count(place => place.PricePerNight == null)
+                Count = type.Places.Count(place => place.Stay == null)
             })
             .ToListAsync(cancellationToken);
 
         var stayOptions = await _db.Tags
             .AsNoTracking()
-            .Where(tag => tag.ForPlace && tag.PlaceTags.Any(placeTag => placeTag.Place.PricePerNight != null))
-            .OrderByDescending(tag => tag.PlaceTags.Count(placeTag => placeTag.Place.PricePerNight != null))
+            .Where(tag => tag.ForPlace && tag.PlaceTags.Any(placeTag => placeTag.Place.Stay != null))
+            .OrderByDescending(tag => tag.PlaceTags.Count(placeTag => placeTag.Place.Stay != null))
             .ThenBy(tag => tag.Name)
             .Take(MetadataOptionLimit)
             .Select(tag => new SearchFilterOptionDto
@@ -300,7 +300,7 @@ public class SearchService : ISearchService
                 Id = $"tag:{tag.Slug}",
                 Label = tag.Name,
                 Domain = SearchDomains.Stays,
-                Count = tag.PlaceTags.Count(placeTag => placeTag.Place.PricePerNight != null)
+                Count = tag.PlaceTags.Count(placeTag => placeTag.Place.Stay != null)
             })
             .ToListAsync(cancellationToken);
 
@@ -387,7 +387,6 @@ public class SearchService : ISearchService
                 Name = destination.Name,
                 Description = destination.Description,
                 DestinationTypeName = destination.DestinationType.Name,
-                Image = destination.ImageUrl,
                 Latitude = destination.Latitude,
                 Longitude = destination.Longitude,
                 ReviewCount = destination.DestinationReviews.Count,
@@ -430,7 +429,7 @@ public class SearchService : ISearchService
 
         var query = _db.Places
             .AsNoTracking()
-            .Where(place => includeStays ? place.PricePerNight != null : place.PricePerNight == null)
+            .Where(place => includeStays ? place.Stay != null && place.Stay.PricePerNight != null : place.Stay == null || place.Stay.PricePerNight == null)
             .Where(place =>
                 hasDomainCandidateIntent ||
                 (destinationId.HasValue && place.Location.DestinationId == destinationId.Value) ||
@@ -461,10 +460,9 @@ public class SearchService : ISearchService
                     Name = place.Name,
                     Subtitle = place.Subtitle,
                     Description = place.Description,
-                    Image = place.ImageUrl,
                     Address = place.Address,
                     OpeningHours = place.OpeningHours,
-                    PricePerNight = place.PricePerNight,
+                    PricePerNight = (place.Stay != null ? place.Stay.PricePerNight : null),
                     PlaceTypeName = place.PlaceType.Name,
                     LocationName = place.Location.Name,
                     DestinationId = place.Location.DestinationId,
@@ -503,10 +501,9 @@ public class SearchService : ISearchService
                     Name = place.Name,
                     Subtitle = place.Subtitle,
                     Description = place.Description,
-                    Image = place.ImageUrl,
                     Address = place.Address,
                     OpeningHours = place.OpeningHours,
-                    PricePerNight = place.PricePerNight,
+                    PricePerNight = (place.Stay != null ? place.Stay.PricePerNight : null),
                     PlaceTypeName = place.PlaceType.Name,
                     LocationName = place.Location.Name,
                     DestinationId = place.Location.DestinationId,
@@ -594,7 +591,6 @@ public class SearchService : ISearchService
                     DestinationName = @event.Location.Destination.Name,
                     Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
                     Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
-                    Image = @event.ImageUrl,
                     StartDate = @event.StartDate,
                     EndDate = @event.EndDate,
                     Tags = @event.EventTags
@@ -624,7 +620,6 @@ public class SearchService : ISearchService
                     DestinationName = @event.Location.Destination.Name,
                     Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
                     Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
-                    Image = @event.ImageUrl,
                     StartDate = @event.StartDate,
                     EndDate = @event.EndDate,
                     DistanceMeters = EF.Property<Point>(@event, SpatialPointFactory.CoordinatesPropertyName).Distance(activePoint),
@@ -1074,7 +1069,6 @@ public class SearchService : ISearchService
                 Name = tag.Name,
                 Slug = tag.Slug,
                 Description = tag.Description,
-                Image = tag.ImageUrl,
                 ForDestination = tag.ForDestination,
                 ForPlace = tag.ForPlace,
                 ForEvent = tag.ForEvent

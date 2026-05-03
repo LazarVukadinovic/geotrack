@@ -26,7 +26,6 @@ public class Event
 
     public ICollection<EventReview> EventReviews { get; set; } = new List<EventReview>(); // NAVIGATIONAL
 
-    public string? ImageUrl { get; set; }
     public string Description { get; set; } = string.Empty;
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
@@ -41,4 +40,6 @@ public class Event
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+
+    public ICollection<EntityImage> Images { get; set; } = new List<EntityImage>();
 }

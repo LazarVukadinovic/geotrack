@@ -23,7 +23,7 @@ public sealed class ContributionPublicationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
 
         using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
-        var createdContribution = await CreateStayContributionAsync(contributorClient);
+        var createdContribution = await CreatePlaceContributionAsync(contributorClient);
 
         Assert.Equal("hello@betavilla.example", createdContribution.Contribution.ContactEmail);
         Assert.Equal(123.45m, createdContribution.Contribution.PricePerNight);
@@ -36,13 +36,13 @@ public sealed class ContributionPublicationTests
         using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
         var approvalResponse = await reviewerClient.PostAsJsonAsync(
             $"/api/contributions/{createdContribution.Contribution.Id}/approve",
-            new ReviewStayContributionRequestDto { Note = "Ready for publication." });
+            new ReviewPlaceContributionRequestDto { Note = "Ready for publication." });
         approvalResponse.EnsureSuccessStatusCode();
 
-        var approved = await approvalResponse.Content.ReadFromJsonAsync<StayContributionResponseDto>();
+        var approved = await approvalResponse.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
         Assert.NotNull(approved);
         Assert.Equal("Approved", approved.Contribution.Status);
-        Assert.NotNull(approved.Contribution.PublishedPlaceId);
+        Assert.NotNull(approved.Contribution.PlaceId);
 
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -51,19 +51,19 @@ public sealed class ContributionPublicationTests
             .Include(place => place.PlaceType)
             .Include(place => place.PlaceBookingPartners)
                 .ThenInclude(partner => partner.BookingPartner)
-            .SingleAsync(place => place.Id == approved.Contribution.PublishedPlaceId!.Value);
+            .SingleAsync(place => place.Id == approved.Contribution.PlaceId!.Value);
 
         Assert.Equal("Beta Villa", publishedPlace.Name);
-        Assert.Equal("Villa", publishedPlace.PlaceType.Name);
+        Assert.Equal("Stay", publishedPlace.PlaceType.Name);
         Assert.Equal("hello@betavilla.example", publishedPlace.ContactEmail);
-        Assert.Equal(123.45m, publishedPlace.PricePerNight);
+        Assert.Equal(123.45m, publishedPlace.Stay!.PricePerNight);
 
         var bookingPartner = publishedPlace.PlaceBookingPartners
             .Single(partner => partner.BookingPartner.Name == "Booking.com");
         Assert.Equal("https://partners.example/booking/beta-villa", bookingPartner.Url);
 
         var publicHotelDetail = await contributorClient.GetFromJsonAsync<HotelDetailDto>(
-            $"/api/places/hotels/{approved.Contribution.PublishedPlaceId.Value}");
+            $"/api/places/hotels/{approved.Contribution.PlaceId.Value}");
         Assert.NotNull(publicHotelDetail);
         Assert.Equal("hello@betavilla.example", publicHotelDetail.ContactEmail);
         Assert.Equal(123.45m, publicHotelDetail.PricePerNight);
@@ -88,14 +88,14 @@ public sealed class ContributionPublicationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
 
         using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
-        var createdContribution = await CreateStayContributionAsync(contributorClient);
+        var createdContribution = await CreatePlaceContributionAsync(contributorClient);
 
         await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
 
         using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
         var rejectionResponse = await reviewerClient.PostAsJsonAsync(
             $"/api/contributions/{createdContribution.Contribution.Id}/reject",
-            new ReviewStayContributionRequestDto { Note = "Please add clearer booking details." });
+            new ReviewPlaceContributionRequestDto { Note = "Please add clearer booking details." });
         rejectionResponse.EnsureSuccessStatusCode();
 
         var notifications = await contributorClient.GetFromJsonAsync<GetUserNotificationsResponseDto>("/api/notifications");
@@ -132,7 +132,7 @@ public sealed class ContributionPublicationTests
         return client;
     }
 
-    private static async Task<StayContributionResponseDto> CreateStayContributionAsync(HttpClient client)
+    private static async Task<PlaceContributionResponseDto> CreatePlaceContributionAsync(HttpClient client)
     {
         var payload = new
         {
@@ -165,10 +165,10 @@ public sealed class ContributionPublicationTests
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             "payload");
 
-        var response = await client.PostAsync("/api/contributions/stays", formData);
+        var response = await client.PostAsync("/api/contributions", formData);
         response.EnsureSuccessStatusCode();
 
-        var created = await response.Content.ReadFromJsonAsync<StayContributionResponseDto>();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
         Assert.NotNull(created);
         return created;
     }
@@ -184,8 +184,8 @@ public sealed class ContributionPublicationTests
         var reviewer = await db.Users
             .Include(user => user.UserRoles)
                 .ThenInclude(userRole => userRole.Role)
-            .Include(user => user.RegionalOrganization)
-                .ThenInclude(organization => organization!.RegionalOrganizationRegions)
+            .Include(user => user.RegionalManager)
+                .ThenInclude(organization => organization!.RegionalManagerRegions)
                 .ThenInclude(link => link.Region)
             .SingleAsync(user => user.Email == reviewerEmail);
 
@@ -201,16 +201,16 @@ public sealed class ContributionPublicationTests
             });
         }
 
-        reviewer.RegionalOrganization ??= new RegionalOrganization
+        reviewer.RegionalManager ??= new RegionalManager
         {
             UserId = reviewer.Id,
             User = reviewer,
         };
 
         var region = await db.Regions.SingleAsync(existingRegion => existingRegion.Name == regionName);
-        if (!reviewer.RegionalOrganization.RegionalOrganizationRegions.Any(link => link.RegionId == region.Id))
+        if (!reviewer.RegionalManager.RegionalManagerRegions.Any(link => link.RegionId == region.Id))
         {
-            reviewer.RegionalOrganization.RegionalOrganizationRegions.Add(new RegionalOrganizationRegion
+            reviewer.RegionalManager.RegionalManagerRegions.Add(new RegionalManagerRegion
             {
                 UserId = reviewer.Id,
                 RegionId = region.Id,
@@ -222,3 +222,4 @@ public sealed class ContributionPublicationTests
         await db.SaveChangesAsync();
     }
 }
+

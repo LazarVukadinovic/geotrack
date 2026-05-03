@@ -1,4 +1,4 @@
-﻿using Geotrack.Application.Interfaces.Repository;
+using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
 using Microsoft.EntityFrameworkCore;
 

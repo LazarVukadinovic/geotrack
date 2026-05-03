@@ -12,22 +12,22 @@ namespace Geotrack.Server.Controllers;
 [Authorize]
 public class ContributionsController : ControllerBase
 {
-    private const long MaxCoverImageBytes = 8 * 1024 * 1024;
+    private const long MaxMainImageBytes = 8 * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly IStayContributionService _stayContributionService;
+    private readonly IPlaceContributionService _placeContributionService;
 
-    public ContributionsController(IStayContributionService stayContributionService)
+    public ContributionsController(IPlaceContributionService placeContributionService)
     {
-        _stayContributionService = stayContributionService;
+        _placeContributionService = placeContributionService;
     }
 
     [HttpGet]
-    public async Task<ActionResult<GetStayContributionsResponseDto>> GetMine()
+    public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetMine()
     {
         try
         {
-            return Ok(await _stayContributionService.GetMineAsync(GetUserId()));
+            return Ok(await _placeContributionService.GetMineAsync(GetUserId()));
         }
         catch (Exception ex)
         {
@@ -36,11 +36,11 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<StayContributionDetailDto>> GetMineDetail([FromRoute] int id)
+    public async Task<ActionResult<PlaceContributionDetailDto>> GetMineDetail([FromRoute] int id)
     {
         try
         {
-            return Ok(await _stayContributionService.GetMineDetailAsync(GetUserId(), id));
+            return Ok(await _placeContributionService.GetMineDetailAsync(GetUserId(), id));
         }
         catch (Exception ex)
         {
@@ -48,19 +48,19 @@ public class ContributionsController : ControllerBase
         }
     }
 
-    [HttpPost("stays")]
+    [HttpPost]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<StayContributionResponseDto>> CreateStay([FromForm] StayContributionFormRequest request)
+    public async Task<ActionResult<PlaceContributionResponseDto>> Create([FromForm] PlaceContributionFormRequest request)
     {
         try
         {
             var payload = ParsePayload(request.Payload);
-            var contribution = await _stayContributionService.CreateAsync(
+            var contribution = await _placeContributionService.CreateAsync(
                 GetUserId(),
                 payload,
-                await ReadCoverImageAsync(request.CoverImage));
+                await ReadMainImageAsync(request.MainImage));
 
-            return CreatedAtAction(nameof(GetMineDetail), new { id = contribution.Id }, new StayContributionResponseDto
+            return CreatedAtAction(nameof(GetMineDetail), new { id = contribution.Id }, new PlaceContributionResponseDto
             {
                 Contribution = contribution
             });
@@ -71,22 +71,32 @@ public class ContributionsController : ControllerBase
         }
     }
 
-    [HttpPut("stays/{id:int}")]
+    [HttpPost("places")]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<StayContributionResponseDto>> UpdateStay(
+    public Task<ActionResult<PlaceContributionResponseDto>> CreatePlace([FromForm] PlaceContributionFormRequest request) =>
+        Create(request);
+
+    [HttpPost("stays")]
+    [Consumes("multipart/form-data")]
+    public Task<ActionResult<PlaceContributionResponseDto>> CreateStay([FromForm] PlaceContributionFormRequest request) =>
+        Create(request);
+
+    [HttpPut("{id:int}")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<PlaceContributionResponseDto>> Update(
         [FromRoute] int id,
-        [FromForm] StayContributionFormRequest request)
+        [FromForm] PlaceContributionFormRequest request)
     {
         try
         {
             var payload = ParsePayload(request.Payload);
-            var contribution = await _stayContributionService.UpdateAsync(
+            var contribution = await _placeContributionService.UpdateAsync(
                 GetUserId(),
                 id,
                 payload,
-                await ReadCoverImageAsync(request.CoverImage));
+                await ReadMainImageAsync(request.MainImage));
 
-            return Ok(new StayContributionResponseDto { Contribution = contribution });
+            return Ok(new PlaceContributionResponseDto { Contribution = contribution });
         }
         catch (Exception ex)
         {
@@ -94,12 +104,26 @@ public class ContributionsController : ControllerBase
         }
     }
 
+    [HttpPut("places/{id:int}")]
+    [Consumes("multipart/form-data")]
+    public Task<ActionResult<PlaceContributionResponseDto>> UpdatePlace(
+        [FromRoute] int id,
+        [FromForm] PlaceContributionFormRequest request) =>
+        Update(id, request);
+
+    [HttpPut("stays/{id:int}")]
+    [Consumes("multipart/form-data")]
+    public Task<ActionResult<PlaceContributionResponseDto>> UpdateStay(
+        [FromRoute] int id,
+        [FromForm] PlaceContributionFormRequest request) =>
+        Update(id, request);
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete([FromRoute] int id)
     {
         try
         {
-            await _stayContributionService.DeleteAsync(GetUserId(), id);
+            await _placeContributionService.DeleteAsync(GetUserId(), id);
             return NoContent();
         }
         catch (Exception ex)
@@ -110,11 +134,11 @@ public class ContributionsController : ControllerBase
 
     [HttpGet("review")]
     [Authorize(Roles = "RegionalManager")]
-    public async Task<ActionResult<GetStayContributionsResponseDto>> GetReviewQueue([FromQuery] string? status = null)
+    public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetReviewQueue([FromQuery] string? status = null)
     {
         try
         {
-            return Ok(await _stayContributionService.GetReviewQueueAsync(GetUserId(), status));
+            return Ok(await _placeContributionService.GetReviewQueueAsync(GetUserId(), status));
         }
         catch (Exception ex)
         {
@@ -124,14 +148,14 @@ public class ContributionsController : ControllerBase
 
     [HttpPost("{id:int}/approve")]
     [Authorize(Roles = "RegionalManager")]
-    public async Task<ActionResult<StayContributionResponseDto>> Approve(
+    public async Task<ActionResult<PlaceContributionResponseDto>> Approve(
         [FromRoute] int id,
-        [FromBody] ReviewStayContributionRequestDto request)
+        [FromBody] ReviewPlaceContributionRequestDto request)
     {
         try
         {
-            var contribution = await _stayContributionService.ApproveAsync(GetUserId(), id, request);
-            return Ok(new StayContributionResponseDto { Contribution = contribution });
+            var contribution = await _placeContributionService.ApproveAsync(GetUserId(), id, request);
+            return Ok(new PlaceContributionResponseDto { Contribution = contribution });
         }
         catch (Exception ex)
         {
@@ -141,14 +165,14 @@ public class ContributionsController : ControllerBase
 
     [HttpPost("{id:int}/reject")]
     [Authorize(Roles = "RegionalManager")]
-    public async Task<ActionResult<StayContributionResponseDto>> Reject(
+    public async Task<ActionResult<PlaceContributionResponseDto>> Reject(
         [FromRoute] int id,
-        [FromBody] ReviewStayContributionRequestDto request)
+        [FromBody] ReviewPlaceContributionRequestDto request)
     {
         try
         {
-            var contribution = await _stayContributionService.RejectAsync(GetUserId(), id, request);
-            return Ok(new StayContributionResponseDto { Contribution = contribution });
+            var contribution = await _placeContributionService.RejectAsync(GetUserId(), id, request);
+            return Ok(new PlaceContributionResponseDto { Contribution = contribution });
         }
         catch (Exception ex)
         {
@@ -156,14 +180,14 @@ public class ContributionsController : ControllerBase
         }
     }
 
-    private static UpsertStayContributionDto ParsePayload(string payload)
+    private static UpsertPlaceContributionDto ParsePayload(string payload)
     {
         if (string.IsNullOrWhiteSpace(payload))
             throw new InvalidOperationException("Contribution payload is required.");
 
         try
         {
-            return JsonSerializer.Deserialize<UpsertStayContributionDto>(payload, JsonOptions)
+            return JsonSerializer.Deserialize<UpsertPlaceContributionDto>(payload, JsonOptions)
                 ?? throw new InvalidOperationException("Contribution payload is invalid.");
         }
         catch (JsonException)
@@ -172,16 +196,16 @@ public class ContributionsController : ControllerBase
         }
     }
 
-    private static async Task<byte[]?> ReadCoverImageAsync(IFormFile? coverImage)
+    private static async Task<byte[]?> ReadMainImageAsync(IFormFile? mainImage)
     {
-        if (coverImage is null || coverImage.Length == 0)
+        if (mainImage is null || mainImage.Length == 0)
             return null;
 
-        if (coverImage.Length > MaxCoverImageBytes)
+        if (mainImage.Length > MaxMainImageBytes)
             throw new InvalidOperationException("Contribution image must be 8 MB or smaller.");
 
         await using var stream = new MemoryStream();
-        await coverImage.CopyToAsync(stream);
+        await mainImage.CopyToAsync(stream);
         return stream.ToArray();
     }
 

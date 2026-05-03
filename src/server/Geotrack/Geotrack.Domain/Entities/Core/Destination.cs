@@ -24,10 +24,11 @@ public class Destination
 
     public ICollection<DestinationReview> DestinationReviews { get; set; } = new List<DestinationReview>(); // NAVIGATIONAL
 
-    public string? ImageUrl { get; set; }
     public string Description { get; set; } = string.Empty;
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+
+    public ICollection<EntityImage> Images { get; set; } = new List<EntityImage>();
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

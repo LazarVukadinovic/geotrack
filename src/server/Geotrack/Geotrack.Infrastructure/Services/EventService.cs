@@ -91,7 +91,7 @@ public class EventService : IEventService
                     Subtitle = e.EventType.Name,
                     Description = e.Description,
                     Location = e.Location.Name,
-                    Image = e.ImageUrl,
+                    Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
                     StartDate = e.StartDate,
                     EndDate = e.EndDate,
                     DestinationPriority = e.Location.DestinationId == destination.Id ? 0 : 1,
@@ -113,7 +113,7 @@ public class EventService : IEventService
                     Subtitle = e.EventType.Name,
                     Description = e.Description,
                     Location = e.Location.Name,
-                    Image = e.ImageUrl,
+                    Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
                     StartDate = e.StartDate,
                     EndDate = e.EndDate,
                     Tags = e.EventTags.OrderBy(et => et.Tag.Name).Select(et => et.Tag.Name).ToList(),
@@ -194,8 +194,10 @@ public class EventService : IEventService
     {
         var evt = await _db.Events
             .Include(e => e.EventType)
+            .Include(e => e.Images)
             .Include(e => e.Location)
             .Include(e => e.Place)
+            .Include(e => e.Images)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
             .FirstOrDefaultAsync(e => e.Id == id);
 
@@ -221,7 +223,7 @@ public class EventService : IEventService
             Location = evt.Location?.Name,
             Latitude = eventLatitude,
             Longitude = eventLongitude,
-            HeroImage = evt.ImageUrl,
+            HeroImage = evt.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
             Tags = evt.EventTags.Select(et => new TagLabelDto { Label = et.Tag.Name }).ToList(),
             Distance = SpatialDistanceFormatter.FormatBetween(
                 latitude,
@@ -249,7 +251,7 @@ public class EventService : IEventService
                 Id = s.Id,
                 Title = s.Name,
                 Subtitle = s.EventType?.Name,
-                Image = s.ImageUrl,
+                Image = s.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
                 IsSaved = favoriteIds.Contains(s.Id)
             }).ToList(),
             IsSaved = isSaved
@@ -261,7 +263,9 @@ public class EventService : IEventService
     public async Task<GetEventDetailsResponseDto> GetEventDetailsAsync(int eventId, int? userId)
     {
         var evt = await _db.Events
+            .Include(e => e.Images)
             .Include(e => e.EventReviews)
+            .Include(e => e.Images)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
             .FirstOrDefaultAsync(e => e.Id == eventId)
             ?? throw new KeyNotFoundException("Event not found");
@@ -310,7 +314,9 @@ public class EventService : IEventService
     public async Task<GetEventSectionResponseDto> GetEventSectionAsync(int eventId, string sectionKey)
     {
         var evt = await _db.Events
+            .Include(e => e.Images)
             .Include(e => e.EventReviews)
+            .Include(e => e.Images)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
             .FirstOrDefaultAsync(e => e.Id == eventId)
             ?? throw new KeyNotFoundException("Event not found");
