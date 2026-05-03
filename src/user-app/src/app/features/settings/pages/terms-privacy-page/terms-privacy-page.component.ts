@@ -29,7 +29,8 @@ const LEGAL_SECTIONS: LegalSection[] = [
     title: 'Privacy Policy',
     body: [
       'GeoTrack uses account information, saved places, and interest tags to personalize recommendations and make destination browsing more relevant.',
-      'When location access is granted, GeoTrack may use your device or approximate city to surface nearby places, events, and context-aware map results. You can clear saved location data from Privacy Settings at any time.',
+      'When precise location access is granted, GeoTrack uses those coordinates for the current browser session only. Precise GPS coordinates are not stored in long-term browser storage.',
+      'If precise location is unavailable, GeoTrack asks before estimating your area from your network connection. Approximate coordinates are also session-only, while your accept or not-now choice can be remembered on this device.',
       'Support requests you submit in-app are stored with your account so the GeoTrack team can review and respond during testing and product iteration.',
     ],
   },
