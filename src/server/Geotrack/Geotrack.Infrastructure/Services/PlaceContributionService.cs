@@ -12,6 +12,15 @@ namespace Geotrack.Infrastructure.Services;
 public class PlaceContributionService : IPlaceContributionService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private const int MaxContributionImages = 20;
+    private const int MaxWebsiteUrlLength = 500;
+    private const int MaxBookingPartnerUrlLength = 500;
+    private const int MaxImageUrlLength = 1000;
+    private const int MaxBookingPartnerIdLength = 80;
+    private const string ManagedContributionMediaPrefix = "/media/uploads/contributions/";
+    private static readonly Regex ManagedContributionMediaFileNameRegex = new(
+        @"^[a-z0-9][a-z0-9._-]{0,199}\.(png|jpe?g|gif|webp)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private readonly AppDbContext _db;
     private readonly IContributionMediaStorageService _mediaStorage;
@@ -90,9 +99,9 @@ public class PlaceContributionService : IPlaceContributionService
                 Subtitle = NormalizeOptional(request.Subtitle, 500),
                 Address = NormalizeOptional(request.Address, 500),
                 OpeningHours = NormalizeOptional(request.OpeningHours, 200),
-                Description = request.Description.Trim(),
-                Latitude = request.Latitude,
-                Longitude = request.Longitude,
+                Description = NormalizeDescription(request.Description),
+                Latitude = references.Latitude,
+                Longitude = references.Longitude,
                 ContactEmail = NormalizeContactEmail(request.ContactEmail),
                 PhoneNumber = NormalizeOptional(request.PhoneNumber ?? request.Phone, 50),
                 Website = NormalizeWebsite(request.Website),
@@ -143,54 +152,63 @@ public class PlaceContributionService : IPlaceContributionService
             .Select(x => x.Url)
             .ToList();
 
+        var references = await ResolveContributionReferencesAsync(request);
+
         string? storedMediaUrl = null;
         if (mainImageBytes is { Length: > 0 })
         {
             storedMediaUrl = (await _mediaStorage.StoreAsync(userId, mainImageBytes)).MediaUrl;
         }
 
-        var references = await ResolveContributionReferencesAsync(request);
-
-        contribution.Type = ParseType(request.Type);
-        contribution.PlaceId = request.PlaceId;
-        contribution.PlaceTypeId = references.PlaceTypeId;
-        contribution.LocationId = references.LocationId;
-        contribution.RestaurantTypeId = request.RestaurantTypeId;
-        contribution.StayTypeId = references.StayTypeId;
-        contribution.Name = request.Name.Trim();
-        contribution.Subtitle = NormalizeOptional(request.Subtitle, 500);
-        contribution.Address = NormalizeOptional(request.Address, 500);
-        contribution.OpeningHours = NormalizeOptional(request.OpeningHours, 200);
-        contribution.Description = request.Description.Trim();
-        contribution.Latitude = request.Latitude;
-        contribution.Longitude = request.Longitude;
-        contribution.ContactEmail = NormalizeContactEmail(request.ContactEmail);
-        contribution.PhoneNumber = NormalizeOptional(request.PhoneNumber ?? request.Phone, 50);
-        contribution.Website = NormalizeWebsite(request.Website);
-        contribution.PricePerNight = NormalizePricePerNight(request.PricePerNight);
-        contribution.CheckInTime = NormalizeOptional(request.CheckInTime, 20);
-        contribution.CheckOutTime = NormalizeOptional(request.CheckOutTime, 20);
-        contribution.TagsJson = Serialize(NormalizeStringList(request.Tags, 80, 30));
-        contribution.AmenitiesJson = Serialize(references.PlaceAmenities);
-        contribution.StayAmenitiesJson = Serialize(references.StayAmenities);
-        contribution.BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners));
-        contribution.Status = PlaceContributionStatus.PendingReview;
-        contribution.ReviewNote = null;
-        contribution.ReviewedAt = null;
-        contribution.ReviewedByUserId = null;
-        contribution.UpdatedAt = DateTime.UtcNow;
-
-        var shouldReplaceImages = request.Images is not null || storedMediaUrl is not null;
-        if (shouldReplaceImages)
-        {
-            _db.PlaceContributionImages.RemoveRange(contribution.Images);
-            contribution.Images.Clear();
-            ApplyImages(contribution, request.Images, storedMediaUrl, DateTime.UtcNow, request.ImagePosition, request.ImageSize);
-        }
-
         try
         {
+            contribution.Type = ParseType(request.Type);
+            contribution.PlaceId = request.PlaceId;
+            contribution.PlaceTypeId = references.PlaceTypeId;
+            contribution.LocationId = references.LocationId;
+            contribution.RestaurantTypeId = request.RestaurantTypeId;
+            contribution.StayTypeId = references.StayTypeId;
+            contribution.Name = request.Name.Trim();
+            contribution.Subtitle = NormalizeOptional(request.Subtitle, 500);
+            contribution.Address = NormalizeOptional(request.Address, 500);
+            contribution.OpeningHours = NormalizeOptional(request.OpeningHours, 200);
+            contribution.Description = NormalizeDescription(request.Description);
+            contribution.Latitude = references.Latitude;
+            contribution.Longitude = references.Longitude;
+            contribution.ContactEmail = NormalizeContactEmail(request.ContactEmail);
+            contribution.PhoneNumber = NormalizeOptional(request.PhoneNumber ?? request.Phone, 50);
+            contribution.Website = NormalizeWebsite(request.Website);
+            contribution.PricePerNight = NormalizePricePerNight(request.PricePerNight);
+            contribution.CheckInTime = NormalizeOptional(request.CheckInTime, 20);
+            contribution.CheckOutTime = NormalizeOptional(request.CheckOutTime, 20);
+            contribution.TagsJson = Serialize(NormalizeStringList(request.Tags, 80, 30));
+            contribution.AmenitiesJson = Serialize(references.PlaceAmenities);
+            contribution.StayAmenitiesJson = Serialize(references.StayAmenities);
+            contribution.BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners));
+            contribution.Status = PlaceContributionStatus.PendingReview;
+            contribution.ReviewNote = null;
+            contribution.ReviewedAt = null;
+            contribution.ReviewedByUserId = null;
+            contribution.UpdatedAt = DateTime.UtcNow;
+
+            var shouldReplaceImages = request.Images is not null || storedMediaUrl is not null;
+            if (shouldReplaceImages)
+            {
+                _db.PlaceContributionImages.RemoveRange(contribution.Images);
+                contribution.Images.Clear();
+                ApplyImages(contribution, request.Images, storedMediaUrl, DateTime.UtcNow, request.ImagePosition, request.ImageSize);
+            }
+
             await _db.SaveChangesAsync();
+
+            if (shouldReplaceImages)
+            {
+                var currentUrls = contribution.Images.Select(x => x.Url).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var oldUrl in oldManagedImages.Where(url => !currentUrls.Contains(url)))
+                {
+                    await _mediaStorage.DeleteAsync(oldUrl);
+                }
+            }
         }
         catch
         {
@@ -198,15 +216,6 @@ public class PlaceContributionService : IPlaceContributionService
                 await _mediaStorage.DeleteAsync(storedMediaUrl);
 
             throw;
-        }
-
-        if (shouldReplaceImages)
-        {
-            var currentUrls = contribution.Images.Select(x => x.Url).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var oldUrl in oldManagedImages.Where(url => !currentUrls.Contains(url)))
-            {
-                await _mediaStorage.DeleteAsync(oldUrl);
-            }
         }
 
         return MapDetail(contribution);
@@ -683,6 +692,20 @@ public class PlaceContributionService : IPlaceContributionService
 
     private async Task<ContributionReferenceResolution> ResolveContributionReferencesAsync(UpsertPlaceContributionDto request)
     {
+        var contributionType = ParseType(request.Type);
+        if (contributionType == PlaceContributionType.UpdatePlace)
+        {
+            if (!request.PlaceId.HasValue)
+                throw new InvalidOperationException("PlaceId is required for update contributions.");
+
+            var targetExists = await _db.Places
+                .AsNoTracking()
+                .AnyAsync(x => x.Id == request.PlaceId.Value);
+
+            if (!targetExists)
+                throw new KeyNotFoundException("Target place not found.");
+        }
+
         var stayTypeId = request.StayTypeId;
         if (!stayTypeId.HasValue && !string.IsNullOrWhiteSpace(request.StayType))
         {
@@ -695,7 +718,7 @@ public class PlaceContributionService : IPlaceContributionService
             placeTypeId = await ResolvePlaceTypeIdAsync("Stay");
         }
 
-        var locationId = request.LocationId ?? await ResolveLegacyLocationIdAsync(request);
+        var location = await ResolveContributionLocationAsync(request);
         var requestedPlaceAmenities = NormalizeStringList(request.Amenities, 80, 30);
         var requestedStayAmenities = NormalizeStringList(request.StayAmenities, 80, 30);
 
@@ -711,10 +734,39 @@ public class PlaceContributionService : IPlaceContributionService
 
         return new ContributionReferenceResolution(
             placeTypeId,
-            locationId,
+            location.LocationId,
             stayTypeId,
             requestedPlaceAmenities,
-            requestedStayAmenities);
+            requestedStayAmenities,
+            location.Latitude,
+            location.Longitude);
+    }
+
+    private async Task<ContributionLocationResolution> ResolveContributionLocationAsync(UpsertPlaceContributionDto request)
+    {
+        if (request.LocationId.HasValue)
+        {
+            var location = await _db.Locations
+                .AsNoTracking()
+                .Where(x => x.Id == request.LocationId.Value)
+                .Select(x => new { x.Id, x.Latitude, x.Longitude })
+                .FirstOrDefaultAsync()
+                ?? throw new KeyNotFoundException("Location not found.");
+
+            var latitude = request.Latitude ?? location.Latitude;
+            var longitude = request.Longitude ?? location.Longitude;
+
+            if (!HasUsableCoordinates(latitude, longitude))
+                throw new InvalidOperationException("Please choose a valid location before submitting.");
+
+            return new ContributionLocationResolution(location.Id, latitude, longitude);
+        }
+
+        var locationId = await ResolveLegacyLocationIdAsync(request);
+        if (!locationId.HasValue || !HasUsableCoordinates(request.Latitude, request.Longitude))
+            throw new InvalidOperationException("Please choose a valid location before submitting.");
+
+        return new ContributionLocationResolution(locationId.Value, request.Latitude!.Value, request.Longitude!.Value);
     }
 
     private async Task<int?> ResolvePlaceTypeIdAsync(string name)
@@ -927,6 +979,20 @@ public class PlaceContributionService : IPlaceContributionService
         return candidates.OrderBy(x => x.Id).First();
     }
 
+    private static bool HasUsableCoordinates(double? latitude, double? longitude) =>
+        latitude.HasValue &&
+        longitude.HasValue &&
+        IsFinite(latitude.Value) &&
+        IsFinite(longitude.Value) &&
+        latitude.Value >= -90 &&
+        latitude.Value <= 90 &&
+        longitude.Value >= -180 &&
+        longitude.Value <= 180 &&
+        (latitude.Value != 0d || longitude.Value != 0d);
+
+    private static bool IsFinite(double value) =>
+        !double.IsNaN(value) && !double.IsInfinity(value);
+
     private static void ApplyImages(
         PlaceContribution contribution,
         IEnumerable<UpsertPlaceContributionImageDto>? requestImages,
@@ -948,6 +1014,9 @@ public class PlaceContributionService : IPlaceContributionService
                 ImageSize = imageSize ?? "cover"
             });
         }
+
+        if (images.Count > MaxContributionImages)
+            throw new InvalidOperationException($"A contribution can include at most {MaxContributionImages} images.");
 
         if (images.Count == 0)
             return;
@@ -978,11 +1047,11 @@ public class PlaceContributionService : IPlaceContributionService
 
     private static IEnumerable<UpsertPlaceContributionImageDto> NormalizeImages(IEnumerable<UpsertPlaceContributionImageDto>? images)
     {
-        return (images ?? Enumerable.Empty<UpsertPlaceContributionImageDto>())
+        var normalized = (images ?? Enumerable.Empty<UpsertPlaceContributionImageDto>())
             .Where(x => !string.IsNullOrWhiteSpace(x.Url))
             .Select((x, index) => new UpsertPlaceContributionImageDto
             {
-                Url = x.Url.Trim(),
+                Url = NormalizeImageUrl(x.Url),
                 AltText = x.AltText,
                 Caption = x.Caption,
                 IsMain = x.IsMain,
@@ -991,7 +1060,12 @@ public class PlaceContributionService : IPlaceContributionService
                 ImageSize = x.ImageSize
             })
             .DistinctBy(x => x.Url, StringComparer.OrdinalIgnoreCase)
-            .Take(20);
+            .ToList();
+
+        if (normalized.Count > MaxContributionImages)
+            throw new InvalidOperationException($"A contribution can include at most {MaxContributionImages} images.");
+
+        return normalized;
     }
 
     private static void Validate(UpsertPlaceContributionDto request, bool isUpdateMethod)
@@ -1002,11 +1076,17 @@ public class PlaceContributionService : IPlaceContributionService
         if (request.Name.Trim().Length > 200)
             throw new InvalidOperationException("Name is too long.");
 
-        if (request.Description.Trim().Length > 2000)
+        if (NormalizeDescription(request.Description).Length > 2000)
             throw new InvalidOperationException("Description is too long.");
 
         if (request is { Latitude: null, Longitude: not null } or { Latitude: not null, Longitude: null })
             throw new InvalidOperationException("Both latitude and longitude are required when setting coordinates.");
+
+        if (request.Latitude.HasValue && !IsFinite(request.Latitude.Value))
+            throw new InvalidOperationException("Latitude must be a finite value.");
+
+        if (request.Longitude.HasValue && !IsFinite(request.Longitude.Value))
+            throw new InvalidOperationException("Longitude must be a finite value.");
 
         if (request.Latitude is < -90 or > 90)
             throw new InvalidOperationException("Latitude must be between -90 and 90.");
@@ -1014,9 +1094,25 @@ public class PlaceContributionService : IPlaceContributionService
         if (request.Longitude is < -180 or > 180)
             throw new InvalidOperationException("Longitude must be between -180 and 180.");
 
+        if (request is { Latitude: 0d, Longitude: 0d })
+            throw new InvalidOperationException("Please choose a valid location before submitting.");
+
+        if (request.LocationId is <= 0)
+            throw new InvalidOperationException("Please choose a valid location before submitting.");
+
+        if (!request.LocationId.HasValue &&
+            (!HasUsableCoordinates(request.Latitude, request.Longitude) ||
+             string.IsNullOrWhiteSpace(request.City) ||
+             string.IsNullOrWhiteSpace(request.Country)))
+        {
+            throw new InvalidOperationException("Please choose a valid location before submitting.");
+        }
+
         _ = NormalizeContactEmail(request.ContactEmail);
         _ = NormalizeWebsite(request.Website);
         _ = NormalizePricePerNight(request.PricePerNight);
+        _ = NormalizeBookingPartners(request.BookingPartners);
+        _ = NormalizeImages(request.Images).ToList();
 
         if (ParseType(request.Type) == PlaceContributionType.UpdatePlace && !request.PlaceId.HasValue)
             throw new InvalidOperationException("PlaceId is required for update contributions.");
@@ -1054,6 +1150,9 @@ public class PlaceContributionService : IPlaceContributionService
         return trimmed.Length > maxLength ? trimmed[..maxLength] : trimmed;
     }
 
+    private static string NormalizeDescription(string? description) =>
+        description?.Trim() ?? string.Empty;
+
     private static string NormalizeContactEmail(string? email)
     {
         var trimmed = email?.Trim() ?? string.Empty;
@@ -1089,10 +1188,84 @@ public class PlaceContributionService : IPlaceContributionService
         if (trimmed.Length == 0)
             return string.Empty;
 
-        return trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
-            ? trimmed
-            : $"https://{trimmed}";
+        return NormalizeExternalHttpsUrl(trimmed, MaxWebsiteUrlLength, "Website URL");
+    }
+
+    private static string NormalizeBookingPartnerUrl(string? url)
+    {
+        var trimmed = url?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
+            throw new InvalidOperationException("Booking partner URL is required.");
+
+        return NormalizeExternalHttpsUrl(trimmed, MaxBookingPartnerUrlLength, "Booking partner URL");
+    }
+
+    private static string NormalizeImageUrl(string? imageUrl)
+    {
+        var trimmed = imageUrl?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
+            throw new InvalidOperationException("Image URL is required.");
+
+        if (trimmed.Length > MaxImageUrlLength)
+            throw new InvalidOperationException($"Image URL must be {MaxImageUrlLength} characters or fewer.");
+
+        if (IsManagedContributionMediaPath(trimmed))
+            return trimmed;
+
+        return NormalizeExternalHttpsUrl(trimmed, MaxImageUrlLength, "Image URL");
+    }
+
+    private static string NormalizeExternalHttpsUrl(string trimmed, int maxLength, string fieldName)
+    {
+        if (trimmed.Length > maxLength)
+            throw new InvalidOperationException($"{fieldName} must be {maxLength} characters or fewer.");
+
+        if (trimmed.StartsWith("//", StringComparison.Ordinal))
+            throw new InvalidOperationException($"{fieldName} must be a valid https URL.");
+
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(uri.Host) ||
+            uri.HostNameType == UriHostNameType.Unknown ||
+            !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            throw new InvalidOperationException($"{fieldName} must be a valid https URL.");
+        }
+
+        var normalized = uri.AbsoluteUri;
+        if (normalized.Length > maxLength)
+            throw new InvalidOperationException($"{fieldName} must be {maxLength} characters or fewer.");
+
+        return normalized;
+    }
+
+    private static bool IsManagedContributionMediaPath(string value)
+    {
+        if (!value.StartsWith(ManagedContributionMediaPrefix, StringComparison.Ordinal))
+            return false;
+
+        if (value.Contains('\\') ||
+            value.Contains("//", StringComparison.Ordinal) ||
+            value.Contains('%') ||
+            value.Contains('?') ||
+            value.Contains('#'))
+        {
+            throw new InvalidOperationException("Image URL must be a valid https URL or managed media path.");
+        }
+
+        var fileName = value[ManagedContributionMediaPrefix.Length..];
+        if (string.IsNullOrWhiteSpace(fileName) ||
+            fileName.Contains('/') ||
+            fileName.Contains('\\') ||
+            fileName.Contains("..", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Image URL must be a valid https URL or managed media path.");
+        }
+
+        if (!ManagedContributionMediaFileNameRegex.IsMatch(fileName))
+            throw new InvalidOperationException("Image URL must be a valid https URL or managed media path.");
+
+        return true;
     }
 
     private static string NormalizeImagePosition(string? value)
@@ -1150,16 +1323,37 @@ public class PlaceContributionService : IPlaceContributionService
 
     private static List<ContributionBookingPartnerDto> NormalizeBookingPartners(IEnumerable<ContributionBookingPartnerDto>? partners)
     {
-        return (partners ?? Enumerable.Empty<ContributionBookingPartnerDto>())
+        var normalized = (partners ?? Enumerable.Empty<ContributionBookingPartnerDto>())
+            .Select(x => new
+            {
+                Id = x.Id?.Trim().ToLowerInvariant() ?? string.Empty,
+                x.Url
+            })
             .Where(x => !string.IsNullOrWhiteSpace(x.Id))
             .Select(x => new ContributionBookingPartnerDto
             {
-                Id = x.Id.Trim().ToLowerInvariant(),
-                Url = NormalizeWebsite(x.Url)
+                Id = NormalizeBookingPartnerId(x.Id),
+                Url = NormalizeBookingPartnerUrl(x.Url)
             })
             .DistinctBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-            .Take(10)
             .ToList();
+
+        if (normalized.Count > 10)
+            throw new InvalidOperationException("A contribution can include at most 10 booking partners.");
+
+        return normalized;
+    }
+
+    private static string NormalizeBookingPartnerId(string partnerId)
+    {
+        if (partnerId.Length > MaxBookingPartnerIdLength)
+            throw new InvalidOperationException($"Booking partner name must be {MaxBookingPartnerIdLength} characters or fewer.");
+
+        var partnerName = PartnerName(partnerId);
+        if (partnerName.Length > 100)
+            throw new InvalidOperationException("Booking partner name is too long.");
+
+        return partnerId;
     }
 
     private static PlaceContributionListItemDto MapListItem(PlaceContribution contribution)
@@ -1306,10 +1500,17 @@ public class PlaceContributionService : IPlaceContributionService
 
     private sealed record ContributionReferenceResolution(
         int? PlaceTypeId,
-        int? LocationId,
+        int LocationId,
         int? StayTypeId,
         List<string> PlaceAmenities,
-        List<string> StayAmenities);
+        List<string> StayAmenities,
+        double Latitude,
+        double Longitude);
+
+    private sealed record ContributionLocationResolution(
+        int LocationId,
+        double Latitude,
+        double Longitude);
 
     private sealed record ReviewAuthorization(
         bool IsAdmin,

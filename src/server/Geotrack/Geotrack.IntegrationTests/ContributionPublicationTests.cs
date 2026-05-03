@@ -256,6 +256,128 @@ public sealed class ContributionPublicationTests
         Assert.Equal(fixture.InScopeLocationId, place.LocationId);
     }
 
+    [Fact]
+    public async Task Create_rejects_contribution_without_confirmed_location_before_queueing()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreateValidContributionPayload("Missing Location Validation Villa");
+        payload["latitude"] = null;
+        payload["longitude"] = null;
+
+        var response = await PostContributionAsync(client, payload);
+
+        await AssertErrorAsync(
+            response,
+            HttpStatusCode.BadRequest,
+            "Please choose a valid location before submitting.");
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.False(await db.PlaceContributions.AnyAsync(x => x.Name == "Missing Location Validation Villa"));
+    }
+
+    [Fact]
+    public async Task Create_rejects_malformed_website_booking_and_external_image_urls()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+
+        var websitePayload = CreateValidContributionPayload("Bad Website Validation Villa");
+        websitePayload["website"] = "javascript:alert(1)";
+        await AssertErrorAsync(
+            await PostContributionAsync(client, websitePayload),
+            HttpStatusCode.BadRequest,
+            "Website URL must be a valid https URL.");
+
+        var bookingPayload = CreateValidContributionPayload("Bad Booking Validation Villa");
+        bookingPayload["bookingPartners"] = new[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["id"] = "booking",
+                ["url"] = "data:text/html,hello"
+            }
+        };
+        await AssertErrorAsync(
+            await PostContributionAsync(client, bookingPayload),
+            HttpStatusCode.BadRequest,
+            "Booking partner URL must be a valid https URL.");
+
+        var imagePayload = CreateValidContributionPayload("Bad Image Validation Villa");
+        imagePayload["images"] = new[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["url"] = "file:///tmp/stay.jpg",
+                ["isMain"] = true,
+                ["sortOrder"] = 0
+            }
+        };
+        await AssertErrorAsync(
+            await PostContributionAsync(client, imagePayload),
+            HttpStatusCode.BadRequest,
+            "Image URL must be a valid https URL.");
+    }
+
+    [Fact]
+    public async Task Create_rejects_overly_long_url_fields()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreateValidContributionPayload("Long Url Validation Villa");
+        payload["website"] = $"https://example.com/{new string('a', 500)}";
+
+        var response = await PostContributionAsync(client, payload);
+
+        await AssertErrorAsync(
+            response,
+            HttpStatusCode.BadRequest,
+            "Website URL must be 500 characters or fewer.");
+    }
+
+    [Fact]
+    public async Task Create_allows_safe_managed_contribution_media_path()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        const string mediaPath = "/media/uploads/contributions/user-1-stay-0123456789abcdef0123456789abcdef.jpg";
+        var payload = CreateValidContributionPayload("Managed Media Validation Villa");
+        payload["images"] = new[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["url"] = mediaPath,
+                ["isMain"] = true,
+                ["sortOrder"] = 0
+            }
+        };
+
+        var response = await PostContributionAsync(client, payload);
+
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        Assert.Contains(created.Contribution.Images, image => image.Url == mediaPath && image.IsMain);
+    }
+
+    [Fact]
+    public async Task Create_update_place_rejects_nonexistent_target_place_early()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreateValidContributionPayload("Missing Target Update Villa");
+        payload["type"] = "UpdatePlace";
+        payload["placeId"] = 999_999_999;
+
+        var response = await PostContributionAsync(client, payload);
+
+        await AssertErrorAsync(
+            response,
+            HttpStatusCode.NotFound,
+            "Target place not found.");
+    }
+
     private static async Task<HttpClient> LoginAsync(GeotrackApiFactory app, string email, string password)
     {
         var client = app.CreateClient();
@@ -296,6 +418,30 @@ public sealed class ContributionPublicationTests
         await GrantRoleAsync(app, email, "Admin");
 
         return await LoginAsync(app, email, "Password123!");
+    }
+
+    private static Dictionary<string, object?> CreateValidContributionPayload(string name)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["name"] = name,
+            ["stayType"] = "Villa",
+            ["address"] = "123 Coast Road",
+            ["city"] = "Dubrovnik",
+            ["region"] = "Dalmatia",
+            ["country"] = "Croatia",
+            ["latitude"] = 42.6507,
+            ["longitude"] = 18.0944,
+            ["imagePosition"] = "50% 50%",
+            ["imageSize"] = "cover",
+            ["description"] = "A contribution used to validate input hardening.",
+            ["phone"] = "+3851234567",
+            ["contactEmail"] = "hello@validation.example",
+            ["website"] = "https://validation.example",
+            ["tags"] = new[] { "Coastal", "Private" },
+            ["amenities"] = new[] { "wifi", "pool" },
+            ["bookingPartners"] = Array.Empty<object>()
+        };
     }
 
     private static async Task<PlaceContributionResponseDto> CreatePlaceContributionAsync(HttpClient client)
@@ -376,6 +522,16 @@ public sealed class ContributionPublicationTests
         return created;
     }
 
+    private static async Task<HttpResponseMessage> PostContributionAsync(HttpClient client, object payload)
+    {
+        using var formData = new MultipartFormDataContent();
+        formData.Add(
+            new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            "payload");
+
+        return await client.PostAsync("/api/contributions", formData);
+    }
+
     private static async Task AssertForbiddenAsync(HttpResponseMessage response)
     {
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -384,6 +540,19 @@ public sealed class ContributionPublicationTests
         Assert.NotNull(error);
         Assert.True(error.TryGetValue("message", out var message));
         Assert.Equal("Forbidden.", message);
+    }
+
+    private static async Task AssertErrorAsync(
+        HttpResponseMessage response,
+        HttpStatusCode expectedStatusCode,
+        string expectedMessage)
+    {
+        Assert.Equal(expectedStatusCode, response.StatusCode);
+
+        var error = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.NotNull(error);
+        Assert.True(error.TryGetValue("message", out var message));
+        Assert.Equal(expectedMessage, message);
     }
 
     private static async Task<ContributionScopeFixture> CreateContributionScopeFixtureAsync(GeotrackApiFactory app)
