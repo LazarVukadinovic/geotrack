@@ -50,6 +50,8 @@ export class HotelDetailPageComponent {
   );
 
   protected readonly scrollProgress = signal(0);
+  protected readonly selectedImageUrl = signal<string | null>(null);
+  protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.hotel()?.heroImage ?? '');
   protected readonly reportMessage = signal('');
   protected readonly reportError = signal('');
   private readonly reportedReviewIds = signal<Record<string, boolean>>({});
@@ -89,6 +91,7 @@ export class HotelDetailPageComponent {
     effect(() => {
       this.hotelId();
       this.scrollProgress.set(0);
+      this.selectedImageUrl.set(null);
       const el = this.hdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -120,6 +123,14 @@ export class HotelDetailPageComponent {
 
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/stays', id]);
+  }
+
+  protected selectGalleryImage(url: string): void {
+    this.selectedImageUrl.set(url);
+  }
+
+  protected isGalleryImageActive(url: string): boolean {
+    return (this.selectedImageUrl() ?? this.hotel()?.heroImage ?? '') === url;
   }
 
   protected openReviews(): void {

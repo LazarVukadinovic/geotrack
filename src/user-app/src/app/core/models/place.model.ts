@@ -1,3 +1,5 @@
+import type { EntityImage } from './entity-image.model';
+
 /** Distinguishes content types for routing purposes. */
 export type PlaceContentType = 'place' | 'hotel' | 'destination';
 
@@ -44,6 +46,7 @@ export interface PlaceDetail {
   latitude?: number | null;
   longitude?: number | null;
   heroImage: string;
+  images: EntityImage[];
   tags: PlaceTag[];
   rating?: number;
   reviewCount?: string;

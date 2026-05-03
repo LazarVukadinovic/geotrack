@@ -1,3 +1,5 @@
+import type { EntityImage } from '../../../core/models/entity-image.model';
+
 export interface HotelTag {
   label: string;
 }
@@ -54,6 +56,7 @@ export interface HotelDetail {
   latitude?: number | null;
   longitude?: number | null;
   heroImage: string;
+  images: EntityImage[];
   tags: HotelTag[];
   rating?: number;
   reviewCount?: string;
