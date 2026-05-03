@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -6,6 +7,7 @@ using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.DTOs.Notifications;
 using Geotrack.Application.DTOs.Places;
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure;
 using Geotrack.IntegrationTests.Infrastructure;
@@ -111,6 +113,149 @@ public sealed class ContributionPublicationTests
         Assert.False(rejectionNotification.IsRead);
     }
 
+    [Fact]
+    public async Task Regional_manager_cannot_review_update_for_target_place_outside_assigned_region()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateContributionScopeFixtureAsync(app);
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var contribution = await CreateUpdatePlaceContributionAsync(
+            contributorClient,
+            fixture.OutOfScopePlaceId,
+            fixture.InScopeLocationId,
+            fixture.PlaceTypeId,
+            "Out of scope overwrite");
+
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+
+        using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
+        var queue = await reviewerClient.GetFromJsonAsync<GetPlaceContributionsResponseDto>(
+            "/api/contributions/review?status=pending");
+
+        Assert.NotNull(queue);
+        Assert.DoesNotContain(queue.Contributions, item => item.Id == contribution.Contribution.Id);
+
+        var rejectResponse = await reviewerClient.PostAsJsonAsync(
+            $"/api/contributions/{contribution.Contribution.Id}/reject",
+            new ReviewPlaceContributionRequestDto { Note = "Out of scope." });
+        await AssertForbiddenAsync(rejectResponse);
+
+        var approvalResponse = await reviewerClient.PostAsJsonAsync(
+            $"/api/contributions/{contribution.Contribution.Id}/approve",
+            new ReviewPlaceContributionRequestDto { Note = "Exploit attempt." });
+        await AssertForbiddenAsync(approvalResponse);
+
+        await AssertPlaceUnchangedAndContributionPendingAsync(
+            app,
+            fixture.OutOfScopePlaceId,
+            fixture.OutOfScopePlaceName,
+            fixture.OutOfScopeLocationId,
+            contribution.Contribution.Id);
+    }
+
+    [Fact]
+    public async Task Regional_manager_cannot_move_in_scope_place_to_out_of_scope_region()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateContributionScopeFixtureAsync(app);
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var contribution = await CreateUpdatePlaceContributionAsync(
+            contributorClient,
+            fixture.InScopePlaceId,
+            fixture.OutOfScopeLocationId,
+            fixture.PlaceTypeId,
+            "Out of region move");
+
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+
+        using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
+        var approvalResponse = await reviewerClient.PostAsJsonAsync(
+            $"/api/contributions/{contribution.Contribution.Id}/approve",
+            new ReviewPlaceContributionRequestDto { Note = "Move out of scope." });
+
+        await AssertForbiddenAsync(approvalResponse);
+        await AssertPlaceUnchangedAndContributionPendingAsync(
+            app,
+            fixture.InScopePlaceId,
+            fixture.InScopePlaceName,
+            fixture.InScopeLocationId,
+            contribution.Contribution.Id);
+    }
+
+    [Fact]
+    public async Task Regional_manager_can_approve_update_when_current_and_proposed_regions_are_in_scope()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateContributionScopeFixtureAsync(app);
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var contribution = await CreateUpdatePlaceContributionAsync(
+            contributorClient,
+            fixture.InScopePlaceId,
+            fixture.InScopeLocationId,
+            fixture.PlaceTypeId,
+            "Approved in-region update");
+
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+
+        using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
+        var approvalResponse = await reviewerClient.PostAsJsonAsync(
+            $"/api/contributions/{contribution.Contribution.Id}/approve",
+            new ReviewPlaceContributionRequestDto { Note = "In region." });
+        approvalResponse.EnsureSuccessStatusCode();
+
+        var approved = await approvalResponse.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(approved);
+        Assert.Equal("Approved", approved.Contribution.Status);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var place = await db.Places.SingleAsync(existingPlace => existingPlace.Id == fixture.InScopePlaceId);
+
+        Assert.Equal("Approved in-region update", place.Name);
+        Assert.Equal(fixture.InScopeLocationId, place.LocationId);
+    }
+
+    [Fact]
+    public async Task Admin_can_approve_cross_region_update_contribution()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateContributionScopeFixtureAsync(app);
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var contribution = await CreateUpdatePlaceContributionAsync(
+            contributorClient,
+            fixture.OutOfScopePlaceId,
+            fixture.InScopeLocationId,
+            fixture.PlaceTypeId,
+            "Admin cross-region update");
+
+        using var adminClient = await RegisterAdminAndLoginAsync(app, "contribution-admin");
+        var queue = await adminClient.GetFromJsonAsync<GetPlaceContributionsResponseDto>(
+            "/api/contributions/review?status=pending");
+
+        Assert.NotNull(queue);
+        Assert.Contains(queue.Contributions, item => item.Id == contribution.Contribution.Id);
+
+        var approvalResponse = await adminClient.PostAsJsonAsync(
+            $"/api/contributions/{contribution.Contribution.Id}/approve",
+            new ReviewPlaceContributionRequestDto { Note = "Admin-only move." });
+        approvalResponse.EnsureSuccessStatusCode();
+
+        var approved = await approvalResponse.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(approved);
+        Assert.Equal("Approved", approved.Contribution.Status);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var place = await db.Places.SingleAsync(existingPlace => existingPlace.Id == fixture.OutOfScopePlaceId);
+
+        Assert.Equal("Admin cross-region update", place.Name);
+        Assert.Equal(fixture.InScopeLocationId, place.LocationId);
+    }
+
     private static async Task<HttpClient> LoginAsync(GeotrackApiFactory app, string email, string password)
     {
         var client = app.CreateClient();
@@ -131,6 +276,26 @@ public sealed class ContributionPublicationTests
             new AuthenticationHeaderValue("Bearer", session.AccessToken);
 
         return client;
+    }
+
+    private static async Task<HttpClient> RegisterAdminAndLoginAsync(GeotrackApiFactory app, string prefix)
+    {
+        var email = $"{prefix}-{Guid.NewGuid():N}@example.com";
+
+        using var registrationClient = app.CreateClient();
+        var registerResponse = await registrationClient.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterRequestDto
+            {
+                FullName = "Contribution Admin",
+                Email = email,
+                Password = "Password123!",
+            });
+        registerResponse.EnsureSuccessStatusCode();
+
+        await GrantRoleAsync(app, email, "Admin");
+
+        return await LoginAsync(app, email, "Password123!");
     }
 
     private static async Task<PlaceContributionResponseDto> CreatePlaceContributionAsync(HttpClient client)
@@ -172,6 +337,166 @@ public sealed class ContributionPublicationTests
         var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
         Assert.NotNull(created);
         return created;
+    }
+
+    private static async Task<PlaceContributionResponseDto> CreateUpdatePlaceContributionAsync(
+        HttpClient client,
+        int targetPlaceId,
+        int proposedLocationId,
+        int placeTypeId,
+        string name)
+    {
+        var payload = new
+        {
+            type = "UpdatePlace",
+            placeId = targetPlaceId,
+            placeTypeId,
+            locationId = proposedLocationId,
+            name,
+            subtitle = "Updated by contribution",
+            address = "Updated address",
+            description = "A scoped update contribution used to validate moderation authorization.",
+            latitude = 42.6507,
+            longitude = 18.0944,
+            contactEmail = "scoped-update@example.com",
+            phone = "+3859876543",
+            website = "https://scoped-update.example"
+        };
+
+        using var formData = new MultipartFormDataContent();
+        formData.Add(
+            new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            "payload");
+
+        var response = await client.PostAsync("/api/contributions", formData);
+        response.EnsureSuccessStatusCode();
+
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        return created;
+    }
+
+    private static async Task AssertForbiddenAsync(HttpResponseMessage response)
+    {
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
+        var error = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.NotNull(error);
+        Assert.True(error.TryGetValue("message", out var message));
+        Assert.Equal("Forbidden.", message);
+    }
+
+    private static async Task<ContributionScopeFixture> CreateContributionScopeFixtureAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var now = DateTime.UtcNow;
+
+        var inScopeRegion = await db.Regions.SingleAsync(region => region.Name == "Dalmatia");
+        var inScopeLocation = await db.Locations
+            .Where(location => location.Destination.RegionId == inScopeRegion.Id)
+            .OrderBy(location => location.Id)
+            .FirstAsync();
+        var destinationType = await db.DestinationTypes.OrderBy(type => type.Id).FirstAsync();
+        var locationType = await db.LocationTypes.OrderBy(type => type.Id).FirstAsync();
+        var placeType = await db.PlaceTypes.SingleAsync(type => type.Name == "Cafe");
+
+        var outOfScopeRegion = new Region
+        {
+            Name = $"Out Scope {Guid.NewGuid():N}",
+            TerritoryId = inScopeRegion.TerritoryId,
+            CreatedAt = now
+        };
+
+        db.Regions.Add(outOfScopeRegion);
+        await db.SaveChangesAsync();
+
+        var outOfScopeDestination = new Destination
+        {
+            Name = $"Out Scope Destination {Guid.NewGuid():N}",
+            DestinationTypeId = destinationType.Id,
+            RegionId = outOfScopeRegion.Id,
+            Description = "Out-of-scope test destination.",
+            Latitude = 44.8666,
+            Longitude = 13.8496,
+            CreatedAt = now
+        };
+
+        db.Destinations.Add(outOfScopeDestination);
+        await db.SaveChangesAsync();
+
+        var outOfScopeLocation = new Location
+        {
+            Name = $"Out Scope Location {Guid.NewGuid():N}",
+            DestinationId = outOfScopeDestination.Id,
+            LocationTypeId = locationType.Id,
+            Latitude = 44.8666,
+            Longitude = 13.8496,
+            CreatedAt = now
+        };
+
+        db.Locations.Add(outOfScopeLocation);
+        await db.SaveChangesAsync();
+
+        const string inScopePlaceName = "In Scope Contribution Test Cafe";
+        var inScopePlace = new Place
+        {
+            Name = inScopePlaceName,
+            Subtitle = "Original in-region place",
+            PlaceTypeId = placeType.Id,
+            LocationId = inScopeLocation.Id,
+            Description = "Original in-scope place.",
+            Latitude = 42.6507,
+            Longitude = 18.0944,
+            CreatedAt = now
+        };
+
+        const string outOfScopePlaceName = "Out Scope Contribution Test Cafe";
+        var outOfScopePlace = new Place
+        {
+            Name = outOfScopePlaceName,
+            Subtitle = "Original out-of-region place",
+            PlaceTypeId = placeType.Id,
+            LocationId = outOfScopeLocation.Id,
+            Description = "Original out-of-scope place.",
+            Latitude = 44.8666,
+            Longitude = 13.8496,
+            CreatedAt = now
+        };
+
+        db.Places.AddRange(inScopePlace, outOfScopePlace);
+        await db.SaveChangesAsync();
+
+        return new ContributionScopeFixture(
+            inScopeRegion.Id,
+            outOfScopeRegion.Id,
+            inScopeLocation.Id,
+            outOfScopeLocation.Id,
+            inScopePlace.Id,
+            outOfScopePlace.Id,
+            placeType.Id,
+            inScopePlaceName,
+            outOfScopePlaceName);
+    }
+
+    private static async Task AssertPlaceUnchangedAndContributionPendingAsync(
+        GeotrackApiFactory app,
+        int placeId,
+        string expectedPlaceName,
+        int expectedLocationId,
+        int contributionId)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var place = await db.Places.SingleAsync(existingPlace => existingPlace.Id == placeId);
+        Assert.Equal(expectedPlaceName, place.Name);
+        Assert.Equal(expectedLocationId, place.LocationId);
+
+        var contribution = await db.PlaceContributions.SingleAsync(existingContribution => existingContribution.Id == contributionId);
+        Assert.Equal(PlaceContributionStatus.PendingReview, contribution.Status);
+        Assert.Null(contribution.ReviewedAt);
+        Assert.Null(contribution.ReviewedByUserId);
     }
 
     private static async Task GrantRegionalManagerCoverageAsync(
@@ -222,5 +547,43 @@ public sealed class ContributionPublicationTests
 
         await db.SaveChangesAsync();
     }
+
+    private static async Task GrantRoleAsync(
+        GeotrackApiFactory app,
+        string email,
+        string roleName)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var user = await db.Users
+            .Include(existingUser => existingUser.UserRoles)
+            .SingleAsync(existingUser => existingUser.Email == email);
+
+        var role = await db.Roles.SingleAsync(existingRole => existingRole.Name == roleName);
+        if (user.UserRoles.Any(existingRole => existingRole.RoleId == role.Id))
+            return;
+
+        user.UserRoles.Add(new UserRole
+        {
+            UserId = user.Id,
+            RoleId = role.Id,
+            User = user,
+            Role = role
+        });
+
+        await db.SaveChangesAsync();
+    }
+
+    private sealed record ContributionScopeFixture(
+        int InScopeRegionId,
+        int OutOfScopeRegionId,
+        int InScopeLocationId,
+        int OutOfScopeLocationId,
+        int InScopePlaceId,
+        int OutOfScopePlaceId,
+        int PlaceTypeId,
+        string InScopePlaceName,
+        string OutOfScopePlaceName);
 }
 

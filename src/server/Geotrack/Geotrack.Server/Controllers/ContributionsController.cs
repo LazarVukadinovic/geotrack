@@ -147,7 +147,7 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpGet("review")]
-    [Authorize(Roles = "RegionalManager")]
+    [Authorize(Roles = "Admin,RegionalManager")]
     public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetReviewQueue([FromQuery] string? status = null)
     {
         try
@@ -161,7 +161,7 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/approve")]
-    [Authorize(Roles = "RegionalManager")]
+    [Authorize(Roles = "Admin,RegionalManager")]
     public async Task<ActionResult<PlaceContributionResponseDto>> Approve(
         [FromRoute] int id,
         [FromBody] ReviewPlaceContributionRequestDto request)
@@ -178,7 +178,7 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/reject")]
-    [Authorize(Roles = "RegionalManager")]
+    [Authorize(Roles = "Admin,RegionalManager")]
     public async Task<ActionResult<PlaceContributionResponseDto>> Reject(
         [FromRoute] int id,
         [FromBody] ReviewPlaceContributionRequestDto request)
@@ -237,7 +237,8 @@ public class ContributionsController : ControllerBase
     {
         return ex switch
         {
-            UnauthorizedAccessException => Unauthorized(new { message = ex.Message }),
+            UnauthorizedAccessException authEx when authEx.Message == "Invalid user token" => Unauthorized(new { message = "Invalid user token" }),
+            UnauthorizedAccessException => StatusCode(StatusCodes.Status403Forbidden, new { message = "Forbidden." }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
             _ => StatusCode(500, new { message = "An unexpected error occurred." })

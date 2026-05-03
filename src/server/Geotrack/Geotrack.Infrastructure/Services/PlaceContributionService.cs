@@ -235,25 +235,45 @@ public class PlaceContributionService : IPlaceContributionService
 
     public async Task<GetPlaceContributionsResponseDto> GetReviewQueueAsync(int reviewerUserId, string? status)
     {
-        var reviewer = await EnsureRegionalManagerAsync(reviewerUserId);
-        var assignedRegionIds = reviewer.RegionalManagerRegions.Select(x => x.RegionId).ToHashSet();
-
-        if (assignedRegionIds.Count == 0)
-            return new GetPlaceContributionsResponseDto();
+        var authorization = await GetReviewAuthorizationAsync(reviewerUserId);
 
         var query = _db.PlaceContributions
             .AsNoTracking()
             .Include(x => x.PlaceType)
+            .Include(x => x.Place)
+                .ThenInclude(x => x!.Location)
+                    .ThenInclude(x => x.Destination)
+                        .ThenInclude(x => x.Region)
+                            .ThenInclude(x => x.Territory)
+            .Include(x => x.Place)
+                .ThenInclude(x => x!.Stay)
+                    .ThenInclude(x => x!.StayType)
             .Include(x => x.Location)
                 .ThenInclude(x => x!.Destination)
                     .ThenInclude(x => x.Region)
                         .ThenInclude(x => x.Territory)
             .Include(x => x.StayType)
             .Include(x => x.Images)
-            .Where(x => x.Location != null && assignedRegionIds.Contains(x.Location.Destination.RegionId));
+            .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status))
             query = query.Where(x => x.Status == ParseStatus(status));
+
+        if (!authorization.IsAdmin)
+        {
+            if (authorization.AssignedRegionIds.Count == 0)
+                return new GetPlaceContributionsResponseDto();
+
+            query = query.Where(x =>
+                x.LocationId.HasValue &&
+                x.Location != null &&
+                authorization.AssignedRegionIds.Contains(x.Location.Destination.RegionId) &&
+                (x.Type != PlaceContributionType.UpdatePlace ||
+                    (x.PlaceId.HasValue &&
+                     x.Place != null &&
+                     authorization.AssignedRegionIds.Contains(x.Place.Location.Destination.RegionId) &&
+                     x.Place.Location.Destination.RegionId == x.Location.Destination.RegionId)));
+        }
 
         var contributions = await query
             .OrderByDescending(x => x.UpdatedAt ?? x.SubmittedAt)
@@ -274,7 +294,7 @@ public class PlaceContributionService : IPlaceContributionService
             .FirstOrDefaultAsync(x => x.Id == contributionId)
             ?? throw new KeyNotFoundException("Contribution not found");
 
-        await EnsureRegionalManagerCanReviewAsync(reviewerUserId, contribution);
+        await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
 
@@ -305,7 +325,7 @@ public class PlaceContributionService : IPlaceContributionService
             .FirstOrDefaultAsync(x => x.Id == contributionId)
             ?? throw new KeyNotFoundException("Contribution not found");
 
-        await EnsureRegionalManagerCanReviewAsync(reviewerUserId, contribution);
+        await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
         var now = DateTime.UtcNow;
         contribution.Status = PlaceContributionStatus.Rejected;
@@ -351,8 +371,13 @@ public class PlaceContributionService : IPlaceContributionService
         if (!contribution.LocationId.HasValue)
             throw new InvalidOperationException("Location is required before approval.");
 
-        var place = contribution.Type == PlaceContributionType.UpdatePlace && contribution.PlaceId.HasValue
-            ? await _db.Places
+        Place? place = null;
+        if (contribution.Type == PlaceContributionType.UpdatePlace)
+        {
+            if (!contribution.PlaceId.HasValue)
+                throw new InvalidOperationException("Target place is required before approval.");
+
+            place = await _db.Places
                 .Include(x => x.PlaceTags)
                 .Include(x => x.PlaceAmenities)
                 .Include(x => x.PlaceBookingPartners)
@@ -360,7 +385,8 @@ public class PlaceContributionService : IPlaceContributionService
                 .Include(x => x.Stay)
                     .ThenInclude(x => x!.StayAmenities)
                 .FirstOrDefaultAsync(x => x.Id == contribution.PlaceId.Value)
-            : null;
+                ?? throw new KeyNotFoundException("Target place not found.");
+        }
 
         if (place is null)
         {
@@ -567,28 +593,92 @@ public class PlaceContributionService : IPlaceContributionService
         });
     }
 
-    private async Task<RegionalManager> EnsureRegionalManagerAsync(int userId)
+    private async Task EnsureReviewerCanReviewAsync(int reviewerUserId, PlaceContribution contribution)
     {
-        return await _db.RegionalManagers
-            .Include(x => x.RegionalManagerRegions)
-                .ThenInclude(x => x.Region)
-            .FirstOrDefaultAsync(x => x.UserId == userId)
-            ?? throw new UnauthorizedAccessException("Only regional managers can review contributions.");
+        var authorization = await GetReviewAuthorizationAsync(reviewerUserId);
+        var proposedRegionId = await ResolveContributionRegionIdAsync(contribution);
+
+        if (authorization.IsAdmin)
+        {
+            if (contribution.Type == PlaceContributionType.UpdatePlace)
+                _ = await ResolveTargetPlaceRegionIdAsync(contribution);
+
+            return;
+        }
+
+        if (authorization.AssignedRegionIds.Count == 0)
+            throw new UnauthorizedAccessException("Regional manager has no assigned regions.");
+
+        if (!authorization.AssignedRegionIds.Contains(proposedRegionId))
+            throw new UnauthorizedAccessException("You are not assigned to this contribution's region.");
+
+        if (contribution.Type != PlaceContributionType.UpdatePlace)
+            return;
+
+        var targetRegionId = await ResolveTargetPlaceRegionIdAsync(contribution);
+        if (!authorization.AssignedRegionIds.Contains(targetRegionId))
+            throw new UnauthorizedAccessException("You are not assigned to this contribution's target place region.");
+
+        // Regional managers can only approve same-region updates. Cross-region
+        // moves require Admin review even when a manager has both regions.
+        if (targetRegionId != proposedRegionId)
+            throw new UnauthorizedAccessException("Cross-region update contributions require admin review.");
     }
 
-    private async Task EnsureRegionalManagerCanReviewAsync(int reviewerUserId, PlaceContribution contribution)
+    private async Task<ReviewAuthorization> GetReviewAuthorizationAsync(int reviewerUserId)
     {
-        var reviewer = await EnsureRegionalManagerAsync(reviewerUserId);
-        var assignedRegionIds = reviewer.RegionalManagerRegions.Select(x => x.RegionId).ToHashSet();
+        var reviewer = await _db.Users
+            .Include(x => x.UserRoles)
+                .ThenInclude(x => x.Role)
+            .Include(x => x.RegionalManager)
+                .ThenInclude(x => x!.RegionalManagerRegions)
+            .FirstOrDefaultAsync(x => x.Id == reviewerUserId)
+            ?? throw new UnauthorizedAccessException("Invalid reviewer.");
 
+        var roles = reviewer.UserRoles
+            .Select(x => x.Role.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var isAdmin = roles.Contains("Admin");
+        var isRegionalManager = roles.Contains("RegionalManager");
+        if (!isAdmin && !isRegionalManager)
+            throw new UnauthorizedAccessException("Contribution review role is required.");
+
+        var assignedRegionIds = reviewer.RegionalManager?.RegionalManagerRegions
+            .Select(x => x.RegionId)
+            .ToHashSet() ?? new HashSet<int>();
+
+        return new ReviewAuthorization(isAdmin, assignedRegionIds);
+    }
+
+    private async Task<int> ResolveContributionRegionIdAsync(PlaceContribution contribution)
+    {
         if (!contribution.LocationId.HasValue)
-            throw new UnauthorizedAccessException("Contribution has no location assigned.");
+            throw new InvalidOperationException("Contribution location is required.");
 
-        var canReview = await _db.Locations
-            .AnyAsync(x => x.Id == contribution.LocationId.Value && assignedRegionIds.Contains(x.Destination.RegionId));
+        var regionId = await _db.Locations
+            .AsNoTracking()
+            .Where(x => x.Id == contribution.LocationId.Value)
+            .Select(x => (int?)x.Destination.RegionId)
+            .FirstOrDefaultAsync();
 
-        if (!canReview)
-            throw new UnauthorizedAccessException("You are not assigned to this contribution's region.");
+        return regionId
+            ?? throw new KeyNotFoundException("Contribution location not found.");
+    }
+
+    private async Task<int> ResolveTargetPlaceRegionIdAsync(PlaceContribution contribution)
+    {
+        if (!contribution.PlaceId.HasValue)
+            throw new InvalidOperationException("Target place is required for update contributions.");
+
+        var regionId = await _db.Places
+            .AsNoTracking()
+            .Where(x => x.Id == contribution.PlaceId.Value)
+            .Select(x => (int?)x.Location.Destination.RegionId)
+            .FirstOrDefaultAsync();
+
+        return regionId
+            ?? throw new KeyNotFoundException("Target place not found.");
     }
 
     private async Task<ContributionReferenceResolution> ResolveContributionReferencesAsync(UpsertPlaceContributionDto request)
@@ -1220,4 +1310,8 @@ public class PlaceContributionService : IPlaceContributionService
         int? StayTypeId,
         List<string> PlaceAmenities,
         List<string> StayAmenities);
+
+    private sealed record ReviewAuthorization(
+        bool IsAdmin,
+        HashSet<int> AssignedRegionIds);
 }
