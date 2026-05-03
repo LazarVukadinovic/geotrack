@@ -3,7 +3,7 @@ import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
-
+import { Router } from '@angular/router';
 declare const L: any;
 
 interface ClassItem {
@@ -32,7 +32,7 @@ interface ClassItem {
 })
 export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone) {}
+  constructor(private zone: NgZone, private router: Router) {}
 
   //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -499,5 +499,12 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
+  }
+  goBack(): void {
+    if (history.length > 1) {
+      history.back();
+    } else {
+      this.router.navigate(['/dashboard']);
+    }
   }
 }

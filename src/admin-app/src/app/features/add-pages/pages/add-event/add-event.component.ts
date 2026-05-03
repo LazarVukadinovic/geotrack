@@ -747,4 +747,11 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
     if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
   }
+  goBack(): void {
+    if (history.length > 1) {
+      history.back();
+    } else {
+      this.router.navigate(['/dashboard']);
+    }
+  }
 }

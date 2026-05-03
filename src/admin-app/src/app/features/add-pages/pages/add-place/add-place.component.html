@@ -3,6 +3,15 @@
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
     <app-topbar [title]="isEditMode ? 'Edit Place' : 'New Place'"></app-topbar>
+    <div class="px-8 py-2.5 border-b border-gray-100 bg-white">
+      <button (click)="goBack()"
+        class="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-blue-700 transition-colors cursor-pointer border-none bg-transparent p-0">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+    </div>
     @if (isEditMode) {
       <div class="px-8 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
         <svg class="w-3.5 h-3.5 text-amber-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -382,7 +391,7 @@
         </div>
 
         <!-- ═══ RIGHT PANEL ═══ -->
-        <div class="w-64 min-w-[256px]">
+        <div class="w-90 min-w-[350px]">
 
           <!-- Publishing -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
@@ -409,7 +418,7 @@
             <!-- Mini map preview -->
             <div
               class="relative rounded-lg overflow-hidden mb-3 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-              style="height: 112px;"
+              style="height: 200px;"
               (click)="openPinModal()"
               title="Click to pin location"
             >

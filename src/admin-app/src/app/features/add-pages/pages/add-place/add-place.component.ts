@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { ActivatedRoute } from '@angular/router';
-
+import { Router } from '@angular/router';
 declare const L: any;
 
 interface ClassItem {
@@ -40,7 +40,7 @@ interface DayHours {
 })
 export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private route: ActivatedRoute) {}
+  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private route: ActivatedRoute, private router: Router) {}
 
   //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -568,5 +568,12 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
     if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
+  }
+  goBack(): void {
+    if (history.length > 1) {
+      history.back();
+    } else {
+      this.router.navigate(['/dashboard']);
+    }
   }
 }
