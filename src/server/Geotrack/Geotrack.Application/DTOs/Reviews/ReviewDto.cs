@@ -14,6 +14,17 @@ public class ReviewDto
     public bool ReportedByCurrentUser { get; set; }
 }
 
+public class PagedReviewsResponseDto
+{
+    public List<ReviewDto> Items { get; set; } = new();
+    public double? AverageRating { get; set; }
+    public int TotalCount { get; set; }
+    public int Skip { get; set; }
+    public int Take { get; set; }
+    public int NextSkip { get; set; }
+    public bool HasMore { get; set; }
+}
+
 public class CreateReviewDto
 {
     [Range(1, 5)]
