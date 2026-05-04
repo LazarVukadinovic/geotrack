@@ -188,4 +188,5 @@ export class MapPageComponent implements OnInit, OnDestroy {
     });
     this.closePopup();
   }
+
 }

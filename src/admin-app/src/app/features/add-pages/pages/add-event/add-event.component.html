@@ -2,16 +2,8 @@
   <app-sidebar></app-sidebar>
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-    <app-topbar title="New Event"></app-topbar>
-    <div class="px-8 py-2.5 border-b border-gray-100 bg-white">
-      <button (click)="goBack()"
-        class="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-blue-700 transition-colors cursor-pointer border-none bg-transparent p-0">
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-        Back
-      </button>
-    </div>
+    <app-topbar title="New Event" [showBack]="true"></app-topbar>
+  
     <div class="flex-1 overflow-y-auto px-8 py-6">
       <div class="flex gap-5 items-start">
 

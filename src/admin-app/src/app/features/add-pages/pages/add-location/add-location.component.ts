@@ -508,11 +508,5 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
   }
-  goBack(): void {
-    if (history.length > 1) {
-      history.back();
-    } else {
-      this.router.navigate(['/dashboard']);
-    }
-  }
+  
 }

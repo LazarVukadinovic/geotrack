@@ -569,11 +569,5 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
     if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
   }
-  goBack(): void {
-    if (history.length > 1) {
-      history.back();
-    } else {
-      this.router.navigate(['/dashboard']);
-    }
-  }
+  
 }

@@ -2,16 +2,8 @@
   <app-sidebar></app-sidebar>
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-    <app-topbar [title]="isEditMode ? 'Edit Place' : 'New Place'"></app-topbar>
-    <div class="px-8 py-2.5 border-b border-gray-100 bg-white">
-      <button (click)="goBack()"
-        class="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-blue-700 transition-colors cursor-pointer border-none bg-transparent p-0">
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-        Back
-      </button>
-    </div>
+    <app-topbar [title]="isEditMode ? 'Edit Place' : 'New Place'" [showBack]="true"></app-topbar>
+    
     @if (isEditMode) {
       <div class="px-8 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
         <svg class="w-3.5 h-3.5 text-amber-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
