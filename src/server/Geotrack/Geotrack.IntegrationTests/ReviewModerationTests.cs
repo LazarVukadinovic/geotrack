@@ -127,9 +127,9 @@ public sealed class ReviewModerationTests
         Assert.False(report.AlreadyReported);
         Assert.Equal("Pending", report.Status);
 
-        var reviewsAfterReport = await reporterClient.GetFromJsonAsync<List<ReviewDto>>($"/api/reviews/places/{placeId}");
+        var reviewsAfterReport = await reporterClient.GetFromJsonAsync<PagedReviewsResponseDto>($"/api/reviews/places/{placeId}");
         Assert.NotNull(reviewsAfterReport);
-        var visibleReview = Assert.Single(reviewsAfterReport, review => review.Id == createdReview.Id);
+        var visibleReview = Assert.Single(reviewsAfterReport.Items, review => review.Id == createdReview.Id);
         Assert.True(visibleReview.ReportedByCurrentUser);
 
         var duplicateResponse = await reporterClient.PostAsJsonAsync(
@@ -192,9 +192,9 @@ public sealed class ReviewModerationTests
             new ModerateReviewReportRequestDto { Note = "Regional manager removal." });
         removeResponse.EnsureSuccessStatusCode();
 
-        var reviewsAfterRemoval = await managerClient.GetFromJsonAsync<List<ReviewDto>>($"/api/reviews/places/{placeId}");
+        var reviewsAfterRemoval = await managerClient.GetFromJsonAsync<PagedReviewsResponseDto>($"/api/reviews/places/{placeId}");
         Assert.NotNull(reviewsAfterRemoval);
-        Assert.DoesNotContain(reviewsAfterRemoval, review => review.Id == reviewToRemove.Id);
+        Assert.DoesNotContain(reviewsAfterRemoval.Items, review => review.Id == reviewToRemove.Id);
 
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

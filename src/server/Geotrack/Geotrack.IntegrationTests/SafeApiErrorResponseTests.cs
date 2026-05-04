@@ -21,7 +21,10 @@ public sealed class SafeApiErrorResponseTests
     {
         var exception = new ApplicationException("Npgsql provider failure at D:\\internal\\query.sql");
         var logger = new RecordingLogger<DestinationController>();
-        var controller = new DestinationController(new ThrowingDestinationService(exception), logger);
+        var controller = new DestinationController(
+            new ThrowingDestinationService(exception),
+            new StubExploreService(),
+            logger);
         ConfigureRequest(controller, HttpMethods.Get, "/api/destinations/42");
 
         var actionResult = await controller.GetDestinationDetails(42);
@@ -86,6 +89,7 @@ public sealed class SafeApiErrorResponseTests
         var logger = new RecordingLogger<DestinationController>();
         var controller = new DestinationController(
             new ThrowingDestinationService(new KeyNotFoundException("Destination not found.")),
+            new StubExploreService(),
             logger);
         ConfigureRequest(controller, HttpMethods.Get, "/api/destinations/999");
 
@@ -173,10 +177,9 @@ public sealed class SafeApiErrorResponseTests
             _exception = exception;
         }
 
-        public Task<ExploreByLocationResponseDto> ExploreByLocationAsync(ExploreByLocationQueryDto query) => throw _exception;
         public Task<GetDestinationDetailsResponseDto> GetDestinationDetailsAsync(int destinationId, int? userId) => throw _exception;
         public Task<GetDestinationSectionResponseDto> GetDestinationSectionAsync(int destinationId, string sectionKey) => throw _exception;
-        public Task<GetDestinationReviewsResponseDto> GetDestinationReviewsAsync(int destinationId) => throw _exception;
+        public Task<GetDestinationReviewsResponseDto> GetDestinationReviewsAsync(int destinationId, int skip = 0, int take = 10) => throw _exception;
         public Task<CreateDestinationReviewResponseDto> CreateDestinationReviewAsync(int destinationId, int userId, CreateDestinationReviewRequestDto request) => throw _exception;
         public Task<List<DestinationSearchResultDto>> SearchAsync(string query) => throw _exception;
         public Task<List<DestinationSearchItemDto>> SearchWithinDestinationAsync(int destinationId, string query, IEnumerable<string>? types) => throw _exception;
@@ -193,8 +196,38 @@ public sealed class SafeApiErrorResponseTests
 
         public Task<GetLocationDetailsResponseDto> GetLocationDetailsAsync(int locationId, int? userId) => throw _exception;
         public Task<GetLocationSectionResponseDto> GetLocationSectionAsync(int locationId, string sectionKey) => throw _exception;
-        public Task<GetLocationReviewsResponseDto> GetLocationReviewsAsync(int locationId) => throw _exception;
+        public Task<GetLocationReviewsResponseDto> GetLocationReviewsAsync(int locationId, int skip = 0, int take = 10) => throw _exception;
         public Task<CreateLocationReviewResponseDto> CreateLocationReviewAsync(int locationId, int userId, CreateLocationReviewRequestDto request) => throw _exception;
+    }
+
+    private sealed class StubExploreService : IExploreService
+    {
+        public Task<ExplorePageDto> GetExplorePageAsync(double latitude, double longitude, int? userId = null) =>
+            Task.FromResult(new ExplorePageDto());
+
+        public Task<ExplorePageDto> GetExplorePageForDestinationAsync(int destinationId, int? userId = null) =>
+            Task.FromResult(new ExplorePageDto());
+
+        public Task<ExploreRecommendationsPageDto> GetRecommendationsAsync(
+            double latitude,
+            double longitude,
+            int userId,
+            int? tagId = null,
+            int skip = 0,
+            int take = 8) =>
+            Task.FromResult(new ExploreRecommendationsPageDto());
+
+        public Task<DestinationScopedResult<LocalPlacesCategoriesPageDto>> GetLocalPlacesCategoriesAsync(
+            int? destinationId,
+            double? latitude = null,
+            double? longitude = null,
+            int skip = 0,
+            int take = 10) =>
+            Task.FromResult(new DestinationScopedResult<LocalPlacesCategoriesPageDto>
+            {
+                Status = DestinationScopedStatus.Success,
+                Data = new LocalPlacesCategoriesPageDto()
+            });
     }
 
     private sealed class ThrowingTerritoryService : ITerritoryService
