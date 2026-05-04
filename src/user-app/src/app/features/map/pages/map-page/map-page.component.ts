@@ -285,10 +285,17 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   locateMe(): void {
-    if (!navigator.geolocation || this.isLocating) return;
+    if (this.isLocating) return;
+    if (typeof navigator.geolocation?.getCurrentPosition !== 'function') {
+      void this.handleLocateFallback();
+      return;
+    }
 
     const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
-    if (!isSecure) return;
+    if (!isSecure) {
+      void this.handleLocateFallback();
+      return;
+    }
 
     this.isLocating = true;
     this.cdr.detectChanges();
@@ -297,17 +304,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       ({ coords }) => this.handleLocationSuccess(coords.latitude, coords.longitude),
       (err) => {
         if (err.code === GeolocationPositionError.PERMISSION_DENIED) {
-          this.isLocating = false;
-          this.cdr.detectChanges();
+          void this.handleLocateFallback();
           return;
         }
 
         navigator.geolocation.getCurrentPosition(
           ({ coords }) => this.handleLocationSuccess(coords.latitude, coords.longitude),
-          () => {
-            this.isLocating = false;
-            this.cdr.detectChanges();
-          },
+          () => void this.handleLocateFallback(),
           { timeout: 15_000, maximumAge: 0, enableHighAccuracy: true },
         );
       },
@@ -1061,6 +1064,52 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     this.isLocating = false;
     this.invalidateMarkerCache();
+    this.cdr.detectChanges();
+  }
+
+  private async handleLocateFallback(): Promise<void> {
+    this.isLocating = true;
+    this.cdr.detectChanges();
+
+    const loc = await this.locationSvc.ensureIpFallback();
+    if (this.isDestroyed) return;
+
+    this.isLocating = false;
+
+    if (!loc || !this.hasUsableCoordinates(loc.latitude, loc.longitude)) {
+      this.loadErrorMessage = "GeoTrack couldn't determine your current location.";
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.destinationName = loc.displayLabel || 'Approximate Location';
+    this.destinationLat = loc.latitude;
+    this.destinationLon = loc.longitude;
+    this.isUserLocation = false;
+    this.loadErrorMessage = '';
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
+    this.selectedPlace = null;
+    this.routeErrorMessage = '';
+    this.clearRoute();
+
+    this.map.resize();
+    this.map.flyTo({
+      center: [loc.longitude, loc.latitude],
+      zoom: INITIAL_LOCATION_ZOOM,
+      duration: 1000,
+      padding: { top: 120, bottom: 0, left: 0, right: 0 },
+    });
+
+    sessionStorage.setItem('mapLocation', JSON.stringify({
+      name: this.destinationName,
+      lat: loc.latitude,
+      lon: loc.longitude,
+      isUserLocation: false,
+    }));
+
+    this.invalidateMarkerCache();
+    this.scheduleViewportLoad(0);
     this.cdr.detectChanges();
   }
 

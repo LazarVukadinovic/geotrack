@@ -154,7 +154,7 @@ export class Home implements OnInit, OnDestroy {
    * GPS flow:
    * 1. Triggers browser permission popup via LocationService.requestGps()
    * 2. On success: preloads Explore data with real coords, marks entry complete, navigates
-   * 3. On denial: offers approximate location, marks entry complete, navigates
+   * 3. On denial: uses approximate location automatically, marks entry complete, navigates
    */
   async requestLocation(): Promise<void> {
     this.isLocating = true;
@@ -171,7 +171,7 @@ export class Home implements OnInit, OnDestroy {
       this.router.navigate(['/explore'], { replaceUrl: true });
 
     } catch {
-      // GPS denied or failed → offer approximate location before calling the backend fallback.
+      // GPS denied or failed → use backend approximate fallback automatically.
       const approximateLoc = await this.locationSvc.ensureIpFallback();
 
       this.isLocating = false;

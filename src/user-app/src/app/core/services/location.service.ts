@@ -13,10 +13,9 @@ const MAP_WATCH_MIN_DISTANCE_METRES = 50;
 const LOCATION_KEY = 'geotrack_location';
 const ENTRY_COMPLETE_KEY = 'geotrack_location_entry_complete';
 const LOCATION_SESSION_SCHEMA_VERSION = 2;
-const APPROXIMATE_DISCLOSURE_KEY = 'geotrack_approximate_location_disclosure_v1';
+const OBSOLETE_APPROXIMATE_DISCLOSURE_KEY = 'geotrack_approximate_location_disclosure_v1';
 
 type LocationSource = ResolvedLocation['source'];
-type ApproximateDisclosureState = 'accepted' | 'declined' | null;
 
 interface StoredLocationPayload {
   schemaVersion: number;
@@ -34,8 +33,6 @@ export class LocationService implements OnDestroy {
   private lastGeocodedLng = 0;
   private lastGeocodeTime = 0;
   private approximateInFlight: Promise<ResolvedLocation | null> | null = null;
-  private approximateDisclosurePromise: Promise<boolean> | null = null;
-  private resolveApproximateDisclosure: ((accepted: boolean) => void) | null = null;
   private lastMapWatchLat = 0;
   private lastMapWatchLng = 0;
   private lastMapWatchUpdateTime = 0;
@@ -47,8 +44,6 @@ export class LocationService implements OnDestroy {
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
   private readonly _hasCompletedLocationEntry = signal(this.readEntryCompleteFromStorage());
-  private readonly _approximateDisclosureState = signal<ApproximateDisclosureState>(this.readApproximateDisclosureFromStorage());
-  private readonly _approximateDisclosureVisible = signal(false);
 
   readonly location = computed(() => this._location());
   readonly routingOrigin = computed(() => {
@@ -60,8 +55,6 @@ export class LocationService implements OnDestroy {
   });
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
-  readonly approximateDisclosureVisible = computed(() => this._approximateDisclosureVisible());
-  readonly approximateDisclosureState = computed(() => this._approximateDisclosureState());
 
   /** True once we have *any* resolved location (session cache, approximate, manual, or GPS). */
   readonly ready = computed(() => this._location() !== null);
@@ -98,7 +91,7 @@ export class LocationService implements OnDestroy {
   /* ── Lifecycle ─────────────────────────────────────────────────────── */
 
   constructor() {
-    this.discardUnsafeLocalStorageLocation();
+    this.discardObsoleteLocationStorage();
 
     // Restore only from the current browser session. Long-term storage never
     // carries coordinates.
@@ -130,28 +123,12 @@ export class LocationService implements OnDestroy {
     try { localStorage.setItem(ENTRY_COMPLETE_KEY, 'true'); } catch { /* quota */ }
   }
 
-  acceptApproximateFallback(): void {
-    this.setApproximateDisclosureState('accepted');
-    this._approximateDisclosureVisible.set(false);
-    this.resolveApproximateDisclosure?.(true);
-  }
-
-  declineApproximateFallback(): void {
-    this.setApproximateDisclosureState('declined');
-    this._approximateDisclosureVisible.set(false);
-    this._loading.set(false);
-    this.resolveApproximateDisclosure?.(false);
-  }
-
   clearSavedLocation(): void {
     this.stopWatching();
     this.lastGeocodedLat = 0;
     this.lastGeocodedLng = 0;
     this.lastGeocodeTime = 0;
     this.approximateInFlight = null;
-    this.approximateDisclosurePromise = null;
-    this.resolveApproximateDisclosure?.(false);
-    this.resolveApproximateDisclosure = null;
     this.lastMapWatchLat = 0;
     this.lastMapWatchLng = 0;
     this.lastMapWatchUpdateTime = 0;
@@ -160,13 +137,11 @@ export class LocationService implements OnDestroy {
     this._loading.set(false);
     this._error.set(null);
     this._hasCompletedLocationEntry.set(false);
-    this._approximateDisclosureState.set(null);
-    this._approximateDisclosureVisible.set(false);
 
     try {
       localStorage.removeItem(LOCATION_KEY);
       localStorage.removeItem(ENTRY_COMPLETE_KEY);
-      localStorage.removeItem(APPROXIMATE_DISCLOSURE_KEY);
+      localStorage.removeItem(OBSOLETE_APPROXIMATE_DISCLOSURE_KEY);
       sessionStorage.removeItem(LOCATION_KEY);
     } catch {
       // storage may be unavailable; silent
@@ -202,7 +177,7 @@ export class LocationService implements OnDestroy {
     }
 
     const permission = await this.getGeolocationPermissionState();
-    if (permission === 'granted') {
+    if (permission !== 'denied') {
       const exact = await this.fetchExactLocation({ enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 });
       if (exact) return exact;
     }
@@ -219,7 +194,7 @@ export class LocationService implements OnDestroy {
    */
   requestGps(): Promise<{ latitude: number; longitude: number }> {
     return new Promise((resolve, reject) => {
-      if (!('geolocation' in navigator)) {
+      if (typeof navigator === 'undefined' || typeof navigator.geolocation?.getCurrentPosition !== 'function') {
         reject(new Error('Geolocation not supported'));
         return;
       }
@@ -295,7 +270,7 @@ export class LocationService implements OnDestroy {
    * Resolve the origin that should be used for route drawing.
    *
    * Routing must never use manual/search/destination state. Exact GPS wins
-   * when available; otherwise we use a disclosed approximate network location.
+   * when available; otherwise we use an approximate network location.
    * If neither is honestly available, callers should not draw a route.
    */
   async resolveRoutingOrigin(): Promise<ResolvedLocation | null> {
@@ -332,8 +307,7 @@ export class LocationService implements OnDestroy {
 
   /**
    * Ensures approximate fallback has been triggered if no location is available yet.
-   * Safe to call multiple times. The backend call runs only after the user
-   * accepts the approximate-location disclosure.
+   * Safe to call multiple times. Parallel callers share one backend request.
    * Returns a promise that resolves when approximate location is available
    * (or immediately if we already have a location).
    */
@@ -391,7 +365,11 @@ export class LocationService implements OnDestroy {
   }
 
   startMapLocationUpdates(onUpdate?: (loc: ResolvedLocation) => void): void {
-    if (this.watchId !== null || typeof navigator === 'undefined' || !('geolocation' in navigator)) return;
+    if (
+      this.watchId !== null ||
+      typeof navigator === 'undefined' ||
+      typeof navigator.geolocation?.watchPosition !== 'function'
+    ) return;
 
     const current = this._location();
     if (current?.source === 'gps') {
@@ -430,7 +408,7 @@ export class LocationService implements OnDestroy {
 
   private stopWatching(): void {
     if (this.watchId !== null) {
-      navigator.geolocation.clearWatch(this.watchId);
+      navigator.geolocation?.clearWatch?.(this.watchId);
       this.watchId = null;
     }
   }
@@ -539,7 +517,7 @@ export class LocationService implements OnDestroy {
   }
 
   private fetchExactLocation(options: PositionOptions): Promise<ResolvedLocation | null> {
-    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+    if (typeof navigator === 'undefined' || typeof navigator.geolocation?.getCurrentPosition !== 'function') {
       return Promise.resolve(null);
     }
 
@@ -638,50 +616,13 @@ export class LocationService implements OnDestroy {
     }
   }
 
-  private readApproximateDisclosureFromStorage(): ApproximateDisclosureState {
-    try {
-      const value = localStorage.getItem(APPROXIMATE_DISCLOSURE_KEY);
-      return value === 'accepted' || value === 'declined' ? value : null;
-    } catch {
-      return null;
-    }
-  }
-
-  private setApproximateDisclosureState(state: ApproximateDisclosureState): void {
-    this._approximateDisclosureState.set(state);
-    try {
-      if (state) {
-        localStorage.setItem(APPROXIMATE_DISCLOSURE_KEY, state);
-      } else {
-        localStorage.removeItem(APPROXIMATE_DISCLOSURE_KEY);
-      }
-    } catch {
-      // Storage may be unavailable; in-memory state still gates this session.
-    }
-  }
-
-  private ensureApproximateDisclosureAccepted(): Promise<boolean> {
-    const state = this._approximateDisclosureState();
-    if (state === 'accepted') return Promise.resolve(true);
-    if (state === 'declined') return Promise.resolve(false);
-
-    if (!this.approximateDisclosurePromise) {
-      this._approximateDisclosureVisible.set(true);
-      this.approximateDisclosurePromise = new Promise<boolean>((resolve) => {
-        this.resolveApproximateDisclosure = resolve;
-      }).finally(() => {
-        this.approximateDisclosurePromise = null;
-        this.resolveApproximateDisclosure = null;
-      });
-    }
-
-    return this.approximateDisclosurePromise;
-  }
-
-  private discardUnsafeLocalStorageLocation(): void {
+  private discardObsoleteLocationStorage(): void {
     try {
       if (localStorage.getItem(LOCATION_KEY) !== null) {
         localStorage.removeItem(LOCATION_KEY);
+      }
+      if (localStorage.getItem(OBSOLETE_APPROXIMATE_DISCLOSURE_KEY) !== null) {
+        localStorage.removeItem(OBSOLETE_APPROXIMATE_DISCLOSURE_KEY);
       }
     } catch {
       // Storage may be unavailable; session restore will simply be skipped.
@@ -748,12 +689,6 @@ export class LocationService implements OnDestroy {
     }
 
     if (this.approximateInFlight) return this.approximateInFlight;
-
-    const accepted = await this.ensureApproximateDisclosureAccepted();
-    if (!accepted) {
-      this._loading.set(false);
-      return null;
-    }
 
     this._loading.set(true);
     const request = new Promise<ResolvedLocation | null>((resolve) => {

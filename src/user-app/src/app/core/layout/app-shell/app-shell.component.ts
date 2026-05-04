@@ -4,7 +4,6 @@ import { ActivatedRoute, NavigationEnd, NavigationStart, Router, RouterOutlet } 
 import { filter } from 'rxjs/operators';
 import { BottomNavComponent } from '../../../shared/components/bottom-nav/bottom-nav.component';
 import { SaveToCollectionSheetComponent } from '../../../shared/components/save-to-collection-sheet/save-to-collection-sheet.component';
-import { ApproximateLocationSheetComponent } from '../../../shared/components/approximate-location-sheet/approximate-location-sheet.component';
 import { AuthService } from '../../services/auth.service';
 import { TokenStorageService } from '../../services/token-storage.service';
 import { TokenRefreshService } from '../../services/token-refresh.service';
@@ -26,7 +25,7 @@ const AUTH_REQUIRED_PREFIXES = [
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [RouterOutlet, BottomNavComponent, SaveToCollectionSheetComponent, ApproximateLocationSheetComponent],
+  imports: [RouterOutlet, BottomNavComponent, SaveToCollectionSheetComponent],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.scss',
 })

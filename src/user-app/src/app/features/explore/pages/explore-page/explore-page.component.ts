@@ -71,8 +71,8 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
       });
     }
 
-    // Opening Explore is an intentional location-aware flow. GPS is used only
-    // when already granted; approximate fallback is gated by the disclosure sheet.
+    // Opening Explore is an intentional location-aware flow. If GPS is denied
+    // or unavailable, approximate fallback runs automatically.
     void this.locationSvc.resolveLocationForProductFlow();
   }
 

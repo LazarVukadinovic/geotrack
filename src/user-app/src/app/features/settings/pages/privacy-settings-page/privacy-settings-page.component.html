@@ -1,6 +1,6 @@
 <app-settings-subpage-shell
   title="Privacy Settings"
-  description="GeoTrack uses location, interests, and saved places to keep nearby suggestions useful while you travel. Precise and approximate coordinates stay in the current browser session, while your approximate-location choice is remembered on this device.">
+  description="GeoTrack uses location, interests, and saved places to keep nearby suggestions useful while you travel. Precise and approximate coordinates stay in the current browser session.">
   <div class="flex flex-col gap-4">
     @if (feedbackMessage()) {
       <div class="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -37,7 +37,7 @@
         <p>Your profile details keep your account recognizable across collections, interests, and support requests.</p>
         <p>Your interests and saved places help GeoTrack rank recommendations that feel more relevant to the cities you browse.</p>
         <p>Device location is used to improve nearby discovery. Precise GPS and approximate network-based coordinates are stored only for the current browser session, not long-term local storage.</p>
-        <p>GeoTrack asks before using approximate location when precise location is unavailable. Clearing location state also clears that on-device choice without touching your account.</p>
+        <p>If precise location is denied or unavailable, GeoTrack uses approximate network-based location automatically for nearby discovery. Clearing location state does not touch your account.</p>
       </div>
     </div>
 
