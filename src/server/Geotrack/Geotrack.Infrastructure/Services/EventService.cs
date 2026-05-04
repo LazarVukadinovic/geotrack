@@ -329,11 +329,14 @@ public class EventService : IEventService
         };
     }
 
-    public async Task<GetEventSectionResponseDto> GetEventSectionAsync(int eventId, string sectionKey)
+    public async Task<GetEventSectionResponseDto> GetEventSectionAsync(
+        int eventId,
+        string sectionKey,
+        int skip = 0,
+        int take = ReviewPaging.DefaultTake)
     {
         var evt = await _db.Events
             .Include(e => e.Images)
-            .Include(e => e.EventReviews)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
             .FirstOrDefaultAsync(e => e.Id == eventId)
             ?? throw new KeyNotFoundException("Event not found");
@@ -342,13 +345,26 @@ public class EventService : IEventService
 
         if (normalizedKey == "reviews")
         {
+            var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
+            var normalizedTake = ReviewPaging.NormalizeTake(take);
+            var totalCount = await _db.EventReviews
+                .AsNoTracking()
+                .CountAsync(r => r.EventId == eventId);
+            var reviews = await _db.EventReviews
+                .AsNoTracking()
+                .Where(r => r.EventId == eventId)
+                .OrderByDescending(r => r.CreatedAt)
+                .ThenByDescending(r => r.Id)
+                .Skip(normalizedSkip)
+                .Take(normalizedTake)
+                .ToListAsync();
+
             return new GetEventSectionResponseDto
             {
                 EventId = eventId,
                 SectionKey = "reviews",
                 SectionTitle = "Reviews",
-                Reviews = evt.EventReviews
-                    .OrderByDescending(r => r.CreatedAt)
+                Reviews = reviews
                     .Select(r => new EventReviewItemDto
                     {
                         Id = r.Id,
@@ -357,7 +373,12 @@ public class EventService : IEventService
                         Comment = r.Comment,
                         CreatedAt = r.CreatedAt,
                         UpdatedAt = r.UpdatedAt
-                    }).ToList()
+                    }).ToList(),
+                TotalCount = totalCount,
+                Skip = normalizedSkip,
+                Take = normalizedTake,
+                NextSkip = normalizedSkip + reviews.Count,
+                HasMore = totalCount > normalizedSkip + reviews.Count
             };
         }
 
@@ -381,24 +402,46 @@ public class EventService : IEventService
         throw new KeyNotFoundException("Section not found");
     }
 
-    public async Task<GetEventReviewsResponseDto> GetEventReviewsAsync(int eventId)
+    public async Task<GetEventReviewsResponseDto> GetEventReviewsAsync(
+        int eventId,
+        int skip = 0,
+        int take = ReviewPaging.DefaultTake)
     {
         var evt = await _db.Events.FindAsync(eventId);
         if (evt == null)
             throw new KeyNotFoundException("Event not found");
 
+        var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
+        var normalizedTake = ReviewPaging.NormalizeTake(take);
+        var totalCount = await _db.EventReviews
+            .AsNoTracking()
+            .CountAsync(r => r.EventId == eventId);
+        var averageRating = totalCount > 0
+            ? Math.Round(await _db.EventReviews
+                .AsNoTracking()
+                .Where(r => r.EventId == eventId)
+                .AverageAsync(r => r.Rating), 2)
+            : 0;
+
         var reviews = await _db.EventReviews
+            .AsNoTracking()
             .Where(r => r.EventId == eventId)
             .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Skip(normalizedSkip)
+            .Take(normalizedTake)
             .ToListAsync();
-
-        var averageRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
 
         return new GetEventReviewsResponseDto
         {
             EventId = eventId,
             AverageRating = averageRating,
-            ReviewsCount = reviews.Count,
+            ReviewsCount = totalCount,
+            TotalCount = totalCount,
+            Skip = normalizedSkip,
+            Take = normalizedTake,
+            NextSkip = normalizedSkip + reviews.Count,
+            HasMore = totalCount > normalizedSkip + reviews.Count,
             Reviews = reviews.Select(r => new EventReviewItemDto
             {
                 Id = r.Id,
@@ -521,6 +564,10 @@ public class EventService : IEventService
                !double.IsNaN(longitude.Value) &&
                !double.IsInfinity(latitude.Value) &&
                !double.IsInfinity(longitude.Value) &&
+               latitude.Value >= -90 &&
+               latitude.Value <= 90 &&
+               longitude.Value >= -180 &&
+               longitude.Value <= 180 &&
                (latitude.Value != 0d || longitude.Value != 0d);
     }
 

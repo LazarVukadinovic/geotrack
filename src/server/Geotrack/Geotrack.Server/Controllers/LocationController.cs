@@ -71,11 +71,20 @@ public class LocationController : ControllerBase
     }
 
     [HttpGet("{id}/reviews")]
-    public async Task<IActionResult> GetLocationReviews([FromRoute] int id)
+    public async Task<IActionResult> GetLocationReviews(
+        [FromRoute] int id,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
     {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
         try
         {
-            var result = await _locationService.GetLocationReviewsAsync(id);
+            var result = await _locationService.GetLocationReviewsAsync(id, skip, take);
             return Ok(result);
         }
         catch (Exception ex)
@@ -112,6 +121,21 @@ public class LocationController : ControllerBase
     private string? GetClientIpAddress()
     {
         return HttpContext.Connection.RemoteIpAddress?.ToString();
+    }
+
+    private ActionResult? ValidatePaging(int skip, int take)
+    {
+        if (skip < 0)
+        {
+            return BadRequest(new { error = "skip must be zero or greater." });
+        }
+
+        if (take <= 0)
+        {
+            return BadRequest(new { error = "take must be greater than zero." });
+        }
+
+        return null;
     }
 
     private IActionResult MapException(Exception ex)

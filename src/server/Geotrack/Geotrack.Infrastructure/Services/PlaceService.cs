@@ -137,8 +137,6 @@ public class PlaceService : IPlaceService
             .Include(p => p.Images)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
-            .Include(p => p.PlaceReviews)
-                .ThenInclude(r => r.User)
             .FirstOrDefaultAsync(p => p.Id == id);
 
         if (place is null)
@@ -165,13 +163,15 @@ public class PlaceService : IPlaceService
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
 
-        var reviewCount = place.PlaceReviews.Count;
-        var averageRating = CalculateAverageRating(place.PlaceReviews);
+        var reviewStats = await GetPlaceReviewStatsAsync(id);
+        var previewReviews = await GetPlaceReviewPreviewAsync(id);
+        var reviewCount = reviewStats.Count;
+        var averageRating = reviewStats.AverageRating;
 
         var reportedReviewIds = await GetReportedReviewIdsAsync(
             userId,
             ReviewReportTargetType.Place,
-            place.PlaceReviews.Select(r => r.Id));
+            previewReviews.Select(r => r.Id));
 
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
             latitude,
@@ -197,9 +197,7 @@ public class PlaceService : IPlaceService
             Distance = detailDistance,
             OpenStatus = DeriveOpenStatus(place.OpeningHours),
             About = DisplayTextSafety.CleanOptional(place.Description),
-            Reviews = place.PlaceReviews
-                .OrderByDescending(r => r.CreatedAt)
-                .Take(10)
+            Reviews = previewReviews
                 .Select(r => new ReviewDto
                 {
                     Id = r.Id,
@@ -251,8 +249,6 @@ public class PlaceService : IPlaceService
                     .ThenInclude(ssa => ssa.StayAmenity)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
-            .Include(p => p.PlaceReviews)
-                .ThenInclude(r => r.User)
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(pb => pb.BookingPartner)
             .FirstOrDefaultAsync(p => p.Id == id && p.Stay != null);
@@ -280,13 +276,15 @@ public class PlaceService : IPlaceService
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
 
-        var reviewCount = place.PlaceReviews.Count;
-        var averageRating = CalculateAverageRating(place.PlaceReviews);
+        var reviewStats = await GetPlaceReviewStatsAsync(id);
+        var previewReviews = await GetPlaceReviewPreviewAsync(id);
+        var reviewCount = reviewStats.Count;
+        var averageRating = reviewStats.AverageRating;
 
         var reportedReviewIds = await GetReportedReviewIdsAsync(
             userId,
             ReviewReportTargetType.Place,
-            place.PlaceReviews.Select(r => r.Id));
+            previewReviews.Select(r => r.Id));
 
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
             latitude,
@@ -335,9 +333,7 @@ public class PlaceService : IPlaceService
                 .GroupBy(a => new { a.Label, a.Icon })
                 .Select(g => g.First())
                 .ToList(),
-            Reviews = place.PlaceReviews
-                .OrderByDescending(r => r.CreatedAt)
-                .Take(10)
+            Reviews = previewReviews
                 .Select(r => new ReviewDto
                 {
                     Id = r.Id,
@@ -526,7 +522,10 @@ public class PlaceService : IPlaceService
         };
     }
 
-    public async Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(int placeId)
+    public async Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(
+        int placeId,
+        int skip = 0,
+        int take = ReviewPaging.DefaultTake)
     {
         var exists = await _db.Places.AnyAsync(p => p.Id == placeId);
         if (!exists)
@@ -534,18 +533,28 @@ public class PlaceService : IPlaceService
             throw new KeyNotFoundException("Place not found");
         }
 
+        var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
+        var normalizedTake = ReviewPaging.NormalizeTake(take);
+        var reviewStats = await GetPlaceReviewStatsAsync(placeId);
         var reviews = await _db.PlaceReviews
+            .AsNoTracking()
             .Where(r => r.PlaceId == placeId)
             .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Skip(normalizedSkip)
+            .Take(normalizedTake)
             .ToListAsync();
-
-        var averageRating = reviews.Count > 0 ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
 
         return new GetPlaceReviewsResponseDto
         {
             PlaceId = placeId,
-            AverageRating = averageRating,
-            ReviewsCount = reviews.Count,
+            AverageRating = reviewStats.AverageRating ?? 0,
+            ReviewsCount = reviewStats.Count,
+            TotalCount = reviewStats.Count,
+            Skip = normalizedSkip,
+            Take = normalizedTake,
+            NextSkip = normalizedSkip + reviews.Count,
+            HasMore = reviewStats.Count > normalizedSkip + reviews.Count,
             Reviews = reviews
                 .Select(r => new PlaceReviewItemDto
                 {
@@ -614,6 +623,36 @@ public class PlaceService : IPlaceService
             CreatedAt = review.CreatedAt,
             UpdatedAt = review.UpdatedAt
         };
+    }
+
+    private async Task<(int Count, double? AverageRating)> GetPlaceReviewStatsAsync(int placeId)
+    {
+        var stats = await _db.PlaceReviews
+            .AsNoTracking()
+            .Where(r => r.PlaceId == placeId)
+            .GroupBy(r => r.PlaceId)
+            .Select(group => new
+            {
+                Count = group.Count(),
+                AverageRating = group.Average(r => r.Rating)
+            })
+            .SingleOrDefaultAsync();
+
+        return stats is null
+            ? (0, null)
+            : (stats.Count, Math.Round(stats.AverageRating, 1));
+    }
+
+    private async Task<List<PlaceReview>> GetPlaceReviewPreviewAsync(int placeId)
+    {
+        return await _db.PlaceReviews
+            .AsNoTracking()
+            .Include(r => r.User)
+            .Where(r => r.PlaceId == placeId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Take(ReviewPaging.DefaultTake)
+            .ToListAsync();
     }
 
     private async Task<PlaceListingResponseDto> BuildPlaceListItemsAsync(
@@ -849,6 +888,10 @@ public class PlaceService : IPlaceService
         !double.IsNaN(longitude) &&
         !double.IsInfinity(latitude) &&
         !double.IsInfinity(longitude) &&
+        latitude >= -90 &&
+        latitude <= 90 &&
+        longitude >= -180 &&
+        longitude <= 180 &&
         (latitude != 0d || longitude != 0d);
 
     private static string GetAuthorName(Domain.Entities.Users.User user)
