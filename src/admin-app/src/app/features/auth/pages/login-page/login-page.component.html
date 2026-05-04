@@ -48,7 +48,8 @@
   </div>
 
   <!-- ═══ RIGHT PANEL ═══ -->
-  <div class="flex-1 flex flex-col items-center justify-center relative bg-[#f4f6fb]">
+  <!-- justify-start + pt-[13vh] → card sits slightly below true center -->
+  <div class="flex-1 flex flex-col items-center justify-start bg-[#f4f6fb] px-4 pt-[13vh] pb-8 min-h-0">
 
     <!-- Form card -->
     <div
@@ -70,17 +71,15 @@
             id="email"
             type="email"
             name="email"
-            [ngModel]="email()" (ngModelChange)="email.set($event)"
+            [ngModel]="email()"
+            (ngModelChange)="email.set($event); onValueChange($event, emailInput)"
             placeholder="name@example.com"
             required
             email
             autocomplete="email"
-            [class.border-red-400]="emailInput.invalid && emailInput.touched"
-            [class.focus:border-red-400]="emailInput.invalid && emailInput.touched"
-            [class.border-gray-200]="!(emailInput.invalid && emailInput.touched)"
-            class="w-full rounded-lg border bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-[#aab4c4] transition-all outline-none focus:bg-white"
+            class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-[#aab4c4] transition-colors outline-none focus:bg-white"
             (focus)="onFieldFocus($event, emailInput)"
-            (blur)="onFieldBlur($event)"
+            (blur)="onFieldBlur($event, emailInput)"
           />
           <!-- Validation messages -->
           <div *ngIf="emailInput.invalid && emailInput.touched" class="mt-1.5 flex items-center gap-1.5">
@@ -105,16 +104,15 @@
               id="password"
               [type]="showPassword() ? 'text' : 'password'"
               name="password"
-              [ngModel]="password()" (ngModelChange)="password.set($event)"
+              [ngModel]="password()"
+              (ngModelChange)="password.set($event); onValueChange($event, passwordInput)"
               placeholder="••••••••"
               required
               minlength="6"
               autocomplete="current-password"
-              [class.border-red-400]="passwordInput.invalid && passwordInput.touched"
-              [class.border-gray-200]="!(passwordInput.invalid && passwordInput.touched)"
-              class="w-full rounded-lg border bg-gray-50 px-3 py-2.5 pr-10 text-sm text-gray-900 placeholder-[#aab4c4] transition-all outline-none focus:bg-white"
+              class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 pr-10 text-sm text-gray-900 placeholder-[#aab4c4] transition-colors outline-none focus:bg-white"
               (focus)="onFieldFocus($event, passwordInput)"
-              (blur)="onFieldBlur($event)"
+              (blur)="onFieldBlur($event, passwordInput)"
             />
             <button
               type="button"
@@ -197,8 +195,8 @@
       </form>
     </div>
 
-    <!-- Footer -->
-    <footer class="absolute bottom-6 flex items-center gap-2 text-gray-400 text-xs">
+    <!-- Footer in flex flow -->
+    <footer class="mt-auto pt-6 flex items-center gap-2 text-gray-400 text-xs">
       <span>GeoTrack Platform</span>
       <span class="text-gray-300">·</span>
       <span>© 2026 All rights reserved.</span>

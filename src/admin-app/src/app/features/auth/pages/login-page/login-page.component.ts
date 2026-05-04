@@ -16,17 +16,52 @@ export class LoginComponent {
   readonly rememberMe   = signal(false);
   readonly showPassword = signal(false);
   readonly isLoading    = signal(false);
-  /** Poruka greške od servera (npr. "Invalid credentials") */
   readonly authError    = signal<string | null>(null);
 
+  // Keeps track of which input element is currently focused
+  private focusedElement: HTMLInputElement | null = null;
+  private userInitiatedFocus = false;
   constructor(private readonly router: Router) {}
 
   togglePassword(): void {
     this.showPassword.update(v => !v);
   }
 
+  /**
+   * FIX 1: Called on every keystroke via (ngModelChange).
+   * Re-applies the correct border/shadow immediately without waiting
+   * for the user to click in/out of the field.
+   */
+  onValueChange(_value: unknown, control: NgModel): void {
+    // Wait one microtask so Angular has time to update control.valid/invalid
+    // after processing the new value (validators run synchronously but
+    // NgModel status updates on the next cycle).
+    Promise.resolve().then(() => {
+      const el = control.valueAccessor
+        ? (this.focusedElement ?? this.getElementByName(control.name))
+        : null;
+      if (!el) return;
+      this.applyFieldStyle(el, control);
+    });
+  }
+
   onFieldFocus(event: Event, control: NgModel): void {
     const el = event.target as HTMLInputElement;
+    this.focusedElement = el;
+    this.userInitiatedFocus = true; // ← DODAJ OVO
+    this.applyFieldStyle(el, control);
+  }
+
+  onFieldBlur(event: Event, control: NgModel): void {
+    const el = event.target as HTMLInputElement;
+    this.focusedElement = null;
+    this.userInitiatedFocus = false; // ← DODAJ OVO
+    el.style.boxShadow = 'none';
+    el.style.borderColor = '';
+  }
+
+  private applyFieldStyle(el: HTMLInputElement, control: NgModel): void {
+    if (!this.userInitiatedFocus) return; // ← DODAJ OVO — autofill ignorišemo
     const isInvalid = control.invalid && control.touched;
     el.style.boxShadow = isInvalid
       ? '0 0 0 3px rgba(239,68,68,0.15)'
@@ -34,9 +69,9 @@ export class LoginComponent {
     el.style.borderColor = isInvalid ? '#f87171' : '#1565d8';
   }
 
-  onFieldBlur(event: Event): void {
-    const el = event.target as HTMLInputElement;
-    el.style.boxShadow = 'none';
+  /** Fallback: find the native input by name attribute when direct ref is unavailable */
+  private getElementByName(name: string): HTMLInputElement | null {
+    return document.querySelector<HTMLInputElement>(`input[name="${name}"]`);
   }
 
   onSubmit(): void {
@@ -44,7 +79,7 @@ export class LoginComponent {
     if (!this.email() || !this.password()) return;
     this.isLoading.set(true);
 
-    // zameniti sa pravim AuthService pozivom
+    // Replace with real AuthService call:
     // this.authService.login(this.email(), this.password()).subscribe({
     //   next: () => this.router.navigate(['/dashboard']),
     //   error: () => {
