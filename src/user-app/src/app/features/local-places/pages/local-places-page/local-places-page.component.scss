@@ -192,3 +192,15 @@
   color: var(--color-muted);
   line-height: 1.5;
 }
+
+@media (min-width: 1024px) {
+  .lp-page__grid {
+    grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+    gap: var(--space-5);
+    padding-inline: var(--desktop-page-gutter);
+  }
+
+  .lp-page__pagination {
+    padding-inline: var(--desktop-page-gutter);
+  }
+}
