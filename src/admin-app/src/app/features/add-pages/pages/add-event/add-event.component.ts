@@ -23,7 +23,7 @@ interface VenueItem {
   lng: number;
   // For locations: zone polygon latlngs; for places: just a pin
   zone?: [number, number][];
-  radius?: number; // for circle zones
+  radius?: number;
 }
 
 @Component({
@@ -51,7 +51,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   constructor(
     private zone: NgZone,
     private cdr: ChangeDetectorRef,
-    private router: Router
+    private router: Router,
   ) {}
 
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -737,7 +737,42 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   }
 
   // Lifecycle
-  ngAfterViewInit(): void { setTimeout(() => this.initMiniMap(), 0); }
+  ngAfterViewInit(): void {
+    setTimeout(() => {
+      this.initMiniMap();
+      this._loadFromRouterState();
+    }, 0);
+  }
+
+  private _loadFromRouterState(): void {
+    const nav = this.router.getCurrentNavigation();
+    
+    const state = history.state as { place?: any };
+    if (!state?.place) return;
+
+    const p = state.place;
+
+    const venue: VenueItem = {
+      id:      p.id,
+      name:    p.name,
+      address: p.description,
+      lat:     p.lat,
+      lng:     p.lng,
+    };
+
+    if (p.type === 'Place') {
+      this.venueType = 'place';
+    } else {
+      this.venueType = 'location';
+
+      const found = this.mockLocations.find(l => l.id === p.id || 
+        (Math.abs(l.lat - p.lat) < 0.001 && Math.abs(l.lng - p.lng) < 0.001));
+      if (found?.zone) venue.zone = found.zone;
+    }
+
+    this.selectVenue(venue);
+    this.cdr.detectChanges();
+  }
 
   ngOnDestroy(): void {
     this.destroyModalMap();

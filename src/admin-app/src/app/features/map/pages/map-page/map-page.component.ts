@@ -188,5 +188,10 @@ export class MapPageComponent implements OnInit, OnDestroy {
     });
     this.closePopup();
   }
-
+  navigateToNewEvent(): void {
+    this.router.navigate(['/events/new'], {
+      state: { place: this.selectedPlace }
+    });
+    this.closePopup();
+  }
 }
