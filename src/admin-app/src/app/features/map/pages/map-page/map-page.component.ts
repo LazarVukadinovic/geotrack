@@ -165,7 +165,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
       attributionControl: false,
     }).setView([44.013, 20.910], 13);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.map);
 
@@ -205,18 +205,18 @@ export class MapPageComponent implements OnInit, OnDestroy {
       const center = bounds.getCenter();
       const label = L.divIcon({
         html: `<div style="
-          background: rgba(0,0,0,0.55);
-          color: white;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          padding: 2px 7px;
-          border-radius: 20px;
-          border: 1px solid ${color};
-          white-space: nowrap;
-          backdrop-filter: blur(4px);
-          pointer-events: none;
-        ">${place.name}</div>`,
+        background: rgba(255,255,255,0.92);
+        color: #1e3a5f;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        padding: 2px 8px;
+        border-radius: 20px;
+        border: 1px solid ${color};
+        white-space: nowrap;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+        pointer-events: none;
+      ">${place.name}</div>`,
         className: '',
         iconAnchor: [0, 0],
       });
@@ -320,7 +320,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
       const center = bounds.getCenter();
       const { color: c } = this.zoneColor(place.type);
       const label = L.divIcon({
-        html: `<div style="background:rgba(0,0,0,0.55);color:white;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;border:1px solid ${c};white-space:nowrap;backdrop-filter:blur(4px);pointer-events:none;">${place.name}</div>`,
+        html: `<div style="background:rgba(255,255,255,0.92);color:#1e3a5f;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid ${c};white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.12);pointer-events:none;">${place.name}</div>`,
         className: '', iconAnchor: [0, 0],
       });
       L.marker(center, { icon: label, interactive: false }).addTo(this.map);
@@ -368,9 +368,9 @@ export class MapPageComponent implements OnInit, OnDestroy {
   }
 
   typeColor(type: string): string {
-    if (type === 'Location')    return 'bg-cyan-900/60 text-cyan-300 border-cyan-700';
-    if (type === 'Destination') return 'bg-purple-900/60 text-purple-300 border-purple-700';
-    return 'bg-blue-900/60 text-blue-300 border-blue-700';
+    if (type === 'Location')    return 'bg-cyan-100 text-cyan-700 border-cyan-300';
+    if (type === 'Destination') return 'bg-purple-100 text-purple-700 border-purple-300';
+    return 'bg-blue-100 text-blue-700 border-blue-300';
   }
 
   editPlace(place: MapPlace): void {

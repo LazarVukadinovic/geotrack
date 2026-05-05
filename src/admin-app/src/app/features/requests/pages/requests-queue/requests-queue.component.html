@@ -219,12 +219,10 @@
                 Approve
               </button>
               <button
-                (click)="openContextMenu(req, $event)"
-                class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 cursor-pointer transition-colors border-none bg-transparent opacity-0 group-hover:opacity-100"
+                (click)="rejectRequest(req)"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 cursor-pointer transition-colors"
               >
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
-                </svg>
+                Reject
               </button>
             </div>
           </div>
