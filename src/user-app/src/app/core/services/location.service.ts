@@ -12,6 +12,15 @@ const MAP_WATCH_MIN_INTERVAL_MS = 15_000;
 const MAP_WATCH_MIN_DISTANCE_METRES = 50;
 const LOCATION_KEY = 'geotrack_location';
 const ENTRY_COMPLETE_KEY = 'geotrack_location_entry_complete';
+const LOCATION_SESSION_SCHEMA_VERSION = 2;
+const OBSOLETE_APPROXIMATE_DISCLOSURE_KEY = 'geotrack_approximate_location_disclosure_v1';
+
+type LocationSource = ResolvedLocation['source'];
+
+interface StoredLocationPayload {
+  schemaVersion: number;
+  location: ResolvedLocation;
+}
 
 @Injectable({ providedIn: 'root' })
 export class LocationService implements OnDestroy {
@@ -23,7 +32,6 @@ export class LocationService implements OnDestroy {
   private lastGeocodedLat = 0;
   private lastGeocodedLng = 0;
   private lastGeocodeTime = 0;
-  private ipFallbackStarted = false;
   private approximateInFlight: Promise<ResolvedLocation | null> | null = null;
   private lastMapWatchLat = 0;
   private lastMapWatchLng = 0;
@@ -33,7 +41,7 @@ export class LocationService implements OnDestroy {
 
   private readonly _location = signal<ResolvedLocation | null>(null);
   private readonly _approximateLocation = signal<ResolvedLocation | null>(null);
-  private readonly _loading = signal(true);
+  private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
   private readonly _hasCompletedLocationEntry = signal(this.readEntryCompleteFromStorage());
 
@@ -48,7 +56,7 @@ export class LocationService implements OnDestroy {
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
 
-  /** True once we have *any* resolved location (session cache, IP, or GPS). */
+  /** True once we have *any* resolved location (session cache, approximate, manual, or GPS). */
   readonly ready = computed(() => this._location() !== null);
 
   /** True after the user has completed the initial location-entry flow at least once. */
@@ -76,17 +84,21 @@ export class LocationService implements OnDestroy {
     const source = this._location()?.source;
     if (source === 'gps') return 'exact location';
     if (source === 'manual') return 'selected location';
+    if (source === 'approximate') return 'approximate location';
     return 'nearby location';
   });
 
   /* ── Lifecycle ─────────────────────────────────────────────────────── */
 
   constructor() {
-    // Restore from local cache — instant, no flicker
+    this.discardObsoleteLocationStorage();
+
+    // Restore only from the current browser session. Long-term storage never
+    // carries coordinates.
     const cached = this.restoreFromStorage();
     if (cached) {
       this._location.set(cached);
-      if (cached.source === 'ip' && this.hasUsableCoordinates(cached.latitude, cached.longitude)) {
+      if (cached.source === 'approximate' && this.hasUsableCoordinates(cached.latitude, cached.longitude)) {
         this._approximateLocation.set(cached);
       }
       this._loading.set(false);
@@ -94,8 +106,7 @@ export class LocationService implements OnDestroy {
       this.lastGeocodedLng = cached.longitude;
       this.lastGeocodeTime = Date.now();
     } else {
-      // No cache → silent IP fallback (no GPS popup)
-      void this.ensureIpFallback();
+      this._loading.set(false);
     }
   }
 
@@ -117,7 +128,6 @@ export class LocationService implements OnDestroy {
     this.lastGeocodedLat = 0;
     this.lastGeocodedLng = 0;
     this.lastGeocodeTime = 0;
-    this.ipFallbackStarted = false;
     this.approximateInFlight = null;
     this.lastMapWatchLat = 0;
     this.lastMapWatchLng = 0;
@@ -131,6 +141,7 @@ export class LocationService implements OnDestroy {
     try {
       localStorage.removeItem(LOCATION_KEY);
       localStorage.removeItem(ENTRY_COMPLETE_KEY);
+      localStorage.removeItem(OBSOLETE_APPROXIMATE_DISCLOSURE_KEY);
       sessionStorage.removeItem(LOCATION_KEY);
     } catch {
       // storage may be unavailable; silent
@@ -139,7 +150,9 @@ export class LocationService implements OnDestroy {
 
   /**
    * Attempt a background GPS refresh without blocking the user.
-   * Used on Explore for returning users — silently upgrades location if GPS is available.
+   * Used on Explore for returning users — silently upgrades location only when
+   * browser permission is already granted. Approximate fallback is never started
+   * from this background path.
    */
   tryBackgroundGpsRefresh(): void {
     const current = this._location();
@@ -153,10 +166,23 @@ export class LocationService implements OnDestroy {
         return;
       }
 
-      if (!this._location() || !this.isCacheFresh(this._location())) {
-        void this.ensureIpFallback();
-      }
+      this._loading.set(false);
     });
+  }
+
+  async resolveLocationForProductFlow(): Promise<ResolvedLocation | null> {
+    const current = this._location();
+    if (current && (current.source === 'manual' || this.isCacheFresh(current))) {
+      return current;
+    }
+
+    const permission = await this.getGeolocationPermissionState();
+    if (permission !== 'denied') {
+      const exact = await this.fetchExactLocation({ enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 });
+      if (exact) return exact;
+    }
+
+    return this.ensureIpFallback();
   }
 
   /* ── Explicit GPS request (called only from landing page) ──────────── */
@@ -168,7 +194,7 @@ export class LocationService implements OnDestroy {
    */
   requestGps(): Promise<{ latitude: number; longitude: number }> {
     return new Promise((resolve, reject) => {
-      if (!('geolocation' in navigator)) {
+      if (typeof navigator === 'undefined' || typeof navigator.geolocation?.getCurrentPosition !== 'function') {
         reject(new Error('Geolocation not supported'));
         return;
       }
@@ -244,8 +270,8 @@ export class LocationService implements OnDestroy {
    * Resolve the origin that should be used for route drawing.
    *
    * Routing must never use manual/search/destination state. Exact GPS wins
-   * when available; otherwise we use a backend-backed IP location. If neither
-   * is honestly available, callers should not draw a route.
+   * when available; otherwise we use an approximate network location.
+   * If neither is honestly available, callers should not draw a route.
    */
   async resolveRoutingOrigin(): Promise<ResolvedLocation | null> {
     const current = this._location();
@@ -259,7 +285,7 @@ export class LocationService implements OnDestroy {
       if (exact) return exact;
     }
 
-    if (current?.source === 'ip' && this.isRoutingOrigin(current) && this.isCacheFresh(current)) {
+    if (current?.source === 'approximate' && this.isRoutingOrigin(current) && this.isCacheFresh(current)) {
       return current;
     }
 
@@ -267,7 +293,7 @@ export class LocationService implements OnDestroy {
     if (existing?.source === 'gps' && geolocationPermission === null && this.isCacheFresh(existing)) {
       return existing;
     }
-    if (existing?.source === 'ip' && this.isCacheFresh(existing)) {
+    if (existing?.source === 'approximate' && this.isCacheFresh(existing)) {
       return existing;
     }
 
@@ -280,9 +306,9 @@ export class LocationService implements OnDestroy {
   }
 
   /**
-   * Ensures IP fallback has been triggered if no location is available yet.
-   * Safe to call multiple times — only runs once.
-   * Returns a promise that resolves when IP location is available
+   * Ensures approximate fallback has been triggered if no location is available yet.
+   * Safe to call multiple times. Parallel callers share one backend request.
+   * Returns a promise that resolves when approximate location is available
    * (or immediately if we already have a location).
    */
   ensureIpFallback(): Promise<ResolvedLocation | null> {
@@ -293,7 +319,7 @@ export class LocationService implements OnDestroy {
 
     const approximate = this._approximateLocation();
     if (this.isRoutingOrigin(approximate) && this.isCacheFresh(approximate)) {
-      if (!current || current.source === 'ip') {
+      if (!current || current.source === 'approximate') {
         this._location.set(approximate);
         this._loading.set(false);
       }
@@ -339,7 +365,11 @@ export class LocationService implements OnDestroy {
   }
 
   startMapLocationUpdates(onUpdate?: (loc: ResolvedLocation) => void): void {
-    if (this.watchId !== null || typeof navigator === 'undefined' || !('geolocation' in navigator)) return;
+    if (
+      this.watchId !== null ||
+      typeof navigator === 'undefined' ||
+      typeof navigator.geolocation?.watchPosition !== 'function'
+    ) return;
 
     const current = this._location();
     if (current?.source === 'gps') {
@@ -378,7 +408,7 @@ export class LocationService implements OnDestroy {
 
   private stopWatching(): void {
     if (this.watchId !== null) {
-      navigator.geolocation.clearWatch(this.watchId);
+      navigator.geolocation?.clearWatch?.(this.watchId);
       this.watchId = null;
     }
   }
@@ -426,7 +456,7 @@ export class LocationService implements OnDestroy {
 
   /* ── Reverse geocoding (OpenStreetMap Nominatim) ───────────────────── */
 
-  private reverseGeocode(lat: number, lng: number, source: 'gps' | 'ip' | 'manual'): Promise<ResolvedLocation | null> {
+  private reverseGeocode(lat: number, lng: number, source: 'gps' | 'approximate' | 'manual'): Promise<ResolvedLocation | null> {
     this.lastGeocodedLat = lat;
     this.lastGeocodedLng = lng;
     this.lastGeocodeTime = Date.now();
@@ -487,7 +517,7 @@ export class LocationService implements OnDestroy {
   }
 
   private fetchExactLocation(options: PositionOptions): Promise<ResolvedLocation | null> {
-    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+    if (typeof navigator === 'undefined' || typeof navigator.geolocation?.getCurrentPosition !== 'function') {
       return Promise.resolve(null);
     }
 
@@ -535,39 +565,46 @@ export class LocationService implements OnDestroy {
     return loc;
   }
 
-  /* ── IP-based fallback ─────────────────────────────────────────────── */
+  /* ── Approximate fallback ──────────────────────────────────────────── */
 
   /* ── Local persistence ─────────────────────────────────────────────── */
 
   private saveToStorage(loc: ResolvedLocation): void {
     try {
-      localStorage.setItem(LOCATION_KEY, JSON.stringify({
-        ...loc,
-        cachedAt: loc.cachedAt ?? Date.now(),
-      }));
-    } catch { /* quota exceeded — ignore */ }
+      const payload: StoredLocationPayload = {
+        schemaVersion: LOCATION_SESSION_SCHEMA_VERSION,
+        location: {
+          ...loc,
+          cachedAt: loc.cachedAt ?? Date.now(),
+        },
+      };
+      sessionStorage.setItem(LOCATION_KEY, JSON.stringify(payload));
+      localStorage.removeItem(LOCATION_KEY);
+    } catch { /* quota exceeded - ignore */ }
   }
 
   private restoreFromStorage(): ResolvedLocation | null {
     try {
-      // Check localStorage first, fall back to sessionStorage for migration
-      const raw = localStorage.getItem(LOCATION_KEY) ?? sessionStorage.getItem(LOCATION_KEY);
+      const raw = sessionStorage.getItem(LOCATION_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      if (typeof parsed.latitude === 'number' && typeof parsed.longitude === 'number') {
-        const loc = {
-          ...parsed,
-          cachedAt: typeof parsed.cachedAt === 'number' ? parsed.cachedAt : Date.now(),
-        } as ResolvedLocation;
-        if ((loc.source === 'gps' || loc.source === 'ip') && !this.isCacheFresh(loc)) {
-          return null;
-        }
-        if (typeof parsed.cachedAt !== 'number') {
-          this.saveToStorage(loc);
-        }
-        return loc;
+      const candidate = this.extractStoredLocationCandidate(parsed);
+      const loc = this.normalizeStoredLocation(candidate);
+      if (!loc) {
+        sessionStorage.removeItem(LOCATION_KEY);
+        return null;
       }
-    } catch { /* corrupt data — ignore */ }
+
+      if ((loc.source === 'gps' || loc.source === 'approximate') && !this.isCacheFresh(loc)) {
+        sessionStorage.removeItem(LOCATION_KEY);
+        return null;
+      }
+
+      this.saveToStorage(loc);
+      return loc;
+    } catch {
+      try { sessionStorage.removeItem(LOCATION_KEY); } catch { /* storage unavailable */ }
+    }
     return null;
   }
 
@@ -579,20 +616,80 @@ export class LocationService implements OnDestroy {
     }
   }
 
-  private fetchApproximateLocationForRouting(): Promise<ResolvedLocation | null> {
+  private discardObsoleteLocationStorage(): void {
+    try {
+      if (localStorage.getItem(LOCATION_KEY) !== null) {
+        localStorage.removeItem(LOCATION_KEY);
+      }
+      if (localStorage.getItem(OBSOLETE_APPROXIMATE_DISCLOSURE_KEY) !== null) {
+        localStorage.removeItem(OBSOLETE_APPROXIMATE_DISCLOSURE_KEY);
+      }
+    } catch {
+      // Storage may be unavailable; session restore will simply be skipped.
+    }
+  }
+
+  private extractStoredLocationCandidate(parsed: unknown): unknown {
+    if (this.isRecord(parsed) &&
+      parsed['schemaVersion'] === LOCATION_SESSION_SCHEMA_VERSION &&
+      this.isRecord(parsed['location'])) {
+      return parsed['location'];
+    }
+
+    return parsed;
+  }
+
+  private normalizeStoredLocation(candidate: unknown): ResolvedLocation | null {
+    if (!this.isRecord(candidate)) return null;
+
+    const latitude = candidate['latitude'];
+    const longitude = candidate['longitude'];
+    if (!this.hasUsableCoordinates(latitude, longitude)) return null;
+
+    const source = this.normalizeLocationSource(candidate['source']);
+    if (!source) return null;
+
+    return {
+      latitude: latitude as number,
+      longitude: longitude as number,
+      city: this.stringValue(candidate['city']),
+      region: this.stringValue(candidate['region']),
+      country: this.stringValue(candidate['country']),
+      displayLabel: this.stringValue(candidate['displayLabel']) || 'Explore',
+      source,
+      cachedAt: typeof candidate['cachedAt'] === 'number' ? candidate['cachedAt'] : Date.now(),
+    };
+  }
+
+  private normalizeLocationSource(value: unknown): LocationSource | null {
+    if (value === 'ip') return 'approximate';
+    if (value === 'gps' || value === 'approximate' || value === 'manual' || value === 'default' || value === 'unknown') {
+      return value;
+    }
+    return null;
+  }
+
+  private stringValue(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+  }
+
+  private async fetchApproximateLocationForRouting(): Promise<ResolvedLocation | null> {
     const current = this._location();
     if (this.isRoutingOrigin(current) && this.isCacheFresh(current)) {
-      return Promise.resolve(current);
+      return current;
     }
 
     const approximate = this._approximateLocation();
     if (this.isRoutingOrigin(approximate) && this.isCacheFresh(approximate)) {
-      return Promise.resolve(approximate);
+      return approximate;
     }
 
     if (this.approximateInFlight) return this.approximateInFlight;
 
-    this.ipFallbackStarted = true;
     this._loading.set(true);
     const request = new Promise<ResolvedLocation | null>((resolve) => {
       this.http
@@ -609,7 +706,7 @@ export class LocationService implements OnDestroy {
 
             this._approximateLocation.set(loc);
             const active = this._location();
-            if (!active || active.source === 'ip' || !this.isCacheFresh(active)) {
+            if (!active || active.source === 'approximate' || !this.isCacheFresh(active)) {
               this._location.set(loc);
               this._loading.set(false);
               this._error.set(null);
@@ -646,7 +743,7 @@ export class LocationService implements OnDestroy {
 
   private isRoutingOrigin(loc: ResolvedLocation | null): loc is ResolvedLocation {
     return loc !== null &&
-      (loc.source === 'gps' || loc.source === 'ip') &&
+      (loc.source === 'gps' || loc.source === 'approximate') &&
       this.hasUsableCoordinates(loc.latitude, loc.longitude);
   }
 
@@ -658,7 +755,7 @@ export class LocationService implements OnDestroy {
     return Date.now() - cachedAt < LOCATION_CACHE_TTL_MS;
   }
 
-  private hasUsableCoordinates(latitude: number | null | undefined, longitude: number | null | undefined): boolean {
+  private hasUsableCoordinates(latitude: unknown, longitude: unknown): boolean {
     return typeof latitude === 'number' &&
       typeof longitude === 'number' &&
       Number.isFinite(latitude) &&
@@ -682,7 +779,7 @@ export class LocationService implements OnDestroy {
       region,
       country,
       displayLabel: res.displayLabel ?? this.buildDisplayLabel(city, region, country),
-      source: 'ip',
+      source: 'approximate',
       cachedAt: Date.now(),
     };
   }

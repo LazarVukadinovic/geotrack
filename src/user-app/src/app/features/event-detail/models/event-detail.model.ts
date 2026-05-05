@@ -1,3 +1,5 @@
+import type { EntityImage } from '../../../core/models/entity-image.model';
+
 export interface EventTag {
   label: string;
 }
@@ -32,6 +34,7 @@ export interface EventDetail {
   latitude?: number | null;
   longitude?: number | null;
   heroImage: string;
+  images: EntityImage[];
   tags: EventTag[];
   distance: string;
   about: string;

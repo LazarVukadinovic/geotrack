@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Images;
 using Geotrack.Application.DTOs.Places;
 
 namespace Geotrack.Application.DTOs.Events;
@@ -10,6 +11,7 @@ public class EventDetailDto
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public string? HeroImage { get; set; }
+    public List<EntityImageDto> Images { get; set; } = new();
     public List<TagLabelDto> Tags { get; set; } = new();
     public string? Distance { get; set; }
     public string? About { get; set; }

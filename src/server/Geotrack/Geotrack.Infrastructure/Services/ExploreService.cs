@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -150,7 +151,7 @@ public class ExploreService : IExploreService
                 EventTypeName = e.EventType.Name,
                 e.StartDate,
                 e.EndDate,
-                Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+                Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
             })
             .OrderBy(e => e.DestinationId == resolvedDestination.Id ? 0 : 1)
@@ -169,7 +170,7 @@ public class ExploreService : IExploreService
                 p.Id,
                 p.Name,
                 DestinationId = p.Location.DestinationId,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 PricePerNight = p.Stay != null ? p.Stay.PricePerNight : null,
@@ -194,7 +195,7 @@ public class ExploreService : IExploreService
                 p.Name,
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
@@ -218,7 +219,7 @@ public class ExploreService : IExploreService
                 p.Name,
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 ReviewCount = p.PlaceReviews.Count(),
                 DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
             })
@@ -244,7 +245,7 @@ public class ExploreService : IExploreService
                 p.Description,
                 Category = p.PlaceType.Name,
                 LocationName = p.Location.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 p.OpeningHours,
@@ -680,7 +681,7 @@ public class ExploreService : IExploreService
                 Title = p.Name,
                 Description = p.Description,
                 Location = p.Location.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault(),
+                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,

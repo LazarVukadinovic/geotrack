@@ -31,12 +31,15 @@ public class PlaceContributionListItemDto
     public string Name { get; set; } = string.Empty;
     public string? Subtitle { get; set; }
     public string? PlaceType { get; set; }
+    public string? StayType { get; set; }
     public string? Location { get; set; }
     public string? MainImageUrl { get; set; }
+    public string? CoverImageUrl { get; set; }
     public string Status { get; set; } = string.Empty;
     public DateTime SubmittedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public int? PlaceId { get; set; }
+    public int? PublishedPlaceId { get; set; }
 }
 
 public class PlaceContributionDetailDto : PlaceContributionListItemDto
@@ -52,10 +55,16 @@ public class PlaceContributionDetailDto : PlaceContributionListItemDto
     public string Description { get; set; } = string.Empty;
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? Phone { get; set; }
     public string? Website { get; set; }
     public decimal? PricePerNight { get; set; }
     public string? CheckInTime { get; set; }
     public string? CheckOutTime { get; set; }
+    public string? City { get; set; }
+    public string? Region { get; set; }
+    public string? Country { get; set; }
+    public string ImagePosition { get; set; } = "50% 50%";
+    public string ImageSize { get; set; } = "cover";
     public List<string> Tags { get; set; } = new();
     public List<string> Amenities { get; set; } = new();
     public List<string> StayAmenities { get; set; } = new();
@@ -70,9 +79,11 @@ public class UpsertPlaceContributionDto
     public string Type { get; set; } = "CreatePlace";
     public int? PlaceId { get; set; }
     public int? PlaceTypeId { get; set; }
+    public string? PlaceType { get; set; }
     public int? LocationId { get; set; }
     public int? RestaurantTypeId { get; set; }
     public int? StayTypeId { get; set; }
+    public string? StayType { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Subtitle { get; set; }
     public string? Address { get; set; }
@@ -82,15 +93,21 @@ public class UpsertPlaceContributionDto
     public double? Longitude { get; set; }
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? Phone { get; set; }
     public string? Website { get; set; }
     public decimal? PricePerNight { get; set; }
     public string? CheckInTime { get; set; }
     public string? CheckOutTime { get; set; }
+    public string? City { get; set; }
+    public string? Region { get; set; }
+    public string? Country { get; set; }
+    public string? ImagePosition { get; set; }
+    public string? ImageSize { get; set; }
     public List<string> Tags { get; set; } = new();
     public List<string> Amenities { get; set; } = new();
     public List<string> StayAmenities { get; set; } = new();
     public List<ContributionBookingPartnerDto> BookingPartners { get; set; } = new();
-    public List<UpsertPlaceContributionImageDto> Images { get; set; } = new();
+    public List<UpsertPlaceContributionImageDto>? Images { get; set; }
 }
 
 public class ContributionBookingPartnerDto

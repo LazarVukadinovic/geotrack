@@ -1,7 +1,9 @@
 using Geotrack.Application.DTOs.Destinations;
+using Geotrack.Application.DTOs.Images;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Infrastructure.Spatial;
@@ -129,13 +131,12 @@ public class PlaceService : IPlaceService
         double? longitude = null)
     {
         var place = await _db.Places
+            .AsNoTracking()
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
             .Include(p => p.Images)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
-            .Include(p => p.PlaceReviews)
-                .ThenInclude(r => r.User)
             .FirstOrDefaultAsync(p => p.Id == id);
 
         if (place is null)
@@ -162,19 +163,22 @@ public class PlaceService : IPlaceService
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
 
-        var reviewCount = place.PlaceReviews.Count;
-        var averageRating = CalculateAverageRating(place.PlaceReviews);
+        var reviewStats = await GetPlaceReviewStatsAsync(id);
+        var previewReviews = await GetPlaceReviewPreviewAsync(id);
+        var reviewCount = reviewStats.Count;
+        var averageRating = reviewStats.AverageRating;
 
         var reportedReviewIds = await GetReportedReviewIdsAsync(
             userId,
             ReviewReportTargetType.Place,
-            place.PlaceReviews.Select(r => r.Id));
+            previewReviews.Select(r => r.Id));
 
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
             latitude,
             longitude,
             place.Latitude,
             place.Longitude);
+        var images = ToImageDtos(place.Images);
 
         return new PlaceDetailDto
         {
@@ -183,7 +187,8 @@ public class PlaceService : IPlaceService
             Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = GetMainImageUrl(place.Images),
+            HeroImage = images.FirstOrDefault()?.Url,
+            Images = images,
             Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
                 .ToList(),
@@ -192,9 +197,7 @@ public class PlaceService : IPlaceService
             Distance = detailDistance,
             OpenStatus = DeriveOpenStatus(place.OpeningHours),
             About = DisplayTextSafety.CleanOptional(place.Description),
-            Reviews = place.PlaceReviews
-                .OrderByDescending(r => r.CreatedAt)
-                .Take(10)
+            Reviews = previewReviews
                 .Select(r => new ReviewDto
                 {
                     Id = r.Id,
@@ -235,6 +238,7 @@ public class PlaceService : IPlaceService
         double? longitude = null)
     {
         var place = await _db.Places
+            .AsNoTracking()
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
             .Include(p => p.Images)
@@ -245,10 +249,6 @@ public class PlaceService : IPlaceService
                     .ThenInclude(ssa => ssa.StayAmenity)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
-            .Include(p => p.PlaceReviews)
-                .ThenInclude(r => r.User)
-            .Include(p => p.PlaceAmenities)
-                .ThenInclude(pa => pa.Amenity)
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(pb => pb.BookingPartner)
             .FirstOrDefaultAsync(p => p.Id == id && p.Stay != null);
@@ -276,27 +276,21 @@ public class PlaceService : IPlaceService
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
 
-        var reviewCount = place.PlaceReviews.Count;
-        var averageRating = CalculateAverageRating(place.PlaceReviews);
+        var reviewStats = await GetPlaceReviewStatsAsync(id);
+        var previewReviews = await GetPlaceReviewPreviewAsync(id);
+        var reviewCount = reviewStats.Count;
+        var averageRating = reviewStats.AverageRating;
 
         var reportedReviewIds = await GetReportedReviewIdsAsync(
             userId,
             ReviewReportTargetType.Place,
-            place.PlaceReviews.Select(r => r.Id));
+            previewReviews.Select(r => r.Id));
 
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
             latitude,
             longitude,
             place.Latitude,
             place.Longitude);
-
-        var placeAmenities = place.PlaceAmenities
-            .Select(pa => new AmenityDto
-            {
-                Id = pa.Amenity.Id,
-                Label = pa.Amenity.Name,
-                Icon = pa.Amenity.Icon
-            });
 
         var stayAmenities = place.Stay?.StayAmenities
             .Select(sa => new AmenityDto
@@ -305,6 +299,7 @@ public class PlaceService : IPlaceService
                 Label = sa.StayAmenity.Name,
                 Icon = sa.StayAmenity.IconKey ?? string.Empty
             }) ?? Enumerable.Empty<AmenityDto>();
+        var images = ToImageDtos(place.Images);
 
         return new HotelDetailDto
         {
@@ -313,7 +308,8 @@ public class PlaceService : IPlaceService
             Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = GetMainImageUrl(place.Images),
+            HeroImage = images.FirstOrDefault()?.Url,
+            Images = images,
             Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
                 .ToList(),
@@ -333,14 +329,11 @@ public class PlaceService : IPlaceService
                     Url = pb.Url
                 })
                 .ToList(),
-            Amenities = placeAmenities
-                .Concat(stayAmenities)
+            Amenities = stayAmenities
                 .GroupBy(a => new { a.Label, a.Icon })
                 .Select(g => g.First())
                 .ToList(),
-            Reviews = place.PlaceReviews
-                .OrderByDescending(r => r.CreatedAt)
-                .Take(10)
+            Reviews = previewReviews
                 .Select(r => new ReviewDto
                 {
                     Id = r.Id,
@@ -529,7 +522,10 @@ public class PlaceService : IPlaceService
         };
     }
 
-    public async Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(int placeId)
+    public async Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(
+        int placeId,
+        int skip = 0,
+        int take = ReviewPaging.DefaultTake)
     {
         var exists = await _db.Places.AnyAsync(p => p.Id == placeId);
         if (!exists)
@@ -537,18 +533,28 @@ public class PlaceService : IPlaceService
             throw new KeyNotFoundException("Place not found");
         }
 
+        var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
+        var normalizedTake = ReviewPaging.NormalizeTake(take);
+        var reviewStats = await GetPlaceReviewStatsAsync(placeId);
         var reviews = await _db.PlaceReviews
+            .AsNoTracking()
             .Where(r => r.PlaceId == placeId)
             .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Skip(normalizedSkip)
+            .Take(normalizedTake)
             .ToListAsync();
-
-        var averageRating = reviews.Count > 0 ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
 
         return new GetPlaceReviewsResponseDto
         {
             PlaceId = placeId,
-            AverageRating = averageRating,
-            ReviewsCount = reviews.Count,
+            AverageRating = reviewStats.AverageRating ?? 0,
+            ReviewsCount = reviewStats.Count,
+            TotalCount = reviewStats.Count,
+            Skip = normalizedSkip,
+            Take = normalizedTake,
+            NextSkip = normalizedSkip + reviews.Count,
+            HasMore = reviewStats.Count > normalizedSkip + reviews.Count,
             Reviews = reviews
                 .Select(r => new PlaceReviewItemDto
                 {
@@ -619,6 +625,36 @@ public class PlaceService : IPlaceService
         };
     }
 
+    private async Task<(int Count, double? AverageRating)> GetPlaceReviewStatsAsync(int placeId)
+    {
+        var stats = await _db.PlaceReviews
+            .AsNoTracking()
+            .Where(r => r.PlaceId == placeId)
+            .GroupBy(r => r.PlaceId)
+            .Select(group => new
+            {
+                Count = group.Count(),
+                AverageRating = group.Average(r => r.Rating)
+            })
+            .SingleOrDefaultAsync();
+
+        return stats is null
+            ? (0, null)
+            : (stats.Count, Math.Round(stats.AverageRating, 1));
+    }
+
+    private async Task<List<PlaceReview>> GetPlaceReviewPreviewAsync(int placeId)
+    {
+        return await _db.PlaceReviews
+            .AsNoTracking()
+            .Include(r => r.User)
+            .Where(r => r.PlaceId == placeId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Take(ReviewPaging.DefaultTake)
+            .ToListAsync();
+    }
+
     private async Task<PlaceListingResponseDto> BuildPlaceListItemsAsync(
         IQueryable<Place> query,
         int destinationId,
@@ -651,6 +687,8 @@ public class PlaceService : IPlaceService
                     Image = p.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
                     Rating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
@@ -682,6 +720,8 @@ public class PlaceService : IPlaceService
                     Image = p.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
                     Rating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
@@ -768,11 +808,33 @@ public class PlaceService : IPlaceService
 
     private static string? GetMainImageUrl(IEnumerable<EntityImage> images)
     {
+        return OrderImages(images)
+            .Select(image => image.Url)
+            .FirstOrDefault();
+    }
+
+    private static List<EntityImageDto> ToImageDtos(IEnumerable<EntityImage> images)
+    {
+        return OrderImages(images)
+            .Select(image => new EntityImageDto
+            {
+                Id = image.Id,
+                Url = image.Url,
+                AltText = DisplayTextSafety.CleanOptional(image.AltText),
+                Caption = DisplayTextSafety.CleanOptional(image.Caption),
+                IsMain = image.IsMain,
+                SortOrder = image.SortOrder
+            })
+            .ToList();
+    }
+
+    private static IOrderedEnumerable<EntityImage> OrderImages(IEnumerable<EntityImage> images)
+    {
         return images
             .OrderByDescending(image => image.IsMain)
             .ThenBy(image => image.SortOrder)
-            .Select(image => image.Url)
-            .FirstOrDefault();
+            .ThenBy(image => image.CreatedAt)
+            .ThenBy(image => image.Id);
     }
 
     private static List<string> BuildFilterTerms(string? rawValue)
@@ -826,6 +888,10 @@ public class PlaceService : IPlaceService
         !double.IsNaN(longitude) &&
         !double.IsInfinity(latitude) &&
         !double.IsInfinity(longitude) &&
+        latitude >= -90 &&
+        latitude <= 90 &&
+        longitude >= -180 &&
+        longitude <= 180 &&
         (latitude != 0d || longitude != 0d);
 
     private static string GetAuthorName(Domain.Entities.Users.User user)

@@ -1,6 +1,6 @@
 # GeoTrack Server
 
-`server/Geotrack` sadrži .NET 8 API, EF Core model/migracije i Batch 11 integracione testove.
+`server/Geotrack` sadrži .NET 8 API, EF Core model/migracije i integracione testove.
 
 ## Potrebne lokalne tajne
 
@@ -39,7 +39,7 @@ psql -d geotrack -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 psql -d geotrack -c "SELECT PostGIS_Version();"
 ```
 
-Migracija `AddPostgisExploreSupport`:
+Trenutna migraciona istorija u repozitorijumu je objedinjena u `20260503002945_InitialCreate`. Taj model uključuje PostGIS podršku:
 
 - dodaje `geography(point)` kolone za `Destinations`, `Locations`, `Places` i `Events`
 - backfill-uje koordinate iz postojecih `Latitude` / `Longitude` vrednosti

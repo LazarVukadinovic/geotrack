@@ -21,7 +21,7 @@ public interface IEventService
 
     // Master detail/section/review methods
     Task<GetEventDetailsResponseDto> GetEventDetailsAsync(int eventId, int? userId);
-    Task<GetEventSectionResponseDto> GetEventSectionAsync(int eventId, string sectionKey);
-    Task<GetEventReviewsResponseDto> GetEventReviewsAsync(int eventId);
+    Task<GetEventSectionResponseDto> GetEventSectionAsync(int eventId, string sectionKey, int skip = 0, int take = 10);
+    Task<GetEventReviewsResponseDto> GetEventReviewsAsync(int eventId, int skip = 0, int take = 10);
     Task<CreateEventReviewResponseDto> CreateEventReviewAsync(int eventId, int userId, CreateEventReviewRequestDto request);
 }

@@ -1,5 +1,6 @@
 using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -17,12 +18,33 @@ public class ReviewService : IReviewService
         _contentModeration = contentModeration;
     }
 
-    public async Task<List<ReviewDto>> GetPlaceReviewsAsync(int placeId, int? currentUserId = null)
+    public async Task<PagedReviewsResponseDto> GetPlaceReviewsAsync(
+        int placeId,
+        int skip = 0,
+        int take = ReviewPaging.DefaultTake,
+        int? currentUserId = null)
     {
+        var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
+        var normalizedTake = ReviewPaging.NormalizeTake(take);
+
+        var totalCount = await _db.PlaceReviews
+            .AsNoTracking()
+            .CountAsync(r => r.PlaceId == placeId);
+        var averageRating = totalCount > 0
+            ? await _db.PlaceReviews
+                .AsNoTracking()
+                .Where(r => r.PlaceId == placeId)
+                .AverageAsync(r => (double?)r.Rating)
+            : null;
+
         var reviews = await _db.PlaceReviews
+            .AsNoTracking()
             .Include(r => r.User)
             .Where(r => r.PlaceId == placeId)
             .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Skip(normalizedSkip)
+            .Take(normalizedTake)
             .ToListAsync();
 
         var reportedReviewIds = await GetReportedReviewIdsAsync(
@@ -30,15 +52,40 @@ public class ReviewService : IReviewService
             ReviewReportTargetType.Place,
             reviews.Select(review => review.Id));
 
-        return reviews.Select(review => MapReview(review, reportedReviewIds.Contains(review.Id))).ToList();
+        var items = reviews
+            .Select(review => MapReview(review, reportedReviewIds.Contains(review.Id)))
+            .ToList();
+
+        return BuildPage(items, averageRating, totalCount, normalizedSkip, normalizedTake);
     }
 
-    public async Task<List<ReviewDto>> GetEventReviewsAsync(int eventId, int? currentUserId = null)
+    public async Task<PagedReviewsResponseDto> GetEventReviewsAsync(
+        int eventId,
+        int skip = 0,
+        int take = ReviewPaging.DefaultTake,
+        int? currentUserId = null)
     {
+        var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
+        var normalizedTake = ReviewPaging.NormalizeTake(take);
+
+        var totalCount = await _db.EventReviews
+            .AsNoTracking()
+            .CountAsync(r => r.EventId == eventId);
+        var averageRating = totalCount > 0
+            ? await _db.EventReviews
+                .AsNoTracking()
+                .Where(r => r.EventId == eventId)
+                .AverageAsync(r => (double?)r.Rating)
+            : null;
+
         var reviews = await _db.EventReviews
+            .AsNoTracking()
             .Include(r => r.User)
             .Where(r => r.EventId == eventId)
             .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Skip(normalizedSkip)
+            .Take(normalizedTake)
             .ToListAsync();
 
         var reportedReviewIds = await GetReportedReviewIdsAsync(
@@ -46,17 +93,20 @@ public class ReviewService : IReviewService
             ReviewReportTargetType.Event,
             reviews.Select(review => review.Id));
 
-        return reviews.Select(r => new ReviewDto
-        {
-            Id = r.Id,
-            AuthorName = GetAuthorName(r.User),
-            AvatarUrl = r.User.AvatarUrl,
-            Rating = (int)r.Rating,
-            TimeAgo = FormatTimeAgo(r.CreatedAt),
-            Body = r.Comment,
-            HelpfulCount = 0,
-            ReportedByCurrentUser = reportedReviewIds.Contains(r.Id)
-        }).ToList();
+        var items = reviews.Select(r => new ReviewDto
+            {
+                Id = r.Id,
+                AuthorName = GetAuthorName(r.User),
+                AvatarUrl = r.User.AvatarUrl,
+                Rating = (int)r.Rating,
+                TimeAgo = FormatTimeAgo(r.CreatedAt),
+                Body = r.Comment,
+                HelpfulCount = 0,
+                ReportedByCurrentUser = reportedReviewIds.Contains(r.Id)
+            })
+            .ToList();
+
+        return BuildPage(items, averageRating, totalCount, normalizedSkip, normalizedTake);
     }
 
     public async Task<ReviewDto> CreatePlaceReviewAsync(int placeId, int userId, CreateReviewDto dto)
@@ -152,6 +202,22 @@ public class ReviewService : IReviewService
         Body = r.Comment,
         HelpfulCount = 0,
         ReportedByCurrentUser = reportedByCurrentUser
+    };
+
+    private static PagedReviewsResponseDto BuildPage(
+        List<ReviewDto> items,
+        double? averageRating,
+        int totalCount,
+        int skip,
+        int take) => new()
+    {
+        Items = items,
+        AverageRating = averageRating.HasValue ? Math.Round(averageRating.Value, 1) : null,
+        TotalCount = totalCount,
+        Skip = skip,
+        Take = take,
+        NextSkip = skip + items.Count,
+        HasMore = totalCount > skip + items.Count
     };
 
     private async Task ValidateReviewAsync(CreateReviewDto dto)

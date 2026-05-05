@@ -71,9 +71,9 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
       });
     }
 
-    // For returning users, silently attempt to upgrade location via GPS in background.
-    // This handles "allow once" and re-granted permissions without blocking.
-    this.locationSvc.tryBackgroundGpsRefresh();
+    // Opening Explore is an intentional location-aware flow. If GPS is denied
+    // or unavailable, approximate fallback runs automatically.
+    void this.locationSvc.resolveLocationForProductFlow();
   }
 
   private readonly heroLocation = computed(() => {
@@ -110,7 +110,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     const source = this.locationSvc.location()?.source;
     if (source === 'gps') return 'Using exact location.';
     if (source === 'manual') return 'Using selected location.';
-    if (source === 'ip') return 'Using nearby location.';
+    if (source === 'approximate') return 'Using approximate location.';
     if (this.locationSvc.loading()) return 'Resolving location.';
     return 'Location unavailable.';
   });

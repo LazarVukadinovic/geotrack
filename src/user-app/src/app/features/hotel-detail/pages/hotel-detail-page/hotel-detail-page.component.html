@@ -44,7 +44,7 @@
       <img
         appImageFallback
         class="hd__hero-img"
-        [src]="h.heroImage"
+        [src]="heroImage()"
         alt=""
         width="800"
         height="480"
@@ -126,7 +126,7 @@
                 class="hd__cta hd__cta--primary"
                 [href]="directionsHref"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 (click)="onDirectionsClick()"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -159,6 +159,33 @@
         }
 
         <!-- ── Booking partners ──────────────────────────────────────────── -->
+        @if (h.images.length > 1) {
+          <section class="hd__gallery" aria-label="Stay photos">
+            <div class="hd__gallery-track" role="list">
+              @for (image of h.images; track image.id) {
+                <button
+                  type="button"
+                  class="hd__gallery-thumb"
+                  [class.hd__gallery-thumb--active]="isGalleryImageActive(image.url)"
+                  [attr.aria-label]="'Show photo ' + ($index + 1) + ' of ' + h.images.length"
+                  (click)="selectGalleryImage(image.url)"
+                >
+                  <img
+                    appImageFallback
+                    class="hd__gallery-img"
+                    [src]="image.url"
+                    [alt]="image.altText || h.title"
+                    width="120"
+                    height="84"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </button>
+              }
+            </div>
+          </section>
+        }
+
         @if (hasBookingPartners()) {
           <div class="hd__divider"></div>
 
@@ -171,7 +198,7 @@
                   class="hd__partner-btn hd__partner-btn--{{ partner.variant }}"
                   [href]="partner.url"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   (click)="onPartnerClick(partner)"
                 >
                   <span>{{ partner.name }}</span>
@@ -193,7 +220,7 @@
                     class="hd__partner-btn hd__partner-btn--muted"
                     [href]="partner.url"
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     (click)="onPartnerClick(partner)"
                   >
                     <span>{{ partner.name }}</span>

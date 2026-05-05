@@ -44,7 +44,7 @@
       <img
         appImageFallback
         class="ed__hero-img"
-        [src]="ev.heroImage"
+        [src]="heroImage()"
         alt=""
         width="800"
         height="480"
@@ -98,7 +98,7 @@
                 class="ed__cta ed__cta--primary"
                 [href]="directionsHref"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 (click)="onDirectionsClick()"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -131,6 +131,33 @@
         }
 
         <!-- ── About the Event ─────────────────────────────────────────── -->
+        @if (ev.images.length > 1) {
+          <section class="ed__gallery" aria-label="Event photos">
+            <div class="ed__gallery-track" role="list">
+              @for (image of ev.images; track image.id) {
+                <button
+                  type="button"
+                  class="ed__gallery-thumb"
+                  [class.ed__gallery-thumb--active]="isGalleryImageActive(image.url)"
+                  [attr.aria-label]="'Show photo ' + ($index + 1) + ' of ' + ev.images.length"
+                  (click)="selectGalleryImage(image.url)"
+                >
+                  <img
+                    appImageFallback
+                    class="ed__gallery-img"
+                    [src]="image.url"
+                    [alt]="image.altText || ev.title"
+                    width="120"
+                    height="84"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </button>
+              }
+            </div>
+          </section>
+        }
+
         <div class="ed__divider"></div>
 
         <section class="ed__section">

@@ -565,7 +565,7 @@ public sealed class AnalyticsTests
         {
             var db = setup.ServiceProvider.GetRequiredService<AppDbContext>();
             var hotel = await db.Places
-                .Where(place => place.PricePerNight != null && place.PlaceTags.Any())
+                .Where(place => place.Stay != null && place.Stay.PricePerNight != null && place.PlaceTags.Any())
                 .Select(place => new { place.Id, TagCount = place.PlaceTags.Count })
                 .FirstAsync();
 

@@ -516,7 +516,7 @@ export class SearchPageComponent implements OnDestroy {
     this.response.set(null);
     this.imgSrcByKey.set({});
 
-    const loc = this.locationSvc.location() ?? await this.locationSvc.ensureIpFallback();
+    const loc = this.locationSvc.location();
     if (requestId !== this.requestVersion) return;
 
     this.searchService.search(q, this.activeDomains(), loc?.latitude, loc?.longitude).subscribe({

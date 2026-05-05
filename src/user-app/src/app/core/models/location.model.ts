@@ -5,6 +5,6 @@ export interface ResolvedLocation {
   region: string;
   country: string;
   displayLabel: string;
-  source: 'gps' | 'ip' | 'manual';
+  source: 'gps' | 'approximate' | 'manual' | 'default' | 'unknown';
   cachedAt?: number;
 }

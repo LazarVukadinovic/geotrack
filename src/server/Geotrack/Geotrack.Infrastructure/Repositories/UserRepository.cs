@@ -103,10 +103,10 @@ namespace Geotrack.Infrastructure.Repositories
                 .Where(ci => ci.CollectionId == collectionId)
                 .OrderByDescending(ci => ci.CreatedAt)
                 .Select(ci =>
-                    ci.Place != null ? ci.Place.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault() :
-                    ci.Event != null ? ci.Event.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault() :
-                    ci.Destination != null ? ci.Destination.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault() :
-                    ci.Location != null ? ci.Location.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).Select(image => image.Url).FirstOrDefault() : null)
+                    ci.Place != null ? ci.Place.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
+                    ci.Event != null ? ci.Event.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
+                    ci.Destination != null ? ci.Destination.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
+                    ci.Location != null ? ci.Location.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() : null)
                 .ToListAsync();
 
             return urls

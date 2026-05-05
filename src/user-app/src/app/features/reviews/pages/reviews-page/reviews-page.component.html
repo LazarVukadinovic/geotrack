@@ -120,6 +120,21 @@
           </article>
         }
       </div>
+
+      @if (hasMore()) {
+        <button
+          type="button"
+          class="reviews-page__load-more"
+          [disabled]="loadingMore()"
+          (click)="loadMore()"
+        >
+          @if (loadingMore()) {
+            Loading...
+          } @else {
+            Load more
+          }
+        </button>
+      }
     }
   </main>
 </div>

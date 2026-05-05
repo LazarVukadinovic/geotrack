@@ -1,6 +1,6 @@
 <app-settings-subpage-shell
   title="Privacy Settings"
-  description="GeoTrack uses location, interests, and saved places to keep nearby suggestions useful while you travel. This page explains what is stored and gives you a real device-level privacy control.">
+  description="GeoTrack uses location, interests, and saved places to keep nearby suggestions useful while you travel. Precise and approximate coordinates stay in the current browser session.">
   <div class="flex flex-col gap-4">
     @if (feedbackMessage()) {
       <div class="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -26,7 +26,7 @@
           type="button"
           (click)="clearSavedLocation()"
           class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors active:bg-slate-50">
-          Clear Saved Location
+          Clear Location State
         </button>
       </div>
     </div>
@@ -36,7 +36,8 @@
       <div class="flex flex-col gap-3 text-sm leading-relaxed text-slate-600">
         <p>Your profile details keep your account recognizable across collections, interests, and support requests.</p>
         <p>Your interests and saved places help GeoTrack rank recommendations that feel more relevant to the cities you browse.</p>
-        <p>Device location is used to improve nearby discovery. Clearing the saved location removes that device-level shortcut without touching your account.</p>
+        <p>Device location is used to improve nearby discovery. Precise GPS and approximate network-based coordinates are stored only for the current browser session, not long-term local storage.</p>
+        <p>If precise location is denied or unavailable, GeoTrack uses approximate network-based location automatically for nearby discovery. Clearing location state does not touch your account.</p>
       </div>
     </div>
 

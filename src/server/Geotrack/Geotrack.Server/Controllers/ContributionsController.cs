@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Server.Requests;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -50,15 +49,18 @@ public class ContributionsController : ControllerBase
 
     [HttpPost]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<PlaceContributionResponseDto>> Create([FromForm] PlaceContributionFormRequest request)
+    public async Task<ActionResult<PlaceContributionResponseDto>> Create(
+        [FromForm(Name = "payload")] string payload,
+        IFormFile? mainImage,
+        IFormFile? coverImage)
     {
         try
         {
-            var payload = ParsePayload(request.Payload);
+            var request = ParsePayload(payload);
             var contribution = await _placeContributionService.CreateAsync(
                 GetUserId(),
-                payload,
-                await ReadMainImageAsync(request.MainImage));
+                request,
+                await ReadMainImageAsync(mainImage ?? coverImage));
 
             return CreatedAtAction(nameof(GetMineDetail), new { id = contribution.Id }, new PlaceContributionResponseDto
             {
@@ -73,28 +75,36 @@ public class ContributionsController : ControllerBase
 
     [HttpPost("places")]
     [Consumes("multipart/form-data")]
-    public Task<ActionResult<PlaceContributionResponseDto>> CreatePlace([FromForm] PlaceContributionFormRequest request) =>
-        Create(request);
+    public Task<ActionResult<PlaceContributionResponseDto>> CreatePlace(
+        [FromForm(Name = "payload")] string payload,
+        IFormFile? mainImage,
+        IFormFile? coverImage) =>
+        Create(payload, mainImage, coverImage);
 
     [HttpPost("stays")]
     [Consumes("multipart/form-data")]
-    public Task<ActionResult<PlaceContributionResponseDto>> CreateStay([FromForm] PlaceContributionFormRequest request) =>
-        Create(request);
+    public Task<ActionResult<PlaceContributionResponseDto>> CreateStay(
+        [FromForm(Name = "payload")] string payload,
+        IFormFile? mainImage,
+        IFormFile? coverImage) =>
+        Create(payload, mainImage, coverImage);
 
     [HttpPut("{id:int}")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<PlaceContributionResponseDto>> Update(
         [FromRoute] int id,
-        [FromForm] PlaceContributionFormRequest request)
+        [FromForm(Name = "payload")] string payload,
+        IFormFile? mainImage,
+        IFormFile? coverImage)
     {
         try
         {
-            var payload = ParsePayload(request.Payload);
+            var request = ParsePayload(payload);
             var contribution = await _placeContributionService.UpdateAsync(
                 GetUserId(),
                 id,
-                payload,
-                await ReadMainImageAsync(request.MainImage));
+                request,
+                await ReadMainImageAsync(mainImage ?? coverImage));
 
             return Ok(new PlaceContributionResponseDto { Contribution = contribution });
         }
@@ -108,15 +118,19 @@ public class ContributionsController : ControllerBase
     [Consumes("multipart/form-data")]
     public Task<ActionResult<PlaceContributionResponseDto>> UpdatePlace(
         [FromRoute] int id,
-        [FromForm] PlaceContributionFormRequest request) =>
-        Update(id, request);
+        [FromForm(Name = "payload")] string payload,
+        IFormFile? mainImage,
+        IFormFile? coverImage) =>
+        Update(id, payload, mainImage, coverImage);
 
     [HttpPut("stays/{id:int}")]
     [Consumes("multipart/form-data")]
     public Task<ActionResult<PlaceContributionResponseDto>> UpdateStay(
         [FromRoute] int id,
-        [FromForm] PlaceContributionFormRequest request) =>
-        Update(id, request);
+        [FromForm(Name = "payload")] string payload,
+        IFormFile? mainImage,
+        IFormFile? coverImage) =>
+        Update(id, payload, mainImage, coverImage);
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete([FromRoute] int id)
@@ -133,7 +147,7 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpGet("review")]
-    [Authorize(Roles = "RegionalManager")]
+    [Authorize(Roles = "Admin,RegionalManager")]
     public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetReviewQueue([FromQuery] string? status = null)
     {
         try
@@ -147,7 +161,7 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/approve")]
-    [Authorize(Roles = "RegionalManager")]
+    [Authorize(Roles = "Admin,RegionalManager")]
     public async Task<ActionResult<PlaceContributionResponseDto>> Approve(
         [FromRoute] int id,
         [FromBody] ReviewPlaceContributionRequestDto request)
@@ -164,7 +178,7 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/reject")]
-    [Authorize(Roles = "RegionalManager")]
+    [Authorize(Roles = "Admin,RegionalManager")]
     public async Task<ActionResult<PlaceContributionResponseDto>> Reject(
         [FromRoute] int id,
         [FromBody] ReviewPlaceContributionRequestDto request)
@@ -223,7 +237,8 @@ public class ContributionsController : ControllerBase
     {
         return ex switch
         {
-            UnauthorizedAccessException => Unauthorized(new { message = ex.Message }),
+            UnauthorizedAccessException authEx when authEx.Message == "Invalid user token" => Unauthorized(new { message = "Invalid user token" }),
+            UnauthorizedAccessException => StatusCode(StatusCodes.Status403Forbidden, new { message = "Forbidden." }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
             _ => StatusCode(500, new { message = "An unexpected error occurred." })

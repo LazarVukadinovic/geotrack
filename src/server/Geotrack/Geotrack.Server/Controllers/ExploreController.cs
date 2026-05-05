@@ -71,6 +71,12 @@ public class ExploreController : ControllerBase
             return BadRequest(new { error = "take must be greater than zero." });
         }
 
+        var coordinateError = ValidateOptionalCoordinates(latitude, longitude);
+        if (coordinateError is not null)
+        {
+            return coordinateError;
+        }
+
         var result = await _exploreService.GetLocalPlacesCategoriesAsync(destinationId, latitude, longitude, skip, take ?? 10);
         var wantsPagedResponse = Request.Query.ContainsKey("skip") || Request.Query.ContainsKey("take");
         return result.Status switch
@@ -137,6 +143,26 @@ public class ExploreController : ControllerBase
     {
         var claim = User.FindFirst("userId")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private ActionResult? ValidateOptionalCoordinates(double? latitude, double? longitude)
+    {
+        if (!latitude.HasValue && !longitude.HasValue)
+        {
+            return null;
+        }
+
+        if (latitude.HasValue != longitude.HasValue)
+        {
+            return BadRequest(new { error = "latitude and longitude must be provided together." });
+        }
+
+        if (!HasValidCoordinates(latitude!.Value, longitude!.Value))
+        {
+            return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
+        }
+
+        return null;
     }
 
     private static bool HasValidCoordinates(double latitude, double longitude)
