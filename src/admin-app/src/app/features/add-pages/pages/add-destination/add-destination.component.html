@@ -2,7 +2,16 @@
   <app-sidebar></app-sidebar>
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-    <app-topbar title="New Destination" [showBack]="true"></app-topbar>
+    <app-topbar [title]="isEditMode ? 'Edit Destination' : 'New Destination'" [showBack]="true"></app-topbar>
+    @if (isEditMode) {
+      <div class="px-8 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
+        <svg class="w-3.5 h-3.5 text-amber-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        <span class="text-xs text-amber-700 font-medium">Editing: <strong>{{ destinationName }}</strong></span>
+      </div>
+    }
 
     <div class="flex-1 overflow-y-auto px-8 py-6">
       <div class="flex gap-5 items-start">
@@ -222,7 +231,7 @@
             <h4 class="text-sm font-bold text-gray-900 mb-3">Publishing</h4>
             <button type="button"
                     class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors">
-              Publish
+              {{ isEditMode ? 'Save Changes' : 'Publish' }}
             </button>
           </div>
 

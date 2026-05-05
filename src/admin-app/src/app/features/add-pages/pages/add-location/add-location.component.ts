@@ -495,7 +495,33 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   //Lifecycle
-  ngOnInit(): void {}
+  isEditMode = false;
+  locationName = '';
+
+  ngOnInit(): void {
+    const state = history.state as { place?: any };
+    if (state?.place) {
+      this.isEditMode = true;
+      this._loadFromRouterState(state.place);
+    }
+  }
+
+  private _loadFromRouterState(p: any): void {
+    this.locationName = p.name ?? '';
+    if (p.zone) {
+      setTimeout(() => {
+        if (!this.miniMap) this.initMiniMap();
+        const polygon = L.polygon(p.zone, {
+          color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.25, weight: 2,
+        });
+        (polygon as any)._isConfirmedZone = true;
+        polygon.addTo(this.miniMap);
+        this.zoneConfirmed = true;
+        this.confirmedLayer = polygon;
+        try { this.miniMap.fitBounds(polygon.getBounds(), { padding: [10, 10] }); } catch {}
+      }, 200);
+    }
+  }
 
   ngAfterViewInit(): void {
     setTimeout(() => this.initMiniMap(), 0);

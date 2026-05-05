@@ -473,6 +473,11 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       lat: 44.0169, lng: 20.9258,
       zone: [[44.0185, 20.9220], [44.0190, 20.9310], [44.0155, 20.9315], [44.0148, 20.9225]],
     },
+    {
+      id: '6', name: 'Kragujevac Old Town', address: 'Staro jezgro, Kragujevac',
+      lat: 44.0128, lng: 20.9142,
+      zone: [[44.0135, 20.9090], [44.0140, 20.9200], [44.0100, 20.9220], [44.0085, 20.9130], [44.0110, 20.9080]],
+    },
   ];
 
   private readonly mockPlaces: VenueItem[] = [
@@ -745,8 +750,6 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   }
 
   private _loadFromRouterState(): void {
-    const nav = this.router.getCurrentNavigation();
-    
     const state = history.state as { place?: any };
     if (!state?.place) return;
 
@@ -763,10 +766,14 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (p.type === 'Place') {
       this.venueType = 'place';
     } else {
+      
       this.venueType = 'location';
 
-      const found = this.mockLocations.find(l => l.id === p.id || 
-        (Math.abs(l.lat - p.lat) < 0.001 && Math.abs(l.lng - p.lng) < 0.001));
+      const found = this.mockLocations.find(l =>
+        l.id === p.id ||
+        l.name === p.name ||
+        (Math.abs(l.lat - p.lat) < 0.001 && Math.abs(l.lng - p.lng) < 0.001)
+      );
       if (found?.zone) venue.zone = found.zone;
     }
 
