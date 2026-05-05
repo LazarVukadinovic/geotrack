@@ -1,49 +1,61 @@
-<article class="rec-card">
-  <div class="rec-card__image-wrap">
-    <img class="rec-card__image" [src]="card().image" [alt]="card().title" />
-    <div class="rec-card__rating" aria-label="Rating {{ card().rating }}">
-      <svg class="rec-card__rating-star" viewBox="0 0 24 24" fill="#e8570a" aria-hidden="true">
-        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-      </svg>
-      {{ card().rating.toFixed(1) }}
-    </div>
+<article class="agent-rec-card">
+  <div class="agent-rec-card__media">
+    @if (card().image) {
+      <img appImageFallback class="agent-rec-card__img" [src]="card().image" [alt]="card().title" />
+    }
+
+    <span class="agent-rec-card__badge">{{ entityLabel() }}</span>
+
+    @if (canSave()) {
+      <app-favorite-button
+        class="agent-rec-card__save"
+        [saved]="card().isFavorite"
+        [itemLabel]="card().title"
+        (clicked)="onSaveClicked()"
+      />
+    }
   </div>
 
-  <div class="rec-card__body">
-    <h3 class="rec-card__title">{{ card().title }}</h3>
-    <p class="rec-card__desc">{{ card().description }}</p>
+  <div class="agent-rec-card__body">
+    <h3 class="agent-rec-card__title">{{ card().title }}</h3>
+    <p class="agent-rec-card__desc">{{ card().description }}</p>
 
-    <div class="rec-card__meta">
-      <span class="rec-card__meta-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <circle cx="12" cy="12" r="9"/>
-          <path stroke-linecap="round" d="M12 7v5l3 3"/>
-        </svg>
-        {{ card().durationHours }} hrs
-      </span>
-      <span class="rec-card__meta-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 2L8 20l4-4 4 4L12 2z"/>
-        </svg>
-        {{ card().distanceKm }} km
-      </span>
+    <div class="agent-rec-card__meta">
+      @if (card().rating != null) {
+        <span class="agent-rec-card__meta-item">
+          <svg class="agent-rec-card__star" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#e8570a" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z" />
+          </svg>
+          {{ card().rating!.toFixed(1) }}
+        </span>
+      } @else {
+        <span class="agent-rec-card__meta-item">No reviews yet</span>
+      }
+
+      @if (card().durationHours != null) {
+        <span class="agent-rec-card__meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/>
+            <path stroke-linecap="round" d="M12 7v5l3 3"/>
+          </svg>
+          {{ card().durationHours }} hrs
+        </span>
+      }
+
+      @if (card().distanceKm != null) {
+        <span class="agent-rec-card__meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 2 8 20l4-4 4 4-4-18Z"/>
+          </svg>
+          {{ card().distanceKm }} km
+        </span>
+      }
     </div>
 
-    <div class="rec-card__actions">
-      <button
-        type="button"
-        class="rec-card__btn rec-card__btn--primary"
-        (click)="onFavoriteToggle()"
-      >
-        @if (isFavorite()) { Remove Favorite } @else { Add to Favorite }
-      </button>
-      <button
-        type="button"
-        class="rec-card__btn rec-card__btn--outline"
-        (click)="onView()"
-      >
-        View
-      </button>
-    </div>
+    @if (card().detailUrl) {
+      <a class="agent-rec-card__cta" [routerLink]="card().detailUrl" (click)="onCardClicked()">
+        Explore
+      </a>
+    }
   </div>
 </article>

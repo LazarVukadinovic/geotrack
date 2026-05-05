@@ -30,6 +30,16 @@ public class Event
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
 
+    // Extended event fields
+    public string? TicketPrice { get; set; }
+    public string? Duration { get; set; }
+    public string? HostedBy { get; set; }
+    public string? VenueDescription { get; set; }
+    public string? ArrivalTips { get; set; }
+    public string? Accessibility { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+
+    public ICollection<EntityImage> Images { get; set; } = new List<EntityImage>();
 }

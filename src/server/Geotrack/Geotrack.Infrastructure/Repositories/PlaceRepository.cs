@@ -1,4 +1,4 @@
-﻿using Geotrack.Application.Interfaces.Repository;
+using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Microsoft.EntityFrameworkCore;
@@ -66,5 +66,13 @@ public class PlaceRepository : Repository<Place>, IPlaceRepository
     public async Task AddReviewAsync(PlaceReview review)
     {
         await _context.PlaceReviews.AddAsync(review);
+    }
+
+    public async Task<List<Place>> SearchByNameAsync(string query)
+    {
+        return await _context.Places
+        .Include(p => p.Location)
+        .Where(p => p.Name.ToLower().Contains(query.ToLower()))
+        .ToListAsync();
     }
 }

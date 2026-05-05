@@ -1,0 +1,140 @@
+<div class="reviews-page">
+  <header class="reviews-page__topbar">
+    <button type="button" class="reviews-page__back" aria-label="Go back" (click)="goBack()">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 5l-7 7 7 7" />
+      </svg>
+    </button>
+
+    <span class="reviews-page__topbar-title">Reviews</span>
+    <div class="reviews-page__topbar-spacer" aria-hidden="true"></div>
+  </header>
+
+  <main class="reviews-page__scroll">
+    <section class="reviews-page__hero" aria-labelledby="reviews-title">
+      <span class="reviews-page__eyebrow">{{ entityKindLabel() }}</span>
+      <h1 id="reviews-title" class="reviews-page__title">{{ entityTitle() }}</h1>
+
+      <div class="reviews-page__summary" aria-live="polite">
+        @if (averageRating() != null) {
+          <span class="reviews-page__rating">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor"
+                    d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+            </svg>
+            {{ averageRating()!.toFixed(1) }}
+          </span>
+          <span class="reviews-page__dot" aria-hidden="true"></span>
+        }
+        <span>{{ reviewsCountLabel() }}</span>
+      </div>
+    </section>
+
+    @if (reportMessage()) {
+      <p class="reviews-page__notice reviews-page__notice--success" role="status">{{ reportMessage() }}</p>
+    }
+    @if (reportError()) {
+      <p class="reviews-page__notice reviews-page__notice--error" role="alert">{{ reportError() }}</p>
+    }
+
+    @if (loadState() === 'loading') {
+      <div class="reviews-page__state" aria-live="polite">
+        <div class="reviews-page__spinner" aria-hidden="true"></div>
+        <p>Loading reviews...</p>
+      </div>
+    } @else if (loadState() === 'error') {
+      <div class="reviews-page__state">
+        <p>We couldn't load these reviews right now.</p>
+        <button type="button" class="reviews-page__retry" (click)="retry()">Try Again</button>
+      </div>
+    } @else if (loadState() === 'notFound') {
+      <div class="reviews-page__state">
+        <p>This reviews page could not be found.</p>
+        <button type="button" class="reviews-page__retry" (click)="goBack()">Go back</button>
+      </div>
+    } @else if (reviews().length === 0) {
+      <div class="reviews-page__state">
+        <p>No reviews yet.</p>
+      </div>
+    } @else {
+      <div class="reviews-page__list" aria-label="All reviews">
+        @for (review of reviews(); track review.id) {
+          <article class="reviews-page__review">
+            <div class="reviews-page__review-top">
+              @if (review.avatarUrl) {
+                <img
+                  appImageFallback
+                  class="reviews-page__avatar"
+                  [src]="review.avatarUrl"
+                  [alt]="review.authorName"
+                  width="44"
+                  height="44"
+                  loading="lazy"
+                  decoding="async"
+                />
+              } @else {
+                <span class="reviews-page__avatar reviews-page__avatar--initials" aria-hidden="true">
+                  {{ reviewInitials(review.authorName) }}
+                </span>
+              }
+
+              <div class="reviews-page__review-meta">
+                <span class="reviews-page__review-name">{{ review.authorName }}</span>
+                @if (review.timeAgo) {
+                  <span class="reviews-page__review-time">{{ review.timeAgo }}</span>
+                }
+              </div>
+
+              <div class="reviews-page__review-rating">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor"
+                        d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                </svg>
+                <span>{{ review.rating.toFixed(1) }}</span>
+              </div>
+            </div>
+
+            <p class="reviews-page__review-body">{{ review.body }}</p>
+
+            <button
+              type="button"
+              class="reviews-page__report"
+              [class.reviews-page__report--reported]="isReviewReported(review)"
+              [disabled]="isReviewReported(review) || isReviewReporting(review.id)"
+              (click)="reportReview(review)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                      d="M5 21V4.6c0-.9.74-1.6 1.65-1.6h9.7c.83 0 1.5.67 1.5 1.5v7.2c0 .83-.67 1.5-1.5 1.5H6"/>
+              </svg>
+              @if (isReviewReporting(review.id)) {
+                Reporting...
+              } @else if (isReviewReported(review)) {
+                Reported
+              } @else {
+                Report
+              }
+            </button>
+          </article>
+        }
+      </div>
+
+      @if (hasMore()) {
+        <button
+          type="button"
+          class="reviews-page__load-more"
+          [disabled]="loadingMore()"
+          (click)="loadMore()"
+        >
+          @if (loadingMore()) {
+            Loading...
+          } @else {
+            Load more
+          }
+        </button>
+      }
+    }
+  </main>
+</div>

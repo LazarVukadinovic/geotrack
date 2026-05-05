@@ -1,0 +1,16 @@
+<header class="page-top-nav">
+  <div class="page-top-nav__row">
+    <button
+      type="button"
+      class="page-top-nav__back"
+      aria-label="Go back"
+      (click)="goBack()">
+      <svg class="page-top-nav__back-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
+      </svg>
+    </button>
+
+    <span class="page-top-nav__title">{{ title() }}</span>
+    <div class="page-top-nav__spacer" aria-hidden="true"></div>
+  </div>
+</header>

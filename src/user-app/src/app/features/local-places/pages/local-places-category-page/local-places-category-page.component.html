@@ -1,17 +1,7 @@
 <div class="lpc-page">
 
   <!-- ── Fixed top bar ────────────────────────────────────────────────────── -->
-  <header class="lpc-page__topbar">
-    <button type="button" class="lpc-page__back" aria-label="Go back" (click)="goBack()">
-      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"
-           stroke="currentColor" stroke-width="2.5"
-           stroke-linecap="round" stroke-linejoin="round">
-        <path d="M19 12H5M12 5l-7 7 7 7" />
-      </svg>
-    </button>
-    <span class="lpc-page__topbar-title">{{ meta().title }}</span>
-    <div class="lpc-page__topbar-spacer"></div>
-  </header>
+  <app-page-top-nav [title]="meta().title" fallbackRoute="/local-places" />
 
   <!-- ── Scrollable content ───────────────────────────────────────────────── -->
   <div class="lpc-page__scroll">
@@ -22,6 +12,13 @@
       <div class="lpc-page__title-accent" aria-hidden="true"></div>
       <p class="lpc-page__subtitle">{{ meta().subtitle }}</p>
     </div>
+
+    @if (loadError()) {
+      <app-empty-state
+        title="Something went wrong"
+        [message]="loadError()!"
+      />
+    }
 
     <!-- Item card list -->
     <div class="lpc-page__list" [attr.aria-label]="meta().title + ' places'">
@@ -98,7 +95,7 @@
                 <button
                   type="button"
                   class="lpc-card__save"
-                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  [attr.aria-label]="item.isSaved ? 'Saved. Choose collection' : 'Save to collection'"
                   (click)="toggleSaved($event, item.id)"
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -178,7 +175,7 @@
                 <button
                   type="button"
                   class="lpc-card__save"
-                  [attr.aria-label]="item.isSaved ? 'Remove from saved' : 'Save'"
+                  [attr.aria-label]="item.isSaved ? 'Saved. Choose collection' : 'Save to collection'"
                   (click)="toggleSaved($event, item.id)"
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -199,12 +196,32 @@
         }
       }
 
-      @if (items().length === 0) {
+      @if (!loading() && items().length === 0) {
         <div class="lpc-page__empty">
           <p class="lpc-page__empty-text">No places found for this category.</p>
         </div>
       }
 
     </div>
+
+    @if (!loadError() && items().length > 0) {
+      <div class="lpc-page__pagination" aria-live="polite">
+        @if (loadMoreError()) {
+          <p class="lpc-page__load-error">{{ loadMoreError() }}</p>
+        }
+
+        @if (hasMore()) {
+          <button
+            type="button"
+            class="lpc-page__load-more"
+            [disabled]="loadingMore()"
+            (click)="loadMore()">
+            {{ loadingMore() ? 'Loading...' : 'Load More' }}
+          </button>
+        } @else {
+          <p class="lpc-page__end">You're caught up for now.</p>
+        }
+      </div>
+    }
   </div>
 </div>

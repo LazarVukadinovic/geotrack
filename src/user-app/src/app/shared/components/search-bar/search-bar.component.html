@@ -1,4 +1,7 @@
 <div class="search-bar">
+  <label class="visually-hidden" [attr.for]="resolvedControlId()">
+    {{ label() }}
+  </label>
   <svg class="search-bar__icon" viewBox="0 0 24 24" aria-hidden="true">
     <path
       fill="none"
@@ -10,6 +13,8 @@
   </svg>
   <input
     #searchField
+    [id]="resolvedControlId()"
+    [attr.name]="resolvedControlName()"
     class="search-bar__input"
     type="search"
     autocomplete="off"
@@ -17,5 +22,20 @@
     [attr.placeholder]="placeholder()"
     [value]="local()"
     (input)="onInput($event)"
+    (focus)="onFocus()"
+    (blur)="onBlur()"
+    (keydown.enter)="onSubmit($event)"
   />
+  @if (local().trim().length > 0) {
+    <button
+      type="button"
+      class="search-bar__clear"
+      aria-label="Clear search"
+      (click)="clearValue()"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 6l12 12M18 6 6 18" />
+      </svg>
+    </button>
+  }
 </div>

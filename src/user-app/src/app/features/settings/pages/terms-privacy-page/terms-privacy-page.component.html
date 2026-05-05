@@ -1,0 +1,29 @@
+<app-settings-subpage-shell
+  title="Terms & Privacy Policy"
+  description="Last updated April 21, 2026. These notes explain how GeoTrack handles accounts, saved trip planning data, and location-aware recommendations inside the current web app.">
+  <div class="flex flex-col gap-4">
+    @for (section of sections; track section.title) {
+      <div class="rounded-[1.5rem] bg-white p-4 shadow-sm">
+        <h2 class="text-base font-bold text-slate-800">{{ section.title }}</h2>
+        <div class="mt-3 flex flex-col gap-3 text-sm leading-relaxed text-slate-600">
+          @for (paragraph of section.body; track paragraph) {
+            <p>{{ paragraph }}</p>
+          }
+        </div>
+      </div>
+    }
+
+    <div class="rounded-[1.5rem] bg-white p-4 shadow-sm">
+      <h2 class="text-base font-bold text-slate-800">Questions About Your Data?</h2>
+      <p class="mt-3 text-sm leading-relaxed text-slate-600">
+        Use Contact Support inside Settings if you want help understanding stored location data, account activity, or how recommendations were shaped for your trip planning.
+      </p>
+      <button
+        type="button"
+        (click)="openSupport()"
+        class="mt-4 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors active:bg-slate-50">
+        Open Contact Support
+      </button>
+    </div>
+  </div>
+</app-settings-subpage-shell>

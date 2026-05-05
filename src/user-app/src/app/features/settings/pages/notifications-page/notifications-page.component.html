@@ -1,0 +1,61 @@
+<app-settings-subpage-shell
+  title="Notifications"
+  description="Choose which GeoTrack updates should be prepared for your account. We save these preferences now so future alerts and summaries reflect your travel style.">
+  <div class="flex flex-col gap-4">
+    @if (errorMessage()) {
+      <div class="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+        {{ errorMessage() }}
+      </div>
+    }
+
+    @if (feedbackMessage()) {
+      <div class="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        {{ feedbackMessage() }}
+      </div>
+    }
+
+    <div class="rounded-[1.5rem] bg-white px-4 py-4 shadow-sm">
+      <p class="text-sm text-slate-600">
+        GeoTrack is steadily expanding travel alerts across the web app. Your selections are saved today and will guide the updates you receive as those experiences roll out.
+      </p>
+    </div>
+
+    <div class="rounded-[1.5rem] bg-white shadow-sm">
+      @if (isLoading()) {
+        <div class="px-4 py-5 text-sm text-slate-500">Loading your preferences...</div>
+      } @else {
+        @for (toggleItem of toggles; track toggleItem.key) {
+          <button
+            type="button"
+            class="w-full px-4 py-4 text-left transition-colors active:bg-slate-50"
+            [class.border-b]="!$last"
+            [class.border-slate-100]="!$last"
+            [class.opacity-50]="toggleItem.key !== 'generalNotifications' && !isEnabled('generalNotifications')"
+            [disabled]="toggleItem.key !== 'generalNotifications' && !isEnabled('generalNotifications')"
+            (click)="toggle(toggleItem.key)">
+            <div class="flex items-start gap-3">
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-slate-800">{{ toggleItem.title }}</p>
+                <p class="mt-1 text-sm leading-relaxed text-slate-500">{{ toggleItem.description }}</p>
+              </div>
+
+              <span
+                class="notif-page__switch"
+                [class.notif-page__switch--on]="isEnabled(toggleItem.key)">
+                <span class="notif-page__switch-knob"></span>
+              </span>
+            </div>
+          </button>
+        }
+      }
+    </div>
+
+    <button
+      type="button"
+      (click)="save()"
+      [disabled]="!isDirty() || isLoading() || isSaving()"
+      class="w-full rounded-[1.75rem] bg-[#e8570a] px-4 py-4 text-base font-bold text-white shadow-lg transition-all duration-200 active:scale-[0.98] disabled:opacity-60">
+      {{ isSaving() ? 'Saving Preferences...' : 'Save Preferences' }}
+    </button>
+  </div>
+</app-settings-subpage-shell>

@@ -1,0 +1,151 @@
+@if (target(); as item) {
+  <div class="sc__backdrop" aria-hidden="true" (click)="close()"></div>
+
+  <section
+    class="sc__sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="save-to-collection-title"
+  >
+    <div class="sc__handle" aria-hidden="true"></div>
+
+    <header class="sc__header">
+      <div class="sc__title-group">
+        <h2 id="save-to-collection-title" class="sc__title">
+          {{ savedCollectionCount() > 0 ? 'Manage Save' : 'Save to Collection' }}
+        </h2>
+        <p class="sc__subtitle">{{ item.title }}</p>
+      </div>
+      <button type="button" class="sc__close" aria-label="Close save dialog" [disabled]="isBusy()" (click)="close()">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </header>
+
+    @if (feedback()) {
+      <p class="sc__notice sc__notice--success" role="status">{{ feedback() }}</p>
+    }
+
+    @if (error()) {
+      <p class="sc__notice sc__notice--error" role="alert">{{ error() }}</p>
+    }
+
+    @if (listLoadState() === 'loading' && collections().length === 0) {
+      <div class="sc__loading">
+        <span class="sc__spinner" aria-hidden="true"></span>
+        <span>Loading collections...</span>
+      </div>
+    } @else if (listLoadState() === 'error' && collections().length === 0) {
+      <div class="sc__empty">
+        <p>Collections could not be loaded.</p>
+        <button type="button" class="sc__link-button" (click)="retryCollections()">Retry</button>
+      </div>
+    } @else {
+      @if (!createMode()) {
+        <div class="sc__collections" role="list" aria-label="Collections">
+          @for (collection of collections(); track collection.id) {
+            @let savedItem = savedItemForCollection(collection);
+            @let membershipLoading = isMembershipLoading(collection);
+            @let membershipUnavailable = isMembershipUnavailable(collection);
+            <div
+              class="sc__collection"
+              role="listitem"
+              [class.sc__collection--saved]="savedItem !== undefined"
+            >
+              <span class="sc__collection-icon" aria-hidden="true">
+                @if (collection.coverImages.length > 0) {
+                  <img [src]="collection.coverImages[0]" alt="" />
+                } @else {
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+                      d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-9Z"/>
+                    <path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M8 9h8M8 13h5"/>
+                  </svg>
+                }
+              </span>
+              <span class="sc__collection-text">
+                <span class="sc__collection-title">{{ collection.title }}</span>
+                <span class="sc__collection-meta">
+                  @if (membershipLoading) {
+                    Checking save status...
+                  } @else if (membershipUnavailable) {
+                    Save status unavailable
+                  } @else if (savedItem) {
+                    Saved here
+                  } @else {
+                    {{ collection.itemsCount }} {{ collection.itemsCount === 1 ? 'item' : 'items' }}
+                  }
+                </span>
+              </span>
+              <button
+                type="button"
+                class="sc__collection-action"
+                [class.sc__collection-action--remove]="savedItem !== undefined"
+                [disabled]="isBusy() || membershipLoading || membershipUnavailable"
+                (click)="toggleCollectionMembership(collection)"
+              >
+                @if (isCollectionBusy(collection)) {
+                  <span class="sc__spinner" aria-hidden="true"></span>
+                  <span>{{ savedItem ? 'Removing' : 'Adding' }}</span>
+                } @else if (membershipLoading) {
+                  <span>Checking</span>
+                } @else if (membershipUnavailable) {
+                  <span>Unavailable</span>
+                } @else {
+                  <span>{{ savedItem ? 'Remove' : 'Add' }}</span>
+                }
+              </button>
+            </div>
+          }
+
+          <button type="button" class="sc__collection sc__collection--create" [disabled]="isBusy()" (click)="startCreate()">
+            <span class="sc__collection-icon sc__collection-icon--create" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/>
+              </svg>
+            </span>
+            <span class="sc__collection-text">
+              <span class="sc__collection-title">New Collection</span>
+              <span class="sc__collection-meta">Create and save here</span>
+            </span>
+          </button>
+        </div>
+      } @else {
+        <div class="sc__create">
+          <label class="sc__label" for="save-new-collection-name">Collection Name</label>
+          <input
+            id="save-new-collection-name"
+            class="sc__input"
+            type="text"
+            maxlength="80"
+            autocomplete="off"
+            placeholder="Weekend ideas"
+            [value]="newCollectionName()"
+            [disabled]="isBusy()"
+            (input)="onNameInput($event)"
+            (keyup.enter)="createAndSave()"
+          />
+
+          <button
+            type="button"
+            class="sc__primary"
+            [disabled]="!canCreateAndSave()"
+            (click)="createAndSave()"
+          >
+            @if (isSaving()) {
+              <span class="sc__spinner sc__spinner--light" aria-hidden="true"></span>
+              <span>Creating...</span>
+            } @else {
+              <span>Create and Save</span>
+            }
+          </button>
+
+          <button type="button" class="sc__secondary" [disabled]="isBusy()" (click)="cancelCreate()">Choose Existing</button>
+        </div>
+      }
+    }
+
+    <button type="button" class="sc__cancel" [disabled]="isBusy()" (click)="close()">Done</button>
+  </section>
+}

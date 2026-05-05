@@ -84,11 +84,18 @@
   align-items: center;
   justify-content: center;
   color: #4a6fa5;
+  overflow: hidden;
 
   svg {
     width: 22px;
     height: 22px;
   }
+}
+
+.re__write-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .re__write-info {
@@ -271,10 +278,28 @@
   line-height: 1.5;
 }
 
+// ─── Inline submit error ─────────────────────────────────────────────────────
+
+.re__error {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  background: #fdecec;
+  border: 1px solid #f5c2c2;
+  border-radius: 12px;
+  color: #b42318;
+  font-size: 13.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+
 // ─── Submit button ────────────────────────────────────────────────────────────
 
 .re__submit-btn {
   width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   border: none;
   background: #e8570a;
   color: #ffffff;
@@ -295,6 +320,28 @@
     outline: 2px solid #1a2b4c;
     outline-offset: 2px;
   }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+
+    &:hover  { opacity: 0.55; }
+    &:active { transform: none; }
+  }
+}
+
+.re__spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  animation: re-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes re-spin {
+  to { transform: rotate(360deg); }
 }
 
 // ─── Cancel button ────────────────────────────────────────────────────────────
@@ -318,5 +365,12 @@
   &:focus-visible {
     outline: 2px solid #e8570a;
     outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+
+    &:hover { color: #1a2b4c; }
   }
 }

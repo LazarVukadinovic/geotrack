@@ -9,7 +9,7 @@ import { Component, input, output } from '@angular/core';
 export class SectionHeaderComponent {
   readonly title = input.required<string>();
   readonly subtitle = input<string>('');
-  readonly actionLabel = input('More');
+  readonly actionLabel = input<string | null>(null);
 
   readonly action = output<void>();
 

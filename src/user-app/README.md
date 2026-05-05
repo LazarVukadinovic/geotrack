@@ -1,59 +1,26 @@
-# UserApp
+# GeoTrack User App
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.2.
+`user-app/` je Angular frontend za GeoTrack. Sa .NET API-jem u `../server/Geotrack` komunicira preko lokalne proxy konfiguracije.
 
-## Development server
-
-To start a local development server, run:
+## Lokalno pokretanje
 
 ```bash
-ng serve
+npm install
+npm run start
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Aplikacija je podrazumevano dostupna na `http://localhost:4200/` i prosleđuje `/api/*` zahteve ka backend-u.
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Build i testiranje
 
 ```bash
-ng generate component component-name
+npm run build
+npm test -- --watch=false
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Šta je stvarno, a šta je simulirano
 
-```bash
-ng generate --help
-```
+- Autentikacija/sesija, trenutni korisnik, tagovi/interesovanja, favoriti, kolekcije i glavni tokovi za listanje i prikaz detalja sadržaja integrisani su sa backend-om.
+- Neki lokalni `data/` fajlovi po funkcionalnostima i dalje postoje kao fiksni primeri podataka ili rezervni sadržaj za izolovane UI celine, ali ponašanje kolekcija, autentikacije i profila tokom rada aplikacije više nije zasnovano samo na mock podacima.
 
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Za full-stack podešavanje, backend tajne i demo kredencijale pogledajte u [README](../README.md) fajlu u korenu repozitorijuma.

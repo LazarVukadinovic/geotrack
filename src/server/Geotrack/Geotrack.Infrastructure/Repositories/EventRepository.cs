@@ -1,4 +1,4 @@
-﻿using Geotrack.Application.Interfaces.Repository;
+using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Microsoft.EntityFrameworkCore;
@@ -58,5 +58,15 @@ public class EventRepository : Repository<Event>, IEventRepository
     public async Task AddReviewAsync(EventReview review)
     {
         await _context.EventReviews.AddAsync(review);
+    }
+
+    public async Task<List<Event>> SearchByNameAsync(string query)
+    {
+        var normalizedQuery = query.ToLower();
+        return await _context.Events
+            .Include(e => e.Location)
+            .Include(e => e.Place)
+            .Where(e => e.Name.ToLower().Contains(normalizedQuery))
+            .ToListAsync();
     }
 }

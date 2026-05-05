@@ -11,6 +11,7 @@ export interface ExploreItem {
   location: string;
   image: string;
   rating?: number;
+  reviewCount?: string;
   isSaved: boolean;
   openingHours?: string;
   isRecommended?: boolean;

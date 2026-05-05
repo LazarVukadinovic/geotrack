@@ -28,6 +28,8 @@ public class Destination
     public double Latitude { get; set; }
     public double Longitude { get; set; }
 
+    public ICollection<EntityImage> Images { get; set; } = new List<EntityImage>();
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

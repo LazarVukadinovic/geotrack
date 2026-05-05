@@ -12,4 +12,5 @@ public interface IPlaceRepository : IRepository<Place>
     Task<List<PlaceReview>> GetReviewsByPlaceIdAsync(int placeId);
     Task<bool> HasUserReviewedPlaceAsync(int placeId, int userId);
     Task AddReviewAsync(PlaceReview review);
+    Task<List<Place>> SearchByNameAsync(string query);
 }

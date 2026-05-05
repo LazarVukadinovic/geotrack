@@ -1,4 +1,4 @@
-﻿using Geotrack.Application.DTOs.Destinations;
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
@@ -10,25 +10,76 @@ namespace Geotrack.Server.Controllers;
 [Route("api/destinations")]
 public class DestinationController : ControllerBase
 {
-    private readonly IDestinationService _destinationService;
+    private const string UnexpectedErrorMessage = "An unexpected error occurred.";
 
-    public DestinationController(IDestinationService destinationService)
+    private readonly IDestinationService _destinationService;
+    private readonly IExploreService _exploreService;
+    private readonly ILogger<DestinationController> _logger;
+
+    public DestinationController(
+        IDestinationService destinationService,
+        IExploreService exploreService,
+        ILogger<DestinationController> logger)
     {
         _destinationService = destinationService;
+        _exploreService = exploreService;
+        _logger = logger;
     }
 
+    [Obsolete("Use GET /api/explore?latitude={latitude}&longitude={longitude}. This compatibility endpoint is bounded by the shared Explore service.")]
     [HttpPost("explore-by-location")]
     public async Task<IActionResult> ExploreByLocation([FromBody] ExploreByLocationRequestDto request)
     {
-        var query = new ExploreByLocationQueryDto
+        if (!HasValidCoordinates(request.Latitude, request.Longitude))
         {
-            Latitude = request.Latitude,
-            Longitude = request.Longitude,
-            UserId = TryGetUserId()
-        };
+            return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
+        }
 
-        var result = await _destinationService.ExploreByLocationAsync(query);
-        return Ok(result);
+        Response.Headers["Deprecation"] = "true";
+        Response.Headers["Link"] = "</api/explore>; rel=\"successor-version\"";
+
+        try
+        {
+            var result = await _exploreService.GetExplorePageAsync(
+                request.Latitude,
+                request.Longitude,
+                TryGetUserId());
+
+            return Ok(MapLegacyExploreResponse(result));
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] string? query)
+    {
+        var results = await _destinationService.SearchAsync(query ?? string.Empty);
+        return Ok(results);
+    }
+
+    [HttpGet("{destinationId}/search")]
+    public async Task<IActionResult> SearchWithinDestination(
+        [FromRoute] int destinationId,
+        [FromQuery] string? query,
+        [FromQuery] string? types)
+    {
+        try
+        {
+            var typeList = types?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var results = await _destinationService.SearchWithinDestinationAsync(
+                destinationId,
+                query ?? string.Empty,
+                typeList);
+
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
     }
 
     [HttpGet("{id}")]
@@ -60,11 +111,20 @@ public class DestinationController : ControllerBase
     }
 
     [HttpGet("{id}/reviews")]
-    public async Task<IActionResult> GetDestinationReviews([FromRoute] int id)
+    public async Task<IActionResult> GetDestinationReviews(
+        [FromRoute] int id,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
     {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
         try
         {
-            var result = await _destinationService.GetDestinationReviewsAsync(id);
+            var result = await _destinationService.GetDestinationReviewsAsync(id, skip, take);
             return Ok(result);
         }
         catch (Exception ex)
@@ -98,13 +158,159 @@ public class DestinationController : ControllerBase
         return int.TryParse(userIdClaim, out var userId) ? userId : null;
     }
 
+    private static ExploreByLocationResponseDto MapLegacyExploreResponse(ExplorePageDto page)
+    {
+        var sections = new List<ExploreSectionDto>();
+
+        AddSection(
+            sections,
+            "events-this-week",
+            "Events This Week",
+            page.EventsThisWeek.Select(item => new ExplorePreviewItemDto
+            {
+                EntityType = "event",
+                EntityId = item.Id,
+                Name = item.Title,
+                Description = item.Subtitle ?? string.Empty
+            }));
+
+        AddSection(
+            sections,
+            "top-stays",
+            "Top Stays",
+            page.TopStays.Select(item => new ExplorePreviewItemDto
+            {
+                EntityType = "place",
+                EntityId = item.Id,
+                Name = item.Title,
+                Description = item.Distance ?? string.Empty,
+                AverageRating = item.Rating ?? 0
+            }));
+
+        AddSection(
+            sections,
+            "popular-nearby",
+            "Popular Nearby",
+            page.PopularNearby.Select(item => new ExplorePreviewItemDto
+            {
+                EntityType = "place",
+                EntityId = item.Id,
+                Name = item.Title,
+                Description = item.CategoryLabel ?? string.Empty,
+                AverageRating = item.Rating ?? 0
+            }));
+
+        AddSection(
+            sections,
+            "must-see-attractions",
+            "Must-See Attractions",
+            page.MustSeeAttractions.Select(item => new ExplorePreviewItemDto
+            {
+                EntityType = "place",
+                EntityId = item.Id,
+                Name = item.Title,
+                Description = item.Type ?? string.Empty
+            }));
+
+        AddSection(
+            sections,
+            "local-favorites",
+            "Local Favorites",
+            page.LocalFavorites.Select(item => new ExplorePreviewItemDto
+            {
+                EntityType = "place",
+                EntityId = item.Id,
+                Name = item.Title,
+                Description = item.Description ?? item.Type ?? string.Empty,
+                AverageRating = item.Rating ?? 0
+            }));
+
+        AddSection(
+            sections,
+            "curated-for-you",
+            "Curated For You",
+            page.CuratedForYou.Select(item => new ExplorePreviewItemDto
+            {
+                EntityType = "place",
+                EntityId = item.Id,
+                Name = item.Title,
+                Description = item.Subtitle ?? item.CategoryLabel ?? string.Empty
+            }));
+
+        return new ExploreByLocationResponseDto
+        {
+            SelectedDestination = page.SelectedDestination,
+            Sections = sections
+        };
+    }
+
+    private static void AddSection(
+        List<ExploreSectionDto> sections,
+        string key,
+        string title,
+        IEnumerable<ExplorePreviewItemDto> items)
+    {
+        var pageItems = items.ToList();
+        if (pageItems.Count == 0)
+        {
+            return;
+        }
+
+        sections.Add(new ExploreSectionDto
+        {
+            Key = key,
+            Title = title,
+            Items = pageItems
+        });
+    }
+
+    private ActionResult? ValidatePaging(int skip, int take)
+    {
+        if (skip < 0)
+        {
+            return BadRequest(new { error = "skip must be zero or greater." });
+        }
+
+        if (take <= 0)
+        {
+            return BadRequest(new { error = "take must be greater than zero." });
+        }
+
+        return null;
+    }
+
+    private static bool HasValidCoordinates(double latitude, double longitude)
+    {
+        return !double.IsNaN(latitude) &&
+               !double.IsNaN(longitude) &&
+               !double.IsInfinity(latitude) &&
+               !double.IsInfinity(longitude) &&
+               latitude >= -90 &&
+               latitude <= 90 &&
+               longitude >= -180 &&
+               longitude <= 180 &&
+               (latitude != 0d || longitude != 0d);
+    }
+
     private IActionResult MapException(Exception ex)
     {
         return ex switch
         {
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
-            _ => StatusCode(500, new { message = ex.Message })
+            _ => HandleUnexpectedException(ex)
         };
+    }
+
+    private IActionResult HandleUnexpectedException(Exception ex)
+    {
+        var httpContext = ControllerContext.HttpContext;
+        _logger.LogError(
+            ex,
+            "Unexpected exception while handling {Method} {Path}.",
+            httpContext?.Request.Method ?? "unknown",
+            httpContext?.Request.Path.Value ?? "unknown");
+
+        return StatusCode(StatusCodes.Status500InternalServerError, new { message = UnexpectedErrorMessage });
     }
 }

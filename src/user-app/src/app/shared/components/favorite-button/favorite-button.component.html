@@ -1,0 +1,26 @@
+<app-icon-button
+  variant="on-media"
+  [compact]="true"
+  [pressed]="saved()"
+  [ariaLabel]="ariaLabel()"
+  [stopPropagation]="true"
+  (clicked)="onClick()"
+>
+  <svg
+    class="favorite-button__icon"
+    [style.color]="saved() ? '#e8570a' : 'rgba(26, 43, 76, 0.82)'"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+  >
+    <path
+      [attr.fill]="saved() ? 'currentColor' : 'none'"
+      [attr.stroke]="saved() ? 'none' : 'currentColor'"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+    />
+  </svg>
+</app-icon-button>

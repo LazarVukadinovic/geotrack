@@ -15,4 +15,5 @@ public class CollectionListItemDto
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public int ItemsCount { get; set; }
+    public List<string> CoverImages { get; set; } = new();
 }

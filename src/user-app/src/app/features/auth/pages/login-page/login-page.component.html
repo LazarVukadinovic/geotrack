@@ -18,7 +18,7 @@
 
     <!-- Email -->
     <div class="mb-4">
-      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
+      <label for="login-email" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Email Address
       </label>
       <div class="relative">
@@ -29,7 +29,10 @@
           </svg>
         </div>
         <input
+          id="login-email"
+          name="email"
           type="email"
+          autocomplete="email"
           [(ngModel)]="email"
           placeholder="name@example.com"
           class="w-full pl-10 pr-4 py-4 bg-white border border-slate-200 rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8570a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
@@ -39,7 +42,7 @@
 
     <!-- Password -->
     <div class="mb-4">
-      <label class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
+      <label for="login-password" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
         Password
       </label>
       <div class="relative">
@@ -50,10 +53,12 @@
           </svg>
         </div>
         <input
+          id="login-password"
+          name="password"
           [type]="showPassword ? 'text' : 'password'"
           [(ngModel)]="password"
           placeholder="Enter your password"
-          autocomplete="new-password"
+          autocomplete="current-password"
           class="w-full pl-10 pr-12 py-4 bg-white border border-slate-200 rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8570a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
         />
         @if (password.length > 0) {
@@ -94,18 +99,30 @@
         </button>
         <span class="text-base text-slate-500">Remember me</span>
       </label>
-      <button type="button" class="text-base font-bold text-[#e8570a]">Forgot password?</button>
+      <span class="text-sm text-slate-400 text-right">Password reset is not available.</span>
     </div>
+
+    <!-- Error message -->
+    @if (errorMessage) {
+      <div class="mb-3 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 text-center">
+        {{ errorMessage }}
+      </div>
+    }
 
     <!-- Sign in button -->
     <button
       type="button"
       (click)="onSignIn()"
-      class="w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-2 transition-all duration-200">
-      Sign In
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
-      </svg>
+      [disabled]="isLoading"
+      class="w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-60 disabled:pointer-events-none">
+      @if (isLoading) {
+        Signing in…
+      } @else {
+        Sign In
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      }
     </button>
   </div>
 

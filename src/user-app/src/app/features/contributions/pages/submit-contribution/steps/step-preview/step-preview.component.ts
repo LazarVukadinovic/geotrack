@@ -1,15 +1,17 @@
 import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ContributionDraft } from '../../submit-contribution.component';
+import { BackgroundImageFallbackDirective } from '../../../../../../shared/directives/background-image-fallback.directive';
 
 @Component({
   selector: 'app-step-preview',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, BackgroundImageFallbackDirective],
   templateUrl: './step-preview.component.html',
 })
 export class StepPreviewComponent {
   draft = input.required<ContributionDraft>();
+  isAccommodation = input(false);
   confirmed = output<void>();
   back = output<void>();
 
@@ -32,5 +34,5 @@ export class StepPreviewComponent {
 
 getAmenityLabel(id: string): string { return this.amenityMap[id]?.label ?? id; }
 getPartnerLabel(id: string): string { return this.partnerMap[id]?.label ?? id; }
- 
+
 }

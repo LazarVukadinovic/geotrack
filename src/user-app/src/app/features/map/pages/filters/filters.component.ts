@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 
 interface Category {
   id: string;
@@ -15,40 +16,23 @@ interface Category {
 })
 export class Filters {
   selectedCategories: string[] = [];
-  selectedDistance = 'Any';
-  selectedRating = 'Any';
 
   allCategories: Category[] = [
-    { id: 'restaurants', label: 'Restaurants'},
-    { id: 'hotels',      label: 'Hotels'},
-    { id: 'attractions', label: 'Attractions'},
-    { id: 'events',      label: 'Events'},
-    { id: 'shopping',    label: 'Shopping'},
-    { id: 'cafes',       label: 'Cafés'},
-    { id: 'bars',        label: 'Bars'},
-    { id: 'parks',       label: 'Parks'},
-    { id: 'museums',     label: 'Museums'},
-    { id: 'transport',   label: 'Transport'},
-    { id: 'health',      label: 'Health'},
-    { id: 'sports',      label: 'Sports'},
+    { id: 'places', label: 'Places' },
+    { id: 'stays', label: 'Stays' },
+    { id: 'events', label: 'Events' },
   ];
 
-  distances = ['Any', '0.5km', '1km', '2km', '5km'];
-  ratings   = ['Any', '3', '4', '4.5'];
-
-  constructor(private router: Router) {
-    const saved = sessionStorage.getItem('mapFilters');
-    if (saved) {
-      const f = JSON.parse(saved);
-      this.selectedCategories = f.categories ?? [];
-      this.selectedDistance   = f.distance   ?? 'Any';
-      this.selectedRating     = f.rating     ?? 'Any';
-    }
+  constructor(
+    private router: Router,
+    private analytics: AnalyticsService,
+  ) {
+    this.selectedCategories = this.readSavedCategories();
   }
 
   toggleCategory(cat: Category): void {
     if (this.isSelected(cat)) {
-      this.selectedCategories = this.selectedCategories.filter(id => id !== cat.id);
+      this.selectedCategories = this.selectedCategories.filter((id) => id !== cat.id);
     } else {
       this.selectedCategories = [...this.selectedCategories, cat.id];
     }
@@ -59,28 +43,71 @@ export class Filters {
   }
 
   clearAll(): void {
+    const previousCategories = this.readSavedCategories();
+    const hadEffectiveFilters = previousCategories.length > 0 || this.selectedCategories.length > 0;
     this.selectedCategories = [];
-    this.selectedDistance   = 'Any';
-    this.selectedRating     = 'Any';
     sessionStorage.removeItem('mapFilters');
+    if (hadEffectiveFilters) {
+      this.analytics.track('filter_applied', {
+        metadata: {
+          surface: 'map_filters',
+          categories: [],
+          cleared: true,
+        },
+      });
+    }
     this.router.navigate(['/map'], {
-      state: { fromFilters: true, cleared: true }
+      state: { fromFilters: true, cleared: true },
     });
   }
 
   applyFilters(): void {
+    const previousCategories = this.readSavedCategories();
+    const nextCategories = this.normalizeCategories(this.selectedCategories);
     sessionStorage.setItem('mapFilters', JSON.stringify({
-      categories: this.selectedCategories,
-      distance:   this.selectedDistance,
-      rating:     this.selectedRating,
+      categories: nextCategories,
     }));
 
+    if (!this.sameCategories(previousCategories, nextCategories)) {
+      this.analytics.track('filter_applied', {
+        metadata: {
+          surface: 'map_filters',
+          categories: nextCategories,
+        },
+      });
+    }
+
     this.router.navigate(['/map'], {
-      state: { applyFilters: true, fromFilters: true }
+      state: { applyFilters: true, fromFilters: true },
     });
   }
 
   goBack(): void {
     this.router.navigate(['/map']);
+  }
+
+  private readSavedCategories(): string[] {
+    const saved = sessionStorage.getItem('mapFilters');
+    if (!saved) return [];
+
+    try {
+      const parsed = JSON.parse(saved) as { categories?: unknown };
+      return Array.isArray(parsed.categories)
+        ? this.normalizeCategories(parsed.categories.filter((value): value is string => typeof value === 'string'))
+        : [];
+    } catch {
+      sessionStorage.removeItem('mapFilters');
+      return [];
+    }
+  }
+
+  private normalizeCategories(categories: string[]): string[] {
+    const allowed = new Set(this.allCategories.map((category) => category.id));
+    return [...new Set(categories.filter((category) => allowed.has(category)))].sort();
+  }
+
+  private sameCategories(left: string[], right: string[]): boolean {
+    if (left.length !== right.length) return false;
+    return left.every((value, index) => value === right[index]);
   }
 }

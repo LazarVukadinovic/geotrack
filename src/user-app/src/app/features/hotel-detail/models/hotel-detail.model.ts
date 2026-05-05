@@ -1,3 +1,5 @@
+import type { EntityImage } from '../../../core/models/entity-image.model';
+
 export interface HotelTag {
   label: string;
 }
@@ -10,13 +12,14 @@ export interface HotelReview {
   timeAgo: string;
   body: string;
   helpfulCount: number;
+  reportedByCurrentUser: boolean;
 }
 
 export interface HotelSimilar {
   id: string;
   title: string;
   image: string;
-  rating: number;
+  rating?: number;
   distance: string;
   isSaved: boolean;
 }
@@ -43,19 +46,25 @@ export interface HotelBookingPartner {
   id: string;
   name: string;
   variant: BookingPartnerVariant;
+  url?: string | null;
 }
 
 export interface HotelDetail {
   id: string;
   title: string;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   heroImage: string;
+  images: EntityImage[];
   tags: HotelTag[];
-  rating: number;
-  reviewCount: string;
+  rating?: number;
+  reviewCount?: string;
   distance: string;
-  pricePerNight: number;
+  pricePerNight: number | null;
   about: string;
+  contactEmail?: string | null;
+  phoneNumber?: string | null;
   bookingPartners: HotelBookingPartner[];
   amenities: HotelAmenity[];
   reviews: HotelReview[];

@@ -23,9 +23,10 @@ public class LocationService : ILocationService
         var location = await _locationRepository.GetWithDetailsAsync(locationId)
             ?? throw new KeyNotFoundException("Locations not found");
 
-        var reviews = location.LocationReviews.ToList();
-        var averageRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
-        var reviewsCount = reviews.Count;
+        var reviewsCount = await _locationRepository.CountReviewsByLocationIdAsync(locationId);
+        var averageRating = reviewsCount > 0
+            ? Math.Round((await _locationRepository.GetAverageRatingByLocationIdAsync(locationId)) ?? 0, 2)
+            : 0;
 
         var isSaved = false;
         var savedCollectionIds = new List<int>();
@@ -111,20 +112,36 @@ public class LocationService : ILocationService
         };
     }
 
-    public async Task<GetLocationReviewsResponseDto> GetLocationReviewsAsync(int locationId)
+    public async Task<GetLocationReviewsResponseDto> GetLocationReviewsAsync(
+        int locationId,
+        int skip = 0,
+        int take = ReviewPaging.DefaultTake)
     {
-        var location = await _locationRepository.GetByIDAsync(locationId);
+        var location = await _locationRepository.GetByIdAsync(locationId);
         if (location == null)
             throw new KeyNotFoundException("Locations not found");
 
-        var reviews = await _locationRepository.GetReviewsByLocationIdAsync(locationId);
-        var averageRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 2) : 0;
+        var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
+        var normalizedTake = ReviewPaging.NormalizeTake(take);
+        var reviewsCount = await _locationRepository.CountReviewsByLocationIdAsync(locationId);
+        var averageRating = reviewsCount > 0
+            ? Math.Round((await _locationRepository.GetAverageRatingByLocationIdAsync(locationId)) ?? 0, 2)
+            : 0;
+        var reviews = await _locationRepository.GetReviewsByLocationIdAsync(
+            locationId,
+            normalizedSkip,
+            normalizedTake);
 
         return new GetLocationReviewsResponseDto
         {
             LocationId = locationId,
             AverageRating = averageRating,
-            ReviewsCount = reviews.Count,
+            ReviewsCount = reviewsCount,
+            TotalCount = reviewsCount,
+            Skip = normalizedSkip,
+            Take = normalizedTake,
+            NextSkip = normalizedSkip + reviews.Count,
+            HasMore = reviewsCount > normalizedSkip + reviews.Count,
             Reviews = reviews.Select(r => new LocationReviewItemDto
             {
                 Id = r.Id,
@@ -145,7 +162,7 @@ public class LocationService : ILocationService
         if ((request.Comment ?? string.Empty).Length > 1000)
             throw new InvalidOperationException("Comment is too long");
 
-        var location = await _locationRepository.GetByIDAsync(locationId);
+        var location = await _locationRepository.GetByIdAsync(locationId);
         if (location == null)
             throw new KeyNotFoundException("Locations not found");
 

@@ -3,7 +3,7 @@ export interface HotelListItem {
   title: string;
   location: string;
   image: string;
-  rating: number;
+  rating?: number;
   reviewCount?: string;
   distance: string;
   pricePerNight: number;

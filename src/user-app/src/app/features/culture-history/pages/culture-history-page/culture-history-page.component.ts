@@ -7,36 +7,38 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { CultureHistoryService } from '../../services/culture-history.service';
 import { CultureHistoryScrollStateService } from '../../services/culture-history-scroll-state.service';
 import { CULTURE_HISTORY_FILTERS } from '../../models/culture-history.model';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
+import { PageTopNavComponent } from '../../../../shared/components/page-top-nav/page-top-nav.component';
 
 @Component({
   selector: 'app-culture-history-page',
   standalone: true,
-  imports: [],
+  imports: [EmptyStateComponent, PageTopNavComponent],
   templateUrl: './culture-history-page.component.html',
   styleUrl: './culture-history-page.component.scss',
 })
 export class CultureHistoryPageComponent implements AfterViewInit {
   private readonly service     = inject(CultureHistoryService);
-  private readonly location    = inject(Location);
   private readonly router      = inject(Router);
   private readonly scrollState = inject(CultureHistoryScrollStateService);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
+  private readonly analytics   = inject(AnalyticsService);
 
   protected readonly filters      = CULTURE_HISTORY_FILTERS;
   protected readonly activeFilter = signal('all');
+  protected readonly loadError    = this.service.loadError;
+  protected readonly loadMoreError = this.service.loadMoreError;
+  protected readonly loading = this.service.loading;
+  protected readonly loadingMore = this.service.loadingMore;
+  protected readonly hasMore = this.service.hasMore;
 
-  protected readonly filteredItems = computed(() => {
-    const filter = this.activeFilter();
-    const items  = this.service.items();
-    if (filter === 'all') return items;
-    return items.filter((item) => item.tags.includes(filter));
-  });
+  protected readonly filteredItems = computed(() => this.service.items());
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -96,7 +98,13 @@ export class CultureHistoryPageComponent implements AfterViewInit {
   }
 
   protected setFilter(id: string): void {
+    if (this.activeFilter() === id) return;
     this.activeFilter.set(id);
+    this.service.setFilter(id);
+    this.analytics.track('filter_applied', {
+      entityType: 'place',
+      metadata: { surface: 'culture_history_listing', filter: id },
+    });
   }
 
   protected toggleSaved(event: Event, id: string): void {
@@ -120,7 +128,7 @@ export class CultureHistoryPageComponent implements AfterViewInit {
     this.router.navigate(['/places', id]);
   }
 
-  protected goBack(): void {
-    this.location.back();
+  protected loadMore(): void {
+    this.service.loadMore();
   }
 }

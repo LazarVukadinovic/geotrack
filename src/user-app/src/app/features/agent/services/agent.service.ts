@@ -1,20 +1,50 @@
-import { Injectable, signal } from '@angular/core';
-import type { ChatMessage } from '../models/agent.model';
-import {
-  AGENT_WELCOME_MESSAGE,
-  MOCK_FALLBACK_RESPONSE,
-  MOCK_RESPONSE_ENTRIES,
-} from '../data/mock-agent.data';
+import { Injectable, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { AnalyticsService } from '../../../core/services/analytics.service';
+import type { ChatMessage, SuggestionPill } from '../models/agent.model';
 
-/**
- * AgentService — owns all chat state for the Ask Agent feature.
- *
- * Architecture note: mock responses are produced by `buildMockResponse()`.
- * To connect a real MCP / REST backend, replace that method with an HTTP call
- * and pipe the Observable into the same `_messages` / `_isTyping` update flow.
- */
+const AGENT_SUGGESTION_PILLS: SuggestionPill[] = [
+  { label: 'Top Attractions', prompt: 'Show me top attractions' },
+  { label: 'Best Restaurants', prompt: 'Recommend restaurants' },
+  { label: 'Stays', prompt: 'Show me places to stay' },
+  { label: 'Events', prompt: 'What events are happening?' },
+];
+
+const AGENT_WELCOME_MESSAGE: ChatMessage = {
+  id: 'welcome',
+  role: 'assistant',
+  type: 'text',
+  text: 'Ask Agent can search the GeoTrack catalog. Live AI planning is not connected yet.',
+  suggestionPills: AGENT_SUGGESTION_PILLS,
+  timestamp: new Date(),
+};
+
+interface ApiAgentResponse {
+  id: string;
+  role: string;
+  type: string;
+  text?: string;
+  cardsTitle?: string;
+  cards?: {
+    id: number;
+    entityType?: string;
+    detailUrl?: string | null;
+    title: string;
+    description?: string;
+    image?: string;
+    rating?: number | null;
+    durationHours?: number | null;
+    distanceKm?: number | null;
+    isFavorite: boolean;
+  }[];
+  suggestionPills?: { label: string; prompt: string }[];
+  timestamp: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AgentService {
+  private readonly http = inject(HttpClient);
+  private readonly analytics = inject(AnalyticsService);
   private readonly _messages = signal<ChatMessage[]>([
     { ...AGENT_WELCOME_MESSAGE, timestamp: new Date() },
   ]);
@@ -23,7 +53,6 @@ export class AgentService {
 
   readonly messages = this._messages.asReadonly();
   readonly isTyping = this._isTyping.asReadonly();
-  /** True after the user has sent at least one message — used to hide suggestion pills. */
   readonly hasSentMessage = this._hasSentMessage.asReadonly();
 
   sendMessage(text: string): void {
@@ -42,28 +71,58 @@ export class AgentService {
     this._hasSentMessage.set(true);
     this._isTyping.set(true);
 
-    // Simulate network latency. Replace setTimeout + buildMockResponse()
-    // with a real HTTP / WebSocket call when connecting the backend.
-    const delay = 1000 + Math.random() * 800;
-    setTimeout(() => {
-      this._isTyping.set(false);
-      const response = this.buildMockResponse(trimmed);
-      this._messages.update(msgs => [...msgs, response]);
-    }, delay);
-  }
+    // Privacy: never persist the prompt text via analytics — only its length
+    // and a fast non-cryptographic hash for grouping similar prompts.
+    this.analytics.track('agent_prompt_sent', {
+      metadata: { length: trimmed.length, promptHash: hashPrompt(trimmed) },
+    });
 
-  // ── Mock response logic (swap this for real API adapter) ──────────────────
-
-  private buildMockResponse(userText: string): ChatMessage {
-    const lower = userText.toLowerCase();
-    const entry = MOCK_RESPONSE_ENTRIES.find(e =>
-      e.keywords.some(kw => lower.includes(kw)),
-    );
-    const payload = entry ? entry.build() : { ...MOCK_FALLBACK_RESPONSE };
-    return {
-      ...payload,
-      id: crypto.randomUUID(),
-      timestamp: new Date(),
-    };
+    this.http.post<ApiAgentResponse>('/api/agent/message', { text: trimmed }).subscribe({
+      next: (res) => {
+        this._isTyping.set(false);
+        const response: ChatMessage = {
+          id: res.id || crypto.randomUUID(),
+          role: 'assistant',
+          type: (res.type as ChatMessage['type']) || 'text',
+          text: res.text ?? '',
+          cardsTitle: res.cardsTitle,
+          cards: res.cards?.map(c => ({
+            id: String(c.id),
+            entityType: c.entityType ?? 'place',
+            detailUrl: c.detailUrl ?? null,
+            title: c.title,
+            description: c.description ?? '',
+            image: c.image ?? '',
+            rating: c.rating ?? null,
+            durationHours: c.durationHours ?? null,
+            distanceKm: c.distanceKm ?? null,
+            isFavorite: c.isFavorite,
+          })),
+          suggestionPills: res.suggestionPills,
+          timestamp: new Date(res.timestamp),
+        };
+        this._messages.update(msgs => [...msgs, response]);
+      },
+      error: () => {
+        this._isTyping.set(false);
+        this._messages.update(msgs => [...msgs, {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          type: 'text',
+          text: 'Ask Agent is unavailable right now. No offline or mock answer was shown.',
+          timestamp: new Date(),
+        }]);
+      },
+    });
   }
+}
+
+// Cheap djb2 hash. Returns an 8-char hex string. Not cryptographic — only
+// good enough to group identical/very-similar prompts in admin analytics.
+function hashPrompt(text: string): string {
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
 }

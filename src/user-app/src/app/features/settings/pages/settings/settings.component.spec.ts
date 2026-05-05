@@ -1,18 +1,44 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { RouterTestingModule } from '@angular/router/testing';
+import { signal } from '@angular/core';
+import { Router } from '@angular/router';
+import { vi } from 'vitest';
 import { SettingsComponent } from './settings.component';
+import { AuthService } from '../../../../core/services/auth.service';
+import { UserService } from '../../../../core/services/user.service';
 
 describe('Settings', () => {
   let component: SettingsComponent;
   let fixture: ComponentFixture<SettingsComponent>;
 
+  const router = {
+    navigate: vi.fn(),
+  };
+
+  const authService = {
+    logout: vi.fn(),
+  };
+
+  const userService = {
+    fullName: signal('Test User'),
+    email: signal('test@example.com'),
+    avatarUrl: signal('/media/uploads/avatars/test-user.png'),
+  };
+
   beforeEach(async () => {
+    vi.clearAllMocks();
+
     await TestBed.configureTestingModule({
-      imports: [SettingsComponent, RouterTestingModule],
+      imports: [SettingsComponent],
+      providers: [
+        { provide: Router, useValue: router },
+        { provide: AuthService, useValue: authService },
+        { provide: UserService, useValue: userService },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SettingsComponent);
     component = fixture.componentInstance;
+    fixture.detectChanges();
     await fixture.whenStable();
   });
 
@@ -20,21 +46,34 @@ describe('Settings', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should load user profile from localStorage', () => {
-    localStorage.setItem('userProfile', JSON.stringify({
-      fullName: 'Test User',
-      email: 'test@example.com',
-    }));
-    const f2 = TestBed.createComponent(SettingsComponent);
-    const c2 = f2.componentInstance;
-    expect(c2.fullName).toBe('Test User');
-    expect(c2.email).toBe('test@example.com');
-    localStorage.removeItem('userProfile');
+  it('should render the current user from UserService signals', () => {
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Test User');
+    expect(text).toContain('test@example.com');
   });
 
-  it('should clear localStorage on logOut', () => {
-    localStorage.setItem('test', 'value');
+  it('should log out and return to the profile tab', () => {
     component.logOut();
-    expect(localStorage.getItem('test')).toBeNull();
+
+    expect(authService.logout).toHaveBeenCalledTimes(1);
+    expect(router.navigate).toHaveBeenCalledWith(['/profile']);
+  });
+
+  it('should route the inactive settings rows to the new subpages', () => {
+    component.changePassword();
+    component.openNotifications();
+    component.openPrivacy();
+    component.openAnalytics();
+    component.openHelp();
+    component.contactSupport();
+    component.openTerms();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/change-password']);
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/notifications']);
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/privacy-settings']);
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/analytics']);
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/help-center']);
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/contact-support']);
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/terms-and-privacy']);
   });
 });

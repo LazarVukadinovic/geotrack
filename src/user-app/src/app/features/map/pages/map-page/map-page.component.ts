@@ -1,43 +1,99 @@
-import { Component, OnDestroy, AfterViewInit, ChangeDetectorRef } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { AfterViewInit, ChangeDetectorRef, Component, OnDestroy } from '@angular/core';
+import { CommonModule, Location as AngularLocation } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, {
-  Map as MapLibreMap,
   GeoJSONSource,
-  MapMouseEvent,
+  Map as MapLibreMap,
   MapStyleImageMissingEvent,
 } from 'maplibre-gl';
+import {
+  MapApiService,
+  MapEntityMarker,
+  MapMarkersMode,
+  MapMarkersResponse,
+  MapRouteResult,
+  MapSearchResult,
+  MapViewportBounds,
+} from '../../../../core/services/map-api.service';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
+import { LocationService } from '../../../../core/services/location.service';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
+import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
+import type { AnalyticsEntityType } from '../../../../core/services/analytics.types';
+import type { ResolvedLocation } from '../../../../core/models/location.model';
 
 const MAP_STYLE_URL = '/map-style.json';
-const OSRM_URL = 'https://router.project-osrm.org/route/v1/foot';
 
-interface Place {
-  name: string;
-  category: string;
-  rating: string;
-  distance: string;
-  status: string;
-  lat: number;
-  lon: number;
+const DESTINATION_ZOOM_THRESHOLD = 10;
+const VIEWPORT_DEBOUNCE_MS = 250;
+const VIEWPORT_CACHE_PADDING = 0.1;
+const LOCATION_CACHE_TTL_MS = 60 * 60 * 1000;
+const MAP_VIEW_STATE_KEY = 'mapViewState';
+const MAP_OPENED_THIS_SESSION_KEY = 'mapOpenedThisSession';
+const INITIAL_LOCATION_ZOOM = 13;
+const DETAIL_FOCUS_ZOOM = 16;
+
+interface MarkerEntry {
+  data: MapEntityMarker;
+  marker: maplibregl.Marker;
+  imageElement: HTMLImageElement;
 }
 
-const DISTANCE_RADIUS_KM: Record<string, number> = {
-  'Any': Infinity,
-  '0.5km': 0.5,
-  '1km': 1,
-  '2km': 2,
-  '5km': 5,
-};
+interface CachedViewport extends MapViewportBounds {
+  mode: MapMarkersMode;
+}
+
+interface StoredMapViewState {
+  center?: [number, number];
+  zoom?: number;
+}
+
+interface MapInitialView {
+  center: [number, number];
+  zoom: number;
+}
+
+interface MapNavigationState {
+  name?: string;
+  lat?: number;
+  lon?: number;
+  isUserLocation?: boolean;
+  fromFilters?: boolean;
+  cleared?: boolean;
+  mapFocus?: Partial<MapEntityMarker> | null;
+  mapPreviewRestore?: boolean;
+}
 
 @Component({
   selector: 'app-map-page',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ImageFallbackDirective],
   templateUrl: './map-page.component.html',
   styleUrl: './map-page.component.css',
 })
 export class MapPageComponent implements AfterViewInit, OnDestroy {
+  private readonly USER_SOURCE = 'user-location-source';
+  private readonly USER_LAYER = 'user-location-layer';
+  private readonly USER_RING = 'user-location-ring';
+  private readonly ROUTE_SOURCE = 'route-source';
+  private readonly ROUTE_LAYER = 'route-layer';
+  private readonly ROUTE_OUTLINE = 'route-layer-outline';
+
   private map!: MapLibreMap;
+  private searchTimeout?: ReturnType<typeof setTimeout>;
+  private filterCategories: string[] = [];
+  private readonly markersByKey = new Map<string, MarkerEntry>();
+  private readonly markerImageFallbackUsed = new Set<string>();
+  private readonly allowedCategoryIds = new Set(['places', 'stays', 'events']);
+  private viewportLoadTimeout?: ReturnType<typeof setTimeout>;
+  private requestSeq = 0;
+  private routeRequestSeq = 0;
+  private lastFetchedViewport: CachedViewport | null = null;
+  private isDestroyed = false;
+  private readonly initialMapFocus: MapEntityMarker | null;
+  private preserveSelectedPlaceFromNavigation = false;
+
+  currentMode: MapMarkersMode = 'entities';
 
   destinationName = 'Search Your Destination';
   destinationLat = 44.0165;
@@ -46,315 +102,200 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   isLoading = false;
   isLocating = false;
   isLoadingRoute = false;
-  activeTab = 'map';
-  selectedPlace: Place | null = null;
+  activeCategory = 'all';
   hasActiveFilters = false;
   isUserLocation = false;
-  activeDistance = 'Any';
-
-  private userLat: number | null = null;
-  private userLon: number | null = null;
-
-  private readonly USER_SOURCE   = 'user-location-source';
-  private readonly USER_LAYER    = 'user-location-layer';
-  private readonly USER_RING     = 'user-location-ring';
-  private readonly ROUTE_SOURCE  = 'route-source';
-  private readonly ROUTE_LAYER   = 'route-layer';
-  private readonly ROUTE_OUTLINE = 'route-layer-outline';
-
-  activeCategory = 'all';
-  categories = [
-    { id: 'all',         label: 'All' },
-    { id: 'restaurants', label: 'Restaurants' },
-    { id: 'hotels',      label: 'Hotels' },
-    { id: 'attractions', label: 'Attractions' },
-    { id: 'events',      label: 'Events' },
-    { id: 'shopping',    label: 'Shopping' },
-  ];
 
   searchQuery = '';
-  searchResults: any[] = [];
-  private searchTimeout?: ReturnType<typeof setTimeout>;
+  searchResults: MapSearchResult[] = [];
 
-  constructor(public router: Router, private cdr: ChangeDetectorRef) {
+  selectedPlace: MapEntityMarker | null = null;
+  emptyStateMessage = '';
+  loadErrorMessage = '';
+  routeErrorMessage = '';
+
+  categories = [
+    { id: 'all', label: 'All' },
+    { id: 'places', label: 'Places' },
+    { id: 'stays', label: 'Stays' },
+    { id: 'events', label: 'Events' },
+  ];
+
+  constructor(
+    public router: Router,
+    private readonly cdr: ChangeDetectorRef,
+    private readonly mapApi: MapApiService,
+    private readonly analytics: AnalyticsService,
+    private readonly locationSvc: LocationService,
+    private readonly angularLocation: AngularLocation,
+  ) {
     const nav = this.router.getCurrentNavigation();
-    const state = (nav?.extras?.state ?? history.state) as any;
-    const savedLocation = sessionStorage.getItem('mapLocation');
+    const state = (nav?.extras?.state ?? history.state) as MapNavigationState;
+    const savedLocation = this.readSessionJson<{
+      name?: string;
+      lat?: number;
+      lon?: number;
+      isUserLocation?: boolean;
+    }>('mapLocation');
 
     if (savedLocation) {
-      const loc = JSON.parse(savedLocation);
-      this.destinationName = loc.name ?? this.destinationName;
-      this.destinationLat  = loc.lat  ?? this.destinationLat;
-      this.destinationLon  = loc.lon  ?? this.destinationLon;
-      this.isUserLocation  = loc.isUserLocation === true;
-      if (loc.isUserLocation) { this.userLat = loc.lat; this.userLon = loc.lon; }
+      this.destinationName = savedLocation.name ?? this.destinationName;
+      this.destinationLat = savedLocation.lat ?? this.destinationLat;
+      this.destinationLon = savedLocation.lon ?? this.destinationLon;
+      this.isUserLocation = savedLocation.isUserLocation === true;
     }
+
     if (state?.name) {
       this.destinationName = state.name;
-      this.destinationLat  = state.lat ?? this.destinationLat;
-      this.destinationLon  = state.lon ?? this.destinationLon;
-      this.isUserLocation  = !!(state.isUserLocation);
+      this.destinationLat = state.lat ?? this.destinationLat;
+      this.destinationLon = state.lon ?? this.destinationLon;
+      this.isUserLocation = state.isUserLocation === true;
       sessionStorage.setItem('mapLocation', JSON.stringify({
-        name: this.destinationName, lat: this.destinationLat,
-        lon: this.destinationLon, isUserLocation: this.isUserLocation,
+        name: this.destinationName,
+        lat: this.destinationLat,
+        lon: this.destinationLon,
+        isUserLocation: this.isUserLocation,
       }));
     }
-    if (state?.fromFilters) this.activeCategory = 'all';
-    if (state?.cleared) { this.hasActiveFilters = false; }
-    else { this.hasActiveFilters = !!sessionStorage.getItem('mapFilters'); }
+
+    this.initialMapFocus = this.readMapFocus(state?.mapFocus);
+    if (this.initialMapFocus) {
+      this.destinationName = this.initialMapFocus.title;
+      this.destinationLat = this.initialMapFocus.latitude;
+      this.destinationLon = this.initialMapFocus.longitude;
+      this.isUserLocation = false;
+      this.selectedPlace = this.initialMapFocus;
+      this.preserveSelectedPlaceFromNavigation = true;
+    }
+
+    const savedFilters = this.readSessionJson<{ categories?: string[] }>('mapFilters');
+    if (savedFilters) {
+      this.filterCategories = (savedFilters.categories ?? []).filter((category) => this.allowedCategoryIds.has(category));
+      this.hasActiveFilters = this.filterCategories.length > 0;
+    }
+
+    if (state?.cleared) {
+      this.filterCategories = [];
+      this.hasActiveFilters = false;
+    }
   }
 
-  ngAfterViewInit(): void { setTimeout(() => this.initMap(), 0); }
+  ngAfterViewInit(): void {
+    setTimeout(() => void this.initMap(), 0);
+  }
 
   ngOnDestroy(): void {
-    this.map?.remove();
+    this.isDestroyed = true;
+    this.locationSvc.stopMapLocationUpdates();
+
+    if (this.viewportLoadTimeout) {
+      clearTimeout(this.viewportLoadTimeout);
+    }
+
+    if (this.map) {
+      this.persistMapViewState();
+
+      for (const entry of this.markersByKey.values()) {
+        entry.marker.remove();
+      }
+      this.markersByKey.clear();
+      this.markerImageFallbackUsed.clear();
+
+      this.map.remove();
+    }
+
     window.removeEventListener('resize', this.resizeHandler);
   }
 
-  private resizeHandler = () => this.map?.resize();
+  get isMoreActive(): boolean {
+    return this.hasActiveFilters;
+  }
 
-  private initMap(): void {
-    const container = document.getElementById('map');
-    if (!container) return;
+  zoomIn(): void {
+    this.map?.zoomIn({ duration: 300 });
+  }
 
-    this.map = new maplibregl.Map({
-      container,
-      style: MAP_STYLE_URL,
-      center: [this.destinationLon, this.destinationLat],
-      zoom: 13,
-      attributionControl: false,
-      fadeDuration: 0,
-      trackResize: true,
-    });
+  zoomOut(): void {
+    this.map?.zoomOut({ duration: 300 });
+  }
 
-    window.addEventListener('resize', this.resizeHandler);
-    this.map.touchZoomRotate.enable();
-    this.map.touchPitch.enable();
+  goBack(): void {
+    this.clearMapFocusHistoryState();
+    this.router.navigate(['/home']);
+  }
 
-    this.map.on('load', () => {
-      this.map.resize();
-      this.map.on('styleimagemissing', (e: MapStyleImageMissingEvent) => {
-        this.map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
+  onSearchInput(value: string): void {
+    clearTimeout(this.searchTimeout);
+    if (value.trim().length < 2) {
+      this.searchResults = [];
+      return;
+    }
+
+    this.searchTimeout = setTimeout(() => {
+      this.mapApi.search(value).subscribe({
+        next: (results) => {
+          this.searchResults = results;
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          this.searchResults = [];
+          this.cdr.detectChanges();
+        },
       });
-
-      const savedFilters = sessionStorage.getItem('mapFilters');
-      if (savedFilters) {
-        const f = JSON.parse(savedFilters);
-        this.activeDistance = f.distance ?? 'Any';
-        if (f.categories?.length > 0) this.applyMultipleFilters(f.categories);
-        else this.applyFilter('all');
-        this.applyDistanceFilter(this.activeDistance);
-      } else {
-        this.applyFilter(this.activeCategory);
-      }
-
-      if (this.isUserLocation) {
-        setTimeout(() => this.placeUserMarker(this.destinationLat, this.destinationLon), 300);
-      }
-    });
-
-    this.map.on('click', (e: MapMouseEvent) => {
-      const features = this.map.queryRenderedFeatures(e.point);
-      const poi = features.find((f: maplibregl.MapGeoJSONFeature) =>
-        f.properties?.['name'] && f.geometry.type === 'Point'
-      );
-
-      if (poi) {
-        const name = poi.properties?.['name'] ?? 'Unknown Place';
-        const type = poi.properties?.['class'] ?? poi.properties?.['type'] ?? poi.layer?.id ?? 'Place';
-        const coords = (poi.geometry as GeoJSON.Point).coordinates;
-        const poiLon = coords[0];
-        const poiLat = coords[1];
-
-        let distance = '—';
-        if (this.userLat !== null && this.userLon !== null) {
-          distance = this.formatDistance(this.haversineKm(this.userLat, this.userLon, poiLat, poiLon));
-        }
-
-        this.selectedPlace = {
-          name,
-          category: this.formatCategory(type),
-          rating: (3.5 + Math.random() * 1.5).toFixed(1),
-          distance,
-          status: 'Open Now • Closes 10 PM',
-          lat: poiLat,
-          lon: poiLon,
-        };
-        this.clearRoute();
-      } else {
-        this.selectedPlace = null;
-        this.clearRoute();
-      }
-      this.cdr.detectChanges();
-    });
+    }, 150);
   }
 
-  // ── Distance filter ───────────────────────────────────────────────────────
+  selectSearchResult(result: MapSearchResult): void {
+    const committedQuery = this.searchQuery.trim();
+    const resultCount = this.searchResults.length;
+    const selectedIndex = this.searchResults.findIndex((candidate) =>
+      candidate.name === result.name &&
+      candidate.latitude === result.latitude &&
+      candidate.longitude === result.longitude);
+    this.searchResults = [];
+    this.searchQuery = result.name;
+    this.destinationName = result.name;
+    this.destinationLat = result.latitude;
+    this.destinationLon = result.longitude;
+    this.isUserLocation = false;
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
+    this.selectedPlace = null;
+    this.routeErrorMessage = '';
+    this.clearRoute();
 
-  private applyDistanceFilter(distance: string): void {
-    const radiusKm = DISTANCE_RADIUS_KM[distance] ?? Infinity;
-    const poiLayers = ['poi_z14', 'poi_z15', 'poi_z16', 'poi_transit'];
-    const centerLat = this.userLat ?? this.destinationLat;
-    const centerLon = this.userLon ?? this.destinationLon;
+    sessionStorage.setItem('mapLocation', JSON.stringify({
+      name: result.name,
+      lat: result.latitude,
+      lon: result.longitude,
+      isUserLocation: false,
+    }));
 
-    if (radiusKm === Infinity) {
-      poiLayers.forEach(id => {
-        if (!this.map.getLayer(id)) return;
-        const savedFilters = sessionStorage.getItem('mapFilters');
-        if (savedFilters) {
-          const f = JSON.parse(savedFilters);
-          if (f.categories?.length > 0) this.applyMultipleFilters(f.categories);
-          else this.map.setFilter(id, null);
-        } else {
-          this.map.setFilter(id, null);
-        }
-      });
-      return;
-    }
-
-    const circleGeoJSON = this.makeCirclePolygon(centerLat, centerLon, radiusKm);
-    const RADIUS_SOURCE = 'distance-radius-source';
-
-    if (this.map.getSource(RADIUS_SOURCE)) {
-      (this.map.getSource(RADIUS_SOURCE) as GeoJSONSource).setData(circleGeoJSON);
-    } else {
-      this.map.addSource(RADIUS_SOURCE, { type: 'geojson', data: circleGeoJSON });
-    }
-
-    const withinFilter: maplibregl.FilterSpecification = ['within', circleGeoJSON];
-    poiLayers.forEach(id => {
-      if (!this.map.getLayer(id)) return;
-      const currentFilter = this.map.getFilter(id);
-      if (currentFilter && (currentFilter as any[])[0] !== 'within') {
-        this.map.setFilter(id, ['all', currentFilter, withinFilter] as any);
-      } else {
-        this.map.setFilter(id, withinFilter as any);
-      }
+    this.map.jumpTo({ center: [result.longitude, result.latitude], zoom: 14 });
+    this.analytics.track('search_performed', {
+      metadata: {
+        surface: 'map',
+        queryLength: committedQuery.length || result.name.length,
+        resultCount,
+        selectedIndex: selectedIndex >= 0 ? selectedIndex : null,
+      },
     });
-
-    const degPerKm = 1 / 111;
-    const latDelta = radiusKm * degPerKm;
-    const lonDelta = radiusKm * degPerKm / Math.cos(centerLat * Math.PI / 180);
-    this.map.fitBounds(
-      [[centerLon - lonDelta, centerLat - latDelta], [centerLon + lonDelta, centerLat + latDelta]],
-      { padding: 40, duration: 800 }
-    );
+    this.invalidateMarkerCache();
+    this.scheduleViewportLoad(0);
   }
-
-  private makeCirclePolygon(lat: number, lon: number, radiusKm: number): GeoJSON.Feature<GeoJSON.Polygon> {
-    const points = 64;
-    const coords: [number, number][] = [];
-    for (let i = 0; i <= points; i++) {
-      const angle = (i / points) * 2 * Math.PI;
-      const dLat = (radiusKm / 111) * Math.cos(angle);
-      const dLon = (radiusKm / 111) * Math.sin(angle) / Math.cos(lat * Math.PI / 180);
-      coords.push([lon + dLon, lat + dLat]);
-    }
-    return {
-      type: 'Feature',
-      geometry: { type: 'Polygon', coordinates: [coords] },
-      properties: {}
-    };
-  }
-
-  // ── Routing (OSRM) ────────────────────────────────────────────────────────
-
-  openDirections(): void {
-    if (!this.selectedPlace) return;
-
-    if (this.userLat === null || this.userLon === null) {
-      const dest = `${this.selectedPlace.lat},${this.selectedPlace.lon}`;
-      const name = encodeURIComponent(this.selectedPlace.name);
-      window.open(`https://www.google.com/maps/search/?api=1&query=${name}@${dest}`, '_blank');
-      return;
-    }
-
-    this.isLoadingRoute = true;
-    this.cdr.detectChanges();
-
-    const origin = `${this.userLon},${this.userLat}`;
-    const dest   = `${this.selectedPlace.lon},${this.selectedPlace.lat}`;
-    const url    = `${OSRM_URL}/${origin};${dest}?overview=full&geometries=geojson`;
-
-    fetch(url)
-      .then(r => r.json())
-      .then(data => {
-        if (data.code !== 'Ok' || !data.routes?.length) {
-          this.isLoadingRoute = false; this.cdr.detectChanges(); return;
-        }
-        const geometry: GeoJSON.LineString = data.routes[0].geometry;
-        this.drawRoute(geometry);
-        const coords = geometry.coordinates as [number, number][];
-        const bounds = coords.reduce(
-          (b, c) => b.extend(c as maplibregl.LngLatLike),
-          new maplibregl.LngLatBounds(coords[0], coords[0])
-        );
-        this.map.fitBounds(bounds, { padding: 70, duration: 900 });
-        this.isLoadingRoute = false; this.cdr.detectChanges();
-      })
-      .catch(() => { this.isLoadingRoute = false; this.cdr.detectChanges(); });
-  }
-
-  private drawRoute(geometry: GeoJSON.LineString): void {
-    const data: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: [{ type: 'Feature', geometry, properties: {} }],
-    };
-    if (this.map.getSource(this.ROUTE_SOURCE)) {
-      (this.map.getSource(this.ROUTE_SOURCE) as GeoJSONSource).setData(data);
-      return;
-    }
-    this.map.addSource(this.ROUTE_SOURCE, { type: 'geojson', data });
-    this.map.addLayer({
-      id: this.ROUTE_OUTLINE, type: 'line', source: this.ROUTE_SOURCE,
-      layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.85 },
-    });
-    this.map.addLayer({
-      id: this.ROUTE_LAYER, type: 'line', source: this.ROUTE_SOURCE,
-      layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': '#e8722a', 'line-width': 5, 'line-opacity': 1 },
-    });
-  }
-
-  clearRoute(): void {
-    if (this.map?.getLayer(this.ROUTE_LAYER))   this.map.removeLayer(this.ROUTE_LAYER);
-    if (this.map?.getLayer(this.ROUTE_OUTLINE)) this.map.removeLayer(this.ROUTE_OUTLINE);
-    if (this.map?.getSource(this.ROUTE_SOURCE)) this.map.removeSource(this.ROUTE_SOURCE);
-  }
-
-  closePlace(): void { this.selectedPlace = null; this.clearRoute(); }
-
-  // ── User marker ───────────────────────────────────────────────────────────
-
-  private placeUserMarker(lat: number, lon: number): void {
-    const geojson: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: {} }],
-    };
-    if (this.map.getSource(this.USER_SOURCE)) {
-      (this.map.getSource(this.USER_SOURCE) as GeoJSONSource).setData(geojson);
-      return;
-    }
-    this.map.addSource(this.USER_SOURCE, { type: 'geojson', data: geojson });
-    this.map.addLayer({
-      id: this.USER_RING, type: 'circle', source: this.USER_SOURCE,
-      paint: { 'circle-radius': 18, 'circle-color': '#e8722a', 'circle-opacity': 0.2,
-               'circle-stroke-width': 1.5, 'circle-stroke-color': '#e8722a', 'circle-stroke-opacity': 0.4 },
-    });
-    this.map.addLayer({
-      id: this.USER_LAYER, type: 'circle', source: this.USER_SOURCE,
-      paint: { 'circle-radius': 9, 'circle-color': '#e8722a', 'circle-stroke-width': 3,
-               'circle-stroke-color': '#ffffff', 'circle-opacity': 1, 'circle-stroke-opacity': 1 },
-    });
-  }
-
-  // ── Locate me ─────────────────────────────────────────────────────────────
 
   locateMe(): void {
-    if (!navigator.geolocation || this.isLocating) return;
+    if (this.isLocating) return;
+    if (typeof navigator.geolocation?.getCurrentPosition !== 'function') {
+      void this.handleLocateFallback();
+      return;
+    }
+
     const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
-    if (!isSecure) return;
+    if (!isSecure) {
+      void this.handleLocateFallback();
+      return;
+    }
 
     this.isLocating = true;
     this.cdr.detectChanges();
@@ -363,138 +304,841 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       ({ coords }) => this.handleLocationSuccess(coords.latitude, coords.longitude),
       (err) => {
         if (err.code === GeolocationPositionError.PERMISSION_DENIED) {
-          this.isLocating = false; this.cdr.detectChanges(); return;
+          void this.handleLocateFallback();
+          return;
         }
+
         navigator.geolocation.getCurrentPosition(
           ({ coords }) => this.handleLocationSuccess(coords.latitude, coords.longitude),
-          (err2) => { console.warn('Location unavailable:', err2.message); this.isLocating = false; this.cdr.detectChanges(); },
-          { timeout: 15000, maximumAge: 0, enableHighAccuracy: true }
+          () => void this.handleLocateFallback(),
+          { timeout: 15_000, maximumAge: 0, enableHighAccuracy: true },
         );
       },
-      { timeout: 10000, maximumAge: 60000, enableHighAccuracy: false }
+      { timeout: 10_000, maximumAge: 60_000, enableHighAccuracy: false },
     );
   }
 
-  private handleLocationSuccess(lat: number, lon: number): void {
-    this.map.flyTo({ center: [lon, lat], zoom: 15, duration: 1000 });
-    if (this.map.isStyleLoaded()) this.placeUserMarker(lat, lon);
-    else this.map.once('load', () => this.placeUserMarker(lat, lon));
-    this.userLat = lat; this.userLon = lon; this.isUserLocation = true;
-    sessionStorage.setItem('mapLocation', JSON.stringify({ name: 'My Location', lat, lon, isUserLocation: true }));
-    this.isLocating = false;
-    this.cdr.detectChanges();
-  }
+  selectCategory(category: { id: string; label: string }): void {
+    if (this.activeCategory === category.id && !this.hasActiveFilters) {
+      return;
+    }
 
-  // ── Filters ───────────────────────────────────────────────────────────────
-
-  selectCategory(cat: { id: string; label: string }): void {
-    this.activeCategory = cat.id;
-    this.activeDistance = 'Any';
+    this.activeCategory = category.id;
+    this.filterCategories = [];
+    this.hasActiveFilters = false;
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
     this.selectedPlace = null;
+    this.routeErrorMessage = '';
     this.clearRoute();
     sessionStorage.removeItem('mapFilters');
-    this.hasActiveFilters = false;
-    if (this.map.isStyleLoaded()) this.applyFilter(cat.id);
-  }
 
-  private applyFilter(categoryId: string): void {
-    const poiLayers = ['poi_z14', 'poi_z15', 'poi_z16', 'poi_transit'];
-    const categoryMap: Record<string, string[]> = {
-      all: [],
-      restaurants: ['restaurant','cafe','fast_food','bar','pub'],
-      hotels: ['hotel','hostel','motel','guest_house','lodging'],
-      attractions: ['attraction','museum','monument','gallery','viewpoint','tourism'],
-      events: ['theatre','cinema','events_venue','nightclub'],
-      shopping: ['shop','supermarket','mall','convenience','clothes','grocery'],
-    };
-    poiLayers.forEach(id => {
-      if (!this.map.getLayer(id)) return;
-      if (categoryId === 'all') this.map.setFilter(id, null);
-      else this.map.setFilter(id, ['in', ['get', 'class'], ['literal', categoryMap[categoryId] ?? []]]);
+    this.analytics.track('filter_applied', {
+      metadata: {
+        surface: 'map',
+        category: category.id,
+      },
     });
+
+    this.invalidateMarkerCache();
+    this.scheduleViewportLoad(0);
   }
 
-  private applyMultipleFilters(categoryIds: string[]): void {
-    const poiLayers = ['poi_z14', 'poi_z15', 'poi_z16', 'poi_transit'];
-    const categoryMap: Record<string, string[]> = {
-      restaurants:['restaurant','cafe','fast_food','bar','pub'],
-      hotels:['hotel','hostel','motel','guest_house','lodging'],
-      attractions:['attraction','museum','monument','gallery','viewpoint','tourism'],
-      events:['theatre','cinema','events_venue','nightclub'],
-      shopping:['shop','supermarket','mall','convenience','clothes','grocery'],
-      cafes:['cafe','coffee'], bars:['bar','pub'], parks:['park','playground'],
-      museums:['museum','gallery'], transport:['bus_stop','subway','train_station','tram_stop'],
-      health:['hospital','pharmacy','clinic','doctor'], sports:['sports_centre','stadium','gym','fitness'],
-    };
-    const unique = [...new Set(categoryIds.flatMap(id => categoryMap[id] ?? []))];
-    poiLayers.forEach(id => {
-      if (!this.map.getLayer(id)) return;
-      if (unique.length === 0) this.map.setFilter(id, null);
-      else this.map.setFilter(id, ['in', ['get', 'class'], ['literal', unique]]);
-    });
-  }
+  async openDirections(): Promise<void> {
+    if (!this.selectedPlace) return;
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+    const selectedPlace = this.selectedPlace;
+    const selectedKey = this.getMarkerKey(selectedPlace);
+    const routeRequestId = ++this.routeRequestSeq;
 
-  private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  }
-
-  private formatDistance(km: number): string {
-    return km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km';
-  }
-
-  private formatCategory(raw: string): string {
-    const map: Record<string, string> = {
-      restaurant:'Restaurant', cafe:'Café', hotel:'Hotel', museum:'Museum',
-      attraction:'Attraction', shop:'Shop', bar:'Bar', park:'Park',
-    };
-    return map[raw.toLowerCase()] ?? raw.charAt(0).toUpperCase() + raw.slice(1);
-  }
-
-  zoomIn():  void { this.map.zoomIn({ duration: 300 }); }
-  zoomOut(): void { this.map.zoomOut({ duration: 300 }); }
-  goBack():  void { this.router.navigate(['/home']); }
-
-  onSearchInput(value: string): void {
-    clearTimeout(this.searchTimeout);
-    if (value.trim().length < 2) { this.searchResults = []; return; }
-    this.searchTimeout = setTimeout(() => this.geocode(value), 150);
-  }
-
-  private geocode(query: string): void {
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en&addressdetails=0&namedetails=0`)
-      .then(r => r.json())
-      .then(data => { this.searchResults = data; this.cdr.detectChanges(); })
-      .catch(() => this.searchResults = []);
-  }
-
-  selectSearchResult(result: any): void {
-    const lat = parseFloat(result.lat), lon = parseFloat(result.lon);
-    const name = result.display_name?.split(',')[0] ?? '';
-
-    this.searchResults = [];
-    this.searchQuery = name;
-    this.destinationName = name;
-    this.destinationLat = lat;
-    this.destinationLon = lon;
-    this.selectedPlace = null;
+    this.isLoadingRoute = true;
+    this.routeErrorMessage = '';
     this.clearRoute();
-    sessionStorage.setItem('mapLocation', JSON.stringify({ name, lat, lon }));
-    this.hasActiveFilters = !!sessionStorage.getItem('mapFilters');
-
-    this.map.jumpTo({ center: [lon, lat], zoom: 14 });
-
-    this.isLoading = true;
     this.cdr.detectChanges();
 
-    this.map.once('idle', () => {
-      this.isLoading = false;
+    const origin = await this.locationSvc.resolveRoutingOrigin();
+    if (!this.isCurrentRouteRequest(routeRequestId, selectedKey)) {
+      if (routeRequestId === this.routeRequestSeq) {
+        this.isLoadingRoute = false;
+        this.cdr.detectChanges();
+      }
+      return;
+    }
+
+    if (!origin || !this.hasUsableCoordinates(origin.latitude, origin.longitude)) {
+      this.isLoadingRoute = false;
+      this.routeErrorMessage = 'Location is unavailable, so directions cannot be calculated yet.';
       this.cdr.detectChanges();
+      return;
+    }
+
+    if (origin.source === 'gps' && this.map.isStyleLoaded()) {
+      this.placeUserMarker(origin.latitude, origin.longitude);
+    }
+
+    this.analytics.track('directions_started', {
+      entityType: this.toAnalyticsEntityType(selectedPlace),
+      entityId: selectedPlace.entityId,
+      metadata: {
+        surface: 'map',
+        provider: 'osrm',
+        originSource: origin.source,
+      },
+    });
+
+    this.mapApi.getWalkingRoute(
+      origin.latitude,
+      origin.longitude,
+      selectedPlace.latitude,
+      selectedPlace.longitude,
+    ).subscribe({
+      next: (route) => {
+        if (!this.isCurrentRouteRequest(routeRequestId, selectedKey)) {
+          if (routeRequestId === this.routeRequestSeq) {
+            this.isLoadingRoute = false;
+            this.cdr.detectChanges();
+          }
+          return;
+        }
+        this.drawRoute(route);
+        this.fitRoute(route);
+        this.isLoadingRoute = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        if (!this.isCurrentRouteRequest(routeRequestId, selectedKey)) {
+          if (routeRequestId === this.routeRequestSeq) {
+            this.isLoadingRoute = false;
+            this.cdr.detectChanges();
+          }
+          return;
+        }
+        this.isLoadingRoute = false;
+        this.routeErrorMessage = 'Walking directions are unavailable right now.';
+        this.cdr.detectChanges();
+      },
     });
   }
 
-  get isMoreActive(): boolean { return this.hasActiveFilters; }
+  openDetails(): void {
+    const selectedPlace = this.selectedPlace;
+    if (!selectedPlace?.detailRoute) return;
+
+    this.persistMapFocusHistoryState(selectedPlace);
+    void this.router.navigateByUrl(selectedPlace.detailRoute, {
+      state: {
+        fromMapPreview: true,
+        mapFocus: selectedPlace,
+      },
+    });
+  }
+
+  closePlace(): void {
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
+    this.selectedPlace = null;
+    this.routeErrorMessage = '';
+    this.clearRoute();
+  }
+
+  private readonly resizeHandler = () => this.map?.resize();
+
+  private async initMap(): Promise<void> {
+    const container = document.getElementById('map');
+    if (!container) return;
+
+    const initialView = await this.resolveInitialMapView();
+    if (this.isDestroyed) return;
+
+    this.map = new maplibregl.Map({
+      container,
+      style: MAP_STYLE_URL,
+      center: initialView.center,
+      zoom: initialView.zoom,
+      attributionControl: false,
+      fadeDuration: 0,
+      trackResize: true,
+    });
+    this.markMapOpenedThisSession();
+
+    window.addEventListener('resize', this.resizeHandler);
+    this.map.touchZoomRotate.enable();
+    this.map.touchPitch.enable();
+
+    this.map.on('load', () => {
+      this.map.resize();
+      this.map.on('styleimagemissing', (event: MapStyleImageMissingEvent) => {
+        this.map.addImage(event.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
+      });
+
+      const exactLocation = this.getExactUserLocation();
+      if (exactLocation) {
+        this.placeUserMarker(exactLocation.latitude, exactLocation.longitude);
+        this.locationSvc.startMapLocationUpdates((loc) => this.handleMapLocationUpdate(loc));
+      }
+
+      this.scheduleViewportLoad(0);
+    });
+
+    this.map.on('moveend', () => {
+      this.scheduleViewportLoad();
+    });
+
+    this.map.on('click', () => {
+      if (this.selectedPlace) {
+        this.closePlace();
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  private async resolveInitialMapView(): Promise<MapInitialView> {
+    const exactLocation = await this.locationSvc.refreshExactLocationForMap();
+
+    if (this.initialMapFocus) {
+      return {
+        center: [this.initialMapFocus.longitude, this.initialMapFocus.latitude],
+        zoom: DETAIL_FOCUS_ZOOM,
+      };
+    }
+
+    const savedView = this.readSavedMapViewState();
+    if (this.hasOpenedMapThisSession() && savedView) {
+      return savedView;
+    }
+
+    const origin = exactLocation ?? await this.locationSvc.resolveRoutingOrigin();
+    if (origin && this.hasUsableCoordinates(origin.latitude, origin.longitude)) {
+      return {
+        center: [origin.longitude, origin.latitude],
+        zoom: INITIAL_LOCATION_ZOOM,
+      };
+    }
+
+    if (savedView) {
+      this.markMapOpenedThisSession();
+      return savedView;
+    }
+
+    this.loadErrorMessage = "GeoTrack couldn't determine your current location, so the map opened at the last selected destination.";
+    this.cdr.detectChanges();
+
+    return {
+      center: [this.destinationLon, this.destinationLat],
+      zoom: INITIAL_LOCATION_ZOOM,
+    };
+  }
+
+  private hasOpenedMapThisSession(): boolean {
+    try {
+      return sessionStorage.getItem(MAP_OPENED_THIS_SESSION_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  private markMapOpenedThisSession(): void {
+    try {
+      sessionStorage.setItem(MAP_OPENED_THIS_SESSION_KEY, 'true');
+    } catch {
+      // storage may be unavailable; restore simply falls back to location.
+    }
+  }
+
+  private persistMapViewState(): void {
+    const center = this.map.getCenter();
+    const zoom = this.map.getZoom();
+    try {
+      sessionStorage.setItem(MAP_VIEW_STATE_KEY, JSON.stringify({
+        center: [center.lng, center.lat],
+        zoom,
+      }));
+      this.markMapOpenedThisSession();
+    } catch {
+      // storage may be unavailable; the next map open will resolve location again.
+    }
+  }
+
+  private readSavedMapViewState(): MapInitialView | null {
+    const savedView = this.readSessionJson<StoredMapViewState>(MAP_VIEW_STATE_KEY);
+    const center = savedView?.center;
+    const zoom = savedView?.zoom;
+
+    if (!center ||
+      center.length !== 2 ||
+      !this.hasUsableCoordinates(center[1], center[0]) ||
+      typeof zoom !== 'number' ||
+      !Number.isFinite(zoom)) {
+      return null;
+    }
+
+    return {
+      center,
+      zoom: Math.min(Math.max(zoom, 0), 22),
+    };
+  }
+
+  private readMapFocus(value: Partial<MapEntityMarker> | null | undefined): MapEntityMarker | null {
+    if (!value || typeof value !== 'object') return null;
+
+    const entityType = value.entityType;
+    if (entityType !== 'place' && entityType !== 'stay' && entityType !== 'event') return null;
+
+    const entityId = typeof value.entityId === 'number' ? value.entityId : NaN;
+    const latitude = value.latitude;
+    const longitude = value.longitude;
+    const title = typeof value.title === 'string' ? value.title.trim() : '';
+
+    if (!Number.isFinite(entityId) ||
+      entityId <= 0 ||
+      !title ||
+      !this.hasUsableCoordinates(latitude, longitude)) {
+      return null;
+    }
+
+    return {
+      entityType,
+      entityId,
+      title,
+      subtitle: typeof value.subtitle === 'string' && value.subtitle.trim() ? value.subtitle : null,
+      categoryLabel: typeof value.categoryLabel === 'string' && value.categoryLabel.trim() ? value.categoryLabel : null,
+      imageUrl: typeof value.imageUrl === 'string' && value.imageUrl.trim() ? value.imageUrl : null,
+      detailRoute: typeof value.detailRoute === 'string' && value.detailRoute.trim() ? value.detailRoute : null,
+      latitude: latitude as number,
+      longitude: longitude as number,
+      distance: typeof value.distance === 'string' && value.distance.trim() ? value.distance : null,
+      isSaved: value.isSaved === true,
+    };
+  }
+
+  private persistMapFocusHistoryState(marker: MapEntityMarker): void {
+    const mapFocus = this.readMapFocus(marker);
+    if (!mapFocus) return;
+
+    try {
+      this.angularLocation.replaceState(this.router.url, '', {
+        ...(history.state ?? {}),
+        mapFocus,
+        mapPreviewRestore: true,
+      } satisfies MapNavigationState);
+    } catch {
+      // History state may be unavailable in restricted browser modes.
+    }
+  }
+
+  private clearMapFocusHistoryState(): void {
+    try {
+      const currentState = history.state as MapNavigationState | null;
+      if (!currentState?.mapFocus && !currentState?.mapPreviewRestore) return;
+
+      const nextState = { ...currentState };
+      delete nextState.mapFocus;
+      delete nextState.mapPreviewRestore;
+      this.angularLocation.replaceState(this.router.url, '', nextState);
+    } catch {
+      // If history state cannot be updated, the in-memory selectedPlace still controls this view.
+    }
+  }
+
+  private scheduleViewportLoad(debounceMs: number = VIEWPORT_DEBOUNCE_MS): void {
+    if (!this.map) return;
+
+    if (this.viewportLoadTimeout) {
+      clearTimeout(this.viewportLoadTimeout);
+      this.viewportLoadTimeout = undefined;
+    }
+
+    if (debounceMs <= 0) {
+      this.loadMarkersForViewport();
+      return;
+    }
+
+    this.viewportLoadTimeout = setTimeout(() => {
+      this.viewportLoadTimeout = undefined;
+      this.loadMarkersForViewport();
+    }, debounceMs);
+  }
+
+  private loadMarkersForViewport(): void {
+    if (!this.map) return;
+
+    const mapBounds = this.map.getBounds();
+    const zoom = this.map.getZoom();
+    const bounds: MapViewportBounds = {
+      north: mapBounds.getNorth(),
+      south: mapBounds.getSouth(),
+      east: mapBounds.getEast(),
+      west: mapBounds.getWest(),
+    };
+
+    const expectedMode: MapMarkersMode = zoom < DESTINATION_ZOOM_THRESHOLD ? 'destinations' : 'entities';
+
+    if (this.isWithinCachedViewport(bounds, expectedMode)) {
+      return;
+    }
+
+    const seq = ++this.requestSeq;
+    this.isLoading = true;
+    this.loadErrorMessage = '';
+    this.cdr.detectChanges();
+
+    this.mapApi.getMarkersInViewport(bounds, zoom, this.getRequestedCategories()).subscribe({
+      next: (response) => {
+        if (seq !== this.requestSeq) return;
+        this.lastFetchedViewport = { ...bounds, mode: response.mode };
+        this.applyMarkers(response);
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        if (seq !== this.requestSeq) return;
+        this.isLoading = false;
+        this.loadErrorMessage = "GeoTrack couldn't load backend-backed map results right now.";
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  private isWithinCachedViewport(bounds: MapViewportBounds, mode: MapMarkersMode): boolean {
+    const last = this.lastFetchedViewport;
+    if (!last || last.mode !== mode) return false;
+
+    const dy = (last.north - last.south) * VIEWPORT_CACHE_PADDING;
+    const dx = (last.east - last.west) * VIEWPORT_CACHE_PADDING;
+
+    return bounds.north <= last.north + dy
+      && bounds.south >= last.south - dy
+      && bounds.east <= last.east + dx
+      && bounds.west >= last.west - dx;
+  }
+
+  private invalidateMarkerCache(): void {
+    this.lastFetchedViewport = null;
+  }
+
+  private applyMarkers(response: MapMarkersResponse): void {
+    const markers = response.markers ?? [];
+    const newKeys = new Set<string>();
+
+    for (const marker of markers) {
+      const key = this.getMarkerKey(marker);
+      newKeys.add(key);
+      const existing = this.markersByKey.get(key);
+      if (existing) {
+        existing.data = marker;
+        existing.marker.setLngLat([marker.longitude, marker.latitude]);
+        this.refreshMarkerDom(existing, marker);
+      } else {
+        const entry = this.createMarkerEntry(marker);
+        this.markersByKey.set(key, entry);
+      }
+    }
+
+    for (const [key, entry] of this.markersByKey) {
+      if (!newKeys.has(key)) {
+        entry.marker.remove();
+        this.markersByKey.delete(key);
+        this.markerImageFallbackUsed.delete(key);
+      }
+    }
+
+    this.currentMode = response.mode;
+
+    if (this.selectedPlace) {
+      const selectedKey = this.getMarkerKey(this.selectedPlace);
+      const stillVisible = this.markersByKey.get(selectedKey);
+      if (stillVisible) {
+        this.selectedPlace = stillVisible.data;
+        this.preserveSelectedPlaceFromNavigation = false;
+      } else if (!this.shouldPreserveSelectedPlaceDuringMarkerRefresh()) {
+        this.selectedPlace = null;
+        this.clearRoute();
+      }
+    }
+
+    this.emptyStateMessage = markers.length === 0
+      ? (response.mode === 'destinations'
+        ? 'Pan or zoom in to discover destinations.'
+        : 'GeoTrack does not have backend-backed places, stays, or events mapped for this area yet.')
+      : '';
+  }
+
+  private createMarkerEntry(marker: MapEntityMarker): MarkerEntry {
+    const button = document.createElement('button');
+    button.type = 'button';
+
+    const img = document.createElement('img');
+    img.alt = '';
+    img.draggable = false;
+    button.appendChild(img);
+
+    const key = this.getMarkerKey(marker);
+    img.addEventListener('error', () => {
+      if (this.markerImageFallbackUsed.has(key)) return;
+      this.markerImageFallbackUsed.add(key);
+      img.src = EXPLORE_IMAGE_FALLBACK;
+    });
+
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const entry = this.markersByKey.get(key);
+      this.onMarkerClick(entry?.data ?? marker);
+    });
+
+    const mapMarker = new maplibregl.Marker({ element: button, anchor: 'center' })
+      .setLngLat([marker.longitude, marker.latitude])
+      .addTo(this.map);
+
+    const entry: MarkerEntry = { data: marker, marker: mapMarker, imageElement: img };
+    this.refreshMarkerDom(entry, marker);
+    return entry;
+  }
+
+  private refreshMarkerDom(entry: MarkerEntry, marker: MapEntityMarker): void {
+    const button = entry.marker.getElement();
+    button.classList.add('gt-marker');
+    button.classList.remove('gt-marker--place', 'gt-marker--stay', 'gt-marker--event', 'gt-marker--destination');
+    button.classList.add(`gt-marker--${marker.entityType}`);
+
+    if (button.getAttribute('aria-label') !== marker.title) {
+      button.setAttribute('aria-label', marker.title);
+    }
+
+    const key = this.getMarkerKey(marker);
+    const desiredSrc = marker.imageUrl ?? EXPLORE_IMAGE_FALLBACK;
+    if (entry.imageElement.getAttribute('src') !== desiredSrc) {
+      this.markerImageFallbackUsed.delete(key);
+      entry.imageElement.src = desiredSrc;
+    }
+  }
+
+  private onMarkerClick(marker: MapEntityMarker): void {
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
+
+    if (marker.entityType === 'destination') {
+      this.selectedPlace = null;
+      this.routeErrorMessage = '';
+      this.searchResults = [];
+      this.clearRoute();
+
+      this.destinationName = marker.title;
+      this.destinationLat = marker.latitude;
+      this.destinationLon = marker.longitude;
+      this.searchQuery = marker.title;
+      this.isUserLocation = false;
+
+      sessionStorage.setItem('mapLocation', JSON.stringify({
+        name: marker.title,
+        lat: marker.latitude,
+        lon: marker.longitude,
+        isUserLocation: false,
+      }));
+
+      this.analytics.track('map_marker_opened', {
+        entityType: 'destination',
+        entityId: marker.entityId,
+        metadata: {
+          surface: 'map',
+          mode: 'destinations',
+        },
+      });
+
+      this.invalidateMarkerCache();
+      this.map.flyTo({
+        center: [marker.longitude, marker.latitude],
+        zoom: Math.max(this.map.getZoom() + 1, 13),
+        duration: 800,
+      });
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.selectedPlace = marker;
+    this.routeErrorMessage = '';
+    this.clearRoute();
+    this.analytics.track('map_marker_opened', {
+      entityType: this.toAnalyticsEntityType(marker),
+      entityId: marker.entityId,
+      metadata: {
+        surface: 'map',
+        category: marker.categoryLabel ?? marker.entityType,
+      },
+    });
+    this.cdr.detectChanges();
+  }
+
+  private getRequestedCategories(): string[] {
+    if (this.hasActiveFilters) {
+      return this.filterCategories;
+    }
+
+    return this.activeCategory === 'all' ? [] : [this.activeCategory];
+  }
+
+  private getMarkerKey(marker: MapEntityMarker): string {
+    return `${marker.entityType}:${marker.entityId}`;
+  }
+
+  private toAnalyticsEntityType(marker: MapEntityMarker): AnalyticsEntityType {
+    switch (marker.entityType) {
+      case 'stay': return 'hotel';
+      case 'event': return 'event';
+      case 'destination': return 'destination';
+      default: return 'place';
+    }
+  }
+
+  private shouldPreserveSelectedPlaceDuringMarkerRefresh(): boolean {
+    return this.preserveSelectedPlaceFromNavigation || this.isLoadingRoute || this.hasRenderedRoute();
+  }
+
+  private hasRenderedRoute(): boolean {
+    return !!this.map?.getSource(this.ROUTE_SOURCE);
+  }
+
+  private isCurrentRouteRequest(routeRequestId: number, selectedKey: string): boolean {
+    return routeRequestId === this.routeRequestSeq &&
+      this.selectedPlace !== null &&
+      this.getMarkerKey(this.selectedPlace) === selectedKey;
+  }
+
+  private getExactUserLocation(): ResolvedLocation | null {
+    const loc = this.locationSvc.location();
+    const cachedAt = typeof loc?.cachedAt === 'number' ? loc.cachedAt : 0;
+    return loc?.source === 'gps' &&
+      Date.now() - cachedAt < LOCATION_CACHE_TTL_MS &&
+      this.hasUsableCoordinates(loc.latitude, loc.longitude)
+      ? loc
+      : null;
+  }
+
+  private hasUsableCoordinates(latitude: number | null | undefined, longitude: number | null | undefined): boolean {
+    return typeof latitude === 'number' &&
+      typeof longitude === 'number' &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      (latitude !== 0 || longitude !== 0);
+  }
+
+  private drawRoute(route: MapRouteResult): void {
+    const coordinates = route.coordinates.map((point) => [point.longitude, point.latitude] as [number, number]);
+    if (coordinates.length < 2) {
+      this.routeErrorMessage = 'Walking directions are unavailable right now.';
+      return;
+    }
+
+    const data: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates,
+        },
+        properties: {},
+      }],
+    };
+
+    if (this.map.getSource(this.ROUTE_SOURCE)) {
+      (this.map.getSource(this.ROUTE_SOURCE) as GeoJSONSource).setData(data);
+      return;
+    }
+
+    this.map.addSource(this.ROUTE_SOURCE, { type: 'geojson', data });
+    this.map.addLayer({
+      id: this.ROUTE_OUTLINE,
+      type: 'line',
+      source: this.ROUTE_SOURCE,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.85 },
+    });
+    this.map.addLayer({
+      id: this.ROUTE_LAYER,
+      type: 'line',
+      source: this.ROUTE_SOURCE,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': '#e8570a', 'line-width': 5, 'line-opacity': 1 },
+    });
+  }
+
+  private fitRoute(route: MapRouteResult): void {
+    const coordinates = route.coordinates.map((point) => [point.longitude, point.latitude] as [number, number]);
+    if (coordinates.length < 2) return;
+
+    const bounds = coordinates.reduce(
+      (acc, coord) => acc.extend(coord as maplibregl.LngLatLike),
+      new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
+    );
+
+    this.map.fitBounds(bounds, { padding: 70, duration: 900 });
+  }
+
+  clearRoute(): void {
+    if (this.map?.getLayer(this.ROUTE_LAYER)) this.map.removeLayer(this.ROUTE_LAYER);
+    if (this.map?.getLayer(this.ROUTE_OUTLINE)) this.map.removeLayer(this.ROUTE_OUTLINE);
+    if (this.map?.getSource(this.ROUTE_SOURCE)) this.map.removeSource(this.ROUTE_SOURCE);
+  }
+
+  private placeUserMarker(lat: number, lon: number): void {
+    const data: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [lon, lat] },
+        properties: {},
+      }],
+    };
+
+    if (this.map.getSource(this.USER_SOURCE)) {
+      (this.map.getSource(this.USER_SOURCE) as GeoJSONSource).setData(data);
+      return;
+    }
+
+    this.map.addSource(this.USER_SOURCE, { type: 'geojson', data });
+    this.map.addLayer({
+      id: this.USER_RING,
+      type: 'circle',
+      source: this.USER_SOURCE,
+      paint: {
+        'circle-radius': 18,
+        'circle-color': '#e8570a',
+        'circle-opacity': 0.2,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': '#e8570a',
+        'circle-stroke-opacity': 0.4,
+      },
+    });
+    this.map.addLayer({
+      id: this.USER_LAYER,
+      type: 'circle',
+      source: this.USER_SOURCE,
+      paint: {
+        'circle-radius': 9,
+        'circle-color': '#e8570a',
+        'circle-stroke-width': 3,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 1,
+        'circle-stroke-opacity': 1,
+      },
+    });
+  }
+
+  private handleLocationSuccess(lat: number, lon: number): void {
+    this.destinationName = 'My Location';
+    this.destinationLat = lat;
+    this.destinationLon = lon;
+    this.locationSvc.setGpsLocation(lat, lon);
+    this.isUserLocation = true;
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
+    this.selectedPlace = null;
+    this.routeErrorMessage = '';
+    this.clearRoute();
+
+    this.map.resize();
+    this.map.flyTo({
+      center: [lon, lat],
+      zoom: 15,
+      duration: 1000,
+      padding: { top: 120, bottom: 0, left: 0, right: 0 },
+    });
+
+    if (this.map.isStyleLoaded()) {
+      this.placeUserMarker(lat, lon);
+    } else {
+      this.map.once('load', () => this.placeUserMarker(lat, lon));
+    }
+    this.locationSvc.startMapLocationUpdates((loc) => this.handleMapLocationUpdate(loc));
+
+    sessionStorage.setItem('mapLocation', JSON.stringify({
+      name: 'My Location',
+      lat,
+      lon,
+      isUserLocation: true,
+    }));
+
+    this.isLocating = false;
+    this.invalidateMarkerCache();
+    this.cdr.detectChanges();
+  }
+
+  private async handleLocateFallback(): Promise<void> {
+    this.isLocating = true;
+    this.cdr.detectChanges();
+
+    const loc = await this.locationSvc.ensureIpFallback();
+    if (this.isDestroyed) return;
+
+    this.isLocating = false;
+
+    if (!loc || !this.hasUsableCoordinates(loc.latitude, loc.longitude)) {
+      this.loadErrorMessage = "GeoTrack couldn't determine your current location.";
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.destinationName = loc.displayLabel || 'Approximate Location';
+    this.destinationLat = loc.latitude;
+    this.destinationLon = loc.longitude;
+    this.isUserLocation = false;
+    this.loadErrorMessage = '';
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
+    this.selectedPlace = null;
+    this.routeErrorMessage = '';
+    this.clearRoute();
+
+    this.map.resize();
+    this.map.flyTo({
+      center: [loc.longitude, loc.latitude],
+      zoom: INITIAL_LOCATION_ZOOM,
+      duration: 1000,
+      padding: { top: 120, bottom: 0, left: 0, right: 0 },
+    });
+
+    sessionStorage.setItem('mapLocation', JSON.stringify({
+      name: this.destinationName,
+      lat: loc.latitude,
+      lon: loc.longitude,
+      isUserLocation: false,
+    }));
+
+    this.invalidateMarkerCache();
+    this.scheduleViewportLoad(0);
+    this.cdr.detectChanges();
+  }
+
+  private handleMapLocationUpdate(loc: ResolvedLocation): void {
+    if (!this.map || this.isDestroyed) return;
+
+    if (this.map.isStyleLoaded()) {
+      this.placeUserMarker(loc.latitude, loc.longitude);
+    }
+
+    if (this.isUserLocation) {
+      this.destinationLat = loc.latitude;
+      this.destinationLon = loc.longitude;
+      sessionStorage.setItem('mapLocation', JSON.stringify({
+        name: 'My Location',
+        lat: loc.latitude,
+        lon: loc.longitude,
+        isUserLocation: true,
+      }));
+    }
+  }
+
+  private readSessionJson<T>(key: string): T | null {
+    try {
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) as T : null;
+    } catch {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+  }
 }

@@ -1,100 +1,80 @@
-import { Component, signal, OnInit } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { ContributionDraft } from '../submit-contribution/submit-contribution.component';
-import { HttpClient } from '@angular/common/http';
-import { ContributionDetailPageComponent } from '../contribution-detail/contribution-detail.component';
-export interface ContributionItem {
-  id: string;
-  name: string;
-  location: string;
-  imageUrl: string;
-  status: 'APPROVED' | 'UNDER REVIEW' | 'REJECTED' | 'PENDING';
-  updatedLabel: string;
-  entityType: 'Stay' | 'Place' | 'Event' | 'Location';
-}
+import { ContributionListItem, ContributionsService } from '../../services/contributions.service';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 
 @Component({
   selector: 'app-my-contributions',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ImageFallbackDirective],
   templateUrl: './my-contributions.component.html',
+  styleUrl: './my-contributions.component.css',
 })
-export class MyContributionsPageComponent {
-  constructor(private router: Router, private http: HttpClient) {}
-  
-  showEntityPicker = signal(false);
-  items: ContributionItem[] = [
-    { id: '1', name: 'Sunny Seaside Villa', location: 'Malibu, California', imageUrl: 'https://images.unsplash.com/photo-1582268611958-ebfd161ef9cf?w=600&q=80', status: 'APPROVED', updatedLabel: 'Updated 2 days ago', entityType: 'Stay' },
-    { id: '2', name: 'Cozy Mountain Cabin', location: 'Aspen, Colorado', imageUrl: 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?w=600&q=80', status: 'UNDER REVIEW', updatedLabel: 'Submitted 5 hours ago', entityType: 'Stay' },
-    { id: '3', name: 'Urban Loft Downtown', location: 'New York City, NY', imageUrl: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&q=80', status: 'APPROVED', updatedLabel: 'Last edited 1 week ago', entityType: 'Stay' },
-    { id: '4', name: 'Riverside Glamping Tent', location: 'Bend, Oregon', imageUrl: 'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=600&q=80', status: 'REJECTED', updatedLabel: 'Updated 3 weeks ago', entityType: 'Stay' },
-  ];
-  // API verzija:
-  // items = signal<ContributionItem[]>([]);
-  // ngOnInit(): void {
-  //   this.http.get<ContributionItem[]>('/api/contributions').subscribe({
-  //     next: (data) => { this.items.set(data); }
-  //   });
-  // }
-  // openEntityPicker(): void { this.showEntityPicker.set(true); }
+export class MyContributionsPageComponent implements OnInit {
+  private readonly router = inject(Router);
+  private readonly contributions = inject(ContributionsService);
 
-  startContribution(type: string): void {
-    this.showEntityPicker.set(false);
-    this.router.navigate(['/contributions/submit'], { state: { entityType: type } });
+  protected readonly items = this.contributions.items;
+  protected readonly isLoading = this.contributions.isLoading;
+  protected readonly loadError = this.contributions.loadError;
+  protected readonly pendingDelete = signal<ContributionListItem | null>(null);
+  protected readonly deleteError = signal<string | null>(null);
+  protected readonly isDeleting = signal(false);
+
+  ngOnInit(): void {
+    this.contributions.loadMine();
   }
 
-  editItem(item: ContributionItem): void {
-    // API verzija:
-    // this.http.get<any>(`/api/contributions/${item.id}`).subscribe({
-    //   next: (fullData) => {
-    //     const editDraft: ContributionDraft = { 
-    //       basics: { name: fullData.name, stayType: fullData.stayType, ... },
-    //       features: { tags: fullData.tags ?? [], amenities: fullData.amenities ?? [] },
-    //       details: { description: fullData.description ?? '', ... }
-    //     };
-    //     this.router.navigate(['/contributions/submit'], {
-    //       state: { entityType: item.entityType, editId: item.id, editDraft }
-    //     });
-    //   },
-    //   error: (err) => console.error(err)
-    // });
-    const editDraft: ContributionDraft = {
-      basics: {
-        name: item.name,
-        stayType: 'Hotel',
-        address: '',
-        city: item.location.split(',')[0]?.trim() ?? '',
-        region: '',
-        country: item.location.split(',')[1]?.trim() ?? '',
-        imageUrl: item.imageUrl,
-        lat: null,
-        lng: null,
-        imgBgPosition: '50% 50%',
-        imgBgSize: 'cover'
-      },
-      features: { tags: [], amenities: [] },
-      details: { description: '', phone: '', website: '', bookingPartners: [] }
-    };
+  protected startContribution(): void {
+    this.router.navigate(['/contributions/submit']);
+  }
 
-    this.router.navigate(['/contributions/submit'], {
-      state: { entityType: item.entityType, editId: item.id, editDraft }
+  protected editItem(event: Event, item: ContributionListItem): void {
+    event.stopPropagation();
+    this.router.navigate(['/contributions', item.id, 'edit']);
+  }
+
+  protected requestDelete(event: Event, item: ContributionListItem): void {
+    event.stopPropagation();
+    this.deleteError.set(null);
+    this.pendingDelete.set(item);
+  }
+
+  protected cancelDelete(): void {
+    if (this.isDeleting()) return;
+    this.pendingDelete.set(null);
+    this.deleteError.set(null);
+  }
+
+  protected confirmDelete(): void {
+    const item = this.pendingDelete();
+    if (!item || this.isDeleting()) return;
+
+    this.isDeleting.set(true);
+    this.deleteError.set(null);
+
+    this.contributions.deleteContribution(item.id).subscribe({
+      next: () => {
+        this.pendingDelete.set(null);
+        this.isDeleting.set(false);
+      },
+      error: () => {
+        this.deleteError.set('Could not delete this contribution. Please try again.');
+        this.isDeleting.set(false);
+      },
     });
   }
-  deleteItem(item: ContributionItem): void {
-    this.items = this.items.filter(i => i.id !== item.id);
-    // API verzija:
-    // this.http.delete(`/api/contributions/${item.id}`).subscribe({
-    //   next: () => {
-    //     this.items = this.items.filter(i => i.id !== item.id);
-    //   },
-    //   error: () => {
-    //   }
-    // });
+
+  protected goBack(): void {
+    this.router.navigate(['/profile']);
   }
 
-  goBack(): void { this.router.navigate(['/profile']); }
-  openDetail(item: ContributionItem): void {
-    this.router.navigate(['/contributions/detail'], { state: { item } });
+  protected openDetail(item: ContributionListItem): void {
+    this.router.navigate(['/contributions', item.id]);
+  }
+
+  protected reload(): void {
+    this.contributions.loadMine();
   }
 }

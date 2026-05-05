@@ -65,28 +65,7 @@
   position: absolute;
   top: var(--space-2);
   right: var(--space-2);
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.92);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
-
-  &:focus-visible {
-    outline: 2px solid var(--color-accent-orange);
-    outline-offset: 2px;
-  }
-}
-
-.stays-slider__heart {
-  width: 14px;
-  height: 14px;
-  color: var(--color-muted);
+  z-index: 2;
 }
 
 .stays-slider__body {
@@ -130,6 +109,10 @@
   font-size: var(--text-xs);
   font-weight: 400;
   color: var(--color-muted);
+}
+
+.stays-slider__reviews--empty {
+  font-weight: 500;
 }
 
 .stays-slider__distance {

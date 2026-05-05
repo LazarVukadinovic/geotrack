@@ -1,26 +1,54 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
+import { HttpBackend, HttpClient } from '@angular/common/http';
+import { AnalyticsService } from './analytics.service';
+import { DestinationService } from './destination.service';
+import { LocationService } from './location.service';
+import { TokenStorageService } from './token-storage.service';
 
-/**
- * Frontend-only auth state for development.
- *
- * BACKEND WIRING: When real auth is ready, replace `_isLoggedIn` signal with
- * a derived signal from an HTTP session/token store, e.g.:
- *   private readonly _isLoggedIn = computed(() => !!this.sessionService.user());
- *
- * Nothing outside this service needs to change — consumers read `isLoggedIn`
- * and call `login()` / `logout()` which you swap for real API calls.
- */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly _isLoggedIn = signal<boolean>(false);
+  private readonly tokenStorage = inject(TokenStorageService);
+  private readonly locationService = inject(LocationService);
+  private readonly destinationService = inject(DestinationService);
+  private readonly analytics = inject(AnalyticsService);
+  private readonly http = new HttpClient(inject(HttpBackend));
 
-  readonly isLoggedIn = computed(() => this._isLoggedIn());
+  readonly isLoggedIn = computed(() => this.tokenStorage.hasSession());
 
-  login(): void {
-    this._isLoggedIn.set(true);
+  login(accessToken: string, rememberMe = true): void {
+    this.tokenStorage.setSession(accessToken, rememberMe);
   }
 
   logout(): void {
-    this._isLoggedIn.set(false);
+    // Fire the logout event AND flush before tearing down the session, so the
+    // event posts with the still-valid JWT and is correctly attributed to the
+    // user. clearClientSessionContext() then wipes local state.
+    this.analytics.track('logout_completed');
+    this.analytics.flushNow();
+
+    this.clearClientSessionContext();
+
+    this.http
+      .post('/api/auth/logout', {})
+      .subscribe({ error: () => {} });
+  }
+
+  clearSession(): void {
+    this.clearClientSessionContext();
+  }
+
+  private clearClientSessionContext(): void {
+    this.tokenStorage.clearAll();
+    this.locationService.clearSavedLocation();
+    this.destinationService.clear();
+
+    try {
+      sessionStorage.removeItem('mapLocation');
+      sessionStorage.removeItem('mapFilters');
+      sessionStorage.removeItem('mapViewState');
+      sessionStorage.removeItem('mapOpenedThisSession');
+    } catch {
+      // Storage may be unavailable; ignore.
+    }
   }
 }

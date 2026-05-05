@@ -1,0 +1,548 @@
+// Sealed-viewport layout — owns its own scroll
+:host {
+  display: block;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+// ── Root container ────────────────────────────────────────────────────────────
+.rec-page {
+  position: relative;
+  height: 100%;
+  background: var(--color-page-bg);
+}
+
+// ── Fixed top bar ─────────────────────────────────────────────────────────────
+// ── Scrollable content area ───────────────────────────────────────────────────
+.rec-page__scroll {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 84px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-10));
+}
+
+// ── Intro section ─────────────────────────────────────────────────────────────
+.rec-page__hero {
+  padding: var(--space-6) var(--page-gutter) var(--space-5);
+  text-align: center;
+}
+
+.rec-page__eyebrow {
+  display: inline-block;
+  padding: 4px 10px;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: rgba(232, 87, 10, 0.1);
+  color: #e8570a;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rec-page__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-display);
+  font-weight: 800;
+  color: #1a2b4c;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.rec-page__title-accent {
+  width: 40px;
+  height: 3px;
+  margin: 0 auto var(--space-3);
+  border-radius: 2px;
+  background: #e8570a;
+}
+
+.rec-page__subtitle {
+  margin: 0 auto;
+  max-width: 280px;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+// ── Filter pills ──────────────────────────────────────────────────────────────
+.rec-page__filters-viewport {
+  overflow: hidden;
+  margin-bottom: var(--space-5);
+}
+
+.rec-page__filters {
+  display: flex;
+  gap: var(--space-2);
+  padding-inline: var(--page-gutter);
+  padding-bottom: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  &::after {
+    content: '';
+    flex: 0 0 var(--space-2);
+  }
+}
+
+.rec-page__pill {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid rgba(26, 43, 76, 0.14);
+  background: #ffffff;
+  color: #1a2b4c;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+
+  &--active {
+    background: #e8570a;
+    color: #ffffff;
+    border-color: #e8570a;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}
+
+.rec-page__pill-skeleton {
+  flex: 0 0 auto;
+  width: 80px;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, #ebedf0 0%, #f7f7f8 50%, #ebedf0 100%);
+  background-size: 200% 100%;
+  animation: rec-shimmer 1.2s ease-in-out infinite;
+}
+
+// ── Card list ─────────────────────────────────────────────────────────────────
+.rec-page__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-inline: var(--page-gutter);
+}
+
+// ── Card shared base ──────────────────────────────────────────────────────────
+.rec-card {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(26, 43, 76, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:active {
+    transform: scale(0.985);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 3px;
+  }
+}
+
+// ── Large card (first item) ───────────────────────────────────────────────────
+.rec-card--large {
+  .rec-card__media {
+    position: relative;
+    width: 100%;
+    height: 210px;
+    background: rgba(26, 43, 76, 0.08);
+  }
+
+  .rec-card__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .rec-card__badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: calc(100% - 24px);
+    padding: 5px 10px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(6px);
+    color: #1a2b4c;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rec-card__badge-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: #e8570a;
+  }
+
+  .rec-card__body {
+    padding: 16px 16px 14px;
+  }
+
+  .rec-card__reason {
+    margin: 0 0 6px;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: #6b7280;
+    letter-spacing: 0.01em;
+  }
+
+  .rec-card__name {
+    margin: 0 0 6px;
+    font-size: var(--text-md);
+    font-weight: 800;
+    color: #1a2b4c;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .rec-card__desc {
+    margin: 8px 0 14px;
+    font-size: var(--text-sm);
+    color: #4b5563;
+    line-height: 1.6;
+    display: -webkit-box;
+    line-clamp: 2;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .rec-card__footer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .rec-card__cta {
+    flex: 1;
+    padding: 12px 0;
+    border-radius: var(--radius-pill);
+    border: none;
+    background: #e8570a;
+    color: #ffffff;
+    font-size: var(--text-sm);
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.01em;
+
+    &:focus-visible {
+      outline: 2px solid #e8570a;
+      outline-offset: 2px;
+    }
+  }
+}
+
+// ── Compact card (remaining items) ────────────────────────────────────────────
+.rec-card--compact {
+  display: flex;
+  align-items: stretch;
+  height: 130px;
+
+  .rec-card__media--compact {
+    position: relative;
+    flex: 0 0 130px;
+    width: 130px;
+    height: 100%;
+    background: rgba(26, 43, 76, 0.08);
+  }
+
+  .rec-card__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .rec-card__badge--compact {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    max-width: calc(100% - 16px);
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(6px);
+    font-size: 10px;
+    font-weight: 700;
+    color: #1a2b4c;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rec-card__body--compact {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 14px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .rec-card__name--compact {
+    margin: 0 0 2px;
+    font-size: var(--text-sm);
+    font-weight: 800;
+    color: #1a2b4c;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rec-card__location--compact {
+    margin-bottom: 4px;
+  }
+
+  .rec-card__footer--compact {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .rec-card__cta--compact {
+    padding: 7px 14px;
+    border-radius: var(--radius-pill);
+    border: none;
+    background: #e8570a;
+    color: #ffffff;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid #e8570a;
+      outline-offset: 2px;
+    }
+  }
+}
+
+// ── Shared card sub-elements ──────────────────────────────────────────────────
+.rec-card__location {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  margin-bottom: 5px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rec-card__pin {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--color-muted);
+}
+
+.rec-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.rec-card__star {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.rec-card__rating {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: #1a2b4c;
+}
+
+.rec-card__reviews {
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: #e8570a;
+}
+
+.rec-card__no-rating {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.rec-card__distance {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.rec-card__save {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(26, 43, 76, 0.14);
+  background: #ffffff;
+  color: var(--color-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}
+
+// ── State containers ──────────────────────────────────────────────────────────
+.rec-page__state {
+  padding: var(--space-6) var(--page-gutter);
+  text-align: center;
+}
+
+.rec-page__retry {
+  display: block;
+  width: min(220px, 100%);
+  margin: var(--space-4) auto 0;
+  padding: 10px 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: #e8570a;
+  color: #ffffff;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+.rec-page__pagination {
+  padding: var(--space-5) var(--page-gutter) 0;
+  text-align: center;
+}
+
+.rec-page__load-more {
+  width: 100%;
+  padding: 12px 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: #e8570a;
+  color: #ffffff;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.68;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 2px;
+  }
+}
+
+.rec-page__load-error,
+.rec-page__end {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+// ── Skeleton loaders ──────────────────────────────────────────────────────────
+.rec-card--skeleton {
+  cursor: default;
+
+  &:active {
+    transform: none;
+  }
+}
+
+.rec-card__skeleton-media {
+  height: 210px;
+  background: linear-gradient(90deg, #e7eaf0 0%, #f7f8fa 50%, #e7eaf0 100%);
+  background-size: 200% 100%;
+  animation: rec-shimmer 1.2s ease-in-out infinite;
+}
+
+.rec-card__skeleton-media--compact {
+  flex: 0 0 130px;
+  width: 130px;
+  height: 100%;
+}
+
+.rec-card__skeleton-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 16px 14px;
+}
+
+.rec-card__skeleton-body--compact {
+  flex: 1;
+  padding: 14px 14px 14px 12px;
+  justify-content: center;
+}
+
+.rec-card__skeleton-line {
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ebedf0 0%, #f7f7f8 50%, #ebedf0 100%);
+  background-size: 200% 100%;
+  animation: rec-shimmer 1.2s ease-in-out infinite;
+
+  &--short {
+    width: 42%;
+  }
+
+  &--medium {
+    width: 72%;
+  }
+}
+
+@keyframes rec-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: -200% 50%;
+  }
+}

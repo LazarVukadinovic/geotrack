@@ -13,7 +13,7 @@
       <button (click)="clearAll()" class="text-xs font-semibold text-white/60">Clear all</button>
     </div>
     <h1 class="text-2xl font-bold text-[#0f172a] tracking-tight mb-1">Choose filters</h1>
-    <p class="text-base text-slate-600">Select what you want to see on the map.</p>
+    <p class="text-base text-slate-600">Select which backend-backed results to show on the map.</p>
   </div>
 
   <!-- Content -->
@@ -36,44 +36,15 @@
       </button>
     </div>
 
-    <!-- Distance section -->
-    <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Max Distance</p>
-    <div class="flex gap-2 mb-8">
-      <button *ngFor="let d of distances"
-        (click)="selectedDistance = d"
-        class="flex-1 py-2.5 rounded-2xl border text-sm font-semibold transition-colors duration-200"
-        [class.bg-[#1a2b4a]]="selectedDistance === d"
-        [class.border-[#1a2b4a]]="selectedDistance === d"
-        [class.text-white]="selectedDistance === d"
-        [class.bg-white]="selectedDistance !== d"
-        [class.border-slate-200]="selectedDistance !== d"
-        [class.text-slate-600]="selectedDistance !== d">
-        {{ d }}
-      </button>
+    <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 mb-8">
+      <p class="text-sm font-semibold text-slate-700">Map scope</p>
+      <p class="text-xs text-slate-500 mt-1">The map loads only what's currently in view, so results scale with how you pan and zoom. Distance presets aren't needed.</p>
     </div>
 
-    <!-- Rating section -->
-    <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Minimum Rating</p>
-    <div class="flex gap-2 mb-10">
-      <button *ngFor="let r of ratings"
-        (click)="selectedRating = r"
-        class="flex-1 py-2.5 rounded-2xl border text-sm font-semibold transition-colors duration-200 flex items-center justify-center gap-1"
-        [class.bg-[#1a2b4a]]="selectedRating === r"
-        [class.border-[#1a2b4a]]="selectedRating === r"
-        [class.text-white]="selectedRating === r"
-        [class.bg-white]="selectedRating !== r"
-        [class.border-slate-200]="selectedRating !== r"
-        [class.text-slate-600]="selectedRating !== r">
-        <svg *ngIf="r !== 'Any'" class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-        </svg>
-        {{ r }}
-      </button>
-    </div>
     <!-- Apply button -->
     <button
       (click)="applyFilters()"
-      class="w-full py-3.5 bg-[#e8722a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200">
+      class="w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200">
       Apply Filters
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>

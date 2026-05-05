@@ -1,6 +1,9 @@
 import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Location } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
+import { DestinationService } from '../../../../core/services/destination.service';
+import { LocationService } from '../../../../core/services/location.service';
 import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
 import { SearchBarComponent } from '../../../../shared/components/search-bar/search-bar.component';
@@ -14,6 +17,10 @@ import { MustSeeSliderComponent } from '../../components/must-see-slider/must-se
 import { LandmarksSliderComponent } from '../../components/landmarks-slider/landmarks-slider.component';
 import { LocalFavoritesListComponent } from '../../components/local-favorites-list/local-favorites-list.component';
 import { ExploreService } from '../../services/explore.service';
+import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
+import { AppNotificationsService } from '../../../../core/services/app-notifications.service';
+import { SearchPageComponent } from '../../../search/pages/search-page/search-page.component';
 
 @Component({
   selector: 'app-explore-page',
@@ -30,6 +37,8 @@ import { ExploreService } from '../../services/explore.service';
     MustSeeSliderComponent,
     LandmarksSliderComponent,
     LocalFavoritesListComponent,
+    EmptyStateComponent,
+    SearchPageComponent,
   ],
   templateUrl: './explore-page.component.html',
   styleUrl: './explore-page.component.scss',
@@ -37,17 +46,78 @@ import { ExploreService } from '../../services/explore.service';
 export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly explore     = inject(ExploreService);
   private readonly auth        = inject(AuthService);
+  private readonly destinationSvc = inject(DestinationService);
+  private readonly locationSvc = inject(LocationService);
   private readonly router      = inject(Router);
+  private readonly route       = inject(ActivatedRoute);
+  private readonly location    = inject(Location);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
+  private readonly analytics   = inject(AnalyticsService);
+  private readonly notifications = inject(AppNotificationsService);
 
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
+  protected readonly hasUnreadNotifications = computed(() => this.notifications.unreadCount() > 0);
+  protected readonly loadError  = this.explore.loadError;
 
-  /** Mock hero location — later replace with user / geo service. */
-  protected readonly heroCity    = signal('Dubrovnik');
-  protected readonly heroCountry = signal('Croatia');
+  constructor() {
+    const routeDestinationId = Number(this.route.snapshot.queryParamMap.get('destinationId'));
+    if (Number.isFinite(routeDestinationId) &&
+      routeDestinationId > 0 &&
+      (!this.destinationSvc.isDestinationMode() || this.destinationSvc.id() !== routeDestinationId)) {
+      this.destinationSvc.setDestinationOverride({
+        id: routeDestinationId,
+        name: this.destinationSvc.name(),
+      });
+    }
+
+    // Opening Explore is an intentional location-aware flow. If GPS is denied
+    // or unavailable, approximate fallback runs automatically.
+    void this.locationSvc.resolveLocationForProductFlow();
+  }
+
+  private readonly heroLocation = computed(() => {
+    if (this.destinationSvc.isDestinationMode()) {
+      return {
+        city: this.destinationSvc.name() || 'Explore',
+        country: '',
+      };
+    }
+
+    const loc = this.locationSvc.location();
+    const label = loc?.displayLabel ?? (this.locationSvc.loading() ? 'Explore' : this.locationSvc.displayLabel());
+    const displayLabel = this.splitDisplayLabel(label);
+    const city = loc?.city?.trim()
+      || loc?.region?.trim()
+      || loc?.country?.trim()
+      || displayLabel.city;
+    const country = loc?.country?.trim() ?? '';
+
+    return {
+      city,
+      country: this.countryForHero(city, country || displayLabel.country),
+    };
+  });
+
+  protected readonly heroCity    = computed(() => this.heroLocation().city);
+  protected readonly heroCountry = computed(() => this.heroLocation().country);
+  protected readonly contextLine = computed(() => {
+    if (this.destinationSvc.isDestinationMode()) {
+      const name = this.destinationSvc.name() || 'this destination';
+      return `Exploring ${name}. Results are based on this destination.`;
+    }
+
+    const source = this.locationSvc.location()?.source;
+    if (source === 'gps') return 'Using exact location.';
+    if (source === 'manual') return 'Using selected location.';
+    if (source === 'approximate') return 'Using approximate location.';
+    if (this.locationSvc.loading()) return 'Resolving location.';
+    return 'Location unavailable.';
+  });
 
   protected readonly searchQuery = signal('');
+  protected readonly isDestinationMode = computed(() => this.destinationSvc.isDestinationMode());
+  protected readonly searchOverlayOpen = signal(this.route.snapshot.data['searchOverlay'] === true);
 
   protected readonly promo        = computed(() => this.explore.promo());
   protected readonly curatedItems = computed(() => this.explore.curatedForYou());
@@ -73,8 +143,48 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     );
   });
 
-  protected onSearchChange(value: string): void {
-    this.searchQuery.set(value);
+  protected openSearch(): void {
+    this.router.navigate(['/search'], { state: { searchFromExplore: true } });
+  }
+
+  protected closeSearch(): void {
+    this.searchOverlayOpen.set(false);
+
+    if (this.router.url.startsWith('/search') && history.state?.searchFromExplore) {
+      this.location.back();
+      return;
+    }
+
+    if (this.router.url.startsWith('/search')) {
+      this.router.navigate(['/explore'], { replaceUrl: true });
+    }
+  }
+
+  protected useCurrentLocation(): void {
+    this.searchQuery.set('');
+    this.explore.useCurrentLocation();
+    this.router.navigate(['/explore'], { replaceUrl: true });
+  }
+
+  private splitDisplayLabel(label: string): { city: string; country: string } {
+    const parts = label
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean);
+
+    if (parts.length === 0) {
+      return { city: 'Explore', country: '' };
+    }
+
+    return {
+      city: parts[0],
+      country: parts.slice(1).join(', '),
+    };
+  }
+
+  private countryForHero(city: string, country: string): string {
+    if (!country) return '';
+    return city.trim().toLowerCase() === country.trim().toLowerCase() ? '' : country;
   }
 
   protected toggleNearbySaved(id: string): void {
@@ -94,6 +204,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     const item = this.explore.localFavorites().find((i) => i.id === id);
     if (!item || item.category === 'hotel') return;
     this.scrollState.markClickedItem('local-favorites', id);
+    this.trackExploreSearchCommit('place', id);
     this.router.navigate(['/places', id]);
   }
 
@@ -139,6 +250,10 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.router.navigate(['/profile']);
   }
 
+  protected onNotifications(): void {
+    this.router.navigate(['/notifications']);
+  }
+
   protected toggleCuratedSaved(id: string): void {
     this.explore.toggleSaved(id, 'curatedForYou');
   }
@@ -149,11 +264,12 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   }
 
   protected onCuratedMore(): void {
-    this.router.navigate(['/culture-and-history']);
+    this.router.navigate(['/recommendations']);
   }
 
   protected onEvent(id: string): void {
     this.scrollState.markClickedItem('events', id);
+    this.trackExploreSearchCommit('event', id);
     this.router.navigate(['/events', id]);
   }
 
@@ -210,5 +326,23 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     });
 
     this.scrollState.save(scrollTop, sliders);
+  }
+
+  private trackExploreSearchCommit(entityType: 'place' | 'event', id: string): void {
+    const query = this.searchQuery().trim();
+    if (query.length < 2) return;
+
+    const entityId = parseInt(id, 10);
+    this.analytics.track('search_performed', {
+      entityType,
+      entityId: isNaN(entityId) ? undefined : entityId,
+      metadata: {
+        surface: 'explore',
+        queryLength: query.length,
+        localMatches: this.filteredLocalFavorites().length,
+        eventMatches: this.eventsThisWeek().length,
+        committed: true,
+      },
+    });
   }
 }

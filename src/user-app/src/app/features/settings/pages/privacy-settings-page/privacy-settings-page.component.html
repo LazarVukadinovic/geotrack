@@ -1,0 +1,73 @@
+<app-settings-subpage-shell
+  title="Privacy Settings"
+  description="GeoTrack uses location, interests, and saved places to keep nearby suggestions useful while you travel. Precise and approximate coordinates stay in the current browser session.">
+  <div class="flex flex-col gap-4">
+    @if (feedbackMessage()) {
+      <div class="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        {{ feedbackMessage() }}
+      </div>
+    }
+
+    <div class="rounded-[1.5rem] bg-white p-4 shadow-sm">
+      <p class="mb-3 text-[12px] font-bold uppercase tracking-[0.15em] text-slate-500">Location On This Device</p>
+      <div class="flex flex-col gap-3">
+        <div class="rounded-2xl bg-slate-50 px-4 py-4">
+          <p class="text-sm font-semibold text-slate-800">{{ locationStatus() }}</p>
+          <p class="mt-1 text-sm text-slate-500">
+            @if (location()) {
+              Using {{ sourceLabel() }} to tailor nearby places, map results, and city-aware recommendations.
+            } @else {
+              GeoTrack will ask again for a location when a travel screen needs it.
+            }
+          </p>
+        </div>
+
+        <button
+          type="button"
+          (click)="clearSavedLocation()"
+          class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors active:bg-slate-50">
+          Clear Location State
+        </button>
+      </div>
+    </div>
+
+    <div class="rounded-[1.5rem] bg-white p-4 shadow-sm">
+      <p class="mb-3 text-[12px] font-bold uppercase tracking-[0.15em] text-slate-500">How GeoTrack Uses Your Data</p>
+      <div class="flex flex-col gap-3 text-sm leading-relaxed text-slate-600">
+        <p>Your profile details keep your account recognizable across collections, interests, and support requests.</p>
+        <p>Your interests and saved places help GeoTrack rank recommendations that feel more relevant to the cities you browse.</p>
+        <p>Device location is used to improve nearby discovery. Precise GPS and approximate network-based coordinates are stored only for the current browser session, not long-term local storage.</p>
+        <p>If precise location is denied or unavailable, GeoTrack uses approximate network-based location automatically for nearby discovery. Clearing location state does not touch your account.</p>
+      </div>
+    </div>
+
+    <div class="rounded-[1.5rem] bg-white p-4 shadow-sm">
+      <p class="mb-3 text-[12px] font-bold uppercase tracking-[0.15em] text-slate-500">Privacy Quick Actions</p>
+      <div class="flex flex-col gap-3">
+        <button
+          type="button"
+          (click)="openInterests()"
+          class="rounded-2xl border border-slate-200 px-4 py-3 text-left transition-colors active:bg-slate-50">
+          <span class="block text-sm font-semibold text-slate-800">Review my interests</span>
+          <span class="mt-1 block text-sm text-slate-500">Adjust the categories that shape GeoTrack recommendations.</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="openLegal()"
+          class="rounded-2xl border border-slate-200 px-4 py-3 text-left transition-colors active:bg-slate-50">
+          <span class="block text-sm font-semibold text-slate-800">Read the privacy policy</span>
+          <span class="mt-1 block text-sm text-slate-500">See the full product terms, data handling notes, and travel-content guidelines.</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="openSupport()"
+          class="rounded-2xl border border-slate-200 px-4 py-3 text-left transition-colors active:bg-slate-50">
+          <span class="block text-sm font-semibold text-slate-800">Ask a privacy question</span>
+          <span class="mt-1 block text-sm text-slate-500">Send a real support request if something about your account or saved data needs attention.</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</app-settings-subpage-shell>

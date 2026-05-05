@@ -1,5 +1,6 @@
-﻿using Geotrack.Application.Interfaces.Repository;
+using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities;
+using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
@@ -15,16 +16,18 @@ namespace Geotrack.Infrastructure.Repositories
             _context = context;
         }
 
-        public async Task<bool> ExistsAsync(string username, string email)
+        public async Task<bool> ExistsByEmailAsync(string email)
         {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
             return await _context.Users
-                .AnyAsync(u => u.Username == username || u.Email == email);
+                .AnyAsync(u => u.Email.ToLower() == normalizedEmail);
         }
 
-        public async Task<User?> GetByUsernameAsync(string username)
+        public async Task<User?> GetByEmailAsync(string email)
         {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
             return await _context.Users
-                .FirstOrDefaultAsync(u => u.Username == username);
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
         }
 
         public async Task<User?> GetByIdWithCollectionsAsync(int userId)
@@ -70,12 +73,19 @@ namespace Geotrack.Infrastructure.Repositories
             return await _context.Collections
                 .Include(c => c.CollectionItems)
                     .ThenInclude(ci => ci.Destination)
+                    .ThenInclude(d => d!.Images)
                 .Include(c => c.CollectionItems)
                     .ThenInclude(ci => ci.Location)
+                    .ThenInclude(l => l!.Images)
                 .Include(c => c.CollectionItems)
                     .ThenInclude(ci => ci.Place)
+                    .ThenInclude(p => p!.Images)
+                .Include(c => c.CollectionItems)
+                    .ThenInclude(ci => ci.Place)
+                    .ThenInclude(p => p!.Stay)
                 .Include(c => c.CollectionItems)
                     .ThenInclude(ci => ci.Event)
+                    .ThenInclude(e => e!.Images)
                 .FirstOrDefaultAsync(c => c.Id == collectionId && c.UserId == userId);
         }
 
@@ -83,6 +93,27 @@ namespace Geotrack.Infrastructure.Repositories
         {
             return await _context.CollectionItems
                 .CountAsync(ci => ci.CollectionId == collectionId);
+        }
+
+        public async Task<List<string>> GetCollectionCoverImagesAsync(int collectionId, int maxCount)
+        {
+            if (maxCount <= 0) return new List<string>();
+
+            var urls = await _context.CollectionItems
+                .Where(ci => ci.CollectionId == collectionId)
+                .OrderByDescending(ci => ci.CreatedAt)
+                .Select(ci =>
+                    ci.Place != null ? ci.Place.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
+                    ci.Event != null ? ci.Event.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
+                    ci.Destination != null ? ci.Destination.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
+                    ci.Location != null ? ci.Location.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() : null)
+                .ToListAsync();
+
+            return urls
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Select(u => u!)
+                .Take(maxCount)
+                .ToList();
         }
 
         public async Task<List<Tag>> GetTagsByIdsAsync(IEnumerable<int> tagIds)
@@ -157,6 +188,20 @@ namespace Geotrack.Infrastructure.Repositories
             await _context.CollectionItems.AddAsync(item);
         }
 
+        public async Task<List<SupportRequest>> GetSupportRequestsByUserIdAsync(int userId, int take)
+        {
+            return await _context.SupportRequests
+                .Where(request => request.UserId == userId)
+                .OrderByDescending(request => request.CreatedAt)
+                .Take(take)
+                .ToListAsync();
+        }
+
+        public async Task AddSupportRequestAsync(SupportRequest supportRequest)
+        {
+            await _context.SupportRequests.AddAsync(supportRequest);
+        }
+
         public async Task AddUserTagAsync(UserTag userTag)
         {
             await _context.UserTags.AddAsync(userTag);
@@ -167,5 +212,98 @@ namespace Geotrack.Infrastructure.Repositories
             _context.UserTags.RemoveRange(userTags);
             return Task.CompletedTask;
         }
+
+        public async Task<List<UserInterestSignal>> GetVisibleInferredInterestSignalsAsync(int userId, double minimumScore)
+        {
+            var explicitTagIds = _context.UserTags
+                .Where(ut => ut.UserId == userId)
+                .Select(ut => ut.TagId);
+
+            return await _context.UserInterestSignals
+                .Include(signal => signal.Tag)
+                .Where(signal =>
+                    signal.UserId == userId &&
+                    signal.Source == "inferred" &&
+                    !signal.IsDismissed &&
+                    signal.Score >= minimumScore &&
+                    !explicitTagIds.Contains(signal.TagId))
+                .OrderByDescending(signal => signal.Score)
+                .ThenBy(signal => signal.Tag.Name)
+                .ToListAsync();
+        }
+
+        public async Task<UserInterestSignal?> GetUserInterestSignalAsync(int userId, int tagId)
+        {
+            return await _context.UserInterestSignals
+                .Include(signal => signal.Tag)
+                .FirstOrDefaultAsync(signal =>
+                    signal.UserId == userId &&
+                    signal.TagId == tagId &&
+                    signal.Source == "inferred");
+        }
+
+        public async Task<User?> GetByIdWithRolesAsync(int userId)
+        {
+            return await _context.Users.Include(u => u.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task<Role?> GetRoleByNameAsync(string roleName)
+        {
+            return await _context.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
+        }
+
+        public Task RemoveUserRoleAsync(UserRole userRole)
+        {
+            _context.UserRoles.Remove(userRole);
+            return Task.CompletedTask;
+        }
+
+        public async Task<User?> GetByIdWithRegionsAsync(int userId)
+        {
+            return await _context.Users.Include(u => u.RegionalManager).ThenInclude(ro => ro.RegionalManagerRegions).ThenInclude(ror => ror.Region).FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task<User?> GetByIdWithRolesAndRegionsAsync(int userId)
+        {
+            return await _context.Users
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .Include(u => u.RegionalManager)
+                    .ThenInclude(ro => ro.RegionalManagerRegions)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task AddRegionalManagerAsync(RegionalManager regionalOrganization)
+        {
+            await _context.RegionalManagers.AddAsync(regionalOrganization);
+        }
+
+        public async Task<bool> RegionExistsAsync(int regionId)
+        {
+            return await _context.Regions.AnyAsync(r => r.Id == regionId);
+        }
+
+        public async Task<bool> UserRegionExistsAsync(int userId, int regionId)
+        {
+            return await _context.RegionalManagerRegions.AnyAsync(ror => ror.UserId == userId && ror.RegionId == regionId);
+        }
+
+        public async Task AddUserRegionAsync(RegionalManagerRegion region)
+        {
+            await _context.RegionalManagerRegions.AddAsync(region);
+        }
+
+        public async Task<RegionalManagerRegion?> GetUserRegionAsync(int userId, int regionId)
+        {
+            return await _context.RegionalManagerRegions
+                .FirstOrDefaultAsync(ror => ror.UserId == userId && ror.RegionId == regionId);
+        }
+
+        public Task DeleteUserRegionAsync(RegionalManagerRegion region)
+        {
+            _context.RegionalManagerRegions.Remove(region);
+            return Task.CompletedTask;
+        }
     }
 }
+

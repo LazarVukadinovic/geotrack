@@ -1,4 +1,5 @@
-﻿using Geotrack.Application.DTOs.Users;
+using Geotrack.Application.DTOs.Tags;
+using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,10 +7,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace Geotrack.Server.Controllers;
 
 [ApiController]
-[Route("api/users")]
+[Route("api/user")]
 [Authorize]
 public class UserController : ControllerBase
 {
+    private const long MaxAvatarFileSizeBytes = 5 * 1024 * 1024;
     private readonly IUserService _userService;
 
     public UserController(IUserService userService)
@@ -43,6 +45,95 @@ public class UserController : ControllerBase
         }
     }
 
+    [HttpPut("me/avatar")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<UpdateAvatarResponseDto>> UpdateAvatar(
+        IFormFile? avatar)
+    {
+        try
+        {
+            if (avatar is null || avatar.Length == 0)
+                return BadRequest(new { message = "Please select an image to upload." });
+
+            if (avatar.Length > MaxAvatarFileSizeBytes)
+                return BadRequest(new { message = "Profile image must be 5 MB or smaller." });
+
+            await using var memoryStream = new MemoryStream();
+            await avatar.CopyToAsync(memoryStream);
+
+            return Ok(await _userService.UpdateAvatarAsync(GetUserId(), memoryStream.ToArray()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("me/password")]
+    public async Task<ActionResult<ChangePasswordResponseDto>> ChangePassword([FromBody] ChangePasswordRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.ChangePasswordAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("me/notifications")]
+    public async Task<ActionResult<GetNotificationSettingsResponseDto>> GetNotificationSettings()
+    {
+        try
+        {
+            return Ok(await _userService.GetNotificationSettingsAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("me/notifications")]
+    public async Task<ActionResult<UpdateNotificationSettingsResponseDto>> UpdateNotificationSettings([FromBody] UpdateNotificationSettingsRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.UpdateNotificationSettingsAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("me/analytics")]
+    public async Task<ActionResult<GetAnalyticsSettingsResponseDto>> GetAnalyticsSettings()
+    {
+        try
+        {
+            return Ok(await _userService.GetAnalyticsSettingsAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("me/analytics")]
+    public async Task<ActionResult<UpdateAnalyticsSettingsResponseDto>> UpdateAnalyticsSettings([FromBody] UpdateAnalyticsSettingsRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.UpdateAnalyticsSettingsAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("me/interests")]
     public async Task<ActionResult<GetUserInterestsResponseDto>> GetUserInterests()
     {
@@ -56,12 +147,52 @@ public class UserController : ControllerBase
         }
     }
 
+    [HttpGet("me/support-requests")]
+    public async Task<ActionResult<GetSupportRequestsResponseDto>> GetSupportRequests()
+    {
+        try
+        {
+            return Ok(await _userService.GetSupportRequestsAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("me/support-requests")]
+    public async Task<ActionResult<CreateSupportRequestResponseDto>> CreateSupportRequest([FromBody] CreateSupportRequestRequestDto request)
+    {
+        try
+        {
+            return Ok(await _userService.CreateSupportRequestAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpPut("me/interests")]
     public async Task<ActionResult<UpdateUserInterestsResponseDto>> UpdateUserInterests([FromBody] UpdateUserInterestsRequestDto request)
     {
         try
         {
             return Ok(await _userService.UpdateUserInterestsAsync(GetUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("me/interests/inferred/{tagId:int}")]
+    public async Task<ActionResult> DismissInferredInterest([FromRoute] int tagId)
+    {
+        try
+        {
+            await _userService.DismissInferredInterestAsync(GetUserId(), tagId);
+            return NoContent();
         }
         catch (Exception ex)
         {
@@ -162,6 +293,96 @@ public class UserController : ControllerBase
         }
     }
 
+    [HttpPut("~/api/users/{id:int}/role/regional-manager")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AssignRegionalManagerRole([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _userService.AssignRegionalManagerRoleAsync(id);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("~/api/users/{id:int}/role/regional-manager")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> RemoveRegionalManagerRole([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _userService.RemoveRegionalManagerRoleAsync(id);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("~/api/users/{id:int}/regions")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetUserRegions([FromRoute] int id)
+    {
+        try
+        {
+            var result = await _userService.GetUserRegionsAsync(id);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("~/api/users/{id:int}/regions")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateUserRegions([FromRoute] int id, [FromBody] UpdateUserRegionsRequestDto request)
+    {
+        try
+        {
+            var result = await _userService.UpdateUserRegionsAsync(id, request);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("~/api/users/{id:int}/regions/{regionId:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AddUserRegion([FromRoute] int id, [FromRoute] int regionId)
+    {
+        try
+        {
+            var result = await _userService.AddUserRegionAsync(id, regionId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("~/api/users/{id:int}/regions/{regionId:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeleteUserRegion([FromRoute] int id, [FromRoute] int regionId)
+    {
+        try
+        {
+            var result = await _userService.DeleteUserRegionAsync(id, regionId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     private int GetUserId()
     {
         var userIdClaim = User.FindFirst("userId")?.Value;
@@ -179,7 +400,7 @@ public class UserController : ControllerBase
             UnauthorizedAccessException => Unauthorized(new { message = ex.Message }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
-            _ => BadRequest(new { message = ex.Message })
+            _ => StatusCode(500, new { message = "An unexpected error occurred." })
         };
     }
 }

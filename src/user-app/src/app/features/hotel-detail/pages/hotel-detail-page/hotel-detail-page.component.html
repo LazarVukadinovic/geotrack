@@ -18,19 +18,11 @@
       <span class="hd__top-bar-title" aria-hidden="true">Stay</span>
 
       <div class="hd__hero-actions">
-        <button type="button" class="hd__hero-btn" aria-label="Share this stay">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>
-          </svg>
-        </button>
-
         <button
           type="button"
           class="hd__hero-btn"
           [class.hd__hero-btn--saved]="h.isSaved"
-          [attr.aria-label]="h.isSaved ? 'Remove from saved' : 'Save stay'"
+          [attr.aria-label]="h.isSaved ? 'Saved. Choose collection' : 'Save stay to collection'"
           (click)="toggleSaved()"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -50,14 +42,14 @@
     <!-- ── Hero image: absolute backdrop, never scrolls ──────────────────── -->
     <div class="hd__hero" aria-hidden="true">
       <img
+        appImageFallback
         class="hd__hero-img"
-        [src]="h.heroImage"
+        [src]="heroImage()"
         alt=""
         width="800"
         height="480"
         loading="eager"
         decoding="async"
-        (error)="onHeroImgError($event)"
       />
     </div>
 
@@ -93,85 +85,156 @@
               <path fill="currentColor"
                     d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
             </svg>
-            <span class="hd__stat-val">{{ h.rating.toFixed(1) }}</span>
-            <span class="hd__stat-sub">({{ h.reviewCount }} reviews)</span>
+            @if (h.rating != null) {
+              <span class="hd__stat-val">{{ h.rating!.toFixed(1) }}</span>
+              @if (h.reviewCount) {
+                <span class="hd__stat-sub">({{ h.reviewCount }})</span>
+              }
+            } @else {
+              <span class="hd__stat-sub hd__stat-sub--empty">No reviews yet</span>
+            }
           </div>
 
-          <span class="hd__stat-dot" aria-hidden="true"></span>
+          @if (h.distance) {
+            <span class="hd__stat-dot" aria-hidden="true"></span>
 
-          <div class="hd__stat">
-            <svg class="hd__stat-icon hd__stat-icon--dist" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke="currentColor" fill="none" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round"
-                    d="M3 18l9-9 9 9"/>
-            </svg>
-            <span class="hd__stat-val">{{ h.distance }}</span>
-          </div>
+            <div class="hd__stat">
+              <svg class="hd__stat-icon hd__stat-icon--dist" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke="currentColor" fill="none" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round"
+                      d="M3 18l9-9 9 9"/>
+              </svg>
+              <span class="hd__stat-val">{{ h.distance }}</span>
+            </div>
+          }
+
+          @if (h.pricePerNight != null) {
+            <span class="hd__stat-dot" aria-hidden="true"></span>
+
+            <div class="hd__stat">
+              <span class="hd__stat-val">${{ h.pricePerNight }}</span>
+              <span class="hd__stat-sub">/ night</span>
+            </div>
+          }
         </div>
 
         <!-- CTA buttons -->
-        <div class="hd__ctas">
-          <button type="button" class="hd__cta hd__cta--primary" (click)="onGetDirections()">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path fill="currentColor"
-                    d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-            Get Directions
-          </button>
-          <button type="button" class="hd__cta hd__cta--outline" (click)="onViewOnMap()">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke="currentColor" fill="none" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round"
-                    d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
-            </svg>
-            View on Map
-          </button>
-        </div>
-
-        <!-- ── Booking partners ──────────────────────────────────────────── -->
-        <div class="hd__divider"></div>
-
-        <section class="hd__section">
-          <div class="hd__booking">
-            <p class="hd__booking-heading">Bookings completed on partner sites</p>
-
-            @for (partner of h.bookingPartners; track partner.id) {
-              @if (partner.variant !== 'muted') {
-                <button
-                  type="button"
-                  class="hd__partner-btn hd__partner-btn--{{ partner.variant }}"
-                  (click)="onBookingPartner(partner.id)"
-                >
-                  <span>{{ partner.name }}</span>
-                  <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
-                  </svg>
-                </button>
-              }
+        @if (directionsUrl() || hasMapCoordinates()) {
+          <div class="hd__ctas">
+            @if (directionsUrl(); as directionsHref) {
+              <a
+                class="hd__cta hd__cta--primary"
+                [href]="directionsHref"
+                target="_blank"
+                rel="noopener noreferrer"
+                (click)="onDirectionsClick()"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor"
+                        d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                Get Directions
+                <svg class="hd__cta-external-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                </svg>
+              </a>
             }
-
-            <p class="hd__booking-also">Also available on</p>
-
-            @for (partner of h.bookingPartners; track partner.id) {
-              @if (partner.variant === 'muted') {
-                <button
-                  type="button"
-                  class="hd__partner-btn hd__partner-btn--muted"
-                  (click)="onBookingPartner(partner.id)"
-                >
-                  <span>{{ partner.name }}</span>
-                  <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
-                  </svg>
-                </button>
-              }
+            @if (hasMapCoordinates()) {
+              <button
+                type="button"
+                class="hd__cta hd__cta--outline"
+                (click)="viewOnMap()"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke="currentColor" fill="none" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+                </svg>
+                View on Map
+              </button>
             }
           </div>
-        </section>
+        }
+
+        <!-- ── Booking partners ──────────────────────────────────────────── -->
+        @if (h.images.length > 1) {
+          <section class="hd__gallery" aria-label="Stay photos">
+            <div class="hd__gallery-track" role="list">
+              @for (image of h.images; track image.id) {
+                <button
+                  type="button"
+                  class="hd__gallery-thumb"
+                  [class.hd__gallery-thumb--active]="isGalleryImageActive(image.url)"
+                  [attr.aria-label]="'Show photo ' + ($index + 1) + ' of ' + h.images.length"
+                  (click)="selectGalleryImage(image.url)"
+                >
+                  <img
+                    appImageFallback
+                    class="hd__gallery-img"
+                    [src]="image.url"
+                    [alt]="image.altText || h.title"
+                    width="120"
+                    height="84"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </button>
+              }
+            </div>
+          </section>
+        }
+
+        @if (hasBookingPartners()) {
+          <div class="hd__divider"></div>
+
+          <section class="hd__section">
+            <div class="hd__booking">
+              <p class="hd__booking-heading">Bookings completed on partner sites</p>
+
+              @for (partner of primaryBookingPartners(); track partner.id) {
+                <a
+                  class="hd__partner-btn hd__partner-btn--{{ partner.variant }}"
+                  [href]="partner.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  (click)="onPartnerClick(partner)"
+                >
+                  <span>{{ partner.name }}</span>
+                  <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                  </svg>
+                </a>
+              }
+
+              @if (secondaryBookingPartners().length) {
+                @if (primaryBookingPartners().length) {
+                  <p class="hd__booking-also">Also available on</p>
+                }
+
+                @for (partner of secondaryBookingPartners(); track partner.id) {
+                  <a
+                    class="hd__partner-btn hd__partner-btn--muted"
+                    [href]="partner.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    (click)="onPartnerClick(partner)"
+                  >
+                    <span>{{ partner.name }}</span>
+                    <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                    </svg>
+                  </a>
+                }
+              }
+            </div>
+          </section>
+        }
 
         <!-- ── About ──────────────────────────────────────────────────────── -->
         <div class="hd__divider"></div>
@@ -180,6 +243,22 @@
           <h2 class="hd__section-title">About this property</h2>
           <p class="hd__about">{{ h.about }}</p>
         </section>
+
+        @if (h.contactEmail || h.phoneNumber) {
+          <div class="hd__divider"></div>
+
+          <section class="hd__section">
+            <h2 class="hd__section-title">Contact</h2>
+            <div class="flex flex-col gap-2 text-sm">
+              @if (h.contactEmail) {
+                <a [href]="'mailto:' + h.contactEmail" class="text-[#e8570a] break-all">{{ h.contactEmail }}</a>
+              }
+              @if (h.phoneNumber) {
+                <p class="text-slate-600">{{ h.phoneNumber }}</p>
+              }
+            </div>
+          </section>
+        }
 
         <!-- ── Amenities ──────────────────────────────────────────────────── -->
         <div class="hd__divider"></div>
@@ -211,15 +290,24 @@
         <section class="hd__section">
           <app-section-header
             title="Reviews"
-            actionLabel="See all"
-            (action)="onSeeAllReviews()"
+            actionLabel="More"
+            (action)="openReviews()"
           />
 
           <app-review-entry
             [isLoggedIn]="isLoggedIn()"
             [entityName]="h.title"
+            [submitRequest]="submitReview"
             (loginRequested)="goToLogin()"
+            (reviewSubmitted)="onReviewSubmitted($event)"
           />
+
+          @if (reportMessage()) {
+            <p class="hd__review-notice hd__review-notice--success" role="status">{{ reportMessage() }}</p>
+          }
+          @if (reportError()) {
+            <p class="hd__review-notice hd__review-notice--error" role="alert">{{ reportError() }}</p>
+          }
 
           <!-- Review cards -->
           <div class="hd__reviews-list">
@@ -250,12 +338,24 @@
 
                 <p class="hd__review-body">{{ review.body }}</p>
 
-                <button type="button" class="hd__review-helpful">
+                <button
+                  type="button"
+                  class="hd__review-report"
+                  [class.hd__review-report--reported]="isReviewReported(review)"
+                  [disabled]="isReviewReported(review) || isReviewReporting(review.id)"
+                  (click)="reportReview(review.id)"
+                >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="currentColor"
-                          d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
+                    <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                          d="M5 21V4.6c0-.9.74-1.6 1.65-1.6h9.7c.83 0 1.5.67 1.5 1.5v7.2c0 .83-.67 1.5-1.5 1.5H6"/>
                   </svg>
-                  Helpful ({{ review.helpfulCount }})
+                  @if (isReviewReporting(review.id)) {
+                    Reporting...
+                  } @else if (isReviewReported(review)) {
+                    Reported
+                  } @else {
+                    Report
+                  }
                 </button>
               </div>
             }
@@ -268,7 +368,6 @@
         <section class="hd__section hd__section--last">
           <app-section-header
             title="Similar Stays"
-            actionLabel="More"
           />
 
           <div class="hd__similar-viewport">
@@ -280,44 +379,31 @@
                   (click)="navigateToSimilar(s.id)"
                 >
                   <div class="hd__similar-media">
-                    <img
-                      class="hd__similar-img"
-                      [src]="s.image"
-                      [alt]="s.title"
+                  <img
+                    appImageFallback
+                    class="hd__similar-img"
+                    [src]="s.image"
+                    [alt]="s.title"
                       width="160"
                       height="110"
                       loading="lazy"
                       decoding="async"
                     />
-                    <button
-                      type="button"
-                      class="hd__similar-fav"
-                      [class.hd__similar-fav--saved]="isSimilarSaved(s.id)"
-                      [attr.aria-label]="isSimilarSaved(s.id) ? 'Remove from saved' : 'Save'"
-                      (click)="toggleSimilarSaved($event, s.id)"
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          [attr.fill]="isSimilarSaved(s.id) ? '#e8570a' : 'none'"
-                          [attr.stroke]="isSimilarSaved(s.id) ? 'none' : 'currentColor'"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-                        />
-                      </svg>
-                    </button>
                   </div>
 
                   <div class="hd__similar-body">
                     <h3 class="hd__similar-title">{{ s.title }}</h3>
                     <div class="hd__similar-meta">
-                      <svg class="hd__similar-star" viewBox="0 0 24 24" aria-hidden="true">
-                        <path fill="currentColor"
-                              d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
-                      </svg>
-                      <span class="hd__similar-rating">{{ s.rating.toFixed(1) }}</span>
-                      <span class="hd__similar-dist">{{ s.distance }}</span>
+                      @if (s.rating != null) {
+                        <svg class="hd__similar-star" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="currentColor"
+                                d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                        </svg>
+                        <span class="hd__similar-rating">{{ s.rating!.toFixed(1) }}</span>
+                      }
+                      @if (s.distance) {
+                        <span class="hd__similar-dist">{{ s.distance }}</span>
+                      }
                     </div>
                   </div>
                 </article>
@@ -331,6 +417,15 @@
 
   </article>
 
+} @else if (hotelId() && loadState() === 'loading') {
+  <div class="hd__not-found">
+    <p>Loading stay...</p>
+  </div>
+} @else if (hotelId() && loadState() === 'error') {
+  <div class="hd__not-found">
+    <p>We couldn't load this stay right now.</p>
+    <button type="button" class="hd__not-found-back" (click)="goBack()">Go back</button>
+  </div>
 } @else if (hotelId()) {
   <div class="hd__not-found">
     <p>Stay not found.</p>
