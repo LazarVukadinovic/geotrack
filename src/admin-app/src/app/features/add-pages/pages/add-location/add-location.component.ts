@@ -4,6 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { Router } from '@angular/router';
+import { LocationsService } from '../../../../core/services/locations.service';
+import { LightboxService } from '../../../../core/services/lightbox.service';
+import { ZoneDrawService } from '../../../../core/services/zone-draw.service';
 declare const L: any;
 
 interface ClassItem {
@@ -32,7 +35,7 @@ interface ClassItem {
 })
 export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private router: Router) {}
+  constructor(private zone: NgZone, private router: Router, private locationsService: LocationsService, private lightboxService: LightboxService, private zoneDrawService: ZoneDrawService) {}
 
   //ViewChild refs
   @ViewChild('editorRef')        editorRef!:           ElementRef<HTMLDivElement>;
@@ -201,7 +204,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
 
     if (this.confirmedLayer) {
-      const layerCopy = this.cloneLayer(this.confirmedLayer);
+      const layerCopy = this.zoneDrawService.cloneLayer(this.confirmedLayer);
       if (layerCopy) {
         layerCopy.addTo(this.modalMap);
         this.drawnLayer = layerCopy;
@@ -291,7 +294,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
           this.drawnLayer.getLatLngs()[0],
         );
       } else {
-        areaM2 = this.shoelaceAreaM2(this.drawnLayer.getLatLngs()[0]);
+        areaM2 = this.zoneDrawService.shoelaceAreaM2(this.drawnLayer.getLatLngs()[0]);
       }
     }
 
@@ -312,7 +315,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
     });
 
-    const clone = this.cloneLayer(this.confirmedLayer);
+    const clone = this.zoneDrawService.cloneLayer(this.confirmedLayer);
     if (!clone) return;
 
     (clone as any)._isConfirmedZone = true;
@@ -321,177 +324,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     try {
       this.miniMap.fitBounds(clone.getBounds(), { padding: [10, 10] });
     } catch {}
-  }
-  private cloneLayer(layer: any): any {
-    const style = { color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.25, weight: 2 };
-    if (layer instanceof L.Circle)    return L.circle(layer.getLatLng(),    { ...style, radius: layer.getRadius() });
-    if (layer instanceof L.Rectangle) return L.rectangle(layer.getBounds(), style);
-    if (layer instanceof L.Polygon)   return L.polygon(layer.getLatLngs(),  style);
-    return null;
-  }
-
-  private shoelaceAreaM2(latlngs: any[]): number {
-    const flat = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
-    const R    = 6_371_000;
-    let area   = 0;
-    const n    = flat.length;
-    for (let i = 0; i < n; i++) {
-      const j    = (i + 1) % n;
-      const lat1 = (flat[i].lat * Math.PI) / 180;
-      const lat2 = (flat[j].lat * Math.PI) / 180;
-      const lng1 = (flat[i].lng * Math.PI) / 180;
-      const lng2 = (flat[j].lng * Math.PI) / 180;
-      area      += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
-    }
-    return Math.abs((area * R * R) / 2);
-  }
-
-  private lightboxEl: HTMLElement | null = null;
-  private _lightboxKeyHandler: ((e: KeyboardEvent) => void) | null = null;
-  private _currentImages: { url: string; name: string }[] = [];
-  private _currentIndex  = 0;
-
-  openLightbox(images: { url: string; name: string }[], index: number): void {
-    this.zone.run(() => {
-      this.closeLightbox();
-      this._currentImages = [...images];
-      this._currentIndex  = index;
-      this._renderLightbox();
-
-      this._lightboxKeyHandler = (e: KeyboardEvent) => {
-        if (e.key === 'Escape')     { this.closeLightbox(); }
-        if (e.key === 'ArrowRight') {
-          this._currentIndex = (this._currentIndex + 1) % this._currentImages.length;
-          this._renderLightbox();
-        }
-        if (e.key === 'ArrowLeft') {
-          this._currentIndex = (this._currentIndex - 1 + this._currentImages.length) % this._currentImages.length;
-          this._renderLightbox();
-        }
-      };
-      document.addEventListener('keydown', this._lightboxKeyHandler);
-      document.body.style.overflow = 'hidden';
-    });
-  }
-
-  private _renderLightbox(): void {
-    if (this.lightboxEl) document.body.removeChild(this.lightboxEl);
-
-    const imgs   = this._currentImages;
-    const idx    = this._currentIndex;
-    const single = imgs.length === 1;
-
-    const overlay = document.createElement('div');
-    overlay.style.cssText =
-      'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);' +
-      'display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', () => this.closeLightbox());
-
-    // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.innerHTML = '&times;';
-    closeBtn.style.cssText =
-      'position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;' +
-      'background:rgba(255,255,255,0.15);border:none;color:white;font-size:24px;' +
-      'cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
-    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.closeLightbox(); });
-    overlay.appendChild(closeBtn);
-
-    // Counter
-    if (!single) {
-      const counter = document.createElement('div');
-      counter.textContent = `${idx + 1} / ${imgs.length}`;
-      counter.style.cssText =
-        'position:absolute;top:16px;left:50%;transform:translateX(-50%);color:white;' +
-        'font-size:14px;font-weight:500;background:rgba(0,0,0,0.4);' +
-        'padding:4px 12px;border-radius:20px;z-index:1;';
-      overlay.appendChild(counter);
-    }
-
-    // Prev button
-    if (!single) {
-      const prev = document.createElement('button');
-      prev.innerHTML = '&#8249;';
-      prev.style.cssText =
-        'position:absolute;left:16px;top:50%;transform:translateY(-50%);width:44px;height:44px;' +
-        'border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;' +
-        'font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
-      prev.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._currentIndex = (idx - 1 + imgs.length) % imgs.length;
-        this._renderLightbox();
-      });
-      overlay.appendChild(prev);
-    }
-
-    // Main image
-    const img = document.createElement('img');
-    img.src = imgs[idx].url;
-    img.alt = imgs[idx].name;
-    img.style.cssText =
-      'max-width:88vw;max-height:80vh;object-fit:contain;' +
-      'border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.5);';
-    img.addEventListener('click', (e) => e.stopPropagation());
-    overlay.appendChild(img);
-
-    // Next button
-    if (!single) {
-      const next = document.createElement('button');
-      next.innerHTML = '&#8250;';
-      next.style.cssText =
-        'position:absolute;right:16px;top:50%;transform:translateY(-50%);width:44px;height:44px;' +
-        'border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;' +
-        'font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
-      next.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._currentIndex = (idx + 1) % imgs.length;
-        this._renderLightbox();
-      });
-      overlay.appendChild(next);
-    }
-
-    // Thumbnails
-    if (!single) {
-      const thumbRow = document.createElement('div');
-      thumbRow.style.cssText =
-        'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);' +
-        'display:flex;gap:8px;z-index:1;';
-      thumbRow.addEventListener('click', (e) => e.stopPropagation());
-
-      imgs.forEach((im, ti) => {
-        const thumb = document.createElement('div');
-        thumb.style.cssText =
-          `width:48px;height:48px;border-radius:8px;overflow:hidden;cursor:pointer;` +
-          `border:2px solid ${ti === idx ? 'white' : 'transparent'};` +
-          `opacity:${ti === idx ? '1' : '0.5'};transition:all 0.15s;`;
-        const tImg = document.createElement('img');
-        tImg.src = im.url;
-        tImg.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-        tImg.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this._currentIndex = ti;
-          this._renderLightbox();
-        });
-        thumb.appendChild(tImg);
-        thumbRow.appendChild(thumb);
-      });
-      overlay.appendChild(thumbRow);
-    }
-
-    document.body.appendChild(overlay);
-    this.lightboxEl = overlay;
-  }
-
-  closeLightbox(): void {
-    if (this.lightboxEl) {
-      document.body.removeChild(this.lightboxEl);
-      this.lightboxEl = null;
-    }
-    if (this._lightboxKeyHandler) {
-      document.removeEventListener('keydown', this._lightboxKeyHandler);
-      this._lightboxKeyHandler = null;
-    }
-    document.body.style.overflow = '';
   }
 
   //Lifecycle
@@ -526,73 +358,48 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     setTimeout(() => this.initMiniMap(), 0);
   }
-
+  openLightbox(images: { url: string; name: string }[], index: number): void {
+    this.lightboxService.open(images, index);
+  }
   ngOnDestroy(): void {
     this.destroyModalMap();
-    this.closeLightbox();
+    this.lightboxService.close();
     this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
   }
+  isSaving = false;
   publish(): void {
     if (!this.zoneConfirmed || !this.confirmedLayer) {
       alert('Please draw a zone on the map first.');
       return;
     }
+    this.isSaving = true;
+    const { zone, centerLat, centerLng } = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
+    const areaKm2 = this.zoneDrawService.calculateAreaKm2(this.confirmedLayer);
 
-    let zone: [number, number][] = [];
-    let centerLat: number;
-    let centerLng: number;
-
-    try {
-      if (this.confirmedLayer instanceof L.Circle) {
-        const center = this.confirmedLayer.getLatLng();
-        const radius = this.confirmedLayer.getRadius();
-        centerLat = center.lat;
-        centerLng = center.lng;
-        const points = 16;
-        for (let i = 0; i < points; i++) {
-          const angle = (i / points) * 2 * Math.PI;
-          const dLat = (radius / 111320) * Math.cos(angle);
-          const dLng = (radius / (111320 * Math.cos(center.lat * Math.PI / 180))) * Math.sin(angle);
-          zone.push([center.lat + dLat, center.lng + dLng]);
-        }
-      } else if (this.confirmedLayer instanceof L.Rectangle) {
-        const bounds = this.confirmedLayer.getBounds();
-        centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
-        centerLng = (bounds.getEast() + bounds.getWest()) / 2;
-        zone = [
-          [bounds.getNorth(), bounds.getWest()],
-          [bounds.getNorth(), bounds.getEast()],
-          [bounds.getSouth(), bounds.getEast()],
-          [bounds.getSouth(), bounds.getWest()],
-        ];
-      } else {
-        // Polygon
-        const latlngs = this.confirmedLayer.getLatLngs();
-        const flat = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
-        zone = (flat as any[]).map((ll: any) => [ll.lat, ll.lng] as [number, number]);
-        const bounds = this.confirmedLayer.getBounds();
-        centerLat = bounds.getCenter().lat;
-        centerLng = bounds.getCenter().lng;
-      }
-    } catch (e) {
-      alert('Could not read zone data. Please try drawing again.');
-      return;
-    }
-
-    const newPlace = {
-      id: Date.now().toString(),
-      name: this.locationName || 'New Location', 
-      type: 'Location' as const,
-      category: 'Location',
-      description: '',
-      status: 'Active',
+    const payload = {
+      name:        this.locationName || 'New Location',
+      type:        'Location' as const,
+      category:    'Location',
+      description: this.editorRef?.nativeElement?.innerHTML ?? '',
+      status:      'Active',
       eventsToday: 0,
-      lat: centerLat!,
-      lng: centerLng!,
+      lat:         centerLat,
+      lng:         centerLng,
       zone,
     };
-    this.router.navigate(['/map'], { state: { newPlace } });
+
+    const action$ = this.isEditMode
+      ? this.locationsService.update(history.state?.place?.id, payload)
+      : this.locationsService.add(payload);
+
+    action$.subscribe({
+      next: (saved) => {
+        this.isSaving = false;
+        this.router.navigate(['/map'], { state: { newPlace: saved } });
+      },
+      error: () => { this.isSaving = false; alert('Failed to save.'); }
+    });
   }
 }

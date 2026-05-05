@@ -5,6 +5,8 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { ActivatedRoute } from '@angular/router';
 import { Router } from '@angular/router';
+import { PlacesService } from '../../../../core/services/places.service';
+import { LightboxService } from '../../../../core/services/lightbox.service';
 declare const L: any;
 
 interface ClassItem {
@@ -40,7 +42,7 @@ interface DayHours {
 })
 export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private route: ActivatedRoute, private router: Router) {}
+  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private route: ActivatedRoute, private router: Router,private placesService: PlacesService,private lightboxService: LightboxService) {}
 
   //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -200,7 +202,45 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       className:  '',
     });
   }
+  isSaving = false;
 
+  publish(): void {
+    if (!this.pinConfirmed) {
+      alert('Please pin the location on the map first.');
+      return;
+    }
+
+    this.isSaving = true;
+    const payload: Omit<import('../../../../core/models/map-place.model').MapPlace, 'id'> = {
+      name:        this.placeName || 'New Place',
+      type:        'Place',
+      category:    this.placeType || 'Place',
+      description: this.editorRef?.nativeElement?.innerHTML ?? '',
+      status:      'Active',
+      eventsToday: 0,
+      lat:         parseFloat(this.pinLat),
+      lng:         parseFloat(this.pinLng),
+      address:     this.streetAddress,
+    };
+
+    const action$ = this.isEditMode && this.editPlaceId
+      ? this.placesService.update(this.editPlaceId, payload)
+      : this.placesService.add(payload);
+
+    action$.subscribe({
+      next: (saved) => {
+        this.isSaving = false;
+        this.router.navigate(['/map'], { state: { newPlace: saved } });
+      },
+      error: () => {
+        this.isSaving = false;
+        alert('Failed to save. Please try again.');
+      }
+    });
+  }
+  openLightbox(images: { url: string; name: string }[], index: number): void {
+    this.lightboxService.open(images, index);
+  }
   private initMiniMap(): void {
     if (this.miniMap) return;
     const el = this.miniMapContainer?.nativeElement;
@@ -322,24 +362,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.reverseGeocode(this.modalPinLat, this.modalPinLng);
     this.closePinModal();
   }
-  publish(): void {
-    if (!this.pinConfirmed) {
-      alert('Please pin the location on the map first.');
-      return;
-    }
-    const newPlace = {
-      id: Date.now().toString(),
-      name: this.placeName || 'New Place',
-      type: 'Place' as const,
-      category: this.placeType || 'Place',
-      description: '',
-      status: 'Active',
-      eventsToday: 0,
-      lat: parseFloat(this.pinLat),
-      lng: parseFloat(this.pinLng),
-    };
-    this.router.navigate(['/map'], { state: { newPlace } });
-  }
+ 
   onCoordInputChange(): void {
     const lat = parseFloat(this.pinLat);
     const lng = parseFloat(this.pinLng);
@@ -398,148 +421,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.miniMap.setView([lat, lng], 14);
   }
 
-  //Lightbox
-  private lightboxEl: HTMLElement | null = null;
-  private _lightboxKeyHandler: ((e: KeyboardEvent) => void) | null = null;
-  private _currentImages: { url: string; name: string }[] = [];
-  private _currentIndex  = 0;
-
-  openLightbox(images: { url: string; name: string }[], index: number): void {
-    this.zone.run(() => {
-      this.closeLightbox();
-      this._currentImages = [...images];
-      this._currentIndex  = index;
-      this._renderLightbox();
-
-      this._lightboxKeyHandler = (e: KeyboardEvent) => {
-        if (e.key === 'Escape')     { this.closeLightbox(); }
-        if (e.key === 'ArrowRight') {
-          this._currentIndex = (this._currentIndex + 1) % this._currentImages.length;
-          this._renderLightbox();
-        }
-        if (e.key === 'ArrowLeft') {
-          this._currentIndex = (this._currentIndex - 1 + this._currentImages.length) % this._currentImages.length;
-          this._renderLightbox();
-        }
-      };
-      document.addEventListener('keydown', this._lightboxKeyHandler);
-      document.body.style.overflow = 'hidden';
-    });
-  }
-
-  private _renderLightbox(): void {
-    if (this.lightboxEl) document.body.removeChild(this.lightboxEl);
-
-    const imgs   = this._currentImages;
-    const idx    = this._currentIndex;
-    const single = imgs.length === 1;
-
-    const overlay = document.createElement('div');
-    overlay.style.cssText =
-      'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);' +
-      'display:flex;align-items:center;justify-content:center;';
-    overlay.addEventListener('click', () => this.closeLightbox());
-
-    const closeBtn = document.createElement('button');
-    closeBtn.innerHTML = '&times;';
-    closeBtn.style.cssText =
-      'position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;' +
-      'background:rgba(255,255,255,0.15);border:none;color:white;font-size:24px;' +
-      'cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
-    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.closeLightbox(); });
-    overlay.appendChild(closeBtn);
-
-    if (!single) {
-      const counter = document.createElement('div');
-      counter.textContent = `${idx + 1} / ${imgs.length}`;
-      counter.style.cssText =
-        'position:absolute;top:16px;left:50%;transform:translateX(-50%);color:white;' +
-        'font-size:14px;font-weight:500;background:rgba(0,0,0,0.4);' +
-        'padding:4px 12px;border-radius:20px;z-index:1;';
-      overlay.appendChild(counter);
-    }
-
-    if (!single) {
-      const prev = document.createElement('button');
-      prev.innerHTML = '&#8249;';
-      prev.style.cssText =
-        'position:absolute;left:16px;top:50%;transform:translateY(-50%);width:44px;height:44px;' +
-        'border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;' +
-        'font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
-      prev.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._currentIndex = (idx - 1 + imgs.length) % imgs.length;
-        this._renderLightbox();
-      });
-      overlay.appendChild(prev);
-    }
-
-    const img = document.createElement('img');
-    img.src = imgs[idx].url;
-    img.alt = imgs[idx].name;
-    img.style.cssText =
-      'max-width:88vw;max-height:80vh;object-fit:contain;' +
-      'border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.5);';
-    img.addEventListener('click', (e) => e.stopPropagation());
-    overlay.appendChild(img);
-
-    if (!single) {
-      const next = document.createElement('button');
-      next.innerHTML = '&#8250;';
-      next.style.cssText =
-        'position:absolute;right:16px;top:50%;transform:translateY(-50%);width:44px;height:44px;' +
-        'border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;' +
-        'font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;';
-      next.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._currentIndex = (idx + 1) % imgs.length;
-        this._renderLightbox();
-      });
-      overlay.appendChild(next);
-    }
-
-    if (!single) {
-      const thumbRow = document.createElement('div');
-      thumbRow.style.cssText =
-        'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);' +
-        'display:flex;gap:8px;z-index:1;';
-      thumbRow.addEventListener('click', (e) => e.stopPropagation());
-
-      imgs.forEach((im, ti) => {
-        const thumb = document.createElement('div');
-        thumb.style.cssText =
-          `width:48px;height:48px;border-radius:8px;overflow:hidden;cursor:pointer;` +
-          `border:2px solid ${ti === idx ? 'white' : 'transparent'};` +
-          `opacity:${ti === idx ? '1' : '0.5'};transition:all 0.15s;`;
-        const tImg = document.createElement('img');
-        tImg.src = im.url;
-        tImg.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-        tImg.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this._currentIndex = ti;
-          this._renderLightbox();
-        });
-        thumb.appendChild(tImg);
-        thumbRow.appendChild(thumb);
-      });
-      overlay.appendChild(thumbRow);
-    }
-
-    document.body.appendChild(overlay);
-    this.lightboxEl = overlay;
-  }
-
-  closeLightbox(): void {
-    if (this.lightboxEl) {
-      document.body.removeChild(this.lightboxEl);
-      this.lightboxEl = null;
-    }
-    if (this._lightboxKeyHandler) {
-      document.removeEventListener('keydown', this._lightboxKeyHandler);
-      this._lightboxKeyHandler = null;
-    }
-    document.body.style.overflow = '';
-  }
   isEditMode = false;
   editPlaceId: string | null = null;
   //Lifecycle
@@ -590,7 +471,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyModalMap();
-    this.closeLightbox();
+    this.lightboxService.close();
     this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }

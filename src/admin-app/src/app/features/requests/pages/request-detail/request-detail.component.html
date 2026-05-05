@@ -1,3 +1,16 @@
+<ng-container *ngIf="isLoading">
+  <div class="flex items-center justify-center h-screen text-gray-400 text-sm">
+    Loading...
+  </div>
+</ng-container>
+
+<ng-container *ngIf="!isLoading && notFound">
+  <div class="flex items-center justify-center h-screen text-red-400 text-sm">
+    Request not found.
+  </div>
+</ng-container>
+
+<ng-container *ngIf="!isLoading && request">
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
 
   <app-sidebar [region]="region" />
@@ -60,7 +73,11 @@
                 <svg class="w-3.5 h-3.5 text-blue-600 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
                 </svg>
-                <span>{{ request.city }}<ng-container *ngIf="request.city && request.country">, </ng-container>{{ request.country }}</span>
+                <span>
+                  {{ request.city }}
+                  <ng-container *ngIf="request.city && request.country">, </ng-container>
+                  {{ request.country }}
+                </span>
               </div>
             </div>
 
@@ -72,7 +89,8 @@
                 <span *ngFor="let tag of request.tags"
                   class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-white text-gray-600 border border-gray-200">
                   <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
+                    <line x1="7" y1="7" x2="7.01" y2="7"/>
                   </svg>
                   {{ tag }}
                 </span>
@@ -196,10 +214,9 @@
 
           </div>
 
-          <!-- Location card with real Leaflet map -->
+          <!-- Location card -->
           <div *ngIf="request.address || request.lat" class="bg-white rounded-xl border border-gray-200 overflow-hidden"
                style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
-
             <div class="flex gap-0">
 
               <!-- Left: address + coords -->
@@ -216,7 +233,9 @@
                     </div>
                   </div>
                   <div *ngIf="request.lat && request.lng" class="flex items-center gap-2.5">
-                    <span class="text-xs font-mono text-gray-500">{{ request.lat.toFixed(4) }}, {{ request.lng.toFixed(4) }}</span>
+                    <span class="text-xs font-mono text-gray-500">
+                      {{ request.lat | number:'1.4-4' }}, {{ request.lng | number:'1.4-4' }}
+                    </span>
                   </div>
                   <button
                     *ngIf="request.lat && request.lng"
@@ -230,16 +249,14 @@
                 </div>
               </div>
 
-              <!-- Right: real Leaflet mini map -->
-              <div class="w-64 flex-shrink-0 relative overflow-hidden rounded-r-xl"
-                   style="min-height: 180px;">
+              <!-- Right: Leaflet mini map -->
+              <div class="w-64 flex-shrink-0 relative overflow-hidden rounded-r-xl" style="min-height: 180px;">
                 <div #miniMapContainer
                      class="absolute inset-0 w-full h-full cursor-pointer"
                      (click)="openMapModal()"
                      title="Click to expand map">
                 </div>
-                <div class="absolute bottom-2 right-2 pointer-events-none"
-                     style="z-index: 500;">
+                <div class="absolute bottom-2 right-2 pointer-events-none" style="z-index: 500;">
                   <span class="text-[10px] text-gray-500 bg-white/80 px-1.5 py-0.5 rounded backdrop-blur-sm">
                     Click to expand
                   </span>
@@ -248,6 +265,7 @@
 
             </div>
           </div>
+
         </div>
 
         <!-- RIGHT panel -->
@@ -335,12 +353,11 @@
 
         </div>
       </div>
-
     </div>
   </div>
 </div>
 
-<!-- MAP MODAL -->
+<!-- MAP MODAL  -->
 <div class="fixed inset-0 flex items-center justify-center"
      style="background: rgba(0,0,0,0.55); z-index: 10000;"
      [style.display]="mapModalOpen ? 'flex' : 'none'"
@@ -359,7 +376,7 @@
     <div #modalMapContainer style="height: 460px; width: 100%;"></div>
     <div class="flex items-center justify-between px-5 py-3 bg-gray-50 border-t border-gray-100">
       <span class="text-xs text-gray-500" *ngIf="request.lat && request.lng">
-        📍 <strong>{{ request.lat.toFixed(4) }}</strong>, <strong>{{ request.lng.toFixed(4) }}</strong>
+        📍 <strong>{{ request.lat | number:'1.4-4' }}</strong>, <strong>{{ request.lng | number:'1.4-4' }}</strong>
       </span>
       <button type="button" (click)="closeMapModal()"
               class="text-sm text-gray-600 font-medium px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">
@@ -368,3 +385,5 @@
     </div>
   </div>
 </div>
+
+</ng-container>

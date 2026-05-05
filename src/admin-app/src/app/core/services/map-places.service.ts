@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { MapPlace } from '../models/map-place.model';
-
+import { Observable, of } from 'rxjs';
 @Injectable({ providedIn: 'root' })
 export class MapPlacesService {
 
@@ -89,5 +89,24 @@ export class MapPlacesService {
 
   findById(id: string): MapPlace | undefined {
     return this.places.find(p => p.id === id);
+  }
+  getAll$(): Observable<MapPlace[]> {
+    // MOCK → return this.http.get<MapPlace[]>('/api/map/places');
+    return of(this.getAll());
+  }
+
+  getLocations$(): Observable<MapPlace[]> {
+    // MOCK → return this.http.get<MapPlace[]>('/api/map/locations');
+    return of(this.getLocations());
+  }
+
+  getPlaces$(): Observable<MapPlace[]> {
+    // MOCK → return this.http.get<MapPlace[]>('/api/map/places/type/place');
+    return of(this.getPlaces());
+  }
+
+  search$(query: string): Observable<MapPlace[]> {
+    // MOCK → return this.http.get<MapPlace[]>(`/api/map/search?q=${query}`);
+    return of(this.search(query));
   }
 }
