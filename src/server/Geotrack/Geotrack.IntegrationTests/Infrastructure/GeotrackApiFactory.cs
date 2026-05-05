@@ -14,6 +14,13 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
     private string? _baseConnectionString;
     private string? _testConnectionString;
 
+    static GeotrackApiFactory()
+    {
+#pragma warning disable CS0618
+        NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite();
+#pragma warning restore CS0618
+    }
+
     public static async Task<GeotrackApiFactory> CreateAsync()
     {
         var factory = new GeotrackApiFactory();

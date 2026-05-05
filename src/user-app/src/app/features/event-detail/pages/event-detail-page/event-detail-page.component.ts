@@ -40,6 +40,8 @@ export class EventDetailPageComponent {
 
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by ed__scroll. */
   protected readonly scrollProgress = signal(0);
+  protected readonly selectedImageUrl = signal<string | null>(null);
+  protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.event()?.heroImage ?? '');
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.event()?.latitude ?? null,
@@ -63,6 +65,7 @@ export class EventDetailPageComponent {
     effect(() => {
       this.eventId();
       this.scrollProgress.set(0);
+      this.selectedImageUrl.set(null);
       const el = this.edScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -90,6 +93,14 @@ export class EventDetailPageComponent {
 
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/events', id]);
+  }
+
+  protected selectGalleryImage(url: string): void {
+    this.selectedImageUrl.set(url);
+  }
+
+  protected isGalleryImageActive(url: string): boolean {
+    return (this.selectedImageUrl() ?? this.event()?.heroImage ?? '') === url;
   }
 
   protected viewOnMap(): void {

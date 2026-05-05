@@ -1,4 +1,6 @@
-﻿using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Core;
@@ -13,15 +15,15 @@ namespace Geotrack.Infrastructure;
 
 public class AppDbContext : DbContext
 {
+    public DbSet<Territory> Territories => Set<Territory>();
     public DbSet<Region> Regions => Set<Region>();
-    public DbSet<RegionalOrganization> RegionalOrganizations => Set<RegionalOrganization>();
-    public DbSet<RegionalOrganizationRegion> RegionalOrganizationRegions => Set<RegionalOrganizationRegion>();
+    public DbSet<RegionalManager> RegionalManagers => Set<RegionalManager>();
+    public DbSet<RegionalManagerRegion> RegionalManagerRegions => Set<RegionalManagerRegion>();
+    public DbSet<TerritoryManager> TerritoryManagers => Set<TerritoryManager>();
+    public DbSet<TerritoryManagerTerritory> TerritoryManagerTerritories => Set<TerritoryManagerTerritory>();
 
     public DbSet<Destination> Destinations => Set<Destination>();
     public DbSet<DestinationType> DestinationTypes => Set<DestinationType>();
-
-    public DbSet<Event> Events => Set<Event>();
-    public DbSet<EventType> EventTypes => Set<EventType>();
 
     public DbSet<Location> Locations => Set<Location>();
     public DbSet<LocationType> LocationTypes => Set<LocationType>();
@@ -32,14 +34,32 @@ public class AppDbContext : DbContext
     public DbSet<PlaceAmenity> PlaceAmenities => Set<PlaceAmenity>();
     public DbSet<BookingPartner> BookingPartners => Set<BookingPartner>();
     public DbSet<PlaceBookingPartner> PlaceBookingPartners => Set<PlaceBookingPartner>();
+    public DbSet<PlaceContribution> PlaceContributions => Set<PlaceContribution>();
+    public DbSet<PlaceContributionImage> PlaceContributionImages => Set<PlaceContributionImage>();
+
+    public DbSet<RestaurantType> RestaurantTypes => Set<RestaurantType>();
+    public DbSet<Stay> Stays => Set<Stay>();
+    public DbSet<StayType> StayTypes => Set<StayType>();
+    public DbSet<StayAmenity> StayAmenities => Set<StayAmenity>();
+    public DbSet<StayStayAmenity> StayStayAmenities => Set<StayStayAmenity>();
+
+    public DbSet<Event> Events => Set<Event>();
+    public DbSet<EventType> EventTypes => Set<EventType>();
 
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<UserTag> UserTags => Set<UserTag>();
     public DbSet<Favorite> Favorites => Set<Favorite>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Collection> Collections => Set<Collection>();
+    public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
+    public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
+    public DbSet<UserPlace> UserPlaces => Set<UserPlace>();
 
     public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<TagType> TagTypes => Set<TagType>();
     public DbSet<DestinationTag> DestinationTags => Set<DestinationTag>();
     public DbSet<LocationTag> LocationTags => Set<LocationTag>();
     public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
@@ -52,19 +72,11 @@ public class AppDbContext : DbContext
     public DbSet<ReviewReport> ReviewReports => Set<ReviewReport>();
     public DbSet<ModerationTerm> ModerationTerms => Set<ModerationTerm>();
 
-    public DbSet<Collection> Collections => Set<Collection>();
-    public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
-    public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
-    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
-    public DbSet<StayContribution> StayContributions => Set<StayContribution>();
-
-    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
-
     public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
     public DbSet<AnonymousSession> AnonymousSessions => Set<AnonymousSession>();
     public DbSet<UserInterestSignal> UserInterestSignals => Set<UserInterestSignal>();
 
-    public DbSet<Territory> Territories => Set<Territory>();
+    public DbSet<EntityImage> EntityImages => Set<EntityImage>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -97,8 +109,33 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
         modelBuilder.HasPostgresExtension("postgis");
 
+        ConfigureTerritories(modelBuilder);
+        ConfigureRegions(modelBuilder);
+        ConfigureRegionalManagers(modelBuilder);
+        ConfigureTerritoryManagers(modelBuilder);
+
+        ConfigureDestinations(modelBuilder);
+        ConfigureLocations(modelBuilder);
+        ConfigurePlaces(modelBuilder);
+        ConfigureStays(modelBuilder);
+        ConfigureEvents(modelBuilder);
+
+        ConfigureLookupTables(modelBuilder);
+        ConfigureUsers(modelBuilder);
+        ConfigureTags(modelBuilder);
+        ConfigureReviews(modelBuilder);
+        ConfigureCollections(modelBuilder);
+        ConfigureSupportAndNotifications(modelBuilder);
+        ConfigurePlaceContributions(modelBuilder);
+        ConfigureEntityImages(modelBuilder);
+        ConfigureAnalytics(modelBuilder);
+    }
+
+    private static void ConfigureTerritories(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Territory>(entity =>
         {
             entity.ToTable("Territories");
@@ -106,6 +143,7 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
+                .IsRequired()
                 .HasMaxLength(200);
 
             entity.HasIndex(x => x.Name)
@@ -116,7 +154,10 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.TerritoryId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
+    }
 
+    private static void ConfigureRegions(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Region>(entity =>
         {
             entity.ToTable("Regions");
@@ -124,6 +165,7 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
+                .IsRequired()
                 .HasMaxLength(200);
 
             entity.HasOne(x => x.Territory)
@@ -136,38 +178,86 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.TerritoryId, x.Name })
                 .IsUnique();
         });
+    }
 
-        modelBuilder.Entity<RegionalOrganization>(entity =>
+    private static void ConfigureRegionalManagers(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RegionalManager>(entity =>
         {
-            entity.ToTable("RegionalOrganizations");
+            entity.ToTable("RegionalManagers");
 
             entity.HasKey(x => x.UserId);
 
             entity.HasOne(x => x.User)
-                .WithOne(x => x.RegionalOrganization)
-                .HasForeignKey<RegionalOrganization>(x => x.UserId)
+                .WithOne(x => x.RegionalManager)
+                .HasForeignKey<RegionalManager>(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<RegionalOrganizationRegion>(entity =>
+        modelBuilder.Entity<RegionalManagerRegion>(entity =>
         {
-            entity.ToTable("RegionalOrganizationRegions");
+            entity.ToTable("RegionalManagerRegions");
 
             entity.HasKey(x => new { x.UserId, x.RegionId });
 
-            entity.HasOne(x => x.RegionalOrganization)
-                .WithMany(x => x.RegionalOrganizationRegions)
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.RegionalManager)
+                .WithMany(x => x.RegionalManagerRegions)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Region property is currently named RegionalManagerRegions in your entity,
+            // even though it contains RegionalManagerRegion rows.
             entity.HasOne(x => x.Region)
-                .WithMany(x => x.RegionalOrganizationRegions)
+                .WithMany(x => x.RegionalManagerRegions)
                 .HasForeignKey(x => x.RegionId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(x => x.RegionId);
         });
+    }
 
+    private static void ConfigureTerritoryManagers(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<TerritoryManager>(entity =>
+        {
+            entity.ToTable("TerritoryManagers");
+
+            entity.HasKey(x => x.UserId);
+
+            entity.HasOne(x => x.User)
+                .WithOne(x => x.TerritoryManager)
+                .HasForeignKey<TerritoryManager>(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TerritoryManagerTerritory>(entity =>
+        {
+            entity.ToTable("TerritoryManagerTerritories");
+
+            entity.HasKey(x => new { x.UserId, x.TerritoryId });
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.TerritoryManager)
+                .WithMany(x => x.TerritoryManagerTerritories)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Territory)
+                .WithMany(x => x.TerritoryManagerTerritories)
+                .HasForeignKey(x => x.TerritoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TerritoryId);
+        });
+    }
+
+    private static void ConfigureDestinations(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Destination>(entity =>
         {
             entity.ToTable("Destinations");
@@ -175,10 +265,14 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
+                .IsRequired()
                 .HasMaxLength(200);
 
             entity.Property(x => x.Description)
                 .HasMaxLength(2000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
 
             entity.HasOne(x => x.DestinationType)
                 .WithMany(x => x.Destinations)
@@ -192,28 +286,238 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.DestinationTypeId);
             entity.HasIndex(x => x.RegionId);
+
             entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
                 .HasColumnType("geography (point)");
+
             entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
                 .HasMethod("GIST");
         });
+    }
 
-        modelBuilder.Entity<DestinationType>(entity =>
+    private static void ConfigureLocations(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Location>(entity =>
         {
-            entity.ToTable("DestinationTypes");
+            entity.ToTable("Locations");
 
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
-                .HasMaxLength(100);
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.Destination)
+                .WithMany(x => x.Locations)
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.LocationType)
+                .WithMany(x => x.Locations)
+                .HasForeignKey(x => x.LocationTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.DestinationId);
+            entity.HasIndex(x => x.LocationTypeId);
+
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
+        });
+    }
+
+    private static void ConfigurePlaces(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Place>(entity =>
+        {
+            entity.ToTable("Places");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(x => x.Subtitle)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.Address)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.OpeningHours)
+                .HasMaxLength(200);
 
             entity.Property(x => x.Description)
-                .HasMaxLength(1000);
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.ContactEmail)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.Number)
+                .HasMaxLength(50);
+
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.PlaceType)
+                .WithMany(x => x.Places)
+                .HasForeignKey(x => x.PlaceTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Location)
+                .WithMany(x => x.Places)
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.PlaceTypeId);
+            entity.HasIndex(x => x.LocationId);
+
+            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
+                .HasColumnType("geography (point)");
+
+            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
+        });
+
+        modelBuilder.Entity<Amenity>(entity =>
+        {
+            entity.ToTable("Amenities");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Icon)
+                .HasMaxLength(50);
 
             entity.HasIndex(x => x.Name)
                 .IsUnique();
         });
 
+        modelBuilder.Entity<PlaceAmenity>(entity =>
+        {
+            entity.ToTable("PlaceAmenities");
+
+            entity.HasKey(x => new { x.PlaceId, x.AmenityId });
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.PlaceAmenities)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Amenity)
+                .WithMany(x => x.PlaceAmenities)
+                .HasForeignKey(x => x.AmenityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.AmenityId);
+        });
+
+        modelBuilder.Entity<BookingPartner>(entity =>
+        {
+            entity.ToTable("BookingPartners");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Variant)
+                .IsRequired()
+                .HasMaxLength(20);
+
+            entity.HasIndex(x => x.Name)
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<PlaceBookingPartner>(entity =>
+        {
+            entity.ToTable("PlaceBookingPartners");
+
+            entity.HasKey(x => new { x.PlaceId, x.BookingPartnerId });
+
+            entity.Property(x => x.Url)
+                .HasMaxLength(500);
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.PlaceBookingPartners)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.BookingPartner)
+                .WithMany(x => x.PlaceBookingPartners)
+                .HasForeignKey(x => x.BookingPartnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.BookingPartnerId);
+        });
+    }
+
+    private static void ConfigureStays(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Stay>(entity =>
+        {
+            entity.ToTable("Stays");
+
+            // Shared primary key: Stays.PlaceId is both PK and FK to Places.Id.
+            entity.HasKey(x => x.PlaceId);
+
+            entity.Property(x => x.PricePerNight)
+                .HasColumnType("decimal(10,2)");
+
+            entity.Property(x => x.CheckInTime)
+                .HasMaxLength(20);
+
+            entity.Property(x => x.CheckOutTime)
+                .HasMaxLength(20);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.Place)
+                .WithOne(x => x.Stay)
+                .HasForeignKey<Stay>(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.StayType)
+                .WithMany(x => x.Stays)
+                .HasForeignKey(x => x.StayTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.StayTypeId);
+        });
+
+        modelBuilder.Entity<StayStayAmenity>(entity =>
+        {
+            entity.ToTable("StayStayAmenities");
+
+            entity.HasKey(x => new { x.StayPlaceId, x.StayAmenityId });
+
+            entity.HasOne(x => x.Stay)
+                .WithMany(x => x.StayAmenities)
+                .HasForeignKey(x => x.StayPlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.StayAmenity)
+                .WithMany(x => x.StayAmenities)
+                .HasForeignKey(x => x.StayAmenityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.StayAmenityId);
+        });
+    }
+
+    private static void ConfigureEvents(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Event>(entity =>
         {
             entity.ToTable("Events");
@@ -221,10 +525,32 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
+                .IsRequired()
                 .HasMaxLength(200);
 
             entity.Property(x => x.Description)
                 .HasMaxLength(2000);
+
+            entity.Property(x => x.TicketPrice)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Duration)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.HostedBy)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.VenueDescription)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.ArrivalTips)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Accessibility)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
 
             entity.HasOne(x => x.EventType)
                 .WithMany(x => x.Events)
@@ -244,19 +570,25 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.EventTypeId);
             entity.HasIndex(x => x.LocationId);
             entity.HasIndex(x => x.PlaceId);
+
             entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
                 .HasColumnType("geography (point)");
+
             entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
                 .HasMethod("GIST");
         });
+    }
 
-        modelBuilder.Entity<EventType>(entity =>
+    private static void ConfigureLookupTables(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<DestinationType>(entity =>
         {
-            entity.ToTable("EventTypes");
+            entity.ToTable("DestinationTypes");
 
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
+                .IsRequired()
                 .HasMaxLength(100);
 
             entity.Property(x => x.Description)
@@ -264,33 +596,6 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.Name)
                 .IsUnique();
-        });
-
-        modelBuilder.Entity<Location>(entity =>
-        {
-            entity.ToTable("Locations");
-
-            entity.HasKey(x => x.Id);
-
-            entity.Property(x => x.Name)
-                .HasMaxLength(200);
-
-            entity.HasOne(x => x.Destination)
-                .WithMany(x => x.Locations)
-                .HasForeignKey(x => x.DestinationId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.LocationType)
-                .WithMany(x => x.Locations)
-                .HasForeignKey(x => x.LocationTypeId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(x => x.DestinationId);
-            entity.HasIndex(x => x.LocationTypeId);
-            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
-                .HasColumnType("geography (point)");
-            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
-                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<LocationType>(entity =>
@@ -300,6 +605,7 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
+                .IsRequired()
                 .HasMaxLength(100);
 
             entity.Property(x => x.Description)
@@ -307,42 +613,6 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.Name)
                 .IsUnique();
-        });
-
-        modelBuilder.Entity<Place>(entity =>
-        {
-            entity.ToTable("Places");
-
-            entity.HasKey(x => x.Id);
-
-            entity.Property(x => x.Name)
-                .HasMaxLength(200);
-
-            entity.Property(x => x.Description)
-                .HasMaxLength(2000);
-
-            entity.Property(x => x.ContactEmail)
-                .HasMaxLength(200);
-
-            entity.Property(x => x.Number)
-                .HasMaxLength(50);
-
-            entity.HasOne(x => x.PlaceType)
-                .WithMany(x => x.Places)
-                .HasForeignKey(x => x.PlaceTypeId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(x => x.Location)
-                .WithMany(x => x.Places)
-                .HasForeignKey(x => x.LocationId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => x.PlaceTypeId);
-            entity.HasIndex(x => x.LocationId);
-            entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
-                .HasColumnType("geography (point)");
-            entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
-                .HasMethod("GIST");
         });
 
         modelBuilder.Entity<PlaceType>(entity =>
@@ -352,6 +622,7 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
+                .IsRequired()
                 .HasMaxLength(100);
 
             entity.Property(x => x.Description)
@@ -361,6 +632,101 @@ public class AppDbContext : DbContext
                 .IsUnique();
         });
 
+        modelBuilder.Entity<EventType>(entity =>
+        {
+            entity.ToTable("EventTypes");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
+
+            entity.HasIndex(x => x.Name)
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<RestaurantType>(entity =>
+        {
+            entity.ToTable("RestaurantTypes");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Slug)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500);
+
+            entity.HasIndex(x => x.Name)
+                .IsUnique();
+
+            entity.HasIndex(x => x.Slug)
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<StayType>(entity =>
+        {
+            entity.ToTable("StayTypes");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Slug)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500);
+
+            entity.HasIndex(x => x.Name)
+                .IsUnique();
+
+            entity.HasIndex(x => x.Slug)
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<StayAmenity>(entity =>
+        {
+            entity.ToTable("StayAmenities");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Slug)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.IconKey)
+                .HasMaxLength(100);
+
+            entity.HasIndex(x => x.Name)
+                .IsUnique();
+
+            entity.HasIndex(x => x.Slug)
+                .IsUnique();
+        });
+    }
+
+    private static void ConfigureUsers(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Role>(entity =>
         {
             entity.ToTable("Roles");
@@ -368,6 +734,7 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
+                .IsRequired()
                 .HasMaxLength(100);
 
             entity.Property(x => x.Description)
@@ -384,9 +751,11 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Username)
+                .IsRequired()
                 .HasMaxLength(100);
 
             entity.Property(x => x.Email)
+                .IsRequired()
                 .HasMaxLength(200);
 
             entity.Property(x => x.FirstName)
@@ -400,6 +769,39 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.PhoneNumber)
                 .HasMaxLength(50);
+
+            entity.Property(x => x.AvatarUrl)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.DisplayName)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Location)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.NeedsInterestsOnboarding)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.GeneralNotificationsEnabled)
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.TravelRecommendationsEnabled)
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.NearbyEventsEnabled)
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.CollectionUpdatesEnabled)
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.EmailNotificationsEnabled)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.AnalyticsEnabled)
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
 
             entity.HasIndex(x => x.Username)
                 .IsUnique();
@@ -427,6 +829,83 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.RoleId);
         });
 
+        modelBuilder.Entity<UserPlace>(entity =>
+        {
+            entity.ToTable("UserPlaces");
+
+            entity.HasKey(x => new { x.UserId, x.PlaceId });
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.UserPlaces)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.UserPlaces)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.PlaceId);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("RefreshTokens");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.TokenHash)
+                .IsRequired()
+                .HasMaxLength(64);
+
+            entity.Property(x => x.IsPersistent)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.ExpiresAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TokenHash)
+                .IsUnique();
+
+            entity.HasIndex(x => new { x.UserId, x.IsRevoked, x.ExpiresAt });
+        });
+
+        modelBuilder.Entity<Favorite>(entity =>
+        {
+            entity.ToTable("Favorites");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.EntityType)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.EntityType, x.EntityId })
+                .IsUnique();
+        });
+    }
+
+    private static void ConfigureTags(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Tag>(entity =>
         {
             entity.ToTable("Tags");
@@ -434,9 +913,11 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
 
             entity.Property(x => x.Name)
+                .IsRequired()
                 .HasMaxLength(100);
 
             entity.Property(x => x.Slug)
+                .IsRequired()
                 .HasMaxLength(100);
 
             entity.Property(x => x.Description)
@@ -454,6 +935,34 @@ public class AppDbContext : DbContext
                 .IsUnique();
 
             entity.HasIndex(x => x.PlaceTypeId);
+        });
+
+        modelBuilder.Entity<TagType>(entity =>
+        {
+            entity.ToTable("TagTypes");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Slug)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500);
+
+            // Tag currently has no TagTypeId property, so this prevents EF Core
+            // from silently creating a shadow FK column on Tags.
+            entity.Ignore(x => x.Tags);
+
+            entity.HasIndex(x => x.Name)
+                .IsUnique();
+
+            entity.HasIndex(x => x.Slug)
+                .IsUnique();
         });
 
         modelBuilder.Entity<DestinationTag>(entity =>
@@ -532,6 +1041,32 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.TagId);
         });
 
+        modelBuilder.Entity<UserTag>(entity =>
+        {
+            entity.ToTable("UserTags");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.UserTags)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany(x => x.UserTags)
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.TagId })
+                .IsUnique();
+        });
+    }
+
+    private static void ConfigureReviews(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<DestinationReview>(entity =>
         {
             entity.ToTable("DestinationReviews");
@@ -540,6 +1075,9 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.Comment)
                 .HasMaxLength(2000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
 
             entity.HasOne(x => x.User)
                 .WithMany()
@@ -567,6 +1105,9 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Comment)
                 .HasMaxLength(2000);
 
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
             entity.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
@@ -593,6 +1134,9 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Comment)
                 .HasMaxLength(2000);
 
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
             entity.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
@@ -618,6 +1162,9 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.Comment)
                 .HasMaxLength(2000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
 
             entity.HasOne(x => x.User)
                 .WithMany()
@@ -765,7 +1312,10 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.CreatedByUserId);
             entity.HasIndex(x => x.UpdatedByUserId);
         });
+    }
 
+    private static void ConfigureCollections(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Collection>(entity =>
         {
             entity.ToTable("Collections");
@@ -805,24 +1355,33 @@ public class AppDbContext : DbContext
             entity.HasOne(x => x.Destination)
                 .WithMany()
                 .HasForeignKey(x => x.DestinationId)
-                .OnDelete(DeleteBehavior.ClientSetNull);
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(x => x.Location)
                 .WithMany()
                 .HasForeignKey(x => x.LocationId)
-                .OnDelete(DeleteBehavior.ClientSetNull);
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(x => x.Event)
                 .WithMany()
                 .HasForeignKey(x => x.EventId)
-                .OnDelete(DeleteBehavior.ClientSetNull);
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(x => x.Place)
                 .WithMany()
                 .HasForeignKey(x => x.PlaceId)
-                .OnDelete(DeleteBehavior.ClientSetNull);
-        });
+                .OnDelete(DeleteBehavior.SetNull);
 
+            entity.HasIndex(x => x.CollectionId);
+            entity.HasIndex(x => x.DestinationId);
+            entity.HasIndex(x => x.LocationId);
+            entity.HasIndex(x => x.EventId);
+            entity.HasIndex(x => x.PlaceId);
+        });
+    }
+
+    private static void ConfigureSupportAndNotifications(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<SupportRequest>(entity =>
         {
             entity.ToTable("SupportRequests");
@@ -888,62 +1447,62 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.UserId, x.ReadAt });
             entity.HasIndex(x => new { x.RelatedEntityType, x.RelatedEntityId });
         });
+    }
 
-        modelBuilder.Entity<StayContribution>(entity =>
+    private static void ConfigurePlaceContributions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PlaceContribution>(entity =>
         {
-            entity.ToTable("StayContributions");
+            entity.ToTable("PlaceContributions");
 
             entity.HasKey(x => x.Id);
 
+            entity.Property(x => x.Type)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .IsRequired();
+
             entity.Property(x => x.Status)
                 .HasConversion<string>()
-                .HasMaxLength(40);
+                .HasMaxLength(40)
+                .IsRequired();
+
+            entity.Property(x => x.OriginalSnapshotJson)
+                .HasColumnType("jsonb");
 
             entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(200);
 
-            entity.Property(x => x.StayType)
-                .IsRequired()
-                .HasMaxLength(80);
+            entity.Property(x => x.Subtitle)
+                .HasMaxLength(500);
 
             entity.Property(x => x.Address)
                 .HasMaxLength(500);
 
-            entity.Property(x => x.City)
-                .IsRequired()
-                .HasMaxLength(120);
-
-            entity.Property(x => x.Region)
-                .HasMaxLength(120);
-
-            entity.Property(x => x.Country)
-                .IsRequired()
-                .HasMaxLength(120);
-
-            entity.Property(x => x.CoverImageUrl)
-                .HasMaxLength(1000);
-
-            entity.Property(x => x.ImagePosition)
-                .HasMaxLength(40);
-
-            entity.Property(x => x.ImageSize)
-                .HasMaxLength(40);
+            entity.Property(x => x.OpeningHours)
+                .HasMaxLength(200);
 
             entity.Property(x => x.Description)
                 .HasMaxLength(2000);
 
-            entity.Property(x => x.Phone)
-                .HasMaxLength(50);
-
             entity.Property(x => x.ContactEmail)
                 .HasMaxLength(200);
+
+            entity.Property(x => x.PhoneNumber)
+                .HasMaxLength(50);
 
             entity.Property(x => x.Website)
                 .HasMaxLength(500);
 
             entity.Property(x => x.PricePerNight)
                 .HasColumnType("decimal(10,2)");
+
+            entity.Property(x => x.CheckInTime)
+                .HasMaxLength(20);
+
+            entity.Property(x => x.CheckOutTime)
+                .HasMaxLength(20);
 
             entity.Property(x => x.ReviewNote)
                 .HasMaxLength(1000);
@@ -954,11 +1513,20 @@ public class AppDbContext : DbContext
             entity.Property(x => x.AmenitiesJson)
                 .HasColumnType("jsonb");
 
+            entity.Property(x => x.StayAmenitiesJson)
+                .HasColumnType("jsonb");
+
             entity.Property(x => x.BookingPartnersJson)
                 .HasColumnType("jsonb");
 
+            entity.Property(x => x.SubmittedAt)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
             entity.HasOne(x => x.User)
-                .WithMany()
+                .WithMany(x => x.PlaceContributions)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
@@ -967,207 +1535,191 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.ReviewedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(x => x.PublishedPlace)
-                .WithMany()
-                .HasForeignKey(x => x.PublishedPlaceId)
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.PlaceContributions)
+                .HasForeignKey(x => x.PlaceId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasIndex(x => new { x.UserId, x.SubmittedAt });
-            entity.HasIndex(x => x.Status);
-            entity.HasIndex(x => x.PublishedPlaceId);
+            entity.HasOne(x => x.PlaceType)
+                .WithMany()
+                .HasForeignKey(x => x.PlaceTypeId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.RestaurantType)
+                .WithMany()
+                .HasForeignKey(x => x.RestaurantTypeId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.StayType)
+                .WithMany()
+                .HasForeignKey(x => x.StayTypeId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => new { x.Status, x.SubmittedAt });
+            entity.HasIndex(x => new { x.Type, x.Status });
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.PlaceId);
+            entity.HasIndex(x => x.PlaceTypeId);
+            entity.HasIndex(x => x.LocationId);
+            entity.HasIndex(x => x.RestaurantTypeId);
+            entity.HasIndex(x => x.StayTypeId);
+            entity.HasIndex(x => x.ReviewedByUserId);
         });
 
-        modelBuilder.Entity<UserTag>(entity =>
+        modelBuilder.Entity<PlaceContributionImage>(entity =>
         {
-            entity.ToTable("UserTags");
+            entity.ToTable("PlaceContributionImages");
 
             entity.HasKey(x => x.Id);
-
-            entity.Property(x => x.CreatedAt)
-                .IsRequired();
-
-            entity.HasOne(x => x.User)
-                .WithMany(x => x.UserTags)
-                .HasForeignKey(x => x.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.Tag)
-                .WithMany(x => x.UserTags)
-                .HasForeignKey(x => x.TagId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // Defense-in-depth: the application layer already de-dupes via
-            // .Distinct() in UpdateUserInterestsAsync, but a DB-level unique
-            // index guarantees no duplicate (UserId, TagId) rows can land
-            // even under concurrent writes.
-            entity.HasIndex(x => new { x.UserId, x.TagId }).IsUnique();
-        });
-
-        // New entities for frontend support
-
-        modelBuilder.Entity<Amenity>(entity =>
-        {
-            entity.ToTable("Amenities");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(100);
-            entity.Property(x => x.Icon).HasMaxLength(50);
-            entity.HasIndex(x => x.Name).IsUnique();
-        });
-
-        modelBuilder.Entity<PlaceAmenity>(entity =>
-        {
-            entity.ToTable("PlaceAmenities");
-            entity.HasKey(x => new { x.PlaceId, x.AmenityId });
-
-            entity.HasOne(x => x.Place)
-                .WithMany(x => x.PlaceAmenities)
-                .HasForeignKey(x => x.PlaceId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.Amenity)
-                .WithMany(x => x.PlaceAmenities)
-                .HasForeignKey(x => x.AmenityId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<BookingPartner>(entity =>
-        {
-            entity.ToTable("BookingPartners");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(100);
-            entity.Property(x => x.Variant).HasMaxLength(20);
-            entity.HasIndex(x => x.Name).IsUnique();
-        });
-
-        modelBuilder.Entity<PlaceBookingPartner>(entity =>
-        {
-            entity.ToTable("PlaceBookingPartners");
-            entity.HasKey(x => new { x.PlaceId, x.BookingPartnerId });
 
             entity.Property(x => x.Url)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.AltText)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.Caption)
                 .HasMaxLength(500);
 
-            entity.HasOne(x => x.Place)
-                .WithMany(x => x.PlaceBookingPartners)
-                .HasForeignKey(x => x.PlaceId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(x => x.ImagePosition)
+                .HasMaxLength(40);
 
-            entity.HasOne(x => x.BookingPartner)
-                .WithMany(x => x.PlaceBookingPartners)
-                .HasForeignKey(x => x.BookingPartnerId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<Favorite>(entity =>
-        {
-            entity.ToTable("Favorites");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.EntityType).HasMaxLength(50);
-            entity.Property(x => x.CreatedAt).IsRequired();
-
-            entity.HasOne(x => x.User)
-                .WithMany()
-                .HasForeignKey(x => x.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => new { x.UserId, x.EntityType, x.EntityId }).IsUnique();
-        });
-
-        // Extended field configurations for Place
-        modelBuilder.Entity<Place>(entity =>
-        {
-            entity.Property(x => x.Subtitle).HasMaxLength(500);
-            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
-            entity.Property(x => x.Address).HasMaxLength(500);
-            entity.Property(x => x.OpeningHours).HasMaxLength(200);
-            entity.Property(x => x.PricePerNight).HasColumnType("decimal(10,2)");
-        });
-
-        // Extended field configurations for Event
-        modelBuilder.Entity<Event>(entity =>
-        {
-            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
-            entity.Property(x => x.TicketPrice).HasMaxLength(100);
-            entity.Property(x => x.Duration).HasMaxLength(100);
-            entity.Property(x => x.HostedBy).HasMaxLength(200);
-            entity.Property(x => x.VenueDescription).HasMaxLength(2000);
-            entity.Property(x => x.ArrivalTips).HasMaxLength(2000);
-            entity.Property(x => x.Accessibility).HasMaxLength(1000);
-        });
-
-        // Extended field configurations for User
-        modelBuilder.Entity<User>(entity =>
-        {
-            entity.Property(x => x.AvatarUrl).HasMaxLength(1000);
-            entity.Property(x => x.DisplayName).HasMaxLength(100);
-            entity.Property(x => x.Location).HasMaxLength(200);
-            entity.Property(x => x.NeedsInterestsOnboarding).HasDefaultValue(false);
-            entity.Property(x => x.GeneralNotificationsEnabled).HasDefaultValue(true);
-            entity.Property(x => x.TravelRecommendationsEnabled).HasDefaultValue(true);
-            entity.Property(x => x.NearbyEventsEnabled).HasDefaultValue(true);
-            entity.Property(x => x.CollectionUpdatesEnabled).HasDefaultValue(true);
-            entity.Property(x => x.EmailNotificationsEnabled).HasDefaultValue(false);
-            entity.Property(x => x.AnalyticsEnabled).HasDefaultValue(true);
-        });
-
-        // ImageUrl fields for other entities
-        modelBuilder.Entity<Destination>(entity =>
-        {
-            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
-        });
-
-        modelBuilder.Entity<Location>(entity =>
-        {
-            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
-        });
-
-        modelBuilder.Entity<Tag>(entity =>
-        {
-            entity.Property(x => x.ImageUrl).HasMaxLength(1000);
-        });
-
-        modelBuilder.Entity<RefreshToken>(entity =>
-        {
-            entity.ToTable("RefreshTokens");
-
-            entity.HasKey(x => x.Id);
-
-            entity.Property(x => x.TokenHash)
-                .IsRequired()
-                .HasMaxLength(64);
-
-            entity.Property(x => x.IsPersistent)
-                .IsRequired();
+            entity.Property(x => x.ImageSize)
+                .HasMaxLength(40);
 
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
-            entity.Property(x => x.ExpiresAt)
-                .IsRequired();
-
-            entity.HasOne(x => x.User)
-                .WithMany()
-                .HasForeignKey(x => x.UserId)
+            entity.HasOne(x => x.PlaceContribution)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.PlaceContributionId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Fast lookup by token hash
-            entity.HasIndex(x => x.TokenHash).IsUnique();
-            // Fast lookup of active tokens per user
-            entity.HasIndex(x => new { x.UserId, x.IsRevoked, x.ExpiresAt });
-        });
+            entity.HasIndex(x => x.PlaceContributionId);
 
+            entity.HasIndex(x => x.PlaceContributionId)
+                .IsUnique()
+                .HasFilter("\"IsMain\" = true");
+        });
+    }
+
+    private static void ConfigureEntityImages(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EntityImage>(entity =>
+        {
+            entity.ToTable("EntityImages");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.TargetType)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .IsRequired();
+
+            entity.Property(x => x.Url)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.AltText)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.Caption)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.Place)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Event)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.EventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Region)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.RegionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Destination)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Territory)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.TerritoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Location)
+                .WithMany(x => x.Images)
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.PlaceId);
+            entity.HasIndex(x => x.EventId);
+            entity.HasIndex(x => x.RegionId);
+            entity.HasIndex(x => x.DestinationId);
+            entity.HasIndex(x => x.TerritoryId);
+            entity.HasIndex(x => x.LocationId);
+
+            entity.HasIndex(x => x.PlaceId)
+                .IsUnique()
+                .HasFilter("\"PlaceId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.EventId)
+                .IsUnique()
+                .HasFilter("\"EventId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.RegionId)
+                .IsUnique()
+                .HasFilter("\"RegionId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.DestinationId)
+                .IsUnique()
+                .HasFilter("\"DestinationId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.TerritoryId)
+                .IsUnique()
+                .HasFilter("\"TerritoryId\" IS NOT NULL AND \"IsMain\" = true");
+
+            entity.HasIndex(x => x.LocationId)
+                .IsUnique()
+                .HasFilter("\"LocationId\" IS NOT NULL AND \"IsMain\" = true");
+        });
+    }
+
+    private static void ConfigureAnalytics(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<AnonymousSession>(entity =>
         {
             entity.ToTable("AnonymousSessions");
 
             entity.HasKey(x => x.Id);
 
-            entity.Property(x => x.CreatedAt).IsRequired();
-            entity.Property(x => x.LastSeenAt).IsRequired();
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
 
-            entity.Property(x => x.EntryRoute).HasMaxLength(300);
-            entity.Property(x => x.CoarseRegion).HasMaxLength(120);
-            entity.Property(x => x.CoarseCountry).HasMaxLength(120);
+            entity.Property(x => x.LastSeenAt)
+                .IsRequired();
+
+            entity.Property(x => x.EntryRoute)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.CoarseRegion)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.CoarseCountry)
+                .HasMaxLength(120);
 
             entity.Property(x => x.UserAgentFamily)
                 .IsRequired()
@@ -1187,15 +1739,19 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(80);
 
-            entity.Property(x => x.EntityType).HasMaxLength(40);
-            entity.Property(x => x.Route).HasMaxLength(300);
+            entity.Property(x => x.EntityType)
+                .HasMaxLength(40);
+
+            entity.Property(x => x.Route)
+                .HasMaxLength(300);
 
             entity.Property(x => x.MetadataJson)
                 .IsRequired()
                 .HasColumnType("jsonb")
                 .HasDefaultValue("{}");
 
-            entity.Property(x => x.OccurredAt).IsRequired();
+            entity.Property(x => x.OccurredAt)
+                .IsRequired();
 
             entity.HasOne(x => x.User)
                 .WithMany()
@@ -1226,17 +1782,25 @@ public class AppDbContext : DbContext
 
             entity.HasKey(x => x.Id);
 
-            entity.Property(x => x.Score).IsRequired();
+            entity.Property(x => x.Score)
+                .IsRequired();
 
             entity.Property(x => x.Source)
                 .IsRequired()
                 .HasMaxLength(20)
                 .HasDefaultValue("inferred");
 
-            entity.Property(x => x.LastInteractionAt).IsRequired();
-            entity.Property(x => x.LastReason).HasMaxLength(80);
-            entity.Property(x => x.IsDismissed).HasDefaultValue(false);
-            entity.Property(x => x.EvidenceSinceDismissal).HasDefaultValue(0.0);
+            entity.Property(x => x.LastInteractionAt)
+                .IsRequired();
+
+            entity.Property(x => x.LastReason)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.IsDismissed)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.EvidenceSinceDismissal)
+                .HasDefaultValue(0.0);
 
             entity.HasOne(x => x.User)
                 .WithMany()
@@ -1248,10 +1812,11 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(x => new { x.UserId, x.TagId }).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.TagId })
+                .IsUnique();
+
             entity.HasIndex(x => new { x.UserId, x.Score });
         });
-
 
     }
 
@@ -1326,3 +1891,4 @@ public class AppDbContext : DbContext
         return null;
     }
 }
+

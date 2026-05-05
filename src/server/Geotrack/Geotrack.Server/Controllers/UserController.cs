@@ -1,7 +1,6 @@
 using Geotrack.Application.DTOs.Tags;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Server.Requests;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -48,12 +47,11 @@ public class UserController : ControllerBase
 
     [HttpPut("me/avatar")]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<UpdateAvatarResponseDto>> UpdateAvatar([FromForm] UpdateAvatarRequest request)
+    public async Task<ActionResult<UpdateAvatarResponseDto>> UpdateAvatar(
+        IFormFile? avatar)
     {
         try
         {
-            var avatar = request.Avatar;
-
             if (avatar is null || avatar.Length == 0)
                 return BadRequest(new { message = "Please select an image to upload." });
 

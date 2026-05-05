@@ -4,6 +4,8 @@ import { FavoriteStateService } from '../../../core/services/favorite-state.serv
 import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
+import { getMainImageUrl, normalizeEntityImages } from '../../../core/models/entity-image.model';
+import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { EventDetail } from '../models/event-detail.model';
 import type { DetailLoadState } from '../../place-detail/services/place-detail.service';
 
@@ -14,6 +16,7 @@ interface ApiEventDetail {
   latitude?: number | null;
   longitude?: number | null;
   heroImage?: string;
+  images?: ApiEntityImage[] | null;
   tags: { label: string }[];
   distance?: string;
   about?: string;
@@ -67,13 +70,15 @@ export class EventDetailService {
           return;
         }
 
+        const images = normalizeEntityImages(dto.images);
         const detail: EventDetail = {
           id: String(dto.id),
           title: dto.title,
           location: dto.location ?? '',
           latitude: dto.latitude ?? null,
           longitude: dto.longitude ?? null,
-          heroImage: dto.heroImage ?? '',
+          heroImage: getMainImageUrl(images, dto.heroImage),
+          images,
           tags: dto.tags,
           distance: dto.distance ?? '',
           about: dto.about ?? '',

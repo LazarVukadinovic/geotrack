@@ -1,9 +1,14 @@
 using System.Globalization;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Geotrack.Application.DTOs.Map;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Infrastructure.Spatial;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
@@ -14,12 +19,17 @@ public class MapService : IMapService
     private const string NominatimBaseUrl = "https://nominatim.openstreetmap.org";
     private const string OsrmBaseUrl = "https://router.project-osrm.org/route/v1/foot";
     private const double DestinationZoomThreshold = 10d;
+    private static readonly TimeSpan SearchCacheDuration = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan ReverseGeocodeCacheDuration = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan RouteCacheDuration = TimeSpan.FromMinutes(5);
+
     private static readonly HashSet<string> AllowedCategories = new(StringComparer.OrdinalIgnoreCase)
     {
         "places",
         "stays",
         "events",
     };
+
     private static readonly HashSet<string> SearchTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "destination",
@@ -27,17 +37,27 @@ public class MapService : IMapService
         "place",
         "event",
     };
+
     private static readonly GeometryFactory ViewportGeometryFactory = new(new PrecisionModel(), 4326);
 
     private readonly HttpClient _httpClient;
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
+    private readonly IMemoryCache _cache;
+    private readonly ILogger<MapService> _logger;
 
-    public MapService(HttpClient httpClient, AppDbContext db, IFavoriteService favoriteService)
+    public MapService(
+        HttpClient httpClient,
+        AppDbContext db,
+        IFavoriteService favoriteService,
+        IMemoryCache cache,
+        ILogger<MapService> logger)
     {
         _httpClient = httpClient;
         _db = db;
         _favoriteService = favoriteService;
+        _cache = cache;
+        _logger = logger;
 
         if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
         {
@@ -49,15 +69,32 @@ public class MapService : IMapService
     {
         var trimmed = query.Trim();
         if (trimmed.Length < 2)
+        {
             return new List<MapSearchResultDto>();
+        }
+
+        var cacheKey = BuildCacheKey("map:search:v1", trimmed.ToLowerInvariant());
+        if (_cache.TryGetValue<List<MapSearchResultDto>>(cacheKey, out var cachedResults))
+        {
+            return cachedResults ?? new List<MapSearchResultDto>();
+        }
 
         var url =
             $"{NominatimBaseUrl}/search?format=jsonv2&q={Uri.EscapeDataString(trimmed)}&limit=5&accept-language=en&addressdetails=1&namedetails=0";
 
-        var results = await _httpClient.GetFromJsonAsync<List<NominatimSearchResult>>(url, cancellationToken)
-            ?? new List<NominatimSearchResult>();
+        List<NominatimSearchResult> results;
+        try
+        {
+            results = await _httpClient.GetFromJsonAsync<List<NominatimSearchResult>>(url, cancellationToken)
+                ?? new List<NominatimSearchResult>();
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            LogProviderFailure("nominatim-search", ex);
+            return new List<MapSearchResultDto>();
+        }
 
-        return results
+        var mappedResults = results
             .Where(result => TryParseCoordinate(result.Lat, out _) && TryParseCoordinate(result.Lon, out _))
             .Select(result => new MapSearchResultDto
             {
@@ -67,6 +104,16 @@ public class MapService : IMapService
                 Longitude = ParseCoordinate(result.Lon),
             })
             .ToList();
+
+        _cache.Set(
+            cacheKey,
+            mappedResults,
+            new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = SearchCacheDuration
+            });
+
+        return mappedResults;
     }
 
     public async Task<List<MapSearchResultDto>> SearchAsync(
@@ -76,7 +123,9 @@ public class MapService : IMapService
     {
         var trimmed = query.Trim();
         if (trimmed.Length < 2)
+        {
             return new List<MapSearchResultDto>();
+        }
 
         var requestedTypes = (types ?? Enumerable.Empty<string>())
             .Select(type => type.Trim().ToLowerInvariant())
@@ -116,7 +165,6 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Locations
                 .AsNoTracking()
-                .Include(location => location.Destination)
                 .Where(location => location.Name.ToLower().Contains(loweredQuery))
                 .OrderBy(location => location.Name)
                 .Take(10)
@@ -137,14 +185,13 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Places
                 .AsNoTracking()
-                .Include(place => place.Location)
                 .Where(place => place.Name.ToLower().Contains(loweredQuery))
                 .OrderBy(place => place.Name)
                 .Take(10)
                 .Select(place => new MapSearchResultDto
                 {
                     Id = place.Id,
-                    Type = "place",
+                    Type = place.Stay != null ? "stay" : "place",
                     Name = place.Name,
                     Description = place.Description,
                     Subtitle = place.Location.Name,
@@ -159,8 +206,6 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Events
                 .AsNoTracking()
-                .Include(@event => @event.Location)
-                .Include(@event => @event.Place)
                 .Where(@event => @event.Name.ToLower().Contains(loweredQuery))
                 .OrderBy(@event => @event.Name)
                 .Take(10)
@@ -190,12 +235,39 @@ public class MapService : IMapService
         double longitude,
         CancellationToken cancellationToken = default)
     {
-        var url =
-            $"{NominatimBaseUrl}/reverse?lat={FormatCoordinate(latitude)}&lon={FormatCoordinate(longitude)}&format=jsonv2&accept-language=en&addressdetails=1";
-
-        var result = await _httpClient.GetFromJsonAsync<NominatimReverseResult>(url, cancellationToken);
-        if (result is null)
+        if (!HasValidCoordinates(latitude, longitude))
+        {
             return null;
+        }
+
+        var normalizedLatitude = NormalizeCoordinate(latitude);
+        var normalizedLongitude = NormalizeCoordinate(longitude);
+        var cacheKey = BuildCacheKey(
+            "map:reverse:v1",
+            $"{FormatCoordinate(normalizedLatitude)},{FormatCoordinate(normalizedLongitude)}");
+        if (_cache.TryGetValue<MapReverseGeocodeDto>(cacheKey, out var cachedResult))
+        {
+            return cachedResult;
+        }
+
+        var url =
+            $"{NominatimBaseUrl}/reverse?lat={FormatCoordinate(normalizedLatitude)}&lon={FormatCoordinate(normalizedLongitude)}&format=jsonv2&accept-language=en&addressdetails=1";
+
+        NominatimReverseResult? result;
+        try
+        {
+            result = await _httpClient.GetFromJsonAsync<NominatimReverseResult>(url, cancellationToken);
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            LogProviderFailure("nominatim-reverse", ex);
+            return null;
+        }
+
+        if (result is null)
+        {
+            return null;
+        }
 
         var address = result.Address ?? new NominatimAddress();
         var city = FirstNonEmpty(
@@ -209,7 +281,7 @@ public class MapService : IMapService
         var region = FirstNonEmpty(address.State, address.County);
         var country = address.Country ?? string.Empty;
 
-        return new MapReverseGeocodeDto
+        var reverseGeocode = new MapReverseGeocodeDto
         {
             Address = string.Join(" ", new[] { address.Road, address.HouseNumber }.Where(x => !string.IsNullOrWhiteSpace(x))),
             City = city,
@@ -217,6 +289,16 @@ public class MapService : IMapService
             Country = country,
             DisplayLabel = BuildDisplayLabel(city, region, country),
         };
+
+        _cache.Set(
+            cacheKey,
+            reverseGeocode,
+            new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = ReverseGeocodeCacheDuration
+            });
+
+        return reverseGeocode;
     }
 
     public async Task<MapRouteResponseDto?> GetWalkingRouteAsync(
@@ -226,10 +308,41 @@ public class MapService : IMapService
         double destinationLongitude,
         CancellationToken cancellationToken = default)
     {
-        var url =
-            $"{OsrmBaseUrl}/{FormatCoordinate(originLongitude)},{FormatCoordinate(originLatitude)};{FormatCoordinate(destinationLongitude)},{FormatCoordinate(destinationLatitude)}?overview=full&geometries=geojson";
+        if (!HasValidCoordinates(originLatitude, originLongitude) ||
+            !HasValidCoordinates(destinationLatitude, destinationLongitude))
+        {
+            return null;
+        }
 
-        var result = await _httpClient.GetFromJsonAsync<OsrmRouteResponse>(url, cancellationToken);
+        var normalizedOriginLatitude = NormalizeCoordinate(originLatitude);
+        var normalizedOriginLongitude = NormalizeCoordinate(originLongitude);
+        var normalizedDestinationLatitude = NormalizeCoordinate(destinationLatitude);
+        var normalizedDestinationLongitude = NormalizeCoordinate(destinationLongitude);
+        var cacheKey = BuildCacheKey(
+            "map:route:v1",
+            string.Join(
+                ";",
+                $"{FormatCoordinate(normalizedOriginLatitude)},{FormatCoordinate(normalizedOriginLongitude)}",
+                $"{FormatCoordinate(normalizedDestinationLatitude)},{FormatCoordinate(normalizedDestinationLongitude)}"));
+        if (_cache.TryGetValue<MapRouteResponseDto>(cacheKey, out var cachedRoute))
+        {
+            return cachedRoute;
+        }
+
+        var url =
+            $"{OsrmBaseUrl}/{FormatCoordinate(normalizedOriginLongitude)},{FormatCoordinate(normalizedOriginLatitude)};{FormatCoordinate(normalizedDestinationLongitude)},{FormatCoordinate(normalizedDestinationLatitude)}?overview=full&geometries=geojson";
+
+        OsrmRouteResponse? result;
+        try
+        {
+            result = await _httpClient.GetFromJsonAsync<OsrmRouteResponse>(url, cancellationToken);
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            LogProviderFailure("osrm-route", ex);
+            return null;
+        }
+
         var route = result?.Routes?.FirstOrDefault();
         if (!string.Equals(result?.Code, "Ok", StringComparison.OrdinalIgnoreCase) ||
             route?.Geometry?.Coordinates is not { Count: > 1 })
@@ -237,7 +350,7 @@ public class MapService : IMapService
             return null;
         }
 
-        return new MapRouteResponseDto
+        var mappedRoute = new MapRouteResponseDto
         {
             Coordinates = route.Geometry.Coordinates
                 .Where(pair => pair.Count >= 2)
@@ -246,10 +359,27 @@ public class MapService : IMapService
                     Latitude = pair[1],
                     Longitude = pair[0],
                 })
+                .Where(point => HasValidCoordinates(point.Latitude, point.Longitude))
+                .Take(5_000)
                 .ToList(),
             DistanceMeters = route.Distance,
             DurationSeconds = route.Duration,
         };
+
+        if (mappedRoute.Coordinates.Count <= 1)
+        {
+            return null;
+        }
+
+        _cache.Set(
+            cacheKey,
+            mappedRoute,
+            new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = RouteCacheDuration
+            });
+
+        return mappedRoute;
     }
 
     public async Task<GetMapEntitiesResponseDto> GetEntitiesAsync(
@@ -269,6 +399,7 @@ public class MapService : IMapService
         var favoritePlaceIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
+
         var favoriteEventIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
             : new HashSet<int>();
@@ -279,8 +410,6 @@ public class MapService : IMapService
         {
             var places = await _db.Places
                 .AsNoTracking()
-                .Include(place => place.PlaceType)
-                .Include(place => place.Location)
                 .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Select(place => new PlaceMarkerProjection
                 {
@@ -288,29 +417,36 @@ public class MapService : IMapService
                     Title = place.Name,
                     Subtitle = place.Location.Name,
                     CategoryLabel = place.PlaceType.Name,
-                    ImageUrl = place.ImageUrl,
+                    ImageUrl = place.Images
+                        .OrderByDescending(image => image.IsMain)
+                        .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
+                        .Select(image => image.Url)
+                        .FirstOrDefault(),
                     Latitude = place.Latitude,
                     Longitude = place.Longitude,
-                    PricePerNight = place.PricePerNight,
+                    PricePerNight = place.Stay != null ? place.Stay.PricePerNight : null,
+                    IsStay = place.Stay != null,
                     DistanceMeters = EF.Property<Point>(place, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
                 })
                 .Where(place => place.DistanceMeters <= radiusMeters)
                 .Where(place => normalizedCategories.Count == 0
-                    || (normalizedCategories.Contains("stays") && place.PricePerNight != null)
-                    || (normalizedCategories.Contains("places") && place.PricePerNight == null))
+                    || (normalizedCategories.Contains("stays") && place.IsStay)
+                    || (normalizedCategories.Contains("places") && !place.IsStay))
                 .OrderBy(place => place.DistanceMeters)
                 .Take(40)
                 .ToListAsync(cancellationToken);
 
             markers.AddRange(places.Select(place => new MapEntityMarkerDto
             {
-                EntityType = place.PricePerNight != null ? "stay" : "place",
+                EntityType = place.IsStay ? "stay" : "place",
                 EntityId = place.Id,
                 Title = place.Title,
                 Subtitle = place.Subtitle,
                 CategoryLabel = place.CategoryLabel,
                 ImageUrl = place.ImageUrl,
-                DetailRoute = place.PricePerNight != null ? $"/stays/{place.Id}" : $"/places/{place.Id}",
+                DetailRoute = place.IsStay ? $"/stays/{place.Id}" : $"/places/{place.Id}",
                 Latitude = place.Latitude,
                 Longitude = place.Longitude,
                 Distance = SpatialDistanceFormatter.Format(place.DistanceMeters),
@@ -322,8 +458,6 @@ public class MapService : IMapService
         {
             var events = await _db.Events
                 .AsNoTracking()
-                .Include(@event => @event.EventType)
-                .Include(@event => @event.Location)
                 .Where(@event => EF.Property<Point?>(@event, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Select(@event => new EventMarkerProjection
                 {
@@ -331,7 +465,13 @@ public class MapService : IMapService
                     Title = @event.Name,
                     Subtitle = @event.Location.Name,
                     CategoryLabel = @event.EventType.Name,
-                    ImageUrl = @event.ImageUrl,
+                    ImageUrl = @event.Images
+                        .OrderByDescending(image => image.IsMain)
+                        .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
+                        .Select(image => image.Url)
+                        .FirstOrDefault(),
                     Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
                     Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
                     DistanceMeters = EF.Property<Point>(@event, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
@@ -391,7 +531,9 @@ public class MapService : IMapService
         CancellationToken cancellationToken = default)
     {
         if (north <= south)
+        {
             throw new InvalidOperationException("'north' must be greater than 'south'.");
+        }
 
         var envelope = ViewportGeometryFactory.CreatePolygon(new[]
         {
@@ -406,7 +548,6 @@ public class MapService : IMapService
         {
             var destinations = await _db.Destinations
                 .AsNoTracking()
-                .Include(destination => destination.DestinationType)
                 .Where(destination => EF.Property<Point?>(destination, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Where(destination => EF.Property<Point>(destination, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
                 .OrderBy(destination => destination.Name)
@@ -418,7 +559,13 @@ public class MapService : IMapService
                     Title = destination.Name,
                     Subtitle = null,
                     CategoryLabel = destination.DestinationType != null ? destination.DestinationType.Name : null,
-                    ImageUrl = destination.ImageUrl,
+                    ImageUrl = destination.Images
+                        .OrderByDescending(image => image.IsMain)
+                        .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
+                        .Select(image => image.Url)
+                        .FirstOrDefault(),
                     DetailRoute = null,
                     Latitude = destination.Latitude,
                     Longitude = destination.Longitude,
@@ -439,6 +586,7 @@ public class MapService : IMapService
         var favoritePlaceIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
+
         var favoriteEventIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
             : new HashSet<int>();
@@ -449,8 +597,6 @@ public class MapService : IMapService
         {
             var places = await _db.Places
                 .AsNoTracking()
-                .Include(place => place.PlaceType)
-                .Include(place => place.Location)
                 .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Where(place => EF.Property<Point>(place, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
                 .Select(place => new PlaceMarkerProjection
@@ -459,28 +605,35 @@ public class MapService : IMapService
                     Title = place.Name,
                     Subtitle = place.Location.Name,
                     CategoryLabel = place.PlaceType.Name,
-                    ImageUrl = place.ImageUrl,
+                    ImageUrl = place.Images
+                        .OrderByDescending(image => image.IsMain)
+                        .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
+                        .Select(image => image.Url)
+                        .FirstOrDefault(),
                     Latitude = place.Latitude,
                     Longitude = place.Longitude,
-                    PricePerNight = place.PricePerNight,
+                    PricePerNight = place.Stay != null ? place.Stay.PricePerNight : null,
+                    IsStay = place.Stay != null,
                     DistanceMeters = null,
                 })
                 .Where(place => normalizedCategories.Count == 0
-                    || (normalizedCategories.Contains("stays") && place.PricePerNight != null)
-                    || (normalizedCategories.Contains("places") && place.PricePerNight == null))
+                    || (normalizedCategories.Contains("stays") && place.IsStay)
+                    || (normalizedCategories.Contains("places") && !place.IsStay))
                 .OrderBy(place => place.Title)
                 .Take(40)
                 .ToListAsync(cancellationToken);
 
             markers.AddRange(places.Select(place => new MapEntityMarkerDto
             {
-                EntityType = place.PricePerNight != null ? "stay" : "place",
+                EntityType = place.IsStay ? "stay" : "place",
                 EntityId = place.Id,
                 Title = place.Title,
                 Subtitle = place.Subtitle,
                 CategoryLabel = place.CategoryLabel,
                 ImageUrl = place.ImageUrl,
-                DetailRoute = place.PricePerNight != null ? $"/stays/{place.Id}" : $"/places/{place.Id}",
+                DetailRoute = place.IsStay ? $"/stays/{place.Id}" : $"/places/{place.Id}",
                 Latitude = place.Latitude,
                 Longitude = place.Longitude,
                 Distance = null,
@@ -492,8 +645,6 @@ public class MapService : IMapService
         {
             var events = await _db.Events
                 .AsNoTracking()
-                .Include(@event => @event.EventType)
-                .Include(@event => @event.Location)
                 .Where(@event => EF.Property<Point?>(@event, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Where(@event => EF.Property<Point>(@event, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
                 .Select(@event => new EventMarkerProjection
@@ -502,7 +653,13 @@ public class MapService : IMapService
                     Title = @event.Name,
                     Subtitle = @event.Location.Name,
                     CategoryLabel = @event.EventType.Name,
-                    ImageUrl = @event.ImageUrl,
+                    ImageUrl = @event.Images
+                        .OrderByDescending(image => image.IsMain)
+                        .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
+                        .Select(image => image.Url)
+                        .FirstOrDefault(),
                     Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
                     Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
                     DistanceMeters = null,
@@ -549,9 +706,48 @@ public class MapService : IMapService
     private static double NormalizeRadiusKm(double? radiusKm)
     {
         if (!radiusKm.HasValue || double.IsNaN(radiusKm.Value) || double.IsInfinity(radiusKm.Value))
+        {
             return 5d;
+        }
 
         return Math.Clamp(radiusKm.Value, 0.5d, 25d);
+    }
+
+    private void LogProviderFailure(string provider, Exception exception)
+    {
+        _logger.LogWarning(
+            "Map provider {Provider} request failed with {ExceptionType}.",
+            provider,
+            exception.GetType().Name);
+    }
+
+    private static bool IsProviderFailure(Exception exception, CancellationToken cancellationToken) =>
+        !cancellationToken.IsCancellationRequested &&
+        (exception is HttpRequestException ||
+         exception is TaskCanceledException ||
+         exception is JsonException ||
+         exception is NotSupportedException);
+
+    private static bool HasValidCoordinates(double latitude, double longitude)
+    {
+        return !double.IsNaN(latitude) &&
+               !double.IsNaN(longitude) &&
+               !double.IsInfinity(latitude) &&
+               !double.IsInfinity(longitude) &&
+               latitude >= -90 &&
+               latitude <= 90 &&
+               longitude >= -180 &&
+               longitude <= 180 &&
+               (latitude != 0d || longitude != 0d);
+    }
+
+    private static double NormalizeCoordinate(double value) =>
+        Math.Round(value, 5, MidpointRounding.AwayFromZero);
+
+    private static string BuildCacheKey(string prefix, string value)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return $"{prefix}:{Convert.ToHexString(hash)}";
     }
 
     private static string BuildSearchTitle(NominatimSearchResult result)
@@ -563,7 +759,9 @@ public class MapService : IMapService
     private static string? BuildSearchSubtitle(string? displayName)
     {
         if (string.IsNullOrWhiteSpace(displayName))
+        {
             return null;
+        }
 
         var parts = displayName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return parts.Length <= 1 ? null : string.Join(", ", parts.Skip(1).Take(2));
@@ -572,16 +770,24 @@ public class MapService : IMapService
     private static string BuildDisplayLabel(string city, string region, string country)
     {
         if (!string.IsNullOrWhiteSpace(city) && !string.IsNullOrWhiteSpace(country))
+        {
             return $"{city}, {country}";
+        }
 
         if (!string.IsNullOrWhiteSpace(city))
+        {
             return city;
+        }
 
         if (!string.IsNullOrWhiteSpace(region) && !string.IsNullOrWhiteSpace(country))
+        {
             return $"{region}, {country}";
+        }
 
         if (!string.IsNullOrWhiteSpace(region))
+        {
             return region;
+        }
 
         return string.IsNullOrWhiteSpace(country) ? "Explore" : country;
     }
@@ -601,7 +807,9 @@ public class MapService : IMapService
     private static double ParseDistanceMeters(string? formattedDistance)
     {
         if (string.IsNullOrWhiteSpace(formattedDistance))
+        {
             return double.MaxValue;
+        }
 
         if (formattedDistance.EndsWith(" km", StringComparison.OrdinalIgnoreCase) &&
             double.TryParse(formattedDistance.Replace(" km", string.Empty, StringComparison.OrdinalIgnoreCase), NumberStyles.Float, CultureInfo.InvariantCulture, out var kilometers))
@@ -628,6 +836,7 @@ public class MapService : IMapService
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public decimal? PricePerNight { get; set; }
+        public bool IsStay { get; set; }
         public double? DistanceMeters { get; set; }
     }
 
@@ -647,7 +856,9 @@ public class MapService : IMapService
     {
         [JsonPropertyName("display_name")]
         public string? DisplayName { get; set; }
+
         public string? Lat { get; set; }
+
         public string? Lon { get; set; }
     }
 
@@ -660,28 +871,40 @@ public class MapService : IMapService
     {
         [JsonPropertyName("house_number")]
         public string? HouseNumber { get; set; }
+
         public string? Road { get; set; }
+
         public string? City { get; set; }
+
         public string? Town { get; set; }
+
         public string? Village { get; set; }
+
         public string? Municipality { get; set; }
+
         public string? County { get; set; }
+
         [JsonPropertyName("state_district")]
         public string? StateDistrict { get; set; }
+
         public string? State { get; set; }
+
         public string? Country { get; set; }
     }
 
     private sealed class OsrmRouteResponse
     {
         public string? Code { get; set; }
+
         public List<OsrmRouteItem>? Routes { get; set; }
     }
 
     private sealed class OsrmRouteItem
     {
         public double? Distance { get; set; }
+
         public double? Duration { get; set; }
+
         public OsrmGeometry? Geometry { get; set; }
     }
 

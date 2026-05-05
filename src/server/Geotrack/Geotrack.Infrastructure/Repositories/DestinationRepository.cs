@@ -1,4 +1,4 @@
-﻿using Geotrack.Application.Interfaces.Repository;
+using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Microsoft.EntityFrameworkCore;
@@ -12,35 +12,6 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
     {
         _context = context;
     }
-    public async Task<List<Destination>> GetAllWithExploreDataAsync()
-    {
-        return await _context.Destinations
-            .Include(d => d.DestinationTags)
-                .ThenInclude(dt => dt.Tag)
-            .Include(d => d.Locations)
-                .ThenInclude(l => l.LocationTags)
-                .ThenInclude(lt => lt.Tag)
-            .Include(d => d.Locations)
-                .ThenInclude(l => l.LocationReviews)
-            .Include(d => d.Locations)
-                .ThenInclude(l => l.Places)
-                .ThenInclude(p => p.PlaceTags)
-                .ThenInclude(pt => pt.Tag)
-            .Include(d => d.Locations)
-                .ThenInclude(l => l.Places)
-                .ThenInclude(p => p.PlaceReviews)
-            .Include(d => d.Locations)
-                .ThenInclude(l => l.Events)
-                .ThenInclude(e => e.EventTags)
-                .ThenInclude(et => et.Tag)
-            .Include(d => d.Locations)
-                .ThenInclude(l => l.Events)
-                .ThenInclude(e => e.EventReviews)
-            .Include(d => d.Locations)
-                .ThenInclude(l => l.Events)
-                .ThenInclude(e => e.Place)
-            .ToListAsync();
-    }
     public async Task<Destination?> GetWithDetailsAsync(int destinationId)
     {
         return await _context.Destinations
@@ -48,7 +19,6 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Include(d => d.Region)
             .Include(d => d.DestinationTags)
                 .ThenInclude(dt => dt.Tag)
-            .Include(d => d.DestinationReviews)
             .Include(d => d.Locations)
                 .ThenInclude(l => l.LocationTags)
                 .ThenInclude(lt => lt.Tag)
@@ -73,12 +43,31 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Distinct()
             .ToListAsync();
     }
-    public async Task<List<DestinationReview>> GetReviewsByDestinationIdAsync(int destinationId)
+    public async Task<List<DestinationReview>> GetReviewsByDestinationIdAsync(int destinationId, int skip, int take)
     {
         return await _context.DestinationReviews
+            .AsNoTracking()
             .Where(r => r.DestinationId == destinationId)
             .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync();
+    }
+    public async Task<int> CountReviewsByDestinationIdAsync(int destinationId)
+    {
+        return await _context.DestinationReviews
+            .AsNoTracking()
+            .CountAsync(r => r.DestinationId == destinationId);
+    }
+
+    public async Task<double?> GetAverageRatingByDestinationIdAsync(int destinationId)
+    {
+        return await _context.DestinationReviews
+            .AsNoTracking()
+            .Where(r => r.DestinationId == destinationId)
+            .Select(r => (double?)r.Rating)
+            .AverageAsync();
     }
     public async Task<bool> HasUserReviewedDestinationAsync(int destinationId, int userId)
     {

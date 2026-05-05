@@ -37,7 +37,7 @@ export class PrivacySettingsPageComponent {
   protected clearSavedLocation(): void {
     this.locationService.clearSavedLocation();
     this.destinationService.clear();
-    this.feedbackMessage.set('Saved location and destination history were cleared from this device.');
+    this.feedbackMessage.set('Location session data and destination history were cleared from this device.');
   }
 
   protected openInterests(): void {

@@ -37,6 +37,6 @@ public interface IPlaceService
     // Master detail/review methods
     Task<GetPlaceDetailsResponseDto> GetPlaceDetailsAsync(int placeId, int? userId);
     Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId);
-    Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(int placeId);
+    Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(int placeId, int skip = 0, int take = 10);
     Task<CreatePlaceReviewResponseDto> CreatePlaceReviewAsync(int placeId, int userId, CreatePlaceReviewRequestDto request);
 }

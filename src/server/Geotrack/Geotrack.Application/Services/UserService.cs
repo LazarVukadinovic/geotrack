@@ -719,7 +719,7 @@ public class UserService : IUserService
                 DestinationId = item.DestinationId,
                 Name = item.Destination.Name,
                 Description = item.Destination.Description,
-                ImageUrl = item.Destination.ImageUrl,
+                ImageUrl = MainImageUrl(item.Destination.Images),
                 DetailRoute = null,
                 Latitude = item.Destination.Latitude,
                 Longitude = item.Destination.Longitude,
@@ -737,7 +737,7 @@ public class UserService : IUserService
                 EntityType = "location",
                 LocationId = item.LocationId,
                 Name = item.Location.Name,
-                ImageUrl = item.Location.ImageUrl,
+                ImageUrl = MainImageUrl(item.Location.Images),
                 DetailRoute = null,
                 Latitude = item.Location.Latitude,
                 Longitude = item.Location.Longitude,
@@ -756,7 +756,7 @@ public class UserService : IUserService
                 PlaceId = item.PlaceId,
                 Name = item.Place.Name,
                 Description = item.Place.Description,
-                ImageUrl = item.Place.ImageUrl,
+                ImageUrl = MainImageUrl(item.Place.Images),
                 DetailRoute = BuildPlaceDetailRoute(item.Place),
                 Latitude = item.Place.Latitude,
                 Longitude = item.Place.Longitude,
@@ -777,7 +777,7 @@ public class UserService : IUserService
                 EventId = item.EventId,
                 Name = item.Event.Name,
                 Description = item.Event.Description,
-                ImageUrl = item.Event.ImageUrl,
+                ImageUrl = MainImageUrl(item.Event.Images),
                 DetailRoute = $"/events/{item.Event.Id}",
                 StartDate = item.Event.StartDate,
                 EndDate = item.Event.EndDate,
@@ -821,7 +821,17 @@ public class UserService : IUserService
     }
 
     private static string BuildPlaceDetailRoute(Place place) =>
-        place.PricePerNight.HasValue ? $"/stays/{place.Id}" : $"/places/{place.Id}";
+        place.Stay != null ? $"/stays/{place.Id}" : $"/places/{place.Id}";
+
+
+    private static string? MainImageUrl(IEnumerable<EntityImage> images) =>
+        images
+            .OrderByDescending(image => image.IsMain)
+            .ThenBy(image => image.SortOrder)
+            .ThenBy(image => image.CreatedAt)
+            .ThenBy(image => image.Id)
+            .Select(image => image.Url)
+            .FirstOrDefault();
 
     private static void ValidateProfileFields(string firstName, string lastName, string phoneNumber)
     {
@@ -907,8 +917,8 @@ public class UserService : IUserService
         if (user == null)
             throw new KeyNotFoundException($"User with id '{userId}' was not found.");
 
-        var regions = user.RegionalOrganization?
-            .RegionalOrganizationRegions
+        var regions = user.RegionalManager?
+            .RegionalManagerRegions
             .Select(ror => new RegionItemDto
             {
                 Id = ror.Region.Id,
@@ -943,12 +953,12 @@ public class UserService : IUserService
                 throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
         }
 
-        if (user.RegionalOrganization == null)
+        if (user.RegionalManager == null)
         {
-            user.RegionalOrganization = new RegionalOrganization
+            user.RegionalManager = new RegionalManager
             {
                 UserId = userId,
-                RegionalOrganizationRegions = regionIds.Select(regionId => new RegionalOrganizationRegion
+                RegionalManagerRegions = regionIds.Select(regionId => new RegionalManagerRegion
                 {
                     UserId = userId,
                     RegionId = regionId,
@@ -956,15 +966,15 @@ public class UserService : IUserService
                 }).ToList()
             };
 
-            await _userRepository.AddRegionalOrganizationAsync(user.RegionalOrganization);
+            await _userRepository.AddRegionalManagerAsync(user.RegionalManager);
         }
         else
         {
-            user.RegionalOrganization.RegionalOrganizationRegions.Clear();
+            user.RegionalManager.RegionalManagerRegions.Clear();
 
             foreach (var regionId in regionIds)
             {
-                user.RegionalOrganization.RegionalOrganizationRegions.Add(new RegionalOrganizationRegion
+                user.RegionalManager.RegionalManagerRegions.Add(new RegionalManagerRegion
                 {
                     UserId = userId,
                     RegionId = regionId,
@@ -1005,14 +1015,14 @@ public class UserService : IUserService
         if (alreadyAssigned)
             throw new InvalidOperationException("Region is already assigned to this user.");
 
-        if (user.RegionalOrganization == null)
+        if (user.RegionalManager == null)
         {
-            var regionalOrganization = new RegionalOrganization
+            var regionalOrganization = new RegionalManager
             {
                 UserId = userId,
-                RegionalOrganizationRegions = new List<RegionalOrganizationRegion>
+                RegionalManagerRegions = new List<RegionalManagerRegion>
                 {
-                    new RegionalOrganizationRegion
+                    new RegionalManagerRegion
                     {
                         UserId = userId,
                         RegionId = regionId,
@@ -1021,11 +1031,11 @@ public class UserService : IUserService
                 }
             };
 
-            await _userRepository.AddRegionalOrganizationAsync(regionalOrganization);
+            await _userRepository.AddRegionalManagerAsync(regionalOrganization);
         }
         else
         {
-            await _userRepository.AddUserRegionAsync(new RegionalOrganizationRegion
+            await _userRepository.AddUserRegionAsync(new RegionalManagerRegion
             {
                 UserId = userId,
                 RegionId = regionId,
@@ -1112,3 +1122,4 @@ public class UserService : IUserService
         return normalized;
     }
 }
+

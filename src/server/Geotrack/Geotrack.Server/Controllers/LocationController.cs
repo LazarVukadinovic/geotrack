@@ -2,6 +2,7 @@
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Geotrack.Server.Controllers;
 
@@ -9,18 +10,24 @@ namespace Geotrack.Server.Controllers;
 [Route("api/locations")]
 public class LocationController : ControllerBase
 {
+    private const string UnexpectedErrorMessage = "An unexpected error occurred.";
+
     private readonly ILocationService _locationService;
     private readonly IClientLocationResolverService _clientLocationResolver;
+    private readonly ILogger<LocationController> _logger;
 
     public LocationController(
         ILocationService locationService,
-        IClientLocationResolverService clientLocationResolver)
+        IClientLocationResolverService clientLocationResolver,
+        ILogger<LocationController> logger)
     {
         _locationService = locationService;
         _clientLocationResolver = clientLocationResolver;
+        _logger = logger;
     }
 
     [HttpGet("approximate")]
+    [EnableRateLimiting("approximateLocation")]
     public async Task<IActionResult> GetApproximateLocation(CancellationToken cancellationToken)
     {
         var location = await _clientLocationResolver.ResolveApproximateLocationAsync(
@@ -64,11 +71,20 @@ public class LocationController : ControllerBase
     }
 
     [HttpGet("{id}/reviews")]
-    public async Task<IActionResult> GetLocationReviews([FromRoute] int id)
+    public async Task<IActionResult> GetLocationReviews(
+        [FromRoute] int id,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
     {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
         try
         {
-            var result = await _locationService.GetLocationReviewsAsync(id);
+            var result = await _locationService.GetLocationReviewsAsync(id, skip, take);
             return Ok(result);
         }
         catch (Exception ex)
@@ -107,13 +123,40 @@ public class LocationController : ControllerBase
         return HttpContext.Connection.RemoteIpAddress?.ToString();
     }
 
+    private ActionResult? ValidatePaging(int skip, int take)
+    {
+        if (skip < 0)
+        {
+            return BadRequest(new { error = "skip must be zero or greater." });
+        }
+
+        if (take <= 0)
+        {
+            return BadRequest(new { error = "take must be greater than zero." });
+        }
+
+        return null;
+    }
+
     private IActionResult MapException(Exception ex)
     {
         return ex switch
         {
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
-            _ => StatusCode(500, new { message = ex.Message })
+            _ => HandleUnexpectedException(ex)
         };
+    }
+
+    private IActionResult HandleUnexpectedException(Exception ex)
+    {
+        var httpContext = ControllerContext.HttpContext;
+        _logger.LogError(
+            ex,
+            "Unexpected exception while handling {Method} {Path}.",
+            httpContext?.Request.Method ?? "unknown",
+            httpContext?.Request.Path.Value ?? "unknown");
+
+        return StatusCode(StatusCodes.Status500InternalServerError, new { message = UnexpectedErrorMessage });
     }
 }

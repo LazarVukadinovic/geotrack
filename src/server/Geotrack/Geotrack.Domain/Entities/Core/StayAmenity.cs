@@ -20,6 +20,8 @@ public class StayAmenity
     [MaxLength(100)]
     public string? IconKey { get; set; }
 
+    public ICollection<StayStayAmenity> StayAmenities { get; set; } = new List<StayStayAmenity>();
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

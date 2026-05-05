@@ -88,14 +88,14 @@ public class UserNotificationService : IUserNotificationService
         await _db.SaveChangesAsync();
     }
 
-    public void AddContributionDecisionNotification(StayContribution contribution)
+    public void AddContributionDecisionNotification(PlaceContribution contribution)
     {
-        if (contribution.Status is not (StayContributionStatus.Approved or StayContributionStatus.Rejected))
+        if (contribution.Status is not (PlaceContributionStatus.Approved or PlaceContributionStatus.Rejected))
         {
             return;
         }
 
-        var isApproved = contribution.Status == StayContributionStatus.Approved;
+        var isApproved = contribution.Status == PlaceContributionStatus.Approved;
 
         _db.UserNotifications.Add(new UserNotification
         {
@@ -103,8 +103,8 @@ public class UserNotificationService : IUserNotificationService
             Type = isApproved ? ContributionApprovedType : ContributionRejectedType,
             Title = isApproved ? "Contribution approved" : "Contribution rejected",
             Message = isApproved
-                ? $"Your stay contribution \"{contribution.Name}\" was approved and is now published."
-                : $"Your stay contribution \"{contribution.Name}\" was rejected. Review the feedback and update it when you are ready.",
+                ? $"Your place contribution \"{contribution.Name}\" was approved and is now published."
+                : $"Your place contribution \"{contribution.Name}\" was rejected. Review the feedback and update it when you are ready.",
             RelatedEntityType = "contribution",
             RelatedEntityId = contribution.Id,
             ActionUrl = $"/contributions/{contribution.Id}",

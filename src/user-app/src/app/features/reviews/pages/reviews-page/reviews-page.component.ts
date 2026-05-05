@@ -18,6 +18,7 @@ type ReviewsLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
   styleUrl: './reviews-page.component.scss',
 })
 export class ReviewsPageComponent {
+  private readonly pageSize = 10;
   private readonly route = inject(ActivatedRoute);
   private readonly location = inject(Location);
   private readonly destroyRef = inject(DestroyRef);
@@ -45,6 +46,9 @@ export class ReviewsPageComponent {
   protected readonly loadState = signal<ReviewsLoadState>('idle');
   protected readonly averageRating = signal<number | null>(null);
   protected readonly reviewsCount = signal(0);
+  protected readonly hasMore = signal(false);
+  protected readonly nextSkip = signal(0);
+  protected readonly loadingMore = signal(false);
   protected readonly reportMessage = signal('');
   protected readonly reportError = signal('');
   private readonly reportingReviewIds = signal<Record<string, boolean>>({});
@@ -83,6 +87,38 @@ export class ReviewsPageComponent {
   protected retry(): void {
     this.lastRequestKey = null;
     this.loadReviews(this.entityTypeParam(), this.entityIdParam());
+  }
+
+  protected loadMore(): void {
+    const entityType = this.normalizeEntityType(this.entityTypeParam());
+    const entityId = parseInt(this.entityIdParam() ?? '', 10);
+
+    if (!entityType || isNaN(entityId) || entityId <= 0 || !this.hasMore() || this.loadingMore()) {
+      return;
+    }
+
+    const seq = this.requestSeq;
+    this.loadingMore.set(true);
+
+    this.reviewsService.getReviews(entityType, entityId, this.nextSkip(), this.pageSize)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          if (seq !== this.requestSeq) return;
+          this.reviews.update(current => this.mergeReviews(current, result.reviews));
+          this.averageRating.set(result.averageRating);
+          this.reviewsCount.set(result.reviewsCount);
+          this.nextSkip.set(result.nextSkip);
+          this.hasMore.set(result.hasMore);
+          this.loadingMore.set(false);
+        },
+        error: () => {
+          if (seq !== this.requestSeq) return;
+          this.loadingMore.set(false);
+          this.reportMessage.set('');
+          this.reportError.set('Could not load more reviews. Please try again.');
+        },
+      });
   }
 
   protected reviewInitials(authorName: string): string {
@@ -148,6 +184,9 @@ export class ReviewsPageComponent {
       this.reviews.set([]);
       this.averageRating.set(null);
       this.reviewsCount.set(0);
+      this.nextSkip.set(0);
+      this.hasMore.set(false);
+      this.loadingMore.set(false);
       this.loadState.set('notFound');
       return;
     }
@@ -158,8 +197,10 @@ export class ReviewsPageComponent {
     this.lastRequestKey = requestKey;
     const seq = ++this.requestSeq;
     this.loadState.set('loading');
+    this.loadingMore.set(false);
+    this.hasMore.set(false);
 
-    this.reviewsService.getReviews(entityType, entityId)
+    this.reviewsService.getReviews(entityType, entityId, 0, this.pageSize)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
@@ -167,6 +208,8 @@ export class ReviewsPageComponent {
           this.reviews.set(result.reviews);
           this.averageRating.set(result.averageRating);
           this.reviewsCount.set(result.reviewsCount);
+          this.nextSkip.set(result.nextSkip);
+          this.hasMore.set(result.hasMore);
           this.reportMessage.set('');
           this.reportError.set('');
           this.reportingReviewIds.set({});
@@ -178,9 +221,20 @@ export class ReviewsPageComponent {
           this.reviews.set([]);
           this.averageRating.set(null);
           this.reviewsCount.set(0);
+          this.nextSkip.set(0);
+          this.hasMore.set(false);
+          this.loadingMore.set(false);
           this.loadState.set('error');
         },
       });
+  }
+
+  private mergeReviews(current: FullReview[], incoming: FullReview[]): FullReview[] {
+    const existingIds = new Set(current.map(review => review.id));
+    return [
+      ...current,
+      ...incoming.filter(review => !existingIds.has(review.id)),
+    ];
   }
 
   private normalizeEntityType(value: string | null): ReviewsEntityType | null {

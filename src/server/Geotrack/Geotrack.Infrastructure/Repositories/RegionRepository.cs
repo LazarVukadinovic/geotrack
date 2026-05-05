@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -37,7 +37,7 @@ namespace Geotrack.Infrastructure.Repositories
 
         public async Task<Region?> GetByIdWithManagersAsync(int regionId)
         {
-            return await _context.Regions.Include(r => r.RegionalOrganizationRegions).ThenInclude(ror => ror.RegionalOrganization).ThenInclude(ro => ro.User).FirstOrDefaultAsync(r => r.Id == regionId);
+            return await _context.Regions.Include(r => r.RegionalManagerRegions).ThenInclude(ror => ror.RegionalManager).ThenInclude(ro => ro.User).FirstOrDefaultAsync(r => r.Id == regionId);
         }
         public async Task<bool> ExistsInTerritoryAsync(int territoryId, string name)
         {

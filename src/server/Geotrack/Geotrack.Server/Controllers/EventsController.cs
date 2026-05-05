@@ -33,6 +33,12 @@ public class EventsController : ControllerBase
             return pagingError;
         }
 
+        var coordinateError = ValidateOptionalCoordinates(latitude, longitude);
+        if (coordinateError is not null)
+        {
+            return coordinateError;
+        }
+
         var userId = GetUserId();
         var result = await _eventService.GetEventsAsync(destinationId, tags, upcoming, userId, latitude, longitude, skip, take);
         return result.Status switch
@@ -57,11 +63,21 @@ public class EventsController : ControllerBase
     }
 
     [HttpGet("{id:int}/sections/{sectionKey}")]
-    public async Task<IActionResult> GetEventSection([FromRoute] int id, [FromRoute] string sectionKey)
+    public async Task<IActionResult> GetEventSection(
+        [FromRoute] int id,
+        [FromRoute] string sectionKey,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
     {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
         try
         {
-            var result = await _eventService.GetEventSectionAsync(id, sectionKey);
+            var result = await _eventService.GetEventSectionAsync(id, sectionKey, skip, take);
             return Ok(result);
         }
         catch (Exception ex)
@@ -71,11 +87,20 @@ public class EventsController : ControllerBase
     }
 
     [HttpGet("{id:int}/reviews")]
-    public async Task<IActionResult> GetEventReviews([FromRoute] int id)
+    public async Task<IActionResult> GetEventReviews(
+        [FromRoute] int id,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
     {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
         try
         {
-            var result = await _eventService.GetEventReviewsAsync(id);
+            var result = await _eventService.GetEventReviewsAsync(id, skip, take);
             return Ok(result);
         }
         catch (Exception ex)
@@ -122,6 +147,39 @@ public class EventsController : ControllerBase
         }
 
         return null;
+    }
+
+    private ActionResult? ValidateOptionalCoordinates(double? latitude, double? longitude)
+    {
+        if (!latitude.HasValue && !longitude.HasValue)
+        {
+            return null;
+        }
+
+        if (latitude.HasValue != longitude.HasValue)
+        {
+            return BadRequest(new { error = "latitude and longitude must be provided together." });
+        }
+
+        if (!HasValidCoordinates(latitude!.Value, longitude!.Value))
+        {
+            return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
+        }
+
+        return null;
+    }
+
+    private static bool HasValidCoordinates(double latitude, double longitude)
+    {
+        return !double.IsNaN(latitude) &&
+               !double.IsNaN(longitude) &&
+               !double.IsInfinity(latitude) &&
+               !double.IsInfinity(longitude) &&
+               latitude >= -90 &&
+               latitude <= 90 &&
+               longitude >= -180 &&
+               longitude <= 180 &&
+               (latitude != 0d || longitude != 0d);
     }
 
     private IActionResult MapException(Exception ex)

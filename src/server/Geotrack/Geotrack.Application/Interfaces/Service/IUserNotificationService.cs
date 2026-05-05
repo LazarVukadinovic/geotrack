@@ -9,5 +9,5 @@ public interface IUserNotificationService
     Task<UserNotificationUnreadCountDto> GetUnreadCountAsync(int userId);
     Task MarkReadAsync(int userId, int notificationId);
     Task MarkAllReadAsync(int userId);
-    void AddContributionDecisionNotification(StayContribution contribution);
+    void AddContributionDecisionNotification(PlaceContribution contribution);
 }

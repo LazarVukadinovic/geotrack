@@ -44,7 +44,7 @@
       <img
         appImageFallback
         class="pd__hero-img"
-        [src]="p.heroImage"
+        [src]="heroImage()"
         alt=""
         width="800"
         height="480"
@@ -131,7 +131,7 @@
                 class="pd__cta pd__cta--primary"
                 [href]="directionsHref"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 (click)="onDirectionsClick()"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -164,6 +164,33 @@
         }
 
         <!-- ── About ──────────────────────────────────────────────────── -->
+        @if (p.images.length > 1) {
+          <section class="pd__gallery" aria-label="Place photos">
+            <div class="pd__gallery-track" role="list">
+              @for (image of p.images; track image.id) {
+                <button
+                  type="button"
+                  class="pd__gallery-thumb"
+                  [class.pd__gallery-thumb--active]="isGalleryImageActive(image.url)"
+                  [attr.aria-label]="'Show photo ' + ($index + 1) + ' of ' + p.images.length"
+                  (click)="selectGalleryImage(image.url)"
+                >
+                  <img
+                    appImageFallback
+                    class="pd__gallery-img"
+                    [src]="image.url"
+                    [alt]="image.altText || p.title"
+                    width="120"
+                    height="84"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </button>
+              }
+            </div>
+          </section>
+        }
+
         <div class="pd__divider"></div>
 
         <section class="pd__section">

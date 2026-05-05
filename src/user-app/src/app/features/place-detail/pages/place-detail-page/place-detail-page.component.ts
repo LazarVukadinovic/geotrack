@@ -52,6 +52,8 @@ export class PlaceDetailPageComponent {
 
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by pd__scroll. */
   protected readonly scrollProgress = signal(0);
+  protected readonly selectedImageUrl = signal<string | null>(null);
+  protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.place()?.heroImage ?? '');
   protected readonly reportMessage = signal('');
   protected readonly reportError = signal('');
   private readonly reportedReviewIds = signal<Record<string, boolean>>({});
@@ -79,6 +81,7 @@ export class PlaceDetailPageComponent {
     effect(() => {
       this.placeId();
       this.scrollProgress.set(0);
+      this.selectedImageUrl.set(null);
       const el = this.pdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -111,6 +114,14 @@ export class PlaceDetailPageComponent {
 
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/places', id]);
+  }
+
+  protected selectGalleryImage(url: string): void {
+    this.selectedImageUrl.set(url);
+  }
+
+  protected isGalleryImageActive(url: string): boolean {
+    return (this.selectedImageUrl() ?? this.place()?.heroImage ?? '') === url;
   }
 
   protected openReviews(): void {

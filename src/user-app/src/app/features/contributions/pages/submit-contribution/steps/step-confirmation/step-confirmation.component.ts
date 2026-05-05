@@ -7,7 +7,7 @@ import { Router } from '@angular/router';
   templateUrl: './step-confirmation.component.html',
 })
 export class StepConfirmationComponent {
-  entityType = input('Stay');
+  entityType = input('Place');
   back = output<void>();
   addAnother = output<void>();
   private router = inject(Router);

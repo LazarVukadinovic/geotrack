@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Search;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -285,14 +286,14 @@ public class SearchService : ISearchService
                 Id = $"place-type:{type.Id}",
                 Label = type.Name,
                 Domain = SearchDomains.Places,
-                Count = type.Places.Count(place => place.PricePerNight == null)
+                Count = type.Places.Count(place => place.Stay == null)
             })
             .ToListAsync(cancellationToken);
 
         var stayOptions = await _db.Tags
             .AsNoTracking()
-            .Where(tag => tag.ForPlace && tag.PlaceTags.Any(placeTag => placeTag.Place.PricePerNight != null))
-            .OrderByDescending(tag => tag.PlaceTags.Count(placeTag => placeTag.Place.PricePerNight != null))
+            .Where(tag => tag.ForPlace && tag.PlaceTags.Any(placeTag => placeTag.Place.Stay != null))
+            .OrderByDescending(tag => tag.PlaceTags.Count(placeTag => placeTag.Place.Stay != null))
             .ThenBy(tag => tag.Name)
             .Take(MetadataOptionLimit)
             .Select(tag => new SearchFilterOptionDto
@@ -300,7 +301,7 @@ public class SearchService : ISearchService
                 Id = $"tag:{tag.Slug}",
                 Label = tag.Name,
                 Domain = SearchDomains.Stays,
-                Count = tag.PlaceTags.Count(placeTag => placeTag.Place.PricePerNight != null)
+                Count = tag.PlaceTags.Count(placeTag => placeTag.Place.Stay != null)
             })
             .ToListAsync(cancellationToken);
 
@@ -387,7 +388,6 @@ public class SearchService : ISearchService
                 Name = destination.Name,
                 Description = destination.Description,
                 DestinationTypeName = destination.DestinationType.Name,
-                Image = destination.ImageUrl,
                 Latitude = destination.Latitude,
                 Longitude = destination.Longitude,
                 ReviewCount = destination.DestinationReviews.Count,
@@ -430,13 +430,13 @@ public class SearchService : ISearchService
 
         var query = _db.Places
             .AsNoTracking()
-            .Where(place => includeStays ? place.PricePerNight != null : place.PricePerNight == null)
+            .Where(place => includeStays ? place.Stay != null : place.Stay == null)
             .Where(place =>
                 hasDomainCandidateIntent ||
                 (destinationId.HasValue && place.Location.DestinationId == destinationId.Value) ||
                 tagIds.Count > 0 && place.PlaceTags.Any(placeTag => tagIds.Contains(placeTag.TagId)) ||
                 placeTypeIds.Count > 0 && placeTypeIds.Contains(place.PlaceTypeId) ||
-                includeStays && amenityIds.Count > 0 && place.PlaceAmenities.Any(amenity => amenityIds.Contains(amenity.AmenityId)) ||
+                includeStays && amenityIds.Count > 0 && place.Stay != null && place.Stay.StayAmenities.Any(amenity => amenityIds.Contains(amenity.StayAmenityId)) ||
                 EF.Functions.ILike(place.Name, pattern) ||
                 (place.Subtitle != null && EF.Functions.ILike(place.Subtitle, pattern)) ||
                 EF.Functions.ILike(place.Description, pattern) ||
@@ -447,9 +447,10 @@ public class SearchService : ISearchService
                 place.PlaceTags.Any(placeTag =>
                     EF.Functions.ILike(placeTag.Tag.Name, pattern) ||
                     EF.Functions.ILike(placeTag.Tag.Slug, pattern)) ||
-                includeStays && place.PlaceAmenities.Any(amenity =>
-                    EF.Functions.ILike(amenity.Amenity.Name, pattern) ||
-                    EF.Functions.ILike(amenity.Amenity.Icon, pattern)));
+                includeStays && place.Stay != null && place.Stay.StayAmenities.Any(amenity =>
+                    EF.Functions.ILike(amenity.StayAmenity.Name, pattern) ||
+                    EF.Functions.ILike(amenity.StayAmenity.Slug, pattern) ||
+                    (amenity.StayAmenity.IconKey != null && EF.Functions.ILike(amenity.StayAmenity.IconKey, pattern))));
 
         List<PlaceSearchProjection> places;
         if (activePoint is null)
@@ -461,10 +462,9 @@ public class SearchService : ISearchService
                     Name = place.Name,
                     Subtitle = place.Subtitle,
                     Description = place.Description,
-                    Image = place.ImageUrl,
                     Address = place.Address,
                     OpeningHours = place.OpeningHours,
-                    PricePerNight = place.PricePerNight,
+                    PricePerNight = (place.Stay != null ? place.Stay.PricePerNight : null),
                     PlaceTypeName = place.PlaceType.Name,
                     LocationName = place.Location.Name,
                     DestinationId = place.Location.DestinationId,
@@ -481,14 +481,23 @@ public class SearchService : ISearchService
                             Slug = placeTag.Tag.Slug
                         })
                         .ToList(),
-                    Amenities = place.PlaceAmenities
-                        .Select(amenity => new SearchAmenityProjection
-                        {
-                            Id = amenity.AmenityId,
-                            Name = amenity.Amenity.Name,
-                            Icon = amenity.Amenity.Icon
-                        })
-                        .ToList()
+                    Amenities = place.Stay != null
+                        ? place.Stay.StayAmenities
+                            .Select(amenity => new SearchAmenityProjection
+                            {
+                                Id = amenity.StayAmenityId,
+                                Name = amenity.StayAmenity.Name,
+                                Icon = amenity.StayAmenity.IconKey ?? amenity.StayAmenity.Slug
+                            })
+                            .ToList()
+                        : place.PlaceAmenities
+                            .Select(amenity => new SearchAmenityProjection
+                            {
+                                Id = amenity.AmenityId,
+                                Name = amenity.Amenity.Name,
+                                Icon = amenity.Amenity.Icon
+                            })
+                            .ToList()
                 })
                 .Take(120)
                 .ToListAsync(cancellationToken);
@@ -503,10 +512,9 @@ public class SearchService : ISearchService
                     Name = place.Name,
                     Subtitle = place.Subtitle,
                     Description = place.Description,
-                    Image = place.ImageUrl,
                     Address = place.Address,
                     OpeningHours = place.OpeningHours,
-                    PricePerNight = place.PricePerNight,
+                    PricePerNight = (place.Stay != null ? place.Stay.PricePerNight : null),
                     PlaceTypeName = place.PlaceType.Name,
                     LocationName = place.Location.Name,
                     DestinationId = place.Location.DestinationId,
@@ -524,14 +532,23 @@ public class SearchService : ISearchService
                             Slug = placeTag.Tag.Slug
                         })
                         .ToList(),
-                    Amenities = place.PlaceAmenities
-                        .Select(amenity => new SearchAmenityProjection
-                        {
-                            Id = amenity.AmenityId,
-                            Name = amenity.Amenity.Name,
-                            Icon = amenity.Amenity.Icon
-                        })
-                        .ToList()
+                    Amenities = place.Stay != null
+                        ? place.Stay.StayAmenities
+                            .Select(amenity => new SearchAmenityProjection
+                            {
+                                Id = amenity.StayAmenityId,
+                                Name = amenity.StayAmenity.Name,
+                                Icon = amenity.StayAmenity.IconKey ?? amenity.StayAmenity.Slug
+                            })
+                            .ToList()
+                        : place.PlaceAmenities
+                            .Select(amenity => new SearchAmenityProjection
+                            {
+                                Id = amenity.AmenityId,
+                                Name = amenity.Amenity.Name,
+                                Icon = amenity.Amenity.Icon
+                            })
+                            .ToList()
                 })
                 .OrderBy(place => destinationId.HasValue && place.DestinationId == destinationId.Value ? 0 : 1)
                 .ThenBy(place => place.DistanceMeters)
@@ -594,7 +611,6 @@ public class SearchService : ISearchService
                     DestinationName = @event.Location.Destination.Name,
                     Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
                     Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
-                    Image = @event.ImageUrl,
                     StartDate = @event.StartDate,
                     EndDate = @event.EndDate,
                     Tags = @event.EventTags
@@ -624,7 +640,6 @@ public class SearchService : ISearchService
                     DestinationName = @event.Location.Destination.Name,
                     Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
                     Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
-                    Image = @event.ImageUrl,
                     StartDate = @event.StartDate,
                     EndDate = @event.EndDate,
                     DistanceMeters = EF.Property<Point>(@event, SpatialPointFactory.CoordinatesPropertyName).Distance(activePoint),
@@ -1074,7 +1089,6 @@ public class SearchService : ISearchService
                 Name = tag.Name,
                 Slug = tag.Slug,
                 Description = tag.Description,
-                Image = tag.ImageUrl,
                 ForDestination = tag.ForDestination,
                 ForPlace = tag.ForPlace,
                 ForEvent = tag.ForEvent
@@ -1101,13 +1115,13 @@ public class SearchService : ISearchService
             })
             .ToListAsync(cancellationToken);
 
-        var amenities = await _db.Amenities
+        var amenities = await _db.StayAmenities
             .AsNoTracking()
             .Select(amenity => new SearchAmenityProjection
             {
                 Id = amenity.Id,
                 Name = amenity.Name,
-                Icon = amenity.Icon
+                Icon = amenity.IconKey ?? amenity.Slug
             })
             .ToListAsync(cancellationToken);
 

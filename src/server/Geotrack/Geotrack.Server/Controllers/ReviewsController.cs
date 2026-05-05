@@ -19,16 +19,34 @@ public class ReviewsController : ControllerBase
     }
 
     [HttpGet("places/{placeId:int}")]
-    public async Task<ActionResult> GetPlaceReviews(int placeId)
+    public async Task<ActionResult> GetPlaceReviews(
+        int placeId,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
     {
-        var reviews = await _reviewService.GetPlaceReviewsAsync(placeId, GetOptionalUserId());
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
+        var reviews = await _reviewService.GetPlaceReviewsAsync(placeId, skip, take, GetOptionalUserId());
         return Ok(reviews);
     }
 
     [HttpGet("events/{eventId:int}")]
-    public async Task<ActionResult> GetEventReviews(int eventId)
+    public async Task<ActionResult> GetEventReviews(
+        int eventId,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
     {
-        var reviews = await _reviewService.GetEventReviewsAsync(eventId, GetOptionalUserId());
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null)
+        {
+            return pagingError;
+        }
+
+        var reviews = await _reviewService.GetEventReviewsAsync(eventId, skip, take, GetOptionalUserId());
         return Ok(reviews);
     }
 
@@ -157,6 +175,21 @@ public class ReviewsController : ControllerBase
     {
         var claim = User.FindFirst("userId")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private ActionResult? ValidatePaging(int skip, int take)
+    {
+        if (skip < 0)
+        {
+            return BadRequest(new { error = "skip must be zero or greater." });
+        }
+
+        if (take <= 0)
+        {
+            return BadRequest(new { error = "take must be greater than zero." });
+        }
+
+        return null;
     }
 
     private IActionResult MapException(Exception ex)

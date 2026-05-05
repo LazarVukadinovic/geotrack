@@ -57,6 +57,7 @@
         @case (3) {
           <app-step-details
             [data]="draft().details"
+            [isAccommodation]="isAccommodationDraft()"
             (changed)="onDetailsChanged($event)"
             (saved)="onDetailsSaved($event)"
             (back)="prevStep()"
@@ -65,6 +66,7 @@
         @case (4) {
           <app-step-preview
             [draft]="draft()"
+            [isAccommodation]="isAccommodationDraft()"
             (confirmed)="onSubmit()"
             (back)="prevStep()"
           />
