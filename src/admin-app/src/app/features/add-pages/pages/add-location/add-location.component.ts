@@ -534,5 +534,65 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
   }
-  
+  publish(): void {
+    if (!this.zoneConfirmed || !this.confirmedLayer) {
+      alert('Please draw a zone on the map first.');
+      return;
+    }
+
+    let zone: [number, number][] = [];
+    let centerLat: number;
+    let centerLng: number;
+
+    try {
+      if (this.confirmedLayer instanceof L.Circle) {
+        const center = this.confirmedLayer.getLatLng();
+        const radius = this.confirmedLayer.getRadius();
+        centerLat = center.lat;
+        centerLng = center.lng;
+        const points = 16;
+        for (let i = 0; i < points; i++) {
+          const angle = (i / points) * 2 * Math.PI;
+          const dLat = (radius / 111320) * Math.cos(angle);
+          const dLng = (radius / (111320 * Math.cos(center.lat * Math.PI / 180))) * Math.sin(angle);
+          zone.push([center.lat + dLat, center.lng + dLng]);
+        }
+      } else if (this.confirmedLayer instanceof L.Rectangle) {
+        const bounds = this.confirmedLayer.getBounds();
+        centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+        centerLng = (bounds.getEast() + bounds.getWest()) / 2;
+        zone = [
+          [bounds.getNorth(), bounds.getWest()],
+          [bounds.getNorth(), bounds.getEast()],
+          [bounds.getSouth(), bounds.getEast()],
+          [bounds.getSouth(), bounds.getWest()],
+        ];
+      } else {
+        // Polygon
+        const latlngs = this.confirmedLayer.getLatLngs();
+        const flat = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
+        zone = (flat as any[]).map((ll: any) => [ll.lat, ll.lng] as [number, number]);
+        const bounds = this.confirmedLayer.getBounds();
+        centerLat = bounds.getCenter().lat;
+        centerLng = bounds.getCenter().lng;
+      }
+    } catch (e) {
+      alert('Could not read zone data. Please try drawing again.');
+      return;
+    }
+
+    const newPlace = {
+      id: Date.now().toString(),
+      name: this.locationName || 'New Location', 
+      type: 'Location' as const,
+      category: 'Location',
+      description: '',
+      status: 'Active',
+      eventsToday: 0,
+      lat: centerLat!,
+      lng: centerLng!,
+      zone,
+    };
+    this.router.navigate(['/map'], { state: { newPlace } });
+  }
 }

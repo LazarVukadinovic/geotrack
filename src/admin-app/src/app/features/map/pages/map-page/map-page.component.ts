@@ -49,7 +49,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
   droppedPinMarker: any = null;
   droppedPinPosition: { x: number; y: number } | null = null;
 
-  readonly mockPlaces: MockPlace[] = [
+  mockPlaces: MockPlace[] = [
     {
       id: '1', name: 'Šumarice Memorial Park', type: 'Location', category: 'Park & Nature',
       description: 'Memorial park dedicated to victims of the Kragujevac massacre in 1941.',
@@ -89,8 +89,12 @@ export class MapPageComponent implements OnInit, OnDestroy {
       status: 'Active', eventsToday: 2, lat: 44.0139, lng: 20.9241,
     },
   ];
-
+  private dynamicPlaces: MockPlace[] = [];
   ngOnInit(): void {
+      const state = history.state as { newPlace?: MockPlace };
+      if (state?.newPlace) {
+        this.dynamicPlaces = [state.newPlace];
+      }
     setTimeout(() => this.initMap(), 100);
   }
 
@@ -321,8 +325,78 @@ export class MapPageComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       });
     });
-  }
+    this.dynamicPlaces.forEach(place => this._addPlaceToMap(place));
 
+    if (this.dynamicPlaces.length > 0) {
+      const p = this.dynamicPlaces[0];
+      setTimeout(() => {
+        this.map.flyTo([p.lat, p.lng], 15, { duration: 1 });
+        setTimeout(() => {
+          this.zone.run(() => {
+            this.selectedPlace = p;
+            const point = this.map.latLngToContainerPoint([p.lat, p.lng]);
+            const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
+            this.popupPosition = {
+              x: point.x + mapEl.left,
+              y: point.y + mapEl.top - 36,
+            };
+            this.cdr.detectChanges();
+          });
+        }, 1100);
+      }, 300);
+    }
+  }
+  private _addPlaceToMap(place: MockPlace): void {
+    if (place.zone) {
+      const { color, fill } = this.zoneColor(place.type);
+      const polygon = L.polygon(place.zone, {
+        color, fillColor: fill, fillOpacity: 0.15, weight: 2, dashArray: '6 4', opacity: 0.8,
+      }).addTo(this.map);
+
+      polygon.on('click', (e: any) => {
+        L.DomEvent.stopPropagation(e);
+        this.zone.run(() => {
+          this.selectedPlace = place;
+          this.droppedPin = null;
+          this.droppedPinPosition = null;
+          const point = this.map.latLngToContainerPoint([place.lat, place.lng]);
+          const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
+          this.popupPosition = { x: point.x + mapEl.left, y: point.y + mapEl.top - 36 };
+          this.cdr.detectChanges();
+        });
+      });
+
+      const bounds = polygon.getBounds();
+      const center = bounds.getCenter();
+      const { color: c } = this.zoneColor(place.type);
+      const label = L.divIcon({
+        html: `<div style="background:rgba(0,0,0,0.55);color:white;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;border:1px solid ${c};white-space:nowrap;backdrop-filter:blur(4px);pointer-events:none;">${place.name}</div>`,
+        className: '', iconAnchor: [0, 0],
+      });
+      L.marker(center, { icon: label, interactive: false }).addTo(this.map);
+      this.zonePolygons.push(polygon);
+    }
+
+    const marker = L.marker([place.lat, place.lng], {
+      icon: this.makePinIcon(this.pinColor(place.type)),
+    }).addTo(this.map);
+
+    marker.on('click', (e: any) => {
+      L.DomEvent.stopPropagation(e);
+      this.zone.run(() => {
+        this.selectedPlace = place;
+        this.droppedPin = null;
+        this.droppedPinPosition = null;
+        const point = this.map.latLngToContainerPoint([place.lat, place.lng]);
+        const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
+        this.popupPosition = { x: point.x + mapEl.left, y: point.y + mapEl.top - 36 };
+        this.cdr.detectChanges();
+      });
+    });
+
+    this.markers.push(marker);
+    (this.mockPlaces as MockPlace[]).push(place);
+  }
   // Popup / Navigation
 
   closePopup(): void {
@@ -363,5 +437,17 @@ export class MapPageComponent implements OnInit, OnDestroy {
   navigateToNewEvent(): void {
     this.router.navigate(['/events/new'], { state: { place: this.selectedPlace } });
     this.closePopup();
+  }
+  navigateToNewPlaceWithPin(): void {
+    if (!this.droppedPin) return;
+    this.router.navigate(['/places/new'], {
+      state: {
+        droppedPin: {
+          lat: this.droppedPin.lat,
+          lng: this.droppedPin.lng,
+        }
+      }
+    });
+    this.cancelDroppedPin();
   }
 }

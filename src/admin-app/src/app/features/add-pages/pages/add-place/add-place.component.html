@@ -388,7 +388,7 @@
           <!-- Publishing -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
             <h4 class="text-sm font-bold text-gray-900 mb-3">Publishing</h4>
-            <button type="button"
+            <button type="button" (click)="publish()"
                     class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors">
               {{ isEditMode ? 'Save Changes' : 'Publish' }}
             </button>

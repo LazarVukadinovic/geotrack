@@ -322,7 +322,24 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.reverseGeocode(this.modalPinLat, this.modalPinLng);
     this.closePinModal();
   }
-
+  publish(): void {
+    if (!this.pinConfirmed) {
+      alert('Please pin the location on the map first.');
+      return;
+    }
+    const newPlace = {
+      id: Date.now().toString(),
+      name: this.placeName || 'New Place',
+      type: 'Place' as const,
+      category: this.placeType || 'Place',
+      description: '',
+      status: 'Active',
+      eventsToday: 0,
+      lat: parseFloat(this.pinLat),
+      lng: parseFloat(this.pinLng),
+    };
+    this.router.navigate(['/map'], { state: { newPlace } });
+  }
   onCoordInputChange(): void {
     const lat = parseFloat(this.pinLat);
     const lng = parseFloat(this.pinLng);
@@ -527,20 +544,30 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   editPlaceId: string | null = null;
   //Lifecycle
   ngOnInit(): void {
-     const nav = history.state?.place;
+    const nav = history.state?.place;
     if (nav) {
       this.isEditMode = true;
       this.editPlaceId = nav.id;
       this.populateFromPlace(nav);
     } else {
-      this.route.paramMap.subscribe(params => {
-        const id = params.get('id');
-        if (id) {
-          this.isEditMode = true;
-          this.editPlaceId = id;
-          // Ovde bi išao servis lookup
-        }
-      });
+      const pinState = history.state?.droppedPin;
+      if (pinState?.lat && pinState?.lng) {
+        this.pinLat = pinState.lat.toFixed(6);
+        this.pinLng = pinState.lng.toFixed(6);
+        this.pinConfirmed = true;
+        setTimeout(() => {
+          this.updateMiniMapPin(pinState.lat, pinState.lng);
+          this.reverseGeocode(pinState.lat, pinState.lng);
+        }, 200);
+      } else {
+        this.route.paramMap.subscribe(params => {
+          const id = params.get('id');
+          if (id) {
+            this.isEditMode = true;
+            this.editPlaceId = id;
+          }
+        });
+      }
     }
   }
   placeName = '';
