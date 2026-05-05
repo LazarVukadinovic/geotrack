@@ -4,21 +4,10 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
-
+import { MapPlace } from '../../../../core/models/map-place.model';
+import { MapPlacesService } from '../../../../core/services/map-places.service';
 declare const L: any;
 
-interface MockPlace {
-  id: string;
-  name: string;
-  type: 'Place' | 'Location' | 'Destination';
-  category: string;
-  description: string;
-  status: string;
-  eventsToday: number;
-  lat: number;
-  lng: number;
-  zone?: [number, number][];
-}
 
 @Component({
   selector: 'app-map-page',
@@ -27,14 +16,14 @@ interface MockPlace {
   templateUrl: './map-page.component.html',
 })
 export class MapPageComponent implements OnInit, OnDestroy {
-  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private router: Router) {}
+  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private router: Router, private mapPlacesService:MapPlacesService) {}
 
   region   = 'Šumadija, Srbija';
   userName = 'Sarah Jenkins';
   userRole = 'Regional Manager';
 
   searchQuery = '';
-  searchResults: MockPlace[] = [];
+  searchResults: MapPlace[] = [];
   searchDropdownOpen = false;
 
   private map: any = null;
@@ -42,56 +31,17 @@ export class MapPageComponent implements OnInit, OnDestroy {
   private zonePolygons: any[] = [];
   private zoneLabels: any[] = [];
 
-  selectedPlace: MockPlace | null = null;
+  selectedPlace: MapPlace | null = null;
   popupPosition: { x: number; y: number } | null = null;
 
   droppedPin: { lat: number; lng: number; address: string } | null = null;
   droppedPinMarker: any = null;
   droppedPinPosition: { x: number; y: number } | null = null;
 
-  mockPlaces: MockPlace[] = [
-    {
-      id: '1', name: 'Šumarice Memorial Park', type: 'Location', category: 'Park & Nature',
-      description: 'Memorial park dedicated to victims of the Kragujevac massacre in 1941.',
-      status: 'Active', eventsToday: 1, lat: 44.0213, lng: 20.8943,
-      zone: [[44.0250, 20.8890], [44.0270, 20.8980], [44.0240, 20.9020], [44.0200, 20.9010], [44.0185, 20.8950], [44.0200, 20.8890]],
-    },
-    {
-      id: '2', name: 'Knjazevsko-srpski teatar', type: 'Place', category: 'Culture & Arts',
-      description: 'One of the oldest theatres in Serbia, founded in 1835.',
-      status: 'Active', eventsToday: 2, lat: 44.0106, lng: 20.9103,
-    },
-    {
-      id: '3', name: 'Sumadija sajam', type: 'Place', category: 'Community Hub',
-      description: 'A mixed-use facility serving as an incubator for local tech startups and events.',
-      status: 'Active', eventsToday: 3, lat: 44.0248, lng: 20.9305,
-    },
-    {
-      id: '4', name: 'Bubanj Lake', type: 'Location', category: 'Nature & Leisure',
-      description: 'Popular recreational lake area perfect for walks and outdoor activities.',
-      status: 'Active', eventsToday: 0, lat: 44.0169, lng: 20.9258,
-      zone: [[44.0185, 20.9220], [44.0190, 20.9310], [44.0155, 20.9315], [44.0148, 20.9225]],
-    },
-    {
-      id: '5', name: 'Stadion Cika Daca', type: 'Place', category: 'Sports',
-      description: 'Home stadium of FK Radnički Kragujevac.',
-      status: 'Active', eventsToday: 1, lat: 44.0212, lng: 20.8991,
-    },
-    {
-      id: '6', name: 'Kragujevac Old Town', type: 'Destination', category: 'Historic Quarter',
-      description: 'The historic heart of Kragujevac with cultural landmarks and old architecture.',
-      status: 'Active', eventsToday: 0, lat: 44.0128, lng: 20.9142,
-      zone: [[44.0135, 20.9090], [44.0140, 20.9200], [44.0100, 20.9220], [44.0085, 20.9130], [44.0110, 20.9080]],
-    },
-    {
-      id: '7', name: 'Hala Jezero', type: 'Place', category: 'Sports & Events',
-      description: 'Multi-purpose sports and events hall.',
-      status: 'Active', eventsToday: 2, lat: 44.0139, lng: 20.9241,
-    },
-  ];
-  private dynamicPlaces: MockPlace[] = [];
+  
+  private dynamicPlaces: MapPlace[] = [];
   ngOnInit(): void {
-      const state = history.state as { newPlace?: MockPlace };
+      const state = history.state as { newPlace?: MapPlace };
       if (state?.newPlace) {
         this.dynamicPlaces = [state.newPlace];
       }
@@ -111,7 +61,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
       this.searchDropdownOpen = false;
       return;
     }
-    this.searchResults = this.mockPlaces.filter(p =>
+    this.searchResults = this.mapPlacesService.getAll().filter(p =>
       p.name.toLowerCase().includes(q) ||
       p.category.toLowerCase().includes(q) ||
       p.type.toLowerCase().includes(q)
@@ -129,7 +79,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
     setTimeout(() => { this.searchDropdownOpen = false; }, 150);
   }
 
-  selectSearchResult(place: MockPlace): void {
+  selectSearchResult(place: MapPlace): void {
     this.searchDropdownOpen = false;
     this.searchQuery = place.name;
 
@@ -158,7 +108,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
   doSearch(): void {
     const q = this.searchQuery.trim().toLowerCase();
     if (!q) return;
-    const found = this.mockPlaces.find(p => p.name.toLowerCase().includes(q));
+    const found = this.mapPlacesService.getAll().find(p => p.name.toLowerCase().includes(q));
     if (found) this.selectSearchResult(found);
   }
 
@@ -221,7 +171,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
 
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
 
-    this.mockPlaces.forEach(place => {
+    this.mapPlacesService.getAll().forEach(place => {
       if (!place.zone) return;
       const { color, fill } = this.zoneColor(place.type);
 
@@ -276,7 +226,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
       this.zonePolygons.push(polygon);
     });
 
-    this.mockPlaces.forEach(place => {
+    this.mapPlacesService.getAll().forEach(place => {
       const marker = L.marker([place.lat, place.lng], {
         icon: this.makePinIcon(this.pinColor(place.type)),
       }).addTo(this.map);
@@ -346,7 +296,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
       }, 300);
     }
   }
-  private _addPlaceToMap(place: MockPlace): void {
+  private _addPlaceToMap(place: MapPlace): void {
     if (place.zone) {
       const { color, fill } = this.zoneColor(place.type);
       const polygon = L.polygon(place.zone, {
@@ -395,7 +345,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
     });
 
     this.markers.push(marker);
-    (this.mockPlaces as MockPlace[]).push(place);
+    this.mapPlacesService.addPlace(place);
   }
   // Popup / Navigation
 
@@ -423,7 +373,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
     return 'bg-blue-900/60 text-blue-300 border-blue-700';
   }
 
-  editPlace(place: MockPlace): void {
+  editPlace(place: MapPlace): void {
     if (place.type === 'Location') {
       this.router.navigate(['/locations/new'], { state: { place } });
     } else if (place.type === 'Destination') {

@@ -4,7 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
-
+import { MapPlacesService } from '../../../../core/services/map-places.service';
+import { MapPlace } from '../../../../core/models/map-place.model';
 declare const L: any;
 
 interface ClassItem {
@@ -13,18 +14,6 @@ interface ClassItem {
 }
 
 const CX = 110, CY = 110, R = 80;
-
-// Mock data types
-interface VenueItem {
-  id: string;
-  name: string;
-  address: string;
-  lat: number;
-  lng: number;
-  // For locations: zone polygon latlngs; for places: just a pin
-  zone?: [number, number][];
-  radius?: number;
-}
 
 @Component({
   selector: 'app-new-event',
@@ -52,6 +41,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     private zone: NgZone,
     private cdr: ChangeDetectorRef,
     private router: Router,
+    private mapPlacesService: MapPlacesService,
   ) {}
 
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -59,15 +49,15 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
   // Basic fields
-  eventTitle = 'Summer Festival';
+  eventTitle = '';
   venueType  = 'location';
   allDay     = false;
   freeEvent  = false;
   recurring  = false;
   startDate  = this.todayIso();
   endDate    = this.todayIso();
-  startTime  = '21:00';
-  endTime    = '05:00';
+  startTime  = '09:00';
+  endTime    = '17:00';
 
   // Rich text editor
   isBold        = false;
@@ -297,7 +287,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
   }
 
-  onDateTextInput(event: Event, field: 'startDate' | 'endDate'): void {
+  onDateTextInput(event: Event, _field: 'startDate' | 'endDate'): void {
     const input = event.target as HTMLInputElement;
     input.value = input.value.replace(/[^\d\.\/]/g, '');
   }
@@ -450,76 +440,31 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (this.venueDropdownOpen) { this.venueDropdownOpen = false; this.cdr.detectChanges(); }
   }
 
-  // Mock data
-
-  private readonly mockLocations: VenueItem[] = [
-    {
-      id: 'l1', name: 'Šumarice Memorial Park', address: 'Kragujevac, Serbia',
-      lat: 44.0213, lng: 20.8943,
-      zone: [[44.0250, 20.8890], [44.0270, 20.8980], [44.0240, 20.9020], [44.0200, 20.9010], [44.0185, 20.8950], [44.0200, 20.8890]],
-    },
-    {
-      id: 'l2', name: 'City Center Kragujevac', address: 'Trg Radomira Putnika, Kragujevac',
-      lat: 44.011028, lng: 20.916156,
-      zone: [[44.0135, 20.9090], [44.0140, 20.9200], [44.0100, 20.9220], [44.0085, 20.9130], [44.0110, 20.9080]],
-    },
-    {
-      id: 'l3', name: 'Veliki Park', address: 'Kragujevackog oktobra bb, Kragujevac',
-      lat: 44.0178, lng: 20.9042,
-      zone: [[44.0195, 20.9010], [44.0200, 20.9075], [44.0165, 20.9080], [44.0155, 20.9015]],
-    },
-    {
-      id: 'l4', name: 'Bubanj Lake', address: 'Lepenicki bulevar bb, Kragujevac',
-      lat: 44.0169, lng: 20.9258,
-      zone: [[44.0185, 20.9220], [44.0190, 20.9310], [44.0155, 20.9315], [44.0148, 20.9225]],
-    },
-    {
-      id: '6', name: 'Kragujevac Old Town', address: 'Staro jezgro, Kragujevac',
-      lat: 44.0128, lng: 20.9142,
-      zone: [[44.0135, 20.9090], [44.0140, 20.9200], [44.0100, 20.9220], [44.0085, 20.9130], [44.0110, 20.9080]],
-    },
-  ];
-
-  private readonly mockPlaces: VenueItem[] = [
-    { id: 'p1', name: 'Sumadija sajam', address: 'Save Kovacevica bb, Kragujevac', lat: 44.024755, lng: 20.930476 },
-    { id: 'p2', name: 'Knjazevsko-srpski teatar', address: 'Daniciceva 3, Kragujevac', lat: 44.0106, lng: 20.9103 },
-    { id: 'p3', name: 'Hala Jezero', address: 'Grada Sirena 15, Kragujevac', lat: 44.013856, lng: 20.924125 },
-    { id: 'p4', name: 'Stadion Cika Daca', address: 'Kralja Milana 4, Kragujevac', lat: 44.021171, lng: 20.899104 },
-  ];
-
-  // Venue search state
   venueSearchQuery     = '';
   venueDropdownOpen    = false;
   isSearchingVenue     = false;
-  filteredVenueResults: VenueItem[] = [];
-  selectedVenue: VenueItem | null   = null;
+  filteredVenueResults: MapPlace[] = [];
+  selectedVenue: MapPlace | null   = null;
   selectedVenueAreaKm2: number | null = null;
 
-  // Geo fields
   pinLat: string = '';
   pinLng: string = '';
   streetAddress: string = '';
   pinConfirmed = false;
-
-  // Map modal
   mapModalOpen = false;
 
-  private miniMap    : any = null;
-  private modalMap   : any = null;
-  private miniMarker : any = null;
+  private miniMap      : any = null;
+  private modalMap     : any = null;
+  private miniMarker   : any = null;
   private miniZoneLayer: any = null;
   private modalZoneLayer: any = null;
-  private modalMarker: any = null;
-
+  private modalMarker  : any = null;
   private _venueSearchDebounce: any = null;
-
 
   navigateToAddVenue(): void {
     this.venueDropdownOpen = false;
     this.router.navigate([this.venueType === 'place' ? '/places/new' : '/locations/new']);
   }
-
-  // Venue search
 
   onVenueTypeChange(): void {
     this.venueSearchQuery = '';
@@ -536,15 +481,17 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
     const q = this.venueSearchQuery.trim().toLowerCase();
     this.venueDropdownOpen = true;
+    const source = this.venueType === 'place'
+      ? this.mapPlacesService.getPlaces()
+      : this.mapPlacesService.getLocations();
     if (q.length < 1) {
-      this.filteredVenueResults = (this.venueType === 'place' ? this.mockPlaces : this.mockLocations);
+      this.filteredVenueResults = source;
       return;
     }
     this.isSearchingVenue = true;
     this._venueSearchDebounce = setTimeout(() => {
-      const source = this.venueType === 'place' ? this.mockPlaces : this.mockLocations;
       this.filteredVenueResults = source.filter(
-        item => item.name.toLowerCase().includes(q) || item.address.toLowerCase().includes(q)
+        item => item.name.toLowerCase().includes(q) || (item.address ?? '').toLowerCase().includes(q)
       );
       this.isSearchingVenue = false;
       this.cdr.detectChanges();
@@ -553,23 +500,25 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
 
   onVenueSearchFocus(): void {
     const q = this.venueSearchQuery.trim().toLowerCase();
-    const source = this.venueType === 'place' ? this.mockPlaces : this.mockLocations;
+    const source = this.venueType === 'place'
+      ? this.mapPlacesService.getPlaces()
+      : this.mapPlacesService.getLocations();
     this.filteredVenueResults = q.length === 0
       ? source
-      : source.filter(item => item.name.toLowerCase().includes(q) || item.address.toLowerCase().includes(q));
+      : source.filter(item => item.name.toLowerCase().includes(q) || (item.address ?? '').toLowerCase().includes(q));
     this.venueDropdownOpen = true;
   }
 
-  selectVenue(item: VenueItem): void {
+  selectVenue(item: MapPlace): void {
     this.selectedVenue    = item;
     this.venueSearchQuery = item.name;
     this.venueDropdownOpen = false;
     this.pinConfirmed = true;
 
     if (this.venueType === 'place') {
-      this.pinLat       = item.lat.toFixed(6);
-      this.pinLng       = item.lng.toFixed(6);
-      this.streetAddress = item.address;
+      this.pinLat        = item.lat.toFixed(6);
+      this.pinLng        = item.lng.toFixed(6);
+      this.streetAddress = item.address ?? '';
       this.updateMiniMapPin(item.lat, item.lng);
     } else {
       this.pinLat = '';
@@ -593,13 +542,13 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   }
 
   private clearGeoFields(): void {
-    this.pinLat       = '';
-    this.pinLng       = '';
+    this.pinLat = '';
+    this.pinLng = '';
     this.streetAddress = '';
   }
 
   private clearMiniMapLayers(): void {
-    if (this.miniMarker   && this.miniMap) { this.miniMap.removeLayer(this.miniMarker);    this.miniMarker    = null; }
+    if (this.miniMarker    && this.miniMap) { this.miniMap.removeLayer(this.miniMarker);    this.miniMarker    = null; }
     if (this.miniZoneLayer && this.miniMap) { this.miniMap.removeLayer(this.miniZoneLayer); this.miniZoneLayer = null; }
   }
 
@@ -642,30 +591,24 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     try { this.miniMap.fitBounds(this.miniZoneLayer.getBounds(), { padding: [10, 10] }); } catch {}
   }
 
-  // Modal map
-
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap) return;
-
     let center: [number, number] = [44.0, 20.9];
     let zoom = 9;
-
     if (this.selectedVenue) {
       if (this.venueType === 'place') {
         const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
         if (!isNaN(lat) && !isNaN(lng)) { center = [lat, lng]; zoom = 15; }
-      } else if (this.selectedVenue.zone && this.selectedVenue.zone.length) {
+      } else if (this.selectedVenue.zone?.length) {
         const lats = this.selectedVenue.zone.map(p => p[0]);
         const lngs = this.selectedVenue.zone.map(p => p[1]);
         center = [(Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2];
         zoom = 13;
       }
     }
-
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false }).setView(center, zoom);
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.modalMap);
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
-
     if (this.selectedVenue) {
       if (this.venueType === 'place') {
         const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
@@ -700,8 +643,6 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this.mapModalOpen = false;
     this.destroyModalMap();
   }
-
-  // Area calculation
 
   private shoelaceAreaKm2(zone: [number, number][]): number {
     const R = 6_371_000;
@@ -755,29 +696,21 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
 
     const p = state.place;
 
-    const venue: VenueItem = {
-      id:      p.id,
-      name:    p.name,
-      address: p.description,
-      lat:     p.lat,
-      lng:     p.lng,
-    };
-
     if (p.type === 'Place') {
       this.venueType = 'place';
+      const found = this.mapPlacesService.findById(p.id) ?? p as MapPlace;
+      this.selectVenue(found);
     } else {
-      
       this.venueType = 'location';
-
-      const found = this.mockLocations.find(l =>
-        l.id === p.id ||
-        l.name === p.name ||
-        (Math.abs(l.lat - p.lat) < 0.001 && Math.abs(l.lng - p.lng) < 0.001)
-      );
-      if (found?.zone) venue.zone = found.zone;
+      const found = this.mapPlacesService.findById(p.id)
+        ?? this.mapPlacesService.getLocations().find(l =>
+            l.name === p.name ||
+            (Math.abs(l.lat - p.lat) < 0.001 && Math.abs(l.lng - p.lng) < 0.001)
+          )
+        ?? p as MapPlace;
+      this.selectVenue(found);
     }
 
-    this.selectVenue(venue);
     this.cdr.detectChanges();
   }
 
@@ -789,5 +722,4 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
     if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
   }
-  
 }
