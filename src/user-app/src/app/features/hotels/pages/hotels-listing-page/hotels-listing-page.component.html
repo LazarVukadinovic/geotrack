@@ -93,18 +93,18 @@
                   </svg>
                   <span class="hcard__rating">{{ item.rating!.toFixed(1) }}</span>
                   @if (item.reviewCount) {
-                    <span class="hcard__reviews">&middot; {{ item.reviewCount }}</span>
+                    <span class="hcard__reviews">({{ item.reviewCount }})</span>
                   }
                 } @else {
                   <span class="hcard__no-rating">No reviews yet</span>
                 }
               </div>
 
-              <p class="hcard__desc">{{ item.description }}</p>
+              <p class="hcard__distance">{{ item.distance }}</p>
 
               <div class="hcard__footer">
                 <button type="button" class="hcard__cta" (click)="$event.stopPropagation(); onHotelCard(item.id)">
-                  Explore Stay &rarr;
+                  Explore &rarr;
                 </button>
                 <button
                   type="button"
@@ -173,12 +173,14 @@
                   </svg>
                   <span class="hcard__rating">{{ item.rating!.toFixed(1) }}</span>
                   @if (item.reviewCount) {
-                    <span class="hcard__reviews">&middot; {{ item.reviewCount }}</span>
+                    <span class="hcard__reviews">({{ item.reviewCount }})</span>
                   }
                 } @else {
                   <span class="hcard__no-rating">No reviews yet</span>
                 }
               </div>
+
+              <p class="hcard__distance">{{ item.distance }}</p>
 
               <div class="hcard__footer hcard__footer--compact">
                 <button type="button" class="hcard__cta hcard__cta--compact" (click)="$event.stopPropagation(); onHotelCard(item.id)">

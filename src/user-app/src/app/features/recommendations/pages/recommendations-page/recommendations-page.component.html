@@ -113,6 +113,7 @@
                 }
 
                 <h2 class="rec-card__name">{{ item.title }}</h2>
+                <p class="rec-card__subtitle">{{ item.reason || item.description }}</p>
 
                 @if (item.location) {
                   <div class="rec-card__location">
@@ -147,6 +148,10 @@
                 }
 
                 <div class="rec-card__footer">
+                  @if (item.categoryLabel) {
+                    <span class="rec-card__tag">{{ item.categoryLabel }}</span>
+                  }
+                  <span class="rec-card__more" aria-hidden="true">More &rsaquo;</span>
                   <button type="button" class="rec-card__cta" (click)="$event.stopPropagation(); onItemCard(item.id)">
                     Explore Details &rarr;
                   </button>
@@ -200,6 +205,7 @@
 
               <div class="rec-card__body rec-card__body--compact">
                 <h2 class="rec-card__name rec-card__name--compact">{{ item.title }}</h2>
+                <p class="rec-card__subtitle">{{ item.reason || item.description }}</p>
 
                 @if (item.location) {
                   <div class="rec-card__location rec-card__location--compact">
@@ -227,6 +233,10 @@
                 </div>
 
                 <div class="rec-card__footer rec-card__footer--compact">
+                  @if (item.categoryLabel) {
+                    <span class="rec-card__tag">{{ item.categoryLabel }}</span>
+                  }
+                  <span class="rec-card__more" aria-hidden="true">More &rsaquo;</span>
                   <button type="button" class="rec-card__cta rec-card__cta--compact" (click)="$event.stopPropagation(); onItemCard(item.id)">
                     Explore &rarr;
                   </button>
