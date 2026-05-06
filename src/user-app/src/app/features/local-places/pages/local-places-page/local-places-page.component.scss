@@ -195,9 +195,17 @@
 
 @media (min-width: 1024px) {
   .lp-page__grid {
-    grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
     gap: var(--space-5);
     padding-inline: var(--desktop-page-gutter);
+  }
+
+  .lp-tile__label {
+    font-size: var(--text-xs);
+  }
+
+  .lp-tile__arrow {
+    display: none;
   }
 
   .lp-page__pagination {
