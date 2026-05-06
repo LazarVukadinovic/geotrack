@@ -1,0 +1,33 @@
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  display: none;
+  -webkit-appearance: none;
+}
+
+input[type="date"],
+input[type="time"] {
+  -moz-appearance: textfield;
+}
+
+input[type="date"]::-webkit-inner-spin-button,
+input[type="time"]::-webkit-inner-spin-button {
+  display: none;
+}
+
+.rte-field { position: relative; }
+.rte-ph {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 0.5rem 0.75rem;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  pointer-events: none;
+  user-select: none;
+  line-height: 1.5rem;
+}
+
+
+
+
+
+
