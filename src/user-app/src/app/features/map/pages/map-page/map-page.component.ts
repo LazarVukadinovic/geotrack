@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import maplibregl, {
   GeoJSONSource,
   Map as MapLibreMap,
+  type MapMouseEvent,
   MapStyleImageMissingEvent,
 } from 'maplibre-gl';
 import {
@@ -33,6 +34,8 @@ const MAP_VIEW_STATE_KEY = 'mapViewState';
 const MAP_OPENED_THIS_SESSION_KEY = 'mapOpenedThisSession';
 const INITIAL_LOCATION_ZOOM = 13;
 const DETAIL_FOCUS_ZOOM = 16;
+const MARKER_ACTIVATION_DEDUPE_MS = 250;
+const MARKER_DISMISS_GRACE_MS = 250;
 
 interface MarkerEntry {
   data: MapEntityMarker;
@@ -92,6 +95,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private isDestroyed = false;
   private readonly initialMapFocus: MapEntityMarker | null;
   private preserveSelectedPlaceFromNavigation = false;
+  private lastMarkerActivationKey: string | null = null;
+  private lastMarkerActivationAt = 0;
 
   currentMode: MapMarkersMode = 'entities';
 
@@ -484,12 +489,25 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.scheduleViewportLoad();
     });
 
-    this.map.on('click', () => {
-      if (this.selectedPlace) {
-        this.closePlace();
-        this.cdr.detectChanges();
-      }
-    });
+    this.map.on('click', (event: MapMouseEvent) => this.onMapClick(event));
+  }
+
+  private onMapClick(event: MapMouseEvent): void {
+    if (this.shouldIgnoreMapBackgroundClick(event)) return;
+
+    if (this.selectedPlace) {
+      this.closePlace();
+      this.cdr.detectChanges();
+    }
+  }
+
+  private shouldIgnoreMapBackgroundClick(event: MapMouseEvent): boolean {
+    const target = event.originalEvent.target;
+    if (target instanceof Element && target.closest('.gt-marker')) {
+      return true;
+    }
+
+    return Date.now() - this.lastMarkerActivationAt < MARKER_DISMISS_GRACE_MS;
   }
 
   private async resolveInitialMapView(): Promise<MapInitialView> {
@@ -779,15 +797,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       img.src = EXPLORE_IMAGE_FALLBACK;
     });
 
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const entry = this.markersByKey.get(key);
-      this.onMarkerClick(entry?.data ?? marker);
-    });
+    button.addEventListener('pointerup', (event) => this.onMarkerPointerUp(event, key, marker));
+    button.addEventListener('click', (event) => this.onMarkerDomClick(event, key, marker));
 
     const mapMarker = new maplibregl.Marker({ element: button, anchor: 'center' })
       .setLngLat([marker.longitude, marker.latitude])
       .addTo(this.map);
+    mapMarker.on('click', (event) => this.onMapLibreMarkerClick(event as { originalEvent?: MouseEvent }, key, marker));
 
     const entry: MarkerEntry = { data: marker, marker: mapMarker, imageElement: img };
     this.refreshMarkerDom(entry, marker);
@@ -810,6 +826,39 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.markerImageFallbackUsed.delete(key);
       entry.imageElement.src = desiredSrc;
     }
+  }
+
+  private onMarkerPointerUp(event: PointerEvent, key: string, marker: MapEntityMarker): void {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.activateMarker(key, marker);
+  }
+
+  private onMarkerDomClick(event: MouseEvent, key: string, marker: MapEntityMarker): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activateMarker(key, marker);
+  }
+
+  private onMapLibreMarkerClick(event: { originalEvent?: MouseEvent }, key: string, marker: MapEntityMarker): void {
+    event.originalEvent?.preventDefault();
+    event.originalEvent?.stopPropagation();
+    this.activateMarker(key, marker);
+  }
+
+  private activateMarker(key: string, marker: MapEntityMarker): void {
+    const now = Date.now();
+    if (this.lastMarkerActivationKey === key && now - this.lastMarkerActivationAt < MARKER_ACTIVATION_DEDUPE_MS) {
+      return;
+    }
+
+    this.lastMarkerActivationKey = key;
+    this.lastMarkerActivationAt = now;
+
+    const entry = this.markersByKey.get(key);
+    this.onMarkerClick(entry?.data ?? marker);
   }
 
   private onMarkerClick(marker: MapEntityMarker): void {
