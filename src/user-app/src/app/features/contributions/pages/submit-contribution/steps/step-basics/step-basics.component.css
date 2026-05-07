@@ -1,0 +1,222 @@
+.step-basics__section-icon,
+.step-basics__section-help,
+.step-basics__drop-title,
+.step-basics__card-heading,
+.step-basics__pin-card--desktop {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  :host {
+    display: block;
+    min-width: 0;
+  }
+
+  .step-basics__shell {
+    gap: var(--space-4);
+    min-height: auto;
+    padding: 0 0 var(--space-2);
+  }
+
+  .step-basics__wide-card,
+  .step-basics__card,
+  .step-basics__pin-card--desktop {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-card-bg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .step-basics__wide-card,
+  .step-basics__pin-card--desktop {
+    display: grid;
+    grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-6);
+    padding: var(--space-5);
+  }
+
+  .step-basics__section-copy {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+
+  .step-basics__section-icon,
+  .step-basics__card-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    background: rgba(26, 43, 76, 0.06);
+    color: #8aa0bf;
+  }
+
+  .step-basics__section-icon--pin,
+  .step-basics__card-icon {
+    color: var(--color-accent-orange);
+    background: rgba(217, 125, 84, 0.1);
+  }
+
+  .step-basics__section-title {
+    margin: 0;
+    color: var(--color-primary-navy);
+    font-size: var(--text-base);
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  .step-basics__section-help {
+    display: block;
+    max-width: 250px;
+    margin: var(--space-2) 0 0;
+    color: #7c8aa3;
+    font-size: var(--text-sm);
+    line-height: 1.45;
+  }
+
+  .step-basics__image-dropzone {
+    height: 136px;
+    border-radius: var(--radius-md);
+  }
+
+  .step-basics__drop-title {
+    display: inline;
+    color: #64748b;
+  }
+
+  .step-basics__form-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+
+  .step-basics__card {
+    min-width: 0;
+    padding: var(--space-5);
+  }
+
+  .step-basics__info-card {
+    gap: var(--space-5);
+  }
+
+  .step-basics__card-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+
+  .step-basics__info-card .step-basics__card-heading {
+    margin-bottom: calc(-1 * var(--space-1));
+  }
+
+  .step-basics__card-title {
+    margin: 0;
+    color: var(--color-primary-navy);
+    font-size: var(--text-base);
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  .step-basics__field {
+    min-width: 0;
+  }
+
+  .step-basics__field label,
+  .step-basics__mobile-section-label label {
+    font-size: var(--text-sm);
+  }
+
+  .step-basics__input-shell {
+    min-height: 48px;
+    border-radius: var(--radius-md);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .step-basics__input-shell:focus-within,
+  .step-basics__location-fields:focus-within {
+    border-color: rgba(217, 125, 84, 0.65);
+    box-shadow: 0 0 0 3px rgba(217, 125, 84, 0.08);
+  }
+
+  .step-basics__type-scroll {
+    flex-wrap: wrap;
+    overflow: visible;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .step-basics__type-chip {
+    padding: 8px 14px;
+    font-size: var(--text-sm);
+    line-height: 1.15;
+  }
+
+  .step-basics__mobile-section-label,
+  .step-basics__pin-card--mobile,
+  .step-basics__location-card > .step-basics__location-error {
+    display: none;
+  }
+
+  .step-basics__location-fields {
+    border-radius: var(--radius-md);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .step-basics__address-row,
+  .step-basics__city-region-row > div,
+  .step-basics__country-row {
+    min-height: 46px;
+    padding-top: 11px;
+    padding-bottom: 11px;
+  }
+
+  .step-basics__pin-card--desktop {
+    padding: var(--space-4) var(--space-5);
+  }
+
+  .step-basics__pin-button-desktop {
+    min-height: 74px;
+    padding-top: var(--space-4);
+    padding-bottom: var(--space-4);
+    border-color: rgba(217, 125, 84, 0.45);
+    border-radius: var(--radius-md);
+    background: rgba(217, 125, 84, 0.03);
+  }
+
+  .step-basics__pin-button-desktop:hover {
+    background: rgba(217, 125, 84, 0.06);
+  }
+
+  .step-basics__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0;
+  }
+
+  .step-basics__continue {
+    width: auto;
+    min-width: min(360px, 100%);
+    padding: 12px var(--space-8);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    line-height: 1.25;
+    box-shadow: 0 10px 22px rgba(217, 125, 84, 0.22);
+  }
+}
+
+@media (min-width: 1280px) {
+  .step-basics__image-dropzone {
+    height: 146px;
+  }
+
+  .step-basics__form-grid {
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  }
+}

@@ -39,6 +39,12 @@ export class SubmitContributionComponent implements OnInit {
     return this.editId() ? 'Edit Place' : 'Add New Place';
   });
   protected readonly isAccommodationDraft = computed(() => this.draft().basics?.placeType === 'Stay');
+  protected readonly desktopSteps = [
+    { number: 1, label: 'Basic Info' },
+    { number: 2, label: 'Amenities' },
+    { number: 3, label: 'Details' },
+    { number: 4, label: 'Review' },
+  ] as const;
 
   protected readonly draft = signal<ContributionDraft>({
     basics: null,
