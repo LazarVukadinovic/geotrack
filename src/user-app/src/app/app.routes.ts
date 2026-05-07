@@ -134,7 +134,7 @@ export const routes: Routes = [
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/settings/pages/change-password-page/change-password-page.component').then(m => m.ChangePasswordPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'settings/notifications',
@@ -205,7 +205,7 @@ export const routes: Routes = [
         canActivate: [guestGuard],
         loadComponent: () =>
           import('./features/auth/pages/login-page/login-page.component').then(m => m.LoginPageComponent),
-        data: { desktopLayout: 'narrow' },
+        data: { desktopLayout: 'wide' },
       },
       {
         path: 'register',
