@@ -1,17 +1,17 @@
 <div class="collection-detail-page min-h-screen flex flex-col bg-[#fafafa] pb-24">
 
   <!-- Header -->
-  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[1.5rem]">
-    <div class="flex items-center justify-between">
+  <div class="collection-detail-page__header bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[1.5rem]">
+    <div class="collection-detail-page__header-row flex items-center justify-between">
       <button type="button" (click)="goBack()"
-        class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        class="collection-detail-page__back w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+        <svg class="collection-detail-page__back-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
-      <span class="text-[16] font-bold text-white tracking-wide">{{ collection()?.title }}</span>
+      <span class="collection-detail-page__title text-[16] font-bold text-white tracking-wide">{{ collection()?.title }}</span>
       <button type="button" (click)="onMenuOpen()"
-        class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+        class="collection-detail-page__menu w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
           <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
         </svg>
@@ -135,17 +135,17 @@
 </div>
 <!-- ── Menu sheet ──────────────────────────────────────────────────────────── -->
 @if (menuOpen()) {
-  <div class="fixed inset-0 bg-black/40 z-[60]" (click)="closeMenu()"></div>
-  <div class="fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-[2rem] px-5 pt-2 shadow-2xl"
+  <div class="collection-detail-page__menu-backdrop fixed inset-0 bg-black/40 z-[60]" (click)="closeMenu()"></div>
+  <div class="collection-detail-page__menu-sheet fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-[2rem] px-5 pt-2 shadow-2xl"
        style="padding-bottom: max(2.5rem, env(safe-area-inset-bottom))"
        (touchstart)="onMenuTouchStart($event)"
        [style.transform]="menuDragOffset() > 0 ? 'translateY(' + menuDragOffset() + 'px)' : null"
        [style.transition]="menuIsDragging() ? 'none' : 'transform 0.28s cubic-bezier(0.32,0.72,0,1)'">
 
-    <div class="w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6 cursor-grab"></div>
+    <div class="collection-detail-page__menu-handle w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6 cursor-grab"></div>
 
     <button type="button" (click)="openRename()"
-      class="w-full flex items-center gap-4 px-2 py-3.5 active:bg-slate-50 rounded-2xl transition-colors">
+      class="collection-detail-page__menu-action w-full flex items-center gap-4 px-2 py-3.5 active:bg-slate-50 rounded-2xl transition-colors">
       <div class="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center flex-none">
         <svg class="w-5 h-5 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -155,10 +155,10 @@
       <span class="text-base font-semibold text-slate-800">Rename Collection</span>
     </button>
 
-    <div class="h-px bg-slate-100 my-1"></div>
+    <div class="collection-detail-page__menu-divider h-px bg-slate-100 my-1"></div>
 
     <button type="button" (click)="onDelete()"
-      class="w-full flex items-center gap-4 px-2 py-3.5 active:bg-red-50 rounded-2xl transition-colors">
+      class="collection-detail-page__menu-action w-full flex items-center gap-4 px-2 py-3.5 active:bg-red-50 rounded-2xl transition-colors">
       <div class="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center flex-none">
         <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -169,7 +169,7 @@
     </button>
 
     <button type="button" (click)="closeMenu()"
-      class="w-full py-3 text-base font-bold text-[#1a2b4a] text-center mt-2 active:opacity-60 transition-opacity">
+      class="collection-detail-page__menu-cancel w-full py-3 text-base font-bold text-[#1a2b4a] text-center mt-2 active:opacity-60 transition-opacity">
       Cancel
     </button>
   </div>
@@ -177,14 +177,14 @@
 
 <!-- ── Rename sheet ────────────────────────────────────────────────────────── -->
 @if (renameOpen()) {
-  <div class="fixed inset-0 bg-black/40 z-[60]" (click)="closeRename()"></div>
-  <div class="fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-[2rem] px-5 pt-2 shadow-2xl"
+  <div class="collection-detail-page__rename-backdrop fixed inset-0 bg-black/40 z-[60]" (click)="closeRename()"></div>
+  <div class="collection-detail-page__rename-sheet fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-[2rem] px-5 pt-2 shadow-2xl"
        style="padding-bottom: max(2.5rem, env(safe-area-inset-bottom))"
        (touchstart)="onRenameTouchStart($event)"
        [style.transform]="renameDragOffset() > 0 ? 'translateY(' + renameDragOffset() + 'px)' : null"
        [style.transition]="renameIsDragging() ? 'none' : 'transform 0.28s cubic-bezier(0.32,0.72,0,1)'">
 
-    <div class="w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6 cursor-grab"></div>
+    <div class="collection-detail-page__rename-handle w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6 cursor-grab"></div>
 
     <h2 class="text-xl font-bold text-slate-800 mb-1">Rename Collection</h2>
     <p class="text-sm text-slate-500 mb-5">Enter a new name for this collection.</p>

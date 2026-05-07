@@ -1,31 +1,34 @@
 <div class="edit-profile-page h-full flex flex-col bg-[#fafafa] overflow-hidden">
 
   <!-- Header -->
-  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[1.5rem] flex-none relative z-10">
-    <div class="flex items-center justify-between">
-      <button (click)="goBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+  <div class="edit-profile-page__header bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[1.5rem] flex-none relative z-10">
+    <div class="edit-profile-page__header-row flex items-center justify-between">
+      <button type="button" (click)="goBack()" class="edit-profile-page__back w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
-      <span class="text-[16] font-bold text-white tracking-wide">Edit Profile</span>
-      <div class="w-9"></div>
+      <div class="edit-profile-page__header-copy">
+        <span class="edit-profile-page__title text-[16] font-bold text-white tracking-wide">Edit Profile</span>
+        <span class="edit-profile-page__subtitle">Update your personal information</span>
+      </div>
+      <div class="edit-profile-page__header-spacer w-9"></div>
     </div>
   </div>
 
   <div class="edit-profile-page__scroll flex-1 min-h-0 overflow-y-auto">
-    <div class="px-5 pt-4 pb-10">
+    <div class="edit-profile-page__grid px-5 pt-4 pb-10">
 
       <!-- Avatar -->
-      <div class="flex justify-center pb-8 relative z-0">
+      <div class="edit-profile-page__photo-card flex justify-center pb-8 relative z-0">
         <div class="flex flex-col items-center gap-3">
           <button
             type="button"
             (click)="avatarInput.click()"
             [disabled]="isUploadingAvatar"
-            class="relative rounded-full transition-transform active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#e8570a]/20 disabled:opacity-70"
+            class="edit-profile-page__avatar-button relative rounded-full transition-transform active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#e8570a]/20 disabled:opacity-70"
             aria-label="Change profile photo">
-            <div class="w-28 h-28 rounded-full bg-slate-300 border-4 border-white flex items-center justify-center shadow-xl overflow-hidden">
+            <div class="edit-profile-page__avatar-frame w-28 h-28 rounded-full bg-slate-300 border-4 border-white flex items-center justify-center shadow-xl overflow-hidden">
               @if (avatarUrl) {
                 <img [src]="avatarUrl" alt="" class="w-full h-full object-cover" (error)="avatarUrl = ''"/>
               } @else {
@@ -40,7 +43,7 @@
                 </div>
               }
             </div>
-            <span class="absolute bottom-1 right-1 w-8 h-8 bg-[#e8570a] rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+            <span class="edit-profile-page__camera absolute bottom-1 right-1 w-8 h-8 bg-[#e8570a] rounded-full flex items-center justify-center shadow-lg border-2 border-white">
               <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
@@ -57,9 +60,15 @@
             (change)="onAvatarSelected($event)"
           />
 
-          <p class="text-[12px] font-medium text-slate-500">
-            {{ isUploadingAvatar ? 'Uploading photo...' : 'Tap photo to change it' }}
+          <p class="edit-profile-page__avatar-prompt text-[12px] font-medium text-slate-500">
+            @if (isUploadingAvatar) {
+              Uploading photo...
+            } @else {
+              <span class="edit-profile-page__avatar-note edit-profile-page__avatar-note--mobile">Tap photo to change it</span>
+              <span class="edit-profile-page__avatar-note edit-profile-page__avatar-note--desktop">Change profile photo</span>
+            }
           </p>
+          <p class="edit-profile-page__avatar-help">JPG, PNG, WEBP or GIF. Max size 5MB.</p>
 
           @if (avatarError) {
             <div class="max-w-[240px] px-3 py-2 bg-red-50 border border-red-200 rounded-2xl text-[12px] text-red-600 text-center">
@@ -67,10 +76,41 @@
             </div>
           }
         </div>
+
+        <div class="edit-profile-page__summary" aria-label="Account summary">
+          <h2 class="edit-profile-page__summary-title">Account Summary</h2>
+
+          <div class="edit-profile-page__summary-row">
+            <div class="edit-profile-page__summary-icon" aria-hidden="true">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <div class="edit-profile-page__summary-copy">
+              <span class="edit-profile-page__summary-value">{{ email || 'Not provided' }}</span>
+              <span class="edit-profile-page__summary-label">Email address</span>
+            </div>
+          </div>
+
+          <div class="edit-profile-page__summary-row">
+            <div class="edit-profile-page__summary-icon" aria-hidden="true">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+            </div>
+            <div class="edit-profile-page__summary-copy">
+              <span class="edit-profile-page__summary-value">{{ location || 'Not provided' }}</span>
+              <span class="edit-profile-page__summary-label">Current location</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Form -->
-      <div class="flex flex-col gap-5">
+      <div class="edit-profile-page__form-card flex flex-col gap-5">
 
         <!-- Save error -->
         @if (saveError) {
@@ -87,13 +127,13 @@
         }
 
         <!-- Full Name -->
-        <div>
-          <label for="edit-profile-full-name" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+        <div class="edit-profile-page__field">
+          <label for="edit-profile-full-name" class="edit-profile-page__label ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
             Full Name
           </label>
-          <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div class="flex items-center gap-3 px-4 py-3.5">
-              <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+          <div class="edit-profile-page__field-shell bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="edit-profile-page__field-row flex items-center gap-3 px-4 py-3.5">
+              <div class="edit-profile-page__field-icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
                 <svg class="w-4 h-4 text-[#1a2b4a]" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
                 </svg>
@@ -105,13 +145,13 @@
         </div>
 
         <!-- Email -->
-        <div>
-          <label for="edit-profile-email" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+        <div class="edit-profile-page__field">
+          <label for="edit-profile-email" class="edit-profile-page__label ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
             Email Address
           </label>
-          <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div class="flex items-center gap-3 px-4 py-3.5">
-              <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+          <div class="edit-profile-page__field-shell edit-profile-page__field-shell--readonly bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="edit-profile-page__field-row flex items-center gap-3 px-4 py-3.5">
+              <div class="edit-profile-page__field-icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
                 <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                     d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
@@ -131,13 +171,13 @@
         </div>
 
         <!-- Phone -->
-        <div>
-          <label for="edit-profile-phone" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+        <div class="edit-profile-page__field">
+          <label for="edit-profile-phone" class="edit-profile-page__label ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
             Phone Number <span class="normal-case font-normal text-slate-400 tracking-normal">(Optional)</span>
           </label>
-          <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div class="flex items-center gap-3 px-4 py-3.5">
-              <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+          <div class="edit-profile-page__field-shell bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="edit-profile-page__field-row flex items-center gap-3 px-4 py-3.5">
+              <div class="edit-profile-page__field-icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
                 <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                     d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
@@ -150,13 +190,13 @@
         </div>
 
         <!-- Location -->
-        <div>
-          <label for="edit-profile-location" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
+        <div class="edit-profile-page__field">
+          <label for="edit-profile-location" class="edit-profile-page__label ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2 block">
             Location <span class="normal-case font-normal text-slate-400 tracking-normal">(Optional)</span>
           </label>
-          <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div class="flex items-center gap-3 px-4 py-3.5">
-              <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+          <div class="edit-profile-page__field-shell bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="edit-profile-page__field-row flex items-center gap-3 px-4 py-3.5">
+              <div class="edit-profile-page__field-icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
                 <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                     d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
@@ -170,13 +210,13 @@
         </div>
 
         <!-- Spacer -->
-        <div class="flex-1"></div>
+        <div class="edit-profile-page__form-spacer flex-1"></div>
 
         <!-- Save button -->
         <button
           (click)="saveChanges()"
           [disabled]="isSaving"
-          class="w-full py-4 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200 shadow-lg"
+          class="edit-profile-page__save w-full py-4 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200 shadow-lg"
           [class.opacity-70]="isSaving">
           @if (isSaving) {
             <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -186,12 +226,12 @@
 
         <!-- Cancel -->
         <button (click)="goBack()"
-          class="w-full py-3 text-base font-bold text-[#1a2b4a] text-center active:opacity-60 transition-opacity">
+          class="edit-profile-page__cancel w-full py-3 text-base font-bold text-[#1a2b4a] text-center active:opacity-60 transition-opacity">
           Cancel
         </button>
 
         <!-- Footer note -->
-        <p class="text-center text-[12px] text-slate-400 leading-relaxed px-4 pb-2">
+        <p class="edit-profile-page__footer-note text-center text-[12px] text-slate-400 leading-relaxed px-4 pb-2">
           <svg class="w-3 h-3 inline-block mr-1 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>

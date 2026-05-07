@@ -11,6 +11,7 @@ const DISMISS_THRESHOLD = 120;
   standalone: true,
   imports: [ImageFallbackDirective],
   templateUrl: './collection-detail.component.html',
+  styleUrl: './collection-detail.component.css',
 })
 export class CollectionDetailComponent {
   private readonly location    = inject(Location);
