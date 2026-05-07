@@ -45,7 +45,7 @@ export const routes: Routes = [
         path: 'agent',
         loadComponent: () =>
           import('./features/agent/pages/agent-page/agent-page.component').then(m => m.AgentPageComponent),
-        data: { desktopLayout: 'narrow' },
+        data: { desktopLayout: 'full' },
       },
 
       // ── Profile ──────────────────────────────────────────────────────────
@@ -53,28 +53,28 @@ export const routes: Routes = [
         path: 'profile',
         loadComponent: () =>
           import('./features/profile/pages/profile-tab/profile-tab.component').then(m => m.ProfileTabComponent),
-        data: { desktopLayout: 'narrow' },
+        data: { desktopLayout: 'wide' },
       },
       {
         path: 'profile/edit',
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/profile/pages/edit-profile/edit-profile.component').then(m => m.EditProfileComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'profile/collections',
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/profile/pages/my-collections-page/my-collections-page.component').then(m => m.MyCollectionsPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'profile/collections/:id',
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/profile/pages/collection-detail/collection-detail.component').then(m => m.CollectionDetailComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'contributions',
@@ -82,7 +82,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/contributions/pages/my-contributions/my-contributions.component')
             .then(m => m.MyContributionsPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'contributions/submit',
@@ -90,7 +90,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/contributions/pages/submit-contribution/submit-contribution.component')
             .then(m => m.SubmitContributionComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'contributions/detail',
@@ -103,7 +103,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/contributions/pages/submit-contribution/submit-contribution.component')
             .then(m => m.SubmitContributionComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'contributions/:id',
@@ -111,7 +111,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/contributions/pages/contribution-detail/contribution-detail.component')
             .then(m => m.ContributionDetailPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
 
       // ── Settings ─────────────────────────────────────────────────────────
@@ -120,14 +120,14 @@ export const routes: Routes = [
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/settings/pages/settings/settings.component').then(m => m.SettingsComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'settings/interests',
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/settings/pages/my-interests/my-interests.component').then(m => m.MyInterestsComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'settings/change-password',
