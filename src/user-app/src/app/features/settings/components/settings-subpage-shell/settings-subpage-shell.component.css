@@ -156,4 +156,34 @@
   :host(.settings-shell--desktop-intro) .settings-shell__description {
     display: none;
   }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__header-row {
+    grid-template-columns: 46px minmax(0, 1fr);
+    justify-content: flex-start;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__back {
+    width: 46px;
+    height: 46px;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__back-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__title-stack {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__header-description {
+    max-width: none;
+    font-weight: 500;
+    text-align: left;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__spacer {
+    display: none;
+  }
 }
