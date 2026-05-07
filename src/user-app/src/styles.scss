@@ -125,3 +125,24 @@ img.image-fallback-active {
   inset: -4px;
   border-width: 2.5px;
 }
+
+@media (min-width: 1024px) {
+  .gt-marker {
+    transition: none;
+  }
+
+  .gt-marker > img,
+  .gt-marker::after {
+    transform-origin: center;
+    transition: transform 120ms ease;
+  }
+
+  .gt-marker:active {
+    scale: 1;
+  }
+
+  .gt-marker:active > img,
+  .gt-marker:active::after {
+    transform: scale(0.94);
+  }
+}

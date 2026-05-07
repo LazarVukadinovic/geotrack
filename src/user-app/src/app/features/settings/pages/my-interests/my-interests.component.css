@@ -14,3 +14,143 @@
 .selected-chips { 
   scrollbar-width: none; 
 }
+
+@media (min-width: 1024px) {
+  :host {
+    font-family: var(--font-sans);
+  }
+
+  .my-interests {
+    min-width: 0;
+    gap: var(--space-5);
+  }
+
+  .my-interests__section,
+  .my-interests__state-card {
+    min-width: 0;
+    border: 1px solid rgba(26, 43, 76, 0.08);
+    border-radius: var(--radius-lg);
+    background: var(--color-card-bg);
+    box-shadow: 0 8px 22px rgba(26, 43, 76, 0.07);
+  }
+
+  .my-interests__section {
+    padding: var(--space-5) var(--space-6);
+  }
+
+  .my-interests__state-card {
+    padding: var(--space-8) var(--space-6);
+  }
+
+  .my-interests__error-card {
+    border-radius: var(--radius-lg);
+  }
+
+  .my-interests__section-title {
+    margin: 0 0 var(--space-3);
+    color: rgba(26, 43, 76, 0.66);
+    font-size: var(--text-xs);
+    line-height: 1.2;
+    letter-spacing: 0.16em;
+  }
+
+  .my-interests__selected-card,
+  .my-interests__suggested-card,
+  .my-interests__empty-card {
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .my-interests__selected-card {
+    justify-content: flex-start;
+    align-items: flex-start;
+    max-height: none;
+    min-height: 38px;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .my-interests__selected-chip {
+    min-height: 36px;
+    padding: 0 0.5rem 0 0.875rem;
+    box-shadow: 0 5px 14px rgba(26, 43, 76, 0.12);
+  }
+
+  .my-interests__chip-remove {
+    width: 1.375rem;
+    height: 1.375rem;
+  }
+
+  .my-interests__empty-card {
+    padding: var(--space-4) 0 var(--space-2);
+  }
+
+  .my-interests__suggested-card {
+    gap: 0;
+    padding: 0;
+  }
+
+  .my-interests__suggested-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--space-4);
+    min-height: 58px;
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid rgba(26, 43, 76, 0.09);
+  }
+
+  .my-interests__suggested-row:last-child {
+    border-bottom: 0;
+  }
+
+  .my-interests__add-button {
+    min-width: 58px;
+    min-height: 36px;
+    padding: 0 var(--space-4);
+    font-size: var(--text-sm);
+    box-shadow: 0 5px 14px rgba(26, 43, 76, 0.14);
+  }
+
+  .my-interests__dismiss-button {
+    width: 38px;
+    height: 38px;
+    border-color: rgba(26, 43, 76, 0.12);
+    color: rgba(26, 43, 76, 0.62);
+  }
+
+  .my-interests__discover-card {
+    justify-content: flex-start;
+    gap: var(--space-3);
+  }
+
+  .my-interests__discover-chip {
+    min-height: 38px;
+    padding: 0 var(--space-5);
+    border-color: rgba(26, 43, 76, 0.1);
+    border-radius: var(--radius-pill);
+    box-shadow: 0 5px 14px rgba(26, 43, 76, 0.07);
+  }
+
+  .my-interests__spacer {
+    display: none;
+  }
+
+  .my-interests__save-error {
+    margin-bottom: 0;
+  }
+
+  .my-interests__save {
+    min-height: 52px;
+    padding: 0 var(--space-6);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-base);
+    box-shadow: 0 12px 24px rgba(232, 87, 10, 0.2);
+  }
+
+  .my-interests__helper {
+    margin: calc(-1 * var(--space-2)) 0 0;
+    padding-bottom: 0;
+  }
+}
