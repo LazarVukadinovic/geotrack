@@ -4,3 +4,243 @@
   height: 100dvh;
   overflow: hidden;
 }
+
+.my-contributions-page__subtitle {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  :host {
+    height: 100dvh;
+  }
+
+  .my-contributions-page {
+    background: transparent;
+  }
+
+  .my-contributions-page__header {
+    min-height: 112px;
+    margin: var(--space-5) var(--desktop-page-gutter) 0;
+    padding: var(--space-5) var(--space-6);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: 0 14px 34px color-mix(in srgb, var(--color-primary-navy) 14%, transparent);
+  }
+
+  .my-contributions-page__header-row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: center;
+    height: 100%;
+    gap: var(--space-4);
+  }
+
+  .my-contributions-page__back,
+  .my-contributions-page__header-spacer {
+    width: 44px;
+    height: 44px;
+  }
+
+  .my-contributions-page__back {
+    border: 0;
+    background: color-mix(in srgb, var(--color-card-bg) 14%, transparent);
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .my-contributions-page__back:hover {
+    background: color-mix(in srgb, var(--color-card-bg) 20%, transparent);
+  }
+
+  .my-contributions-page__back:active {
+    transform: scale(0.98);
+  }
+
+  .my-contributions-page__header-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .my-contributions-page__title {
+    font-size: var(--text-lg);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: 0;
+  }
+
+  .my-contributions-page__subtitle {
+    display: block;
+    margin-top: var(--space-2);
+    color: color-mix(in srgb, var(--color-card-bg) 82%, transparent);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .my-contributions-page__scroll {
+    overflow-x: hidden;
+    padding: var(--space-5) var(--desktop-page-gutter) var(--space-8);
+  }
+
+  .my-contributions-page__mobile-summary {
+    display: none;
+  }
+
+  .my-contributions-page__loading {
+    min-height: 280px;
+    padding-block: 0;
+  }
+
+  .my-contributions-page__error {
+    width: min(420px, 100%);
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--color-primary-navy) 8%, transparent);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .my-contributions-page__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(208px, 224px));
+    justify-content: start;
+    align-items: start;
+    gap: var(--space-4);
+    min-width: 0;
+    margin-top: 0;
+    padding: 0;
+  }
+
+  .my-contributions-card {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid color-mix(in srgb, var(--color-primary-navy) 8%, transparent);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--color-primary-navy) 7%, transparent);
+  }
+
+  .my-contributions-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 26px color-mix(in srgb, var(--color-primary-navy) 10%, transparent);
+  }
+
+  .my-contributions-card:focus-visible {
+    outline: 2px solid var(--color-accent-orange);
+    outline-offset: 3px;
+  }
+
+  .my-contributions-card__media {
+    height: auto;
+    aspect-ratio: 16 / 10;
+    background: color-mix(in srgb, var(--color-primary-navy) 5%, var(--color-card-bg));
+  }
+
+  .my-contributions-card__image,
+  .my-contributions-card__fallback {
+    width: 100%;
+    height: 100%;
+  }
+
+  .my-contributions-card__fallback svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .my-contributions-card__type-badge {
+    top: var(--space-2);
+    left: var(--space-2);
+    padding: 5px 10px;
+    box-shadow: var(--shadow-subtle);
+  }
+
+  .my-contributions-card__status-badge {
+    top: var(--space-2);
+    right: var(--space-2);
+    max-width: calc(100% - var(--space-4));
+    padding: 5px 9px;
+    box-shadow: var(--shadow-subtle);
+  }
+
+  .my-contributions-card__status-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .my-contributions-card__body {
+    min-width: 0;
+    padding: var(--space-3);
+  }
+
+  .my-contributions-card__title {
+    overflow: hidden;
+    margin: 0 0 var(--space-1);
+    color: var(--color-primary-navy);
+    font-size: var(--text-base);
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .my-contributions-card__meta-row {
+    min-width: 0;
+    margin-bottom: var(--space-1);
+  }
+
+  .my-contributions-card__meta-row svg {
+    flex: 0 0 auto;
+  }
+
+  .my-contributions-card__meta-text {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--text-xs);
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .my-contributions-card__actions {
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+
+  .my-contributions-card__action {
+    min-width: 0;
+    min-height: 38px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-md);
+    font-size: var(--text-xs);
+    line-height: 1;
+  }
+
+  .my-contributions-card__action svg {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+  }
+
+  .my-contributions-page__empty {
+    grid-column: 1 / -1;
+    width: min(420px, 100%);
+    border: 1px solid color-mix(in srgb, var(--color-primary-navy) 8%, transparent);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .my-contributions-page__fab {
+    right: var(--desktop-page-gutter);
+    bottom: var(--space-6);
+  }
+
+  .my-contributions-page__delete-sheet {
+    right: 0;
+    left: var(--desktop-sidebar-width);
+    width: min(420px, calc(100vw - var(--desktop-sidebar-width) - var(--space-8) - var(--space-8)));
+    margin-inline: auto;
+    padding: var(--space-5);
+    border-radius: var(--radius-lg);
+  }
+}
