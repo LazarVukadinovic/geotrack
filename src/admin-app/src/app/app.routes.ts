@@ -28,6 +28,11 @@ export const routes: Routes = [
           import('./features/locations/pages/all-locations/all-locations/all-locations.component').then(m => m.AllLocationsComponent),
       },
       {
+        path: 'locations/detail/:id',
+        loadComponent: () =>
+          import('./features/locations/pages/location-detail/location-detail/location-detail.component').then(m => m.LocationDetailComponent),
+      },
+      {
         path: 'destinations',
         loadComponent: () =>
           import('./features/destinations/pages/all-destinations/all-destinations/all-destinations.component').then(m => m.AllDestinationsComponent),

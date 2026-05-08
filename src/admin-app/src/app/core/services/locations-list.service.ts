@@ -12,6 +12,9 @@ export interface LocationListItem {
   imageUrl?: string;
   imageBg: string;
   category: string;
+  lat?: number;
+  lng?: number;
+  address?: string;
 }
 
 export type LocationSortField = 'name' | 'lastUpdated' | 'status';

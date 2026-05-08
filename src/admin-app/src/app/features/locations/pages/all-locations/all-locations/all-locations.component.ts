@@ -161,7 +161,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   }
 
   viewLocation(item: LocationListItem): void {
-    this.router.navigate(['/locations', item.id]);
+    this.router.navigate(['locations/detail', item.id], {state: item});
   }
 
   editLocation(item: LocationListItem): void {
