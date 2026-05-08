@@ -33,6 +33,11 @@ export const routes: Routes = [
           import('./features/destinations/pages/all-destinations/all-destinations/all-destinations.component').then(m => m.AllDestinationsComponent),
       },
       {
+        path: 'destinations/detail/:id',
+        loadComponent: () =>
+          import('./features/destinations/pages/destination-detail/destination-detail/destination-detail.component').then(m => m.DestinationDetailComponent),
+      },
+      {
         path: 'places',
         loadComponent: () =>
           import('./features/places/pages/all-places/all-places/all-places.component').then(m => m.AllPlacesComponent),

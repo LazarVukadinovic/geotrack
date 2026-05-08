@@ -121,7 +121,7 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
   navigateToAdd(): void { this.router.navigate(['/destinations/new']); }
 
   viewDestination(item: DestinationListItem): void {
-    this.router.navigate(['/destinations', item.id]);
+    this.router.navigate(['destinations/detail', item.id], { state: item });
   }
 
   editDestination(item: DestinationListItem): void {

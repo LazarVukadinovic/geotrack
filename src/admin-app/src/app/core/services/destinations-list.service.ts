@@ -11,6 +11,9 @@ export interface DestinationListItem {
   lastUpdated: string;
   imageBg: string;
   category: string;
+  lat?: number;
+  lng?: number;
+  address?: string;
 }
 
 export type DestinationSortField = 'name' | 'lastUpdated' | 'status';
