@@ -1,5 +1,5 @@
 import { CommonModule, Location } from '@angular/common';
-import { Component, inject, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { Router } from '@angular/router';
 
 @Component({
@@ -12,7 +12,10 @@ import { Router } from '@angular/router';
 export class SettingsSubpageShellComponent {
   readonly title = input.required<string>();
   readonly description = input<string>('');
+  readonly headerDescription = input<string | null>(null);
   readonly fallbackRoute = input('/settings');
+
+  protected readonly resolvedHeaderDescription = computed(() => this.headerDescription() ?? this.description());
 
   private readonly location = inject(Location);
   private readonly router = inject(Router);

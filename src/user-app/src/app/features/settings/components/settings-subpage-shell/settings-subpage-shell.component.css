@@ -157,6 +157,15 @@
     display: none;
   }
 
+  :host(.settings-shell--desktop-keep-description) .settings-shell__description {
+    display: block;
+    margin: 0 0 var(--space-5);
+    color: rgba(26, 43, 76, 0.66);
+    font-size: var(--text-base);
+    font-weight: 600;
+    line-height: 1.55;
+  }
+
   :host(.settings-shell--desktop-left-intro) .settings-shell__header-row {
     grid-template-columns: 46px minmax(0, 1fr);
     justify-content: flex-start;

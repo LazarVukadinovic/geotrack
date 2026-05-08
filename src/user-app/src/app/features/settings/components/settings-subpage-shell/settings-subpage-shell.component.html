@@ -12,8 +12,8 @@
       </button>
       <div class="settings-shell__title-stack">
         <span class="settings-shell__title">{{ title() }}</span>
-        @if (description()) {
-          <span class="settings-shell__header-description">{{ description() }}</span>
+        @if (resolvedHeaderDescription()) {
+          <span class="settings-shell__header-description">{{ resolvedHeaderDescription() }}</span>
         }
       </div>
       <div class="settings-shell__spacer" aria-hidden="true"></div>
