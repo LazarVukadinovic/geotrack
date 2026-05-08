@@ -11,6 +11,9 @@ export interface PlaceListItem {
   lastUpdated: string;
   imageBg: string;
   category: string;
+  lat?: number;
+  lng?: number;
+  address?: string;
 }
 
 export type PlaceSortField = 'name' | 'lastUpdated' | 'status';

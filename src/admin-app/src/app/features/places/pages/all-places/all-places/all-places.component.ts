@@ -125,7 +125,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
   navigateToAdd(): void { this.router.navigate(['/places/new']); }
 
   viewPlace(item: PlaceListItem): void {
-    this.router.navigate(['/places', item.id]);
+    this.router.navigate(['places/detail', item.id], {state:item});
   }
 
   editPlace(item: PlaceListItem): void {
