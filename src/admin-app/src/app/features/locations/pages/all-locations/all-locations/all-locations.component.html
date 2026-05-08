@@ -1,6 +1,3 @@
-<!-- all-locations.component.html -->
-<!-- Path: src/app/features/locations/pages/all-locations/all-locations.component.html -->
-
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
 
   <!-- ══════════ SIDEBAR ══════════ -->
@@ -9,7 +6,8 @@
   <!-- ══════════ MAIN ══════════ -->
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-    <app-topbar [userName]="userName" [userRole]="userRole" title="All Locations" [showBack]="true" backRoute="/dashboard" />
+    <app-topbar [userName]="userName" [userRole]="userRole" title="All Locations"
+                [showBack]="true" backRoute="/dashboard" />
 
     <!-- Scrollable area -->
     <div class="flex-1 overflow-y-auto px-8 py-6">
@@ -18,7 +16,8 @@
       <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">All Locations</h1>
         <p class="text-sm text-gray-500 mt-0.5">
-          Manage all locations within your assigned region. Review statuses, update details, or catalog new locations.
+          Manage all locations within your assigned region.
+          Review statuses, update details, or catalog new locations.
         </p>
       </div>
 
@@ -40,55 +39,46 @@
           />
           <button *ngIf="searchQuery"
                   (click)="searchQuery = ''; onSearchChange()"
-                  class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer p-0 leading-none text-lg flex-shrink-0">
+                  class="text-gray-400 hover:text-gray-600 border-none bg-transparent
+                         cursor-pointer p-0 leading-none text-lg flex-shrink-0">
             &times;
           </button>
         </div>
 
-        <!-- Sort buttons -->
-        <div class="flex items-center gap-1.5 ml-1">
-          <span class="text-xs text-gray-400 font-medium mr-0.5">Sort:</span>
-          <button (click)="setSort('name')"
-                  class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer"
-                  [ngClass]="sortField === 'name'
-                    ? 'bg-blue-700 text-white border-blue-700'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'">
-            Name
-            <svg *ngIf="sortField === 'name'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline *ngIf="sortDir === 'asc'"  points="18 15 12 9 6 15"/>
-              <polyline *ngIf="sortDir === 'desc'" points="6 9 12 15 18 9"/>
+        <!-- Sort dropdown -->
+        <div class="relative ml-1">
+          <button
+            (click)="sortOpen = !sortOpen; $event.stopPropagation()"
+            class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 cursor-pointer transition-colors"
+          >
+            <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+            </svg>
+            Sort: {{ currentSortLabel }}
+            <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
             </svg>
           </button>
-          <button (click)="setSort('lastUpdated')"
-                  class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer"
-                  [ngClass]="sortField === 'lastUpdated'
-                    ? 'bg-blue-700 text-white border-blue-700'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'">
-            Date
-            <svg *ngIf="sortField === 'lastUpdated'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline *ngIf="sortDir === 'asc'"  points="18 15 12 9 6 15"/>
-              <polyline *ngIf="sortDir === 'desc'" points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          <button (click)="setSort('status')"
-                  class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer"
-                  [ngClass]="sortField === 'status'
-                    ? 'bg-blue-700 text-white border-blue-700'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'">
-            Status
-            <svg *ngIf="sortField === 'status'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline *ngIf="sortDir === 'asc'"  points="18 15 12 9 6 15"/>
-              <polyline *ngIf="sortDir === 'desc'" points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
+          <div
+            *ngIf="sortOpen"
+            class="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-44 py-1 overflow-hidden"
+          >
+            <button
+              *ngFor="let opt of sortOptions"
+              (click)="applySortOption(opt); sortOpen = false"
+              class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer border-none bg-transparent"
+              [ngClass]="currentSortLabel === opt.label ? 'font-semibold text-blue-700 bg-blue-50' : ''"
+            >{{ opt.label }}</button>
+          </div>
         </div>
 
-        <!-- Spacer -->
         <div class="flex-1"></div>
 
         <!-- Add New Location -->
         <button (click)="navigateToAdd()"
-                class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-700 hover:bg-blue-800 transition-colors cursor-pointer border-none shadow-sm">
+                class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
+                       text-white bg-blue-700 hover:bg-blue-800 transition-colors
+                       cursor-pointer border-none shadow-sm">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
@@ -101,8 +91,7 @@
 
         <!-- Table header -->
         <div class="grid items-center gap-4 px-5 py-3 border-b border-gray-100 bg-gray-50/60"
-             style="grid-template-columns: 56px 1fr 110px 140px 120px;">
-          <!-- thumbnail col -->
+             style="grid-template-columns: 56px 1fr 110px 140px 180px;">
           <div></div>
           <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Location Details</span>
           <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
@@ -110,7 +99,7 @@
           <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider text-right">Actions</span>
         </div>
 
-        <!-- ── Loading skeleton ── -->
+        <!-- ── Skeleton loader ── -->
         <ng-container *ngIf="isLoading">
           <div *ngFor="let i of [1,2,3,4,5]"
                class="grid items-center gap-4 px-5 py-3.5 border-b border-gray-50 animate-pulse"
@@ -134,11 +123,13 @@
         <!-- ── Rows ── -->
         <ng-container *ngIf="!isLoading">
           <div *ngFor="let item of items; trackBy: trackById"
-               class="grid items-center gap-4 px-5 py-3.5 border-b border-gray-50 hover:bg-blue-50/30 transition-colors group"
-               style="grid-template-columns: 56px 1fr 110px 140px 120px;">
+                class="grid items-center gap-4 px-5 py-3.5 border-b border-gray-50
+                        hover:bg-blue-50/30 transition-colors group cursor-pointer"
+                style="grid-template-columns: 56px 1fr 110px 140px 180px;"
+                (click)="viewLocation(item)">
 
             <!-- Thumbnail -->
-            <div class="w-14 h-14 rounded-lg flex-shrink-0 overflow-hidden"
+            <div class="w-14 h-14 rounded-lg flex-shrink-0"
                  [style.background]="item.imageBg">
             </div>
 
@@ -146,8 +137,8 @@
             <div class="min-w-0">
               <div class="flex items-center gap-2 mb-0.5">
                 <p class="text-sm font-semibold text-gray-900 truncate">{{ item.name }}</p>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold
-                             bg-gray-100 text-gray-500 border border-gray-200 flex-shrink-0">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px]
+                             font-semibold bg-gray-100 text-gray-500 border border-gray-200 flex-shrink-0">
                   {{ item.category }}
                 </span>
               </div>
@@ -162,7 +153,7 @@
               </div>
             </div>
 
-            <!-- Status badge -->
+            <!-- Status -->
             <div>
               <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold"
                     [ngClass]="statusClass(item.status)">
@@ -174,43 +165,35 @@
             <div class="text-sm text-gray-600">{{ item.lastUpdated }}</div>
 
             <!-- Actions -->
-            <div class="flex items-center gap-1.5 justify-end">
-              <!-- View -->
-              <button (click)="viewLocation(item)"
-                      title="View"
-                      class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400
-                             hover:text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer border-none bg-transparent">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
+            <div class="flex items-center justify-end gap-2" (click)="$event.stopPropagation()">
+            <button (click)="editLocation(item)"
+                    title="Edit"
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                            text-blue-700 bg-white border border-blue-200 hover:bg-blue-50
+                            transition-colors cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                 </svg>
-              </button>
-              <!-- Edit -->
-              <button (click)="editLocation(item)"
-                      title="Edit"
-                      class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400
-                             hover:text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer border-none bg-transparent">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                Edit
+            </button>
+            <button (click)="promptDelete(item)"
+                    title="Delete"
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                            text-red-600 bg-white border border-red-200 hover:bg-red-50
+                            transition-colors cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
                 </svg>
-              </button>
-              <!-- Three-dot menu -->
-              <button (click)="openContextMenu(item, $event)"
-                      title="More options"
-                      class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400
-                             hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer border-none bg-transparent">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="12" cy="5"  r="1.5"/>
-                  <circle cx="12" cy="12" r="1.5"/>
-                  <circle cx="12" cy="19" r="1.5"/>
-                </svg>
-              </button>
+                Delete
+            </button>
             </div>
-
           </div>
 
-          <!-- ── Empty state ── -->
+          <!-- Empty state -->
           <div *ngIf="items.length === 0"
                class="flex flex-col items-center justify-center py-16 text-gray-400">
             <svg class="w-12 h-12 mb-3 text-gray-200" viewBox="0 0 24 24" fill="none"
@@ -229,26 +212,27 @@
               Add First Location
             </button>
           </div>
-
         </ng-container>
 
-        <!-- ── Show More / footer ── -->
-        <div *ngIf="!isLoading"
-             class="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/40">
-          <p class="text-sm text-gray-500">
-            Showing
-            <span class="font-semibold text-gray-700">{{ items.length }}</span>
-            of
-            <span class="font-semibold text-gray-700">{{ totalItems }}</span>
-            location{{ totalItems !== 1 ? 's' : '' }}
-          </p>
+        <!-- ── Footer / Show More ── -->
+            <div *ngIf="!isLoading"
+                class="flex flex-col items-center gap-3 px-5 py-3
+                        border-t border-gray-100 bg-gray-50/40">
+            <p class="text-sm text-gray-500">
+                Showing
+                <span class="font-semibold text-gray-700">{{ items.length }}</span>
+                of
+                <span class="font-semibold text-gray-700">{{ totalItems }}</span>
+                location{{ totalItems !== 1 ? 's' : '' }}
+            </p>
 
           <button *ngIf="hasMore"
                   (click)="loadMore()"
                   [disabled]="isLoadingMore"
                   class="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold
                          text-blue-700 bg-white border border-blue-200 hover:bg-blue-50
-                         transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
+                         transition-colors cursor-pointer
+                         disabled:opacity-60 disabled:cursor-not-allowed">
             <svg *ngIf="isLoadingMore" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
@@ -260,7 +244,7 @@
             </span>
           </button>
 
-          <span *ngIf="!hasMore && items.length > 0"
+           <span *ngIf="!hasMore && items.length > 0"
                 class="text-xs text-gray-400 italic">All locations loaded</span>
         </div>
       </div>
@@ -271,7 +255,7 @@
 
 
 <!-- ══════════════════════════════════════════════════════════
-     CONTEXT MENU (three-dot dropdown)
+     CONTEXT MENU
 ══════════════════════════════════════════════════════════ -->
 <div *ngIf="contextMenu"
      class="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-xl py-1 w-40 overflow-hidden"
@@ -282,16 +266,20 @@
   <button (click)="viewLocation(contextMenu.item); contextMenu = null"
           class="w-full text-left px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50
                  flex items-center gap-2 cursor-pointer border-none bg-transparent transition-colors">
-    <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+    <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
     </svg>
     View
   </button>
 
   <button (click)="editLocation(contextMenu.item); contextMenu = null"
-          class="w-full text-left px-3.5 py-2 text-sm text-blue-700 font-medium hover:bg-blue-50
-                 flex items-center gap-2 cursor-pointer border-none bg-transparent transition-colors">
-    <svg class="w-3.5 h-3.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          class="w-full text-left px-3.5 py-2 text-sm text-blue-700 font-medium
+                 hover:bg-blue-50 flex items-center gap-2 cursor-pointer
+                 border-none bg-transparent transition-colors">
+    <svg class="w-3.5 h-3.5 text-blue-500" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2">
       <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
       <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
     </svg>
@@ -303,7 +291,8 @@
   <button (click)="promptDelete(contextMenu.item)"
           class="w-full text-left px-3.5 py-2 text-sm text-red-600 hover:bg-red-50
                  flex items-center gap-2 cursor-pointer border-none bg-transparent transition-colors">
-    <svg class="w-3.5 h-3.5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <svg class="w-3.5 h-3.5 text-red-400" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2">
       <polyline points="3 6 5 6 21 6"/>
       <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
       <path d="M10 11v6M14 11v6"/>
@@ -325,7 +314,6 @@
   <div class="bg-white rounded-2xl shadow-2xl overflow-hidden w-96 max-w-[92vw]"
        (click)="$event.stopPropagation()">
 
-    <!-- Header -->
     <div class="px-6 pt-6 pb-4">
       <div class="flex items-start gap-4">
         <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
@@ -348,11 +336,12 @@
       </div>
     </div>
 
-    <!-- Footer -->
-    <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50/60">
+    <div class="flex items-center justify-end gap-2 px-6 py-4
+                border-t border-gray-100 bg-gray-50/60">
       <button (click)="cancelDelete()"
-              class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-white
-                     border border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors">
+              class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600
+                     bg-white border border-gray-300 hover:bg-gray-50
+                     cursor-pointer transition-colors">
         Cancel
       </button>
       <button (click)="confirmDelete()"

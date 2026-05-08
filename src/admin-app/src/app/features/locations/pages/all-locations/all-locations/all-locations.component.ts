@@ -48,7 +48,28 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   searchQuery = '';
   sortField: LocationSortField = 'lastUpdated';
   sortDir:   LocationSortDir   = 'desc';
+  // Sort dropdown
+  sortOpen = false;
 
+  sortOptions: { label: string; field: LocationSortField; dir: LocationSortDir }[] = [
+    { label: 'Newest First', field: 'lastUpdated', dir: 'desc' },
+    { label: 'Oldest First', field: 'lastUpdated', dir: 'asc' },
+    { label: 'A–Z',          field: 'name',        dir: 'asc'  },
+    { label: 'Z–A',          field: 'name',        dir: 'desc' },
+  ];
+
+  get currentSortLabel(): string {
+    return this.sortOptions.find(
+      o => o.field === this.sortField && o.dir === this.sortDir
+    )?.label ?? 'Newest First';
+  }
+
+  applySortOption(opt: { label: string; field: LocationSortField; dir: LocationSortDir }): void {
+    this.sortField    = opt.field;
+    this.sortDir      = opt.dir;
+    this.displayCount = PAGE_SIZE_INITIAL;
+    this.loadItems();
+  }
   
   contextMenu: { item: LocationListItem; x: number; y: number } | null = null;
 
@@ -160,6 +181,10 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   closeContextMenu(): void {
     if (this.contextMenu) {
       this.contextMenu = null;
+      this.cdr.markForCheck();
+    }
+    if (this.sortOpen) {
+      this.sortOpen = false;
       this.cdr.markForCheck();
     }
   }
