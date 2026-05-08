@@ -1,7 +1,9 @@
 <app-settings-subpage-shell
+  class="settings-shell--desktop-intro settings-shell--desktop-left-intro"
   title="Privacy Settings"
+  [headerDescription]="'Manage how GeoTrack uses your data and location information.'"
   description="GeoTrack uses location, interests, and saved places to keep nearby suggestions useful while you travel. Precise and approximate coordinates stay in the current browser session.">
-  <div class="flex flex-col gap-4">
+  <div class="privacy-page__mobile flex flex-col gap-4">
     @if (feedbackMessage()) {
       <div class="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
         {{ feedbackMessage() }}
@@ -69,5 +71,215 @@
         </button>
       </div>
     </div>
+  </div>
+
+  <div class="privacy-page__desktop">
+    @if (feedbackMessage()) {
+      <div class="privacy-page__alert privacy-page__alert--success">
+        {{ feedbackMessage() }}
+      </div>
+    }
+
+    <div class="privacy-page__columns">
+      <section class="privacy-page__card privacy-page__location-card" aria-labelledby="privacy-location-title">
+        <div class="privacy-page__card-header">
+          <span class="privacy-page__icon privacy-page__icon--location" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21s7-5.1 7-11a7 7 0 10-14 0c0 5.9 7 11 7 11z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+            </svg>
+          </span>
+
+          <div class="privacy-page__card-copy">
+            <h2 id="privacy-location-title" class="privacy-page__card-title">Location on this device</h2>
+            <p class="privacy-page__card-description">GeoTrack uses your location to provide nearby suggestions that are relevant and helpful.</p>
+          </div>
+        </div>
+
+        <div class="privacy-page__location-state">
+          <div class="privacy-page__location-row">
+            <span class="privacy-page__state-icon" aria-hidden="true">
+              <svg fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2.5a7.5 7.5 0 00-7.5 7.5c0 5.25 6.7 11.1 6.98 11.34a.8.8 0 001.04 0C12.8 21.1 19.5 15.25 19.5 10A7.5 7.5 0 0012 2.5z" />
+              </svg>
+            </span>
+
+            <div class="privacy-page__state-copy">
+              <h3>{{ locationStatus() }}</h3>
+              <p>
+                @if (location()) {
+                  Using {{ sourceLabel() }} to tailor nearby places, map results, and city-aware recommendations.
+                } @else {
+                  GeoTrack will ask again for a location when a travel screen needs it.
+                }
+              </p>
+            </div>
+          </div>
+
+          <div class="privacy-page__divider" aria-hidden="true"></div>
+
+          <button
+            type="button"
+            (click)="clearSavedLocation()"
+            class="privacy-page__outline-action">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 7h12m-9 0V5h6v2m-7 3v8m4-8v8m4-8v8M8 7l1 13h6l1-13" />
+            </svg>
+            <span>Clear Location State</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="privacy-page__card privacy-page__data-card" aria-labelledby="privacy-data-title">
+        <div class="privacy-page__card-header">
+          <span class="privacy-page__icon privacy-page__icon--shield" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21s7-3.5 7-10V5l-7-3-7 3v6c0 6.5 7 10 7 10z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-5" />
+            </svg>
+          </span>
+
+          <div class="privacy-page__card-copy">
+            <h2 id="privacy-data-title" class="privacy-page__card-title">How GeoTrack uses your data</h2>
+            <p class="privacy-page__card-description">GeoTrack keeps these signals focused on account recognition, relevant recommendations, and nearby discovery.</p>
+          </div>
+        </div>
+
+        <div class="privacy-page__data-list">
+          <div class="privacy-page__data-row">
+            <span class="privacy-page__data-icon" aria-hidden="true">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 12a4 4 0 100-8 4 4 0 000 8zM4.5 20a7.5 7.5 0 0115 0" />
+              </svg>
+            </span>
+            <p>Your profile details keep your account recognizable across collections, interests, and support requests.</p>
+          </div>
+
+          <div class="privacy-page__data-row">
+            <span class="privacy-page__data-icon" aria-hidden="true">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20.8 4.6a5.2 5.2 0 00-7.4 0L12 6l-1.4-1.4a5.2 5.2 0 10-7.4 7.4L12 20.8l8.8-8.8a5.2 5.2 0 000-7.4z" />
+              </svg>
+            </span>
+            <p>Your interests and saved places help GeoTrack rank recommendations that feel more relevant to the cities you browse.</p>
+          </div>
+
+          <div class="privacy-page__data-row">
+            <span class="privacy-page__data-icon" aria-hidden="true">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 12l14-8-4 16-4-6-6-2z" />
+              </svg>
+            </span>
+            <p>Device location is used to improve nearby discovery.</p>
+          </div>
+
+          <div class="privacy-page__data-row">
+            <span class="privacy-page__data-icon" aria-hidden="true">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 12.5a10 10 0 0114 0M8.5 16a5 5 0 017 0M12 19h.01M2 9a15 15 0 0120 0" />
+              </svg>
+            </span>
+            <p>Precise GPS and approximate network-based coordinates are stored only for the current browser session, not long-term local storage.</p>
+          </div>
+
+          <div class="privacy-page__data-row">
+            <span class="privacy-page__data-icon" aria-hidden="true">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21s7-3.5 7-10V5l-7-3-7 3v6c0 6.5 7 10 7 10z" />
+              </svg>
+            </span>
+            <p>If precise location is denied or unavailable, GeoTrack uses approximate network-based location automatically for nearby discovery. Clearing location state does not touch your account.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="privacy-page__card privacy-page__quick-card" aria-labelledby="privacy-actions-title">
+      <div class="privacy-page__quick-header">
+        <span class="privacy-page__quick-icon" aria-hidden="true">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
+          </svg>
+        </span>
+        <h2 id="privacy-actions-title" class="privacy-page__quick-title">Privacy quick actions</h2>
+      </div>
+
+      <div class="privacy-page__quick-actions">
+        <button type="button" class="privacy-page__action-card" (click)="openInterests()">
+          <span class="privacy-page__action-icon" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20.8 4.6a5.2 5.2 0 00-7.4 0L12 6l-1.4-1.4a5.2 5.2 0 10-7.4 7.4L12 20.8l8.8-8.8a5.2 5.2 0 000-7.4z" />
+            </svg>
+          </span>
+          <span class="privacy-page__action-copy">
+            <span class="privacy-page__action-title">Review my interests</span>
+            <span class="privacy-page__action-description">Adjust the categories that shape GeoTrack recommendations.</span>
+          </span>
+          <span class="privacy-page__chevron" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.1" d="M9 5l7 7-7 7" />
+            </svg>
+          </span>
+        </button>
+
+        <button type="button" class="privacy-page__action-card" (click)="openLegal()">
+          <span class="privacy-page__action-icon" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 3h7l4 4v14H7V3z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3v5h5M9 13h6M9 17h6" />
+            </svg>
+          </span>
+          <span class="privacy-page__action-copy">
+            <span class="privacy-page__action-title">Read the privacy policy</span>
+            <span class="privacy-page__action-description">See the full product terms, data handling notes, and travel-content guidelines.</span>
+          </span>
+          <span class="privacy-page__chevron" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.1" d="M9 5l7 7-7 7" />
+            </svg>
+          </span>
+        </button>
+
+        <button type="button" class="privacy-page__action-card" (click)="openSupport()">
+          <span class="privacy-page__action-icon" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5.5h16v10H8l-4 4v-14z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 10.5h.01M12 10.5h.01M16 10.5h.01" />
+            </svg>
+          </span>
+          <span class="privacy-page__action-copy">
+            <span class="privacy-page__action-title">Ask a privacy question</span>
+            <span class="privacy-page__action-description">Send a real support request if something about your account or saved data needs attention.</span>
+          </span>
+          <span class="privacy-page__chevron" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.1" d="M9 5l7 7-7 7" />
+            </svg>
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <section class="privacy-page__priority-card" aria-labelledby="privacy-priority-title">
+      <span class="privacy-page__priority-illustration" aria-hidden="true">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M12 21s7-3.5 7-10V5l-7-3-7 3v6c0 6.5 7 10 7 10z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M9.5 12l1.7 1.7 3.8-4.2" />
+        </svg>
+      </span>
+
+      <div class="privacy-page__priority-copy">
+        <h2 id="privacy-priority-title">Your privacy is our priority</h2>
+        <p>These controls affect how GeoTrack personalizes your experience and uses location while you travel. Location data is session-based, and clearing location state does not touch your account.</p>
+      </div>
+
+      <span class="privacy-page__priority-lock" aria-hidden="true">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 11V8a5 5 0 0110 0v3" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 11h12v9H6v-9z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2" />
+        </svg>
+      </span>
+    </section>
   </div>
 </app-settings-subpage-shell>
