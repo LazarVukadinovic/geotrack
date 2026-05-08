@@ -125,7 +125,7 @@ export class AllEventsComponent implements OnInit, OnDestroy {
   navigateToAdd(): void { this.router.navigate(['/events/new']); }
 
   viewEvent(item: EventListItem): void {
-    this.router.navigate(['/events', item.id]);
+    this.router.navigate(['events/detail', item.id], { state: item });
   }
 
   editEvent(item: EventListItem): void {

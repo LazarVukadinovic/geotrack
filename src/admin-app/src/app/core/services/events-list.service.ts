@@ -12,6 +12,12 @@ export interface EventListItem {
   imageBg: string;
   category: string;
   dateRange?: string;
+  startDate?: string;
+  endDate?: string;
+  lat?: number;
+  lng?: number;
+  address?: string;
+
 }
 
 export type EventSortField = 'name' | 'lastUpdated' | 'status';
