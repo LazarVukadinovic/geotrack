@@ -139,5 +139,33 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
   }
 
   trackById(_: number, item: LocationListItem): string { return item.id; }
-  promptDelete(item: any) {}
+  deleteTarget: LocationListItem | null = null;
+  isDeleting = false;
+
+  promptDelete(item: LocationListItem, event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.deleteTarget = item;
+    this.cdr.markForCheck();
+  }
+
+  cancelDelete(): void {
+    this.deleteTarget = null;
+    this.cdr.markForCheck();
+  }
+
+  confirmDelete(): void {
+    if (!this.deleteTarget) return;
+    this.isDeleting = true;
+    this.svc.delete$(this.deleteTarget.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.isDeleting   = false;
+        this.deleteTarget = null;
+        if (this.displayCount > PAGE_SIZE_INITIAL) {
+          this.displayCount = Math.max(PAGE_SIZE_INITIAL, this.displayCount - 1);
+        }
+        this.totalItems--;
+        this.loadItems();
+      });
+  }
 }
