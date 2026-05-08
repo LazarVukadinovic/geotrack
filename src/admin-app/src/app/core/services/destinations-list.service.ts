@@ -39,6 +39,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 24, 2023',
       imageBg: 'url(https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=120&q=60) center/cover',
       category: 'Destination',
+      lat: 44.0165,
+      lng: 20.9114,
+      address: 'Šumadija region, centralna Srbija',
     },
     {
       id: 'd2',
@@ -49,6 +52,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 22, 2023',
       imageBg: 'url(https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=120&q=60) center/cover',
       category: 'Destination',
+      lat: 44.0128,
+      lng: 20.9237,
+      address: 'Kragujevac, Šumadija',
     },
     {
       id: 'd3',
@@ -59,6 +65,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 20, 2023',
       imageBg: 'url(https://images.unsplash.com/photo-1529420705456-b94baeebe4b5?w=120&q=60) center/cover',
       category: 'Destination',
+      lat: 44.2558,
+      lng: 20.6817,
+      address: 'Topola, Šumadija',
     },
     {
       id: 'd4',
@@ -69,6 +78,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 18, 2023',
       imageBg: 'url(https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=120&q=60) center/cover',
       category: 'Destination',
+      lat: 44.3017,
+      lng: 20.5631,
+      address: 'Aranđelovac, Šumadija',
     },
     {
       id: 'd5',
@@ -79,6 +91,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 15, 2023',
       imageBg: 'url(https://images.unsplash.com/photo-1470770903676-69b98201ea1c?w=120&q=60) center/cover',
       category: 'Destination',
+      lat: 44.1228,
+      lng: 20.5142,
+      address: 'Rudnik planina, Šumadija',
     },
     {
       id: 'd6',
@@ -89,6 +104,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 12, 2023',
       imageBg: 'linear-gradient(135deg,#0ea5e9 0%,#0369a1 100%)',
       category: 'Destination',
+      lat: 43.9347,
+      lng: 20.6812,
+      address: 'Gruža jezero, Knić, Šumadija',
     },
     {
       id: 'd7',
@@ -99,6 +117,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 10, 2023',
       imageBg: 'linear-gradient(135deg,#a855f7 0%,#9333ea 100%)',
       category: 'Destination',
+      lat: 44.1803,
+      lng: 20.7451,
+      address: 'Jasenica, Šumadija',
     },
     {
       id: 'd8',
@@ -109,6 +130,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 8, 2023',
       imageBg: 'linear-gradient(135deg,#10b981 0%,#059669 100%)',
       category: 'Destination',
+      lat: 43.8912,
+      lng: 20.9834,
+      address: 'Gledićke planine, Šumadija',
     },
     {
       id: 'd9',
@@ -119,6 +143,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 5, 2023',
       imageBg: 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
       category: 'Destination',
+      lat: 43.9651,
+      lng: 20.5728,
+      address: 'Rača klisura, Šumadija',
     },
     {
       id: 'd10',
@@ -129,6 +156,9 @@ export class DestinationsListService {
       lastUpdated: 'Oct 3, 2023',
       imageBg: 'linear-gradient(135deg,#92400e 0%,#78350f 100%)',
       category: 'Destination',
+      lat: 43.8743,
+      lng: 20.9156,
+      address: 'Manastir Kalenić, Rekovac, Šumadija',
     },
     {
       id: 'd11',
@@ -139,6 +169,9 @@ export class DestinationsListService {
       lastUpdated: 'Sep 28, 2023',
       imageBg: 'linear-gradient(135deg,#84cc16 0%,#65a30d 100%)',
       category: 'Destination',
+      lat: 44.1251,
+      lng: 20.1034,
+      address: 'Divčibare, Maljen planina',
     },
     {
       id: 'd12',
@@ -149,6 +182,9 @@ export class DestinationsListService {
       lastUpdated: 'Sep 20, 2023',
       imageBg: 'linear-gradient(135deg,#78716c 0%,#57534e 100%)',
       category: 'Destination',
+      lat: 44.4328,
+      lng: 20.6934,
+      address: 'Mladenovac, Šumadija',
     },
     {
       id: 'd13',
@@ -159,6 +195,9 @@ export class DestinationsListService {
       lastUpdated: 'Sep 15, 2023',
       imageBg: 'linear-gradient(135deg,#16a34a 0%,#15803d 100%)',
       category: 'Destination',
+      lat: 45.0512,
+      lng: 20.4317,
+      address: 'Opovo, Vojvodina',
     },
     {
       id: 'd14',
@@ -169,6 +208,9 @@ export class DestinationsListService {
       lastUpdated: 'Sep 10, 2023',
       imageBg: 'linear-gradient(135deg,#dc2626 0%,#b91c1c 100%)',
       category: 'Destination',
+      lat: 44.0812,
+      lng: 20.6341,
+      address: 'Kladnica dolina, Šumadija',
     },
     {
       id: 'd15',
@@ -179,6 +221,9 @@ export class DestinationsListService {
       lastUpdated: 'Sep 5, 2023',
       imageBg: 'linear-gradient(135deg,#fb923c 0%,#f97316 100%)',
       category: 'Destination',
+      lat: 44.0534,
+      lng: 20.7823,
+      address: 'Stragari, Šumadija',
     },
   ];
 
