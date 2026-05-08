@@ -1,7 +1,4 @@
-import {
-  Component, OnInit, OnDestroy, HostListener,
-  ChangeDetectionStrategy, ChangeDetectorRef,
-} from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule }  from '@angular/common';
 import { FormsModule }   from '@angular/forms';
 import { Router }        from '@angular/router';
@@ -9,7 +6,7 @@ import { Subject }       from 'rxjs';
 import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent }  from '../../../../../shared/components/topbar/topbar.component';
-import { LocationsListService, LocationListItem, LocationSortField, LocationSortDir } from '../../../../../core/services/locations-list.service';
+import { PlacesListService, PlaceListItem, PlaceSortField, PlaceSortDir } from '../../../../../core/services/places-list.service';
 
 const PAGE_SIZE_INITIAL = 5;
 const PAGE_SIZE_STEP    = 5;
@@ -25,7 +22,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
 
   constructor(
     private router: Router,
-    private svc: LocationsListService,
+    private svc: PlacesListService,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -33,18 +30,18 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
   userName = 'Sarah Jenkins';
   userRole = 'Regional Manager';
 
-  items:        LocationListItem[] = [];
+  items:        PlaceListItem[] = [];
   totalItems    = 0;
   isLoading     = false;
   isLoadingMore = false;
   displayCount  = PAGE_SIZE_INITIAL;
 
   searchQuery = '';
-  sortField: LocationSortField = 'lastUpdated';
-  sortDir:   LocationSortDir   = 'desc';
+  sortField: PlaceSortField = 'lastUpdated';
+  sortDir:   PlaceSortDir   = 'desc';
 
   sortOpen = false;
-  sortOptions: { label: string; field: LocationSortField; dir: LocationSortDir }[] = [
+  sortOptions: { label: string; field: PlaceSortField; dir: PlaceSortDir }[] = [
     { label: 'Newest First', field: 'lastUpdated', dir: 'desc' },
     { label: 'Oldest First', field: 'lastUpdated', dir: 'asc'  },
     { label: 'A–Z',          field: 'name',        dir: 'asc'  },
@@ -57,14 +54,14 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     )?.label ?? 'Newest First';
   }
 
-  applySortOption(opt: { label: string; field: LocationSortField; dir: LocationSortDir }): void {
+  applySortOption(opt: { label: string; field: PlaceSortField; dir: PlaceSortDir }): void {
     this.sortField    = opt.field;
     this.sortDir      = opt.dir;
     this.displayCount = PAGE_SIZE_INITIAL;
     this.loadItems();
   }
 
-  deleteTarget: LocationListItem | null = null;
+  deleteTarget: PlaceListItem | null = null;
   isDeleting = false;
 
   private searchSubject = new Subject<string>();
@@ -127,15 +124,15 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
 
   navigateToAdd(): void { this.router.navigate(['/places/new']); }
 
-  viewPlace(item: LocationListItem): void {
+  viewPlace(item: PlaceListItem): void {
     this.router.navigate(['/places', item.id]);
   }
 
-  editPlace(item: LocationListItem): void {
+  editPlace(item: PlaceListItem): void {
     this.router.navigate(['/places/new'], { state: { place: item } });
   }
 
-  promptDelete(item: LocationListItem, event?: MouseEvent): void {
+  promptDelete(item: PlaceListItem, event?: MouseEvent): void {
     event?.stopPropagation();
     this.deleteTarget = item;
     this.cdr.markForCheck();
@@ -169,5 +166,5 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     return '';
   }
 
-  trackById(_: number, item: LocationListItem): string { return item.id; }
+  trackById(_: number, item: PlaceListItem): string { return item.id; }
 }
