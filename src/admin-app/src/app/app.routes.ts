@@ -26,19 +26,21 @@ export const routes: Routes = [
         path: 'locations',
         loadComponent: () =>
           import('./features/locations/pages/all-locations/all-locations/all-locations.component').then(m => m.AllLocationsComponent),
-
       },
       {
         path: 'destinations',
         loadComponent: () =>
           import('./features/destinations/pages/all-destinations/all-destinations/all-destinations.component').then(m => m.AllDestinationsComponent),
-
       },
       {
         path: 'places',
         loadComponent: () =>
           import('./features/places/pages/all-places/all-places/all-places.component').then(m => m.AllPlacesComponent),
-
+      },
+      {
+        path: 'events',
+        loadComponent: () =>
+          import('./features/events/pages/all-events/all-events/all-events.component').then(m => m.AllEventsComponent),
       },
       {
         path: 'destinations/new',
