@@ -1,7 +1,9 @@
 <app-settings-subpage-shell
+  class="settings-shell--desktop-intro settings-shell--desktop-left-intro settings-shell--desktop-keep-description"
   title="Analytics"
+  [headerDescription]="'Control your product analytics preferences'"
   description="GeoTrack uses first-party product analytics to understand which travel screens, searches, maps, and recommendations are useful. You can turn this off at any time.">
-  <div class="flex flex-col gap-4">
+  <div class="analytics-page__mobile flex flex-col gap-4">
     @if (errorMessage()) {
       <div class="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
         {{ errorMessage() }}
@@ -60,5 +62,124 @@
         <p>When analytics is disabled, the app stops sending those optional events and the backend ignores authenticated analytics events for your account.</p>
       </div>
     </div>
+  </div>
+
+  <div class="analytics-page__desktop">
+    @if (errorMessage()) {
+      <div class="analytics-page__alert analytics-page__alert--error">
+        {{ errorMessage() }}
+      </div>
+    }
+
+    @if (feedbackMessage()) {
+      <div class="analytics-page__alert analytics-page__alert--success">
+        {{ feedbackMessage() }}
+      </div>
+    }
+
+    <section class="analytics-page__card" aria-labelledby="analytics-product-title">
+      <h2 id="analytics-product-title" class="analytics-page__section-title">PRODUCT ANALYTICS</h2>
+
+      @if (isLoading()) {
+        <div class="analytics-page__loading-card">
+          Loading your analytics preference...
+        </div>
+      } @else {
+        <button
+          type="button"
+          class="analytics-page__toggle analytics-page__toggle--desktop"
+          [attr.aria-pressed]="preference().analyticsEnabled"
+          [disabled]="isSaving()"
+          (click)="toggleAnalytics()">
+          <span class="analytics-page__icon analytics-page__icon--muted" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 19V9m5 10V5m5 14v-7m5 7V8" />
+            </svg>
+          </span>
+
+          <span class="analytics-page__toggle-copy">
+            <span class="analytics-page__toggle-title">
+              Analytics is {{ preference().analyticsEnabled ? 'enabled' : 'disabled' }}
+            </span>
+            <span class="analytics-page__toggle-description">
+              {{ preference().analyticsEnabled
+                ? 'Optional usage events help improve discovery, maps, filters, and recommendations.'
+                : 'Optional usage events are no longer sent from this app for your account.' }}
+            </span>
+          </span>
+
+          <span
+            class="analytics-page__switch"
+            [class.analytics-page__switch--on]="preference().analyticsEnabled">
+            <span class="analytics-page__switch-knob"></span>
+          </span>
+        </button>
+
+        @if (isSaving()) {
+          <p class="analytics-page__saving">Saving your preference...</p>
+        }
+      }
+    </section>
+
+    <section class="analytics-page__card" aria-labelledby="analytics-controls-title">
+      <h2 id="analytics-controls-title" class="analytics-page__section-title">WHAT THIS CONTROLS</h2>
+
+      <div class="analytics-page__control-list">
+        <div class="analytics-page__control-row">
+          <span class="analytics-page__icon" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7h8M8 11h8M8 15h5M6 3h9l3 3v15H6V3z" />
+            </svg>
+          </span>
+          <p>When analytics is enabled, GeoTrack may collect optional events such as page and detail views, searches, filters, map marker opens, directions starts, outbound booking-link clicks, favorites, collections, and review actions.</p>
+        </div>
+
+        <div class="analytics-page__control-row">
+          <span class="analytics-page__icon" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20.8 4.6a5.2 5.2 0 00-7.4 0L12 6l-1.4-1.4a5.2 5.2 0 10-7.4 7.4L12 20.8l8.8-8.8a5.2 5.2 0 000-7.4z" />
+            </svg>
+          </span>
+          <p>Those events can also update inferred interests, which help personalize the Curated for You and recommendation surfaces.</p>
+        </div>
+
+        <div class="analytics-page__control-row">
+          <span class="analytics-page__icon" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21s7-3.5 7-10V5l-7-3-7 3v6c0 6.5 7 10 7 10z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-5" />
+            </svg>
+          </span>
+          <p>When analytics is disabled, the app stops sending those optional events and the backend ignores authenticated analytics events for your account.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="analytics-page__privacy-card" aria-labelledby="analytics-privacy-title">
+      <div class="analytics-page__privacy-row">
+        <span class="analytics-page__icon analytics-page__icon--blue" aria-hidden="true">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 11V8a5 5 0 0110 0v3" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 11h12v9H6v-9z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2" />
+          </svg>
+        </span>
+
+        <div class="analytics-page__privacy-copy">
+          <h2 id="analytics-privacy-title">Your privacy matters</h2>
+          <p>This setting only controls optional product analytics and does not affect essential app functionality.</p>
+        </div>
+
+        <button
+          type="button"
+          class="analytics-page__privacy-link"
+          (click)="openPrivacyPolicy()">
+          <span>Learn more about privacy</span>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    </section>
   </div>
 </app-settings-subpage-shell>
