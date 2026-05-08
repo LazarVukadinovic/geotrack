@@ -33,7 +33,35 @@
             &times;
           </button>
         </div>
-
+        <!-- Sort dropdown -->
+        <div class="relative ml-1">
+        <button (click)="sortOpen = !sortOpen; $event.stopPropagation()"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200
+                        rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300
+                        cursor-pointer transition-colors">
+            <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+            </svg>
+            Sort: {{ currentSortLabel }}
+            <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+            </svg>
+        </button>
+        <div *ngIf="sortOpen"
+            class="absolute left-0 top-full mt-1 bg-white border border-gray-200
+                    rounded-lg shadow-lg z-10 w-44 py-1 overflow-hidden">
+            <button *ngFor="let opt of sortOptions"
+                    (click)="applySortOption(opt); sortOpen = false"
+                    class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50
+                        transition-colors cursor-pointer border-none bg-transparent"
+                    [ngClass]="currentSortLabel === opt.label
+                    ? 'font-semibold text-blue-700 bg-blue-50' : ''">
+            {{ opt.label }}
+            </button>
+        </div>
+        </div>
         <div class="flex-1"></div>
 
         <button (click)="navigateToAdd()"
