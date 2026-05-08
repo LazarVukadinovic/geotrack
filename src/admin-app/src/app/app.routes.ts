@@ -23,6 +23,12 @@ export const routes: Routes = [
           import('./features/dashboard/pages/dashboard-page/dashboard-page.component').then(m => m.DashboardComponent),
       },
       {
+        path: 'locations',
+        loadComponent: () =>
+          import('./features/locations/pages/all-locations/all-locations/all-locations.component').then(m => m.AllLocationsComponent),
+
+      },
+      {
         path: 'destinations/new',
         loadComponent: () =>
           import('./features/add-pages/pages/add-destination/add-destination.component').then(m => m.AddDestinationComponent),
