@@ -1,7 +1,9 @@
 <app-settings-subpage-shell
+  class="settings-shell--desktop-intro settings-shell--desktop-left-intro"
   title="Contact Support"
+  [headerDescription]="'Send a support request and track your recent conversations.'"
   description="Send a real support request tied to your GeoTrack account. Messages are stored so the team can review the trip flow, city, or feature you mention.">
-  <div class="flex flex-col gap-4">
+  <div class="contact-support__mobile flex flex-col gap-4">
     @if (errorMessage()) {
       <div class="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
         {{ errorMessage() }}
@@ -112,5 +114,188 @@
         </div>
       }
     </div>
+  </div>
+
+  <div class="contact-support__desktop">
+    @if (errorMessage()) {
+      <div class="contact-support__alert contact-support__alert--error">
+        {{ errorMessage() }}
+      </div>
+    }
+
+    @if (feedbackMessage()) {
+      <div class="contact-support__alert contact-support__alert--success">
+        {{ feedbackMessage() }}
+      </div>
+    }
+
+    <section class="contact-support__topic-card" aria-labelledby="support-topic-title">
+      <h2 id="support-topic-title" class="contact-support__section-title">Pick A Topic</h2>
+
+      <div class="contact-support__topic-list" aria-label="Support topics">
+        @for (category of categories; track category.value) {
+          <button
+            type="button"
+            class="contact-support__topic-chip"
+            [class.contact-support__topic-chip--selected]="selectedCategory() === category.value"
+            [attr.aria-pressed]="selectedCategory() === category.value"
+            (click)="selectCategory(category.value)">
+            {{ category.label }}
+          </button>
+        }
+      </div>
+
+      @if (selectedCategoryHelper()) {
+        <p class="contact-support__topic-helper">{{ selectedCategoryHelper() }}</p>
+      }
+    </section>
+
+    <div class="contact-support__columns">
+      <section class="contact-support__form-card" aria-labelledby="support-request-title">
+        <h2 id="support-request-title" class="contact-support__section-title">Support Request</h2>
+
+        <div class="contact-support__fields">
+          <div class="contact-support__field">
+            <label for="desktop-support-subject" class="contact-support__label">Subject</label>
+            <div
+              class="contact-support__input-shell"
+              [class.contact-support__input-shell--error]="subjectError()">
+              <input
+                id="desktop-support-subject"
+                type="text"
+                [value]="subject()"
+                [attr.aria-invalid]="subjectError() ? 'true' : null"
+                [attr.aria-describedby]="subjectError() ? 'desktop-support-subject-error' : null"
+                (input)="subject.set($any($event.target).value)"
+                placeholder="Short summary of what happened" />
+            </div>
+            @if (subjectError()) {
+              <p id="desktop-support-subject-error" class="contact-support__error">{{ subjectError() }}</p>
+            }
+          </div>
+
+          <div class="contact-support__field">
+            <label for="desktop-support-message" class="contact-support__label">Message</label>
+            <div
+              class="contact-support__input-shell contact-support__input-shell--textarea"
+              [class.contact-support__input-shell--error]="messageError()">
+              <textarea
+                id="desktop-support-message"
+                rows="6"
+                [value]="message()"
+                [attr.aria-invalid]="messageError() ? 'true' : null"
+                [attr.aria-describedby]="messageError() ? 'desktop-support-message-error' : null"
+                (input)="message.set($any($event.target).value)"
+                placeholder="Tell us what city, page, or trip flow you were in and what felt wrong."></textarea>
+            </div>
+            @if (messageError()) {
+              <p id="desktop-support-message-error" class="contact-support__error">{{ messageError() }}</p>
+            }
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="contact-support__submit"
+          (click)="submit()"
+          [disabled]="isSaving()">
+          {{ isSaving() ? 'Sending Request...' : 'Send Support Request' }}
+        </button>
+      </section>
+
+      <aside class="contact-support__help-card" aria-labelledby="before-send-title">
+        <h2 id="before-send-title" class="contact-support__section-title">Before You Send</h2>
+
+        <div class="contact-support__guidance-list">
+          @for (item of guidanceItems; track item.title) {
+            <div class="contact-support__guidance-row">
+              <span class="contact-support__guidance-icon" aria-hidden="true">
+                @switch (item.icon) {
+                  @case ('document') {
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 3h7l4 4v14H7V3z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3v5h5M9 12h6M9 16h4" />
+                    </svg>
+                  }
+                  @case ('location') {
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21s7-5.1 7-11a7 7 0 10-14 0c0 5.9 7 11 7 11z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+                    </svg>
+                  }
+                  @case ('camera') {
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 8h4l1.5-2h5L16 8h4v11H4V8z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16a3 3 0 100-6 3 3 0 000 6z" />
+                    </svg>
+                  }
+                  @case ('lock') {
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 11V8a5 5 0 0110 0v3" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 11h12v9H6v-9z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2" />
+                    </svg>
+                  }
+                }
+              </span>
+
+              <div class="contact-support__guidance-copy">
+                <h3>{{ item.title }}</h3>
+                <p>{{ item.description }}</p>
+              </div>
+            </div>
+          }
+        </div>
+      </aside>
+    </div>
+
+    <section class="contact-support__recent-card" aria-labelledby="recent-requests-title">
+      <h2 id="recent-requests-title" class="contact-support__section-title">Recent Requests</h2>
+
+      @if (isLoading()) {
+        <div class="contact-support__recent-state">
+          <span class="contact-support__state-icon" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5.5h16v10H8l-4 4v-14z" />
+            </svg>
+          </span>
+          <p>Loading recent requests...</p>
+        </div>
+      } @else if (requests().length === 0) {
+        <div class="contact-support__recent-empty">
+          <span class="contact-support__state-icon contact-support__state-icon--empty" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 8h16v10H4V8z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 8V6h8v2M8 13h8" />
+            </svg>
+          </span>
+
+          <div class="contact-support__empty-copy">
+            <h3>No support requests yet.</h3>
+            <p>When you send one, it will appear here with a reference code.</p>
+          </div>
+        </div>
+      } @else {
+        <div class="contact-support__request-list">
+          @for (request of requests(); track request.id) {
+            <article class="contact-support__request-card">
+              <div class="contact-support__request-header">
+                <div class="contact-support__request-meta">
+                  <p class="contact-support__request-code">{{ request.referenceCode }}</p>
+                  <p class="contact-support__request-category">{{ categoryLabel(request.category) }}</p>
+                </div>
+                <span class="contact-support__status">{{ request.status }}</span>
+              </div>
+
+              <h3 class="contact-support__request-subject">{{ request.subject }}</h3>
+              <p class="contact-support__request-message">{{ request.message }}</p>
+              <time class="contact-support__request-date" [attr.datetime]="request.createdAt">
+                {{ request.createdAt | date: 'mediumDate' }}
+              </time>
+            </article>
+          }
+        </div>
+      }
+    </section>
   </div>
 </app-settings-subpage-shell>
