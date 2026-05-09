@@ -194,6 +194,14 @@
 }
 
 @media (min-width: 1024px) {
+  app-page-top-nav {
+    display: none;
+  }
+
+  .lp-page__scroll {
+    padding-top: var(--space-8);
+  }
+
   .lp-page__grid {
     grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
     gap: var(--space-5);

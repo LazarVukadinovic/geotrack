@@ -393,6 +393,14 @@
 }
 
 @media (min-width: 1024px) {
+  app-page-top-nav {
+    display: none;
+  }
+
+  .lpc-page__scroll {
+    padding-top: var(--space-8);
+  }
+
   .lpc-page__list,
   .lpc-page__pagination {
     padding-inline: var(--desktop-page-gutter);
@@ -476,12 +484,13 @@
 
   .lpc-card--large .lpc-card__badge,
   .lpc-card--compact .lpc-card__badge--compact,
-  .lpc-card__location,
-  .lpc-card__desc,
-  .lpc-card__hours,
-  .lpc-card__hours-compact,
-  .lpc-card__cta,
-  .lpc-card__cta--compact {
+  .lpc-card--large .lpc-card__location,
+  .lpc-card--compact .lpc-card__location--compact,
+  .lpc-card--large .lpc-card__desc,
+  .lpc-card--large .lpc-card__hours,
+  .lpc-card--compact .lpc-card__hours-compact,
+  .lpc-card--large .lpc-card__cta,
+  .lpc-card--compact .lpc-card__cta--compact {
     display: none;
   }
 
