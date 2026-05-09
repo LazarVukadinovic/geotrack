@@ -449,6 +449,14 @@
 }
 
 @media (min-width: 1024px) {
+  app-page-top-nav {
+    display: none;
+  }
+
+  .ch-page__scroll {
+    padding-top: var(--space-8);
+  }
+
   .ch-page__filters,
   .ch-page__list,
   .ch-page__pagination {
@@ -537,11 +545,13 @@
 
   .chc--large .chc__badge,
   .chc--compact .chc__badge--compact,
-  .chc__location,
-  .chc__meta,
-  .chc__desc,
-  .chc__footer,
-  .chc__footer--compact {
+  .chc--large .chc__location,
+  .chc--compact .chc__location--compact,
+  .chc--large .chc__meta,
+  .chc--compact .chc__meta,
+  .chc--large .chc__desc,
+  .chc--large .chc__cta,
+  .chc--compact .chc__cta--compact {
     display: none;
   }
 
@@ -575,5 +585,23 @@
     font-size: var(--text-xs);
     font-weight: 600;
     opacity: 0.88;
+  }
+
+  .chc--large .chc__footer,
+  .chc--compact .chc__footer--compact {
+    display: block;
+    margin-top: 0;
+  }
+
+  .chc__save {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   }
 }

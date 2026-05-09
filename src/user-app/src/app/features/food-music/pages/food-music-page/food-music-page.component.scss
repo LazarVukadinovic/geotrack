@@ -449,6 +449,14 @@
 }
 
 @media (min-width: 1024px) {
+  app-page-top-nav {
+    display: none;
+  }
+
+  .fm-page__scroll {
+    padding-top: var(--space-8);
+  }
+
   .fm-page__filters,
   .fm-page__list,
   .fm-page__pagination {
@@ -533,12 +541,13 @@
 
   .fmc--large .fmc__badge,
   .fmc--compact .fmc__badge--compact,
-  .fmc__location,
-  .fmc__desc,
-  .fmc__hours,
-  .fmc__hours-compact,
-  .fmc__cta,
-  .fmc__cta--compact {
+  .fmc--large .fmc__location,
+  .fmc--compact .fmc__location--compact,
+  .fmc--large .fmc__desc,
+  .fmc--large .fmc__hours,
+  .fmc--compact .fmc__hours-compact,
+  .fmc--large .fmc__cta,
+  .fmc--compact .fmc__cta--compact {
     display: none;
   }
 

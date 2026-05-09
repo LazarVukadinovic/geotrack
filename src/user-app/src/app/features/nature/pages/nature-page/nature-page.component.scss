@@ -449,6 +449,14 @@
 }
 
 @media (min-width: 1024px) {
+  app-page-top-nav {
+    display: none;
+  }
+
+  .nat-page__scroll {
+    padding-top: var(--space-8);
+  }
+
   .nat-page__filters,
   .nat-page__list,
   .nat-page__pagination {
@@ -522,10 +530,11 @@
 
   .natc--large .natc__badge,
   .natc--compact .natc__badge--compact,
-  .natc__location,
-  .natc__desc,
-  .natc__cta,
-  .natc__cta--compact {
+  .natc--large .natc__location,
+  .natc--compact .natc__location--compact,
+  .natc--large .natc__desc,
+  .natc--large .natc__cta,
+  .natc--compact .natc__cta--compact {
     display: none;
   }
 

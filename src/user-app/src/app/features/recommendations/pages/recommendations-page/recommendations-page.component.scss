@@ -554,6 +554,14 @@
 }
 
 @media (min-width: 1024px) {
+  app-page-top-nav {
+    display: none;
+  }
+
+  .rec-page__scroll {
+    padding-top: var(--space-8);
+  }
+
   .rec-page__filters,
   .rec-page__list,
   .rec-page__pagination {
@@ -637,12 +645,14 @@
 
   .rec-card--large .rec-card__badge,
   .rec-card--compact .rec-card__badge--compact,
-  .rec-card__reason,
-  .rec-card__location,
-  .rec-card__meta,
-  .rec-card__desc,
-  .rec-card__cta,
-  .rec-card__cta--compact {
+  .rec-card--large .rec-card__reason,
+  .rec-card--large .rec-card__location,
+  .rec-card--compact .rec-card__location--compact,
+  .rec-card--large .rec-card__meta,
+  .rec-card--compact .rec-card__meta,
+  .rec-card--large .rec-card__desc,
+  .rec-card--large .rec-card__cta,
+  .rec-card--compact .rec-card__cta--compact {
     display: none;
   }
 
