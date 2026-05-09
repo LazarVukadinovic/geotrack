@@ -210,14 +210,14 @@ export const routes: Routes = [
         canActivate: [guestGuard],
         loadComponent: () =>
           import('./features/auth/pages/register-page/register-page.component').then(m => m.RegisterPageComponent),
-        data: { hideBottomNav: true, desktopLayout: 'narrow' },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'register/interests',
         canActivate: [interestsOnboardingGuard],
         loadComponent: () =>
           import('./features/auth/pages/interests-page/interests-page.component').then(m => m.InterestsPageComponent),
-        data: { hideBottomNav: true, desktopLayout: 'narrow' },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
 
       // ── Ostale rute ───────────────────────────────────────────────────────
