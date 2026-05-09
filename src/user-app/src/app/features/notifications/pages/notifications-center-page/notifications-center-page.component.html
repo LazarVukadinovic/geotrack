@@ -2,6 +2,25 @@
   <app-page-top-nav title="Notifications" fallbackRoute="/explore" />
 
   <main class="notifications-page__scroll">
+    <section class="notifications-page__desktop-header" aria-labelledby="notifications-desktop-title">
+      <div class="notifications-page__desktop-header-row">
+        <button
+          type="button"
+          class="notifications-page__desktop-back"
+          aria-label="Go back"
+          (click)="goBack()">
+          <svg class="notifications-page__desktop-back-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
+        <div class="notifications-page__desktop-title-stack">
+          <h1 id="notifications-desktop-title" class="notifications-page__desktop-title">Notifications</h1>
+          <p class="notifications-page__desktop-subtitle">Manage your updates and stay informed</p>
+        </div>
+      </div>
+    </section>
+
     <section class="notifications-page__hero" aria-labelledby="notifications-title">
       <span class="notifications-page__eyebrow">Updates</span>
       <h1 id="notifications-title" class="notifications-page__title">Your Notifications</h1>
@@ -13,112 +32,177 @@
       }
     </section>
 
-    @if (hasUnread()) {
-      <div class="notifications-page__toolbar">
-        <button type="button" class="notifications-page__mark-all" (click)="markAllRead()">
-          Mark all read
-        </button>
-      </div>
-    }
-
-    @if (loading()) {
-      <div class="notifications-page__list" aria-hidden="true">
-        @for (slot of [1, 2, 3]; track slot) {
-          <article class="notification-card notification-card--skeleton">
-            <span class="notification-card__icon notification-card__icon--skeleton"></span>
-            <div class="notification-card__content">
-              <span class="notification-card__line notification-card__line--title"></span>
-              <span class="notification-card__line"></span>
-              <span class="notification-card__line notification-card__line--short"></span>
-            </div>
-          </article>
-        }
-      </div>
-    } @else if (loadError()) {
-      <div class="notifications-page__state">
-        <app-empty-state
-          title="Something went wrong"
-          [message]="loadError()!"
-        />
-        <button type="button" class="notifications-page__retry" (click)="retry()">Try Again</button>
-      </div>
-    } @else if (items().length === 0) {
-      <div class="notifications-page__state">
-        <app-empty-state
-          title="No notifications yet"
-          message="Contribution decisions and account updates will appear here."
-        />
-      </div>
-    } @else {
-      <div class="notifications-page__list" aria-label="Notifications">
-        @for (notification of items(); track notification.id) {
-          <article
-            class="notification-card"
-            [class.notification-card--unread]="!notification.isRead"
-            [class.notification-card--clickable]="notification.actionUrl"
-            role="button"
-            tabindex="0"
-            [attr.aria-label]="notification.title"
-            (click)="openNotification(notification)"
-            (keydown.enter)="openNotification(notification)"
-            (keydown.space)="$event.preventDefault(); openNotification(notification)"
-          >
-            <div
-              class="notification-card__icon"
-              [class.notification-card__icon--approved]="iconKind(notification) === 'approved'"
-              [class.notification-card__icon--rejected]="iconKind(notification) === 'rejected'"
-            >
-              @switch (iconKind(notification)) {
-                @case ('approved') {
-                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M20 6 9 17l-5-5" />
-                  </svg>
-                }
-                @case ('rejected') {
-                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12" />
-                  </svg>
-                }
-                @default {
-                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Z" />
-                    <path stroke-linecap="round" d="M10 20h4" />
-                  </svg>
-                }
-              }
-            </div>
-
-            <div class="notification-card__content">
-              <div class="notification-card__topline">
-                <h2 class="notification-card__title">{{ notification.title }}</h2>
-                @if (!notification.isRead) {
-                  <span class="notification-card__unread-dot" aria-label="Unread"></span>
-                }
-              </div>
-              <p class="notification-card__message">{{ notification.message }}</p>
-              <div class="notification-card__meta">
-                <span>{{ timeLabel(notification.createdAt) }}</span>
-                @if (notification.actionUrl) {
-                  <span class="notification-card__action">View</span>
-                }
-              </div>
-            </div>
-          </article>
-        }
-      </div>
-
-      @if (hasMore()) {
-        <div class="notifications-page__pagination">
+    <section class="notifications-page__panel">
+      <div class="notifications-page__desktop-controls">
+        <div class="notifications-page__segments" aria-label="Notification filters">
           <button
             type="button"
-            class="notifications-page__load-more"
-            [disabled]="loadingMore()"
-            (click)="loadMore()"
-          >
-            {{ loadingMore() ? 'Loading...' : 'Load More' }}
+            class="notifications-page__segment"
+            [class.notifications-page__segment--active]="activeFilter() === 'all'"
+            [attr.aria-pressed]="activeFilter() === 'all'"
+            (click)="selectFilter('all')">
+            All
+          </button>
+          <button
+            type="button"
+            class="notifications-page__segment"
+            [class.notifications-page__segment--active]="activeFilter() === 'unread'"
+            [attr.aria-pressed]="activeFilter() === 'unread'"
+            (click)="selectFilter('unread')">
+            Unread
+          </button>
+          <button
+            type="button"
+            class="notifications-page__segment"
+            [class.notifications-page__segment--active]="activeFilter() === 'updates'"
+            [attr.aria-pressed]="activeFilter() === 'updates'"
+            (click)="selectFilter('updates')">
+            Updates
+          </button>
+        </div>
+
+        <button type="button" class="notifications-page__time-filter" aria-label="Notification time range: All time">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M8 2.75v3.5m8-3.5v3.5M4.5 9.25h15M6.5 5h11A2.5 2.5 0 0120 7.5v10A2.5 2.5 0 0117.5 20h-11A2.5 2.5 0 014 17.5v-10A2.5 2.5 0 016.5 5z" />
+          </svg>
+          <span>All time</span>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.1" d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      </div>
+
+      @if (hasUnread()) {
+        <div class="notifications-page__toolbar">
+          <button type="button" class="notifications-page__mark-all" (click)="markAllRead()">
+            Mark all read
           </button>
         </div>
       }
-    }
+
+      @if (loading()) {
+        <div class="notifications-page__list" aria-hidden="true">
+          @for (slot of [1, 2, 3]; track slot) {
+            <article class="notification-card notification-card--skeleton">
+              <span class="notification-card__icon notification-card__icon--skeleton"></span>
+              <div class="notification-card__content">
+                <span class="notification-card__line notification-card__line--title"></span>
+                <span class="notification-card__line"></span>
+                <span class="notification-card__line notification-card__line--short"></span>
+              </div>
+            </article>
+          }
+        </div>
+      } @else if (loadError()) {
+        <div class="notifications-page__state">
+          <app-empty-state
+            title="Something went wrong"
+            [message]="loadError()!"
+          />
+          <button type="button" class="notifications-page__retry" (click)="retry()">Try Again</button>
+        </div>
+      } @else if (items().length === 0) {
+        <div class="notifications-page__state notifications-page__state--empty">
+          <div class="notifications-page__empty-illustration" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6.5 9a5.5 5.5 0 0111 0c0 6 2.5 7.25 2.5 7.25h-16S6.5 15 6.5 9z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.75 18.25a2.25 2.25 0 004.5 0" />
+            </svg>
+            <span class="notifications-page__empty-badge">0</span>
+            <span class="notifications-page__empty-spark notifications-page__empty-spark--one"></span>
+            <span class="notifications-page__empty-spark notifications-page__empty-spark--two"></span>
+            <span class="notifications-page__empty-spark notifications-page__empty-spark--three"></span>
+          </div>
+
+          <app-empty-state
+            title="No notifications yet"
+            message="Contribution decisions and account updates will appear here."
+          />
+
+          <div class="notifications-page__desktop-empty-copy">
+            <h2>No notifications yet</h2>
+            <p>Contribution decisions and account updates will appear here.</p>
+          </div>
+
+          <button type="button" class="notifications-page__check-updates" (click)="retry()">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M6.5 9a5.5 5.5 0 0111 0c0 6 2.5 7.25 2.5 7.25h-16S6.5 15 6.5 9z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M9.75 18.25a2.25 2.25 0 004.5 0" />
+            </svg>
+            <span>Check for updates</span>
+          </button>
+        </div>
+      } @else {
+        <div class="notifications-page__list" aria-label="Notifications">
+          @for (notification of items(); track notification.id) {
+            <article
+              class="notification-card"
+              [class.notification-card--unread]="!notification.isRead"
+              [class.notification-card--clickable]="notification.actionUrl"
+              role="button"
+              tabindex="0"
+              [attr.aria-label]="notification.title"
+              (click)="openNotification(notification)"
+              (keydown.enter)="openNotification(notification)"
+              (keydown.space)="$event.preventDefault(); openNotification(notification)"
+            >
+              <div
+                class="notification-card__icon"
+                [class.notification-card__icon--approved]="iconKind(notification) === 'approved'"
+                [class.notification-card__icon--rejected]="iconKind(notification) === 'rejected'"
+              >
+                @switch (iconKind(notification)) {
+                  @case ('approved') {
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M20 6 9 17l-5-5" />
+                    </svg>
+                  }
+                  @case ('rejected') {
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                  }
+                  @default {
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Z" />
+                      <path stroke-linecap="round" d="M10 20h4" />
+                    </svg>
+                  }
+                }
+              </div>
+
+              <div class="notification-card__content">
+                <div class="notification-card__topline">
+                  <h2 class="notification-card__title">{{ notification.title }}</h2>
+                  @if (!notification.isRead) {
+                    <span class="notification-card__unread-dot" aria-label="Unread"></span>
+                  }
+                </div>
+                <p class="notification-card__message">{{ notification.message }}</p>
+                <div class="notification-card__meta">
+                  <span>{{ timeLabel(notification.createdAt) }}</span>
+                  @if (notification.actionUrl) {
+                    <span class="notification-card__action">View</span>
+                  }
+                </div>
+              </div>
+            </article>
+          }
+        </div>
+
+        @if (hasMore()) {
+          <div class="notifications-page__pagination">
+            <button
+              type="button"
+              class="notifications-page__load-more"
+              [disabled]="loadingMore()"
+              (click)="loadMore()"
+            >
+              {{ loadingMore() ? 'Loading...' : 'Load More' }}
+            </button>
+          </div>
+        }
+      }
+    </section>
   </main>
 </div>

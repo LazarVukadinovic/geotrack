@@ -1,4 +1,5 @@
-import { Component, computed, inject } from '@angular/core';
+import { Location } from '@angular/common';
+import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import {
   AppNotification,
@@ -6,6 +7,8 @@ import {
 } from '../../../../core/services/app-notifications.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import { PageTopNavComponent } from '../../../../shared/components/page-top-nav/page-top-nav.component';
+
+type NotificationFilter = 'all' | 'unread' | 'updates';
 
 @Component({
   selector: 'app-notifications-center-page',
@@ -16,8 +19,10 @@ import { PageTopNavComponent } from '../../../../shared/components/page-top-nav/
 })
 export class NotificationsCenterPageComponent {
   private readonly notifications = inject(AppNotificationsService);
+  private readonly location = inject(Location);
   private readonly router = inject(Router);
 
+  protected readonly activeFilter = signal<NotificationFilter>('all');
   protected readonly items = this.notifications.items;
   protected readonly loading = this.notifications.loading;
   protected readonly loadingMore = this.notifications.loadingMore;
@@ -40,6 +45,21 @@ export class NotificationsCenterPageComponent {
 
   protected retry(): void {
     this.notifications.loadInitial(true);
+  }
+
+  protected selectFilter(filter: NotificationFilter): void {
+    this.activeFilter.set(filter);
+  }
+
+  protected goBack(): void {
+    const navigationId = Number(globalThis.history?.state?.navigationId ?? 0);
+
+    if (navigationId > 1) {
+      this.location.back();
+      return;
+    }
+
+    void this.router.navigateByUrl('/explore');
   }
 
   protected openNotification(notification: AppNotification): void {
