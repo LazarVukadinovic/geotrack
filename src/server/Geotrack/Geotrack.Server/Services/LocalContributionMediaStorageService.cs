@@ -6,6 +6,7 @@ namespace Geotrack.Server.Services;
 public sealed class LocalContributionMediaStorageService : IContributionMediaStorageService
 {
     private const int MaxImageBytes = 8 * 1024 * 1024;
+    private const int MaxOwnershipProofBytes = 10 * 1024 * 1024;
     private const string ContributionUrlPrefix = "/media/uploads/contributions/";
 
     private readonly string _mediaDirectory;
@@ -31,6 +32,34 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
         Directory.CreateDirectory(_mediaDirectory);
 
         var fileName = $"user-{userId}-stay-{Guid.NewGuid():N}{detectedImage.Extension}";
+        var filePath = Path.Combine(_mediaDirectory, fileName);
+
+        await File.WriteAllBytesAsync(filePath, fileBytes);
+
+        return new StoredContributionMediaFile
+        {
+            MediaUrl = $"{ContributionUrlPrefix}{fileName}",
+        };
+    }
+
+    public async Task<StoredContributionMediaFile> StoreOwnershipProofAsync(
+        int userId,
+        byte[] fileBytes,
+        string? originalFileName,
+        string? contentType)
+    {
+        if (fileBytes.Length == 0)
+            throw new InvalidOperationException("Please select an ownership proof document to upload.");
+
+        if (fileBytes.Length > MaxOwnershipProofBytes)
+            throw new InvalidOperationException("Ownership proof document must be 10 MB or smaller.");
+
+        var detectedFile = DetectOwnershipProofFile(fileBytes, originalFileName, contentType)
+            ?? throw new InvalidOperationException("Ownership proof document must be a PDF, JPG, PNG, or WEBP file.");
+
+        Directory.CreateDirectory(_mediaDirectory);
+
+        var fileName = $"user-{userId}-ownership-proof-{Guid.NewGuid():N}{detectedFile.Extension}";
         var filePath = Path.Combine(_mediaDirectory, fileName);
 
         await File.WriteAllBytesAsync(filePath, fileBytes);
@@ -86,6 +115,54 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
         return true;
     }
 
+    private static DetectedUploadFile? DetectOwnershipProofFile(
+        ReadOnlySpan<byte> fileBytes,
+        string? originalFileName,
+        string? contentType)
+    {
+        var extension = Path.GetExtension(originalFileName ?? string.Empty).ToLowerInvariant();
+        var normalizedContentType = contentType?.Trim().ToLowerInvariant();
+
+        if (fileBytes.Length >= 5 &&
+            fileBytes[0] == 0x25 &&
+            fileBytes[1] == 0x50 &&
+            fileBytes[2] == 0x44 &&
+            fileBytes[3] == 0x46 &&
+            fileBytes[4] == 0x2D &&
+            extension == ".pdf" &&
+            normalizedContentType == "application/pdf")
+        {
+            return new DetectedUploadFile(".pdf");
+        }
+
+        var detectedImage = DetectImageType(fileBytes);
+        if (detectedImage is null)
+            return null;
+
+        if (detectedImage.Extension == ".jpg" &&
+            extension is ".jpg" or ".jpeg" &&
+            normalizedContentType == "image/jpeg")
+        {
+            return new DetectedUploadFile(".jpg");
+        }
+
+        if (detectedImage.Extension == ".png" &&
+            extension == ".png" &&
+            normalizedContentType == "image/png")
+        {
+            return new DetectedUploadFile(".png");
+        }
+
+        if (detectedImage.Extension == ".webp" &&
+            extension == ".webp" &&
+            normalizedContentType == "image/webp")
+        {
+            return new DetectedUploadFile(".webp");
+        }
+
+        return null;
+    }
+
     private static DetectedImage? DetectImageType(ReadOnlySpan<byte> fileBytes)
     {
         if (fileBytes.Length >= 8 &&
@@ -137,4 +214,5 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
     }
 
     private sealed record DetectedImage(string Extension);
+    private sealed record DetectedUploadFile(string Extension);
 }

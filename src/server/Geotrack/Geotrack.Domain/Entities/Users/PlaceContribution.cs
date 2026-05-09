@@ -59,6 +59,11 @@ public class PlaceContribution
     public string StayAmenitiesJson { get; set; } = "[]";
     public string BookingPartnersJson { get; set; } = "[]";
 
+    public string? OwnershipProofDocumentUrl { get; set; }
+    public string? OwnershipProofOriginalFileName { get; set; }
+    public string? OwnershipProofContentType { get; set; }
+    public DateTime? OwnershipProofUploadedAt { get; set; }
+
     public ICollection<PlaceContributionImage> Images { get; set; } = new List<PlaceContributionImage>();
 
     public DateTime SubmittedAt { get; set; }

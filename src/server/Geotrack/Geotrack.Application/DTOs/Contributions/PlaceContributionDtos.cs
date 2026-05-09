@@ -40,6 +40,7 @@ public class PlaceContributionListItemDto
     public DateTime? UpdatedAt { get; set; }
     public int? PlaceId { get; set; }
     public int? PublishedPlaceId { get; set; }
+    public bool HasOwnershipProofDocument { get; set; }
 }
 
 public class PlaceContributionDetailDto : PlaceContributionListItemDto
@@ -72,6 +73,10 @@ public class PlaceContributionDetailDto : PlaceContributionListItemDto
     public List<PlaceContributionImageDto> Images { get; set; } = new();
     public string? ReviewNote { get; set; }
     public DateTime? ReviewedAt { get; set; }
+    public string? OwnershipProofDocumentUrl { get; set; }
+    public string? OwnershipProofOriginalFileName { get; set; }
+    public string? OwnershipProofContentType { get; set; }
+    public DateTime? OwnershipProofUploadedAt { get; set; }
 }
 
 public class UpsertPlaceContributionDto

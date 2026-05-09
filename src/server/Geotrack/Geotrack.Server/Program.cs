@@ -125,6 +125,10 @@ builder.Services.AddScoped<IContributionMediaStorageService, LocalContributionMe
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IFavoriteRepository, FavoriteRepository>();
+builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
+builder.Services.AddScoped<ITagRepository, TagRepository>();
+builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
 
 var forwardedHeadersEnabled = ConfigureForwardedHeaders(builder);
 
