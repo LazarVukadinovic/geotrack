@@ -24,7 +24,6 @@ export class SettingsComponent {
   goBack():            void { this.router.navigate(['/profile']); }
   goToProfile():       void { this.router.navigate(['/profile/edit'], { queryParams: { from: 'settings' } }); }
   changePassword():    void { this.router.navigate(['/settings/change-password']); }
-  openNotifications(): void { this.router.navigate(['/settings/notifications']); }
   openPrivacy():       void { this.router.navigate(['/settings/privacy-settings']); }
   openAnalytics():     void { this.router.navigate(['/settings/analytics']); }
   openInterests():     void { this.router.navigate(['/settings/interests'], { queryParams: { from: 'settings' } }); }
