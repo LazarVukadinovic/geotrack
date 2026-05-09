@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, nationalManagerGuard, regionalManagerGuard } from './core/guards/auth-guard';
+import { authGuard, nationalManagerGuard, regionalManagerGuard } from './core/guards/auth.guard';
 export const routes: Routes = [
   // Redirect root → login
   { path: '', redirectTo: 'login', pathMatch: 'full' },
