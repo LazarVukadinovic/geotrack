@@ -93,7 +93,7 @@ export class AuthService {
   getHomeRoute(): string {
     const role: UserRole | undefined = this._currentUser()?.role;
     switch (role) {
-      case 'National Manager': return '/national-overview';
+      case 'National Manager': return '/national-dashboard';
       case 'Regional Manager': return '/dashboard';
       default:                 return '/login';
     }
