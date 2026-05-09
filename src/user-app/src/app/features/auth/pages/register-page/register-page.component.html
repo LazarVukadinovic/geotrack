@@ -1,273 +1,454 @@
 <div class="auth-register min-h-full flex flex-col bg-[#fafaf9]">
+  <aside class="auth-register__showcase" aria-hidden="true">
+    <div class="auth-register__showcase-content">
+      <div class="auth-register__showcase-brand">
+        <img src="images/logo.png" alt="" class="auth-register__showcase-logo" />
+        <span>GeoTrack</span>
+      </div>
 
-  <div class="auth-register__hero" style="background: linear-gradient(to bottom, #2d4a7a 0%, #5b7fa6 40%, #a8c4d8 70%, #fafaf9 100%);"
-    class="px-6 pt-6 pb-8">
+      <div class="auth-register__showcase-rule"></div>
 
-    <!-- Step indicator -->
-    <div class="pt-3 flex items-center justify-between mb-5">
-      <button type="button" (click)="goBack()" class="w-8 h-8 flex items-center justify-center text-white/80">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-        </svg>
+      <div class="auth-register__showcase-copy">
+        <h2>Create your GeoTrack account</h2>
+        <p>Join our community and unlock personalized travel recommendations and itineraries.</p>
+      </div>
+    </div>
+
+    <div class="auth-register__map-visual">
+      <span class="auth-register__route auth-register__route--green"></span>
+      <span class="auth-register__route auth-register__route--blue"></span>
+      <span class="auth-register__pin auth-register__pin--primary"></span>
+      <span class="auth-register__pin auth-register__pin--green"></span>
+      <span class="auth-register__pin auth-register__pin--orange"></span>
+    </div>
+  </aside>
+
+  <div class="auth-register__form-panel">
+    <div class="auth-register__hero px-6 pt-6 pb-8">
+      <!-- Step indicator -->
+      <div class="auth-register__progress pt-3 flex items-center justify-between mb-5">
+        <button
+          type="button"
+          (click)="goBack()"
+          class="auth-register__back w-8 h-8 flex items-center justify-center text-white/80"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        </button>
+        <span
+          class="auth-register__step-label text-xs font-semibold tracking-[0.15em] text-white/80"
+          >STEP 1 OF 2</span
+        >
+        <div class="auth-register__progress-spacer w-8"></div>
+      </div>
+      <div
+        class="auth-register__progress-track h-1.5 bg-white/20 rounded-full overflow-hidden mb-5"
+      >
+        <div class="auth-register__progress-fill h-full w-1/2 bg-white rounded-full"></div>
+      </div>
+
+      <h1 class="auth-register__title text-2xl font-bold text-[#0f172a] tracking-tight mb-1.5">
+        Create your account
+      </h1>
+      <p class="auth-register__subtitle text-base text-slate-700 leading-relaxed">
+        Join our premium guide to unlock personalized recommendations and itineraries.
+      </p>
+    </div>
+
+    <div class="auth-register__body flex-1 px-6 pb-6 flex flex-col bg-[#fafaf9]">
+      <!-- Full Name -->
+      <div class="auth-register__field auth-register__field--name mb-4">
+        <label
+          for="register-full-name"
+          class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block"
+        >
+          Name
+        </label>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+            <svg
+              class="w-4 h-4 text-slate-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.5"
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+              />
+            </svg>
+          </div>
+          <input
+            id="register-full-name"
+            name="fullName"
+            type="text"
+            autocomplete="name"
+            [(ngModel)]="fullName"
+            (ngModelChange)="onFieldInput()"
+            placeholder="Enter your name"
+            class="w-full pl-10 pr-4 py-3.5 bg-white border rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:ring-2 focus:ring-orange-100 transition-all duration-200"
+            [class.border-slate-200]="!fullNameError"
+            [class.border-red-400]="!!fullNameError"
+            [class.focus:border-[#e8570a]]="!fullNameError"
+            [class.focus:border-red-400]="!!fullNameError"
+          />
+        </div>
+        @if (fullNameError) {
+          <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ fullNameError }}</p>
+        }
+      </div>
+
+      <!-- Email -->
+      <div class="auth-register__field auth-register__field--email mb-4">
+        <label
+          for="register-email"
+          class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block"
+        >
+          Email Address
+        </label>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+            <svg
+              class="w-4 h-4 text-slate-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.5"
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+              />
+            </svg>
+          </div>
+          <input
+            id="register-email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            [(ngModel)]="email"
+            (ngModelChange)="onFieldInput()"
+            placeholder="name@example.com"
+            class="w-full pl-10 pr-4 py-3.5 bg-white border rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:ring-2 focus:ring-orange-100 transition-all duration-200"
+            [class.border-slate-200]="!emailError"
+            [class.border-red-400]="!!emailError"
+            [class.focus:border-[#e8570a]]="!emailError"
+            [class.focus:border-red-400]="!!emailError"
+          />
+        </div>
+        @if (emailError) {
+          <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ emailError }}</p>
+        }
+      </div>
+
+      <!-- Create Password -->
+      <div class="auth-register__field auth-register__field--password mb-3">
+        <div class="auth-register__password-control">
+          <label
+            for="register-password"
+            class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block"
+          >
+            Create Password
+          </label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+              <svg
+                class="w-4 h-4 text-slate-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.5"
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
+              </svg>
+            </div>
+            <input
+              id="register-password"
+              name="password"
+              [type]="showPassword ? 'text' : 'password'"
+              [(ngModel)]="password"
+              placeholder="Enter your password"
+              autocomplete="new-password"
+              (ngModelChange)="checkPasswordRequirements(); onFieldInput()"
+              class="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8570a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
+            />
+            @if (password.length > 0) {
+              <button
+                (click)="showPassword = !showPassword"
+                type="button"
+                class="absolute inset-y-0 right-4 flex items-center text-slate-300 hover:text-slate-500 transition-colors"
+              >
+                @if (!showPassword) {
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="1.5"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
+                  </svg>
+                }
+                @if (showPassword) {
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="1.5"
+                      d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+                    />
+                  </svg>
+                }
+              </button>
+            }
+          </div>
+
+          @if (passwordError) {
+            <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ passwordError }}</p>
+          }
+        </div>
+
+        <!-- Password requirements -->
+        <div
+          class="auth-register__requirements mt-4 bg-white border border-slate-100 rounded-2xl px-4 py-3 space-y-2"
+        >
+          <div class="auth-register__requirements-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.6"
+                d="M12 3.5l7 2.6v5.3c0 4.2-2.8 7.9-7 9.1-4.2-1.2-7-4.9-7-9.1V6.1l7-2.6z"
+              />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.8"
+                d="M8.9 12.1l2 2 4.3-4.5"
+              />
+            </svg>
+          </div>
+          <p class="text-sm font-bold text-slate-500 mb-2">Password requirements:</p>
+          <div class="auth-register__requirement flex items-center gap-2">
+            <div
+              class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-none transition-colors duration-200"
+              [class.border-[#e8570a]]="req.minLength"
+              [class.bg-[#e8570a]]="req.minLength"
+              [class.border-slate-300]="!req.minLength"
+            >
+              @if (req.minLength) {
+                <svg
+                  class="w-2.5 h-2.5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="3"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              }
+            </div>
+            <span
+              class="text-xs"
+              [class.text-slate-500]="!req.minLength"
+              [class.text-[#e8570a]]="req.minLength"
+            >
+              At least 8 characters long
+            </span>
+          </div>
+          <div class="auth-register__requirement flex items-center gap-2">
+            <div
+              class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-none transition-colors duration-200"
+              [class.border-[#e8570a]]="req.hasNumber"
+              [class.bg-[#e8570a]]="req.hasNumber"
+              [class.border-slate-300]="!req.hasNumber"
+            >
+              @if (req.hasNumber) {
+                <svg
+                  class="w-2.5 h-2.5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="3"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              }
+            </div>
+            <span
+              class="text-xs"
+              [class.text-slate-500]="!req.hasNumber"
+              [class.text-[#e8570a]]="req.hasNumber"
+            >
+              Contains a number
+            </span>
+          </div>
+          <div class="auth-register__requirement flex items-center gap-2">
+            <div
+              class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-none transition-colors duration-200"
+              [class.border-[#e8570a]]="req.hasSpecial"
+              [class.bg-[#e8570a]]="req.hasSpecial"
+              [class.border-slate-300]="!req.hasSpecial"
+            >
+              @if (req.hasSpecial) {
+                <svg
+                  class="w-2.5 h-2.5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="3"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              }
+            </div>
+            <span
+              class="text-xs"
+              [class.text-slate-500]="!req.hasSpecial"
+              [class.text-[#e8570a]]="req.hasSpecial"
+            >
+              Contains a special character
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Repeat Password -->
+      <div class="auth-register__field auth-register__field--repeat mt-3 mb-4">
+        <label
+          for="register-repeat-password"
+          class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block"
+        >
+          Repeat Password
+        </label>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+            <svg
+              class="w-4 h-4 text-slate-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.5"
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+              />
+            </svg>
+          </div>
+          <input
+            id="register-repeat-password"
+            name="repeatPassword"
+            [type]="showRepeatPassword ? 'text' : 'password'"
+            [(ngModel)]="repeatPassword"
+            (ngModelChange)="onFieldInput()"
+            placeholder="Repeat your password"
+            autocomplete="new-password"
+            class="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8570a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
+            [class.border-red-400]="!!repeatPasswordError"
+            [class.border-slate-200]="!repeatPasswordError"
+          />
+          @if (repeatPassword.length > 0) {
+            <button
+              (click)="showRepeatPassword = !showRepeatPassword"
+              type="button"
+              class="absolute inset-y-0 right-4 flex items-center text-slate-300 hover:text-slate-500 transition-colors"
+            >
+              @if (!showRepeatPassword) {
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                  />
+                </svg>
+              }
+              @if (showRepeatPassword) {
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+                  />
+                </svg>
+              }
+            </button>
+          }
+        </div>
+        @if (repeatPasswordError) {
+          <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ repeatPasswordError }}</p>
+        }
+      </div>
+
+      @if (submitErrorMessage) {
+        <div
+          class="auth-register__submit-error mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 text-center"
+        >
+          {{ submitErrorMessage }}
+        </div>
+      }
+
+      <!-- Continue button -->
+      <button
+        type="button"
+        (click)="onContinue()"
+        [disabled]="isLoading"
+        class="auth-register__continue w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200 disabled:opacity-60 disabled:pointer-events-none"
+      >
+        @if (isLoading) {
+          Creating account…
+        } @else {
+          Continue
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M14 5l7 7m0 0l-7 7m7-7H3"
+            />
+          </svg>
+        }
       </button>
-      <span class="text-xs font-semibold tracking-[0.15em] text-white/80">STEP 1 OF 2</span>
-      <div class="w-8"></div>
-    </div>
-    <div class="h-1.5 bg-white/20 rounded-full overflow-hidden mb-5">
-      <div class="h-full w-1/2 bg-white rounded-full"></div>
-    </div>
 
-    <h1 class="text-2xl font-bold text-[#0f172a] tracking-tight mb-1.5">Create your account</h1>
-    <p class="text-base text-slate-700 leading-relaxed">
-      Join our premium guide to unlock personalized recommendations and itineraries.
-    </p>
+      <p class="auth-register__legal text-center text-sm text-slate-400 mt-4">
+        By continuing you create a GeoTrack account with the details above.
+      </p>
+
+      <div class="auth-register__spacer flex-1"></div>
+
+      <p class="auth-register__signin text-center text-base text-slate-500 mt-6">
+        Already have an account?
+        <button type="button" (click)="goToLogin()" class="font-bold text-[#e8570a] ml-1">
+          Sign in
+        </button>
+      </p>
+    </div>
   </div>
-
-  <div class="auth-register__body flex-1 px-6 pb-6 flex flex-col bg-[#fafaf9]">
-
-    <!-- Full Name -->
-    <div class="mb-4">
-      <label for="register-full-name" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
-        Name
-      </label>
-      <div class="relative">
-        <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-          </svg>
-        </div>
-        <input
-          id="register-full-name"
-          name="fullName"
-          type="text"
-          autocomplete="name"
-          [(ngModel)]="fullName"
-          (ngModelChange)="onFieldInput()"
-          placeholder="Enter your name"
-          class="w-full pl-10 pr-4 py-3.5 bg-white border rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:ring-2 focus:ring-orange-100 transition-all duration-200"
-          [class.border-slate-200]="!fullNameError"
-          [class.border-red-400]="!!fullNameError"
-          [class.focus:border-[#e8570a]]="!fullNameError"
-          [class.focus:border-red-400]="!!fullNameError"
-        />
-      </div>
-      @if (fullNameError) {
-        <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ fullNameError }}</p>
-      }
-    </div>
-
-    <!-- Email -->
-    <div class="mb-4">
-      <label for="register-email" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
-        Email Address
-      </label>
-      <div class="relative">
-        <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-          </svg>
-        </div>
-        <input
-          id="register-email"
-          name="email"
-          type="email"
-          autocomplete="email"
-          [(ngModel)]="email"
-          (ngModelChange)="onFieldInput()"
-          placeholder="name@example.com"
-          class="w-full pl-10 pr-4 py-3.5 bg-white border rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:ring-2 focus:ring-orange-100 transition-all duration-200"
-          [class.border-slate-200]="!emailError"
-          [class.border-red-400]="!!emailError"
-          [class.focus:border-[#e8570a]]="!emailError"
-          [class.focus:border-red-400]="!!emailError"
-        />
-      </div>
-      @if (emailError) {
-        <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ emailError }}</p>
-      }
-    </div>
-
-    <!-- Create Password -->
-    <div class="mb-3">
-      <label for="register-password" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
-        Create Password
-      </label>
-      <div class="relative">
-        <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-          </svg>
-        </div>
-        <input
-          id="register-password"
-          name="password"
-          [type]="showPassword ? 'text' : 'password'"
-          [(ngModel)]="password"
-          placeholder="Enter your password"
-          autocomplete="new-password"
-          (ngModelChange)="checkPasswordRequirements(); onFieldInput()"
-          class="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8570a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
-        />
-        @if (password.length > 0) {
-          <button
-            (click)="showPassword = !showPassword"
-            type="button"
-            class="absolute inset-y-0 right-4 flex items-center text-slate-300 hover:text-slate-500 transition-colors">
-            @if (!showPassword) {
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-              </svg>
-            }
-            @if (showPassword) {
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
-              </svg>
-            }
-          </button>
-        }
-      </div>
-
-      @if (passwordError) {
-        <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ passwordError }}</p>
-      }
-
-      <!-- Password requirements -->
-      <div class="mt-4 bg-white border border-slate-100 rounded-2xl px-4 py-3 space-y-2">
-        <p class="text-sm font-bold text-slate-500 mb-2">Password requirements:</p>
-        <div class="flex items-center gap-2">
-          <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-none transition-colors duration-200"
-            [class.border-[#e8570a]]="req.minLength"
-            [class.bg-[#e8570a]]="req.minLength"
-            [class.border-slate-300]="!req.minLength">
-            @if (req.minLength) {
-              <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
-              </svg>
-            }
-          </div>
-          <span class="text-xs" [class.text-slate-500]="!req.minLength" [class.text-[#e8570a]]="req.minLength">
-            At least 8 characters long
-          </span>
-        </div>
-        <div class="flex items-center gap-2">
-          <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-none transition-colors duration-200"
-            [class.border-[#e8570a]]="req.hasNumber"
-            [class.bg-[#e8570a]]="req.hasNumber"
-            [class.border-slate-300]="!req.hasNumber">
-            @if (req.hasNumber) {
-              <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
-              </svg>
-            }
-          </div>
-          <span class="text-xs" [class.text-slate-500]="!req.hasNumber" [class.text-[#e8570a]]="req.hasNumber">
-            Contains a number
-          </span>
-        </div>
-        <div class="flex items-center gap-2">
-          <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-none transition-colors duration-200"
-            [class.border-[#e8570a]]="req.hasSpecial"
-            [class.bg-[#e8570a]]="req.hasSpecial"
-            [class.border-slate-300]="!req.hasSpecial">
-            @if (req.hasSpecial) {
-              <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
-              </svg>
-            }
-          </div>
-          <span class="text-xs" [class.text-slate-500]="!req.hasSpecial" [class.text-[#e8570a]]="req.hasSpecial">
-            Contains a special character
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Repeat Password -->
-    <div class="mt-3 mb-4">
-      <label for="register-repeat-password" class="ml-2 text-[12px] font-bold tracking-[0.15em] text-slate-700 uppercase mb-2 block">
-        Repeat Password
-      </label>
-      <div class="relative">
-        <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-          </svg>
-        </div>
-        <input
-          id="register-repeat-password"
-          name="repeatPassword"
-          [type]="showRepeatPassword ? 'text' : 'password'"
-          [(ngModel)]="repeatPassword"
-          (ngModelChange)="onFieldInput()"
-          placeholder="Repeat your password"
-          autocomplete="new-password"
-          class="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-3xl text-base text-slate-700 placeholder-slate-300 outline-none focus:border-[#e8570a] focus:ring-2 focus:ring-orange-100 transition-all duration-200"
-          [class.border-red-400]="!!repeatPasswordError"
-          [class.border-slate-200]="!repeatPasswordError"
-        />
-        @if (repeatPassword.length > 0) {
-          <button
-            (click)="showRepeatPassword = !showRepeatPassword"
-            type="button"
-            class="absolute inset-y-0 right-4 flex items-center text-slate-300 hover:text-slate-500 transition-colors">
-            @if (!showRepeatPassword) {
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-              </svg>
-            }
-            @if (showRepeatPassword) {
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
-              </svg>
-            }
-          </button>
-        }
-      </div>
-      @if (repeatPasswordError) {
-        <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ repeatPasswordError }}</p>
-      }
-    </div>
-
-    @if (submitErrorMessage) {
-      <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 text-center">
-        {{ submitErrorMessage }}
-      </div>
-    }
-
-    <!-- Continue button -->
-    <button
-      type="button"
-      (click)="onContinue()"
-      [disabled]="isLoading"
-      class="w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-3 transition-all duration-200 disabled:opacity-60 disabled:pointer-events-none">
-      @if (isLoading) {
-        Creating account…
-      } @else {
-        Continue
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
-        </svg>
-      }
-    </button>
-
-    <p class="text-center text-sm text-slate-400 mt-4">
-      By continuing you create a GeoTrack account with the details above.
-    </p>
-
-    <div class="flex-1"></div>
-
-    <p class="text-center text-base text-slate-500 mt-6">
-      Already have an account?
-      <button type="button" (click)="goToLogin()" class="font-bold text-[#e8570a] ml-1">Sign in</button>
-    </p>
-  </div>
-
 </div>
