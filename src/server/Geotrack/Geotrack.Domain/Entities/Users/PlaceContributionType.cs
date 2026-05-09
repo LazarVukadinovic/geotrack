@@ -3,5 +3,6 @@
 public enum PlaceContributionType
 {
     CreatePlace = 1,
-    UpdatePlace = 2
+    UpdatePlace = 2,
+    ClaimOwnership = 3
 }

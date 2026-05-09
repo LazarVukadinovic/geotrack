@@ -86,10 +86,12 @@ public class PlaceContributionService : IPlaceContributionService
         var now = DateTime.UtcNow;
         var type = ParseType(request.Type);
 
-        if (type == PlaceContributionType.CreatePlace &&
+        Place? targetPlace = null;
+
+        if (type is PlaceContributionType.CreatePlace or PlaceContributionType.ClaimOwnership &&
             ownershipProofBytes is null or { Length: 0 })
         {
-            throw new InvalidOperationException("Ownership proof document is required when creating a place contribution.");
+            throw new InvalidOperationException("Ownership proof document is required.");
         }
 
         if (type == PlaceContributionType.UpdatePlace)
@@ -97,9 +99,35 @@ public class PlaceContributionService : IPlaceContributionService
             if (!request.PlaceId.HasValue)
                 throw new InvalidOperationException("PlaceId is required for update contributions.");
 
-            var placeExists = await _db.Places.AnyAsync(p => p.Id == request.PlaceId.Value);
-            if (!placeExists)
+            var canManagePlace = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            if (!canManagePlace)
+                throw new InvalidOperationException("You must be the owner of this place to propose updates.");
+
+            targetPlace = await _db.Places
+                .AsNoTracking()
+                .Include(p => p.Stay)
+                .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
+
+            if (targetPlace is null)
                 throw new InvalidOperationException("The place you are trying to update does not exist.");
+        }
+
+        if (type == PlaceContributionType.ClaimOwnership)
+        {
+            if (!request.PlaceId.HasValue)
+                throw new InvalidOperationException("PlaceId is required for ownership claims.");
+
+            targetPlace = await _db.Places
+                .AsNoTracking()
+                .Include(p => p.Stay)
+                .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
+
+            if (targetPlace is null)
+                throw new InvalidOperationException("The place you are trying to claim does not exist.");
+
+            var alreadyOwner = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            if (alreadyOwner)
+                throw new InvalidOperationException("You already own this place.");
         }
 
         string? storedMainImageUrl = null;
@@ -130,27 +158,49 @@ public class PlaceContributionService : IPlaceContributionService
             Type = type,
             Status = PlaceContributionStatus.PendingReview,
             UserId = userId,
-            PlaceId = type == PlaceContributionType.UpdatePlace ? request.PlaceId : null,
-            OriginalSnapshotJson = type == PlaceContributionType.UpdatePlace && request.PlaceId.HasValue
+            PlaceId = type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership
+                ? request.PlaceId
+                : null,
+            OriginalSnapshotJson = type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership && request.PlaceId.HasValue
                 ? await BuildOriginalSnapshotAsync(request.PlaceId.Value)
                 : "{}",
-            PlaceTypeId = request.PlaceTypeId,
-            LocationId = request.LocationId,
+            PlaceTypeId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.PlaceTypeId : request.PlaceTypeId,
+            LocationId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.LocationId : request.LocationId,
             RestaurantTypeId = request.RestaurantTypeId,
-            StayTypeId = request.StayTypeId,
-            Name = NormalizeRequired(request.Name, "Name"),
-            Subtitle = NormalizeOptional(request.Subtitle),
-            Address = NormalizeOptional(request.Address),
-            OpeningHours = NormalizeOptional(request.OpeningHours),
-            Description = NormalizeRequired(request.Description, "Description"),
-            Latitude = request.Latitude,
-            Longitude = request.Longitude,
-            ContactEmail = NormalizeOptional(request.ContactEmail),
-            PhoneNumber = NormalizeOptional(request.PhoneNumber ?? request.Phone),
+            StayTypeId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Stay?.StayTypeId : request.StayTypeId,
+            Name = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Name
+                : NormalizeRequired(request.Name, "Name"),
+            Subtitle = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Subtitle
+                : NormalizeOptional(request.Subtitle),
+            Address = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Address
+                : NormalizeOptional(request.Address),
+            OpeningHours = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.OpeningHours
+                : NormalizeOptional(request.OpeningHours),
+            Description = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Description
+                : NormalizeRequired(request.Description, "Description"),
+            Latitude = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Latitude : request.Latitude,
+            Longitude = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Longitude : request.Longitude,
+            ContactEmail = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.ContactEmail
+                : NormalizeOptional(request.ContactEmail),
+            PhoneNumber = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Number
+                : NormalizeOptional(request.PhoneNumber ?? request.Phone),
             Website = NormalizeOptional(request.Website),
-            PricePerNight = request.PricePerNight,
-            CheckInTime = NormalizeOptional(request.CheckInTime),
-            CheckOutTime = NormalizeOptional(request.CheckOutTime),
+            PricePerNight = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Stay?.PricePerNight
+                : request.PricePerNight,
+            CheckInTime = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Stay?.CheckInTime
+                : NormalizeOptional(request.CheckInTime),
+            CheckOutTime = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Stay?.CheckOutTime
+                : NormalizeOptional(request.CheckOutTime),
             TagsJson = Serialize(NormalizeStringList(request.Tags)),
             AmenitiesJson = Serialize(NormalizeStringList(request.Amenities)),
             StayAmenitiesJson = Serialize(NormalizeStringList(request.StayAmenities)),
@@ -200,14 +250,49 @@ public class PlaceContributionService : IPlaceContributionService
         var now = DateTime.UtcNow;
         var type = ParseType(request.Type);
 
+        Place? targetPlace = null;
+
+        if (type is PlaceContributionType.CreatePlace or PlaceContributionType.ClaimOwnership &&
+            string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl) &&
+            ownershipProofBytes is null or { Length: 0 })
+        {
+            throw new InvalidOperationException("Ownership proof document is required.");
+        }
+
         if (type == PlaceContributionType.UpdatePlace)
         {
             if (!request.PlaceId.HasValue)
                 throw new InvalidOperationException("PlaceId is required for update contributions.");
 
-            var placeExists = await _db.Places.AnyAsync(p => p.Id == request.PlaceId.Value);
-            if (!placeExists)
+            var canManagePlace = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            if (!canManagePlace)
+                throw new InvalidOperationException("You must be the owner of this place to propose updates.");
+
+            targetPlace = await _db.Places
+                .AsNoTracking()
+                .Include(p => p.Stay)
+                .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
+
+            if (targetPlace is null)
                 throw new InvalidOperationException("The place you are trying to update does not exist.");
+        }
+
+        if (type == PlaceContributionType.ClaimOwnership)
+        {
+            if (!request.PlaceId.HasValue)
+                throw new InvalidOperationException("PlaceId is required for ownership claims.");
+
+            targetPlace = await _db.Places
+                .AsNoTracking()
+                .Include(p => p.Stay)
+                .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
+
+            if (targetPlace is null)
+                throw new InvalidOperationException("The place you are trying to claim does not exist.");
+
+            var alreadyOwner = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            if (alreadyOwner)
+                throw new InvalidOperationException("You already own this place.");
         }
 
         string? storedMainImageUrl = null;
@@ -241,27 +326,49 @@ public class PlaceContributionService : IPlaceContributionService
         }
 
         contribution.Type = type;
-        contribution.PlaceId = type == PlaceContributionType.UpdatePlace ? request.PlaceId : null;
-        contribution.OriginalSnapshotJson = type == PlaceContributionType.UpdatePlace && request.PlaceId.HasValue
+        contribution.PlaceId = type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership
+            ? request.PlaceId
+            : null;
+        contribution.OriginalSnapshotJson = type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership && request.PlaceId.HasValue
             ? await BuildOriginalSnapshotAsync(request.PlaceId.Value)
             : "{}";
-        contribution.PlaceTypeId = request.PlaceTypeId;
-        contribution.LocationId = request.LocationId;
+        contribution.PlaceTypeId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.PlaceTypeId : request.PlaceTypeId;
+        contribution.LocationId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.LocationId : request.LocationId;
         contribution.RestaurantTypeId = request.RestaurantTypeId;
-        contribution.StayTypeId = request.StayTypeId;
-        contribution.Name = NormalizeRequired(request.Name, "Name");
-        contribution.Subtitle = NormalizeOptional(request.Subtitle);
-        contribution.Address = NormalizeOptional(request.Address);
-        contribution.OpeningHours = NormalizeOptional(request.OpeningHours);
-        contribution.Description = NormalizeRequired(request.Description, "Description");
-        contribution.Latitude = request.Latitude;
-        contribution.Longitude = request.Longitude;
-        contribution.ContactEmail = NormalizeOptional(request.ContactEmail);
-        contribution.PhoneNumber = NormalizeOptional(request.PhoneNumber ?? request.Phone);
+        contribution.StayTypeId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Stay?.StayTypeId : request.StayTypeId;
+        contribution.Name = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Name
+            : NormalizeRequired(request.Name, "Name");
+        contribution.Subtitle = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Subtitle
+            : NormalizeOptional(request.Subtitle);
+        contribution.Address = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Address
+            : NormalizeOptional(request.Address);
+        contribution.OpeningHours = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.OpeningHours
+            : NormalizeOptional(request.OpeningHours);
+        contribution.Description = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Description
+            : NormalizeRequired(request.Description, "Description");
+        contribution.Latitude = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Latitude : request.Latitude;
+        contribution.Longitude = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Longitude : request.Longitude;
+        contribution.ContactEmail = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.ContactEmail
+            : NormalizeOptional(request.ContactEmail);
+        contribution.PhoneNumber = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Number
+            : NormalizeOptional(request.PhoneNumber ?? request.Phone);
         contribution.Website = NormalizeOptional(request.Website);
-        contribution.PricePerNight = request.PricePerNight;
-        contribution.CheckInTime = NormalizeOptional(request.CheckInTime);
-        contribution.CheckOutTime = NormalizeOptional(request.CheckOutTime);
+        contribution.PricePerNight = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Stay?.PricePerNight
+            : request.PricePerNight;
+        contribution.CheckInTime = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Stay?.CheckInTime
+            : NormalizeOptional(request.CheckInTime);
+        contribution.CheckOutTime = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Stay?.CheckOutTime
+            : NormalizeOptional(request.CheckOutTime);
         contribution.TagsJson = Serialize(NormalizeStringList(request.Tags));
         contribution.AmenitiesJson = Serialize(NormalizeStringList(request.Amenities));
         contribution.StayAmenitiesJson = Serialize(NormalizeStringList(request.StayAmenities));
@@ -313,21 +420,42 @@ public class PlaceContributionService : IPlaceContributionService
         if (contribution.Status != PlaceContributionStatus.PendingReview)
             throw new InvalidOperationException("Only pending contributions can be approved.");
 
-        var now = DateTime.UtcNow;
+        await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
-        Place publishedPlace;
+        var now = DateTime.UtcNow;
 
         if (contribution.Type == PlaceContributionType.CreatePlace)
         {
-            publishedPlace = await PublishNewPlaceAsync(contribution, now);
+            var publishedPlace = await PublishNewPlaceAsync(contribution, now);
             contribution.PlaceId = publishedPlace.Id;
+
+            await EnsureUserPlaceAsync(contribution.UserId, publishedPlace.Id, now);
         }
-        else
+        else if (contribution.Type == PlaceContributionType.UpdatePlace)
         {
             if (!contribution.PlaceId.HasValue)
                 throw new InvalidOperationException("Update contribution is missing target place.");
 
-            publishedPlace = await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId.Value, now);
+            var canManagePlace = await UserCanManagePlaceAsync(contribution.UserId, contribution.PlaceId.Value);
+            if (!canManagePlace)
+                throw new InvalidOperationException("The contributor is no longer the owner of this place.");
+
+            await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId.Value, now);
+        }
+        else if (contribution.Type == PlaceContributionType.ClaimOwnership)
+        {
+            if (!contribution.PlaceId.HasValue)
+                throw new InvalidOperationException("Ownership claim is missing target place.");
+
+            var placeExists = await _db.Places.AnyAsync(place => place.Id == contribution.PlaceId.Value);
+            if (!placeExists)
+                throw new InvalidOperationException("The place you are trying to claim does not exist.");
+
+            await EnsureUserPlaceAsync(contribution.UserId, contribution.PlaceId.Value, now);
+        }
+        else
+        {
+            throw new InvalidOperationException("Unsupported contribution type.");
         }
 
         contribution.Status = PlaceContributionStatus.Approved;
@@ -352,6 +480,8 @@ public class PlaceContributionService : IPlaceContributionService
 
         if (contribution.Status != PlaceContributionStatus.PendingReview)
             throw new InvalidOperationException("Only pending contributions can be rejected.");
+
+        await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
         var now = DateTime.UtcNow;
 
@@ -387,22 +517,12 @@ public class PlaceContributionService : IPlaceContributionService
         if (!reviewerUserId.HasValue)
             return query;
 
-        var managesAll = await _db.Users
-            .AsNoTracking()
-            .Where(u => u.Id == reviewerUserId.Value)
-            .Select(u => u.UserRoles.Any(ur =>
-                ur.Role.Name == "Admin" ||
-                ur.Role.Name == "SuperAdmin"))
-            .SingleOrDefaultAsync();
+        var managesAll = await ReviewerManagesAllAsync(reviewerUserId.Value);
 
         if (managesAll)
             return query;
 
-        var regionIds = await _db.RegionalManagerRegions
-            .AsNoTracking()
-            .Where(r => r.UserId == reviewerUserId.Value)
-            .Select(r => r.RegionId)
-            .ToListAsync();
+        var regionIds = await GetReviewerRegionIdsAsync(reviewerUserId.Value);
 
         if (regionIds.Count == 0)
             return query.Where(c => false);
@@ -411,6 +531,85 @@ public class PlaceContributionService : IPlaceContributionService
             c.Location != null &&
             c.Location.Destination != null &&
             regionIds.Contains(c.Location.Destination.RegionId));
+    }
+
+    private async Task EnsureReviewerCanReviewAsync(int reviewerUserId, PlaceContribution contribution)
+    {
+        var managesAll = await ReviewerManagesAllAsync(reviewerUserId);
+
+        if (managesAll)
+            return;
+
+        var regionIds = await GetReviewerRegionIdsAsync(reviewerUserId);
+        if (regionIds.Count == 0)
+            throw new InvalidOperationException("You are not allowed to review this contribution.");
+
+        int? contributionRegionId = null;
+
+        if (contribution.LocationId.HasValue)
+        {
+            contributionRegionId = await _db.Locations
+                .AsNoTracking()
+                .Where(location => location.Id == contribution.LocationId.Value)
+                .Select(location => (int?)location.Destination.RegionId)
+                .SingleOrDefaultAsync();
+        }
+
+        if (!contributionRegionId.HasValue && contribution.PlaceId.HasValue)
+        {
+            contributionRegionId = await _db.Places
+                .AsNoTracking()
+                .Where(place => place.Id == contribution.PlaceId.Value)
+                .Select(place => (int?)place.Location.Destination.RegionId)
+                .SingleOrDefaultAsync();
+        }
+
+        if (!contributionRegionId.HasValue || !regionIds.Contains(contributionRegionId.Value))
+            throw new InvalidOperationException("You are not allowed to review this contribution.");
+    }
+
+    private async Task<bool> ReviewerManagesAllAsync(int reviewerUserId)
+    {
+        return await _db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == reviewerUserId)
+            .Select(u => u.UserRoles.Any(ur =>
+                ur.Role.Name == "Admin" ||
+                ur.Role.Name == "SuperAdmin"))
+            .SingleOrDefaultAsync();
+    }
+
+    private async Task<List<int>> GetReviewerRegionIdsAsync(int reviewerUserId)
+    {
+        return await _db.RegionalManagerRegions
+            .AsNoTracking()
+            .Where(r => r.UserId == reviewerUserId)
+            .Select(r => r.RegionId)
+            .ToListAsync();
+    }
+
+    private async Task<bool> UserCanManagePlaceAsync(int userId, int placeId)
+    {
+        return await _db.UserPlaces
+            .AsNoTracking()
+            .AnyAsync(userPlace => userPlace.UserId == userId && userPlace.PlaceId == placeId);
+    }
+
+    private async Task EnsureUserPlaceAsync(int userId, int placeId, DateTime now)
+    {
+        var exists = await _db.UserPlaces
+            .AnyAsync(userPlace => userPlace.UserId == userId && userPlace.PlaceId == placeId);
+
+        if (exists)
+            return;
+
+        _db.UserPlaces.Add(new UserPlace
+        {
+            UserId = userId,
+            PlaceId = placeId,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
     }
 
     private async Task<string> BuildOriginalSnapshotAsync(int placeId)
