@@ -1,5 +1,5 @@
 @if (place(); as p) {
-  <article class="pd">
+  <article class="pd gt-detail gt-detail--place">
 
     <!-- ── Top bar: absolute, above scroll container, transparent → navy ─── -->
     <header class="pd__top-bar" [style.--progress]="scrollProgress()">
@@ -59,7 +59,7 @@
     <div class="pd__scroll" #pdScroll (scroll)="onScroll($event)">
       <div class="pd__scroll-spacer" aria-hidden="true"></div>
 
-      <div class="pd__card">
+      <div class="pd__card" [class.pd__card--has-gallery]="p.images.length > 1">
         <!-- Category tags -->
         <div class="pd__tags" role="list" aria-label="Categories">
           @for (tag of p.tags; track tag.label) {
@@ -191,17 +191,73 @@
           </section>
         }
 
-        <div class="pd__divider"></div>
+        <div class="pd__detail-grid">
+          <div class="pd__detail-main">
+            <div class="pd__divider pd__divider--about"></div>
 
-        <section class="pd__section">
-          <h2 class="pd__section-title">About this place</h2>
-          <p class="pd__about">{{ p.about }}</p>
-        </section>
+            <section class="pd__section pd__section--about">
+              <h2 class="pd__section-title">About this place</h2>
+              <p class="pd__about">{{ p.about }}</p>
+            </section>
+
+            @if (p.similar.length > 0) {
+              <div class="pd__divider pd__divider--similar"></div>
+
+              <section class="pd__section pd__section--similar pd__section--last">
+                <app-section-header
+                  title="Similar Places"
+                />
+
+                <div class="pd__similar-viewport">
+                  <div class="pd__similar-track" role="list">
+                    @for (s of p.similar; track s.id) {
+                      <article
+                        class="pd__similar-card"
+                        role="listitem"
+                        (click)="navigateToSimilar(s.id)"
+                      >
+                        <div class="pd__similar-media">
+                          <img
+                            appImageFallback
+                            class="pd__similar-img"
+                            [src]="s.image"
+                            [alt]="s.title"
+                            width="160"
+                            height="110"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </div>
+
+                        <div class="pd__similar-body">
+                          <h3 class="pd__similar-title">{{ s.title }}</h3>
+                          <div class="pd__similar-meta">
+                            @if (s.rating != null) {
+                              <svg class="pd__similar-star" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor"
+                                      d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                              </svg>
+                              <span class="pd__similar-rating">{{ s.rating!.toFixed(1) }}</span>
+                            }
+                            @if (s.distance) {
+                              <span class="pd__similar-dist">{{ s.distance }}</span>
+                            }
+                          </div>
+                        </div>
+                      </article>
+                    }
+                  </div>
+                </div>
+              </section>
+            }
+          </div>
+
+          <div class="pd__detail-side">
 
         <!-- ── Reviews ───────────────────────────────────────────────── -->
-        <div class="pd__divider"></div>
+        <div class="pd__divider pd__divider--reviews"></div>
 
-        <section class="pd__section">
+        <section class="pd__section pd__section--reviews">
           <app-section-header
             title="Reviews"
             actionLabel="More"
@@ -276,55 +332,8 @@
           </div>
         </section>
 
-        <!-- ── Similar Places ─────────────────────────────────────────── -->
-        <div class="pd__divider"></div>
-
-        <section class="pd__section pd__section--last">
-          <app-section-header
-            title="Similar Places"
-          />
-
-          <div class="pd__similar-viewport">
-            <div class="pd__similar-track" role="list">
-              @for (s of p.similar; track s.id) {
-                <article
-                  class="pd__similar-card"
-                  role="listitem"
-                  (click)="navigateToSimilar(s.id)"
-                >
-                  <div class="pd__similar-media">
-                    <img
-                      appImageFallback
-                      class="pd__similar-img"
-                      [src]="s.image"
-                      [alt]="s.title"
-                      width="160"
-                      height="110"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </div>
-
-                  <div class="pd__similar-body">
-                    <h3 class="pd__similar-title">{{ s.title }}</h3>
-                    <div class="pd__similar-meta">
-                      @if (s.rating != null) {
-                        <svg class="pd__similar-star" viewBox="0 0 24 24" aria-hidden="true">
-                          <path fill="currentColor"
-                                d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
-                        </svg>
-                        <span class="pd__similar-rating">{{ s.rating!.toFixed(1) }}</span>
-                      }
-                      @if (s.distance) {
-                        <span class="pd__similar-dist">{{ s.distance }}</span>
-                      }
-                    </div>
-                  </div>
-                </article>
-              }
-            </div>
-          </div>
-        </section>
+          </div><!-- /.pd__detail-side -->
+        </div><!-- /.pd__detail-grid -->
 
       </div><!-- /.pd__card -->
     </div><!-- /.pd__scroll -->

@@ -384,6 +384,23 @@
   &--last { margin-bottom: 0; }
 }
 
+.pd__detail-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.pd__detail-main,
+.pd__detail-side {
+  display: contents;
+}
+
+.pd__divider--about { order: 1; }
+.pd__section--about { order: 2; }
+.pd__divider--reviews { order: 3; }
+.pd__section--reviews { order: 4; }
+.pd__divider--similar { order: 5; }
+.pd__section--similar { order: 6; }
+
 .pd__section-title {
   font-size: 18px;
   font-weight: 800;
@@ -737,59 +754,45 @@
 
 @media (min-width: 1024px) {
   :host {
-    padding: var(--space-6);
+    height: 100%;
+    min-height: 100dvh;
+    padding: var(--space-4) var(--desktop-page-gutter) var(--space-6);
+    background: var(--color-page-bg, #f8f9fa);
   }
 
-  .pd {
-    overflow: hidden;
-    border-radius: 28px;
-    background: #ffffff;
-    box-shadow: 0 24px 60px rgba(26, 43, 76, 0.16);
-  }
-
-  .pd__top-bar {
-    border-radius: 0;
-    padding: var(--space-5) var(--space-6);
-  }
-
-  .pd__hero {
-    height: 360px;
-  }
-
-  .pd__scroll-spacer {
-    height: 312px;
-  }
-
-  .pd__card {
-    max-width: 980px;
-    min-height: calc(100dvh - 280px);
-    margin-inline: auto;
-    padding: var(--space-8) var(--space-8) var(--space-10);
-    border-radius: 28px 28px 0 0;
-  }
-
-  .pd__title {
-    font-size: 2.25rem;
-  }
-
-  .pd__about,
-  .pd__review-body {
-    font-size: var(--text-base);
-  }
-
-  .pd__similar-viewport {
-    margin-inline: 0;
-    padding-inline: 0;
-  }
-
-  .pd__similar-track {
-    width: auto;
+  .pd__detail-grid {
+    grid-column: 1 / -1;
+    grid-row: 6;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    padding-right: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.88fr);
+    column-gap: var(--space-5);
+    align-items: start;
   }
 
-  .pd__similar-card {
-    width: auto;
+  .pd__detail-main,
+  .pd__detail-side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+
+  .pd__detail-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .pd__detail-side {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .pd__detail-grid .pd__divider {
+    display: none;
+  }
+
+  .pd__detail-grid .pd__section {
+    margin-bottom: 0;
+    min-width: 0;
   }
 }
