@@ -1,7 +1,9 @@
 <app-settings-subpage-shell
+  class="settings-shell--desktop-intro settings-shell--desktop-left-intro terms-page-shell"
   title="Terms & Privacy Policy"
-  description="Last updated April 21, 2026. These notes explain how GeoTrack handles accounts, saved trip planning data, and location-aware recommendations inside the current web app.">
-  <div class="flex flex-col gap-4">
+  [headerDescription]="headerSubtitle"
+  [description]="lastUpdatedText">
+  <div class="terms-page__mobile flex flex-col gap-4">
     @for (section of sections; track section.title) {
       <div class="rounded-[1.5rem] bg-white p-4 shadow-sm">
         <h2 class="text-base font-bold text-slate-800">{{ section.title }}</h2>
@@ -25,5 +27,84 @@
         Open Contact Support
       </button>
     </div>
+  </div>
+
+  <div class="terms-page__desktop">
+    <div class="terms-page__updated" aria-label="Last updated">
+      <span class="terms-page__updated-icon" aria-hidden="true">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 3v3m10-3v3M4.5 9.5h15M6.5 5h11a2 2 0 012 2v11a2 2 0 01-2 2h-11a2 2 0 01-2-2V7a2 2 0 012-2z" />
+        </svg>
+      </span>
+      <p>{{ lastUpdatedText }}</p>
+    </div>
+
+    <div class="terms-page__grid">
+      @for (section of sections; track section.title; let index = $index) {
+        <section class="terms-page__card" [attr.aria-labelledby]="'terms-section-' + index">
+          <span class="terms-page__card-icon" aria-hidden="true">
+            @switch (section.icon) {
+              @case ('terms') {
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 3h7l4 4v14H7V3z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3v5h5M9 13h6M9 17h6" />
+                </svg>
+              }
+              @case ('account') {
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 12a4 4 0 100-8 4 4 0 000 8zM4.5 20a7.5 7.5 0 0115 0" />
+                </svg>
+              }
+              @case ('privacy') {
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21s7-3.5 7-10V5l-7-3-7 3v6c0 6.5 7 10 7 10z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-5" />
+                </svg>
+              }
+              @case ('travel') {
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21s7-5.1 7-11a7 7 0 10-14 0c0 5.9 7 11 7 11z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+                </svg>
+              }
+            }
+          </span>
+
+          <div class="terms-page__card-copy">
+            <h2 [id]="'terms-section-' + index" class="terms-page__card-title">{{ section.title }}</h2>
+            <div class="terms-page__card-body">
+              @for (paragraph of section.body; track paragraph) {
+                <p>{{ paragraph }}</p>
+              }
+            </div>
+          </div>
+        </section>
+      }
+    </div>
+
+    <section class="terms-page__support-card" aria-labelledby="terms-support-title">
+      <span class="terms-page__support-icon" aria-hidden="true">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8.25 9.5a3.75 3.75 0 117.15 1.6c-.82 1.04-2.15 1.26-2.85 2.14-.3.38-.43.8-.43 1.26" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 17.25h.01" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 22a10 10 0 100-20 10 10 0 000 20z" />
+        </svg>
+      </span>
+
+      <div class="terms-page__support-copy">
+        <h2 id="terms-support-title">Questions About Your Data?</h2>
+        <p>
+          Use Contact Support inside Settings if you want help understanding stored location data, account activity, or how recommendations were shaped for your trip planning.
+        </p>
+      </div>
+
+      <button type="button" class="terms-page__support-action" (click)="openSupport()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5.5h16v10H8l-4 4v-14z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 10.5h.01M12 10.5h.01M16 10.5h.01" />
+        </svg>
+        <span>Open Contact Support</span>
+      </button>
+    </section>
   </div>
 </app-settings-subpage-shell>
