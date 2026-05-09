@@ -138,10 +138,8 @@ export const routes: Routes = [
       },
       {
         path: 'settings/notifications',
-        canActivate: [authGuard],
-        loadComponent: () =>
-          import('./features/settings/pages/notifications-page/notifications-page.component').then(m => m.NotificationsPageComponent),
-        data: { hideBottomNav: true },
+        pathMatch: 'full',
+        redirectTo: 'settings',
       },
       {
         path: 'settings/privacy-settings',
@@ -162,21 +160,21 @@ export const routes: Routes = [
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/settings/pages/help-center-page/help-center-page.component').then(m => m.HelpCenterPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'settings/contact-support',
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/settings/pages/contact-support-page/contact-support-page.component').then(m => m.ContactSupportPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'settings/terms-and-privacy',
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/settings/pages/terms-privacy-page/terms-privacy-page.component').then(m => m.TermsPrivacyPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
 
       // ── Auth (registracija) ───────────────────────────────────────────────
@@ -192,7 +190,7 @@ export const routes: Routes = [
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/notifications/pages/notifications-center-page/notifications-center-page.component').then(m => m.NotificationsCenterPageComponent),
-        data: { hideBottomNav: true },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'reviews/:entityType/:id',
