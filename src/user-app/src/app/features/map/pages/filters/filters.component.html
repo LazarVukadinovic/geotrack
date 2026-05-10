@@ -21,7 +21,10 @@
 
     <!-- Categories section -->
     <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Categories</p>
-    <div class="flex flex-wrap justify-center gap-2 mb-8">
+    <div
+      class="flex flex-wrap justify-center gap-2"
+      [class.mb-4]="availableMoreFilters().length > 0"
+      [class.mb-8]="availableMoreFilters().length === 0">
       <button
         *ngFor="let cat of allCategories"
         (click)="toggleCategory(cat)"
@@ -35,6 +38,31 @@
         {{ cat.label }}
       </button>
     </div>
+
+    @if (availableMoreFilters().length > 0) {
+      <div class="flex flex-wrap justify-center gap-2 mb-8" role="list" aria-label="Backend map categories">
+        <button
+          *ngFor="let filter of availableMoreFilters()"
+          (click)="toggleMoreFilter(filter)"
+          class="inline-flex max-w-full items-center gap-2 px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-200"
+          [class.bg-[#1a2b4a]]="isMoreFilterSelected(filter)"
+          [class.border-[#1a2b4a]]="isMoreFilterSelected(filter)"
+          [class.text-white]="isMoreFilterSelected(filter)"
+          [class.bg-white]="!isMoreFilterSelected(filter)"
+          [class.border-slate-200]="!isMoreFilterSelected(filter)"
+          [class.text-slate-600]="!isMoreFilterSelected(filter)">
+          <span>{{ filter.label }}</span>
+          <span
+            class="min-w-5 h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center"
+            [class.text-white]="isMoreFilterSelected(filter)"
+            [class.bg-slate-100]="!isMoreFilterSelected(filter)"
+            [class.text-slate-500]="!isMoreFilterSelected(filter)"
+            [style.background-color]="isMoreFilterSelected(filter) ? 'rgba(255, 255, 255, 0.2)' : null">
+            {{ filter.count }}
+          </span>
+        </button>
+      </div>
+    }
 
     <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 mb-8">
       <p class="text-sm font-semibold text-slate-700">Map scope</p>
