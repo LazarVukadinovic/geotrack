@@ -1,0 +1,662 @@
+<div class="flex h-screen w-screen overflow-hidden bg-gray-50">
+  <app-sidebar></app-sidebar>
+
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <app-topbar title="New Event" [showBack]="true"></app-topbar>
+  
+    <div class="flex-1 overflow-y-auto px-8 py-6">
+      <div class="flex gap-5 items-start">
+
+        <!-- ═══ LEFT COLUMN ═══ -->
+        <div class="flex-1 min-w-0">
+
+          <!-- Event Title Hero Card -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <span class="block text-[10px] font-bold tracking-widest text-gray-400 mb-1">EVENT TITLE</span>
+            <input class="w-full text-2xl font-bold text-gray-900 border-none outline-none bg-transparent placeholder-gray-300 font-sans" [(ngModel)]="eventTitle" placeholder="e.g. Summer Festival" />
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Assigned Region (Locked)</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none" value="Šumadija, Srbija" readonly />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Parent Destination (Auto-filled)</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none" value="Kragujevac" readonly />
+              </div>
+            </div>
+          </div>
+
+          <!-- Basic Information -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <h3 class="text-sm font-bold text-gray-900 mb-0.5">Basic Information</h3>
+            <p class="text-xs text-gray-500 mb-4">Core details about the event.</p>
+            <div class="mb-3">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Event Title <span class="text-red-500">*</span></label>
+              <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" [(ngModel)]="eventTitle" />
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Event Category/Type <span class="text-red-500">*</span></label>
+                <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none"
+                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;">
+                  <option value="">Select Event Category/Type...</option>
+                  <option>Festival</option><option>Concert</option><option>Exhibition</option>
+                  <option>Sports</option><option>Workshop</option><option>Market</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Internal Reference ID</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" value="EVT-PNW-001" />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Short Excerpt/Summary <span class="text-red-500">*</span></label>
+              <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans" placeholder="A brief, engaging summary (max 160 characters)..." rows="2" maxlength="160"></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Full Description</label>
+              <div class="border border-gray-300 rounded-lg overflow-hidden">
+                <div class="flex gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200">
+                  <button type="button" class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors" [class.bg-blue-100]="isBold" [class.text-blue-700]="isBold" [class.bg-transparent]="!isBold" (mousedown)="$event.preventDefault(); execFormat('bold')"><strong>B</strong></button>
+                  <button type="button" class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors" [class.bg-blue-100]="isItalic" [class.text-blue-700]="isItalic" [class.bg-transparent]="!isItalic" (mousedown)="$event.preventDefault(); execFormat('italic')"><em>I</em></button>
+                  <button type="button" class="px-2 py-0.5 rounded text-sm text-gray-600 border-none cursor-pointer transition-colors" [class.bg-blue-100]="isUnderline" [class.text-blue-700]="isUnderline" [class.bg-transparent]="!isUnderline" (mousedown)="$event.preventDefault(); execFormat('underline')"><u>U</u></button>
+                </div>
+                <div class="relative rte-field">
+                  @if (editorIsEmpty) { <span class="rte-ph">Provide a comprehensive description of what visitors can expect...</span> }
+                  <div #editorRef contenteditable="true" class="w-full px-3 py-2 text-sm min-h-[100px] outline-none text-gray-700" style="font-family: inherit;" (keyup)="onEditorChange()" (input)="onEditorChange()" (mouseup)="onEditorChange()" (focus)="onEditorFocus()" (blur)="onEditorBlur()"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Event Parent & Venue Logic -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <h3 class="text-sm font-bold text-gray-900 mb-0.5">Event Parent &amp; Venue Logic</h3>
+            <p class="text-xs text-gray-500 mb-4">Determine where this event structurally belongs.</p>
+            <p class="text-sm text-gray-700 mb-2">Event happens at:</p>
+            <div class="flex gap-4 mb-3">
+              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="radio" name="venueType" value="location" [(ngModel)]="venueType" class="accent-blue-700" (change)="onVenueTypeChange()" /> Location
+              </label>
+              <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="radio" name="venueType" value="place" [(ngModel)]="venueType" class="accent-blue-700" (change)="onVenueTypeChange()" /> Place
+              </label>
+            </div>
+            <div class="mb-3 relative">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">
+                {{ venueType === 'place' ? 'Place Selector' : 'Location Selector' }}
+                <span class="text-red-500">*</span>
+              </label>
+              <div class="relative">
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  [placeholder]="venueType === 'place' ? 'Search places...' : 'Search locations...'"
+                  [(ngModel)]="venueSearchQuery"
+                  (input)="onVenueSearch()"
+                  (focus)="onVenueSearchFocus()"
+                  (click)="$event.stopPropagation()"
+                  autocomplete="off" />
+                @if (isSearchingVenue) {
+                  <div class="absolute right-3 top-1/2 -translate-y-1/2">
+                    <svg class="animate-spin w-3.5 h-3.5 text-blue-500" viewBox="0 0 24 24" fill="none">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                  </div>
+                }
+              </div>
+
+              <!-- Dropdown -->
+              @if (venueDropdownOpen) {
+                <div class="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto" (click)="$event.stopPropagation()">
+
+                  <!-- Add new shortcut -->
+                  <button type="button"
+                    class="w-full text-left px-4 py-2.5 text-sm font-semibold border-none cursor-pointer transition-colors flex items-center gap-2 border-b border-gray-100"
+                    style="background: #f0f7ff; color: #1d4ed8;"
+                    (click)="navigateToAddVenue()">
+                    <span class="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                      </svg>
+                    </span>
+                    Add new {{ venueType === 'place' ? 'Place' : 'Location' }}
+                  </button>
+
+                  <!-- Search results -->
+                  @for (item of filteredVenueResults; track item.id) {
+                    <button type="button"
+                      class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 border-none bg-transparent cursor-pointer transition-colors flex items-center gap-2"
+                      (click)="selectVenue(item)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                        @if (venueType === 'place') {
+                          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                        } @else {
+                          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        }
+                      </svg>
+                      <div>
+                        <div class="font-medium">{{ item.name }}</div>
+                        <div class="text-xs text-gray-400">{{ item.address }}</div>
+                      </div>
+                    </button>
+                  }
+
+                  <!-- Empty state -->
+                  @if (venueSearchQuery.length > 1 && filteredVenueResults.length === 0 && !isSearchingVenue) {
+                    <div class="px-4 py-3 text-sm text-gray-400">
+                      No {{ venueType === 'place' ? 'places' : 'locations' }} found for "{{ venueSearchQuery }}"
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+
+            @if (selectedVenue) {
+              <div class="mb-3 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-semibold text-blue-700">{{ selectedVenue.name }}</p>
+                  <p class="text-xs text-blue-500">{{ selectedVenue.address }}</p>
+                </div>
+                <button type="button" (click)="clearVenue()" class="text-blue-400 hover:text-blue-700 border-none bg-transparent cursor-pointer text-lg leading-none">&times;</button>
+              </div>
+            }
+
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Venue Name <span class="text-gray-400 font-normal">(Optional)</span></label>
+              <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. Seattle Convention Center" />
+            </div>
+          </div>
+
+          <!-- Date & Time -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <div class="flex items-center gap-2 mb-4">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <h3 class="text-sm font-bold text-gray-900">Date &amp; Time</h3>
+            </div>
+
+            <!-- All-day toggle -->
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-semibold text-gray-700 mb-0.5">All-day Event</p>
+                  <p class="text-[11px] text-gray-400">Does not require specific start and end times.</p>
+                </div>
+                <div class="relative cursor-pointer flex-shrink-0" style="width: 44px; height: 24px;" (click)="allDay = !allDay">
+                  <div class="absolute inset-0 rounded-full transition-colors duration-200" [class.bg-blue-600]="allDay" [class.bg-gray-300]="!allDay"></div>
+                  <div class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200" style="width: 20px; height: 20px;" [style.left]="allDay ? '22px' : '2px'"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <!-- Start Date -->
+              <div class="relative">
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Start Date <span class="text-red-500">*</span></label>
+                <div class="flex items-center gap-0 border rounded-lg overflow-hidden bg-white"
+                    [class.border-blue-500]="activePicker === 'startDate'"
+                    [class.border-gray-300]="activePicker !== 'startDate'">
+                  <button type="button"
+                    class="flex items-center justify-center px-2.5 py-1.5 border-r border-gray-200 bg-gray-50 hover:bg-blue-50 transition-colors flex-shrink-0 outline-none"
+                    (click)="togglePicker('startDate', $event)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </button>
+                  <input type="text"
+                    class="flex-1 px-2.5 py-1.5 text-sm text-gray-700 outline-none bg-white min-w-0"
+                    placeholder="dd.mm.yyyy"
+                    [value]="startDateDisplay"
+                    (input)="onDateTextInput($event, 'startDate')"
+                    (blur)="onDateTextBlur($event, 'startDate')"
+                    (click)="$event.stopPropagation()" />
+                </div>
+              </div>
+              <!-- End Date -->
+              <div class="relative">
+                <label class="block text-xs font-semibold text-gray-600 mb-1">End Date <span class="text-red-500">*</span></label>
+                <div class="flex items-center gap-0 border rounded-lg overflow-hidden bg-white"
+                    [class.border-blue-500]="activePicker === 'endDate'"
+                    [class.border-gray-300]="activePicker !== 'endDate'">
+                  <button type="button"
+                    class="flex items-center justify-center px-2.5 py-1.5 border-r border-gray-200 bg-gray-50 hover:bg-blue-50 transition-colors flex-shrink-0 outline-none"
+                    (click)="togglePicker('endDate', $event)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </button>
+                  <input type="text"
+                    class="flex-1 px-2.5 py-1.5 text-sm text-gray-700 outline-none bg-white min-w-0"
+                    placeholder="dd.mm.yyyy"
+                    [value]="endDateDisplay"
+                    (input)="onDateTextInput($event, 'endDate')"
+                    (blur)="onDateTextBlur($event, 'endDate')"
+                    (click)="$event.stopPropagation()" />
+                </div>
+              </div>
+
+              @if (!allDay) {
+                <!-- Start Time -->
+                <div class="relative">
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">Start Time <span class="text-red-500">*</span></label>
+                  <button type="button"
+                    class="w-full flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm bg-white cursor-pointer hover:border-blue-400 transition-colors outline-none text-left"
+                    [class.border-blue-500]="activePicker === 'startTime'"
+                    [class.border-gray-300]="activePicker !== 'startTime'"
+                    (click)="togglePicker('startTime', $event)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="flex-1" [class.text-gray-700]="startTime" [class.text-gray-400]="!startTime">{{ startTime ? formatDisplayTime(startTime) : 'Pick time' }}</span>
+                  </button>
+                </div>
+                <!-- End Time -->
+                <div class="relative">
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">End Time <span class="text-red-500">*</span></label>
+                  <button type="button"
+                    class="w-full flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm bg-white cursor-pointer hover:border-blue-400 transition-colors outline-none text-left"
+                    [class.border-blue-500]="activePicker === 'endTime'"
+                    [class.border-gray-300]="activePicker !== 'endTime'"
+                    (click)="togglePicker('endTime', $event)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="flex-shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="flex-1" [class.text-gray-700]="endTime" [class.text-gray-400]="!endTime">{{ endTime ? formatDisplayTime(endTime) : 'Pick time' }}</span>
+                  </button>
+                </div>
+              }
+            </div>
+
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" [(ngModel)]="recurring" class="w-3.5 h-3.5 accent-blue-700" /> This is a recurring event
+            </label>
+          </div>
+
+          <!-- Event Details -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <div class="flex items-center gap-2 mb-4">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <h3 class="text-sm font-bold text-gray-900">Event Details</h3>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-700">This is a free event</span>
+                <div class="relative cursor-pointer flex-shrink-0" style="width: 44px; height: 24px;" (click)="freeEvent = !freeEvent">
+                  <div class="absolute inset-0 rounded-full transition-colors duration-200" [class.bg-blue-600]="freeEvent" [class.bg-gray-300]="!freeEvent"></div>
+                  <div class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200" style="width: 20px; height: 20px;" [style.left]="freeEvent ? '22px' : '2px'"></div>
+                </div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Ticket Price</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">$</span>
+                  <input class="w-full border border-gray-300 rounded-lg pl-7 pr-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-400" value="50.00" [disabled]="freeEvent" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">External Ticket Link</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-400" placeholder="https://tickets.example.com/..." [disabled]="freeEvent" />
+                <p class="text-[11px] text-gray-400 mt-1">Users will be redirected here to purchase tickets.</p>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Organizer Name</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="Name of the organizing body" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Contact Email</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="contact@example.com" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Attendance Limit <span class="text-gray-400 font-normal">(Optional)</span></label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g., 500" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Age Restriction</label>
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g., 18+ or All ages" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Hero Media + Gallery -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="text-sm font-bold text-gray-900 mb-0.5">Hero Media</h3>
+                <p class="text-xs text-gray-500">Main cover image and optional gallery</p>
+              </div>
+              <button type="button" class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 cursor-pointer">Library</button>
+            </div>
+            @if (!coverImageUrl) {
+              <label class="border-2 border-dashed border-gray-300 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors" for="coverImageInput">
+                <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </div>
+                <span>Click to upload Main Cover Image</span>
+                <span class="text-xs text-gray-400">PNG, JPG, WEBP</span>
+              </label>
+            }
+            @if (coverImageUrl) {
+              <div class="relative rounded-xl overflow-hidden group">
+                <img [src]="coverImageUrl" alt="Cover preview" class="w-full object-cover rounded-xl cursor-zoom-in" style="max-height: 280px;" (click)="openLightbox([{ url: coverImageUrl!, name: coverImageName }], 0)" />
+                <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 pointer-events-none">
+                  <label for="coverImageInput" class="bg-white text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 pointer-events-auto">Replace</label>
+                  <button type="button" (click)="removeCoverImage()" class="bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto">Remove</button>
+                </div>
+              </div>
+              <p class="text-xs text-gray-400 mt-2 mb-4">{{ coverImageName }}</p>
+            }
+            <input id="coverImageInput" type="file" accept="image/*" class="hidden" (change)="onCoverImageSelected($event)" />
+            <div class="border-t border-gray-100 my-4"></div>
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs font-semibold text-gray-600">Gallery Images <span class="text-gray-400 font-normal">(Optional)</span></p>
+              @if (galleryImages.length > 0) {
+                <label for="galleryInput" class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1 cursor-pointer hover:bg-blue-100">+ Add</label>
+              }
+            </div>
+            @if (galleryImages.length > 0) {
+              <div class="overflow-y-auto mb-2" style="max-height: 316px; scrollbar-width: thin;">
+                <div class="grid grid-cols-3 gap-2">
+                  @for (img of galleryImages; track img.url; let i = $index) {
+                    <div class="relative rounded-lg overflow-hidden group aspect-square">
+                      <img [src]="img.url" [alt]="img.name" class="w-full h-full object-cover cursor-zoom-in" (click)="openLightbox(galleryImages, i)" />
+                      <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+                        <button type="button" (click)="removeGalleryImage(i)" class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto">Remove</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+              <p class="text-xs text-gray-400 mb-1">{{ galleryImages.length }} image{{ galleryImages.length !== 1 ? 's' : '' }} added</p>
+            }
+            @if (galleryImages.length === 0) {
+              <label for="galleryInput" class="border-2 border-dashed border-gray-300 rounded-xl py-6 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors">
+                <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </div>
+                <span>Click to add Gallery Images</span>
+                <span class="text-xs text-gray-400">PNG, JPG, WEBP · Multiple selection allowed</span>
+              </label>
+            }
+            <input id="galleryInput" type="file" accept="image/*" multiple class="hidden" (change)="onGalleryImagesSelected($event)" />
+          </div>
+
+        </div>
+
+        <!-- ═══ RIGHT PANEL ═══ -->
+        <div class="w-80 min-w-[350px]">
+          <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Publishing</h4>
+            <button class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors">Publish</button>
+          </div>
+
+          <!-- Geographical Context panel -->
+          <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-bold text-gray-900">Geographical Context</h4>
+            </div>
+
+            @if (!selectedVenue) {
+              <p class="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3">
+                Select a {{ venueType }} to see it on the map.
+              </p>
+            }
+
+            <!-- Map preview — zone for location, pin for place -->
+            <div class="relative rounded-lg overflow-hidden mb-3 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+                style="height: 200px;"
+                [class.opacity-40]="!selectedVenue"
+                (click)="selectedVenue ? openMapModal() : null"
+                [title]="selectedVenue ? 'Click to expand map' : ''">
+              <div #miniMapContainer class="w-full h-full"></div>
+              @if (!selectedVenue) {
+                <div class="absolute inset-0 flex items-center justify-center bg-gray-100/80">
+                  <span class="text-xs text-gray-400 font-medium">No {{ venueType }} selected</span>
+                </div>
+              }
+              @if (selectedVenue) {
+                <div class="absolute bottom-2 right-2 bg-white/80 text-[10px] text-gray-500 px-1.5 py-0.5 rounded backdrop-blur-sm">
+                  Click to expand
+                </div>
+              }
+            </div>
+
+            <!-- Zone area badge — only for location -->
+            @if (venueType === 'location' && selectedVenue && selectedVenueAreaKm2 !== null) {
+              <div class="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3">
+                <p class="text-xs text-blue-700">
+                  Zone area: <strong>{{ selectedVenueAreaKm2 | number:'1.2-2' }} km²</strong>
+                </p>
+              </div>
+            }
+
+            <!-- Lat/Lng shown only for place -->
+            @if (venueType === 'place') {
+              <div class="grid grid-cols-2 gap-2 mb-3">
+                <div>
+                  <label class="block text-[11px] font-semibold text-gray-600 mb-1">Latitude</label>
+                  <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 bg-gray-50 outline-none"
+                        [value]="pinLat || '—'" readonly />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-semibold text-gray-600 mb-1">Longitude</label>
+                  <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 bg-gray-50 outline-none"
+                        [value]="pinLng || '—'" readonly />
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Street Address</label>
+                <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 bg-gray-50 outline-none"
+                      [value]="streetAddress || '—'" readonly />
+              </div>
+            }
+          </div>
+
+          <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Classification</h4>
+            @for (item of classItems; track item.label) {
+              <label class="flex items-center gap-2 text-sm text-gray-700 mb-2 cursor-pointer">
+                <input type="checkbox" [(ngModel)]="item.checked" class="w-4 h-4 accent-blue-700" /> {{ item.label }}
+              </label>
+            }
+            <div class="mt-3">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Additional Tags</label>
+              <input class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500" placeholder="Type and press Enter..." [(ngModel)]="tagInput" (keydown.enter)="addTag($event)" />
+              @if (tags.length > 0) {
+                <div class="flex gap-1.5 mt-2 overflow-x-auto pb-1" style="scrollbar-width: thin;">
+                  @for (tag of tags; track tag) {
+                    <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5 whitespace-nowrap flex-shrink-0">
+                      {{ tag }}
+                      <button type="button" (click)="removeTag(tag)" class="border-none bg-transparent text-blue-500 hover:text-blue-800 cursor-pointer p-0 leading-none text-sm">&times;</button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+          <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Metadata</h4>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs"><span class="text-gray-500">Created By</span><span class="text-gray-900 font-semibold">Sarah J.</span></div>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs"><span class="text-gray-500">Assigned Region</span><span class="text-gray-900 font-semibold">Šumadija</span></div>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs"><span class="text-gray-500">Parent Dest.</span><span class="text-gray-900 font-semibold">Kragujevac</span></div>
+            <div class="flex justify-between items-center py-1.5 text-xs"><span class="text-gray-500">Created</span><span class="text-gray-900 font-semibold">Oct 12, 2023</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAP VIEW MODAL -->
+<div class="fixed inset-0 z-50 flex items-center justify-center"
+     style="background: rgba(0,0,0,0.55);"
+     [style.display]="mapModalOpen ? 'flex' : 'none'"
+     (click)="closeMapModal()">
+  <div class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+       style="width: 760px; max-width: 95vw; max-height: 90vh;"
+       (click)="$event.stopPropagation()">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+      <div>
+        <h4 class="text-sm font-bold text-gray-900">{{ selectedVenue?.name || 'Location' }}</h4>
+        <p class="text-xs text-gray-500 mt-0.5">{{ selectedVenue?.address }}</p>
+      </div>
+      <button type="button" (click)="closeMapModal()"
+              class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">&times;</button>
+    </div>
+    <div #modalMapContainer style="height: 460px; width: 100%;"></div>
+    <div class="flex items-center justify-between px-5 py-3 bg-gray-50 border-t border-gray-100">
+      <span class="text-xs text-gray-500">
+        @if (venueType === 'place') {
+          📍 <strong>{{ pinLat }}</strong>, <strong>{{ pinLng }}</strong>
+        } @else {
+          🗺️ {{ selectedVenue?.name }}
+          @if (selectedVenueAreaKm2 !== null) {
+            &nbsp;·&nbsp; <strong>{{ selectedVenueAreaKm2 | number:'1.2-2' }} km²</strong>
+          }
+        }
+      </span>
+      <button type="button" (click)="closeMapModal()"
+              class="text-sm text-gray-600 font-medium px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">
+        Close
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- DATE PICKER MODAL -->
+@if (activePicker === 'startDate' || activePicker === 'endDate') {
+  <div class="fixed inset-0 z-50 flex items-center justify-center"
+       style="background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
+       (click)="activePicker = null">
+    <div class="bg-white rounded-2xl shadow-2xl overflow-hidden"
+         style="width: 320px;"
+         (click)="$event.stopPropagation()">
+      <div class="bg-blue-700 px-5 pt-5 pb-4">
+        <p class="text-[11px] font-semibold tracking-widest text-blue-200 uppercase mb-1">
+          {{ activePicker === 'startDate' ? 'Start Date' : 'End Date' }}
+        </p>
+        <p class="text-2xl font-bold text-white">
+          {{ activePicker === 'startDate'
+              ? (startDate ? formatDisplayDate(startDate) : 'Pick a date')
+              : (endDate   ? formatDisplayDate(endDate)   : 'Pick a date') }}
+        </p>
+      </div>
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <button type="button" class="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 border-none bg-transparent cursor-pointer text-lg" (click)="prevMonth()">&#8249;</button>
+        <span class="text-sm font-semibold text-gray-800">{{ monthNames[calendarMonth] }} {{ calendarYear }}</span>
+        <button type="button" class="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 border-none bg-transparent cursor-pointer text-lg" (click)="nextMonth()">&#8250;</button>
+      </div>
+      <div class="grid grid-cols-7 px-3 pt-2 pb-1">
+        @for (d of weekDays; track d) {
+          <div class="text-center text-[11px] font-semibold text-gray-400 py-1">{{ d }}</div>
+        }
+      </div>
+      <div class="grid grid-cols-7 px-3 pb-3">
+        @for (day of calendarDays; track $index) {
+          <button type="button"
+            class="aspect-square flex items-center justify-center text-sm rounded-full border-none cursor-pointer transition-all mx-auto"
+            style="width: 36px; height: 36px;"
+            [class.bg-blue-700]="isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.text-white]="isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.font-bold]="isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.text-blue-700]="isToday(day) && !isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.font-semibold]="isToday(day)"
+            [class.text-gray-700]="day !== 0 && !isToday(day) && !isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            [class.text-transparent]="day === 0"
+            [class.pointer-events-none]="day === 0"
+            [class.bg-transparent]="!isSelectedDate(day, activePicker === 'startDate' ? startDate : endDate)"
+            (click)="day !== 0 && selectDate(day, activePicker === 'startDate' ? 'startDate' : 'endDate')">
+            {{ day !== 0 ? day : '' }}
+          </button>
+        }
+      </div>
+      <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-100">
+        <button type="button" class="text-sm text-gray-500 px-4 py-1.5 rounded-lg hover:bg-gray-100 border-none bg-transparent cursor-pointer" (click)="activePicker = null">Cancel</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- CLOCK PICKER MODAL -->
+@if (activePicker === 'startTime' || activePicker === 'endTime') {
+  <div class="fixed inset-0 z-50 flex items-center justify-center"
+       style="background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
+       (click)="activePicker = null">
+    <div class="bg-white rounded-2xl shadow-2xl overflow-hidden"
+         style="width: 300px;"
+         (click)="$event.stopPropagation()">
+      <div class="bg-blue-700 px-5 pt-5 pb-4">
+        <p class="text-[11px] font-semibold tracking-widest text-blue-200 uppercase mb-1">
+          {{ activePicker === 'startTime' ? 'Start Time' : 'End Time' }}
+        </p>
+        <div class="flex items-end gap-1">
+          <span class="text-5xl font-bold tracking-tight"
+                [class.text-white]="clockMode === 'hour'"
+                [class.text-blue-300]="clockMode !== 'hour'"
+                style="cursor:pointer; line-height:1;"
+                (click)="setClockMode('hour')">{{ selectedHour | number:'2.0-0' }}</span>
+          <span class="text-5xl font-bold text-blue-300" style="line-height:1;">:</span>
+          <span class="text-5xl font-bold tracking-tight"
+                [class.text-white]="clockMode === 'minute'"
+                [class.text-blue-300]="clockMode !== 'minute'"
+                style="cursor:pointer; line-height:1;"
+                (click)="setClockMode('minute')">{{ selectedMinute | number:'2.0-0' }}</span>
+          <div class="flex flex-col gap-0.5 ml-2 mb-1">
+            <button type="button"
+                    class="text-xs font-bold px-2 py-0.5 rounded border-none cursor-pointer transition-colors"
+                    [class.bg-white]="selectedAmPm === 'AM'" [class.text-blue-700]="selectedAmPm === 'AM'"
+                    [class.bg-blue-600]="selectedAmPm !== 'AM'" [class.text-blue-200]="selectedAmPm !== 'AM'"
+                    (click)="setClockAmPm('AM')">AM</button>
+            <button type="button"
+                    class="text-xs font-bold px-2 py-0.5 rounded border-none cursor-pointer transition-colors"
+                    [class.bg-white]="selectedAmPm === 'PM'" [class.text-blue-700]="selectedAmPm === 'PM'"
+                    [class.bg-blue-600]="selectedAmPm !== 'PM'" [class.text-blue-200]="selectedAmPm !== 'PM'"
+                    (click)="setClockAmPm('PM')">PM</button>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2 px-5 pt-4 pb-2">
+        <button type="button"
+                class="text-xs font-semibold px-3 py-1 rounded-full border-none cursor-pointer transition-colors"
+                [class.bg-blue-100]="clockMode === 'hour'" [class.text-blue-700]="clockMode === 'hour'"
+                [class.bg-gray-100]="clockMode !== 'hour'" [class.text-gray-500]="clockMode !== 'hour'"
+                (click)="setClockMode('hour')">Hour</button>
+        <button type="button"
+                class="text-xs font-semibold px-3 py-1 rounded-full border-none cursor-pointer transition-colors"
+                [class.bg-blue-100]="clockMode === 'minute'" [class.text-blue-700]="clockMode === 'minute'"
+                [class.bg-gray-100]="clockMode !== 'minute'" [class.text-gray-500]="clockMode !== 'minute'"
+                (click)="setClockMode('minute')">Minute</button>
+      </div>
+      <div class="flex justify-center px-4 pb-2">
+        <svg #clockSvg width="220" height="220" viewBox="0 0 220 220"
+             style="cursor:pointer; display:block;"
+             (mousedown)="onClockMouseDown($event, clockSvg)"
+             (touchstart)="onClockInteraction($event, clockSvg)"
+             (touchmove)="onClockInteraction($event, clockSvg)">
+          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="108" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="88"  fill="#f1f5f9" stroke="#e2e8f0" stroke-width="0.5"/>
+          <line [attr.x1]="clockCX" [attr.y1]="clockCY" [attr.x2]="clockHandEnd.x" [attr.y2]="clockHandEnd.y" stroke="#1d4ed8" stroke-width="2.5" stroke-linecap="round"/>
+          <circle [attr.cx]="clockCX" [attr.cy]="clockCY" r="4" fill="#1d4ed8"/>
+          @if (clockMode === 'hour') {
+            @for (m of clockHourMarkers; track m.value) {
+              <g>
+                @if (m.selected) { <circle [attr.cx]="m.x" [attr.cy]="m.y" r="18" fill="#1d4ed8"/> }
+                @if (!m.selected && isClockHourNear(m.value)) { <circle [attr.cx]="m.x" [attr.cy]="m.y" r="18" fill="#dbeafe" opacity="0.7"/> }
+                <text [attr.x]="m.x" [attr.y]="m.y" text-anchor="middle" dominant-baseline="central" font-size="14" font-family="inherit"
+                      [attr.fill]="m.selected ? 'white' : '#374151'" [attr.font-weight]="m.selected ? '700' : '400'">{{ m.value }}</text>
+              </g>
+            }
+          }
+          @if (clockMode === 'minute') {
+            @for (m of clockMinuteMarkers; track m.value) {
+              <g>
+                @if (m.selected) { <circle [attr.cx]="m.x" [attr.cy]="m.y" r="18" fill="#1d4ed8"/> }
+                @if (!m.selected && isClockMinuteNear(m.value)) { <circle [attr.cx]="m.x" [attr.cy]="m.y" r="18" fill="#dbeafe" opacity="0.7"/> }
+                <text [attr.x]="m.x" [attr.cy]="m.y" [attr.y]="m.y" text-anchor="middle" dominant-baseline="central" font-size="13" font-family="inherit"
+                      [attr.fill]="m.selected ? 'white' : '#374151'" [attr.font-weight]="m.selected ? '700' : '400'">{{ m.value | number:'2.0-0' }}</text>
+              </g>
+            }
+          }
+          <circle [attr.cx]="clockHandEnd.x" [attr.cy]="clockHandEnd.y" r="11" fill="#1d4ed8"/>
+        </svg>
+      </div>
+      <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-100">
+        <button type="button" class="text-sm text-gray-500 px-4 py-1.5 rounded-lg hover:bg-gray-100 border-none bg-transparent cursor-pointer" (click)="activePicker = null">Cancel</button>
+        <button type="button" class="text-sm text-white font-semibold px-5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer" (click)="confirmTime(activePicker === 'startTime' ? 'startTime' : 'endTime')">Confirm</button>
+      </div>
+    </div>
+  </div>
+}

@@ -1,0 +1,405 @@
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit, NgZone } from '@angular/core';
+import { CommonModule, DecimalPipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
+import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { Router } from '@angular/router';
+import { LocationsService } from '../../../../core/services/locations.service';
+import { LightboxService } from '../../../../core/services/lightbox.service';
+import { ZoneDrawService } from '../../../../core/services/zone-draw.service';
+declare const L: any;
+
+interface ClassItem {
+  label: string;
+  checked: boolean;
+}
+
+@Component({
+  selector: 'app-add-location',
+  standalone: true,
+  imports: [CommonModule, FormsModule, DecimalPipe, SidebarComponent, TopbarComponent],
+  templateUrl: './add-location.component.html',
+  styles: [`
+    .rte-field { position: relative; }
+    .rte-ph {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 0.5rem 0.75rem;
+      color: #9ca3af;
+      font-size: 0.875rem;
+      pointer-events: none;
+      user-select: none;
+      line-height: 1.5rem;
+    }
+  `]
+})
+export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
+
+  constructor(private zone: NgZone, private router: Router, private locationsService: LocationsService, private lightboxService: LightboxService, private zoneDrawService: ZoneDrawService) {}
+
+  //ViewChild refs
+  @ViewChild('editorRef')        editorRef!:           ElementRef<HTMLDivElement>;
+  @ViewChild('miniMapContainer') miniMapContainer!:    ElementRef<HTMLDivElement>;
+  @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
+
+  //Rich text editor
+  isBold      = false;
+  isItalic    = false;
+  isUnderline = false;
+
+  execFormat(command: 'bold' | 'italic' | 'underline'): void {
+    document.execCommand(command, false, undefined);
+    this.editorRef.nativeElement.focus();
+    this.syncToolbarState();
+  }
+
+  editorIsEmpty = true;
+
+  onEditorChange(): void { this.syncToolbarState(); this.syncEmptyState(); }
+  onEditorFocus():  void { this.syncToolbarState(); this.syncEmptyState(); }
+  onEditorBlur():   void {
+    this.syncToolbarState();
+    const el = this.editorRef?.nativeElement;
+    if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
+      el.innerHTML = '';
+    }
+      this.syncEmptyState();
+  }
+
+  private syncEmptyState(): void {
+    const el = this.editorRef?.nativeElement;
+    if (!el) return;
+    const text = el.innerText ?? el.textContent ?? '';
+    this.editorIsEmpty = text.trim() === '' && !el.querySelector('img');
+  }
+  private syncToolbarState(): void {
+      this.isBold      = document.queryCommandState('bold');
+      this.isItalic    = document.queryCommandState('italic');
+      this.isUnderline = document.queryCommandState('underline');
+    }
+  //Cover image
+  coverImageUrl : string | null = null;
+  coverImageName: string        = '';
+
+  onCoverImageSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file  = input.files?.[0];
+    if (!file) return;
+    this.coverImageUrl  = URL.createObjectURL(file);
+    this.coverImageName = file.name;
+    input.value = '';
+  }
+
+  removeCoverImage(): void {
+    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
+    this.coverImageUrl  = null;
+    this.coverImageName = '';
+  }
+
+  //Gallery
+  galleryImages: { url: string; name: string }[] = [];
+
+  onGalleryImagesSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    for (const file of files) {
+      this.galleryImages.push({ url: URL.createObjectURL(file), name: file.name });
+    }
+    input.value = '';
+  }
+
+  removeGalleryImage(index: number): void {
+    URL.revokeObjectURL(this.galleryImages[index].url);
+    this.galleryImages.splice(index, 1);
+  }
+
+  //Classification
+  classItems: ClassItem[] = [
+    { label: 'Nature',  checked: false },
+    { label: 'History', checked: false },
+    { label: 'Beaches', checked: false },
+    { label: 'Hiking',  checked: false },
+    { label: 'Culture', checked: false },
+  ];
+
+  //Tags
+  tags    : string[] = [];
+  tagInput: string   = '';
+
+  addTag(event: Event): void {
+    event.preventDefault();
+    const value = this.tagInput.trim();
+    if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
+    this.tags     = [...this.tags, value];
+    this.tagInput = '';
+  }
+
+  removeTag(tag: string): void {
+    this.tags = this.tags.filter(t => t !== tag);
+  }
+
+  //Geographic zone / Leaflet
+  zoneModalOpen = false;
+  zoneConfirmed = false;
+  zoneAreaKm2: number | null = null;
+
+  drawTool: 'polygon' | 'rectangle' | 'circle' = 'polygon';
+
+  get drawHint(): string {
+    const hints: Record<string, string> = {
+      polygon:   'Click to add points. Double-click to close the polygon.',
+      rectangle: 'Click and drag to draw a rectangle.',
+      circle:    'Click the centre point, then drag to set the radius.',
+    };
+    return hints[this.drawTool];
+  }
+
+  private miniMap  : any = null;
+  private modalMap : any = null;
+  private drawnLayer    : any = null;
+  private confirmedLayer: any = null;
+  private drawControl   : any = null;
+
+  private initMiniMap(): void {
+    if (this.miniMap) return;
+    const el = this.miniMapContainer?.nativeElement;
+    if (!el) return;
+
+    this.miniMap = L.map(el, {
+      zoomControl: false, dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, touchZoom: false, attributionControl: false,
+    }).setView([44.0, 20.9], 8);
+
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+    }).addTo(this.miniMap);
+  }
+
+  openZoneModal(): void {
+    this.zoneModalOpen = true;
+    setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
+  }
+
+  closeZoneModal(): void {
+    this.zoneModalOpen = false;
+    this.destroyModalMap();
+  }
+
+  onModalBackdropClick(_event: MouseEvent): void {
+    this.closeZoneModal();
+  }
+
+  private initModalMap(el: HTMLDivElement): void {
+    if (this.modalMap) return;
+
+    this.modalMap = L.map(el, {
+      zoomControl: true,
+      attributionControl: false,
+    }).setView([44.0, 20.9], 9);
+
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+    }).addTo(this.modalMap);
+
+    setTimeout(() => this.modalMap?.invalidateSize(), 200);
+
+    if (this.confirmedLayer) {
+      const layerCopy = this.zoneDrawService.cloneLayer(this.confirmedLayer);
+      if (layerCopy) {
+        layerCopy.addTo(this.modalMap);
+        this.drawnLayer = layerCopy;
+        this.modalMap.fitBounds(layerCopy.getBounds(), { padding: [30, 30] });
+      }
+    }
+
+    this.activateDrawTool();
+  }
+
+  private destroyModalMap(): void {
+    if (this.modalMap) {
+      this.modalMap.remove();
+      this.modalMap    = null;
+      this.drawnLayer  = null;
+      this.drawControl = null;
+    }
+  }
+
+  setDrawTool(tool: 'polygon' | 'rectangle' | 'circle'): void {
+    this.drawTool = tool;
+    if (this.modalMap) { this.clearZone(); this.activateDrawTool(); }
+  }
+
+  private activateDrawTool(): void {
+    if (!this.modalMap) return;
+
+    if (this.drawControl) { this.drawControl.disable(); this.drawControl = null; }
+
+    const shapeOptions = {
+      color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
+    };
+
+    let handler: any;
+    switch (this.drawTool) {
+      case 'polygon':
+        handler = new L.Draw.Polygon(this.modalMap, {
+          shapeOptions, showArea: true, allowIntersection: false,
+        });
+        break;
+      case 'rectangle':
+        handler = new L.Draw.Rectangle(this.modalMap, { shapeOptions });
+        break;
+      case 'circle':
+        handler = new L.Draw.Circle(this.modalMap, { shapeOptions });
+        break;
+    }
+
+    if (handler) {
+      this.drawControl = handler;
+      handler.enable();
+
+      this.modalMap.once('draw:created', (e: any) => {
+        if (this.drawnLayer) this.modalMap.removeLayer(this.drawnLayer);
+        this.drawnLayer = e.layer;
+        this.modalMap.addLayer(this.drawnLayer);
+      });
+    }
+  }
+
+  clearZone(): void {
+    if (this.drawnLayer && this.modalMap) {
+      this.modalMap.removeLayer(this.drawnLayer);
+      this.drawnLayer = null;
+    }
+    if (this.drawControl) { this.drawControl.disable(); this.drawControl = null; }
+    this.activateDrawTool();
+  }
+
+  confirmZone(): void {
+    if (!this.drawnLayer) {
+      alert('Please draw a zone on the map first.');
+      return;
+    }
+
+    let areaM2 = 0;
+
+    if (this.drawnLayer instanceof L.Circle) {
+      const r = this.drawnLayer.getRadius();
+      areaM2  = Math.PI * r * r;
+    } else if (
+      this.drawnLayer instanceof L.Polygon ||
+      this.drawnLayer instanceof L.Rectangle
+    ) {
+      if ((L as any).GeometryUtil?.geodesicArea) {
+        areaM2 = (L as any).GeometryUtil.geodesicArea(
+          this.drawnLayer.getLatLngs()[0],
+        );
+      } else {
+        areaM2 = this.zoneDrawService.shoelaceAreaM2(this.drawnLayer.getLatLngs()[0]);
+      }
+    }
+
+    this.zoneAreaKm2   = areaM2 / 1_000_000;
+    this.zoneConfirmed = true;
+    this.confirmedLayer = this.drawnLayer;
+
+    this.showZoneOnMiniMap();
+    this.closeZoneModal();
+  }
+
+  private showZoneOnMiniMap(): void {
+    if (!this.miniMap) this.initMiniMap();
+    if (!this.miniMap || !this.confirmedLayer) return;
+
+    // Ukloni prethodnu zonu sa mini mape
+    this.miniMap.eachLayer((layer: any) => {
+      if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
+    });
+
+    const clone = this.zoneDrawService.cloneLayer(this.confirmedLayer);
+    if (!clone) return;
+
+    (clone as any)._isConfirmedZone = true;
+    clone.addTo(this.miniMap);
+
+    try {
+      this.miniMap.fitBounds(clone.getBounds(), { padding: [10, 10] });
+    } catch {}
+  }
+
+  //Lifecycle
+  isEditMode = false;
+  locationName = '';
+
+  ngOnInit(): void {
+    const state = history.state as { place?: any };
+    if (state?.place) {
+      this.isEditMode = true;
+      this._loadFromRouterState(state.place);
+    }
+  }
+
+  private _loadFromRouterState(p: any): void {
+    this.locationName = p.name ?? '';
+    if (p.zone) {
+      setTimeout(() => {
+        if (!this.miniMap) this.initMiniMap();
+        const polygon = L.polygon(p.zone, {
+          color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.25, weight: 2,
+        });
+        (polygon as any)._isConfirmedZone = true;
+        polygon.addTo(this.miniMap);
+        this.zoneConfirmed = true;
+        this.confirmedLayer = polygon;
+        try { this.miniMap.fitBounds(polygon.getBounds(), { padding: [10, 10] }); } catch {}
+      }, 200);
+    }
+  }
+
+  ngAfterViewInit(): void {
+    setTimeout(() => this.initMiniMap(), 0);
+  }
+  openLightbox(images: { url: string; name: string }[], index: number): void {
+    this.lightboxService.open(images, index);
+  }
+  ngOnDestroy(): void {
+    this.destroyModalMap();
+    this.lightboxService.close();
+    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
+    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
+    if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
+  }
+  isSaving = false;
+  publish(): void {
+    if (!this.zoneConfirmed || !this.confirmedLayer) {
+      alert('Please draw a zone on the map first.');
+      return;
+    }
+    this.isSaving = true;
+    const { zone, centerLat, centerLng } = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
+    const areaKm2 = this.zoneDrawService.calculateAreaKm2(this.confirmedLayer);
+
+    const payload = {
+      name:        this.locationName || 'New Location',
+      type:        'Location' as const,
+      category:    'Location',
+      description: this.editorRef?.nativeElement?.innerHTML ?? '',
+      status:      'Active',
+      eventsToday: 0,
+      lat:         centerLat,
+      lng:         centerLng,
+      zone,
+    };
+
+    const action$ = this.isEditMode
+      ? this.locationsService.update(history.state?.place?.id, payload)
+      : this.locationsService.add(payload);
+
+    action$.subscribe({
+      next: (saved) => {
+        this.isSaving = false;
+        this.router.navigate(['/map'], { state: { newPlace: saved } });
+      },
+      error: () => { this.isSaving = false; alert('Failed to save.'); }
+    });
+  }
+}

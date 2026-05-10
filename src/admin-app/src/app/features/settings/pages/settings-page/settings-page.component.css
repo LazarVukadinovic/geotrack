@@ -1,0 +1,67 @@
+:host {
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  display: block;
+  height: 100vh;
+}
+
+/* Toggle switch */
+.toggle-track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 44px;
+  height: 24px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background 0.2s;
+  background: #e5e7eb;
+  flex-shrink: 0;
+}
+.toggle-track.on {
+  background: #1565d8;
+}
+.toggle-thumb {
+  position: absolute;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  transition: transform 0.2s cubic-bezier(.4,0,.2,1);
+}
+.toggle-track.on .toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* Focus ring for inputs */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: #1565d8 !important;
+  box-shadow: 0 0 0 3px rgba(21,101,216,0.12);
+}
+
+/* Disabled input */
+input:disabled, textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Save button hover */
+.btn-save:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1250b0 0%, #1575d0 100%) !important;
+  box-shadow: 0 4px 16px rgba(21,101,216,0.35);
+}
+.btn-save:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* Success toast fade */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.toast-success {
+  animation: fadeInUp 0.25s ease both;
+}
