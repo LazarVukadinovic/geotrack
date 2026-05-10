@@ -20,7 +20,7 @@
           <h1 class="text-2xl font-bold text-gray-900">All Regions</h1>
           <p class="text-sm text-gray-500 mt-0.5">
             Manage all regions, their operational status, and regional content coverage.
-            Monitor pending requests and reassign resources as needed.
+            
           </p>
         </div>
         <button
@@ -104,15 +104,15 @@
 
         <!-- Header -->
         <div
-          class="grid items-center gap-4 px-5 py-3 border-b border-gray-100 bg-gray-50/60"
+          class="grid items-center gap-3 px-3 py-5 border-b border-gray-100 bg-gray-50/60"
           style="grid-template-columns: 56px 1fr 200px 160px 140px 160px;"
         >
           <div></div>
-          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Region Details</span>
-          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Content Entities</span>
-          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Assigned Persons</span>
-          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
-          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider text-right">Actions</span>
+          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Region Details</span>
+          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Content Entities</span>
+          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Assigned Persons</span>
+          <span class="ml-1 text-[12px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
+          <span class="ml-9 text-[12px] font-bold text-gray-400 uppercase tracking-wider">Actions</span>
         </div>
 
         <!-- Skeleton -->
@@ -208,7 +208,7 @@
 
             <!-- Assigned persons -->
             <div class="flex items-center gap-1.5 text-sm text-gray-700">
-              <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+              <svg class=" ml-13 w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M16 11c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm-8 0c1.657 0 3-1.343 3-3S9.657 5 8 5 5 6.343 5 8s1.343 3 3 3zm0 2c-2.337 0-7 1.173-7 3.5V18h14v-1.5C15 14.173 10.337 13 8 13zm8 0c-.29 0-.621.018-.97.048C16.198 13.773 17 14.76 17 16.5V18h5v-1.5c0-2.327-4.663-3.5-6-3.5z"/>
               </svg>
               {{ item.assignedPersons }}
@@ -217,7 +217,7 @@
             <!-- Status -->
             <div>
               <span
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                class="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
                 [ngClass]="statusClass(item.status)"
               >
                 <span

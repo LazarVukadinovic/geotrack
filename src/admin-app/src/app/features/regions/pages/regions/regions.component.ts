@@ -41,25 +41,23 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   displayCount  = PAGE_SIZE_INITIAL;
 
   searchQuery = '';
-  sortField: RegionSortField = 'name';
+  sortField: RegionSortField = 'status';
   sortDir:   RegionSortDir   = 'asc';
   sortOpen = false;
 
   sortOptions: { label: string; field: RegionSortField; dir: RegionSortDir }[] = [
-    { label: 'A–Z',                   field: 'name',            dir: 'asc'  },
-    { label: 'Z–A',                   field: 'name',            dir: 'desc' },
     { label: 'Status: Active First',  field: 'status',          dir: 'asc'  },
     { label: 'Status: Inactive First',field: 'status',          dir: 'desc' },
     { label: 'Most Persons',          field: 'assignedPersons', dir: 'desc' },
     { label: 'Fewest Persons',        field: 'assignedPersons', dir: 'asc'  },
-    { label: 'Most Destinations',     field: 'destinations',    dir: 'desc' },
-    { label: 'Fewest Destinations',   field: 'destinations',    dir: 'asc'  },
+    { label: 'A–Z',                   field: 'name',            dir: 'asc'  },
+    { label: 'Z–A',                   field: 'name',            dir: 'desc' },
   ];
 
   get currentSortLabel(): string {
     return this.sortOptions.find(
       o => o.field === this.sortField && o.dir === this.sortDir
-    )?.label ?? 'A–Z';
+    )?.label ?? 'Status: Active First';
   }
 
   applySortOption(opt: { label: string; field: RegionSortField; dir: RegionSortDir }): void {
