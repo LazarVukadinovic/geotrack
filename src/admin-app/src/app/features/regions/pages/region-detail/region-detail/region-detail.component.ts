@@ -6,7 +6,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
-import { RegionsService, RegionDetail, RegionTeamMember } from '../../../../../core/services/national/regions.service';
+import { RegionsService, RegionDetail, RegionTeamMember, buildDetail, RegionListItem } from '../../../../../core/services/national/regions.service';
 
 @Component({
   selector: 'app-region-detail',
@@ -48,17 +48,27 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   isRemoving = false;
 
   ngOnInit(): void {
-    const state = history.state as { editMode?: boolean } | undefined;
+    const state = history.state as { region?: RegionListItem; editMode?: boolean } | undefined;
     this.isViewMode = !(state?.editMode === true);
+
+    if (state?.region) {
+      this.region = buildDetail(state.region);
+      this.isLoading = false;
+      this.syncEditFields();
+      this.cdr.markForCheck();
+    }
 
     const id = this.route.snapshot.paramMap.get('id') ?? '';
 
     this.svc.getDetail$(id)
       .pipe(takeUntil(this.destroy$))
       .subscribe(detail => {
-        this.region    = detail;
+        if (detail) {
+          this.region = detail;
+          this.syncEditFields();
+          this.cdr.markForCheck();
+        }
         this.isLoading = false;
-        this.syncEditFields();
         this.cdr.markForCheck();
       });
   }

@@ -79,6 +79,14 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
       this.displayCount = PAGE_SIZE_INITIAL;
       this.loadItems();
     });
+    const cached = this.svc.lastPage$.getValue();
+    if (cached) {
+      this.items      = cached.items;
+      this.totalItems = cached.total;
+      this.isLoading  = false;
+      this.cdr.markForCheck();
+    }
+
     this.loadItems();
   }
 

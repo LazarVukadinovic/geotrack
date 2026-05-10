@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { Observable, of } from 'rxjs';
-import { delay } from 'rxjs/operators';
+import { Observable, of, BehaviorSubject } from 'rxjs';
+import { delay, tap } from 'rxjs/operators';
 
 
 export interface RegionListItem {
@@ -214,7 +214,7 @@ const DETAIL_OVERRIDES: Record<string, Partial<RegionDetail>> = {
   },
 };
 
-function buildDetail(item: RegionListItem): RegionDetail {
+export function buildDetail(item: RegionListItem): RegionDetail {
   const ov = DETAIL_OVERRIDES[item.id] ?? {};
   return {
     ...item,
@@ -236,7 +236,7 @@ function buildDetail(item: RegionListItem): RegionDetail {
 
 @Injectable({ providedIn: 'root' })
 export class RegionsService {
-
+  readonly lastPage$ = new BehaviorSubject<RegionPage | null>(null);
   getPage$(req: RegionPageRequest): Observable<RegionPage> {
     let filtered = ALL_REGIONS.filter(r => {
       if (!req.search) return true;
@@ -255,7 +255,7 @@ export class RegionsService {
 
     const total = filtered.length;
     const items = filtered.slice(0, req.pageSize);
-    return of({ items, total }).pipe(delay(350));
+    return of({ items, total }).pipe(tap(page => this.lastPage$.next(page)),);
   }
 
   delete$(id: string): Observable<void> {
