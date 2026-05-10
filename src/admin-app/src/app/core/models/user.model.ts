@@ -6,7 +6,7 @@ export interface User {
   lastName: string;
   email: string;
   role: UserRole;
-  region: string;           // assigned region or country
+  region: string;
   memberSince: string;
   bio: string;
   language: string;
