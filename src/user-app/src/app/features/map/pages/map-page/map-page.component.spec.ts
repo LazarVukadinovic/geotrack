@@ -15,6 +15,9 @@ describe('MapPage', () => {
     onMarkerDomClick(event: MouseEvent, key: string, marker: MapEntityMarker): void;
     onMapLibreMarkerClick(event: { originalEvent?: MouseEvent }, key: string, marker: MapEntityMarker): void;
     onMapClick(event: { originalEvent: { target: EventTarget | null } }): void;
+    rebuildAvailableMoreFilters(markers: MapEntityMarker[]): void;
+    filterMarkersByMoreFilters(markers: MapEntityMarker[]): MapEntityMarker[];
+    selectedCategoryLabelFilters: string[];
   };
 
   const router = {
@@ -156,6 +159,55 @@ describe('MapPage', () => {
     expect(preview?.textContent).toContain(placeMarker.categoryLabel);
   });
 
+  it('opens More inline on desktop without navigating away from the map', () => {
+    mockViewport(true);
+
+    component.onMoreFiltersClick();
+
+    expect(component.isMoreFiltersOpen).toBe(true);
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the mobile More flow routed to the Filters page', () => {
+    mockViewport(false);
+
+    component.onMoreFiltersClick();
+
+    expect(component.isMoreFiltersOpen).toBe(false);
+    expect(router.navigate).toHaveBeenCalledWith(['/filters']);
+  });
+
+  it('derives inline More filters from backend marker category labels', () => {
+    const markers: MapEntityMarker[] = [
+      placeMarker,
+      { ...placeMarker, entityId: 43, title: 'Museum One', categoryLabel: 'Museum' },
+      { ...placeMarker, entityId: 44, title: 'Museum Two', categoryLabel: 'Museum' },
+      { ...placeMarker, entityType: 'event', entityId: 12, title: 'Jazz Night', categoryLabel: 'Live Music' },
+      { ...placeMarker, entityType: 'destination', entityId: 9, title: 'Dubrovnik', categoryLabel: 'City' },
+    ];
+
+    componentInternals.rebuildAvailableMoreFilters(markers);
+
+    expect(component.availableMoreFilters).toEqual([
+      { id: 'museum', label: 'Museum', count: 2 },
+      { id: 'landmark', label: 'Landmark', count: 1 },
+      { id: 'live music', label: 'Live Music', count: 1 },
+    ]);
+  });
+
+  it('filters visible entity markers by selected backend category labels', () => {
+    const markers: MapEntityMarker[] = [
+      placeMarker,
+      { ...placeMarker, entityId: 43, title: 'Museum One', categoryLabel: 'Museum' },
+      { ...placeMarker, entityType: 'event', entityId: 12, title: 'Jazz Night', categoryLabel: 'Live Music' },
+    ];
+    componentInternals.selectedCategoryLabelFilters = ['museum'];
+
+    const filtered = componentInternals.filterMarkersByMoreFilters(markers);
+
+    expect(filtered.map((marker) => marker.title)).toEqual(['Museum One']);
+  });
+
   it('replaces the selected marker when another entity marker is clicked', () => {
     const stayMarker: MapEntityMarker = {
       ...placeMarker,
@@ -253,5 +305,22 @@ describe('MapPage', () => {
       preventDefault,
       stopPropagation,
     };
+  }
+
+  function mockViewport(matches: boolean): void {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
   }
 });
