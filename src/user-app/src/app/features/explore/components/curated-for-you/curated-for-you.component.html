@@ -6,7 +6,22 @@
     (action)="sectionMore.emit()"
   />
 
-  @if (items().length === 0) {
+  @if (loading()) {
+    <div class="curated__viewport" aria-busy="true">
+      <div class="curated__track" data-slider-id="curated" role="list">
+        @for (_ of [0, 1, 2]; track $index) {
+          <article class="curated__card curated__card--skeleton" aria-hidden="true">
+            <div class="curated__media curated__skeleton-media"></div>
+            <div class="curated__body">
+              <span class="curated__skeleton-line curated__skeleton-line--title"></span>
+              <span class="curated__skeleton-line"></span>
+              <span class="curated__skeleton-line curated__skeleton-line--short"></span>
+            </div>
+          </article>
+        }
+      </div>
+    </div>
+  } @else if (items().length === 0) {
     <app-empty-state
       title="Nothing personalized nearby yet"
       message="We do not have nearby matches for your saved interests or recent activity yet."
