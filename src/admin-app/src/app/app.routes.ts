@@ -142,6 +142,12 @@ export const routes: Routes = [
         loadComponent: () => import('./features/regions/pages/region-detail/region-detail/region-detail.component').then(m=>m.RegionDetailComponent),
       },
       {
+        path: 'user-administration',
+        canActivate: [nationalManagerGuard],
+        loadComponent: () =>
+          import('./features/users/pages/user-administration/user-administration/user-administration.component').then(m => m.UserAdministrationComponent),
+      },
+      {
         path: 'settings',
         loadComponent: () =>
           import('./features/settings/pages/settings-page/settings-page.component')
