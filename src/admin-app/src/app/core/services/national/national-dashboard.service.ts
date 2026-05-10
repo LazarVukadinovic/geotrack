@@ -44,7 +44,7 @@ export interface TopPlace {
   rating: number;
 }
 
-export interface HotEvent {
+export interface Event {
   name: string;
   date: string;
   attendeesFigure: string;
@@ -69,42 +69,42 @@ export class NationalDashboardService {
   getRegions(): RegionCard[] {
     return [
       {
-        name: 'Šumadija i Zapadna Srbija',
+        name: 'Šumadija',
         manager: 'Nikola Petrović',
         destinations: 28, locations: 620, places: 340, events: 22,
         activityScore: 91,
         initials: ['NP', 'MJ', 'AK'],
       },
       {
-        name: 'Vojvodina',
+        name: 'Banat',
         manager: 'Ana Kovačević',
         destinations: 21, locations: 510, places: 280, events: 18,
         activityScore: 84,
         initials: ['AK', 'DS', 'BL'],
       },
       {
-        name: 'Beograd',
+        name: 'Bačka',
         manager: 'Stefan Đorđević',
         destinations: 14, locations: 480, places: 310, events: 31,
         activityScore: 95,
         initials: ['SĐ', 'IV', 'MM'],
       },
       {
-        name: 'Južna i Istočna Srbija',
+        name: 'Pomoravlje',
         manager: 'Milica Stanković',
         destinations: 22, locations: 390, places: 210, events: 9,
         activityScore: 68,
         initials: ['MS', 'RP', 'TN'],
       },
       {
-        name: 'Raška i Stari Ras',
+        name: 'Raška',
         manager: 'Jovan Milošević',
         destinations: 19, locations: 340, places: 185, events: 8,
         activityScore: 77,
         initials: ['JM', 'KV', 'LP'],
       },
       {
-        name: 'Podunavlje i Braničevo',
+        name: 'Podunavlje',
         manager: 'Dragana Nikolić',
         destinations: 20, locations: 500, places: 238, events: 5,
         activityScore: 82,
@@ -145,7 +145,7 @@ export class NationalDashboardService {
     ];
   }
 
-  getHotEvents(): HotEvent[] {
+  getEvents(): Event[] {
     return [
       { name: 'Exit Festival',            date: '2025-07-10', attendeesFigure: '200K' },
       { name: 'Dragačevski sabor — Guča', date: '2025-08-07', attendeesFigure: '800K' },

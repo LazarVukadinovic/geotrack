@@ -3,7 +3,7 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
-import { NationalDashboardService, NationalStat, RegionCard, TopRegion, TopDestination, TopLocation, TopPlace, HotEvent } from '../../../../core/services/national/national-dashboard.service';
+import { NationalDashboardService, NationalStat, RegionCard, TopRegion, TopDestination, TopLocation, TopPlace, Event } from '../../../../core/services/national/national-dashboard.service';
 
 @Component({
   selector: 'app-national-dashboard',
@@ -26,5 +26,5 @@ export class NationalDashboardComponent {
   readonly topDestinations: TopDestination[] = this.dashboard.getTopDestinations();
   readonly topLocations:    TopLocation[]    = this.dashboard.getTopLocations();
   readonly topPlaces:       TopPlace[]       = this.dashboard.getTopPlaces();
-  readonly hotEvents:       HotEvent[]       = this.dashboard.getHotEvents();
+  readonly Events:       Event[]       = this.dashboard.getEvents();
 }
