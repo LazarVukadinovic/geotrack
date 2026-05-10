@@ -385,7 +385,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
   }
 
   navigateToNewEvent(): void {
-    this.router.navigate(['/events/new'], { state: { place: this.selectedPlace } });
+    this.router.navigate(['/events/new'], { state: { place: this.selectedPlace, returnTo: '/map', } });
     this.closePopup();
   }
   navigateToNewPlaceWithPin(): void {
@@ -395,7 +395,8 @@ export class MapPageComponent implements OnInit, OnDestroy {
         droppedPin: {
           lat: this.droppedPin.lat,
           lng: this.droppedPin.lng,
-        }
+        },
+        returnTo: '/map',
       }
     });
     this.cancelDroppedPin();

@@ -90,40 +90,46 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
   private initMiniMap(): void {
     if (this.miniMap || !this.miniMapContainer?.nativeElement) return;
     const el = this.miniMapContainer.nativeElement;
+    const zone = (this.item as any)?.zone as [number,number][] | undefined;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
-    const hasCoords = (this.item as any)?.lat != null;
 
     this.miniMap = L.map(el, {
       zoomControl: true, dragging: true, scrollWheelZoom: false,
       doubleClickZoom: false, touchZoom: false, attributionControl: false,
-    }).setView([lat, lng], hasCoords ? 14 : 8);
+    }).setView([lat, lng], zone ? 12 : 8);
 
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 })
-      .addTo(this.miniMap);
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+    }).addTo(this.miniMap);
 
-    if (hasCoords) {
-      this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
-        .addTo(this.miniMap);
+    if (zone && zone.length > 0) {
+      this.miniMarker = L.polygon(zone, {
+        color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
+      }).addTo(this.miniMap);
+      try { this.miniMap.fitBounds(this.miniMarker.getBounds(), { padding: [10, 10] }); } catch {}
     }
     setTimeout(() => this.miniMap?.invalidateSize(), 200);
   }
 
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap) return;
+    const zone = (this.item as any)?.zone as [number,number][] | undefined;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
-    const hasCoords = (this.item as any)?.lat != null;
 
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false })
-      .setView([lat, lng], hasCoords ? 15 : 9);
+      .setView([lat, lng], zone ? 13 : 9);
 
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 })
-      .addTo(this.modalMap);
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+    }).addTo(this.modalMap);
 
-    if (hasCoords) {
-      this.modalMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
-        .addTo(this.modalMap);
+    if (zone && zone.length > 0) {
+      this.modalMarker = L.polygon(zone, {
+        color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
+      }).addTo(this.modalMap);
+      try { this.modalMap.fitBounds(this.modalMarker.getBounds(), { padding: [30, 30] }); } catch {}
     }
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
   }
@@ -143,11 +149,26 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   editItem(): void {
-    this.router.navigate(['/locations/new'], { state: { place: this.item } });
+    const full = this.svc.findById(this.item!.id) ?? this.item!;
+    this.router.navigate(['/locations/new'], {
+      state: { place: full, returnTo: `/locations/detail/${full.id}` }
+    });
   }
 
   addEvent(): void {
-    this.router.navigate(['/events/new'], { state: { linkedLocation: this.item } });
+    this.router.navigate(['/events/new'], {
+      state: {
+        place: {
+          id:   this.item!.id,
+          name: this.item!.name,
+          type: 'Location',   // ili 'Place'
+          lat:  (this.item as any).lat,
+          lng:  (this.item as any).lng,
+          zone: (this.item as any).zone,
+        },
+        returnTo: `/locations/detail/${this.item!.id}`,
+      }
+    });
   }
 
   promptDelete(): void {

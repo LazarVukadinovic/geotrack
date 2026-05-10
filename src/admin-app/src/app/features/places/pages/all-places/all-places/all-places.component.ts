@@ -131,7 +131,10 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
   }
 
   editPlace(item: PlaceListItem): void {
-    this.router.navigate(['/places/new'], { state: { place: item } });
+    const full = this.svc.findById(item.id) ?? item;
+    this.router.navigate(['/places/new'], {
+      state: { place: full, returnTo: '/places' }
+    });
   }
 
   promptDelete(item: PlaceListItem, event?: MouseEvent): void {

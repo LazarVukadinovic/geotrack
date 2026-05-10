@@ -165,7 +165,10 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   }
 
   editLocation(item: LocationListItem): void {
-    this.router.navigate(['/locations/new'], { state: { place: item } });
+    const full = this.svc.findById(item.id) ?? item;
+    this.router.navigate(['/locations/new'], {
+      state: { place: full, returnTo: '/locations' }
+    });
   }
 
   // Context menu

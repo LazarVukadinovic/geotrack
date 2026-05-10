@@ -143,7 +143,10 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   editItem(): void {
-    this.router.navigate(['/events/new'], { state: { place: this.item } });
+    const full = this.svc.findById(this.item!.id) ?? this.item!;
+    this.router.navigate(['/events/new'], {
+      state: { place: full, returnTo: `/events/detail/${full.id}` }
+    });
   }
 
   promptDelete(): void {

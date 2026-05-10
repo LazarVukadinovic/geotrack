@@ -131,7 +131,10 @@ export class AllEventsComponent implements OnInit, OnDestroy {
   }
 
   editEvent(item: EventListItem): void {
-    this.router.navigate(['/events/new'], { state: { place: item } });
+    const full = this.svc.findById(item.id) ?? item;
+    this.router.navigate(['/events/new'], {
+      state: { place: full, returnTo: '/events' }
+    });
   }
 
   promptDelete(item: EventListItem, event?: MouseEvent): void {

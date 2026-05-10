@@ -229,29 +229,43 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       : this.placesService.add(payload);
 
     action$.subscribe({
-      next: (saved) => {
-        this.isSaving = false;
-        const returnTo = history.state?.returnTo as string | undefined;
-        if (returnTo) {
-          const listItem: PlaceListItem = {
-            id:          saved.id,
-            name:        saved.name,
-            summary:     '',
-            region:      'Šumadija, Srbija',
-            status:      'Published',
-            lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            imageBg:     'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
-            category:    saved.category,
-            lat:         saved.lat,
-            lng:         saved.lng,
-            address:     saved.address,
-          };
-          (this.placesListSvc as any)._all.unshift(listItem);
-          this.router.navigate([returnTo]);
-        } else {
-          this.router.navigate(['/map'], { state: { newPlace: saved } });
-        }
-      },
+    next: (saved) => {
+      this.isSaving = false;
+      const returnTo = history.state?.returnTo as string | undefined;
+
+      if (this.isEditMode && this.editPlaceId) {
+        this.placesListSvc.updateItem(this.editPlaceId, {
+          name:     saved.name,
+          lat:      saved.lat,
+          lng:      saved.lng,
+          address:  saved.address,
+          category: saved.category,
+          status:   'Published',
+        });
+      } else {
+        this.placesListSvc.addItem({
+          id:          saved.id,
+          name:        saved.name,
+          summary:     this.editorRef?.nativeElement?.innerText?.slice(0, 160) ?? '',
+          region:      'Šumadija, Srbija',
+          status:      'Published',
+          lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          imageBg:     this.coverImageUrl
+                        ? `url(${this.coverImageUrl}) center/cover`
+                        : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+          category:    saved.category,
+          lat:         saved.lat,
+          lng:         saved.lng,
+          address:     saved.address,
+        });
+      }
+
+      if (returnTo) {
+        this.router.navigate([returnTo]);
+      } else {
+        this.router.navigate(['/map'], { state: { newPlace: saved } });
+      }
+    },
       error: () => {
         this.isSaving = false;
         alert('Failed to save. Please try again.');

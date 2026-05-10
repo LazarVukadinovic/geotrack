@@ -143,12 +143,27 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   editItem(): void {
-    this.router.navigate(['/places/new'], { state: { place: this.item } });
+    const full = this.svc.findById(this.item!.id) ?? this.item!;
+    this.router.navigate(['/places/new'], {
+      state: { place: full, returnTo: `/places/detail/${full.id}` }
+    });
   }
 
-  addEvent(): void {
-    this.router.navigate(['/events/new'], { state: { linkedPlace: this.item } });
-  }
+addEvent(): void {
+  this.router.navigate(['/events/new'], {
+    state: {
+      place: {
+        id:   this.item!.id,
+        name: this.item!.name,
+        type: 'Location',   // ili 'Place'
+        lat:  (this.item as any).lat,
+        lng:  (this.item as any).lng,
+        zone: (this.item as any).zone,
+      },
+      returnTo: `/places/detail/${this.item!.id}`,
+    }
+  });
+}
 
   promptDelete(): void {
     this.deleteTarget = this.item;

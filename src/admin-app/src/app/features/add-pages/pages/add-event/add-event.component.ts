@@ -656,25 +656,58 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   publish(): void {
     this.isSaving = true;
     const returnTo = history.state?.returnTo as string | undefined;
+    const isEditMode = !!(history.state?.place?.id);
 
-    // Simuliraj save (ovde bi išao pravi API poziv)
     setTimeout(() => {
       this.isSaving = false;
-      if (returnTo) {
-        const listItem: EventListItem = {
+
+      const lat = this.pinLat ? parseFloat(this.pinLat) : this.selectedVenue?.lat;
+      const lng = this.pinLng ? parseFloat(this.pinLng) : this.selectedVenue?.lng;
+
+      const startDisp = this.startDate
+        ? new Date(this.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : '';
+      const endDisp = this.endDate
+        ? new Date(this.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : '';
+      const dateRange = startDisp === endDisp ? startDisp : `${startDisp}–${endDisp}`;
+
+      if (isEditMode) {
+        this.eventsListSvc.updateItem(history.state.place.id, {
+          name:       this.eventTitle || 'New Event',
+          lat,
+          lng,
+          address:    this.streetAddress || this.selectedVenue?.address,
+          venueName:  this.selectedVenue?.name,
+          startDate:  startDisp,
+          endDate:    endDisp,
+          dateRange,
+          status:     'Published',
+        });
+      } else {
+        this.eventsListSvc.addItem({
           id:          Date.now().toString(),
           name:        this.eventTitle || 'New Event',
-          summary:     '',
+          summary:     this.editorRef?.nativeElement?.innerText?.slice(0, 160) ?? '',
           region:      'Šumadija, Srbija',
           status:      'Published',
           lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          imageBg:     'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+          imageBg:     this.coverImageUrl
+                        ? `url(${this.coverImageUrl}) center/cover`
+                        : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
           category:    'Event',
-          lat:         this.pinLat ? parseFloat(this.pinLat) : undefined,
-          lng:         this.pinLng ? parseFloat(this.pinLng) : undefined,
-          address:     this.streetAddress || undefined,
-        };
-        (this.eventsListSvc as any)._all.unshift(listItem);
+          lat,
+          lng,
+          address:     this.streetAddress || this.selectedVenue?.address,
+          venueName:   this.selectedVenue?.name,
+          startDate:   startDisp,
+          endDate:     endDisp,
+          dateRange,
+          description: this.editorRef?.nativeElement?.innerHTML ?? '',
+        });
+      }
+
+      if (returnTo) {
         this.router.navigate([returnTo]);
       } else {
         this.router.navigate(['/events']);

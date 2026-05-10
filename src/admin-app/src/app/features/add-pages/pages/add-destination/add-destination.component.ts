@@ -398,29 +398,46 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       : this.destinationsService.add(payload);
 
     action$.subscribe({
-      next: (saved) => {
-        this.isSaving = false;
-        const returnTo = history.state?.returnTo as string | undefined;
-        if (returnTo) {
-          // Dodaj u list servis
-          const listItem: DestinationListItem = {
-            id:          saved.id,
-            name:        saved.name,
-            summary:     '',
-            region:      'Šumadija, Srbija',
-            status:      'Published',
-            lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            imageBg:     'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
-            category:    saved.category,
-            lat:         saved.lat,
-            lng:         saved.lng,
-          };
-          (this.destinationsListSvc as any)._all.unshift(listItem);
-          this.router.navigate([returnTo]);
-        } else {
-          this.router.navigate(['/map'], { state: { newPlace: saved } });
-        }
-      },
+    next: (saved) => {
+      this.isSaving = false;
+      const returnTo = history.state?.returnTo as string | undefined;
+
+      if (this.isEditMode) {
+        this.destinationsListSvc.updateItem(history.state?.place?.id, {
+          name:     saved.name,
+          lat:      saved.lat,
+          lng:      saved.lng,
+          zone:     saved.zone,
+          category: saved.category,
+          status:   'Published',
+          description: this.editorRef?.nativeElement?.innerText ?? '',
+        });
+      } else {
+        this.destinationsListSvc.addItem({
+          id:          saved.id,
+          name:        saved.name,
+          summary:     this.editorRef?.nativeElement?.innerText?.slice(0, 160) ?? '',
+          region:      'Šumadija, Srbija',
+          status:      'Published',
+          lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          imageBg:     this.coverImageUrl
+                        ? `url(${this.coverImageUrl}) center/cover`
+                        : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+          category:    saved.category,
+          lat:         saved.lat,
+          lng:         saved.lng,
+          zone:        saved.zone,
+          address:     saved.address,
+          description: this.editorRef?.nativeElement?.innerHTML ?? '',
+        });
+      }
+
+      if (returnTo) {
+        this.router.navigate([returnTo]);
+      } else {
+        this.router.navigate(['/map'], { state: { newPlace: saved } });
+      }
+    },
       error: () => { this.isSaving = false; alert('Failed to save.'); }
     });
   }

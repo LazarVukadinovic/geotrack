@@ -127,7 +127,10 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
   }
 
   editDestination(item: DestinationListItem): void {
-    this.router.navigate(['/destinations/new'], { state: { place: item } });
+    const full = this.svc.findById(item.id) ?? item;
+    this.router.navigate(['/destinations/new'], {
+      state: { place: full, returnTo: '/destinations' }
+    });
   }
 
   statusClass(status: string): string {
