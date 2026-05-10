@@ -7,6 +7,7 @@ import { Router } from '@angular/router';
 import { DestinationsService } from '../../../../core/services/destinations.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { ZoneDrawService } from '../../../../core/services/zone-draw.service';
+import { DestinationsListService, DestinationListItem } from '../../../../core/services/destinations-list.service';
 declare const L: any;
 
 interface ClassItem {
@@ -35,7 +36,7 @@ interface ClassItem {
 })
 export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private router: Router,private destinationsService: DestinationsService, private lightboxService: LightboxService, private zoneDrawService: ZoneDrawService) {}
+  constructor(private zone: NgZone, private router: Router,private destinationsService: DestinationsService, private lightboxService: LightboxService, private zoneDrawService: ZoneDrawService, private destinationsListSvc: DestinationsListService) {}
 
   //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -379,7 +380,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     }
     this.isSaving = true;
     const { zone, centerLat, centerLng } = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
-    const areaKm2 = this.zoneDrawService.calculateAreaKm2(this.confirmedLayer);
 
     const payload = {
       name:        this.destinationName || 'New Destination',
@@ -400,7 +400,26 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     action$.subscribe({
       next: (saved) => {
         this.isSaving = false;
-        this.router.navigate(['/map'], { state: { newPlace: saved } });
+        const returnTo = history.state?.returnTo as string | undefined;
+        if (returnTo) {
+          // Dodaj u list servis
+          const listItem: DestinationListItem = {
+            id:          saved.id,
+            name:        saved.name,
+            summary:     '',
+            region:      'Šumadija, Srbija',
+            status:      'Published',
+            lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            imageBg:     'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+            category:    saved.category,
+            lat:         saved.lat,
+            lng:         saved.lng,
+          };
+          (this.destinationsListSvc as any)._all.unshift(listItem);
+          this.router.navigate([returnTo]);
+        } else {
+          this.router.navigate(['/map'], { state: { newPlace: saved } });
+        }
       },
       error: () => { this.isSaving = false; alert('Failed to save.'); }
     });

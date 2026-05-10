@@ -122,7 +122,9 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     if (this.sortOpen) { this.sortOpen = false; this.cdr.markForCheck(); }
   }
 
-  navigateToAdd(): void { this.router.navigate(['/places/new']); }
+  navigateToAdd(): void {
+    this.router.navigate(['/places/new'], { state: { returnTo: '/places' } });
+  }
 
   viewPlace(item: PlaceListItem): void {
     this.router.navigate(['places/detail', item.id], {state:item});

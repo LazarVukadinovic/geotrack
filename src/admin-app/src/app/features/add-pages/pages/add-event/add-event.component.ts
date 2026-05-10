@@ -7,7 +7,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { MapPlacesService } from '../../../../core/services/map-places.service';
 import { MapPlace } from '../../../../core/models/map-place.model';
 import { LightboxService } from '../../../../core/services/lightbox.service';
-
+import { EventsListService, EventListItem } from '../../../../core/services/events-list.service';
 declare const L: any;
 
 interface ClassItem {
@@ -44,7 +44,8 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private router: Router,
     private mapPlacesService: MapPlacesService,
-    private lightboxService: LightboxService
+    private lightboxService: LightboxService,
+    private eventsListSvc: EventsListService
   ) {}
 
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -650,5 +651,34 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
     if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
+  }
+  isSaving = false;
+  publish(): void {
+    this.isSaving = true;
+    const returnTo = history.state?.returnTo as string | undefined;
+
+    // Simuliraj save (ovde bi išao pravi API poziv)
+    setTimeout(() => {
+      this.isSaving = false;
+      if (returnTo) {
+        const listItem: EventListItem = {
+          id:          Date.now().toString(),
+          name:        this.eventTitle || 'New Event',
+          summary:     '',
+          region:      'Šumadija, Srbija',
+          status:      'Published',
+          lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          imageBg:     'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+          category:    'Event',
+          lat:         this.pinLat ? parseFloat(this.pinLat) : undefined,
+          lng:         this.pinLng ? parseFloat(this.pinLng) : undefined,
+          address:     this.streetAddress || undefined,
+        };
+        (this.eventsListSvc as any)._all.unshift(listItem);
+        this.router.navigate([returnTo]);
+      } else {
+        this.router.navigate(['/events']);
+      }
+    }, 800);
   }
 }

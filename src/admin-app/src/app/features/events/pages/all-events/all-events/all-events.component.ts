@@ -122,7 +122,9 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     if (this.sortOpen) { this.sortOpen = false; this.cdr.markForCheck(); }
   }
 
-  navigateToAdd(): void { this.router.navigate(['/events/new']); }
+  navigateToAdd(): void {
+    this.router.navigate(['/events/new'], { state: { returnTo: '/events' } });
+  }
 
   viewEvent(item: EventListItem): void {
     this.router.navigate(['events/detail', item.id], { state: item });

@@ -7,6 +7,7 @@ import { ActivatedRoute } from '@angular/router';
 import { Router } from '@angular/router';
 import { PlacesService } from '../../../../core/services/places.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
+import { PlacesListService, PlaceListItem } from '../../../../core/services/places-list.service';
 declare const L: any;
 
 interface ClassItem {
@@ -42,7 +43,7 @@ interface DayHours {
 })
 export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private route: ActivatedRoute, private router: Router,private placesService: PlacesService,private lightboxService: LightboxService) {}
+  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private route: ActivatedRoute, private router: Router,private placesService: PlacesService,private lightboxService: LightboxService, private placesListSvc: PlacesListService) {}
 
   //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -211,9 +212,9 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.isSaving = true;
-    const payload: Omit<import('../../../../core/models/map-place.model').MapPlace, 'id'> = {
+    const payload = {
       name:        this.placeName || 'New Place',
-      type:        'Place',
+      type:        'Place' as const,
       category:    this.placeType || 'Place',
       description: this.editorRef?.nativeElement?.innerHTML ?? '',
       status:      'Active',
@@ -230,7 +231,26 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     action$.subscribe({
       next: (saved) => {
         this.isSaving = false;
-        this.router.navigate(['/map'], { state: { newPlace: saved } });
+        const returnTo = history.state?.returnTo as string | undefined;
+        if (returnTo) {
+          const listItem: PlaceListItem = {
+            id:          saved.id,
+            name:        saved.name,
+            summary:     '',
+            region:      'Šumadija, Srbija',
+            status:      'Published',
+            lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            imageBg:     'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+            category:    saved.category,
+            lat:         saved.lat,
+            lng:         saved.lng,
+            address:     saved.address,
+          };
+          (this.placesListSvc as any)._all.unshift(listItem);
+          this.router.navigate([returnTo]);
+        } else {
+          this.router.navigate(['/map'], { state: { newPlace: saved } });
+        }
       },
       error: () => {
         this.isSaving = false;
