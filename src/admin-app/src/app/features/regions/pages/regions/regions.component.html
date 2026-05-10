@@ -144,9 +144,9 @@
         <!-- Rows -->
         <ng-container *ngIf="!isLoading">
           <div
-            *ngFor="let item of items; trackBy: trackById"
+            *ngFor="let item of items; trackBy: trackById" (click)="viewRegion(item)"
             class="grid items-center gap-4 px-5 py-4 border-b border-gray-50
-                   hover:bg-blue-50/30 transition-colors"
+                   hover:bg-blue-50/30 transition-colors cursor-pointer"
             style="grid-template-columns: 56px 1fr 200px 160px 140px 160px;"
           >
             <!-- Thumbnail -->

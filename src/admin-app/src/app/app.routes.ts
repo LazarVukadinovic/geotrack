@@ -137,6 +137,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/regions/pages/regions/regions.component').then(m=>m.AllRegionsComponent),
       },
       {
+        path: 'regions/:id',
+        canActivate:[nationalManagerGuard],
+        loadComponent: () => import('./features/regions/pages/region-detail/region-detail/region-detail.component').then(m=>m.RegionDetailComponent),
+      },
+      {
         path: 'settings',
         loadComponent: () =>
           import('./features/settings/pages/settings-page/settings-page.component')

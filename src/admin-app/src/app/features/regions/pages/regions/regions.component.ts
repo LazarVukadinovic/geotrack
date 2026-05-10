@@ -124,9 +124,15 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
 
   editRegion(item: RegionListItem, event?: MouseEvent): void {
     event?.stopPropagation();
-    this.router.navigate(['/regions/edit', item.id], { state: { region: item } });
+    this.router.navigate(['/regions', item.id], {
+      state: { region: item, editMode: true },
+    });
   }
-
+  viewRegion(item: RegionListItem): void {
+    this.router.navigate(['/regions', item.id], {
+      state: { region: item, editMode: false },
+    });
+  }
   statusClass(status: string): string {
     if (status === 'Active')   return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
     if (status === 'Inactive') return 'bg-gray-100 text-gray-500 ring-1 ring-gray-200';

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy,ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -6,7 +6,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
-import { RegionsService, RegionDetail, RegionTeamMember, RegionListItem } from '../../../../../core/services/national/regions.service';
+import { RegionsService, RegionDetail, RegionTeamMember } from '../../../../../core/services/national/regions.service';
 
 @Component({
   selector: 'app-region-detail',
@@ -28,7 +28,6 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
 
   userName = 'Sarah Jenkins';
   userRole = 'National Manager';
-
   isViewMode = true;
 
   region: RegionDetail | null = null;
@@ -49,10 +48,7 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   isRemoving = false;
 
   ngOnInit(): void {
-    const nav   = this.router.getCurrentNavigation();
-    const state = nav?.extras?.state as
-      { region?: RegionListItem; editMode?: boolean } | undefined;
-
+    const state = history.state as { editMode?: boolean } | undefined;
     this.isViewMode = !(state?.editMode === true);
 
     const id = this.route.snapshot.paramMap.get('id') ?? '';
@@ -76,6 +72,12 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
     this.editSummary     = this.region.shortSummary;
     this.editDescription = this.region.fullDescription;
   }
+  formatDate(dateStr: string): string {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+  }
 
   switchToEdit(): void {
     this.isViewMode = false;
@@ -98,8 +100,8 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
       internalRefId:   this.editRefId,
       shortSummary:    this.editSummary,
       fullDescription: this.editDescription,
-      lastUpdated: new Date().toLocaleDateString('en-US', {
-        month: 'short', day: '2-digit', year: 'numeric',
+      lastUpdated: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'long', year: 'numeric',
       }),
     };
 
@@ -128,8 +130,8 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   assignUser(): void {
     if (!this.region || !this.newUserName || !this.newUserEmail) return;
 
-    const initials   = this.newUserName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    const colors     = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+    const initials  = this.newUserName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const colors    = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
     const newMember: RegionTeamMember = {
       id:           'u' + Date.now(),
       name:         this.newUserName,
@@ -138,8 +140,8 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
       avatarColor:  colors[this.region.team.length % colors.length],
       role:         this.newUserRole,
       status:       'Active',
-      assignedDate: new Date().toLocaleDateString('en-US', {
-        month: 'short', day: '2-digit', year: 'numeric',
+      assignedDate: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'long', year: 'numeric',
       }),
     };
 
