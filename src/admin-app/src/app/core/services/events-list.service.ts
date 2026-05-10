@@ -20,6 +20,11 @@ export interface EventListItem {
   address?: string;
   description?: string;
   venueName?: string;
+  classification?: string[];
+  tags?: string[];
+  coverImageUrl?: string;
+  coverImageName?: string;
+  galleryImages?: { url: string; name: string }[];
 }
 
 export type EventSortField = 'name' | 'lastUpdated' | 'status';

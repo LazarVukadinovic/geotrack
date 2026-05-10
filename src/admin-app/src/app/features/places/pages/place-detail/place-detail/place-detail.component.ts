@@ -50,15 +50,17 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     const id = this.route.snapshot.paramMap.get('id');
     const navState = history.state as PlaceListItem;
 
-    if (navState?.id) {
-      this.item      = { ...navState };
-      this.isLoading = false;
-      return;
+    if (id) {
+      const fromService = this.svc.findById(id);
+      if (fromService) {
+        this.item      = { ...fromService };
+        this.isLoading = false;
+        return;
+      }
     }
 
-    if (id) {
-      // BACKEND → replace with: this.svc.getById$(id).subscribe(...)
-      this.notFound  = true;
+    if (navState?.id) {
+      this.item      = { ...navState };
       this.isLoading = false;
       return;
     }
@@ -149,21 +151,26 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-addEvent(): void {
-  this.router.navigate(['/events/new'], {
-    state: {
-      place: {
-        id:   this.item!.id,
-        name: this.item!.name,
-        type: 'Location',   // ili 'Place'
-        lat:  (this.item as any).lat,
-        lng:  (this.item as any).lng,
-        zone: (this.item as any).zone,
-      },
-      returnTo: `/places/detail/${this.item!.id}`,
-    }
-  });
-}
+  addEvent(): void {
+    const it = this.item!;
+    this.router.navigate(['/events/new'], {
+      state: {
+        place: {
+          id:          it.id,
+          name:        it.name,
+          type:        'Place',
+          category:    (it as any).category ?? 'Place',
+          description: (it as any).description ?? '',
+          status:      'Active',
+          eventsToday: 0,
+          lat:         (it as any).lat,
+          lng:         (it as any).lng,
+          address:     (it as any).address,
+        },
+        returnTo: `/places/detail/${it.id}`,
+      }
+    });
+  }
 
   promptDelete(): void {
     this.deleteTarget = this.item;

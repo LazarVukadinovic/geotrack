@@ -18,6 +18,11 @@ export interface LocationListItem {
   address?: string;
   zone?: [number, number][];
   description?: string;
+  classification?: string[];
+  tags?: string[];
+  coverImageUrl?: string;
+  coverImageName?: string;
+  galleryImages?: { url: string; name: string }[];
 }
 
 export type LocationSortField = 'name' | 'lastUpdated' | 'status';

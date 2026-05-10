@@ -7,7 +7,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { MapPlacesService } from '../../../../core/services/map-places.service';
 import { MapPlace } from '../../../../core/models/map-place.model';
 import { LightboxService } from '../../../../core/services/lightbox.service';
-import { EventsListService, EventListItem } from '../../../../core/services/events-list.service';
+import { EventsListService } from '../../../../core/services/events-list.service';
 declare const L: any;
 
 interface ClassItem {
@@ -107,13 +107,16 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const file  = input.files?.[0];
     if (!file) return;
-    this.coverImageUrl  = URL.createObjectURL(file);
-    this.coverImageName = file.name;
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.coverImageUrl  = reader.result as string;
+      this.coverImageName = file.name;
+    };
+    reader.readAsDataURL(file);
     input.value = '';
   }
 
   removeCoverImage(): void {
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     this.coverImageUrl  = null;
     this.coverImageName = '';
   }
@@ -125,13 +128,16 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     for (const file of files) {
-      this.galleryImages.push({ url: URL.createObjectURL(file), name: file.name });
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.galleryImages.push({ url: reader.result as string, name: file.name });
+      };
+      reader.readAsDataURL(file);
     }
     input.value = '';
   }
 
   removeGalleryImage(index: number): void {
-    URL.revokeObjectURL(this.galleryImages[index].url);
     this.galleryImages.splice(index, 1);
   }
 
@@ -370,6 +376,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (this.venueDropdownOpen) { this.venueDropdownOpen = false; this.cdr.detectChanges(); }
   }
 
+  // Venue search
   venueSearchQuery     = '';
   venueDropdownOpen    = false;
   isSearchingVenue     = false;
@@ -440,10 +447,10 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   }
 
   selectVenue(item: MapPlace): void {
-    this.selectedVenue    = item;
-    this.venueSearchQuery = item.name;
+    this.selectedVenue     = item;
+    this.venueSearchQuery  = item.name;
     this.venueDropdownOpen = false;
-    this.pinConfirmed = true;
+    this.pinConfirmed      = true;
 
     if (this.venueType === 'place') {
       this.pinLat        = item.lat.toFixed(6);
@@ -575,7 +582,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   }
 
   private shoelaceAreaKm2(zone: [number, number][]): number {
-    const R = 6_371_000;
+    const Rm = 6_371_000;
     let area = 0;
     const n = zone.length;
     for (let i = 0; i < n; i++) {
@@ -586,7 +593,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       const lng2 = (zone[j][1] * Math.PI) / 180;
       area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
     }
-    return Math.abs((area * R * R) / 2) / 1_000_000;
+    return Math.abs((area * Rm * Rm) / 2) / 1_000_000;
   }
 
   // Classification & Tags
@@ -613,97 +620,204 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   }
 
   // Lifecycle
+
+  private isEditMode = false;
+  private _pendingDescription = '';
+
   ngAfterViewInit(): void {
     setTimeout(() => {
       this.initMiniMap();
       this._loadFromRouterState();
+
+      if (this._pendingDescription && this.editorRef?.nativeElement) {
+        this.editorRef.nativeElement.innerHTML = this._pendingDescription;
+        this.syncEmptyState();
+      }
     }, 0);
   }
 
   private _loadFromRouterState(): void {
-    const state = history.state as { place?: any };
-    if (!state?.place) return;
+    const state = history.state as any;
+    if (!state) return;
 
-    const p = state.place;
+    if (state.place?.id && state.returnTo?.includes('events/detail')) {
+      this.isEditMode = true;
+      const p = state.place;
+      this.eventTitle          = p.name      ?? '';
+      this._pendingDescription = p.description ?? '';
+      this.startDate = this._parseDisplayDateToIso(p.startDate) ?? this.startDate;
+      this.endDate   = this._parseDisplayDateToIso(p.endDate)   ?? this.endDate;
 
-    if (p.type === 'Place') {
-      this.venueType = 'place';
-      const found = this.mapPlacesService.findById(p.id) ?? p as MapPlace;
-      this.selectVenue(found);
-    } else {
-      this.venueType = 'location';
-      const found = this.mapPlacesService.findById(p.id)
-        ?? this.mapPlacesService.getLocations().find(l =>
-            l.name === p.name ||
-            (Math.abs(l.lat - p.lat) < 0.001 && Math.abs(l.lng - p.lng) < 0.001)
-          )
-        ?? p as MapPlace;
-      this.selectVenue(found);
+      if (p.coverImageUrl) {
+        this.coverImageUrl  = p.coverImageUrl;
+        this.coverImageName = p.coverImageName ?? 'cover';
+      }
+
+      if (Array.isArray(p.galleryImages)) {
+        this.galleryImages = [...p.galleryImages];
+      }
+
+      // Classification / Tags
+      if (Array.isArray(p.classification)) {
+        this.classItems = this.classItems.map(c => ({
+          ...c, checked: (p.classification as string[]).includes(c.label),
+        }));
+      }
+      this.tags = Array.isArray(p.tags) ? [...p.tags] : [];
+
+      // Venue
+      if (p.venueName || p.lat) {
+        const found = p.lat
+          ? (this.mapPlacesService.getAll().find(v =>
+              Math.abs(v.lat - p.lat) < 0.001 && Math.abs(v.lng - p.lng) < 0.001
+            ))
+          : undefined;
+        if (found) {
+          this.venueType = found.type === 'Place' ? 'place' : 'location';
+          this.selectVenue(found);
+        }
+      }
+      return;
     }
 
-    this.cdr.detectChanges();
+    if (state.place) {
+      const p = state.place;
+      const type = (p.type ?? '').toLowerCase();
+
+      if (type === 'place') {
+        this.venueType = 'place';
+        const found = this.mapPlacesService.findById(p.id) ?? (p as MapPlace);
+        this.selectVenue(found);
+      } else {
+        // Location or Destination
+        this.venueType = 'location';
+
+        let found: MapPlace | undefined =
+          this.mapPlacesService.findById(p.id) ??
+          this.mapPlacesService.getLocations().find(l =>
+            l.name === p.name ||
+            (p.lat != null && Math.abs(l.lat - p.lat) < 0.001 && Math.abs(l.lng - p.lng) < 0.001)
+          );
+
+        if (!found && p.lat != null) {
+          const tempPlace: MapPlace = {
+            id:          p.id   ?? Date.now().toString(),
+            name:        p.name ?? 'Unknown Location',
+            type:        'Location',
+            category:    p.category ?? 'Location',
+            description: p.description ?? '',
+            status:      'Active',
+            eventsToday: 0,
+            lat:         p.lat,
+            lng:         p.lng,
+            zone:        p.zone,
+            address:     p.address,
+          };
+          this.mapPlacesService.addPlace(tempPlace);
+          found = tempPlace;
+        }
+
+        if (found) {
+          this.selectVenue(found);
+        }
+      }
+
+      this.cdr.detectChanges();
+    }
+  }
+
+  private _parseDisplayDateToIso(display: string | undefined): string | null {
+    if (!display) return null;
+    try {
+      const d = new Date(display);
+      if (isNaN(d.getTime())) return null;
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    } catch { return null; }
   }
 
   ngOnDestroy(): void {
     this.destroyModalMap();
-    this.lightboxService.close()
-    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
+    this.lightboxService.close();
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
     if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
   }
   isSaving = false;
+
   publish(): void {
+    if (!this.selectedVenue) {
+      alert('Please select a location or place for this event.');
+      return;
+    }
+    if (!this.eventTitle.trim()) {
+      alert('Please enter an event title.');
+      return;
+    }
+
     this.isSaving = true;
     const returnTo = history.state?.returnTo as string | undefined;
-    const isEditMode = !!(history.state?.place?.id);
+
+    const lat = this.pinLat ? parseFloat(this.pinLat) : this.selectedVenue?.lat;
+    const lng = this.pinLng ? parseFloat(this.pinLng) : this.selectedVenue?.lng;
+
+    const startDisp = this.startDate
+      ? new Date(this.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
+    const endDisp = this.endDate
+      ? new Date(this.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
+    const dateRange = startDisp === endDisp ? startDisp : `${startDisp}–${endDisp}`;
+
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML ?? '';
+    const descriptionText = this.editorRef?.nativeElement?.innerText  ?? '';
+    const classification  = this.classItems.filter(c => c.checked).map(c => c.label);
 
     setTimeout(() => {
       this.isSaving = false;
 
-      const lat = this.pinLat ? parseFloat(this.pinLat) : this.selectedVenue?.lat;
-      const lng = this.pinLng ? parseFloat(this.pinLng) : this.selectedVenue?.lng;
-
-      const startDisp = this.startDate
-        ? new Date(this.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        : '';
-      const endDisp = this.endDate
-        ? new Date(this.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        : '';
-      const dateRange = startDisp === endDisp ? startDisp : `${startDisp}–${endDisp}`;
-
-      if (isEditMode) {
+      if (this.isEditMode && history.state?.place?.id) {
         this.eventsListSvc.updateItem(history.state.place.id, {
-          name:       this.eventTitle || 'New Event',
+          name:           this.eventTitle,
           lat,
           lng,
-          address:    this.streetAddress || this.selectedVenue?.address,
-          venueName:  this.selectedVenue?.name,
-          startDate:  startDisp,
-          endDate:    endDisp,
+          address:        this.streetAddress || this.selectedVenue?.address,
+          venueName:      this.selectedVenue?.name,
+          startDate:      startDisp,
+          endDate:        endDisp,
           dateRange,
-          status:     'Published',
+          status:         'Published',
+          description:    descriptionHtml,
+          classification: classification.length ? classification : undefined,
+          tags:           this.tags.length ? this.tags : undefined,
+          coverImageUrl:  this.coverImageUrl ?? undefined,
+          coverImageName: this.coverImageName || undefined,
+          galleryImages:  this.galleryImages.length ? [...this.galleryImages] : undefined,
+          ...(this.coverImageUrl ? { imageBg: `url(${this.coverImageUrl}) center/cover` } : {}),
         });
       } else {
         this.eventsListSvc.addItem({
-          id:          Date.now().toString(),
-          name:        this.eventTitle || 'New Event',
-          summary:     this.editorRef?.nativeElement?.innerText?.slice(0, 160) ?? '',
-          region:      'Šumadija, Srbija',
-          status:      'Published',
-          lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          imageBg:     this.coverImageUrl
-                        ? `url(${this.coverImageUrl}) center/cover`
-                        : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
-          category:    'Event',
+          id:            Date.now().toString(),
+          name:          this.eventTitle,
+          summary:       descriptionText.slice(0, 160),
+          region:        'Šumadija, Srbija',
+          status:        'Published',
+          lastUpdated:   new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          imageBg:       this.coverImageUrl
+                          ? `url(${this.coverImageUrl}) center/cover`
+                          : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+          category:      'Event',
           lat,
           lng,
-          address:     this.streetAddress || this.selectedVenue?.address,
-          venueName:   this.selectedVenue?.name,
-          startDate:   startDisp,
-          endDate:     endDisp,
+          address:       this.streetAddress || this.selectedVenue?.address,
+          venueName:     this.selectedVenue?.name,
+          startDate:     startDisp,
+          endDate:       endDisp,
           dateRange,
-          description: this.editorRef?.nativeElement?.innerHTML ?? '',
+          description:   descriptionHtml,
+          coverImageUrl: this.coverImageUrl ?? undefined,
+          coverImageName: this.coverImageName || undefined,
+          galleryImages: this.galleryImages.length ? [...this.galleryImages] : undefined,
+          classification: classification.length ? classification : undefined,
+          tags:          this.tags.length ? this.tags : undefined,
         });
       }
 

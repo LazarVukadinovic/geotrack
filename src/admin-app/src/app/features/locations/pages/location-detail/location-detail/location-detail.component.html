@@ -97,6 +97,67 @@
             </div>
           </div>
 
+          <!-- Description -->
+          <ng-container *ngIf="(item)['description']">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-bold text-gray-800">Description</h3>
+              </div>
+              <div class="px-6 py-5">
+                <div class="text-sm text-gray-600 leading-relaxed"
+                     [innerHTML]="(item)['description']"></div>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- Classification & Tags -->
+          <ng-container *ngIf="(item)['classification']?.length || (item)['tags']?.length">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-bold text-gray-800">Classification & Tags</h3>
+              </div>
+              <div class="px-6 py-5 flex flex-col gap-4">
+                <div *ngIf="(item)['classification']?.length">
+                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Classification</span>
+                  <div class="flex flex-wrap gap-2">
+                    <span *ngFor="let c of (item)['classification']"
+                          class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                      {{ c }}
+                    </span>
+                  </div>
+                </div>
+                <div *ngIf="(item)['tags']?.length">
+                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Tags</span>
+                  <div class="flex flex-wrap gap-2">
+                    <span *ngFor="let t of (item)['tags']"
+                          class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      #{{ t }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- Gallery -->
+          <ng-container *ngIf="(item)['galleryImages']?.length">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-bold text-gray-800">Gallery
+                  <span class="text-gray-400 font-normal">({{ (item)['galleryImages']?.length }})</span>
+                </h3>
+              </div>
+              <div class="px-6 py-5">
+                <div class="grid grid-cols-3 gap-3">
+                  <div *ngFor="let img of (item)['galleryImages']"
+                       class="aspect-video rounded-lg overflow-hidden bg-gray-100">
+                    <img [src]="img.url" [alt]="img.name" class="w-full h-full object-cover" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
           <!-- Location map -->
           <ng-container *ngIf="(item)['lat'] || (item)['address']">
             <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">

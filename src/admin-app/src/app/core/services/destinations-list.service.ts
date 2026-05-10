@@ -8,7 +8,7 @@ export interface DestinationListItem {
   summary: string;
   region: string;
   status: 'Published' | 'Draft' | 'Archived';
-  lastUpdated: string; 
+  lastUpdated: string;
   sortTimestamp: number;
   imageBg: string;
   category: string;
@@ -17,6 +17,11 @@ export interface DestinationListItem {
   address?: string;
   zone?: [number, number][];
   description?: string;
+  classification?: string[];
+  tags?: string[];
+  coverImageUrl?: string;
+  coverImageName?: string;
+  galleryImages?: { url: string; name: string }[];
 }
 
 export type DestinationSortField = 'name' | 'lastUpdated' | 'status';

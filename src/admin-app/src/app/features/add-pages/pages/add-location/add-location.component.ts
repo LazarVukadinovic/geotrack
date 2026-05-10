@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit, NgZone } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit, NgZone, ChangeDetectorRef } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
@@ -7,7 +7,7 @@ import { Router } from '@angular/router';
 import { LocationsService } from '../../../../core/services/locations.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { ZoneDrawService } from '../../../../core/services/zone-draw.service';
-import { LocationsListService, LocationListItem } from '../../../../core/services/locations-list.service';
+import { LocationsListService } from '../../../../core/services/locations-list.service';
 declare const L: any;
 
 interface ClassItem {
@@ -36,25 +36,35 @@ interface ClassItem {
 })
 export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private router: Router, private locationsService: LocationsService, private lightboxService: LightboxService, private zoneDrawService: ZoneDrawService, private locationsListSvc: LocationsListService) {}
+  constructor(
+    private zone: NgZone,
+    private cdr: ChangeDetectorRef,
+    private router: Router,
+    private locationsService: LocationsService,
+    private lightboxService: LightboxService,
+    private zoneDrawService: ZoneDrawService,
+    private locationsListSvc: LocationsListService
+  ) {}
 
-  //ViewChild refs
-  @ViewChild('editorRef')        editorRef!:           ElementRef<HTMLDivElement>;
-  @ViewChild('miniMapContainer') miniMapContainer!:    ElementRef<HTMLDivElement>;
+  @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
+  @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
-  //Rich text editor
-  isBold      = false;
-  isItalic    = false;
-  isUnderline = false;
+  // Basic fields
+  locationName  = '';
+  streetAddress = '';
+
+  // Rich text editor
+  isBold        = false;
+  isItalic      = false;
+  isUnderline   = false;
+  editorIsEmpty = true;
 
   execFormat(command: 'bold' | 'italic' | 'underline'): void {
     document.execCommand(command, false, undefined);
     this.editorRef.nativeElement.focus();
     this.syncToolbarState();
   }
-
-  editorIsEmpty = true;
 
   onEditorChange(): void { this.syncToolbarState(); this.syncEmptyState(); }
   onEditorFocus():  void { this.syncToolbarState(); this.syncEmptyState(); }
@@ -64,7 +74,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
       el.innerHTML = '';
     }
-      this.syncEmptyState();
+    this.syncEmptyState();
   }
 
   private syncEmptyState(): void {
@@ -73,12 +83,14 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     const text = el.innerText ?? el.textContent ?? '';
     this.editorIsEmpty = text.trim() === '' && !el.querySelector('img');
   }
+
   private syncToolbarState(): void {
-      this.isBold      = document.queryCommandState('bold');
-      this.isItalic    = document.queryCommandState('italic');
-      this.isUnderline = document.queryCommandState('underline');
-    }
-  //Cover image
+    this.isBold      = document.queryCommandState('bold');
+    this.isItalic    = document.queryCommandState('italic');
+    this.isUnderline = document.queryCommandState('underline');
+  }
+
+  // Cover image
   coverImageUrl : string | null = null;
   coverImageName: string        = '';
 
@@ -86,44 +98,54 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const file  = input.files?.[0];
     if (!file) return;
-    this.coverImageUrl  = URL.createObjectURL(file);
-    this.coverImageName = file.name;
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.coverImageUrl  = reader.result as string;
+      this.coverImageName = file.name;
+    };
+    reader.readAsDataURL(file);
     input.value = '';
   }
 
   removeCoverImage(): void {
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     this.coverImageUrl  = null;
     this.coverImageName = '';
   }
 
-  //Gallery
+  // Gallery
   galleryImages: { url: string; name: string }[] = [];
 
   onGalleryImagesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     for (const file of files) {
-      this.galleryImages.push({ url: URL.createObjectURL(file), name: file.name });
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.galleryImages.push({ url: reader.result as string, name: file.name });
+      };
+      reader.readAsDataURL(file);
     }
     input.value = '';
   }
 
   removeGalleryImage(index: number): void {
-    URL.revokeObjectURL(this.galleryImages[index].url);
     this.galleryImages.splice(index, 1);
   }
 
-  //Classification
+  openLightbox(images: { url: string; name: string }[], index: number): void {
+    this.lightboxService.open(images, index);
+  }
+
+  // Classification
   classItems: ClassItem[] = [
-    { label: 'Nature',  checked: false },
-    { label: 'History', checked: false },
-    { label: 'Beaches', checked: false },
-    { label: 'Hiking',  checked: false },
-    { label: 'Culture', checked: false },
+    { label: 'Nature & Outdoors', checked: false },
+    { label: 'Culture & Heritage', checked: false },
+    { label: 'Urban & City',       checked: false },
+    { label: 'Adventure & Sport',  checked: false },
+    { label: 'Family Friendly',    checked: false },
   ];
 
-  //Tags
+  // Tags
   tags    : string[] = [];
   tagInput: string   = '';
 
@@ -139,7 +161,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     this.tags = this.tags.filter(t => t !== tag);
   }
 
-  //Geographic zone / Leaflet
+  // Geographic zone / Leaflet
   zoneModalOpen = false;
   zoneConfirmed = false;
   zoneAreaKm2: number | null = null;
@@ -155,8 +177,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     return hints[this.drawTool];
   }
 
-  private miniMap  : any = null;
-  private modalMap : any = null;
+  private miniMap       : any = null;
+  private modalMap      : any = null;
   private drawnLayer    : any = null;
   private confirmedLayer: any = null;
   private drawControl   : any = null;
@@ -299,8 +321,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
-    this.zoneAreaKm2   = areaM2 / 1_000_000;
-    this.zoneConfirmed = true;
+    this.zoneAreaKm2    = areaM2 / 1_000_000;
+    this.zoneConfirmed  = true;
     this.confirmedLayer = this.drawnLayer;
 
     this.showZoneOnMiniMap();
@@ -311,7 +333,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.miniMap) this.initMiniMap();
     if (!this.miniMap || !this.confirmedLayer) return;
 
-    // Ukloni prethodnu zonu sa mini mape
     this.miniMap.eachLayer((layer: any) => {
       if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
     });
@@ -327,20 +348,44 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch {}
   }
 
-  //Lifecycle
+  // Lifecycle
+
   isEditMode = false;
-  locationName = '';
+  private editId: string | null = null;
+  private _pendingDescription   = '';
 
   ngOnInit(): void {
     const state = history.state as { place?: any };
     if (state?.place) {
-      this.isEditMode = true;
+      this.isEditMode        = true;
+      this.editId            = state.place.id ?? null;
+      this._pendingDescription = state.place.description ?? state.place.summary ?? '';
       this._loadFromRouterState(state.place);
     }
   }
 
   private _loadFromRouterState(p: any): void {
-    this.locationName = p.name ?? '';
+    this.locationName  = p.name    ?? '';
+    this.streetAddress = p.address ?? '';
+
+    if (p.coverImageUrl) {
+      this.coverImageUrl  = p.coverImageUrl;
+      this.coverImageName = p.coverImageName ?? 'cover';
+    }
+
+    if (Array.isArray(p.galleryImages)) {
+      this.galleryImages = [...p.galleryImages];
+    }
+
+    if (Array.isArray(p.classification)) {
+      this.classItems = this.classItems.map(c => ({
+        ...c,
+        checked: (p.classification as string[]).includes(c.label),
+      }));
+    }
+
+    this.tags = Array.isArray(p.tags) ? [...p.tags] : [];
+
     if (p.zone) {
       setTimeout(() => {
         if (!this.miniMap) this.initMiniMap();
@@ -349,7 +394,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         });
         (polygon as any)._isConfirmedZone = true;
         polygon.addTo(this.miniMap);
-        this.zoneConfirmed = true;
+        this.zoneConfirmed  = true;
         this.confirmedLayer = polygon;
         try { this.miniMap.fitBounds(polygon.getBounds(), { padding: [10, 10] }); } catch {}
       }, 200);
@@ -357,82 +402,108 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    setTimeout(() => this.initMiniMap(), 0);
+    setTimeout(() => {
+      this.initMiniMap();
+      if (this._pendingDescription && this.editorRef?.nativeElement) {
+        this.editorRef.nativeElement.innerHTML = this._pendingDescription;
+        this.syncEmptyState();
+      }
+    }, 0);
   }
-  openLightbox(images: { url: string; name: string }[], index: number): void {
-    this.lightboxService.open(images, index);
-  }
+
   ngOnDestroy(): void {
     this.destroyModalMap();
     this.lightboxService.close();
-    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
   }
+
   isSaving = false;
+
   publish(): void {
     if (!this.zoneConfirmed || !this.confirmedLayer) {
       alert('Please draw a zone on the map first.');
       return;
     }
+
     this.isSaving = true;
     const { zone, centerLat, centerLng } = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML ?? '';
+    const descriptionText = this.editorRef?.nativeElement?.innerText  ?? '';
+    const classification  = this.classItems.filter(c => c.checked).map(c => c.label);
 
+    if (this.isEditMode && this.editId) {
+      this.locationsListSvc.updateItem(this.editId, {
+        name:           this.locationName || 'New Location',
+        lat:            centerLat,
+        lng:            centerLng,
+        zone,
+        category:       'Location',
+        address:        this.streetAddress || undefined,
+        status:         'Published',
+        description:    descriptionHtml,
+        summary:        descriptionText.slice(0, 160),
+        classification: classification.length ? classification : undefined,
+        tags:           this.tags.length ? this.tags : undefined,
+        coverImageUrl:  this.coverImageUrl ?? undefined,
+        coverImageName: this.coverImageName || undefined,
+        galleryImages:  this.galleryImages.length ? [...this.galleryImages] : undefined,
+        ...(this.coverImageUrl ? { imageBg: `url(${this.coverImageUrl}) center/cover` } : {}),
+      });
+
+      this.isSaving = false;
+      const returnTo = history.state?.returnTo as string | undefined;
+      this.router.navigate([returnTo ?? '/locations']);
+      return;
+    }
+
+    // ── ADD MODE ──
     const payload = {
       name:        this.locationName || 'New Location',
       type:        'Location' as const,
       category:    'Location',
-      description: this.editorRef?.nativeElement?.innerHTML ?? '',
+      description: descriptionHtml,
       status:      'Active',
       eventsToday: 0,
       lat:         centerLat,
       lng:         centerLng,
       zone,
+      address:     this.streetAddress || undefined,
     };
 
-    const action$ = this.isEditMode
-      ? this.locationsService.update(history.state?.place?.id, payload)
-      : this.locationsService.add(payload);
+    this.locationsService.add(payload).subscribe({
+      next: (saved) => {
+        this.isSaving = false;
+        const returnTo = history.state?.returnTo as string | undefined;
 
-    action$.subscribe({
-    next: (saved) => {
-      this.isSaving = false;
-      const returnTo = history.state?.returnTo as string | undefined;
-
-      if (this.isEditMode) {
-        this.locationsListSvc.updateItem(history.state?.place?.id, {
-          name:     saved.name,
-          lat:      saved.lat,
-          lng:      saved.lng,
-          zone:     saved.zone,
-          category: saved.category,
-          status:   'Published',
-        });
-      } else {
         this.locationsListSvc.addItem({
-          id:          saved.id,
-          name:        saved.name,
-          summary:     this.editorRef?.nativeElement?.innerText?.slice(0, 160) ?? '',
-          region:      'Šumadija, Srbija',
-          status:      'Published',
-          lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          imageBg:     this.coverImageUrl
-                        ? `url(${this.coverImageUrl}) center/cover`
-                        : 'linear-gradient(135deg,#0891b2 0%,#0e7490 100%)',
-          category:    saved.category,
-          lat:         saved.lat,
-          lng:         saved.lng,
-          zone:        saved.zone,
-          address:     saved.address,
+          id:            saved.id,
+          name:          saved.name,
+          summary:       descriptionText.slice(0, 160),
+          region:        'Šumadija, Srbija',
+          status:        'Published',
+          lastUpdated:   new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          imageBg:       this.coverImageUrl
+                          ? `url(${this.coverImageUrl}) center/cover`
+                          : 'linear-gradient(135deg,#0891b2 0%,#0e7490 100%)',
+          category:      saved.category,
+          lat:           saved.lat,
+          lng:           saved.lng,
+          zone:          saved.zone,
+          address:       saved.address,
+          description:   descriptionHtml,
+          coverImageUrl: this.coverImageUrl ?? undefined,
+          coverImageName: this.coverImageName || undefined,
+          galleryImages: this.galleryImages.length ? [...this.galleryImages] : undefined,
+          classification: classification.length ? classification : undefined,
+          tags:          this.tags.length ? this.tags : undefined,
         });
-      }
 
-      if (returnTo) {
-        this.router.navigate([returnTo]);
-      } else {
-        this.router.navigate(['/map'], { state: { newPlace: saved } });
-      }
-    },
+        if (returnTo) {
+          this.router.navigate([returnTo]);
+        } else {
+          this.router.navigate(['/map'], { state: { newPlace: saved } });
+        }
+      },
       error: () => { this.isSaving = false; alert('Failed to save.'); }
     });
   }

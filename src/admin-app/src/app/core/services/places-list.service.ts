@@ -16,6 +16,12 @@ export interface PlaceListItem {
   lng?: number;
   address?: string;
   description?: string;
+  classification?: string[];
+  tags?: string[];
+  coverImageUrl?: string;
+  coverImageName?: string;
+  galleryImages?: { url: string; name: string }[];
+  hours?: { name: string; open: boolean; openTime: string; closeTime: string }[];
 }
 
 export type PlaceSortField = 'name' | 'lastUpdated' | 'status';

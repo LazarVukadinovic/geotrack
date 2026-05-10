@@ -50,15 +50,17 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     const id = this.route.snapshot.paramMap.get('id');
     const navState = history.state as EventListItem;
 
-    if (navState?.id) {
-      this.item      = { ...navState };
-      this.isLoading = false;
-      return;
+    if (id) {
+      const fromService = this.svc.findById(id);
+      if (fromService) {
+        this.item      = { ...fromService };
+        this.isLoading = false;
+        return;
+      }
     }
 
-    if (id) {
-      // BACKEND → replace with: this.svc.getById$(id).subscribe(...)
-      this.notFound  = true;
+    if (navState?.id) {
+      this.item      = { ...navState };
       this.isLoading = false;
       return;
     }
