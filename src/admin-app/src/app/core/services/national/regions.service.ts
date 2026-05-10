@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 
+
 export interface RegionListItem {
   id: string;
   name: string;
@@ -31,6 +32,35 @@ export interface RegionPageRequest {
   sortField: RegionSortField;
   sortDir: RegionSortDir;
 }
+
+
+export interface RegionTeamMember {
+  id: string;
+  name: string;
+  email: string;
+  initials: string;
+  avatarColor: string;
+  role: string;
+  status: 'Active' | 'Inactive';
+  assignedDate: string;
+}
+
+export interface RegionDetail extends RegionListItem {
+  fullName: string;
+  internalRefId: string;
+  shortSummary: string;
+  fullDescription: string;
+  team: RegionTeamMember[];
+  createdBy: string;
+  createdDate: string;
+  lastUpdated: string;
+  activityScore: number;
+  activityLabel: string;
+  processingLabel: string;
+  pendingRequests: number;
+  avgProcessingTime: number;
+}
+
 
 const ALL_REGIONS: RegionListItem[] = [
   {
@@ -105,6 +135,105 @@ const ALL_REGIONS: RegionListItem[] = [
   },
 ];
 
+const DETAIL_OVERRIDES: Record<string, Partial<RegionDetail>> = {
+  'REG-001': {
+    fullName: 'Šumadija, Srbija',
+    internalRefId: 'REG-SRB-001',
+    shortSummary: 'Central historical region known for agriculture and tourism.',
+    fullDescription:
+      'Šumadija is a geographical region in the central part of Serbia. The area is heavily forested, hence its name. It is known for its rich history, rolling hills, and agricultural output.',
+    team: [
+      {
+        id: 'u1', name: 'Jovan Đorđević', email: 'jovan.d@example.com',
+        initials: 'JD', avatarColor: '#3b82f6',
+        role: 'Regional Admin', status: 'Active', assignedDate: 'Jan 12, 2024',
+      },
+      {
+        id: 'u2', name: 'Milica Petrović', email: 'milica.p@example.com',
+        initials: 'MP', avatarColor: '#8b5cf6',
+        role: 'Regional Admin', status: 'Active', assignedDate: 'Feb 04, 2024',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: 'Oct 12, 2023',
+    lastUpdated: 'Mar 15, 2024',
+    activityScore: 92,
+    activityLabel: 'Highly Active',
+    processingLabel: 'Fast Processing',
+    pendingRequests: 12,
+    avgProcessingTime: 2.4,
+  },
+  'REG-002': {
+    fullName: 'Banat, Srbija',
+    internalRefId: 'REG-SRB-002',
+    shortSummary: 'Desert ecosystems, canyons, and arid plateaus.',
+    fullDescription:
+      'Banat is a geographical and historical region in Central Europe. The Serbian part of Banat is located in the northeastern part of Serbia, comprising flat fertile plains along the Tisa and Danube rivers.',
+    team: [
+      {
+        id: 'u3', name: 'Stefan Nikolić', email: 'stefan.n@example.com',
+        initials: 'SN', avatarColor: '#10b981',
+        role: 'Regional Admin', status: 'Active', assignedDate: 'Mar 01, 2024',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: 'Nov 05, 2023',
+    lastUpdated: 'Feb 20, 2024',
+    activityScore: 78,
+    activityLabel: 'Active',
+    processingLabel: 'Normal',
+    pendingRequests: 4,
+    avgProcessingTime: 3.1,
+  },
+  'REG-003': {
+    fullName: 'Pomoravlje, Srbija',
+    internalRefId: 'REG-SRB-003',
+    shortSummary: 'Historic landmarks, dense urban coastal areas, and mixed forests.',
+    fullDescription:
+      'Pomoravlje is a district in central Serbia. It takes its name from the Great Morava river. The area is known for its rich cultural heritage, including medieval monasteries and fortresses.',
+    team: [
+      {
+        id: 'u4', name: 'Ana Jovanović', email: 'ana.j@example.com',
+        initials: 'AJ', avatarColor: '#f59e0b',
+        role: 'Regional Admin', status: 'Active', assignedDate: 'Jan 20, 2024',
+      },
+      {
+        id: 'u5', name: 'Marko Stanković', email: 'marko.s@example.com',
+        initials: 'MS', avatarColor: '#ef4444',
+        role: 'Regional Editor', status: 'Active', assignedDate: 'Feb 10, 2024',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: 'Sep 18, 2023',
+    lastUpdated: 'Apr 02, 2024',
+    activityScore: 88,
+    activityLabel: 'Highly Active',
+    processingLabel: 'Fast Processing',
+    pendingRequests: 7,
+    avgProcessingTime: 1.8,
+  },
+};
+
+function buildDetail(item: RegionListItem): RegionDetail {
+  const ov = DETAIL_OVERRIDES[item.id] ?? {};
+  return {
+    ...item,
+    fullName:         ov.fullName         ?? `${item.name}, Srbija`,
+    internalRefId:    ov.internalRefId    ?? item.id,
+    shortSummary:     ov.shortSummary     ?? item.description,
+    fullDescription:  ov.fullDescription  ?? item.description,
+    team:             ov.team             ?? [],
+    createdBy:        ov.createdBy        ?? 'System Admin',
+    createdDate:      ov.createdDate      ?? 'Jan 01, 2024',
+    lastUpdated:      ov.lastUpdated      ?? 'Jan 01, 2024',
+    activityScore:    ov.activityScore    ?? 70,
+    activityLabel:    ov.activityLabel    ?? 'Active',
+    processingLabel:  ov.processingLabel  ?? 'Normal',
+    pendingRequests:  ov.pendingRequests  ?? 0,
+    avgProcessingTime: ov.avgProcessingTime ?? 3.0,
+  };
+}
+
 @Injectable({ providedIn: 'root' })
 export class RegionsService {
 
@@ -117,15 +246,10 @@ export class RegionsService {
 
     filtered = filtered.sort((a, b) => {
       let cmp = 0;
-      if (req.sortField === 'name') {
-        cmp = a.name.localeCompare(b.name);
-      } else if (req.sortField === 'status') {
-        cmp = a.status.localeCompare(b.status);
-      } else if (req.sortField === 'assignedPersons') {
-        cmp = a.assignedPersons - b.assignedPersons;
-      } else if (req.sortField === 'destinations') {
-        cmp = a.destinations - b.destinations;
-      }
+      if (req.sortField === 'name')            cmp = a.name.localeCompare(b.name);
+      else if (req.sortField === 'status')     cmp = a.status.localeCompare(b.status);
+      else if (req.sortField === 'assignedPersons') cmp = a.assignedPersons - b.assignedPersons;
+      else if (req.sortField === 'destinations')    cmp = a.destinations - b.destinations;
       return req.sortDir === 'asc' ? cmp : -cmp;
     });
 
@@ -138,5 +262,34 @@ export class RegionsService {
     const idx = ALL_REGIONS.findIndex(r => r.id === id);
     if (idx !== -1) ALL_REGIONS.splice(idx, 1);
     return of(undefined).pipe(delay(500));
+  }
+
+  getDetail$(id: string): Observable<RegionDetail | null> {
+    const item = ALL_REGIONS.find(r => r.id === id) ?? null;
+    const detail = item ? buildDetail(item) : null;
+    return of(detail).pipe(delay(350));
+  }
+
+  updateDetail$(id: string, patch: Partial<RegionDetail>): Observable<RegionDetail | null> {
+    const idx = ALL_REGIONS.findIndex(r => r.id === id);
+    if (idx === -1) return of(null).pipe(delay(500));
+
+    const listFields: (keyof RegionListItem)[] = [
+      'name', 'description', 'isTop', 'destinations', 'places',
+      'locations', 'events', 'assignedPersons', 'status',
+    ];
+    listFields.forEach(f => {
+      if (f in patch) (ALL_REGIONS[idx] as any)[f] = (patch as any)[f];
+    });
+
+    DETAIL_OVERRIDES[id] = { ...(DETAIL_OVERRIDES[id] ?? {}), ...patch };
+
+    const updated = buildDetail(ALL_REGIONS[idx]);
+    return of(updated).pipe(delay(500));
+  }
+
+  updateTeam$(id: string, team: RegionTeamMember[]): Observable<void> {
+    DETAIL_OVERRIDES[id] = { ...(DETAIL_OVERRIDES[id] ?? {}), team };
+    return of(undefined).pipe(delay(300));
   }
 }
