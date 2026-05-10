@@ -4,7 +4,7 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { NationalDashboardService, NationalStat, RegionCard, TopRegion, TopDestination, TopLocation, TopPlace, Event } from '../../../../core/services/national/national-dashboard.service';
-
+import { Router } from '@angular/router';
 @Component({
   selector: 'app-national-dashboard',
   standalone: true,
@@ -13,6 +13,7 @@ import { NationalDashboardService, NationalStat, RegionCard, TopRegion, TopDesti
   styleUrl: './national-dashboard.component.css',
 })
 export class NationalDashboardComponent {
+  constructor(private router: Router){}
   private readonly auth      = inject(AuthService);
   private readonly dashboard = inject(NationalDashboardService);
 
@@ -27,4 +28,8 @@ export class NationalDashboardComponent {
   readonly topLocations:    TopLocation[]    = this.dashboard.getTopLocations();
   readonly topPlaces:       TopPlace[]       = this.dashboard.getTopPlaces();
   readonly Events:       Event[]       = this.dashboard.getEvents();
+  
+  navigate(): void {
+    this.router.navigate(['/regions']);
+  }
 }

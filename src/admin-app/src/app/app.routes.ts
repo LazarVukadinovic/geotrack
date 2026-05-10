@@ -126,11 +126,16 @@ export const routes: Routes = [
     //       import('./features/analytics/pages/analytics-page/analytics-page.component')
     //         .then(m => m.AnalyticsPageComponent),
     //   },
-    {
-      path: 'national-dashboard',
-      canActivate:[nationalManagerGuard],
-      loadComponent: () => import('./features/dashboard/pages/national-dashboard/national-dashboard.component').then(m=>m.NationalDashboardComponent),
-    },
+      {
+        path: 'national-dashboard',
+        canActivate:[nationalManagerGuard],
+        loadComponent: () => import('./features/dashboard/pages/national-dashboard/national-dashboard.component').then(m=>m.NationalDashboardComponent),
+      },
+      {
+        path: 'regions',
+        canActivate:[nationalManagerGuard],
+        loadComponent: () => import('./features/regions/pages/regions/regions.component').then(m=>m.AllRegionsComponent),
+      },
       {
         path: 'settings',
         loadComponent: () =>
