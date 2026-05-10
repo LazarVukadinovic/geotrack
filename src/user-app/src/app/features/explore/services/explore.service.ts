@@ -1,10 +1,13 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { FavoriteEntityType, FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
+import { TagService } from '../../../core/services/tag.service';
+import { UserService } from '../../../core/services/user.service';
 import type { ExploreItem } from '../../../core/models/explore-item.model';
 import type {
   ExploreAttraction,
@@ -47,10 +50,13 @@ const AUTH_PROMO_CARD: ExplorePromoCard = {
 })
 export class ExploreService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
+  private readonly userService = inject(UserService);
   private readonly locationSvc = inject(LocationService);
   private readonly destinationSvc = inject(DestinationService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly tagService = inject(TagService);
 
   private readonly _curatedForYou = signal<ExploreCuratedItem[]>([]);
   private readonly _localFavorites = signal<ExploreItem[]>([]);
@@ -62,6 +68,7 @@ export class ExploreService {
   private readonly _mustSeeAttractions = signal<ExploreAttraction[]>([]);
   private readonly _landmarkCategories = signal<ExploreLandmarkCategory[]>([]);
   private readonly _loaded = signal(false);
+  private readonly _loading = signal(false);
   private readonly _loadError = signal<string | null>(null);
 
   /** Coordinates used for the last successful load. */
@@ -69,6 +76,24 @@ export class ExploreService {
   private loadedLng = 0;
   private loadedSource: 'gps' | 'approximate' | 'manual' | 'destination' | 'default' | 'unknown' | null = null;
   private loadedDestinationId: number | null = null;
+  private loadedCurationContextKey: string | null = null;
+  private loadedRequestKey: string | null = null;
+  private loadingRequestKey: string | null = null;
+  private requestVersion = 0;
+
+  private readonly curationContextKey = computed(() => {
+    if (!this.auth.isLoggedIn()) return 'guest';
+
+    const profile = this.userService.profile();
+    if (!profile) return null;
+
+    return [
+      'user',
+      profile.id,
+      profile.needsInterestsOnboarding ? 'onboarding' : 'ready',
+      this.tagService.interestRevision(),
+    ].join(':');
+  });
 
   /** Reactive lists for templates that prefer signals. */
   readonly curatedForYou = computed(() => this.withSavedState(this._curatedForYou(), 'place'));
@@ -81,30 +106,55 @@ export class ExploreService {
   readonly mustSeeAttractions = computed(() => this._mustSeeAttractions());
   readonly landmarkCategories = computed(() => this._landmarkCategories());
   readonly loaded = computed(() => this._loaded());
+  readonly loading = computed(() => this._loading());
   readonly loadError = computed(() => this._loadError());
 
   constructor() {
     effect(() => {
+      const curationContextKey = this.curationContextKey();
+      if (curationContextKey !== this.loadedCurationContextKey) {
+        this._curatedForYou.set([]);
+      }
+    });
+
+    effect(() => {
+      const curationContextKey = this.curationContextKey();
+      if (!curationContextKey) return;
       if (this.destinationSvc.mode() !== 'destination') return;
       const destinationId = this.destinationSvc.id();
       if (destinationId == null) return;
-      if (this._loaded() && this.loadedSource === 'destination' && this.loadedDestinationId === destinationId) return;
-      this.loadDestinationFromApi(destinationId);
+      const requestKey = this.buildDestinationRequestKey(destinationId, curationContextKey);
+      if (this.loadingRequestKey === requestKey) return;
+      if (this._loaded() && this.loadedRequestKey === requestKey) return;
+      this.loadDestinationFromApi(destinationId, undefined, curationContextKey, requestKey);
     });
     // React to location changes — reload explore data when city meaningfully changes
     effect(() => {
+      const curationContextKey = this.curationContextKey();
+      if (!curationContextKey) return;
       if (this.destinationSvc.mode() === 'destination') return;
       const loc = this.locationSvc.location();
       if (!loc) return;
 
       const dist = this.haversineKm(this.loadedLat, this.loadedLng, loc.latitude, loc.longitude);
       const sourceChanged = this.loadedSource !== loc.source;
+      const curationChanged = this.loadedCurationContextKey !== curationContextKey;
+      const requestKey = this.buildLocationRequestKey(loc.latitude, loc.longitude, loc.source, curationContextKey);
+      if (this.loadingRequestKey === requestKey) return;
       // First load (0,0 → real) always triggers. After that we still reload when
       // the source changes, so a fresh GPS fix can replace an approximate load
       // even if both coordinates are within the same city.
-      if (this._loaded() && dist < RELOAD_THRESHOLD_KM && !sourceChanged && this.loadedSource !== 'destination') return;
+      if (
+        this._loaded() &&
+        !curationChanged &&
+        dist < RELOAD_THRESHOLD_KM &&
+        !sourceChanged &&
+        this.loadedSource !== 'destination'
+      ) {
+        return;
+      }
 
-      this.loadFromApi(loc.latitude, loc.longitude, undefined, loc.source);
+      this.loadFromApi(loc.latitude, loc.longitude, undefined, loc.source, curationContextKey, requestKey);
     });
   }
 
@@ -114,24 +164,36 @@ export class ExploreService {
    * Used by the landing page for preloading before navigation.
    */
   loadForLocation(lat: number, lng: number): Promise<void> {
+    const curationContextKey = this.curationContextKey();
+    if (!curationContextKey) return Promise.resolve();
+
     const dist = this.haversineKm(this.loadedLat, this.loadedLng, lat, lng);
     const source = this.locationSvc.location()?.source ?? null;
-    if (this._loaded() && dist < RELOAD_THRESHOLD_KM && this.loadedSource === source) {
+    if (
+      this._loaded() &&
+      this.loadedCurationContextKey === curationContextKey &&
+      dist < RELOAD_THRESHOLD_KM &&
+      this.loadedSource === source
+    ) {
       return Promise.resolve(); // already loaded for a nearby location
     }
     return new Promise((resolve) => {
-      this.loadFromApi(lat, lng, resolve, source);
+      this.loadFromApi(lat, lng, resolve, source, curationContextKey);
     });
   }
 
   loadForDestination(destinationId: number): Promise<void> {
     if (destinationId <= 0) return Promise.resolve();
-    if (this._loaded() && this.loadedSource === 'destination' && this.loadedDestinationId === destinationId) {
+    const curationContextKey = this.curationContextKey();
+    if (!curationContextKey) return Promise.resolve();
+
+    const requestKey = this.buildDestinationRequestKey(destinationId, curationContextKey);
+    if (this._loaded() && this.loadedRequestKey === requestKey) {
       return Promise.resolve();
     }
 
     return new Promise((resolve) => {
-      this.loadDestinationFromApi(destinationId, resolve);
+      this.loadDestinationFromApi(destinationId, resolve, curationContextKey, requestKey);
     });
   }
 
@@ -141,13 +203,19 @@ export class ExploreService {
     if (!loc) {
       void this.locationSvc.ensureIpFallback().then((resolved) => {
         if (resolved) {
-          this.loadFromApi(resolved.latitude, resolved.longitude, undefined, resolved.source);
+          const curationContextKey = this.curationContextKey();
+          if (curationContextKey) {
+            this.loadFromApi(resolved.latitude, resolved.longitude, undefined, resolved.source, curationContextKey);
+          }
         }
       });
       return;
     }
 
-    this.loadFromApi(loc.latitude, loc.longitude, undefined, loc.source);
+    const curationContextKey = this.curationContextKey();
+    if (!curationContextKey) return;
+
+    this.loadFromApi(loc.latitude, loc.longitude, undefined, loc.source, curationContextKey);
   }
 
   private loadFromApi(
@@ -155,21 +223,51 @@ export class ExploreService {
     lng: number,
     onComplete?: () => void,
     source?: 'gps' | 'approximate' | 'manual' | 'default' | 'unknown' | null,
+    curationContextKey = this.curationContextKey(),
+    requestKey?: string,
   ): void {
+    if (!curationContextKey) {
+      onComplete?.();
+      return;
+    }
+
+    const effectiveRequestKey = requestKey ?? this.buildLocationRequestKey(lat, lng, source, curationContextKey);
+    if (this.loadingRequestKey === effectiveRequestKey) {
+      onComplete?.();
+      return;
+    }
+
+    const requestId = ++this.requestVersion;
+    this.loadingRequestKey = effectiveRequestKey;
     this._loadError.set(null);
+    this._loading.set(true);
 
     this.http.get<ExploreApiResponse>(`/api/explore?latitude=${lat}&longitude=${lng}`).subscribe({
       next: (res) => {
+        if (this.isStaleRequest(requestId, effectiveRequestKey)) {
+          onComplete?.();
+          return;
+        }
+
         this.applyResponse(res);
         this.loadedLat = lat;
         this.loadedLng = lng;
         this.loadedSource = source ?? this.locationSvc.location()?.source ?? null;
         this.loadedDestinationId = res.selectedDestination?.id ?? null;
+        this.loadedCurationContextKey = curationContextKey;
+        this.loadedRequestKey = effectiveRequestKey;
+        this.loadingRequestKey = null;
         this._loadError.set(null);
+        this._loading.set(false);
         this._loaded.set(true);
         onComplete?.();
       },
       error: () => {
+        if (this.isStaleRequest(requestId, effectiveRequestKey)) {
+          onComplete?.();
+          return;
+        }
+
         this._eventsThisWeek.set([]);
         this._topStays.set([]);
         this._popularNearby.set([]);
@@ -181,28 +279,65 @@ export class ExploreService {
         this.loadedLng = lng;
         this.loadedSource = source ?? this.locationSvc.location()?.source ?? null;
         this.loadedDestinationId = null;
+        this.loadedCurationContextKey = curationContextKey;
+        this.loadedRequestKey = effectiveRequestKey;
+        this.loadingRequestKey = null;
         this._loadError.set("We couldn't load the Explore feed. Check your connection and try again.");
+        this._loading.set(false);
         this._loaded.set(true);
         onComplete?.();
       },
     });
   }
 
-  private loadDestinationFromApi(destinationId: number, onComplete?: () => void): void {
+  private loadDestinationFromApi(
+    destinationId: number,
+    onComplete?: () => void,
+    curationContextKey = this.curationContextKey(),
+    requestKey?: string,
+  ): void {
+    if (!curationContextKey) {
+      onComplete?.();
+      return;
+    }
+
+    const effectiveRequestKey = requestKey ?? this.buildDestinationRequestKey(destinationId, curationContextKey);
+    if (this.loadingRequestKey === effectiveRequestKey) {
+      onComplete?.();
+      return;
+    }
+
+    const requestId = ++this.requestVersion;
+    this.loadingRequestKey = effectiveRequestKey;
     this._loadError.set(null);
+    this._loading.set(true);
 
     this.http.get<ExploreApiResponse>(`/api/explore?destinationId=${destinationId}`).subscribe({
       next: (res) => {
+        if (this.isStaleRequest(requestId, effectiveRequestKey)) {
+          onComplete?.();
+          return;
+        }
+
         this.applyResponse(res);
         this.loadedSource = 'destination';
         this.loadedDestinationId = destinationId;
         this.loadedLat = res.selectedDestination?.latitude ?? 0;
         this.loadedLng = res.selectedDestination?.longitude ?? 0;
+        this.loadedCurationContextKey = curationContextKey;
+        this.loadedRequestKey = effectiveRequestKey;
+        this.loadingRequestKey = null;
         this._loadError.set(null);
+        this._loading.set(false);
         this._loaded.set(true);
         onComplete?.();
       },
       error: () => {
+        if (this.isStaleRequest(requestId, effectiveRequestKey)) {
+          onComplete?.();
+          return;
+        }
+
         this._eventsThisWeek.set([]);
         this._topStays.set([]);
         this._popularNearby.set([]);
@@ -212,7 +347,11 @@ export class ExploreService {
         this._localFavorites.set([]);
         this.loadedSource = 'destination';
         this.loadedDestinationId = destinationId;
+        this.loadedCurationContextKey = curationContextKey;
+        this.loadedRequestKey = effectiveRequestKey;
+        this.loadingRequestKey = null;
         this._loadError.set("We couldn't load that destination. Check your connection and try again.");
+        this._loading.set(false);
         this._loaded.set(true);
         onComplete?.();
       },
@@ -305,6 +444,29 @@ export class ExploreService {
       Math.sin(dLat / 2) ** 2 +
       Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  private buildLocationRequestKey(
+    latitude: number,
+    longitude: number,
+    source: 'gps' | 'approximate' | 'manual' | 'default' | 'unknown' | null | undefined,
+    curationContextKey: string,
+  ): string {
+    return [
+      'location',
+      latitude.toFixed(4),
+      longitude.toFixed(4),
+      source ?? 'unknown',
+      curationContextKey,
+    ].join(':');
+  }
+
+  private buildDestinationRequestKey(destinationId: number, curationContextKey: string): string {
+    return ['destination', destinationId, curationContextKey].join(':');
+  }
+
+  private isStaleRequest(requestId: number, requestKey: string): boolean {
+    return requestId !== this.requestVersion || this.loadingRequestKey !== requestKey;
   }
 
   /** Signal-backed streams kept for existing components that consume observables. */
