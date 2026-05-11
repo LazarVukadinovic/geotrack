@@ -109,8 +109,10 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      this.coverImageUrl  = reader.result as string;
-      this.coverImageName = file.name;
+      this.zone.run(() => {
+        this.coverImageUrl  = reader.result as string;
+        this.coverImageName = file.name;
+      });
     };
     reader.readAsDataURL(file);
     input.value = '';
@@ -130,7 +132,9 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     for (const file of files) {
       const reader = new FileReader();
       reader.onload = () => {
-        this.galleryImages.push({ url: reader.result as string, name: file.name });
+        this.zone.run(() => {
+          this.galleryImages.push({ url: reader.result as string, name: file.name });
+        });
       };
       reader.readAsDataURL(file);
     }

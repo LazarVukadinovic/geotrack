@@ -168,9 +168,15 @@
               </div>
               <div class="px-6 py-5">
                 <div class="grid grid-cols-3 gap-3">
-                  <div *ngFor="let img of (item)['galleryImages']"
-                       class="aspect-video rounded-lg overflow-hidden bg-gray-100">
-                    <img [src]="img.url" [alt]="img.name" class="w-full h-full object-cover" />
+                  <div *ngFor="let img of (item)['galleryImages']; let i = index"
+                       class="aspect-video rounded-lg overflow-hidden bg-gray-100 cursor-pointer group relative"
+                       (click)="openLightbox((item)['galleryImages'] || [], i)">
+                    <img [src]="img.url" [alt]="img.name" class="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                    <div class="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                      <svg class="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                      </svg>
+                    </div>
                   </div>
                 </div>
               </div>

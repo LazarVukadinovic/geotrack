@@ -8,6 +8,7 @@ import { LocationsService } from '../../../../core/services/locations.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { ZoneDrawService } from '../../../../core/services/zone-draw.service';
 import { LocationsListService } from '../../../../core/services/locations-list.service';
+import { MapPlacesService } from '../../../../core/services/map-places.service';
 declare const L: any;
 
 interface ClassItem {
@@ -43,7 +44,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     private locationsService: LocationsService,
     private lightboxService: LightboxService,
     private zoneDrawService: ZoneDrawService,
-    private locationsListSvc: LocationsListService
+    private locationsListSvc: LocationsListService,
+    private mapPlacesSvc: MapPlacesService
   ) {}
 
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -100,8 +102,10 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      this.coverImageUrl  = reader.result as string;
-      this.coverImageName = file.name;
+      this.zone.run(() => {
+        this.coverImageUrl  = reader.result as string;
+        this.coverImageName = file.name;
+      });
     };
     reader.readAsDataURL(file);
     input.value = '';
@@ -121,7 +125,9 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     for (const file of files) {
       const reader = new FileReader();
       reader.onload = () => {
-        this.galleryImages.push({ url: reader.result as string, name: file.name });
+        this.zone.run(() => {
+          this.galleryImages.push({ url: reader.result as string, name: file.name });
+        });
       };
       reader.readAsDataURL(file);
     }
@@ -407,6 +413,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       if (this._pendingDescription && this.editorRef?.nativeElement) {
         this.editorRef.nativeElement.innerHTML = this._pendingDescription;
         this.syncEmptyState();
+        this.cdr.detectChanges();
       }
     }, 0);
   }
@@ -497,6 +504,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
           classification: classification.length ? classification : undefined,
           tags:          this.tags.length ? this.tags : undefined,
         });
+
+        this.mapPlacesSvc.addPlace(saved);
 
         if (returnTo) {
           this.router.navigate([returnTo]);

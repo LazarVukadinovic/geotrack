@@ -8,6 +8,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent }  from '../../../../../shared/components/topbar/topbar.component';
 import { PlacesListService, PlaceListItem } from '../../../../../core/services/places-list.service';
+import { LightboxService } from '../../../../../core/services/lightbox.service';
 declare const L: any;
 
 @Component({
@@ -24,6 +25,7 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     private zone: NgZone,
     private cdr: ChangeDetectorRef,
     private svc: PlacesListService,
+    private lightboxService: LightboxService,
   ) {}
 
   @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
@@ -191,6 +193,10 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
         this.deleteTarget = null;
         this.router.navigate(['/places']);
       });
+  }
+
+  openLightbox(images: { url: string; name: string }[], index: number): void {
+    this.lightboxService.open(images, index);
   }
 
   statusClass(status: string): string {
