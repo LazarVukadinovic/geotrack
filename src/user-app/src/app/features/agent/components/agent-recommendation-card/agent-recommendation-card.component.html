@@ -1,15 +1,21 @@
-<article class="agent-rec-card">
+<article
+  class="agent-rec-card"
+  role="link"
+  tabindex="0"
+  [attr.aria-label]="'Open ' + card().title"
+  (click)="onCardClicked()"
+  (keydown.enter)="onCardClicked()"
+  (keydown.space)="$event.preventDefault(); onCardClicked()"
+>
   <div class="agent-rec-card__media">
-    @if (card().image) {
-      <img appImageFallback class="agent-rec-card__img" [src]="card().image" [alt]="card().title" />
-    }
+    <img appImageFallback class="agent-rec-card__img" [src]="imageSrc()" [alt]="imageAlt()" />
 
     <span class="agent-rec-card__badge">{{ entityLabel() }}</span>
 
     @if (canSave()) {
       <app-favorite-button
         class="agent-rec-card__save"
-        [saved]="card().isFavorite"
+        [saved]="false"
         [itemLabel]="card().title"
         (clicked)="onSaveClicked()"
       />
@@ -18,7 +24,12 @@
 
   <div class="agent-rec-card__body">
     <h3 class="agent-rec-card__title">{{ card().title }}</h3>
-    <p class="agent-rec-card__desc">{{ card().description }}</p>
+    @if (subtitle()) {
+      <p class="agent-rec-card__subtitle">{{ subtitle() }}</p>
+    }
+    @if (description()) {
+      <p class="agent-rec-card__desc">{{ description() }}</p>
+    }
 
     <div class="agent-rec-card__meta">
       @if (card().rating != null) {
@@ -28,17 +39,20 @@
           </svg>
           {{ card().rating!.toFixed(1) }}
         </span>
-      } @else {
+        @if (reviewText()) {
+          <span class="agent-rec-card__meta-item">{{ reviewText() }}</span>
+        }
+      } @else if (card().entityType !== 'event') {
         <span class="agent-rec-card__meta-item">No reviews yet</span>
       }
 
-      @if (card().durationHours != null) {
+      @if (card().dateText && card().entityType === 'event') {
         <span class="agent-rec-card__meta-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
             <circle cx="12" cy="12" r="9"/>
             <path stroke-linecap="round" d="M12 7v5l3 3"/>
           </svg>
-          {{ card().durationHours }} hrs
+          {{ card().dateText }}
         </span>
       }
 
@@ -52,10 +66,6 @@
       }
     </div>
 
-    @if (card().detailUrl) {
-      <a class="agent-rec-card__cta" [routerLink]="card().detailUrl" (click)="onCardClicked()">
-        Explore
-      </a>
-    }
+    <span class="agent-rec-card__cta" aria-hidden="true">Explore</span>
   </div>
 </article>
