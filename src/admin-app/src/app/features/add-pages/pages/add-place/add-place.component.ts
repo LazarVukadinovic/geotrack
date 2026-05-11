@@ -465,7 +465,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     if (Array.isArray(place.hours)) {
-      this.days = place.hours.map((h: any) => ({ ...h }));
+      this.days      = place.hours.map((h: any) => ({ ...h }));
+      this.opsEnabled = true;
     }
 
     if (Array.isArray(place.classification)) {

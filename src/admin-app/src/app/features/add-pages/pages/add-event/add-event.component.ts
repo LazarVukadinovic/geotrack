@@ -651,12 +651,17 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     if (state.place?.id && (state.editMode || state.returnTo?.includes('events/detail'))) {
       this.isEditMode = true;
       const p = state.place;
-      this.eventTitle          = p.name      ?? '';
-      this.eventCategory       = p.category  ?? '';
-      this.summary             = p.summary   ?? '';
+      this.eventTitle          = p.name        ?? '';
+      this.eventCategory       = p.category   ?? '';
+      this.summary             = p.summary    ?? '';
       this._pendingDescription = p.description ?? '';
       this.startDate = this._parseDisplayDateToIso(p.startDate) ?? this.startDate;
       this.endDate   = this._parseDisplayDateToIso(p.endDate)   ?? this.endDate;
+      if (p.startTime) this.startTime = p.startTime;
+      if (p.endTime)   this.endTime   = p.endTime;
+      this.allDay    = p.allDay    ?? false;
+      this.freeEvent = p.freeEvent ?? false;
+      this.recurring = p.recurring ?? false;
 
       if (p.coverImageUrl) {
         this.coverImageUrl  = p.coverImageUrl;
@@ -795,6 +800,11 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
           venueName:      this.selectedVenue?.name,
           startDate:      startDisp,
           endDate:        endDisp,
+          startTime:      this.startTime,
+          endTime:        this.endTime,
+          allDay:         this.allDay,
+          freeEvent:      this.freeEvent,
+          recurring:      this.recurring,
           dateRange,
           status:         'Published',
           description:    descriptionHtml,
@@ -823,6 +833,11 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
           venueName:     this.selectedVenue?.name,
           startDate:     startDisp,
           endDate:       endDisp,
+          startTime:     this.startTime,
+          endTime:       this.endTime,
+          allDay:        this.allDay,
+          freeEvent:     this.freeEvent,
+          recurring:     this.recurring,
           dateRange,
           description:   descriptionHtml,
           coverImageUrl: this.coverImageUrl ?? undefined,

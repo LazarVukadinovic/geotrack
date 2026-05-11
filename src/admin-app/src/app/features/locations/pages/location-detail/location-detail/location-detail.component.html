@@ -93,6 +93,12 @@
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Last Updated</span>
                   <span class="text-sm font-medium text-gray-700">{{ item.lastUpdated }}</span>
                 </div>
+                <ng-container *ngIf="(item)['parentDestination']">
+                  <div class="flex flex-col gap-1 col-span-2">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent Destination</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['parentDestination'] }}</span>
+                  </div>
+                </ng-container>
               </div>
             </div>
           </div>

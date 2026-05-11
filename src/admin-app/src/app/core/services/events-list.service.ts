@@ -15,6 +15,11 @@ export interface EventListItem {
   dateRange?: string;
   startDate?: string;
   endDate?: string;
+  startTime?: string;
+  endTime?: string;
+  allDay?: boolean;
+  freeEvent?: boolean;
+  recurring?: boolean;
   lat?: number;
   lng?: number;
   address?: string;

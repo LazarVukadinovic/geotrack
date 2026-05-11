@@ -95,22 +95,58 @@
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Last Updated</span>
                   <span class="text-sm font-medium text-gray-700">{{ item.lastUpdated }}</span>
                 </div>
-                <!-- Event-specific fields (from model if present) -->
-                <ng-container *ngIf="(item)['startDate']">
-                  <div class="flex flex-col gap-1">
-                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Start Date</span>
-                    <span class="text-sm font-medium text-gray-700">{{ (item)['startDate'] }}</span>
-                  </div>
-                </ng-container>
-                <ng-container *ngIf="(item)['endDate']">
-                  <div class="flex flex-col gap-1">
-                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">End Date</span>
-                    <span class="text-sm font-medium text-gray-700">{{ (item)['endDate'] }}</span>
+                <ng-container *ngIf="(item)['dateRange']">
+                  <div class="flex flex-col gap-1 col-span-2">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Date</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['dateRange'] }}</span>
                   </div>
                 </ng-container>
               </div>
             </div>
           </div>
+
+          <!-- Date & Time -->
+          <ng-container *ngIf="(item)['startDate'] || (item)['startTime']">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-bold text-gray-800">Date &amp; Time</h3>
+              </div>
+              <div class="px-6 py-5">
+                <div class="grid grid-cols-2 gap-4">
+                  <div *ngIf="(item)['startDate']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Start Date</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['startDate'] }}</span>
+                  </div>
+                  <div *ngIf="(item)['endDate']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">End Date</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['endDate'] }}</span>
+                  </div>
+                  <div *ngIf="(item)['startTime'] && !(item)['allDay']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Start Time</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['startTime'] }}</span>
+                  </div>
+                  <div *ngIf="(item)['endTime'] && !(item)['allDay']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">End Time</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['endTime'] }}</span>
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-4">
+                  <span *ngIf="(item)['allDay']"
+                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                    All Day
+                  </span>
+                  <span *ngIf="(item)['freeEvent']"
+                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                    Free Entry
+                  </span>
+                  <span *ngIf="(item)['recurring']"
+                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 ring-1 ring-purple-100">
+                    Recurring
+                  </span>
+                </div>
+              </div>
+            </div>
+          </ng-container>
 
           <!-- Description -->
           <ng-container *ngIf="(item)['description']">
