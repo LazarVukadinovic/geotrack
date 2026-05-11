@@ -1,6 +1,7 @@
-import { Component, Input, inject } from '@angular/core';
+import { Component, Input, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, RouterLinkActive, Router } from '@angular/router';
+import { RouterLink, Router, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { ReviewRequestsService } from '../../../core/services/review-requests.service';
 import { AuthService } from '../../../core/services/auth.service';
 
@@ -15,7 +16,7 @@ export interface SidebarNavItem {
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterLink],
   templateUrl: './sidebar.component.html',
   styleUrl: './sidebar.component.css',
 })
@@ -25,6 +26,20 @@ export class SidebarComponent {
   private readonly auth            = inject(AuthService);
   private readonly requestsService = inject(ReviewRequestsService);
   private readonly router          = inject(Router);
+
+  private readonly currentUrl = signal(this.router.url);
+
+  constructor() {
+    this.router.events
+      .pipe(filter(e => e instanceof NavigationEnd))
+      .subscribe(e => this.currentUrl.set((e as NavigationEnd).urlAfterRedirects));
+  }
+
+  isActive(path: string, exact = false): boolean {
+    const url = this.currentUrl();
+    if (exact) return url === path;
+    return url === path || url.startsWith(path + '/') || url.startsWith(path + '?');
+  }
 
   get pickerLabel(): string {
     return this.auth.isNationalManager() ? 'COUNTRY' : 'REGION';
