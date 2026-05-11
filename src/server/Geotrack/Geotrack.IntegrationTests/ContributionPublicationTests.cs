@@ -545,6 +545,7 @@ public sealed class ContributionPublicationTests
         formData.Add(
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             "payload");
+        AddOwnershipProofDocument(formData);
 
         var response = await client.PostAsync("/api/contributions", formData);
         response.EnsureSuccessStatusCode();
@@ -582,6 +583,7 @@ public sealed class ContributionPublicationTests
         formData.Add(
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             "payload");
+        AddOwnershipProofDocument(formData);
 
         var response = await client.PostAsync("/api/contributions", formData);
         response.EnsureSuccessStatusCode();
@@ -600,8 +602,16 @@ public sealed class ContributionPublicationTests
         formData.Add(
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             "payload");
+        AddOwnershipProofDocument(formData);
 
         return await client.PostAsync(endpoint, formData);
+    }
+
+    private static void AddOwnershipProofDocument(MultipartFormDataContent formData)
+    {
+        var ownershipProofContent = new ByteArrayContent(Encoding.UTF8.GetBytes("%PDF-1.4\n% GeoTrack ownership proof test document\n"));
+        ownershipProofContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        formData.Add(ownershipProofContent, "ownershipProofDocument", "ownership-proof.pdf");
     }
 
     private static async Task AssertForbiddenAsync(HttpResponseMessage response)

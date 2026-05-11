@@ -1682,6 +1682,18 @@ namespace Geotrack.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb");
 
+                    b.Property<string>("OwnershipProofContentType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OwnershipProofDocumentUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OwnershipProofOriginalFileName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("OwnershipProofUploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("PhoneNumber")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");

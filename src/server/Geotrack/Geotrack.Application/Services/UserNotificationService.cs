@@ -1,9 +1,9 @@
 using Geotrack.Application.DTOs.Notifications;
+using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Users;
-using Microsoft.EntityFrameworkCore;
 
-namespace Geotrack.Infrastructure.Services;
+namespace Geotrack.Application.Services;
 
 public class UserNotificationService : IUserNotificationService
 {
@@ -11,11 +11,11 @@ public class UserNotificationService : IUserNotificationService
     private const string ContributionApprovedType = "contribution_approved";
     private const string ContributionRejectedType = "contribution_rejected";
 
-    private readonly AppDbContext _db;
+    private readonly IUserNotificationRepository _notificationRepository;
 
-    public UserNotificationService(AppDbContext db)
+    public UserNotificationService(IUserNotificationRepository notificationRepository)
     {
-        _db = db;
+        _notificationRepository = notificationRepository;
     }
 
     public async Task<GetUserNotificationsResponseDto> GetMineAsync(int userId, int skip = 0, int take = 30)
@@ -23,25 +23,17 @@ public class UserNotificationService : IUserNotificationService
         var normalizedSkip = Math.Max(0, skip);
         var normalizedTake = Math.Clamp(take, 1, MaxTake);
 
-        var query = _db.UserNotifications
-            .AsNoTracking()
-            .Where(notification => notification.UserId == userId)
-            .OrderByDescending(notification => notification.CreatedAt)
-            .ThenByDescending(notification => notification.Id);
-
-        var notifications = await query
-            .Skip(normalizedSkip)
-            .Take(normalizedTake + 1)
-            .ToListAsync();
+        var notifications = await _notificationRepository.GetByUserAsync(
+            userId,
+            normalizedSkip,
+            normalizedTake + 1);
 
         var hasMore = notifications.Count > normalizedTake;
         var pageItems = hasMore
             ? notifications.Take(normalizedTake).ToList()
             : notifications;
 
-        var unreadCount = await _db.UserNotifications
-            .AsNoTracking()
-            .CountAsync(notification => notification.UserId == userId && notification.ReadAt == null);
+        var unreadCount = await _notificationRepository.CountUnreadAsync(userId);
 
         return new GetUserNotificationsResponseDto
         {
@@ -56,36 +48,30 @@ public class UserNotificationService : IUserNotificationService
 
     public async Task<UserNotificationUnreadCountDto> GetUnreadCountAsync(int userId)
     {
-        var unreadCount = await _db.UserNotifications
-            .AsNoTracking()
-            .CountAsync(notification => notification.UserId == userId && notification.ReadAt == null);
-
+        var unreadCount = await _notificationRepository.CountUnreadAsync(userId);
         return new UserNotificationUnreadCountDto { UnreadCount = unreadCount };
     }
 
     public async Task MarkReadAsync(int userId, int notificationId)
     {
-        var notification = await _db.UserNotifications
-            .FirstOrDefaultAsync(item => item.Id == notificationId && item.UserId == userId)
+        var notification = await _notificationRepository.GetByIdForUserAsync(userId, notificationId)
             ?? throw new KeyNotFoundException("Notification not found");
 
         notification.ReadAt ??= DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+        await _notificationRepository.SaveChangesAsync();
     }
 
     public async Task MarkAllReadAsync(int userId)
     {
         var now = DateTime.UtcNow;
-        var unreadNotifications = await _db.UserNotifications
-            .Where(item => item.UserId == userId && item.ReadAt == null)
-            .ToListAsync();
+        var unreadNotifications = await _notificationRepository.GetUnreadByUserAsync(userId);
 
         foreach (var notification in unreadNotifications)
         {
             notification.ReadAt = now;
         }
 
-        await _db.SaveChangesAsync();
+        await _notificationRepository.SaveChangesAsync();
     }
 
     public void AddContributionDecisionNotification(PlaceContribution contribution)
@@ -97,7 +83,7 @@ public class UserNotificationService : IUserNotificationService
 
         var isApproved = contribution.Status == PlaceContributionStatus.Approved;
 
-        _db.UserNotifications.Add(new UserNotification
+        _notificationRepository.Add(new UserNotification
         {
             UserId = contribution.UserId,
             Type = isApproved ? ContributionApprovedType : ContributionRejectedType,

@@ -1,5 +1,4 @@
-using System.Text.Json;
-using System.Text.RegularExpressions;
+﻿using System.Text.Json;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
@@ -11,44 +10,25 @@ namespace Geotrack.Infrastructure.Services;
 
 public class PlaceContributionService : IPlaceContributionService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private const int MaxContributionImages = 20;
-    private const int MaxWebsiteUrlLength = 500;
-    private const int MaxBookingPartnerUrlLength = 500;
-    private const int MaxImageUrlLength = 1000;
-    private const int MaxBookingPartnerIdLength = 80;
-    private const string ManagedContributionMediaPrefix = "/media/uploads/contributions/";
-    private static readonly Regex ManagedContributionMediaFileNameRegex = new(
-        @"^[a-z0-9][a-z0-9._-]{0,199}\.(png|jpe?g|gif|webp)$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private const string MainImageCaption = "__contribution_main__";
+    private const string CoverImageCaption = "__contribution_cover__";
 
     private readonly AppDbContext _db;
     private readonly IContributionMediaStorageService _mediaStorage;
-    private readonly IUserNotificationService _notificationService;
 
     public PlaceContributionService(
         AppDbContext db,
-        IContributionMediaStorageService mediaStorage,
-        IUserNotificationService notificationService)
+        IContributionMediaStorageService mediaStorage)
     {
         _db = db;
         _mediaStorage = mediaStorage;
-        _notificationService = notificationService;
     }
 
-    public async Task<GetPlaceContributionsResponseDto> GetMineAsync(int userId)
+    public async Task<GetPlaceContributionsResponseDto> GetForUserAsync(int userId)
     {
-        var contributions = await _db.PlaceContributions
-            .AsNoTracking()
-            .Include(x => x.PlaceType)
-            .Include(x => x.Location)
-                .ThenInclude(x => x!.Destination)
-                    .ThenInclude(x => x.Region)
-                        .ThenInclude(x => x.Territory)
-            .Include(x => x.StayType)
-            .Include(x => x.Images)
-            .Where(x => x.UserId == userId)
-            .OrderByDescending(x => x.UpdatedAt ?? x.SubmittedAt)
+        var contributions = await BaseContributionQuery()
+            .Where(c => c.UserId == userId)
+            .OrderByDescending(c => c.SubmittedAt)
             .ToListAsync();
 
         return new GetPlaceContributionsResponseDto
@@ -57,1331 +37,1009 @@ public class PlaceContributionService : IPlaceContributionService
         };
     }
 
-    public async Task<PlaceContributionDetailDto> GetMineDetailAsync(int userId, int contributionId)
+    public async Task<PlaceContributionDetailDto?> GetByIdForUserAsync(int userId, int contributionId)
     {
-        var contribution = await LoadContributionDetails()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == contributionId && x.UserId == userId)
-            ?? throw new KeyNotFoundException("Contribution not found");
+        var contribution = await BaseContributionQuery()
+            .SingleOrDefaultAsync(c => c.Id == contributionId && c.UserId == userId);
 
-        return MapDetail(contribution);
+        return contribution is null ? null : MapDetail(contribution);
     }
 
-    public async Task<PlaceContributionDetailDto> CreateAsync(int userId, UpsertPlaceContributionDto request, byte[]? mainImageBytes)
+    public async Task<GetPlaceContributionsResponseDto> GetPendingReviewAsync(int? reviewerUserId = null)
     {
-        Validate(request, isUpdateMethod: false);
+        var query = BaseContributionQuery()
+            .Where(c => c.Status == PlaceContributionStatus.PendingReview);
 
+        query = await ApplyReviewerScopeAsync(query, reviewerUserId);
+
+        var contributions = await query
+            .OrderBy(c => c.SubmittedAt)
+            .ToListAsync();
+
+        return new GetPlaceContributionsResponseDto
+        {
+            Contributions = contributions.Select(MapListItem).ToList()
+        };
+    }
+
+    public async Task<PlaceContributionDetailDto?> GetPendingReviewByIdAsync(int contributionId, int? reviewerUserId = null)
+    {
+        var query = BaseContributionQuery()
+            .Where(c => c.Id == contributionId && c.Status == PlaceContributionStatus.PendingReview);
+
+        query = await ApplyReviewerScopeAsync(query, reviewerUserId);
+
+        var contribution = await query.SingleOrDefaultAsync();
+
+        return contribution is null ? null : MapDetail(contribution);
+    }
+
+    public async Task<PlaceContributionDetailDto> CreateAsync(
+        int userId,
+        UpsertPlaceContributionDto request,
+        byte[]? mainImageBytes,
+        byte[]? coverImageBytes,
+        byte[]? ownershipProofBytes,
+        string? ownershipProofOriginalFileName,
+        string? ownershipProofContentType)
+    {
         var now = DateTime.UtcNow;
-        string? storedMediaUrl = null;
+        var type = ParseType(request.Type);
+
+        Place? targetPlace = null;
+
+        if (type is PlaceContributionType.CreatePlace or PlaceContributionType.ClaimOwnership &&
+            ownershipProofBytes is null or { Length: 0 })
+        {
+            throw new InvalidOperationException("Ownership proof document is required.");
+        }
+
+        if (type == PlaceContributionType.UpdatePlace)
+        {
+            if (!request.PlaceId.HasValue)
+                throw new InvalidOperationException("PlaceId is required for update contributions.");
+
+            var canManagePlace = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            if (!canManagePlace)
+                throw new InvalidOperationException("You must be the owner of this place to propose updates.");
+
+            targetPlace = await _db.Places
+                .AsNoTracking()
+                .Include(p => p.Stay)
+                .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
+
+            if (targetPlace is null)
+                throw new InvalidOperationException("The place you are trying to update does not exist.");
+        }
+
+        if (type == PlaceContributionType.ClaimOwnership)
+        {
+            if (!request.PlaceId.HasValue)
+                throw new InvalidOperationException("PlaceId is required for ownership claims.");
+
+            targetPlace = await _db.Places
+                .AsNoTracking()
+                .Include(p => p.Stay)
+                .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
+
+            if (targetPlace is null)
+                throw new InvalidOperationException("The place you are trying to claim does not exist.");
+
+            var alreadyOwner = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            if (alreadyOwner)
+                throw new InvalidOperationException("You already own this place.");
+        }
+
+        string? storedMainImageUrl = null;
+        string? storedCoverImageUrl = null;
+        string? storedOwnershipProofUrl = null;
 
         if (mainImageBytes is { Length: > 0 })
         {
-            storedMediaUrl = (await _mediaStorage.StoreAsync(userId, mainImageBytes)).MediaUrl;
+            storedMainImageUrl = (await _mediaStorage.StoreAsync(userId, mainImageBytes)).MediaUrl;
         }
 
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-
-        try
+        if (coverImageBytes is { Length: > 0 })
         {
-            var references = await ResolveContributionReferencesAsync(request);
-
-            var contribution = new PlaceContribution
-            {
-                Type = ParseType(request.Type),
-                Status = PlaceContributionStatus.PendingReview,
-                UserId = userId,
-                PlaceId = request.PlaceId,
-                PlaceTypeId = references.PlaceTypeId,
-                LocationId = references.LocationId,
-                RestaurantTypeId = request.RestaurantTypeId,
-                StayTypeId = references.StayTypeId,
-                Name = request.Name.Trim(),
-                Subtitle = NormalizeOptional(request.Subtitle, 500),
-                Address = NormalizeOptional(request.Address, 500),
-                OpeningHours = NormalizeOptional(request.OpeningHours, 200),
-                Description = NormalizeDescription(request.Description),
-                Latitude = references.Latitude,
-                Longitude = references.Longitude,
-                ContactEmail = NormalizeContactEmail(request.ContactEmail),
-                PhoneNumber = NormalizeOptional(request.PhoneNumber ?? request.Phone, 50),
-                Website = NormalizeWebsite(request.Website),
-                PricePerNight = NormalizePricePerNight(request.PricePerNight),
-                CheckInTime = NormalizeOptional(request.CheckInTime, 20),
-                CheckOutTime = NormalizeOptional(request.CheckOutTime, 20),
-                TagsJson = Serialize(NormalizeStringList(request.Tags, 80, 30)),
-                AmenitiesJson = Serialize(references.PlaceAmenities),
-                StayAmenitiesJson = Serialize(references.StayAmenities),
-                BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners)),
-                SubmittedAt = now,
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-
-            ApplyImages(contribution, request.Images, storedMediaUrl, now, request.ImagePosition, request.ImageSize);
-
-            await _db.PlaceContributions.AddAsync(contribution);
-            await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
-
-            return MapDetail(contribution);
+            storedCoverImageUrl = (await _mediaStorage.StoreAsync(userId, coverImageBytes)).MediaUrl;
         }
-        catch
+
+        if (ownershipProofBytes is { Length: > 0 })
         {
-            if (storedMediaUrl is not null)
-                await _mediaStorage.DeleteAsync(storedMediaUrl);
-
-            throw;
+            storedOwnershipProofUrl = (await _mediaStorage.StoreOwnershipProofAsync(
+                userId,
+                ownershipProofBytes,
+                ownershipProofOriginalFileName,
+                ownershipProofContentType)).MediaUrl;
         }
+
+        var contribution = new PlaceContribution
+        {
+            Type = type,
+            Status = PlaceContributionStatus.PendingReview,
+            UserId = userId,
+            PlaceId = type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership
+                ? request.PlaceId
+                : null,
+            OriginalSnapshotJson = type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership && request.PlaceId.HasValue
+                ? await BuildOriginalSnapshotAsync(request.PlaceId.Value)
+                : "{}",
+            PlaceTypeId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.PlaceTypeId : request.PlaceTypeId,
+            LocationId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.LocationId : request.LocationId,
+            RestaurantTypeId = request.RestaurantTypeId,
+            StayTypeId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Stay?.StayTypeId : request.StayTypeId,
+            Name = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Name
+                : NormalizeRequired(request.Name, "Name"),
+            Subtitle = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Subtitle
+                : NormalizeOptional(request.Subtitle),
+            Address = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Address
+                : NormalizeOptional(request.Address),
+            OpeningHours = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.OpeningHours
+                : NormalizeOptional(request.OpeningHours),
+            Description = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Description
+                : NormalizeRequired(request.Description, "Description"),
+            Latitude = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Latitude : request.Latitude,
+            Longitude = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Longitude : request.Longitude,
+            ContactEmail = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.ContactEmail
+                : NormalizeOptional(request.ContactEmail),
+            PhoneNumber = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Number
+                : NormalizeOptional(request.PhoneNumber ?? request.Phone),
+            Website = NormalizeOptional(request.Website),
+            PricePerNight = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Stay?.PricePerNight
+                : request.PricePerNight,
+            CheckInTime = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Stay?.CheckInTime
+                : NormalizeOptional(request.CheckInTime),
+            CheckOutTime = type == PlaceContributionType.ClaimOwnership
+                ? targetPlace!.Stay?.CheckOutTime
+                : NormalizeOptional(request.CheckOutTime),
+            TagsJson = Serialize(NormalizeStringList(request.Tags)),
+            AmenitiesJson = Serialize(NormalizeStringList(request.Amenities)),
+            StayAmenitiesJson = Serialize(NormalizeStringList(request.StayAmenities)),
+            BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners)),
+            OwnershipProofDocumentUrl = storedOwnershipProofUrl,
+            OwnershipProofOriginalFileName = storedOwnershipProofUrl is null
+                ? null
+                : NormalizeFileName(ownershipProofOriginalFileName),
+            OwnershipProofContentType = storedOwnershipProofUrl is null
+                ? null
+                : NormalizeOptional(ownershipProofContentType),
+            OwnershipProofUploadedAt = storedOwnershipProofUrl is null ? null : now,
+            SubmittedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        SyncContributionImages(contribution, request.Images, storedMainImageUrl, storedCoverImageUrl, now);
+
+        _db.PlaceContributions.Add(contribution);
+        await _db.SaveChangesAsync();
+
+        var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
+        return MapDetail(saved);
     }
 
     public async Task<PlaceContributionDetailDto> UpdateAsync(
         int userId,
         int contributionId,
         UpsertPlaceContributionDto request,
-        byte[]? mainImageBytes)
+        byte[]? mainImageBytes,
+        byte[]? coverImageBytes,
+        byte[]? ownershipProofBytes,
+        string? ownershipProofOriginalFileName,
+        string? ownershipProofContentType)
     {
-        Validate(request, isUpdateMethod: true);
-
         var contribution = await _db.PlaceContributions
-            .Include(x => x.Images)
-            .FirstOrDefaultAsync(x => x.Id == contributionId && x.UserId == userId)
-            ?? throw new KeyNotFoundException("Contribution not found");
+            .Include(c => c.Images)
+            .SingleOrDefaultAsync(c => c.Id == contributionId && c.UserId == userId);
 
-        var oldManagedImages = contribution.Images
-            .Where(x => _mediaStorage.IsManagedContributionMediaUrl(x.Url))
-            .Select(x => x.Url)
-            .ToList();
+        if (contribution is null)
+            throw new InvalidOperationException("Contribution was not found.");
 
-        var references = await ResolveContributionReferencesAsync(request);
+        if (contribution.Status != PlaceContributionStatus.PendingReview)
+            throw new InvalidOperationException("Only pending contributions can be edited.");
 
-        string? storedMediaUrl = null;
+        var now = DateTime.UtcNow;
+        var type = ParseType(request.Type);
+
+        Place? targetPlace = null;
+
+        if (type is PlaceContributionType.CreatePlace or PlaceContributionType.ClaimOwnership &&
+            string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl) &&
+            ownershipProofBytes is null or { Length: 0 })
+        {
+            throw new InvalidOperationException("Ownership proof document is required.");
+        }
+
+        if (type == PlaceContributionType.UpdatePlace)
+        {
+            if (!request.PlaceId.HasValue)
+                throw new InvalidOperationException("PlaceId is required for update contributions.");
+
+            var canManagePlace = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            if (!canManagePlace)
+                throw new InvalidOperationException("You must be the owner of this place to propose updates.");
+
+            targetPlace = await _db.Places
+                .AsNoTracking()
+                .Include(p => p.Stay)
+                .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
+
+            if (targetPlace is null)
+                throw new InvalidOperationException("The place you are trying to update does not exist.");
+        }
+
+        if (type == PlaceContributionType.ClaimOwnership)
+        {
+            if (!request.PlaceId.HasValue)
+                throw new InvalidOperationException("PlaceId is required for ownership claims.");
+
+            targetPlace = await _db.Places
+                .AsNoTracking()
+                .Include(p => p.Stay)
+                .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
+
+            if (targetPlace is null)
+                throw new InvalidOperationException("The place you are trying to claim does not exist.");
+
+            var alreadyOwner = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            if (alreadyOwner)
+                throw new InvalidOperationException("You already own this place.");
+        }
+
+        string? storedMainImageUrl = null;
+        string? storedCoverImageUrl = null;
+
         if (mainImageBytes is { Length: > 0 })
         {
-            storedMediaUrl = (await _mediaStorage.StoreAsync(userId, mainImageBytes)).MediaUrl;
+            storedMainImageUrl = (await _mediaStorage.StoreAsync(userId, mainImageBytes)).MediaUrl;
         }
 
-        try
+        if (coverImageBytes is { Length: > 0 })
         {
-            contribution.Type = ParseType(request.Type);
-            contribution.PlaceId = request.PlaceId;
-            contribution.PlaceTypeId = references.PlaceTypeId;
-            contribution.LocationId = references.LocationId;
-            contribution.RestaurantTypeId = request.RestaurantTypeId;
-            contribution.StayTypeId = references.StayTypeId;
-            contribution.Name = request.Name.Trim();
-            contribution.Subtitle = NormalizeOptional(request.Subtitle, 500);
-            contribution.Address = NormalizeOptional(request.Address, 500);
-            contribution.OpeningHours = NormalizeOptional(request.OpeningHours, 200);
-            contribution.Description = NormalizeDescription(request.Description);
-            contribution.Latitude = references.Latitude;
-            contribution.Longitude = references.Longitude;
-            contribution.ContactEmail = NormalizeContactEmail(request.ContactEmail);
-            contribution.PhoneNumber = NormalizeOptional(request.PhoneNumber ?? request.Phone, 50);
-            contribution.Website = NormalizeWebsite(request.Website);
-            contribution.PricePerNight = NormalizePricePerNight(request.PricePerNight);
-            contribution.CheckInTime = NormalizeOptional(request.CheckInTime, 20);
-            contribution.CheckOutTime = NormalizeOptional(request.CheckOutTime, 20);
-            contribution.TagsJson = Serialize(NormalizeStringList(request.Tags, 80, 30));
-            contribution.AmenitiesJson = Serialize(references.PlaceAmenities);
-            contribution.StayAmenitiesJson = Serialize(references.StayAmenities);
-            contribution.BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners));
-            contribution.Status = PlaceContributionStatus.PendingReview;
-            contribution.ReviewNote = null;
-            contribution.ReviewedAt = null;
-            contribution.ReviewedByUserId = null;
-            contribution.UpdatedAt = DateTime.UtcNow;
-
-            var shouldReplaceImages = request.Images is not null || storedMediaUrl is not null;
-            if (shouldReplaceImages)
-            {
-                _db.PlaceContributionImages.RemoveRange(contribution.Images);
-                contribution.Images.Clear();
-                ApplyImages(contribution, request.Images, storedMediaUrl, DateTime.UtcNow, request.ImagePosition, request.ImageSize);
-            }
-
-            await _db.SaveChangesAsync();
-
-            if (shouldReplaceImages)
-            {
-                var currentUrls = contribution.Images.Select(x => x.Url).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                foreach (var oldUrl in oldManagedImages.Where(url => !currentUrls.Contains(url)))
-                {
-                    await _mediaStorage.DeleteAsync(oldUrl);
-                }
-            }
+            storedCoverImageUrl = (await _mediaStorage.StoreAsync(userId, coverImageBytes)).MediaUrl;
         }
-        catch
+
+        if (ownershipProofBytes is { Length: > 0 })
         {
-            if (storedMediaUrl is not null)
-                await _mediaStorage.DeleteAsync(storedMediaUrl);
+            if (!string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl))
+                await _mediaStorage.DeleteAsync(contribution.OwnershipProofDocumentUrl);
 
-            throw;
+            var storedOwnershipProof = await _mediaStorage.StoreOwnershipProofAsync(
+                userId,
+                ownershipProofBytes,
+                ownershipProofOriginalFileName,
+                ownershipProofContentType);
+
+            contribution.OwnershipProofDocumentUrl = storedOwnershipProof.MediaUrl;
+            contribution.OwnershipProofOriginalFileName = NormalizeFileName(ownershipProofOriginalFileName);
+            contribution.OwnershipProofContentType = NormalizeOptional(ownershipProofContentType);
+            contribution.OwnershipProofUploadedAt = now;
         }
 
-        return MapDetail(contribution);
+        contribution.Type = type;
+        contribution.PlaceId = type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership
+            ? request.PlaceId
+            : null;
+        contribution.OriginalSnapshotJson = type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership && request.PlaceId.HasValue
+            ? await BuildOriginalSnapshotAsync(request.PlaceId.Value)
+            : "{}";
+        contribution.PlaceTypeId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.PlaceTypeId : request.PlaceTypeId;
+        contribution.LocationId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.LocationId : request.LocationId;
+        contribution.RestaurantTypeId = request.RestaurantTypeId;
+        contribution.StayTypeId = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Stay?.StayTypeId : request.StayTypeId;
+        contribution.Name = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Name
+            : NormalizeRequired(request.Name, "Name");
+        contribution.Subtitle = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Subtitle
+            : NormalizeOptional(request.Subtitle);
+        contribution.Address = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Address
+            : NormalizeOptional(request.Address);
+        contribution.OpeningHours = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.OpeningHours
+            : NormalizeOptional(request.OpeningHours);
+        contribution.Description = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Description
+            : NormalizeRequired(request.Description, "Description");
+        contribution.Latitude = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Latitude : request.Latitude;
+        contribution.Longitude = type == PlaceContributionType.ClaimOwnership ? targetPlace!.Longitude : request.Longitude;
+        contribution.ContactEmail = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.ContactEmail
+            : NormalizeOptional(request.ContactEmail);
+        contribution.PhoneNumber = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Number
+            : NormalizeOptional(request.PhoneNumber ?? request.Phone);
+        contribution.Website = NormalizeOptional(request.Website);
+        contribution.PricePerNight = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Stay?.PricePerNight
+            : request.PricePerNight;
+        contribution.CheckInTime = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Stay?.CheckInTime
+            : NormalizeOptional(request.CheckInTime);
+        contribution.CheckOutTime = type == PlaceContributionType.ClaimOwnership
+            ? targetPlace!.Stay?.CheckOutTime
+            : NormalizeOptional(request.CheckOutTime);
+        contribution.TagsJson = Serialize(NormalizeStringList(request.Tags));
+        contribution.AmenitiesJson = Serialize(NormalizeStringList(request.Amenities));
+        contribution.StayAmenitiesJson = Serialize(NormalizeStringList(request.StayAmenities));
+        contribution.BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners));
+        contribution.UpdatedAt = now;
+
+        SyncContributionImages(contribution, request.Images, storedMainImageUrl, storedCoverImageUrl, now);
+
+        await _db.SaveChangesAsync();
+
+        var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
+        return MapDetail(saved);
     }
 
     public async Task DeleteAsync(int userId, int contributionId)
     {
         var contribution = await _db.PlaceContributions
-            .Include(x => x.Images)
-            .FirstOrDefaultAsync(x => x.Id == contributionId && x.UserId == userId)
-            ?? throw new KeyNotFoundException("Contribution not found");
+            .Include(c => c.Images)
+            .SingleOrDefaultAsync(c => c.Id == contributionId && c.UserId == userId);
 
-        var mediaUrls = contribution.Images
-            .Where(x => _mediaStorage.IsManagedContributionMediaUrl(x.Url))
-            .Select(x => x.Url)
-            .ToList();
+        if (contribution is null)
+            throw new InvalidOperationException("Contribution was not found.");
+
+        if (contribution.Status != PlaceContributionStatus.PendingReview)
+            throw new InvalidOperationException("Only pending contributions can be deleted.");
+
+        foreach (var image in contribution.Images)
+        {
+            if (_mediaStorage.IsManagedContributionMediaUrl(image.Url))
+                await _mediaStorage.DeleteAsync(image.Url);
+        }
+
+        if (!string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl))
+            await _mediaStorage.DeleteAsync(contribution.OwnershipProofDocumentUrl);
 
         _db.PlaceContributions.Remove(contribution);
         await _db.SaveChangesAsync();
-
-        foreach (var url in mediaUrls)
-        {
-            await _mediaStorage.DeleteAsync(url);
-        }
     }
 
-    public async Task<GetPlaceContributionsResponseDto> GetReviewQueueAsync(int reviewerUserId, string? status)
+    public async Task<PlaceContributionDetailDto> ApproveAsync(int contributionId, int reviewerUserId, string? note)
     {
-        var authorization = await GetReviewAuthorizationAsync(reviewerUserId);
+        var contribution = await _db.PlaceContributions
+            .Include(c => c.Images)
+            .SingleOrDefaultAsync(c => c.Id == contributionId);
 
-        var query = _db.PlaceContributions
-            .AsNoTracking()
-            .Include(x => x.PlaceType)
-            .Include(x => x.Place)
-                .ThenInclude(x => x!.Location)
-                    .ThenInclude(x => x.Destination)
-                        .ThenInclude(x => x.Region)
-                            .ThenInclude(x => x.Territory)
-            .Include(x => x.Place)
-                .ThenInclude(x => x!.Stay)
-                    .ThenInclude(x => x!.StayType)
-            .Include(x => x.Location)
-                .ThenInclude(x => x!.Destination)
-                    .ThenInclude(x => x.Region)
-                        .ThenInclude(x => x.Territory)
-            .Include(x => x.StayType)
-            .Include(x => x.Images)
-            .AsQueryable();
+        if (contribution is null)
+            throw new InvalidOperationException("Contribution was not found.");
 
-        if (!string.IsNullOrWhiteSpace(status))
-            query = query.Where(x => x.Status == ParseStatus(status));
-
-        if (!authorization.IsAdmin)
-        {
-            if (authorization.AssignedRegionIds.Count == 0)
-                return new GetPlaceContributionsResponseDto();
-
-            query = query.Where(x =>
-                x.LocationId.HasValue &&
-                x.Location != null &&
-                authorization.AssignedRegionIds.Contains(x.Location.Destination.RegionId) &&
-                (x.Type != PlaceContributionType.UpdatePlace ||
-                    (x.PlaceId.HasValue &&
-                     x.Place != null &&
-                     authorization.AssignedRegionIds.Contains(x.Place.Location.Destination.RegionId) &&
-                     x.Place.Location.Destination.RegionId == x.Location.Destination.RegionId)));
-        }
-
-        var contributions = await query
-            .OrderByDescending(x => x.UpdatedAt ?? x.SubmittedAt)
-            .ToListAsync();
-
-        return new GetPlaceContributionsResponseDto
-        {
-            Contributions = contributions.Select(MapListItem).ToList()
-        };
-    }
-
-    public async Task<PlaceContributionDetailDto> ApproveAsync(
-        int reviewerUserId,
-        int contributionId,
-        ReviewPlaceContributionRequestDto request)
-    {
-        var contribution = await LoadContributionDetails()
-            .FirstOrDefaultAsync(x => x.Id == contributionId)
-            ?? throw new KeyNotFoundException("Contribution not found");
+        if (contribution.Status != PlaceContributionStatus.PendingReview)
+            throw new InvalidOperationException("Only pending contributions can be approved.");
 
         await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-
-        var place = await PublishPlaceAsync(contribution);
         var now = DateTime.UtcNow;
 
-        contribution.PlaceId = place.Id;
+        if (contribution.Type == PlaceContributionType.CreatePlace)
+        {
+            var publishedPlace = await PublishNewPlaceAsync(contribution, now);
+            contribution.PlaceId = publishedPlace.Id;
+
+            await EnsureUserPlaceAsync(contribution.UserId, publishedPlace.Id, now);
+        }
+        else if (contribution.Type == PlaceContributionType.UpdatePlace)
+        {
+            if (!contribution.PlaceId.HasValue)
+                throw new InvalidOperationException("Update contribution is missing target place.");
+
+            var canManagePlace = await UserCanManagePlaceAsync(contribution.UserId, contribution.PlaceId.Value);
+            if (!canManagePlace)
+                throw new InvalidOperationException("The contributor is no longer the owner of this place.");
+
+            await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId.Value, now);
+        }
+        else if (contribution.Type == PlaceContributionType.ClaimOwnership)
+        {
+            if (!contribution.PlaceId.HasValue)
+                throw new InvalidOperationException("Ownership claim is missing target place.");
+
+            var placeExists = await _db.Places.AnyAsync(place => place.Id == contribution.PlaceId.Value);
+            if (!placeExists)
+                throw new InvalidOperationException("The place you are trying to claim does not exist.");
+
+            await EnsureUserPlaceAsync(contribution.UserId, contribution.PlaceId.Value, now);
+        }
+        else
+        {
+            throw new InvalidOperationException("Unsupported contribution type.");
+        }
+
         contribution.Status = PlaceContributionStatus.Approved;
         contribution.ReviewedByUserId = reviewerUserId;
         contribution.ReviewedAt = now;
-        contribution.ReviewNote = NormalizeReviewNote(request.Note);
+        contribution.ReviewNote = NormalizeOptional(note);
         contribution.UpdatedAt = now;
 
-        _notificationService.AddContributionDecisionNotification(contribution);
-
         await _db.SaveChangesAsync();
-        await transaction.CommitAsync();
 
-        return MapDetail(contribution);
+        var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
+        return MapDetail(saved);
     }
 
-    public async Task<PlaceContributionDetailDto> RejectAsync(
-        int reviewerUserId,
-        int contributionId,
-        ReviewPlaceContributionRequestDto request)
+    public async Task<PlaceContributionDetailDto> RejectAsync(int contributionId, int reviewerUserId, string? note)
     {
-        var contribution = await LoadContributionDetails()
-            .FirstOrDefaultAsync(x => x.Id == contributionId)
-            ?? throw new KeyNotFoundException("Contribution not found");
+        var contribution = await _db.PlaceContributions
+            .SingleOrDefaultAsync(c => c.Id == contributionId);
+
+        if (contribution is null)
+            throw new InvalidOperationException("Contribution was not found.");
+
+        if (contribution.Status != PlaceContributionStatus.PendingReview)
+            throw new InvalidOperationException("Only pending contributions can be rejected.");
 
         await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
         var now = DateTime.UtcNow;
+
         contribution.Status = PlaceContributionStatus.Rejected;
         contribution.ReviewedByUserId = reviewerUserId;
         contribution.ReviewedAt = now;
-        contribution.ReviewNote = NormalizeReviewNote(request.Note);
+        contribution.ReviewNote = NormalizeOptional(note);
         contribution.UpdatedAt = now;
 
-        _notificationService.AddContributionDecisionNotification(contribution);
-
         await _db.SaveChangesAsync();
 
-        return MapDetail(contribution);
+        var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
+        return MapDetail(saved);
     }
 
-    private IQueryable<PlaceContribution> LoadContributionDetails()
+    private IQueryable<PlaceContribution> BaseContributionQuery()
     {
         return _db.PlaceContributions
-            .Include(x => x.User)
-            .Include(x => x.ReviewedByUser)
-            .Include(x => x.Place)
-                .ThenInclude(x => x!.Images)
-            .Include(x => x.Place)
-                .ThenInclude(x => x!.Stay)
-                    .ThenInclude(x => x!.StayType)
-            .Include(x => x.PlaceType)
-            .Include(x => x.Location)
-                .ThenInclude(x => x!.Destination)
-                    .ThenInclude(x => x.Region)
-                        .ThenInclude(x => x.Territory)
-            .Include(x => x.RestaurantType)
-            .Include(x => x.StayType)
-            .Include(x => x.Images);
+            .AsNoTracking()
+            .Include(c => c.PlaceType)
+            .Include(c => c.Location)
+                .ThenInclude(l => l!.Destination)
+                    .ThenInclude(d => d.Region)
+            .Include(c => c.StayType)
+            .Include(c => c.Images)
+            .Include(c => c.Place);
     }
 
-    private async Task<Place> PublishPlaceAsync(PlaceContribution contribution)
+    private async Task<IQueryable<PlaceContribution>> ApplyReviewerScopeAsync(
+        IQueryable<PlaceContribution> query,
+        int? reviewerUserId)
     {
-        var now = DateTime.UtcNow;
+        if (!reviewerUserId.HasValue)
+            return query;
 
-        if (!contribution.PlaceTypeId.HasValue)
-            throw new InvalidOperationException("Place type is required before approval.");
+        var managesAll = await ReviewerManagesAllAsync(reviewerUserId.Value);
 
-        if (!contribution.LocationId.HasValue)
-            throw new InvalidOperationException("Location is required before approval.");
+        if (managesAll)
+            return query;
 
-        Place? place = null;
-        if (contribution.Type == PlaceContributionType.UpdatePlace)
+        var regionIds = await GetReviewerRegionIdsAsync(reviewerUserId.Value);
+
+        if (regionIds.Count == 0)
+            return query.Where(c => false);
+
+        return query.Where(c =>
+            c.Location != null &&
+            c.Location.Destination != null &&
+            regionIds.Contains(c.Location.Destination.RegionId));
+    }
+
+    private async Task EnsureReviewerCanReviewAsync(int reviewerUserId, PlaceContribution contribution)
+    {
+        var managesAll = await ReviewerManagesAllAsync(reviewerUserId);
+
+        if (managesAll)
+            return;
+
+        var regionIds = await GetReviewerRegionIdsAsync(reviewerUserId);
+        if (regionIds.Count == 0)
+            throw new InvalidOperationException("You are not allowed to review this contribution.");
+
+        int? contributionRegionId = null;
+
+        if (contribution.LocationId.HasValue)
         {
-            if (!contribution.PlaceId.HasValue)
-                throw new InvalidOperationException("Target place is required before approval.");
-
-            place = await _db.Places
-                .Include(x => x.PlaceTags)
-                .Include(x => x.PlaceAmenities)
-                .Include(x => x.PlaceBookingPartners)
-                .Include(x => x.Images)
-                .Include(x => x.Stay)
-                    .ThenInclude(x => x!.StayAmenities)
-                .FirstOrDefaultAsync(x => x.Id == contribution.PlaceId.Value)
-                ?? throw new KeyNotFoundException("Target place not found.");
+            contributionRegionId = await _db.Locations
+                .AsNoTracking()
+                .Where(location => location.Id == contribution.LocationId.Value)
+                .Select(location => (int?)location.Destination.RegionId)
+                .SingleOrDefaultAsync();
         }
+
+        if (!contributionRegionId.HasValue && contribution.PlaceId.HasValue)
+        {
+            contributionRegionId = await _db.Places
+                .AsNoTracking()
+                .Where(place => place.Id == contribution.PlaceId.Value)
+                .Select(place => (int?)place.Location.Destination.RegionId)
+                .SingleOrDefaultAsync();
+        }
+
+        if (!contributionRegionId.HasValue || !regionIds.Contains(contributionRegionId.Value))
+            throw new InvalidOperationException("You are not allowed to review this contribution.");
+    }
+
+    private async Task<bool> ReviewerManagesAllAsync(int reviewerUserId)
+    {
+        return await _db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == reviewerUserId)
+            .Select(u => u.UserRoles.Any(ur =>
+                ur.Role.Name == "Admin" ||
+                ur.Role.Name == "SuperAdmin"))
+            .SingleOrDefaultAsync();
+    }
+
+    private async Task<List<int>> GetReviewerRegionIdsAsync(int reviewerUserId)
+    {
+        return await _db.RegionalManagerRegions
+            .AsNoTracking()
+            .Where(r => r.UserId == reviewerUserId)
+            .Select(r => r.RegionId)
+            .ToListAsync();
+    }
+
+    private async Task<bool> UserCanManagePlaceAsync(int userId, int placeId)
+    {
+        return await _db.UserPlaces
+            .AsNoTracking()
+            .AnyAsync(userPlace => userPlace.UserId == userId && userPlace.PlaceId == placeId);
+    }
+
+    private async Task EnsureUserPlaceAsync(int userId, int placeId, DateTime now)
+    {
+        var exists = await _db.UserPlaces
+            .AnyAsync(userPlace => userPlace.UserId == userId && userPlace.PlaceId == placeId);
+
+        if (exists)
+            return;
+
+        _db.UserPlaces.Add(new UserPlace
+        {
+            UserId = userId,
+            PlaceId = placeId,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+    }
+
+    private async Task<string> BuildOriginalSnapshotAsync(int placeId)
+    {
+        var place = await _db.Places
+            .AsNoTracking()
+            .Include(p => p.Stay)
+            .Include(p => p.Images)
+            .Include(p => p.PlaceTags)
+                .ThenInclude(pt => pt.Tag)
+            .Include(p => p.PlaceAmenities)
+                .ThenInclude(pa => pa.Amenity)
+            .Include(p => p.PlaceBookingPartners)
+                .ThenInclude(pb => pb.BookingPartner)
+            .SingleOrDefaultAsync(p => p.Id == placeId);
 
         if (place is null)
+            return "{}";
+
+        var snapshot = new
         {
-            place = new Place { CreatedAt = now };
-            await _db.Places.AddAsync(place);
-        }
+            place.Id,
+            place.Name,
+            place.Subtitle,
+            place.Address,
+            place.OpeningHours,
+            place.Description,
+            place.Latitude,
+            place.Longitude,
+            place.ContactEmail,
+            PhoneNumber = place.Number,
+            place.PlaceTypeId,
+            place.LocationId,
+            StayTypeId = place.Stay?.StayTypeId,
+            place.Stay?.PricePerNight,
+            place.Stay?.CheckInTime,
+            place.Stay?.CheckOutTime,
+            Tags = place.PlaceTags.Select(pt => pt.Tag.Name).ToList(),
+            Amenities = place.PlaceAmenities.Select(pa => pa.Amenity.Name).ToList(),
+            BookingPartners = place.PlaceBookingPartners.Select(pb => new
+            {
+                pb.BookingPartnerId,
+                pb.Url
+            }).ToList(),
+            Images = place.Images.Select(image => new
+            {
+                image.Url,
+                image.AltText,
+                image.Caption,
+                image.IsMain,
+                image.SortOrder
+            }).ToList()
+        };
 
-        place.Name = contribution.Name.Trim();
-        place.Subtitle = contribution.Subtitle;
-        place.PlaceTypeId = contribution.PlaceTypeId.Value;
-        place.LocationId = contribution.LocationId.Value;
-        place.Address = contribution.Address;
-        place.OpeningHours = contribution.OpeningHours;
-        place.Description = contribution.Description.Trim();
-        place.Latitude = contribution.Latitude ?? 0;
-        place.Longitude = contribution.Longitude ?? 0;
-        place.ContactEmail = contribution.ContactEmail;
-        place.Number = contribution.PhoneNumber;
-        place.UpdatedAt = now;
+        return JsonSerializer.Serialize(snapshot);
+    }
 
+    private async Task<Place> PublishNewPlaceAsync(PlaceContribution contribution, DateTime now)
+    {
+        if (!contribution.PlaceTypeId.HasValue)
+            throw new InvalidOperationException("Place type is required.");
+
+        if (!contribution.LocationId.HasValue)
+            throw new InvalidOperationException("Location is required.");
+
+        if (!contribution.Latitude.HasValue || !contribution.Longitude.HasValue)
+            throw new InvalidOperationException("Coordinates are required.");
+
+        var place = new Place
+        {
+            Name = contribution.Name,
+            Subtitle = contribution.Subtitle,
+            Address = contribution.Address,
+            OpeningHours = contribution.OpeningHours,
+            Description = contribution.Description,
+            Latitude = contribution.Latitude.Value,
+            Longitude = contribution.Longitude.Value,
+            ContactEmail = contribution.ContactEmail,
+            Number = contribution.PhoneNumber,
+            PlaceTypeId = contribution.PlaceTypeId.Value,
+            LocationId = contribution.LocationId.Value,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        _db.Places.Add(place);
         await _db.SaveChangesAsync();
 
-        await SyncPlaceTagsAsync(place, DeserializeStringList(contribution.TagsJson), now);
-        await SyncPlaceAmenitiesAsync(place, DeserializeStringList(contribution.AmenitiesJson));
-        await SyncBookingPartnersAsync(place, DeserializeBookingPartners(contribution.BookingPartnersJson));
-        await SyncStayAsync(place, contribution, DeserializeStringList(contribution.StayAmenitiesJson), now);
-        SyncEntityImages(place, contribution.Images, now);
-        await EnsureUserPlaceAsync(contribution.UserId, place.Id, now);
+        await SyncPublishedPlaceRelationsAsync(place, contribution, now);
+        await SyncPublishedPlaceImagesAsync(place, contribution.Images, now);
 
         return place;
     }
 
-    private async Task SyncStayAsync(Place place, PlaceContribution contribution, List<string> stayAmenitySlugs, DateTime now)
+    private async Task<Place> ApplyUpdateToExistingPlaceAsync(PlaceContribution contribution, int placeId, DateTime now)
     {
-        if (!contribution.StayTypeId.HasValue)
-        {
-            if (place.Stay is not null)
-                _db.Stays.Remove(place.Stay);
+        var place = await _db.Places
+            .Include(p => p.Stay)
+            .Include(p => p.Images)
+            .Include(p => p.PlaceTags)
+            .Include(p => p.PlaceAmenities)
+            .Include(p => p.PlaceBookingPartners)
+            .SingleOrDefaultAsync(p => p.Id == placeId);
 
-            return;
-        }
+        if (place is null)
+            throw new InvalidOperationException("The place you are trying to update does not exist.");
 
-        var stay = place.Stay;
-        if (stay is null)
-        {
-            stay = new Stay
-            {
-                PlaceId = place.Id,
-                CreatedAt = now
-            };
-            await _db.Stays.AddAsync(stay);
-        }
+        if (!contribution.PlaceTypeId.HasValue)
+            throw new InvalidOperationException("Place type is required.");
 
-        stay.StayTypeId = contribution.StayTypeId.Value;
-        stay.PricePerNight = contribution.PricePerNight;
-        stay.CheckInTime = contribution.CheckInTime;
-        stay.CheckOutTime = contribution.CheckOutTime;
-        stay.UpdatedAt = now;
+        if (!contribution.LocationId.HasValue)
+            throw new InvalidOperationException("Location is required.");
 
-        if (place.Stay is null)
-            place.Stay = stay;
+        if (!contribution.Latitude.HasValue || !contribution.Longitude.HasValue)
+            throw new InvalidOperationException("Coordinates are required.");
 
-        _db.StayStayAmenities.RemoveRange(stay.StayAmenities);
+        place.Name = contribution.Name;
+        place.Subtitle = contribution.Subtitle;
+        place.Address = contribution.Address;
+        place.OpeningHours = contribution.OpeningHours;
+        place.Description = contribution.Description;
+        place.Latitude = contribution.Latitude.Value;
+        place.Longitude = contribution.Longitude.Value;
+        place.ContactEmail = contribution.ContactEmail;
+        place.Number = contribution.PhoneNumber;
+        place.PlaceTypeId = contribution.PlaceTypeId.Value;
+        place.LocationId = contribution.LocationId.Value;
+        place.UpdatedAt = now;
 
-        if (stayAmenitySlugs.Count == 0)
-            return;
+        await SyncPublishedPlaceRelationsAsync(place, contribution, now);
+        await SyncPublishedPlaceImagesAsync(place, contribution.Images, now);
 
-        var amenities = await _db.StayAmenities
-            .Where(x => stayAmenitySlugs.Contains(x.Slug))
-            .ToListAsync();
-
-        foreach (var amenity in amenities)
-        {
-            stay.StayAmenities.Add(new StayStayAmenity
-            {
-                StayPlaceId = place.Id,
-                StayAmenityId = amenity.Id
-            });
-        }
+        return place;
     }
 
-    private async Task SyncPlaceTagsAsync(Place place, List<string> tagSlugsOrNames, DateTime now)
+    private async Task SyncPublishedPlaceRelationsAsync(Place place, PlaceContribution contribution, DateTime now)
     {
-        _db.PlaceTags.RemoveRange(place.PlaceTags);
+        var tagNames = DeserializeStringList(contribution.TagsJson);
+        var amenityNames = DeserializeStringList(contribution.AmenitiesJson);
+        var stayAmenityNames = DeserializeStringList(contribution.StayAmenitiesJson);
+        var bookingPartners = DeserializeBookingPartners(contribution.BookingPartnersJson);
 
-        foreach (var value in tagSlugsOrNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        var existingPlaceTags = await _db.PlaceTags
+            .Where(pt => pt.PlaceId == place.Id)
+            .ToListAsync();
+
+        _db.PlaceTags.RemoveRange(existingPlaceTags);
+
+        var tags = await ResolveTagsAsync(tagNames);
+        foreach (var tag in tags)
         {
-            var slug = Slugify(value);
-            var tag = await _db.Tags.FirstOrDefaultAsync(x => x.Slug == slug || x.Name.ToLower() == value.ToLower());
-            if (tag is null)
-            {
-                tag = new Tag
-                {
-                    Name = ToTitle(value),
-                    Slug = slug,
-                    ForPlace = true,
-                    CreatedAt = now
-                };
-                await _db.Tags.AddAsync(tag);
-                await _db.SaveChangesAsync();
-            }
-
-            place.PlaceTags.Add(new PlaceTag
+            _db.PlaceTags.Add(new PlaceTag
             {
                 PlaceId = place.Id,
                 TagId = tag.Id
             });
         }
-    }
 
-    private async Task SyncPlaceAmenitiesAsync(Place place, List<string> amenityNamesOrIcons)
-    {
-        _db.PlaceAmenities.RemoveRange(place.PlaceAmenities);
+        var existingAmenities = await _db.PlaceAmenities
+            .Where(pa => pa.PlaceId == place.Id)
+            .ToListAsync();
 
-        foreach (var value in amenityNamesOrIcons.Distinct(StringComparer.OrdinalIgnoreCase))
+        _db.PlaceAmenities.RemoveRange(existingAmenities);
+
+        var amenities = await ResolveAmenitiesAsync(amenityNames);
+        foreach (var amenity in amenities)
         {
-            var normalized = value.Trim().ToLowerInvariant();
-            var amenity = await _db.Amenities.FirstOrDefaultAsync(x => x.Icon == normalized || x.Name.ToLower() == normalized);
-            if (amenity is not null)
+            _db.PlaceAmenities.Add(new PlaceAmenity
             {
-                place.PlaceAmenities.Add(new PlaceAmenity
+                PlaceId = place.Id,
+                AmenityId = amenity.Id
+            });
+        }
+
+        var existingBookingPartners = await _db.PlaceBookingPartners
+            .Where(pb => pb.PlaceId == place.Id)
+            .ToListAsync();
+
+        _db.PlaceBookingPartners.RemoveRange(existingBookingPartners);
+
+        var resolvedBookingPartners = await ResolveBookingPartnersAsync(bookingPartners);
+        foreach (var bookingPartner in resolvedBookingPartners)
+        {
+            _db.PlaceBookingPartners.Add(new PlaceBookingPartner
+            {
+                PlaceId = place.Id,
+                BookingPartnerId = bookingPartner.BookingPartnerId,
+                Url = bookingPartner.Url
+            });
+        }
+
+        if (contribution.StayTypeId.HasValue)
+        {
+            if (place.Stay is null)
+            {
+                place.Stay = new Stay
                 {
                     PlaceId = place.Id,
-                    AmenityId = amenity.Id
-                });
+                    CreatedAt = now
+                };
             }
+
+            place.Stay.StayTypeId = contribution.StayTypeId.Value;
+            place.Stay.PricePerNight = contribution.PricePerNight;
+            place.Stay.CheckInTime = contribution.CheckInTime;
+            place.Stay.CheckOutTime = contribution.CheckOutTime;
+            place.Stay.UpdatedAt = now;
+
+            await SyncStayAmenitiesAsync(place.Id, stayAmenityNames);
+        }
+        else if (place.Stay is not null)
+        {
+            var existingStayAmenities = await _db.StayStayAmenities
+                .Where(sa => sa.StayPlaceId == place.Id)
+                .ToListAsync();
+
+            _db.StayStayAmenities.RemoveRange(existingStayAmenities);
+            _db.Stays.Remove(place.Stay);
         }
     }
 
-    private async Task SyncBookingPartnersAsync(Place place, List<ContributionBookingPartnerDto> partners)
+    private async Task SyncStayAmenitiesAsync(int stayPlaceId, List<string> stayAmenityNames)
     {
-        _db.PlaceBookingPartners.RemoveRange(place.PlaceBookingPartners);
+        var existingStayAmenities = await _db.StayStayAmenities
+            .Where(sa => sa.StayPlaceId == stayPlaceId)
+            .ToListAsync();
 
-        foreach (var partnerDto in partners)
+        _db.StayStayAmenities.RemoveRange(existingStayAmenities);
+
+        var stayAmenities = await ResolveStayAmenitiesAsync(stayAmenityNames);
+        foreach (var stayAmenity in stayAmenities)
         {
-            var partnerName = PartnerName(partnerDto.Id);
-            var partner = await _db.BookingPartners.FirstOrDefaultAsync(x => x.Name == partnerName);
-            if (partner is null)
+            _db.StayStayAmenities.Add(new StayStayAmenity
             {
-                partner = new BookingPartner
-                {
-                    Name = partnerName,
-                    Variant = PartnerVariant(partnerDto.Id)
-                };
-                await _db.BookingPartners.AddAsync(partner);
-                await _db.SaveChangesAsync();
-            }
-
-            place.PlaceBookingPartners.Add(new PlaceBookingPartner
-            {
-                PlaceId = place.Id,
-                BookingPartnerId = partner.Id,
-                Url = partnerDto.Url
+                StayPlaceId = stayPlaceId,
+                StayAmenityId = stayAmenity.Id
             });
         }
     }
 
-    private void SyncEntityImages(Place place, IEnumerable<PlaceContributionImage> contributionImages, DateTime now)
+    private async Task SyncPublishedPlaceImagesAsync(
+        Place place,
+        IEnumerable<PlaceContributionImage> contributionImages,
+        DateTime now)
     {
-        _db.EntityImages.RemoveRange(place.Images);
+        var existingImages = await _db.EntityImages
+            .Where(image => image.PlaceId == place.Id)
+            .ToListAsync();
 
-        var orderedImages = contributionImages
-            .OrderByDescending(x => x.IsMain)
-            .ThenBy(x => x.SortOrder)
-            .ToList();
+        _db.EntityImages.RemoveRange(existingImages);
 
-        var hasMain = orderedImages.Any(x => x.IsMain);
-        var mainSeen = false;
-        for (var index = 0; index < orderedImages.Count; index++)
+        foreach (var image in contributionImages.OrderBy(i => i.SortOrder).ThenBy(i => i.Id))
         {
-            var image = orderedImages[index];
-            var isMain = hasMain
-                ? image.IsMain && !mainSeen
-                : index == 0;
-
-            if (isMain)
-                mainSeen = true;
-
-            place.Images.Add(new EntityImage
+            _db.EntityImages.Add(new EntityImage
             {
                 TargetType = EntityImageTargetType.Place,
                 PlaceId = place.Id,
                 Url = image.Url,
                 AltText = image.AltText,
                 Caption = image.Caption,
-                IsMain = isMain,
+                IsMain = image.IsMain,
                 SortOrder = image.SortOrder,
-                CreatedAt = now
+                CreatedAt = now,
+                UpdatedAt = now
             });
         }
     }
 
-    private async Task EnsureUserPlaceAsync(int userId, int placeId, DateTime now)
-    {
-        var exists = await _db.UserPlaces.AnyAsync(x => x.UserId == userId && x.PlaceId == placeId);
-        if (exists)
-            return;
-
-        await _db.UserPlaces.AddAsync(new UserPlace
-        {
-            UserId = userId,
-            PlaceId = placeId,
-            CreatedAt = now
-        });
-    }
-
-    private async Task EnsureReviewerCanReviewAsync(int reviewerUserId, PlaceContribution contribution)
-    {
-        var authorization = await GetReviewAuthorizationAsync(reviewerUserId);
-        var proposedRegionId = await ResolveContributionRegionIdAsync(contribution);
-
-        if (authorization.IsAdmin)
-        {
-            if (contribution.Type == PlaceContributionType.UpdatePlace)
-                _ = await ResolveTargetPlaceRegionIdAsync(contribution);
-
-            return;
-        }
-
-        if (authorization.AssignedRegionIds.Count == 0)
-            throw new UnauthorizedAccessException("Regional manager has no assigned regions.");
-
-        if (!authorization.AssignedRegionIds.Contains(proposedRegionId))
-            throw new UnauthorizedAccessException("You are not assigned to this contribution's region.");
-
-        if (contribution.Type != PlaceContributionType.UpdatePlace)
-            return;
-
-        var targetRegionId = await ResolveTargetPlaceRegionIdAsync(contribution);
-        if (!authorization.AssignedRegionIds.Contains(targetRegionId))
-            throw new UnauthorizedAccessException("You are not assigned to this contribution's target place region.");
-
-        // Regional managers can only approve same-region updates. Cross-region
-        // moves require Admin review even when a manager has both regions.
-        if (targetRegionId != proposedRegionId)
-            throw new UnauthorizedAccessException("Cross-region update contributions require admin review.");
-    }
-
-    private async Task<ReviewAuthorization> GetReviewAuthorizationAsync(int reviewerUserId)
-    {
-        var reviewer = await _db.Users
-            .Include(x => x.UserRoles)
-                .ThenInclude(x => x.Role)
-            .Include(x => x.RegionalManager)
-                .ThenInclude(x => x!.RegionalManagerRegions)
-            .FirstOrDefaultAsync(x => x.Id == reviewerUserId)
-            ?? throw new UnauthorizedAccessException("Invalid reviewer.");
-
-        var roles = reviewer.UserRoles
-            .Select(x => x.Role.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var isAdmin = roles.Contains("Admin");
-        var isRegionalManager = roles.Contains("RegionalManager");
-        if (!isAdmin && !isRegionalManager)
-            throw new UnauthorizedAccessException("Contribution review role is required.");
-
-        var assignedRegionIds = reviewer.RegionalManager?.RegionalManagerRegions
-            .Select(x => x.RegionId)
-            .ToHashSet() ?? new HashSet<int>();
-
-        return new ReviewAuthorization(isAdmin, assignedRegionIds);
-    }
-
-    private async Task<int> ResolveContributionRegionIdAsync(PlaceContribution contribution)
-    {
-        if (!contribution.LocationId.HasValue)
-            throw new InvalidOperationException("Contribution location is required.");
-
-        var regionId = await _db.Locations
-            .AsNoTracking()
-            .Where(x => x.Id == contribution.LocationId.Value)
-            .Select(x => (int?)x.Destination.RegionId)
-            .FirstOrDefaultAsync();
-
-        return regionId
-            ?? throw new KeyNotFoundException("Contribution location not found.");
-    }
-
-    private async Task<int> ResolveTargetPlaceRegionIdAsync(PlaceContribution contribution)
-    {
-        if (!contribution.PlaceId.HasValue)
-            throw new InvalidOperationException("Target place is required for update contributions.");
-
-        var regionId = await _db.Places
-            .AsNoTracking()
-            .Where(x => x.Id == contribution.PlaceId.Value)
-            .Select(x => (int?)x.Location.Destination.RegionId)
-            .FirstOrDefaultAsync();
-
-        return regionId
-            ?? throw new KeyNotFoundException("Target place not found.");
-    }
-
-    private async Task<ContributionReferenceResolution> ResolveContributionReferencesAsync(UpsertPlaceContributionDto request)
-    {
-        var contributionType = ParseType(request.Type);
-        if (contributionType == PlaceContributionType.UpdatePlace)
-        {
-            if (!request.PlaceId.HasValue)
-                throw new InvalidOperationException("PlaceId is required for update contributions.");
-
-            var targetExists = await _db.Places
-                .AsNoTracking()
-                .AnyAsync(x => x.Id == request.PlaceId.Value);
-
-            if (!targetExists)
-                throw new KeyNotFoundException("Target place not found.");
-        }
-
-        var stayTypeId = request.StayTypeId;
-        if (!stayTypeId.HasValue && !string.IsNullOrWhiteSpace(request.StayType))
-        {
-            stayTypeId = await ResolveStayTypeIdAsync(request.StayType);
-        }
-
-        var placeTypeId = request.PlaceTypeId;
-        if (!placeTypeId.HasValue && !string.IsNullOrWhiteSpace(request.PlaceType))
-        {
-            placeTypeId = await ResolvePlaceTypeIdAsync(request.PlaceType);
-        }
-
-        if (!placeTypeId.HasValue && stayTypeId.HasValue)
-        {
-            placeTypeId = await ResolvePlaceTypeIdAsync("Stay");
-        }
-
-        if (!placeTypeId.HasValue)
-        {
-            placeTypeId = await ResolvePlaceTypeIdAsync("Place");
-        }
-
-        var location = await ResolveContributionLocationAsync(request);
-        var requestedPlaceAmenities = NormalizeStringList(request.Amenities, 80, 30);
-        var requestedStayAmenities = NormalizeStringList(request.StayAmenities, 80, 30);
-
-        if (stayTypeId.HasValue && requestedStayAmenities.Count == 0 && requestedPlaceAmenities.Count > 0)
-        {
-            requestedStayAmenities = NormalizeStayAmenityValues(requestedPlaceAmenities);
-            requestedPlaceAmenities = new List<string>();
-        }
-        else if (stayTypeId.HasValue)
-        {
-            requestedStayAmenities = NormalizeStayAmenityValues(requestedStayAmenities);
-        }
-
-        return new ContributionReferenceResolution(
-            placeTypeId,
-            location.LocationId,
-            stayTypeId,
-            requestedPlaceAmenities,
-            requestedStayAmenities,
-            location.Latitude,
-            location.Longitude);
-    }
-
-    private async Task<ContributionLocationResolution> ResolveContributionLocationAsync(UpsertPlaceContributionDto request)
-    {
-        if (request.LocationId.HasValue)
-        {
-            var location = await _db.Locations
-                .AsNoTracking()
-                .Where(x => x.Id == request.LocationId.Value)
-                .Select(x => new { x.Id, x.Latitude, x.Longitude })
-                .FirstOrDefaultAsync()
-                ?? throw new KeyNotFoundException("Location not found.");
-
-            var latitude = request.Latitude ?? location.Latitude;
-            var longitude = request.Longitude ?? location.Longitude;
-
-            if (!HasUsableCoordinates(latitude, longitude))
-                throw new InvalidOperationException("Please choose a valid location before submitting.");
-
-            return new ContributionLocationResolution(location.Id, latitude, longitude);
-        }
-
-        var locationId = await ResolveLegacyLocationIdAsync(request);
-        if (!locationId.HasValue || !HasUsableCoordinates(request.Latitude, request.Longitude))
-            throw new InvalidOperationException("Please choose a valid location before submitting.");
-
-        return new ContributionLocationResolution(locationId.Value, request.Latitude!.Value, request.Longitude!.Value);
-    }
-
-    private async Task<int?> ResolvePlaceTypeIdAsync(string name)
-    {
-        var displayName = NormalizeRequiredName(name, "Place type", 100);
-        var normalized = displayName.ToLowerInvariant();
-        var placeType = await _db.PlaceTypes
-            .FirstOrDefaultAsync(x => x.Name.ToLower() == normalized);
-
-        if (placeType is not null)
-            return placeType.Id;
-
-        placeType = new PlaceType
-        {
-            Name = ToTitle(displayName),
-            Description = normalized == "stay" ? "Accommodation and stay listings" : $"{ToTitle(displayName)} listings",
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _db.PlaceTypes.AddAsync(placeType);
-        await _db.SaveChangesAsync();
-        return placeType.Id;
-    }
-
-    private async Task<int?> ResolveStayTypeIdAsync(string stayTypeName)
-    {
-        var normalized = stayTypeName.Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-            return null;
-
-        var slug = Slugify(normalized);
-        var stayType = await _db.StayTypes
-            .FirstOrDefaultAsync(x => x.Slug == slug || x.Name.ToLower() == normalized.ToLowerInvariant());
-
-        if (stayType is not null)
-            return stayType.Id;
-
-        stayType = new StayType
-        {
-            Name = ToTitle(normalized),
-            Slug = slug,
-            Description = $"{ToTitle(normalized)} accommodation",
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _db.StayTypes.AddAsync(stayType);
-        await _db.SaveChangesAsync();
-        return stayType.Id;
-    }
-
-    private async Task<int?> ResolveLegacyLocationIdAsync(UpsertPlaceContributionDto request)
-    {
-        var city = NormalizeOptional(request.City, 200);
-        var regionName = NormalizeOptional(request.Region, 200);
-        var countryName = NormalizeOptional(request.Country, 200);
-
-        if (city is null && regionName is null && countryName is null)
-            return null;
-
-        if (city is not null)
-        {
-            var directLocation = await _db.Locations
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Name.ToLower() == city.ToLowerInvariant());
-
-            if (directLocation is not null)
-                return directLocation.Id;
-
-            var matchingDestination = await _db.Destinations
-                .Include(x => x.Locations)
-                .Include(x => x.Region)
-                    .ThenInclude(x => x.Territory)
-                .FirstOrDefaultAsync(x => x.Name.ToLower() == city.ToLowerInvariant());
-
-            if (matchingDestination is not null)
-            {
-                var existing = SelectBestLocation(matchingDestination.Locations, request.Latitude, request.Longitude);
-                if (existing is not null)
-                    return existing.Id;
-            }
-        }
-
-        var territory = countryName is not null
-            ? await _db.Territories.FirstOrDefaultAsync(x => x.Name.ToLower() == countryName.ToLowerInvariant())
-            : await _db.Territories.OrderBy(x => x.Id).FirstOrDefaultAsync();
-
-        if (territory is null)
-        {
-            territory = new Territory
-            {
-                Name = countryName ?? "Unknown",
-                CreatedAt = DateTime.UtcNow
-            };
-            await _db.Territories.AddAsync(territory);
-            await _db.SaveChangesAsync();
-        }
-
-        var resolvedRegionName = regionName ?? territory.Name;
-        var region = await _db.Regions
-            .FirstOrDefaultAsync(x => x.TerritoryId == territory.Id && x.Name.ToLower() == resolvedRegionName.ToLowerInvariant());
-
-        if (region is null)
-        {
-            region = new Region
-            {
-                Name = resolvedRegionName,
-                TerritoryId = territory.Id,
-                CreatedAt = DateTime.UtcNow
-            };
-            await _db.Regions.AddAsync(region);
-            await _db.SaveChangesAsync();
-        }
-
-        var destinationName = city ?? region.Name;
-        var destination = await _db.Destinations
-            .Include(x => x.Locations)
-            .FirstOrDefaultAsync(x => x.RegionId == region.Id && x.Name.ToLower() == destinationName.ToLowerInvariant());
-
-        if (destination is null)
-        {
-            var destinationType = await ResolveDestinationTypeAsync();
-            destination = new Destination
-            {
-                Name = destinationName,
-                DestinationTypeId = destinationType.Id,
-                RegionId = region.Id,
-                Description = string.Empty,
-                Latitude = request.Latitude ?? 0,
-                Longitude = request.Longitude ?? 0,
-                CreatedAt = DateTime.UtcNow
-            };
-            await _db.Destinations.AddAsync(destination);
-            await _db.SaveChangesAsync();
-        }
-        else
-        {
-            var existing = SelectBestLocation(destination.Locations, request.Latitude, request.Longitude);
-            if (existing is not null)
-                return existing.Id;
-        }
-
-        var locationType = await ResolveLocationTypeAsync();
-        var location = new Location
-        {
-            Name = destinationName,
-            DestinationId = destination.Id,
-            LocationTypeId = locationType.Id,
-            Latitude = request.Latitude ?? destination.Latitude,
-            Longitude = request.Longitude ?? destination.Longitude,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _db.Locations.AddAsync(location);
-        await _db.SaveChangesAsync();
-        return location.Id;
-    }
-
-    private async Task<DestinationType> ResolveDestinationTypeAsync()
-    {
-        var destinationType = await _db.DestinationTypes
-            .FirstOrDefaultAsync(x => x.Name == "City")
-            ?? await _db.DestinationTypes.OrderBy(x => x.Id).FirstOrDefaultAsync();
-
-        if (destinationType is not null)
-            return destinationType;
-
-        destinationType = new DestinationType
-        {
-            Name = "City",
-            Description = "City destination",
-            CreatedAt = DateTime.UtcNow
-        };
-        await _db.DestinationTypes.AddAsync(destinationType);
-        await _db.SaveChangesAsync();
-        return destinationType;
-    }
-
-    private async Task<LocationType> ResolveLocationTypeAsync()
-    {
-        var locationType = await _db.LocationTypes
-            .FirstOrDefaultAsync(x => x.Name == "Neighborhood")
-            ?? await _db.LocationTypes.OrderBy(x => x.Id).FirstOrDefaultAsync();
-
-        if (locationType is not null)
-            return locationType;
-
-        locationType = new LocationType
-        {
-            Name = "Area",
-            Description = "Contribution-created area",
-            CreatedAt = DateTime.UtcNow
-        };
-        await _db.LocationTypes.AddAsync(locationType);
-        await _db.SaveChangesAsync();
-        return locationType;
-    }
-
-    private static Location? SelectBestLocation(IEnumerable<Location> locations, double? latitude, double? longitude)
-    {
-        var candidates = locations.ToList();
-        if (candidates.Count == 0)
-            return null;
-
-        if (latitude.HasValue && longitude.HasValue)
-        {
-            return candidates
-                .OrderBy(x => Math.Pow(x.Latitude - latitude.Value, 2) + Math.Pow(x.Longitude - longitude.Value, 2))
-                .First();
-        }
-
-        return candidates.OrderBy(x => x.Id).First();
-    }
-
-    private static bool HasUsableCoordinates(double? latitude, double? longitude) =>
-        latitude.HasValue &&
-        longitude.HasValue &&
-        IsFinite(latitude.Value) &&
-        IsFinite(longitude.Value) &&
-        latitude.Value >= -90 &&
-        latitude.Value <= 90 &&
-        longitude.Value >= -180 &&
-        longitude.Value <= 180 &&
-        (latitude.Value != 0d || longitude.Value != 0d);
-
-    private static bool IsFinite(double value) =>
-        !double.IsNaN(value) && !double.IsInfinity(value);
-
-    private static void ApplyImages(
+    private void SyncContributionImages(
         PlaceContribution contribution,
-        IEnumerable<UpsertPlaceContributionImageDto>? requestImages,
+        List<UpsertPlaceContributionImageDto>? requestImages,
         string? storedMainImageUrl,
-        DateTime now,
-        string? imagePosition = null,
-        string? imageSize = null)
+        string? storedCoverImageUrl,
+        DateTime now)
     {
-        var images = NormalizeImages(requestImages).ToList();
+        var oldManagedUrls = contribution.Images
+            .Where(image => _mediaStorage.IsManagedContributionMediaUrl(image.Url))
+            .Select(image => image.Url)
+            .ToList();
+
+        contribution.Images.Clear();
+
+        var imageDtos = new List<UpsertPlaceContributionImageDto>();
+
+        if (requestImages is not null)
+        {
+            imageDtos.AddRange(requestImages.Where(image => !string.IsNullOrWhiteSpace(image.Url)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(storedCoverImageUrl))
+        {
+            imageDtos.Add(new UpsertPlaceContributionImageDto
+            {
+                Url = storedCoverImageUrl,
+                Caption = CoverImageCaption,
+                IsMain = false,
+                SortOrder = -1,
+                ImagePosition = "50% 50%",
+                ImageSize = "cover"
+            });
+        }
 
         if (!string.IsNullOrWhiteSpace(storedMainImageUrl))
         {
-            images.Insert(0, new UpsertPlaceContributionImageDto
+            imageDtos.Add(new UpsertPlaceContributionImageDto
             {
                 Url = storedMainImageUrl,
+                Caption = MainImageCaption,
                 IsMain = true,
                 SortOrder = 0,
-                ImagePosition = imagePosition ?? "50% 50%",
-                ImageSize = imageSize ?? "cover"
+                ImagePosition = "50% 50%",
+                ImageSize = "cover"
             });
         }
 
-        if (images.Count > MaxContributionImages)
-            throw new InvalidOperationException($"A contribution can include at most {MaxContributionImages} images.");
-
-        if (images.Count == 0)
+        if (imageDtos.Count == 0)
             return;
 
-        if (!images.Any(x => x.IsMain))
-            images[0].IsMain = true;
-
-        var mainSeen = false;
-        foreach (var image in images.OrderBy(x => x.SortOrder))
+        var hasMain = imageDtos.Any(image => image.IsMain);
+        if (!hasMain)
         {
-            var isMain = image.IsMain && !mainSeen;
-            if (isMain)
-                mainSeen = true;
+            imageDtos[0].IsMain = true;
+        }
 
+        foreach (var image in imageDtos
+                     .OrderBy(image => image.SortOrder)
+                     .ThenBy(image => image.Url, StringComparer.OrdinalIgnoreCase))
+        {
             contribution.Images.Add(new PlaceContributionImage
             {
-                Url = image.Url.Trim(),
-                AltText = NormalizeOptional(image.AltText, 300),
-                Caption = NormalizeOptional(image.Caption, 500),
-                IsMain = isMain,
+                Url = NormalizeRequired(image.Url, "Image url"),
+                AltText = NormalizeOptional(image.AltText),
+                Caption = NormalizeOptional(image.Caption),
+                IsMain = image.IsMain,
                 SortOrder = image.SortOrder,
-                ImagePosition = NormalizeImagePosition(image.ImagePosition),
-                ImageSize = NormalizeImageSize(image.ImageSize),
-                CreatedAt = now
+                ImagePosition = NormalizeOptional(image.ImagePosition) ?? "50% 50%",
+                ImageSize = NormalizeOptional(image.ImageSize) ?? "cover",
+                CreatedAt = now,
+                UpdatedAt = now
             });
         }
-    }
 
-    private static IEnumerable<UpsertPlaceContributionImageDto> NormalizeImages(IEnumerable<UpsertPlaceContributionImageDto>? images)
-    {
-        var normalized = (images ?? Enumerable.Empty<UpsertPlaceContributionImageDto>())
-            .Where(x => !string.IsNullOrWhiteSpace(x.Url))
-            .Select((x, index) => new UpsertPlaceContributionImageDto
+        foreach (var oldManagedUrl in oldManagedUrls)
+        {
+            if (contribution.Images.All(image => !string.Equals(image.Url, oldManagedUrl, StringComparison.OrdinalIgnoreCase)))
             {
-                Url = NormalizeImageUrl(x.Url),
-                AltText = x.AltText,
-                Caption = x.Caption,
-                IsMain = x.IsMain,
-                SortOrder = x.SortOrder < 0 ? index : x.SortOrder,
-                ImagePosition = x.ImagePosition,
-                ImageSize = x.ImageSize
-            })
-            .DistinctBy(x => x.Url, StringComparer.OrdinalIgnoreCase)
+                _ = _mediaStorage.DeleteAsync(oldManagedUrl);
+            }
+        }
+    }
+
+    private async Task<List<Tag>> ResolveTagsAsync(List<string> tagNames)
+    {
+        if (tagNames.Count == 0)
+            return new List<Tag>();
+
+        var normalized = tagNames.Select(NormalizeSlug).ToList();
+
+        return await _db.Tags
+            .Where(tag => normalized.Contains(tag.Slug.ToLower()))
+            .ToListAsync();
+    }
+
+    private async Task<List<Amenity>> ResolveAmenitiesAsync(List<string> amenityNames)
+    {
+        if (amenityNames.Count == 0)
+            return new List<Amenity>();
+
+        var normalized = amenityNames.Select(NormalizeSlug).ToList();
+
+        return await _db.Amenities
+            .Where(amenity => normalized.Contains(amenity.Name.ToLower()))
+            .ToListAsync();
+    }
+
+    private async Task<List<StayAmenity>> ResolveStayAmenitiesAsync(List<string> stayAmenityNames)
+    {
+        if (stayAmenityNames.Count == 0)
+            return new List<StayAmenity>();
+
+        var normalized = stayAmenityNames.Select(NormalizeSlug).ToList();
+
+        return await _db.StayAmenities
+            .Where(amenity => normalized.Contains(amenity.Slug.ToLower()) ||
+                              normalized.Contains(amenity.Name.ToLower()))
+            .ToListAsync();
+    }
+
+    private async Task<List<ResolvedBookingPartner>> ResolveBookingPartnersAsync(
+        List<ContributionBookingPartnerDto> bookingPartners)
+    {
+        if (bookingPartners.Count == 0)
+            return new List<ResolvedBookingPartner>();
+
+        var normalizedIds = bookingPartners
+            .Select(partner => NormalizeOptional(partner.Id))
+            .Where(value => value is not null)
+            .Select(value => value!)
             .ToList();
 
-        if (normalized.Count > MaxContributionImages)
-            throw new InvalidOperationException($"A contribution can include at most {MaxContributionImages} images.");
+        var knownPartners = await _db.BookingPartners
+            .Where(partner => normalizedIds.Contains(partner.Id.ToString()) ||
+                              normalizedIds.Contains(partner.Name.ToLower()))
+            .ToListAsync();
 
-        return normalized;
-    }
-
-    private static void Validate(UpsertPlaceContributionDto request, bool isUpdateMethod)
-    {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            throw new InvalidOperationException("Name is required.");
-
-        if (request.Name.Trim().Length > 200)
-            throw new InvalidOperationException("Name is too long.");
-
-        if (NormalizeDescription(request.Description).Length > 2000)
-            throw new InvalidOperationException("Description is too long.");
-
-        if (request is { Latitude: null, Longitude: not null } or { Latitude: not null, Longitude: null })
-            throw new InvalidOperationException("Both latitude and longitude are required when setting coordinates.");
-
-        if (request.Latitude.HasValue && !IsFinite(request.Latitude.Value))
-            throw new InvalidOperationException("Latitude must be a finite value.");
-
-        if (request.Longitude.HasValue && !IsFinite(request.Longitude.Value))
-            throw new InvalidOperationException("Longitude must be a finite value.");
-
-        if (request.Latitude is < -90 or > 90)
-            throw new InvalidOperationException("Latitude must be between -90 and 90.");
-
-        if (request.Longitude is < -180 or > 180)
-            throw new InvalidOperationException("Longitude must be between -180 and 180.");
-
-        if (request is { Latitude: 0d, Longitude: 0d })
-            throw new InvalidOperationException("Please choose a valid location before submitting.");
-
-        if (request.LocationId is <= 0)
-            throw new InvalidOperationException("Please choose a valid location before submitting.");
-
-        if (!request.LocationId.HasValue &&
-            (!HasUsableCoordinates(request.Latitude, request.Longitude) ||
-             string.IsNullOrWhiteSpace(request.City) ||
-             string.IsNullOrWhiteSpace(request.Country)))
-        {
-            throw new InvalidOperationException("Please choose a valid location before submitting.");
-        }
-
-        _ = NormalizeContactEmail(request.ContactEmail);
-        _ = NormalizeWebsite(request.Website);
-        _ = NormalizePricePerNight(request.PricePerNight);
-        _ = NormalizeBookingPartners(request.BookingPartners);
-        _ = NormalizeImages(request.Images).ToList();
-
-        if (ParseType(request.Type) == PlaceContributionType.UpdatePlace && !request.PlaceId.HasValue)
-            throw new InvalidOperationException("PlaceId is required for update contributions.");
-    }
-
-    private static PlaceContributionType ParseType(string? type)
-    {
-        var normalized = (type ?? string.Empty).Trim().Replace(" ", "", StringComparison.OrdinalIgnoreCase).Replace("-", "", StringComparison.OrdinalIgnoreCase).ToLowerInvariant();
-        return normalized switch
-        {
-            "" or "create" or "createplace" => PlaceContributionType.CreatePlace,
-            "update" or "updateplace" => PlaceContributionType.UpdatePlace,
-            _ => throw new InvalidOperationException("Invalid contribution type.")
-        };
-    }
-
-    private static PlaceContributionStatus ParseStatus(string status)
-    {
-        var normalized = status.Trim().Replace(" ", "", StringComparison.OrdinalIgnoreCase).Replace("-", "", StringComparison.OrdinalIgnoreCase).ToLowerInvariant();
-        return normalized switch
-        {
-            "pending" or "underreview" or "pendingreview" => PlaceContributionStatus.PendingReview,
-            "approved" => PlaceContributionStatus.Approved,
-            "rejected" => PlaceContributionStatus.Rejected,
-            _ => throw new InvalidOperationException("Invalid contribution status.")
-        };
-    }
-
-    private static string? NormalizeOptional(string? value, int maxLength)
-    {
-        var trimmed = value?.Trim();
-        if (string.IsNullOrWhiteSpace(trimmed))
-            return null;
-
-        return trimmed.Length > maxLength ? trimmed[..maxLength] : trimmed;
-    }
-
-    private static string NormalizeDescription(string? description) =>
-        description?.Trim() ?? string.Empty;
-
-    private static string NormalizeRequiredName(string? value, string fieldName, int maxLength)
-    {
-        var trimmed = value?.Trim() ?? string.Empty;
-        if (trimmed.Length == 0)
-            throw new InvalidOperationException($"{fieldName} is required.");
-
-        if (trimmed.Length > maxLength)
-            throw new InvalidOperationException($"{fieldName} must be {maxLength} characters or fewer.");
-
-        return trimmed;
-    }
-
-    private static string NormalizeContactEmail(string? email)
-    {
-        var trimmed = email?.Trim() ?? string.Empty;
-        if (trimmed.Length == 0)
-            return string.Empty;
-
-        if (trimmed.Length > 200)
-            throw new InvalidOperationException("Contact email is too long.");
-
-        if (!Regex.IsMatch(trimmed, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
-            throw new InvalidOperationException("Contact email is invalid.");
-
-        return trimmed.ToLowerInvariant();
-    }
-
-    private static decimal? NormalizePricePerNight(decimal? pricePerNight)
-    {
-        if (!pricePerNight.HasValue)
-            return null;
-
-        if (pricePerNight.Value < 0m)
-            throw new InvalidOperationException("Price per night cannot be negative.");
-
-        if (pricePerNight.Value > 100000m)
-            throw new InvalidOperationException("Price per night is too large.");
-
-        return decimal.Round(pricePerNight.Value, 2, MidpointRounding.AwayFromZero);
-    }
-
-    private static string NormalizeWebsite(string? website)
-    {
-        var trimmed = website?.Trim() ?? string.Empty;
-        if (trimmed.Length == 0)
-            return string.Empty;
-
-        return NormalizeExternalHttpsUrl(trimmed, MaxWebsiteUrlLength, "Website URL");
-    }
-
-    private static string NormalizeBookingPartnerUrl(string? url)
-    {
-        var trimmed = url?.Trim() ?? string.Empty;
-        if (trimmed.Length == 0)
-            throw new InvalidOperationException("Booking partner URL is required.");
-
-        return NormalizeExternalHttpsUrl(trimmed, MaxBookingPartnerUrlLength, "Booking partner URL");
-    }
-
-    private static string NormalizeImageUrl(string? imageUrl)
-    {
-        var trimmed = imageUrl?.Trim() ?? string.Empty;
-        if (trimmed.Length == 0)
-            throw new InvalidOperationException("Image URL is required.");
-
-        if (trimmed.Length > MaxImageUrlLength)
-            throw new InvalidOperationException($"Image URL must be {MaxImageUrlLength} characters or fewer.");
-
-        if (IsManagedContributionMediaPath(trimmed))
-            return trimmed;
-
-        return NormalizeExternalHttpsUrl(trimmed, MaxImageUrlLength, "Image URL");
-    }
-
-    private static string NormalizeExternalHttpsUrl(string trimmed, int maxLength, string fieldName)
-    {
-        if (trimmed.Length > maxLength)
-            throw new InvalidOperationException($"{fieldName} must be {maxLength} characters or fewer.");
-
-        if (trimmed.StartsWith("//", StringComparison.Ordinal))
-            throw new InvalidOperationException($"{fieldName} must be a valid https URL.");
-
-        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
-            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrWhiteSpace(uri.Host) ||
-            uri.HostNameType == UriHostNameType.Unknown ||
-            !string.IsNullOrEmpty(uri.UserInfo))
-        {
-            throw new InvalidOperationException($"{fieldName} must be a valid https URL.");
-        }
-
-        var normalized = uri.AbsoluteUri;
-        if (normalized.Length > maxLength)
-            throw new InvalidOperationException($"{fieldName} must be {maxLength} characters or fewer.");
-
-        return normalized;
-    }
-
-    private static bool IsManagedContributionMediaPath(string value)
-    {
-        if (!value.StartsWith(ManagedContributionMediaPrefix, StringComparison.Ordinal))
-            return false;
-
-        if (value.Contains('\\') ||
-            value.Contains("//", StringComparison.Ordinal) ||
-            value.Contains('%') ||
-            value.Contains('?') ||
-            value.Contains('#'))
-        {
-            throw new InvalidOperationException("Image URL must be a valid https URL or managed media path.");
-        }
-
-        var fileName = value[ManagedContributionMediaPrefix.Length..];
-        if (string.IsNullOrWhiteSpace(fileName) ||
-            fileName.Contains('/') ||
-            fileName.Contains('\\') ||
-            fileName.Contains("..", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("Image URL must be a valid https URL or managed media path.");
-        }
-
-        if (!ManagedContributionMediaFileNameRegex.IsMatch(fileName))
-            throw new InvalidOperationException("Image URL must be a valid https URL or managed media path.");
-
-        return true;
-    }
-
-    private static string NormalizeImagePosition(string? value)
-    {
-        var trimmed = value?.Trim();
-        return string.IsNullOrWhiteSpace(trimmed) || trimmed.Length > 40 ? "50% 50%" : trimmed;
-    }
-
-    private static string NormalizeImageSize(string? value)
-    {
-        var trimmed = value?.Trim();
-        return string.IsNullOrWhiteSpace(trimmed) || trimmed.Length > 40 ? "cover" : trimmed;
-    }
-
-    private static string NormalizeReviewNote(string? value)
-    {
-        var trimmed = value?.Trim() ?? string.Empty;
-        return trimmed.Length > 1000 ? trimmed[..1000] : trimmed;
-    }
-
-    private static List<string> NormalizeStringList(IEnumerable<string>? values, int maxItemLength, int maxCount) =>
-        (values ?? Enumerable.Empty<string>())
-            .Select(x => x.Trim())
-            .Where(x => !string.IsNullOrWhiteSpace(x) && x.Length <= maxItemLength)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(maxCount)
-            .ToList();
-
-    private static List<string> NormalizeStayAmenityValues(IEnumerable<string> values)
-    {
-        return values
-            .Select(value => StayAmenitySlug(value))
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private static string StayAmenitySlug(string value)
-    {
-        var slug = Slugify(value);
-        return slug switch
-        {
-            "wifi" or "free-wifi" => "free-wifi",
-            "pool" or "swimming-pool" => "swimming-pool",
-            "breakfast" or "breakfast-included" => "breakfast-included",
-            "parking" => "parking",
-            "spa" => "spa",
-            "gym" or "fitness" or "fitness-center" => "fitness-center",
-            "dining" or "restaurant" => "restaurant",
-            "ac" or "a-c" or "air-conditioning" => "air-conditioning",
-            "sea" or "sea-view" => "sea-view",
-            _ => slug
-        };
-    }
-
-    private static List<ContributionBookingPartnerDto> NormalizeBookingPartners(IEnumerable<ContributionBookingPartnerDto>? partners)
-    {
-        var normalized = (partners ?? Enumerable.Empty<ContributionBookingPartnerDto>())
-            .Select(x => new
+        return bookingPartners
+            .Select(partner =>
             {
-                Id = x.Id?.Trim().ToLowerInvariant() ?? string.Empty,
-                x.Url
+                var normalizedId = NormalizeOptional(partner.Id);
+                if (normalizedId is null)
+                    return null;
+
+                var resolved = knownPartners.FirstOrDefault(known =>
+                    string.Equals(known.Id.ToString(), normalizedId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(known.Name, normalizedId, StringComparison.OrdinalIgnoreCase));
+
+                return resolved is null
+                    ? null
+                    : new ResolvedBookingPartner(resolved.Id, NormalizeOptional(partner.Url));
             })
-            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
-            .Select(x => new ContributionBookingPartnerDto
-            {
-                Id = NormalizeBookingPartnerId(x.Id),
-                Url = NormalizeBookingPartnerUrl(x.Url)
-            })
-            .DistinctBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+            .Where(value => value is not null)
+            .Select(value => value!)
             .ToList();
-
-        if (normalized.Count > 10)
-            throw new InvalidOperationException("A contribution can include at most 10 booking partners.");
-
-        return normalized;
-    }
-
-    private static string NormalizeBookingPartnerId(string partnerId)
-    {
-        if (partnerId.Length > MaxBookingPartnerIdLength)
-            throw new InvalidOperationException($"Booking partner name must be {MaxBookingPartnerIdLength} characters or fewer.");
-
-        var partnerName = PartnerName(partnerId);
-        if (partnerName.Length > 100)
-            throw new InvalidOperationException("Booking partner name is too long.");
-
-        return partnerId;
     }
 
     private static PlaceContributionListItemDto MapListItem(PlaceContribution contribution)
     {
-        var mainImageUrl = MainImageUrl(contribution.Images);
+        var mainImage = GetMainImage(contribution);
+        var coverImage = GetCoverImage(contribution);
+
         return new PlaceContributionListItemDto
         {
             Id = contribution.Id,
@@ -1390,24 +1048,22 @@ public class PlaceContributionService : IPlaceContributionService
             Name = contribution.Name,
             Subtitle = contribution.Subtitle,
             PlaceType = contribution.PlaceType?.Name,
-            StayType = contribution.StayType?.Name ?? contribution.Place?.Stay?.StayType?.Name,
-            Location = contribution.Location?.Name ?? contribution.Location?.Destination?.Name,
-            MainImageUrl = mainImageUrl,
-            CoverImageUrl = mainImageUrl,
+            StayType = contribution.StayType?.Name,
+            Location = BuildLocationLabel(contribution),
+            MainImageUrl = mainImage?.Url,
+            CoverImageUrl = coverImage?.Url,
             Status = contribution.Status.ToString(),
             SubmittedAt = contribution.SubmittedAt,
             UpdatedAt = contribution.UpdatedAt,
             PlaceId = contribution.PlaceId,
-            PublishedPlaceId = contribution.PlaceId
+            PublishedPlaceId = contribution.PlaceId,
+            HasOwnershipProofDocument = !string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl)
         };
     }
 
     private static PlaceContributionDetailDto MapDetail(PlaceContribution contribution)
     {
         var listItem = MapListItem(contribution);
-        var mainImage = MainImage(contribution.Images);
-        var placeAmenities = DeserializeStringList(contribution.AmenitiesJson);
-        var stayAmenities = DeserializeStringList(contribution.StayAmenitiesJson);
 
         return new PlaceContributionDetailDto
         {
@@ -1426,6 +1082,7 @@ public class PlaceContributionService : IPlaceContributionService
             UpdatedAt = listItem.UpdatedAt,
             PlaceId = listItem.PlaceId,
             PublishedPlaceId = listItem.PublishedPlaceId,
+            HasOwnershipProofDocument = listItem.HasOwnershipProofDocument,
             PlaceTypeId = contribution.PlaceTypeId,
             LocationId = contribution.LocationId,
             RestaurantTypeId = contribution.RestaurantTypeId,
@@ -1442,100 +1099,176 @@ public class PlaceContributionService : IPlaceContributionService
             PricePerNight = contribution.PricePerNight,
             CheckInTime = contribution.CheckInTime,
             CheckOutTime = contribution.CheckOutTime,
-            City = contribution.Location?.Destination?.Name,
+            City = contribution.Location?.Name,
             Region = contribution.Location?.Destination?.Region?.Name,
-            Country = contribution.Location?.Destination?.Region?.Territory?.Name,
-            ImagePosition = mainImage?.ImagePosition ?? "50% 50%",
-            ImageSize = mainImage?.ImageSize ?? "cover",
+            Country = contribution.Location?.Destination?.Name,
+            ImagePosition = GetMainImage(contribution)?.ImagePosition ?? "50% 50%",
+            ImageSize = GetMainImage(contribution)?.ImageSize ?? "cover",
             Tags = DeserializeStringList(contribution.TagsJson),
-            Amenities = stayAmenities.Count > 0 || IsAccommodationContribution(contribution) ? stayAmenities : placeAmenities,
-            StayAmenities = stayAmenities,
+            Amenities = DeserializeStringList(contribution.AmenitiesJson),
+            StayAmenities = DeserializeStringList(contribution.StayAmenitiesJson),
             BookingPartners = DeserializeBookingPartners(contribution.BookingPartnersJson),
             Images = contribution.Images
-                .OrderByDescending(x => x.IsMain)
-                .ThenBy(x => x.SortOrder)
-                .Select(x => new PlaceContributionImageDto
+                .OrderBy(image => image.SortOrder)
+                .ThenBy(image => image.Id)
+                .Select(image => new PlaceContributionImageDto
                 {
-                    Id = x.Id,
-                    Url = x.Url,
-                    AltText = x.AltText,
-                    Caption = x.Caption,
-                    IsMain = x.IsMain,
-                    SortOrder = x.SortOrder,
-                    ImagePosition = x.ImagePosition,
-                    ImageSize = x.ImageSize
+                    Id = image.Id,
+                    Url = image.Url,
+                    AltText = image.AltText,
+                    Caption = image.Caption,
+                    IsMain = image.IsMain,
+                    SortOrder = image.SortOrder,
+                    ImagePosition = image.ImagePosition,
+                    ImageSize = image.ImageSize
                 })
                 .ToList(),
             ReviewNote = contribution.ReviewNote,
-            ReviewedAt = contribution.ReviewedAt
+            ReviewedAt = contribution.ReviewedAt,
+            OwnershipProofDocumentUrl = contribution.OwnershipProofDocumentUrl,
+            OwnershipProofOriginalFileName = contribution.OwnershipProofOriginalFileName,
+            OwnershipProofContentType = contribution.OwnershipProofContentType,
+            OwnershipProofUploadedAt = contribution.OwnershipProofUploadedAt
         };
     }
 
-    private static string? MainImageUrl(IEnumerable<PlaceContributionImage> images) =>
-        images.OrderByDescending(x => x.IsMain).ThenBy(x => x.SortOrder).Select(x => x.Url).FirstOrDefault();
-
-    private static PlaceContributionImage? MainImage(IEnumerable<PlaceContributionImage> images) =>
-        images.OrderByDescending(x => x.IsMain).ThenBy(x => x.SortOrder).FirstOrDefault();
-
-    private static bool IsAccommodationContribution(PlaceContribution contribution) =>
-        contribution.StayTypeId.HasValue || contribution.StayType is not null || contribution.Place?.Stay is not null;
-
-    private static string Serialize<T>(T value) => JsonSerializer.Serialize(value, JsonOptions);
-
-    private static List<string> DeserializeStringList(string json)
+    private static PlaceContributionImage? GetMainImage(PlaceContribution contribution)
     {
-        try { return JsonSerializer.Deserialize<List<string>>(json, JsonOptions) ?? new List<string>(); }
-        catch (JsonException) { return new List<string>(); }
+        return contribution.Images
+            .OrderByDescending(image => image.IsMain)
+            .ThenBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .FirstOrDefault(image => !string.Equals(image.Caption, CoverImageCaption, StringComparison.Ordinal));
     }
 
-    private static List<ContributionBookingPartnerDto> DeserializeBookingPartners(string json)
+    private static PlaceContributionImage? GetCoverImage(PlaceContribution contribution)
     {
-        try { return JsonSerializer.Deserialize<List<ContributionBookingPartnerDto>>(json, JsonOptions) ?? new List<ContributionBookingPartnerDto>(); }
-        catch (JsonException) { return new List<ContributionBookingPartnerDto>(); }
+        return contribution.Images
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .FirstOrDefault(image => string.Equals(image.Caption, CoverImageCaption, StringComparison.Ordinal));
     }
 
-    private static string PartnerName(string id) => id.ToLowerInvariant() switch
+    private static string? BuildLocationLabel(PlaceContribution contribution)
     {
-        "booking" => "Booking.com",
-        "airbnb" => "Airbnb",
-        "hotel" => "Hotel Website",
-        "expedia" => "Expedia",
-        _ => ToTitle(id)
-    };
+        if (contribution.Location is null)
+            return null;
 
-    private static string PartnerVariant(string id) => id.ToLowerInvariant() switch
-    {
-        "airbnb" => "brand",
-        "hotel" => "muted",
-        "expedia" => "muted",
-        _ => "dark"
-    };
+        var parts = new[]
+        {
+            contribution.Location.Name,
+            contribution.Location.Destination?.Name,
+            contribution.Location.Destination?.Region?.Name
+        };
 
-    private static string Slugify(string value)
-    {
-        var slug = Regex.Replace(value.Trim().ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
-        return string.IsNullOrWhiteSpace(slug) ? $"tag-{Guid.NewGuid():N}" : slug;
+        return string.Join(", ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
     }
 
-    private static string ToTitle(string value) =>
-        string.Join(" ", value.Split('-', '_', StringSplitOptions.RemoveEmptyEntries)
-            .Select(x => char.ToUpperInvariant(x[0]) + x[1..]));
+    private static PlaceContributionType ParseType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return PlaceContributionType.CreatePlace;
 
-    private sealed record ContributionReferenceResolution(
-        int? PlaceTypeId,
-        int LocationId,
-        int? StayTypeId,
-        List<string> PlaceAmenities,
-        List<string> StayAmenities,
-        double Latitude,
-        double Longitude);
+        if (Enum.TryParse<PlaceContributionType>(value, ignoreCase: true, out var parsed))
+            return parsed;
 
-    private sealed record ContributionLocationResolution(
-        int LocationId,
-        double Latitude,
-        double Longitude);
+        throw new InvalidOperationException("Unsupported contribution type.");
+    }
 
-    private sealed record ReviewAuthorization(
-        bool IsAdmin,
-        HashSet<int> AssignedRegionIds);
+    private static string NormalizeRequired(string? value, string fieldName)
+    {
+        var normalized = NormalizeOptional(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+            throw new InvalidOperationException($"{fieldName} is required.");
+
+        return normalized;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        var trimmed = value?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    private static string? NormalizeFileName(string? value)
+    {
+        var normalized = NormalizeOptional(value);
+        if (normalized is null)
+            return null;
+
+        var fileName = Path.GetFileName(normalized);
+        return fileName.Length > 255 ? fileName[..255] : fileName;
+    }
+
+    private static List<string> NormalizeStringList(IEnumerable<string>? values)
+    {
+        if (values is null)
+            return new List<string>();
+
+        return values
+            .Select(NormalizeOptional)
+            .Where(value => value is not null)
+            .Select(value => value!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<ContributionBookingPartnerDto> NormalizeBookingPartners(
+        IEnumerable<ContributionBookingPartnerDto>? values)
+    {
+        if (values is null)
+            return new List<ContributionBookingPartnerDto>();
+
+        return values
+            .Select(value => new ContributionBookingPartnerDto
+            {
+                Id = NormalizeOptional(value.Id) ?? string.Empty,
+                Url = NormalizeOptional(value.Url) ?? string.Empty
+            })
+            .Where(value => !string.IsNullOrWhiteSpace(value.Id))
+            .ToList();
+    }
+
+    private static string Serialize<T>(T value)
+    {
+        return JsonSerializer.Serialize(value);
+    }
+
+    private static List<string> DeserializeStringList(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return new List<string>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        }
+        catch (JsonException)
+        {
+            return new List<string>();
+        }
+    }
+
+    private static List<ContributionBookingPartnerDto> DeserializeBookingPartners(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return new List<ContributionBookingPartnerDto>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<ContributionBookingPartnerDto>>(json)
+                   ?? new List<ContributionBookingPartnerDto>();
+        }
+        catch (JsonException)
+        {
+            return new List<ContributionBookingPartnerDto>();
+        }
+    }
+
+    private static string NormalizeSlug(string value)
+    {
+        return value.Trim().ToLowerInvariant();
+    }
+
+    private sealed record ResolvedBookingPartner(int BookingPartnerId, string? Url);
 }

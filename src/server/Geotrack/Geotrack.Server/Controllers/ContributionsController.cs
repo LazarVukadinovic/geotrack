@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
@@ -11,237 +12,253 @@ namespace Geotrack.Server.Controllers;
 [Authorize]
 public class ContributionsController : ControllerBase
 {
-    private const long MaxMainImageBytes = 8 * 1024 * 1024;
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly IPlaceContributionService _contributions;
 
-    private readonly IPlaceContributionService _placeContributionService;
-
-    public ContributionsController(IPlaceContributionService placeContributionService)
+    public ContributionsController(IPlaceContributionService contributions)
     {
-        _placeContributionService = placeContributionService;
+        _contributions = contributions;
     }
 
-    [HttpGet]
+    [HttpGet("mine")]
     public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetMine()
     {
-        try
-        {
-            return Ok(await _placeContributionService.GetMineAsync(GetUserId()));
-        }
-        catch (Exception ex)
-        {
-            return HandleException(ex);
-        }
+        var userId = GetCurrentUserId();
+        var response = await _contributions.GetForUserAsync(userId);
+        return Ok(response);
     }
 
-    [HttpGet("{id:int}")]
-    public async Task<ActionResult<PlaceContributionDetailDto>> GetMineDetail([FromRoute] int id)
+    [HttpGet("mine/{id:int}")]
+    public async Task<ActionResult<PlaceContributionResponseDto>> GetMineById(int id)
     {
-        try
+        var userId = GetCurrentUserId();
+        var contribution = await _contributions.GetByIdForUserAsync(userId, id);
+
+        if (contribution is null)
+            return NotFound();
+
+        return Ok(new PlaceContributionResponseDto
         {
-            return Ok(await _placeContributionService.GetMineDetailAsync(GetUserId(), id));
-        }
-        catch (Exception ex)
-        {
-            return HandleException(ex);
-        }
+            Contribution = contribution
+        });
     }
 
-    [HttpPost]
-    [Consumes("multipart/form-data")]
-    public async Task<ActionResult<PlaceContributionResponseDto>> Create(
-        [FromForm(Name = "payload")] string payload,
-        IFormFile? mainImage,
-        IFormFile? coverImage)
+    [HttpGet("pending")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetPending()
     {
-        try
-        {
-            var request = ParsePayload(payload);
-            var contribution = await _placeContributionService.CreateAsync(
-                GetUserId(),
-                request,
-                await ReadMainImageAsync(mainImage ?? coverImage));
+        var userId = GetCurrentUserId();
+        var response = await _contributions.GetPendingReviewAsync(userId);
+        return Ok(response);
+    }
 
-            return CreatedAtAction(nameof(GetMineDetail), new { id = contribution.Id }, new PlaceContributionResponseDto
-            {
-                Contribution = contribution
-            });
-        }
-        catch (Exception ex)
+    [HttpGet("pending/{id:int}")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<ActionResult<PlaceContributionResponseDto>> GetPendingById(int id)
+    {
+        var userId = GetCurrentUserId();
+        var contribution = await _contributions.GetPendingReviewByIdAsync(id, userId);
+
+        if (contribution is null)
+            return NotFound();
+
+        return Ok(new PlaceContributionResponseDto
         {
-            return HandleException(ex);
-        }
+            Contribution = contribution
+        });
     }
 
     [HttpPost("places")]
     [Consumes("multipart/form-data")]
-    public Task<ActionResult<PlaceContributionResponseDto>> CreatePlace(
-        [FromForm(Name = "payload")] string payload,
-        IFormFile? mainImage,
-        IFormFile? coverImage) =>
-        Create(payload, mainImage, coverImage);
-
-    [HttpPost("stays")]
-    [Consumes("multipart/form-data")]
-    public Task<ActionResult<PlaceContributionResponseDto>> CreateStay(
-        [FromForm(Name = "payload")] string payload,
-        IFormFile? mainImage,
-        IFormFile? coverImage) =>
-        Create(payload, mainImage, coverImage);
-
-    [HttpPut("{id:int}")]
-    [Consumes("multipart/form-data")]
-    public async Task<ActionResult<PlaceContributionResponseDto>> Update(
-        [FromRoute] int id,
-        [FromForm(Name = "payload")] string payload,
-        IFormFile? mainImage,
-        IFormFile? coverImage)
+    public async Task<ActionResult<PlaceContributionResponseDto>> CreatePlaceContribution(
+        [FromForm] string payload,
+        [FromForm] IFormFile? mainImage,
+        [FromForm] IFormFile? coverImage,
+        [FromForm] IFormFile? ownershipProofDocument)
     {
+        UpsertPlaceContributionDto? request;
+
         try
         {
-            var request = ParsePayload(payload);
-            var contribution = await _placeContributionService.UpdateAsync(
-                GetUserId(),
-                id,
-                request,
-                await ReadMainImageAsync(mainImage ?? coverImage));
-
-            return Ok(new PlaceContributionResponseDto { Contribution = contribution });
+            request = JsonSerializer.Deserialize<UpsertPlaceContributionDto>(
+                payload,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
         }
-        catch (Exception ex)
+        catch (JsonException)
         {
-            return HandleException(ex);
+            return BadRequest(new { message = "Invalid contribution payload." });
+        }
+
+        if (request is null)
+            return BadRequest(new { message = "Contribution payload is required." });
+
+        byte[]? mainImageBytes = null;
+        byte[]? coverImageBytes = null;
+        byte[]? ownershipProofBytes = null;
+
+        try
+        {
+            mainImageBytes = await ReadFileBytesAsync(mainImage);
+            coverImageBytes = await ReadFileBytesAsync(coverImage);
+            ownershipProofBytes = await ReadFileBytesAsync(ownershipProofDocument);
+
+            var contribution = await _contributions.CreateAsync(
+                GetCurrentUserId(),
+                request,
+                mainImageBytes,
+                coverImageBytes,
+                ownershipProofBytes,
+                ownershipProofDocument?.FileName,
+                ownershipProofDocument?.ContentType);
+
+            return CreatedAtAction(
+                nameof(GetMineById),
+                new { id = contribution.Id },
+                new PlaceContributionResponseDto
+                {
+                    Contribution = contribution
+                });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 
     [HttpPut("places/{id:int}")]
     [Consumes("multipart/form-data")]
-    public Task<ActionResult<PlaceContributionResponseDto>> UpdatePlace(
-        [FromRoute] int id,
-        [FromForm(Name = "payload")] string payload,
-        IFormFile? mainImage,
-        IFormFile? coverImage) =>
-        Update(id, payload, mainImage, coverImage);
-
-    [HttpPut("stays/{id:int}")]
-    [Consumes("multipart/form-data")]
-    public Task<ActionResult<PlaceContributionResponseDto>> UpdateStay(
-        [FromRoute] int id,
-        [FromForm(Name = "payload")] string payload,
-        IFormFile? mainImage,
-        IFormFile? coverImage) =>
-        Update(id, payload, mainImage, coverImage);
-
-    [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete([FromRoute] int id)
+    public async Task<ActionResult<PlaceContributionResponseDto>> UpdatePlaceContribution(
+        int id,
+        [FromForm] string payload,
+        [FromForm] IFormFile? mainImage,
+        [FromForm] IFormFile? coverImage,
+        [FromForm] IFormFile? ownershipProofDocument)
     {
-        try
-        {
-            await _placeContributionService.DeleteAsync(GetUserId(), id);
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            return HandleException(ex);
-        }
-    }
-
-    [HttpGet("review")]
-    [Authorize(Roles = "Admin,RegionalManager")]
-    public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetReviewQueue([FromQuery] string? status = null)
-    {
-        try
-        {
-            return Ok(await _placeContributionService.GetReviewQueueAsync(GetUserId(), status));
-        }
-        catch (Exception ex)
-        {
-            return HandleException(ex);
-        }
-    }
-
-    [HttpPost("{id:int}/approve")]
-    [Authorize(Roles = "Admin,RegionalManager")]
-    public async Task<ActionResult<PlaceContributionResponseDto>> Approve(
-        [FromRoute] int id,
-        [FromBody] ReviewPlaceContributionRequestDto request)
-    {
-        try
-        {
-            var contribution = await _placeContributionService.ApproveAsync(GetUserId(), id, request);
-            return Ok(new PlaceContributionResponseDto { Contribution = contribution });
-        }
-        catch (Exception ex)
-        {
-            return HandleException(ex);
-        }
-    }
-
-    [HttpPost("{id:int}/reject")]
-    [Authorize(Roles = "Admin,RegionalManager")]
-    public async Task<ActionResult<PlaceContributionResponseDto>> Reject(
-        [FromRoute] int id,
-        [FromBody] ReviewPlaceContributionRequestDto request)
-    {
-        try
-        {
-            var contribution = await _placeContributionService.RejectAsync(GetUserId(), id, request);
-            return Ok(new PlaceContributionResponseDto { Contribution = contribution });
-        }
-        catch (Exception ex)
-        {
-            return HandleException(ex);
-        }
-    }
-
-    private static UpsertPlaceContributionDto ParsePayload(string payload)
-    {
-        if (string.IsNullOrWhiteSpace(payload))
-            throw new InvalidOperationException("Contribution payload is required.");
+        UpsertPlaceContributionDto? request;
 
         try
         {
-            return JsonSerializer.Deserialize<UpsertPlaceContributionDto>(payload, JsonOptions)
-                ?? throw new InvalidOperationException("Contribution payload is invalid.");
+            request = JsonSerializer.Deserialize<UpsertPlaceContributionDto>(
+                payload,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
         }
         catch (JsonException)
         {
-            throw new InvalidOperationException("Contribution payload is invalid.");
+            return BadRequest(new { message = "Invalid contribution payload." });
+        }
+
+        if (request is null)
+            return BadRequest(new { message = "Contribution payload is required." });
+
+        try
+        {
+            var contribution = await _contributions.UpdateAsync(
+                GetCurrentUserId(),
+                id,
+                request,
+                await ReadFileBytesAsync(mainImage),
+                await ReadFileBytesAsync(coverImage),
+                await ReadFileBytesAsync(ownershipProofDocument),
+                ownershipProofDocument?.FileName,
+                ownershipProofDocument?.ContentType);
+
+            return Ok(new PlaceContributionResponseDto
+            {
+                Contribution = contribution
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 
-    private static async Task<byte[]?> ReadMainImageAsync(IFormFile? mainImage)
+    [HttpDelete("places/{id:int}")]
+    public async Task<IActionResult> DeletePlaceContribution(int id)
     {
-        if (mainImage is null || mainImage.Length == 0)
+        try
+        {
+            await _contributions.DeleteAsync(GetCurrentUserId(), id);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("places/{id:int}/approve")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<ActionResult<PlaceContributionResponseDto>> ApprovePlaceContribution(
+        int id,
+        [FromBody] ReviewPlaceContributionRequestDto? request)
+    {
+        try
+        {
+            var contribution = await _contributions.ApproveAsync(
+                id,
+                GetCurrentUserId(),
+                request?.Note);
+
+            return Ok(new PlaceContributionResponseDto
+            {
+                Contribution = contribution
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("places/{id:int}/reject")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<ActionResult<PlaceContributionResponseDto>> RejectPlaceContribution(
+        int id,
+        [FromBody] ReviewPlaceContributionRequestDto? request)
+    {
+        try
+        {
+            var contribution = await _contributions.RejectAsync(
+                id,
+                GetCurrentUserId(),
+                request?.Note);
+
+            return Ok(new PlaceContributionResponseDto
+            {
+                Contribution = contribution
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private int GetCurrentUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue("userId");
+
+        return int.TryParse(value, out var userId)
+            ? userId
+            : throw new InvalidOperationException("Authenticated user id was not found.");
+    }
+
+    private static async Task<byte[]?> ReadFileBytesAsync(IFormFile? file)
+    {
+        if (file is null || file.Length == 0)
             return null;
 
-        if (mainImage.Length > MaxMainImageBytes)
-            throw new InvalidOperationException("Contribution image must be 8 MB or smaller.");
-
-        await using var stream = new MemoryStream();
-        await mainImage.CopyToAsync(stream);
-        return stream.ToArray();
-    }
-
-    private int GetUserId()
-    {
-        var userIdClaim = User.FindFirst("userId")?.Value;
-
-        if (!int.TryParse(userIdClaim, out var userId))
-            throw new UnauthorizedAccessException("Invalid user token");
-
-        return userId;
-    }
-
-    private ActionResult HandleException(Exception ex)
-    {
-        return ex switch
-        {
-            UnauthorizedAccessException authEx when authEx.Message == "Invalid user token" => Unauthorized(new { message = "Invalid user token" }),
-            UnauthorizedAccessException => StatusCode(StatusCodes.Status403Forbidden, new { message = "Forbidden." }),
-            KeyNotFoundException => NotFound(new { message = ex.Message }),
-            InvalidOperationException => BadRequest(new { message = ex.Message }),
-            _ => StatusCode(500, new { message = "An unexpected error occurred." })
-        };
+        await using var stream = file.OpenReadStream();
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+        return memory.ToArray();
     }
 }
