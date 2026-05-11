@@ -292,4 +292,9 @@ export class RegionsService {
     DETAIL_OVERRIDES[id] = { ...(DETAIL_OVERRIDES[id] ?? {}), team };
     return of(undefined).pipe(delay(300));
   }
+
+  private _listState: { searchQuery: string; sortField: string; sortDir: string; displayCount: number; scrollTop: number } | null = null;
+  saveListState(s: { searchQuery: string; sortField: string; sortDir: string; displayCount: number; scrollTop: number }): void { this._listState = s; }
+  getListState() { return this._listState; }
+  clearListState(): void { this._listState = null; }
 }
