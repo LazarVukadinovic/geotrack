@@ -633,7 +633,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         this.mapPlacesService.addPlace(saved);
 
         if (returnTo) {
-          this.router.navigate([returnTo]);
+          this.router.navigate([returnTo], { state: { place: saved } });
         } else {
           this.router.navigate(['/map'], { state: { newPlace: saved } });
         }

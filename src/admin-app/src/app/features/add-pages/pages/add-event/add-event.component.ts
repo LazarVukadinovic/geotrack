@@ -415,9 +415,10 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
 
   navigateToAddVenue(): void {
     this.venueDropdownOpen = false;
-    if (this.venueType === 'place') this.router.navigate(['/places/new']);
-    else if (this.venueType === 'destination') this.router.navigate(['/destinations/new']);
-    else this.router.navigate(['/locations/new']);
+    const returnState = { returnTo: '/events/new', venueType: this.venueType };
+    if (this.venueType === 'place') this.router.navigate(['/places/new'], { state: returnState });
+    else if (this.venueType === 'destination') this.router.navigate(['/destinations/new'], { state: returnState });
+    else this.router.navigate(['/locations/new'], { state: returnState });
   }
 
   private getVenueSource(): MapPlace[] {

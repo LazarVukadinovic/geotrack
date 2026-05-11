@@ -165,6 +165,15 @@ export class MapPageComponent implements OnInit, OnDestroy {
     return { color: '#2563eb', fill: '#3b82f6' };
   }
 
+  private shrinkZone(zone: [number, number][], factor: number): [number, number][] {
+    const centLat = zone.reduce((s, p) => s + p[0], 0) / zone.length;
+    const centLng = zone.reduce((s, p) => s + p[1], 0) / zone.length;
+    return zone.map(([lat, lng]) => [
+      centLat + (lat - centLat) * factor,
+      centLng + (lng - centLng) * factor,
+    ] as [number, number]);
+  }
+
   // Map Init
 
   private initMap(): void {
@@ -185,8 +194,9 @@ export class MapPageComponent implements OnInit, OnDestroy {
     this.mapPlacesService.getAll().forEach(place => {
       if (!place.zone) return;
       const { color, fill } = this.zoneColor(place.type);
+      const coords = place.type === 'Location' ? this.shrinkZone(place.zone, 0.82) : place.zone;
 
-      const polygon = L.polygon(place.zone, {
+      const polygon = L.polygon(coords, {
         color,
         fillColor: fill,
         fillOpacity: 0.15,
@@ -310,7 +320,8 @@ export class MapPageComponent implements OnInit, OnDestroy {
   private _addPlaceToMap(place: MapPlace): void {
     if (place.zone) {
       const { color, fill } = this.zoneColor(place.type);
-      const polygon = L.polygon(place.zone, {
+      const coords = place.type === 'Location' ? this.shrinkZone(place.zone, 0.82) : place.zone;
+      const polygon = L.polygon(coords, {
         color, fillColor: fill, fillOpacity: 0.15, weight: 2, dashArray: '6 4', opacity: 0.8,
       }).addTo(this.map);
 

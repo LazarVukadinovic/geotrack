@@ -522,7 +522,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         this.mapPlacesSvc.addPlace(saved);
 
         if (returnTo) {
-          this.router.navigate([returnTo]);
+          this.router.navigate([returnTo], { state: { place: saved } });
         } else {
           this.router.navigate(['/map'], { state: { newPlace: saved } });
         }
