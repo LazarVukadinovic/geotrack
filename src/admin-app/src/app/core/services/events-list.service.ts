@@ -36,6 +36,7 @@ export interface EventListItem {
   contactEmail?: string;
   attendanceLimit?: string;
   ageRestriction?: string;
+  internalRefId?: string;
 }
 
 export type EventSortField = 'name' | 'lastUpdated' | 'status';

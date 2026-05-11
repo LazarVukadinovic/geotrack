@@ -71,6 +71,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   contactEmail     = '';
   attendanceLimit  = '';
   ageRestriction   = '';
+  internalRefId    = '';
 
   // Rich text editor
   isBold        = false;
@@ -701,6 +702,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       this.contactEmail     = p.contactEmail    ?? '';
       this.attendanceLimit  = p.attendanceLimit ?? '';
       this.ageRestriction   = p.ageRestriction  ?? '';
+      this.internalRefId    = p.internalRefId   ?? '';
 
       if (p.venueName || p.lat) {
         let found: MapPlace | undefined;
@@ -893,6 +895,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
         contactEmail:    this.contactEmail || undefined,
         attendanceLimit: this.attendanceLimit || undefined,
         ageRestriction:  this.ageRestriction || undefined,
+        internalRefId:   this.internalRefId || undefined,
       };
 
       if (this.isEditMode && history.state?.place?.id) {
@@ -902,9 +905,10 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
           ...(this.coverImageUrl ? { imageBg: `url(${this.coverImageUrl}) center/cover` } : {}),
         });
       } else {
+        const newEventId = Date.now().toString();
         this.eventsListSvc.addItem({
           ...sharedFields,
-          id:          Date.now().toString(),
+          id:          newEventId,
           region:      'Šumadija, Srbija',
           status:      'Published',
           lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
@@ -912,6 +916,13 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
                          ? `url(${this.coverImageUrl}) center/cover`
                          : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
         });
+
+        if (returnTo) {
+          this.router.navigate([returnTo], { state: { newEvent: { id: newEventId, name: this.eventTitle } } });
+        } else {
+          this.router.navigate(['/events']);
+        }
+        return;
       }
 
       if (returnTo) {

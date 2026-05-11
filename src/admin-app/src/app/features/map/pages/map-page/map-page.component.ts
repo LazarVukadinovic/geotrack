@@ -51,11 +51,16 @@ export class MapPageComponent implements OnInit, OnDestroy {
 
   
   private dynamicPlaces: MapPlace[] = [];
+  newEventNotification: { id: string; name: string } | null = null;
+
   ngOnInit(): void {
-      const state = history.state as { newPlace?: MapPlace };
-      if (state?.newPlace) {
-        this.dynamicPlaces = [state.newPlace];
-      }
+    const state = history.state as { newPlace?: MapPlace; newEvent?: { id: string; name: string } };
+    if (state?.newPlace) {
+      this.dynamicPlaces = [state.newPlace];
+    }
+    if (state?.newEvent) {
+      this.newEventNotification = state.newEvent;
+    }
     setTimeout(() => this.initMap(), 100);
   }
 
@@ -407,6 +412,10 @@ export class MapPageComponent implements OnInit, OnDestroy {
       this.router.navigate(['/places/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
     }
     this.closePopup();
+  }
+
+  dismissEventNotification(): void {
+    this.newEventNotification = null;
   }
 
   navigateToNewEvent(): void {
