@@ -1,6 +1,8 @@
 using Geotrack.Server;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -13,6 +15,8 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
 
     private string? _baseConnectionString;
     private string? _testConnectionString;
+    private string TestDataProtectionKeyDirectory =>
+        Path.Combine(AppContext.BaseDirectory, ".dataprotection-keys", _databaseName);
 
     static GeotrackApiFactory()
     {
@@ -69,6 +73,15 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
         {
             logging.ClearProviders();
             logging.AddConsole();
+        });
+        builder.ConfigureServices(services =>
+        {
+            var keyDirectory = new DirectoryInfo(TestDataProtectionKeyDirectory);
+            keyDirectory.Create();
+
+            services.AddDataProtection()
+                .PersistKeysToFileSystem(keyDirectory)
+                .SetApplicationName($"GeoTrack.IntegrationTests.{_databaseName}");
         });
 
         return base.CreateHost(builder);
