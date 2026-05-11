@@ -1,6 +1,6 @@
 import {
-  Component, OnInit, OnDestroy, HostListener,
-  ChangeDetectionStrategy, ChangeDetectorRef,
+  Component, OnInit, OnDestroy, AfterViewInit, HostListener,
+  ChangeDetectionStrategy, ChangeDetectorRef, ViewChild, ElementRef,
 } from '@angular/core';
 import { CommonModule }  from '@angular/common';
 import { FormsModule }   from '@angular/forms';
@@ -22,9 +22,8 @@ const PAGE_SIZE_STEP    = 5;
   templateUrl: './all-locations.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AllLocationsComponent implements OnInit, OnDestroy {
+export class AllLocationsComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  
   constructor(
     private router: Router,
     private svc: LocationsListService,
@@ -71,6 +70,9 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     this.loadItems();
   }
   
+  @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
+  private _pendingScrollTop = 0;
+
   contextMenu: { item: LocationListItem; x: number; y: number } | null = null;
 
  
@@ -83,6 +85,15 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
 
   // Lifecycle
   ngOnInit(): void {
+    const saved = this.svc.getListState();
+    if (saved) {
+      this.searchQuery  = saved.searchQuery;
+      this.sortField    = saved.sortField as LocationSortField;
+      this.sortDir      = saved.sortDir   as LocationSortDir;
+      this.displayCount = saved.displayCount;
+      this._pendingScrollTop = saved.scrollTop;
+    }
+
     this.searchSubject.pipe(
       debounceTime(300),
       distinctUntilChanged(),
@@ -93,6 +104,18 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     });
 
     this.loadItems();
+  }
+
+  ngAfterViewInit(): void {
+    if (this._pendingScrollTop > 0) {
+      const st = this._pendingScrollTop;
+      this._pendingScrollTop = 0;
+      setTimeout(() => {
+        if (this.scrollContainer?.nativeElement) {
+          this.scrollContainer.nativeElement.scrollTop = st;
+        }
+      }, 150);
+    }
   }
 
   ngOnDestroy(): void {
@@ -156,15 +179,27 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   }
 
   // Navigation
+  private saveListState(): void {
+    this.svc.saveListState({
+      searchQuery:  this.searchQuery,
+      sortField:    this.sortField,
+      sortDir:      this.sortDir,
+      displayCount: this.displayCount,
+      scrollTop:    this.scrollContainer?.nativeElement?.scrollTop ?? 0,
+    });
+  }
+
   navigateToAdd(): void {
     this.router.navigate(['/locations/new'], { state: { returnTo: '/locations' } });
   }
 
   viewLocation(item: LocationListItem): void {
+    this.saveListState();
     this.router.navigate(['locations/detail', item.id], {state: item});
   }
 
   editLocation(item: LocationListItem): void {
+    this.saveListState();
     const full = this.svc.findById(item.id) ?? item;
     this.router.navigate(['/locations/new'], {
       state: { place: full, returnTo: '/locations' }

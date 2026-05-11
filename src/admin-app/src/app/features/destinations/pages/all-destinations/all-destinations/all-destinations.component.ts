@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectionStrategy, ChangeDetectorRef, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule }  from '@angular/common';
 import { FormsModule }   from '@angular/forms';
 import { Router }        from '@angular/router';
@@ -18,13 +18,16 @@ const PAGE_SIZE_STEP    = 5;
   templateUrl: './all-destinations.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AllDestinationsComponent implements OnInit, OnDestroy {
+export class AllDestinationsComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private router: Router,
     private svc: DestinationsListService,
     private cdr: ChangeDetectorRef,
   ) {}
+  @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
+  private _pendingScrollTop = 0;
+
   @HostListener('document:click')
   onDocumentClick(): void {
     if (this.sortOpen) { this.sortOpen = false; this.cdr.markForCheck(); }
@@ -69,6 +72,15 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
   private destroy$      = new Subject<void>();
 
   ngOnInit(): void {
+    const saved = this.svc.getListState();
+    if (saved) {
+      this.searchQuery  = saved.searchQuery;
+      this.sortField    = saved.sortField as DestinationSortField;
+      this.sortDir      = saved.sortDir   as DestinationSortDir;
+      this.displayCount = saved.displayCount;
+      this._pendingScrollTop = saved.scrollTop;
+    }
+
     this.searchSubject.pipe(
       debounceTime(300),
       distinctUntilChanged(),
@@ -78,6 +90,18 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
       this.loadItems();
     });
     this.loadItems();
+  }
+
+  ngAfterViewInit(): void {
+    if (this._pendingScrollTop > 0) {
+      const st = this._pendingScrollTop;
+      this._pendingScrollTop = 0;
+      setTimeout(() => {
+        if (this.scrollContainer?.nativeElement) {
+          this.scrollContainer.nativeElement.scrollTop = st;
+        }
+      }, 150);
+    }
   }
 
   ngOnDestroy(): void {
@@ -118,15 +142,27 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
 
   onSearchChange(): void { this.searchSubject.next(this.searchQuery); }
 
+  private saveListState(): void {
+    this.svc.saveListState({
+      searchQuery:  this.searchQuery,
+      sortField:    this.sortField,
+      sortDir:      this.sortDir,
+      displayCount: this.displayCount,
+      scrollTop:    this.scrollContainer?.nativeElement?.scrollTop ?? 0,
+    });
+  }
+
   navigateToAdd(): void {
     this.router.navigate(['/destinations/new'], { state: { returnTo: '/destinations' } });
   }
 
   viewDestination(item: DestinationListItem): void {
+    this.saveListState();
     this.router.navigate(['destinations/detail', item.id], { state: item });
   }
 
   editDestination(item: DestinationListItem): void {
+    this.saveListState();
     const full = this.svc.findById(item.id) ?? item;
     this.router.navigate(['/destinations/new'], {
       state: { place: full, returnTo: '/destinations' }

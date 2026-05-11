@@ -291,4 +291,8 @@ export class LocationsListService {
   }
 
   get total(): number { return this._all.length; }
+
+  private _listState: { searchQuery: string; sortField: string; sortDir: string; displayCount: number; scrollTop: number } | null = null;
+  saveListState(s: { searchQuery: string; sortField: string; sortDir: string; displayCount: number; scrollTop: number }): void { this._listState = s; }
+  getListState()  { return this._listState; }
 }

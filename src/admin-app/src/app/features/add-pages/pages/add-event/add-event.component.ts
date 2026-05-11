@@ -112,6 +112,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       this.zone.run(() => {
         this.coverImageUrl  = reader.result as string;
         this.coverImageName = file.name;
+        this.cdr.detectChanges();
       });
     };
     reader.readAsDataURL(file);
@@ -133,7 +134,8 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       const reader = new FileReader();
       reader.onload = () => {
         this.zone.run(() => {
-          this.galleryImages.push({ url: reader.result as string, name: file.name });
+          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name }];
+          this.cdr.detectChanges();
         });
       };
       reader.readAsDataURL(file);
@@ -644,7 +646,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     const state = history.state as any;
     if (!state) return;
 
-    if (state.place?.id && state.returnTo?.includes('events/detail')) {
+    if (state.place?.id && (state.editMode || state.returnTo?.includes('events/detail'))) {
       this.isEditMode = true;
       const p = state.place;
       this.eventTitle          = p.name      ?? '';

@@ -105,6 +105,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       this.zone.run(() => {
         this.coverImageUrl  = reader.result as string;
         this.coverImageName = file.name;
+        this.cdr.detectChanges();
       });
     };
     reader.readAsDataURL(file);
@@ -126,7 +127,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       const reader = new FileReader();
       reader.onload = () => {
         this.zone.run(() => {
-          this.galleryImages.push({ url: reader.result as string, name: file.name });
+          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name }];
+          this.cdr.detectChanges();
         });
       };
       reader.readAsDataURL(file);
