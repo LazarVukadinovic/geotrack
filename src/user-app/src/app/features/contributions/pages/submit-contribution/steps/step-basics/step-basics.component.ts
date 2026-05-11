@@ -31,6 +31,7 @@ export interface BasicsData {
   standalone: true,
   imports: [CommonModule, FormsModule, BackgroundImageFallbackDirective],
   templateUrl: './step-basics.component.html',
+  styleUrl: './step-basics.component.css',
 })
 export class StepBasicsComponent implements OnDestroy {
   private readonly mapApi = inject(MapApiService);

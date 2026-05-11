@@ -192,3 +192,31 @@
   color: var(--color-muted);
   line-height: 1.5;
 }
+
+@media (min-width: 1024px) {
+  app-page-top-nav {
+    display: none;
+  }
+
+  .lp-page__scroll {
+    padding-top: var(--space-8);
+  }
+
+  .lp-page__grid {
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    gap: var(--space-5);
+    padding-inline: var(--desktop-page-gutter);
+  }
+
+  .lp-tile__label {
+    font-size: var(--text-xs);
+  }
+
+  .lp-tile__arrow {
+    display: none;
+  }
+
+  .lp-page__pagination {
+    padding-inline: var(--desktop-page-gutter);
+  }
+}

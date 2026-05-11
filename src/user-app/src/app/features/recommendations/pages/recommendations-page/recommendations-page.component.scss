@@ -400,6 +400,12 @@
   color: var(--color-muted);
 }
 
+.rec-card__subtitle,
+.rec-card__tag,
+.rec-card__more {
+  display: none;
+}
+
 .rec-card__save {
   width: 36px;
   height: 36px;
@@ -544,5 +550,185 @@
 
   100% {
     background-position: -200% 50%;
+  }
+}
+
+@media (min-width: 1024px) {
+  app-page-top-nav {
+    display: none;
+  }
+
+  .rec-page__scroll {
+    padding-top: var(--space-8);
+  }
+
+  .rec-page__filters,
+  .rec-page__list,
+  .rec-page__pagination {
+    padding-inline: var(--desktop-page-gutter);
+  }
+
+  .rec-page__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+    gap: var(--space-5);
+    align-items: stretch;
+  }
+
+  .rec-card--large,
+  .rec-card--compact {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .rec-card--large .rec-card__media,
+  .rec-card--compact .rec-card__media--compact,
+  .rec-card__skeleton-media,
+  .rec-card__skeleton-media--compact {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 132px;
+  }
+
+  .rec-card--large .rec-card__body,
+  .rec-card--compact .rec-card__body--compact,
+  .rec-card__skeleton-body,
+  .rec-card__skeleton-body--compact {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-3);
+  }
+
+  .rec-card--large .rec-card__footer,
+  .rec-card--compact .rec-card__footer--compact {
+    margin-top: auto;
+  }
+
+  .rec-card--large .rec-card__cta,
+  .rec-card--compact .rec-card__cta--compact {
+    min-width: 0;
+    font-size: var(--text-xs);
+  }
+
+  .rec-card--compact .rec-card__cta--compact {
+    flex: 1;
+    padding-inline: var(--space-2);
+  }
+}
+
+@media (min-width: 1024px) {
+  .rec-page__list {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  .rec-card--large,
+  .rec-card--compact {
+    position: relative;
+    display: block;
+    height: auto;
+    background: var(--color-card-bg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .rec-card--large .rec-card__media,
+  .rec-card--compact .rec-card__media--compact,
+  .rec-card__skeleton-media,
+  .rec-card__skeleton-media--compact {
+    position: relative;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+  }
+
+  .rec-card--large .rec-card__badge,
+  .rec-card--compact .rec-card__badge--compact,
+  .rec-card--large .rec-card__reason,
+  .rec-card--large .rec-card__location,
+  .rec-card--compact .rec-card__location--compact,
+  .rec-card--large .rec-card__meta,
+  .rec-card--compact .rec-card__meta,
+  .rec-card--large .rec-card__desc,
+  .rec-card--large .rec-card__cta,
+  .rec-card--compact .rec-card__cta--compact {
+    display: none;
+  }
+
+  .rec-card--large .rec-card__body,
+  .rec-card--compact .rec-card__body--compact,
+  .rec-card__skeleton-body,
+  .rec-card__skeleton-body--compact {
+    display: block;
+    padding: var(--space-3) var(--space-3) var(--space-4);
+  }
+
+  .rec-card--large .rec-card__name,
+  .rec-card--compact .rec-card__name--compact {
+    margin: 0 0 var(--space-1);
+    font-size: var(--text-sm);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  .rec-card__subtitle {
+    display: -webkit-box;
+    margin: 0 0 var(--space-3);
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    line-height: 1.4;
+    line-clamp: 2;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .rec-card--large .rec-card__footer,
+  .rec-card--compact .rec-card__footer--compact {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-top: 0;
+  }
+
+  .rec-card__tag {
+    display: inline-block;
+    min-width: 0;
+    max-width: 100%;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    background: #f0f1f5;
+    color: var(--color-primary-navy);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rec-card__more {
+    display: inline-block;
+    flex: 0 0 auto;
+    color: #e8570a;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .rec-card__save {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   }
 }

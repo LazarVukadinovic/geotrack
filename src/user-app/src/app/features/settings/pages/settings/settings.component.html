@@ -1,30 +1,33 @@
-<div class="h-full flex flex-col bg-[#fafafa]">
+<div class="settings-page h-full flex flex-col bg-[#fafafa]">
 
   <!-- Header -->
   <div class="settings-header">
-    <div class="flex items-center justify-between">
-      <button type="button" (click)="goBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+    <div class="settings-header__row flex items-center justify-between">
+      <button type="button" (click)="goBack()" class="settings-header__back w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
-      <span class="settings-header__title">Settings</span>
-      <div class="w-9"></div>
+      <div class="settings-header__copy">
+        <span class="settings-header__title">Settings</span>
+        <span class="settings-header__subtitle">Manage your account and preferences</span>
+      </div>
+      <div class="settings-header__spacer w-9"></div>
     </div>
   </div>
 
   <!-- Content -->
-  <div class="flex-1 min-h-0 overflow-y-auto">
-  <div class="px-5 pt-7 pb-10 flex flex-col gap-5">
+  <div class="settings-page__scroll flex-1 min-h-0 overflow-y-auto">
+  <div class="settings-grid px-5 pt-7 pb-10 flex flex-col gap-5">
 
     <!-- Account & Security -->
-    <div>
-      <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Account & Security</p>
-      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="settings-section settings-section--account">
+      <p class="settings-section__title ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Account & Security</p>
+      <div class="settings-card bg-white rounded-2xl shadow-sm overflow-hidden">
 
         <!-- Profile row -->
-        <button (click)="goToProfile()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
-          <div class="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-none">
+        <button (click)="goToProfile()" class="settings-row settings-row--profile w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
+          <div class="settings-row__avatar w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-none">
             @if (avatarUrl()) {
               <img [src]="avatarUrl()" alt="" class="w-full h-full object-cover"/>
             } @else {
@@ -33,25 +36,25 @@
               </svg>
             }
           </div>
-          <div class="flex-1 text-left min-w-0">
-            <p class="text-sm font-semibold text-slate-800 truncate">{{ fullName() }}</p>
-            <p class="text-xs text-slate-400 truncate">{{ email() }}</p>
+          <div class="settings-row__copy flex-1 text-left min-w-0">
+            <p class="settings-row__name text-sm font-semibold text-slate-800 truncate">{{ fullName() }}</p>
+            <p class="settings-row__meta text-xs text-slate-400 truncate">{{ email() }}</p>
           </div>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="settings-row__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
 
         <!-- Change Password -->
-        <button (click)="changePassword()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+        <button (click)="changePassword()" class="settings-row w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="settings-row__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">Change Password</span>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span class="settings-row__label flex-1 text-left text-sm font-medium text-slate-700">Change Password</span>
+          <svg class="settings-row__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
@@ -60,48 +63,48 @@
     </div>
 
     <!-- Preferences -->
-    <div>
-      <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Preferences</p>
-      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="settings-section settings-section--preferences">
+      <p class="settings-section__title ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Preferences</p>
+      <div class="settings-card bg-white rounded-2xl shadow-sm overflow-hidden">
 
         <!-- Language -->
-        <div class="w-full flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 opacity-90">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+        <div class="settings-row settings-row--language w-full flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 opacity-90">
+          <div class="settings-row__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
           </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-slate-700">Language</p>
-            <p class="text-xs text-slate-400">Additional language support is not available yet.</p>
+          <div class="settings-row__copy flex-1 min-w-0">
+            <p class="settings-row__label text-sm font-medium text-slate-700">Language</p>
+            <p class="settings-row__meta text-xs text-slate-400">Additional language support is not available yet.</p>
           </div>
-          <span class="text-sm text-[#e8570a] font-semibold mr-1">{{ language }}</span>
+          <span class="settings-row__value text-sm text-[#e8570a] font-semibold mr-1">{{ language }}</span>
         </div>
 
         <!-- Notifications -->
-        <button (click)="openNotifications()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+        <div class="settings-row settings-row--notifications w-full flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 opacity-90">
+          <div class="settings-row__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">Notifications</span>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-        </button>
+          <div class="settings-row__copy flex-1 min-w-0">
+            <p class="settings-row__label text-sm font-medium text-slate-700">Notifications</p>
+            <p class="settings-row__meta text-xs text-slate-400">Notification preferences are not available yet.</p>
+          </div>
+        </div>
         <!-- My Interests -->
-        <button (click)="openInterests()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+        <button (click)="openInterests()" class="settings-row w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="settings-row__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">My Interests</span>
-            <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span class="settings-row__label flex-1 text-left text-sm font-medium text-slate-700">My Interests</span>
+            <svg class="settings-row__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
             </svg>
         </button>
@@ -109,34 +112,34 @@
     </div>
 
     <!-- Privacy & Safety -->
-    <div>
-      <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Privacy & Safety</p>
-      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="settings-section settings-section--privacy">
+      <p class="settings-section__title ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Privacy & Safety</p>
+      <div class="settings-card bg-white rounded-2xl shadow-sm overflow-hidden">
 
         <!-- Privacy Settings -->
-        <button (click)="openPrivacy()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+        <button (click)="openPrivacy()" class="settings-row w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
+          <div class="settings-row__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">Privacy Settings</span>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span class="settings-row__label flex-1 text-left text-sm font-medium text-slate-700">Privacy Settings</span>
+          <svg class="settings-row__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
 
         <!-- Analytics -->
-        <button (click)="openAnalytics()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+        <button (click)="openAnalytics()" class="settings-row w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="settings-row__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M3 3v18h18M8 17V9m5 8V5m5 12v-6"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">Analytics</span>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span class="settings-row__label flex-1 text-left text-sm font-medium text-slate-700">Analytics</span>
+          <svg class="settings-row__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
@@ -144,34 +147,34 @@
     </div>
 
     <!-- Help & Support -->
-    <div>
-      <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Help & Support</p>
-      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="settings-section settings-section--support">
+      <p class="settings-section__title ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Help & Support</p>
+      <div class="settings-card bg-white rounded-2xl shadow-sm overflow-hidden">
 
         <!-- Help Center -->
-        <button (click)="openHelp()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+        <button (click)="openHelp()" class="settings-row w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
+          <div class="settings-row__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">Help Center</span>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span class="settings-row__label flex-1 text-left text-sm font-medium text-slate-700">Help Center</span>
+          <svg class="settings-row__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
 
         <!-- Contact Support -->
-        <button (click)="contactSupport()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+        <button (click)="contactSupport()" class="settings-row w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="settings-row__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">Contact Support</span>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span class="settings-row__label flex-1 text-left text-sm font-medium text-slate-700">Contact Support</span>
+          <svg class="settings-row__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
@@ -180,18 +183,18 @@
     </div>
 
     <!-- About -->
-    <div>
-      <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">About</p>
-      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <button (click)="openTerms()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
-          <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+    <div class="settings-section settings-section--about">
+      <p class="settings-section__title ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">About</p>
+      <div class="settings-card bg-white rounded-2xl shadow-sm overflow-hidden">
+        <button (click)="openTerms()" class="settings-row w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+          <div class="settings-row__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-medium text-slate-700">Terms & Privacy Policy</span>
-          <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span class="settings-row__label flex-1 text-left text-sm font-medium text-slate-700">Terms & Privacy Policy</span>
+          <svg class="settings-row__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
@@ -199,16 +202,16 @@
     </div>
 
     <!-- Log Out -->
-    <div>
-      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <button (click)="logOut()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-red-50 transition-colors">
-          <div class="w-8 h-8 bg-red-50 rounded-full flex items-center justify-center flex-none">
+    <div class="settings-section settings-section--logout">
+      <div class="settings-card bg-white rounded-2xl shadow-sm overflow-hidden">
+        <button (click)="logOut()" class="settings-row settings-row--logout w-full flex items-center gap-3 px-4 py-3.5 active:bg-red-50 transition-colors">
+          <div class="settings-row__icon settings-row__icon--danger w-8 h-8 bg-red-50 rounded-full flex items-center justify-center flex-none">
             <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
             </svg>
           </div>
-          <span class="flex-1 text-left text-sm font-semibold text-red-500">Log Out</span>
+          <span class="settings-row__label flex-1 text-left text-sm font-semibold text-red-500">Log Out</span>
         </button>
       </div>
     </div>

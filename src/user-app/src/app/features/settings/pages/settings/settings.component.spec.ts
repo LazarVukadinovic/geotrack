@@ -52,6 +52,22 @@ describe('Settings', () => {
     expect(text).toContain('test@example.com');
   });
 
+  it('should render notifications as unavailable and non-actionable', () => {
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const notificationLabel = Array.from(nativeElement.querySelectorAll('.settings-row__label'))
+      .find((element) => element.textContent?.trim() === 'Notifications');
+    const notificationRow = notificationLabel?.closest('.settings-row') as HTMLElement | null;
+
+    expect(nativeElement.textContent).toContain('Notification preferences are not available yet.');
+    expect(notificationRow).toBeTruthy();
+    expect(notificationRow?.tagName.toLowerCase()).toBe('div');
+    expect(notificationRow?.querySelector('.settings-row__chevron')).toBeNull();
+
+    notificationRow?.click();
+
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
   it('should log out and return to the profile tab', () => {
     component.logOut();
 
@@ -59,19 +75,19 @@ describe('Settings', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/profile']);
   });
 
-  it('should route the inactive settings rows to the new subpages', () => {
+  it('should route the actionable settings rows to the new subpages', () => {
     component.changePassword();
-    component.openNotifications();
     component.openPrivacy();
     component.openAnalytics();
+    component.openInterests();
     component.openHelp();
     component.contactSupport();
     component.openTerms();
 
     expect(router.navigate).toHaveBeenCalledWith(['/settings/change-password']);
-    expect(router.navigate).toHaveBeenCalledWith(['/settings/notifications']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/privacy-settings']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/analytics']);
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/interests'], { queryParams: { from: 'settings' } });
     expect(router.navigate).toHaveBeenCalledWith(['/settings/help-center']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/contact-support']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/terms-and-privacy']);

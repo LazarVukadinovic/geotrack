@@ -134,7 +134,7 @@
   }
 }
 
-// ── Large card ────────────────────────────────────────────────────────────────
+// Large card: mobile source of truth.
 .evc--large {
   .evc__media {
     position: relative;
@@ -226,7 +226,7 @@
   }
 }
 
-// ── Compact card ──────────────────────────────────────────────────────────────
+// Compact card: mobile source of truth.
 .evc--compact {
   display: flex;
   align-items: stretch;
@@ -321,7 +321,7 @@
   }
 }
 
-// ── Shared card sub-elements ──────────────────────────────────────────────────
+// Shared card sub-elements.
 .evc__location {
   display: flex;
   align-items: center;
@@ -429,4 +429,153 @@
   font-size: var(--text-xs);
   color: var(--color-muted);
   line-height: 1.5;
+}
+
+@media (min-width: 1024px) {
+  app-page-top-nav {
+    display: none;
+  }
+
+  .ev-page__scroll {
+    padding-top: var(--space-8);
+  }
+
+  .ev-page__filters,
+  .ev-page__list,
+  .ev-page__pagination {
+    padding-inline: var(--desktop-page-gutter);
+  }
+
+  .ev-page__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-5);
+    align-items: start;
+    justify-content: start;
+  }
+
+  .evc--large,
+  .evc--compact {
+    position: relative;
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr);
+    gap: var(--space-3);
+    height: auto;
+    min-width: 0;
+    width: 100%;
+    padding: var(--space-3);
+    background: var(--color-card-bg);
+    border: 1px solid rgba(26, 43, 76, 0.08);
+    box-shadow: var(--shadow-subtle);
+    text-align: left;
+  }
+
+  .evc--large .evc__media,
+  .evc--compact .evc__media--compact {
+    position: relative;
+    flex: none;
+    width: 80px;
+    height: 80px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: rgba(26, 43, 76, 0.08);
+  }
+
+  .evc--large .evc__badge,
+  .evc--compact .evc__badge--compact {
+    display: none;
+  }
+
+  .evc--large .evc__desc,
+  .evc--large .evc__date-icon {
+    display: none;
+  }
+
+  .evc--large .evc__body,
+  .evc--compact .evc__body--compact {
+    flex: 1;
+    min-width: 0;
+    padding: 0 38px 0 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 3px;
+  }
+
+  .evc--large .evc__date-row,
+  .evc--compact .evc__date-compact {
+    display: block;
+    order: 0;
+    margin: 0;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--color-accent-orange);
+  }
+
+  .evc--large .evc__date {
+    font-size: inherit;
+    font-weight: inherit;
+    color: inherit;
+  }
+
+  .evc--large .evc__name,
+  .evc--compact .evc__name--compact {
+    order: 1;
+    margin: 0;
+    color: var(--color-primary-navy);
+    font-size: var(--text-sm);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .evc--large .evc__location,
+  .evc--compact .evc__location--compact {
+    order: 2;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--color-muted);
+    font-size: 0.6875rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .evc__pin {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  .evc--large .evc__footer,
+  .evc--compact .evc__footer--compact {
+    display: block;
+    margin: 0;
+    padding: 0;
+  }
+
+  .evc--large .evc__cta,
+  .evc--compact .evc__cta--compact {
+    display: none;
+  }
+
+  .evc__save {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
 }

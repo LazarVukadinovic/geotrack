@@ -19,6 +19,7 @@ public class ContributionsController : ControllerBase
         _contributions = contributions;
     }
 
+    [HttpGet]
     [HttpGet("mine")]
     public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetMine()
     {
@@ -27,6 +28,7 @@ public class ContributionsController : ControllerBase
         return Ok(response);
     }
 
+    [HttpGet("{id:int}")]
     [HttpGet("mine/{id:int}")]
     public async Task<ActionResult<PlaceContributionResponseDto>> GetMineById(int id)
     {
@@ -43,8 +45,9 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpGet("pending")]
-    [Authorize(Roles = "Admin,Moderator")]
-    public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetPending()
+    [HttpGet("review")]
+    [Authorize(Roles = "Admin,RegionalManager")]
+    public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetPending([FromQuery] string? status = null)
     {
         var userId = GetCurrentUserId();
         var response = await _contributions.GetPendingReviewAsync(userId);
@@ -52,7 +55,8 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpGet("pending/{id:int}")]
-    [Authorize(Roles = "Admin,Moderator")]
+    [HttpGet("review/{id:int}")]
+    [Authorize(Roles = "Admin,RegionalManager")]
     public async Task<ActionResult<PlaceContributionResponseDto>> GetPendingById(int id)
     {
         var userId = GetCurrentUserId();
@@ -67,13 +71,15 @@ public class ContributionsController : ControllerBase
         });
     }
 
+    [HttpPost]
     [HttpPost("places")]
+    [HttpPost("stays")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<PlaceContributionResponseDto>> CreatePlaceContribution(
         [FromForm] string payload,
-        [FromForm] IFormFile? mainImage,
-        [FromForm] IFormFile? coverImage,
-        [FromForm] IFormFile? ownershipProofDocument)
+        IFormFile? mainImage,
+        IFormFile? coverImage,
+        IFormFile? ownershipProofDocument)
     {
         UpsertPlaceContributionDto? request;
 
@@ -121,20 +127,22 @@ public class ContributionsController : ControllerBase
                     Contribution = contribution
                 });
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return HandleException(ex);
         }
     }
 
+    [HttpPut("{id:int}")]
     [HttpPut("places/{id:int}")]
+    [HttpPut("stays/{id:int}")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<PlaceContributionResponseDto>> UpdatePlaceContribution(
         int id,
         [FromForm] string payload,
-        [FromForm] IFormFile? mainImage,
-        [FromForm] IFormFile? coverImage,
-        [FromForm] IFormFile? ownershipProofDocument)
+        IFormFile? mainImage,
+        IFormFile? coverImage,
+        IFormFile? ownershipProofDocument)
     {
         UpsertPlaceContributionDto? request;
 
@@ -172,13 +180,15 @@ public class ContributionsController : ControllerBase
                 Contribution = contribution
             });
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return HandleException(ex);
         }
     }
 
+    [HttpDelete("{id:int}")]
     [HttpDelete("places/{id:int}")]
+    [HttpDelete("stays/{id:int}")]
     public async Task<IActionResult> DeletePlaceContribution(int id)
     {
         try
@@ -186,14 +196,15 @@ public class ContributionsController : ControllerBase
             await _contributions.DeleteAsync(GetCurrentUserId(), id);
             return NoContent();
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return HandleException(ex);
         }
     }
 
+    [HttpPost("{id:int}/approve")]
     [HttpPost("places/{id:int}/approve")]
-    [Authorize(Roles = "Admin,Moderator")]
+    [Authorize(Roles = "Admin,RegionalManager")]
     public async Task<ActionResult<PlaceContributionResponseDto>> ApprovePlaceContribution(
         int id,
         [FromBody] ReviewPlaceContributionRequestDto? request)
@@ -210,14 +221,15 @@ public class ContributionsController : ControllerBase
                 Contribution = contribution
             });
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return HandleException(ex);
         }
     }
 
+    [HttpPost("{id:int}/reject")]
     [HttpPost("places/{id:int}/reject")]
-    [Authorize(Roles = "Admin,Moderator")]
+    [Authorize(Roles = "Admin,RegionalManager")]
     public async Task<ActionResult<PlaceContributionResponseDto>> RejectPlaceContribution(
         int id,
         [FromBody] ReviewPlaceContributionRequestDto? request)
@@ -234,9 +246,9 @@ public class ContributionsController : ControllerBase
                 Contribution = contribution
             });
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return HandleException(ex);
         }
     }
 
@@ -260,5 +272,16 @@ public class ContributionsController : ControllerBase
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory);
         return memory.ToArray();
+    }
+
+    private ActionResult HandleException(Exception ex)
+    {
+        return ex switch
+        {
+            UnauthorizedAccessException => StatusCode(StatusCodes.Status403Forbidden, new { message = "Forbidden." }),
+            KeyNotFoundException => NotFound(new { message = ex.Message }),
+            InvalidOperationException => BadRequest(new { message = ex.Message }),
+            _ => StatusCode(StatusCodes.Status500InternalServerError, new { message = "An unexpected error occurred." })
+        };
     }
 }

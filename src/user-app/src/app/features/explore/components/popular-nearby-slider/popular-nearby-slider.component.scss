@@ -125,3 +125,29 @@
 .nearby-slider__reviews--empty {
   font-weight: 500;
 }
+
+@media (min-width: 1024px) {
+  .nearby-slider__viewport {
+    margin-inline: 0;
+    overflow: visible;
+  }
+
+  .nearby-slider__track {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+    gap: var(--space-5);
+    padding-inline: 0;
+    padding-bottom: 0;
+    overflow: visible;
+    scroll-snap-type: none;
+
+    &::after {
+      display: none;
+    }
+  }
+
+  .nearby-slider__card {
+    width: auto;
+    scroll-snap-align: none;
+  }
+}

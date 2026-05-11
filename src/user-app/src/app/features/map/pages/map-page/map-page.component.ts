@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import maplibregl, {
   GeoJSONSource,
   Map as MapLibreMap,
+  type MapMouseEvent,
   MapStyleImageMissingEvent,
 } from 'maplibre-gl';
 import {
@@ -22,6 +23,7 @@ import { ImageFallbackDirective } from '../../../../shared/directives/image-fall
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import type { AnalyticsEntityType } from '../../../../core/services/analytics.types';
 import type { ResolvedLocation } from '../../../../core/models/location.model';
+import { MapFilterOption, MapFilterStateService } from '../../services/map-filter-state.service';
 
 const MAP_STYLE_URL = '/map-style.json';
 
@@ -33,6 +35,8 @@ const MAP_VIEW_STATE_KEY = 'mapViewState';
 const MAP_OPENED_THIS_SESSION_KEY = 'mapOpenedThisSession';
 const INITIAL_LOCATION_ZOOM = 13;
 const DETAIL_FOCUS_ZOOM = 16;
+const MARKER_ACTIVATION_DEDUPE_MS = 250;
+const MARKER_DISMISS_GRACE_MS = 250;
 
 interface MarkerEntry {
   data: MapEntityMarker;
@@ -82,9 +86,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private map!: MapLibreMap;
   private searchTimeout?: ReturnType<typeof setTimeout>;
   private filterCategories: string[] = [];
+  private selectedCategoryLabelFilters: string[] = [];
   private readonly markersByKey = new Map<string, MarkerEntry>();
   private readonly markerImageFallbackUsed = new Set<string>();
-  private readonly allowedCategoryIds = new Set(['places', 'stays', 'events']);
+  private rawViewportMarkers: MapEntityMarker[] = [];
   private viewportLoadTimeout?: ReturnType<typeof setTimeout>;
   private requestSeq = 0;
   private routeRequestSeq = 0;
@@ -92,6 +97,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private isDestroyed = false;
   private readonly initialMapFocus: MapEntityMarker | null;
   private preserveSelectedPlaceFromNavigation = false;
+  private lastMarkerActivationKey: string | null = null;
+  private lastMarkerActivationAt = 0;
 
   currentMode: MapMarkersMode = 'entities';
 
@@ -104,6 +111,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   isLoadingRoute = false;
   activeCategory = 'all';
   hasActiveFilters = false;
+  isMoreFiltersOpen = false;
   isUserLocation = false;
 
   searchQuery = '';
@@ -121,6 +129,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     { id: 'events', label: 'Events' },
   ];
 
+  availableMoreFilters: MapFilterOption[] = [];
+
   constructor(
     public router: Router,
     private readonly cdr: ChangeDetectorRef,
@@ -128,6 +138,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     private readonly analytics: AnalyticsService,
     private readonly locationSvc: LocationService,
     private readonly angularLocation: AngularLocation,
+    private readonly mapFilterState: MapFilterStateService,
   ) {
     const nav = this.router.getCurrentNavigation();
     const state = (nav?.extras?.state ?? history.state) as MapNavigationState;
@@ -168,15 +179,16 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.preserveSelectedPlaceFromNavigation = true;
     }
 
-    const savedFilters = this.readSessionJson<{ categories?: string[] }>('mapFilters');
-    if (savedFilters) {
-      this.filterCategories = (savedFilters.categories ?? []).filter((category) => this.allowedCategoryIds.has(category));
-      this.hasActiveFilters = this.filterCategories.length > 0;
-    }
+    const savedFilters = this.mapFilterState.readSelection();
+    this.filterCategories = savedFilters.categories;
+    this.selectedCategoryLabelFilters = savedFilters.categoryLabelIds;
+    this.syncActiveFilters();
 
     if (state?.cleared) {
       this.filterCategories = [];
+      this.selectedCategoryLabelFilters = [];
       this.hasActiveFilters = false;
+      this.mapFilterState.clearSelection();
     }
   }
 
@@ -208,7 +220,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   get isMoreActive(): boolean {
-    return this.hasActiveFilters;
+    return this.hasActiveFilters || this.isMoreFiltersOpen;
   }
 
   zoomIn(): void {
@@ -325,13 +337,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     this.activeCategory = category.id;
     this.filterCategories = [];
+    this.selectedCategoryLabelFilters = [];
     this.hasActiveFilters = false;
+    this.isMoreFiltersOpen = false;
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
     this.routeErrorMessage = '';
     this.clearRoute();
-    sessionStorage.removeItem('mapFilters');
+    this.mapFilterState.clearSelection();
 
     this.analytics.track('filter_applied', {
       metadata: {
@@ -342,6 +356,67 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     this.invalidateMarkerCache();
     this.scheduleViewportLoad(0);
+  }
+
+  onMoreFiltersClick(): void {
+    if (!this.isDesktopViewport()) {
+      void this.router.navigate(['/filters']);
+      return;
+    }
+
+    this.isMoreFiltersOpen = !this.isMoreFiltersOpen;
+  }
+
+  closeMoreFilters(): void {
+    this.isMoreFiltersOpen = false;
+  }
+
+  clearMoreFilters(): void {
+    const hadServerCategories = this.filterCategories.length > 0;
+    const hadFilters = this.hasActiveFilters;
+
+    this.filterCategories = [];
+    this.selectedCategoryLabelFilters = [];
+    this.syncActiveFilters();
+    this.mapFilterState.clearSelection();
+
+    if (hadFilters) {
+      this.analytics.track('filter_applied', {
+        metadata: {
+          surface: 'map_inline_filters',
+          categories: [],
+          categoryLabels: [],
+          cleared: true,
+        },
+      });
+    }
+
+    this.clearSelectionForFilterChange();
+    this.refreshMarkersAfterMoreFilterChange(hadServerCategories);
+  }
+
+  toggleMoreFilter(filter: MapFilterOption): void {
+    this.selectedCategoryLabelFilters = this.mapFilterState.toggleCategoryLabelFilter(
+      this.selectedCategoryLabelFilters,
+      filter,
+    );
+    this.syncActiveFilters();
+    this.persistMapFilters();
+
+    this.analytics.track('filter_applied', {
+      metadata: {
+        surface: 'map_inline_filters',
+        categories: this.filterCategories,
+        categoryLabels: this.selectedMoreFilterLabels(),
+      },
+    });
+
+    this.clearSelectionForFilterChange();
+    this.refreshMarkersAfterMoreFilterChange(false);
+  }
+
+  isMoreFilterSelected(filter: MapFilterOption): boolean {
+    return this.selectedCategoryLabelFilters.includes(filter.id);
   }
 
   async openDirections(): Promise<void> {
@@ -484,12 +559,25 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.scheduleViewportLoad();
     });
 
-    this.map.on('click', () => {
-      if (this.selectedPlace) {
-        this.closePlace();
-        this.cdr.detectChanges();
-      }
-    });
+    this.map.on('click', (event: MapMouseEvent) => this.onMapClick(event));
+  }
+
+  private onMapClick(event: MapMouseEvent): void {
+    if (this.shouldIgnoreMapBackgroundClick(event)) return;
+
+    if (this.selectedPlace) {
+      this.closePlace();
+      this.cdr.detectChanges();
+    }
+  }
+
+  private shouldIgnoreMapBackgroundClick(event: MapMouseEvent): boolean {
+    const target = event.originalEvent.target;
+    if (target instanceof Element && target.closest('.gt-marker')) {
+      return true;
+    }
+
+    return Date.now() - this.lastMarkerActivationAt < MARKER_DISMISS_GRACE_MS;
   }
 
   private async resolveInitialMapView(): Promise<MapInitialView> {
@@ -717,7 +805,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private applyMarkers(response: MapMarkersResponse): void {
-    const markers = response.markers ?? [];
+    this.rawViewportMarkers = response.markers ?? [];
+    this.rebuildAvailableMoreFilters(this.rawViewportMarkers);
+    this.renderMarkers(this.filterMarkersByMoreFilters(this.rawViewportMarkers), response.mode);
+  }
+
+  private renderMarkers(markers: MapEntityMarker[], mode: MapMarkersMode): void {
     const newKeys = new Set<string>();
 
     for (const marker of markers) {
@@ -742,7 +835,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       }
     }
 
-    this.currentMode = response.mode;
+    this.currentMode = mode;
 
     if (this.selectedPlace) {
       const selectedKey = this.getMarkerKey(this.selectedPlace);
@@ -757,9 +850,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
 
     this.emptyStateMessage = markers.length === 0
-      ? (response.mode === 'destinations'
+      ? (mode === 'destinations'
         ? 'Pan or zoom in to discover destinations.'
-        : 'GeoTrack does not have backend-backed places, stays, or events mapped for this area yet.')
+        : this.selectedCategoryLabelFilters.length > 0
+          ? 'No backend-backed map entities in this view match those filters.'
+          : 'GeoTrack does not have backend-backed places, stays, or events mapped for this area yet.')
       : '';
   }
 
@@ -779,15 +874,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       img.src = EXPLORE_IMAGE_FALLBACK;
     });
 
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const entry = this.markersByKey.get(key);
-      this.onMarkerClick(entry?.data ?? marker);
-    });
+    button.addEventListener('pointerup', (event) => this.onMarkerPointerUp(event, key, marker));
+    button.addEventListener('click', (event) => this.onMarkerDomClick(event, key, marker));
 
     const mapMarker = new maplibregl.Marker({ element: button, anchor: 'center' })
       .setLngLat([marker.longitude, marker.latitude])
       .addTo(this.map);
+    mapMarker.on('click', (event) => this.onMapLibreMarkerClick(event as { originalEvent?: MouseEvent }, key, marker));
 
     const entry: MarkerEntry = { data: marker, marker: mapMarker, imageElement: img };
     this.refreshMarkerDom(entry, marker);
@@ -810,6 +903,39 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.markerImageFallbackUsed.delete(key);
       entry.imageElement.src = desiredSrc;
     }
+  }
+
+  private onMarkerPointerUp(event: PointerEvent, key: string, marker: MapEntityMarker): void {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.activateMarker(key, marker);
+  }
+
+  private onMarkerDomClick(event: MouseEvent, key: string, marker: MapEntityMarker): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activateMarker(key, marker);
+  }
+
+  private onMapLibreMarkerClick(event: { originalEvent?: MouseEvent }, key: string, marker: MapEntityMarker): void {
+    event.originalEvent?.preventDefault();
+    event.originalEvent?.stopPropagation();
+    this.activateMarker(key, marker);
+  }
+
+  private activateMarker(key: string, marker: MapEntityMarker): void {
+    const now = Date.now();
+    if (this.lastMarkerActivationKey === key && now - this.lastMarkerActivationAt < MARKER_ACTIVATION_DEDUPE_MS) {
+      return;
+    }
+
+    this.lastMarkerActivationKey = key;
+    this.lastMarkerActivationAt = now;
+
+    const entry = this.markersByKey.get(key);
+    this.onMarkerClick(entry?.data ?? marker);
   }
 
   private onMarkerClick(marker: MapEntityMarker): void {
@@ -869,11 +995,59 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private getRequestedCategories(): string[] {
-    if (this.hasActiveFilters) {
+    if (this.filterCategories.length > 0) {
       return this.filterCategories;
     }
 
     return this.activeCategory === 'all' ? [] : [this.activeCategory];
+  }
+
+  private refreshMarkersAfterMoreFilterChange(serverCategoriesChanged: boolean): void {
+    if (serverCategoriesChanged) {
+      this.invalidateMarkerCache();
+      this.scheduleViewportLoad(0);
+      return;
+    }
+
+    this.renderMarkers(this.filterMarkersByMoreFilters(this.rawViewportMarkers), this.currentMode);
+    this.cdr.detectChanges();
+  }
+
+  private clearSelectionForFilterChange(): void {
+    this.preserveSelectedPlaceFromNavigation = false;
+    this.clearMapFocusHistoryState();
+    this.selectedPlace = null;
+    this.routeErrorMessage = '';
+    this.clearRoute();
+  }
+
+  private rebuildAvailableMoreFilters(markers: MapEntityMarker[]): void {
+    this.availableMoreFilters = this.mapFilterState.rebuildAvailableMoreFilters(
+      markers,
+      this.selectedCategoryLabelFilters,
+    );
+  }
+
+  private filterMarkersByMoreFilters(markers: MapEntityMarker[]): MapEntityMarker[] {
+    return this.mapFilterState.filterMarkersByCategoryLabels(markers, this.selectedCategoryLabelFilters);
+  }
+
+  private persistMapFilters(): void {
+    this.mapFilterState.persistSelection(this.filterCategories, this.selectedCategoryLabelFilters);
+  }
+
+  private selectedMoreFilterLabels(): string[] {
+    return this.mapFilterState.labelsForCategoryLabelIds(this.selectedCategoryLabelFilters);
+  }
+
+  private syncActiveFilters(): void {
+    this.hasActiveFilters = this.filterCategories.length > 0 || this.selectedCategoryLabelFilters.length > 0;
+  }
+
+  private isDesktopViewport(): boolean {
+    return typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(min-width: 1024px)').matches;
   }
 
   private getMarkerKey(marker: MapEntityMarker): string {

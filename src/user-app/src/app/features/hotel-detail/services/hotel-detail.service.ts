@@ -21,7 +21,6 @@ interface ApiHotelDetail {
   rating?: number;
   reviewCount?: string;
   distance?: string;
-  pricePerNight?: number | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
   about?: string;
@@ -91,7 +90,6 @@ export class HotelDetailService {
           rating: dto.rating,
           reviewCount: dto.reviewCount,
           distance: dto.distance ?? '',
-          pricePerNight: dto.pricePerNight ?? null,
           about: dto.about ?? '',
           contactEmail: dto.contactEmail ?? null,
           phoneNumber: dto.phoneNumber ?? null,

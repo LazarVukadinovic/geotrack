@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { UserService } from '../../../../core/services/user.service';
 import { SettingsSubpageShellComponent } from '../../components/settings-subpage-shell/settings-subpage-shell.component';
 import { AnalyticsPreferences } from '../../models/user-settings.model';
@@ -15,6 +16,7 @@ import { UserSettingsService } from '../../services/user-settings.service';
 export class AnalyticsSettingsPageComponent {
   private readonly settingsService = inject(UserSettingsService);
   private readonly userService = inject(UserService);
+  private readonly router = inject(Router);
 
   protected readonly preference = signal<AnalyticsPreferences>({ analyticsEnabled: true });
   protected readonly isLoading = signal(true);
@@ -65,6 +67,10 @@ export class AnalyticsSettingsPageComponent {
         this.errorMessage.set(error.error?.message ?? 'We could not save your analytics preference right now.');
       },
     });
+  }
+
+  protected openPrivacyPolicy(): void {
+    void this.router.navigate(['/settings/terms-and-privacy']);
   }
 
   private applyPreference(preference: AnalyticsPreferences): void {

@@ -49,3 +49,18 @@
   border: 2px solid var(--color-page-bg);
   pointer-events: none;
 }
+
+@media (min-width: 1024px) {
+  .app-header {
+    left: var(--desktop-sidebar-width);
+    min-height: 76px;
+    padding: var(--space-4) var(--desktop-page-gutter);
+    background: rgba(248, 249, 250, 0.94);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .app-header__title {
+    font-size: 2rem;
+  }
+}

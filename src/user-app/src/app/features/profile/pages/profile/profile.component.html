@@ -1,11 +1,22 @@
-<div class="h-full flex flex-col bg-[#fafafa]">
+<div class="profile-page h-full flex flex-col bg-[#fafafa]">
 
   <!-- Header -->
   <div class="profile-header">
-    <div class="flex items-center justify-between">
-      <div class="w-9 h-9"></div>
-      <span class="profile-header__title">Profile</span>
-      <button type="button" (click)="goToSettings()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+    <div class="profile-header__row flex items-center justify-between">
+      <div class="profile-header__mobile-spacer w-9 h-9"></div>
+      <div class="profile-header__lead">
+        <div class="profile-header__icon" aria-hidden="true">
+          <svg fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+          </svg>
+        </div>
+        <div class="profile-header__copy">
+          <span class="profile-header__title profile-header__title--desktop">Profile</span>
+          <span class="profile-header__subtitle">Manage your account and preferences</span>
+        </div>
+      </div>
+      <span class="profile-header__title profile-header__title--mobile">Profile</span>
+      <button type="button" aria-label="Open settings" (click)="goToSettings()" class="profile-header__settings w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
             d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
@@ -15,118 +26,124 @@
     </div>
   </div>
 
-  <div class="flex-1 min-h-0 overflow-y-auto pb-6">
-    <!-- Avatar + Name -->
-    <div class="flex flex-col items-center mt-4 px-5">
-      <div class="w-24 h-24 rounded-full bg-slate-300 border-4 border-white shadow-lg flex items-center justify-center overflow-hidden">
-        @if (avatarUrl()) {
-          <img appImageFallback [src]="avatarUrl()" alt="" class="w-full h-full object-cover"/>
-        } @else {
-          <svg class="w-14 h-14 text-white/70" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-          </svg>
-        }
+  <div class="profile-page__scroll flex-1 min-h-0 overflow-y-auto pb-6">
+    <div class="profile-page__content">
+      <div class="profile-page__left">
+        <!-- Avatar + Name -->
+        <div class="profile-card flex flex-col items-center mt-4 px-5">
+          <div class="profile-card__avatar w-24 h-24 rounded-full bg-slate-300 border-4 border-white shadow-lg flex items-center justify-center overflow-hidden">
+            @if (avatarUrl()) {
+              <img appImageFallback [src]="avatarUrl()" alt="" class="w-full h-full object-cover"/>
+            } @else {
+              <svg class="w-14 h-14 text-white/70" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+              </svg>
+            }
+          </div>
+          <div class="profile-card__details">
+            <h2 class="profile-card__name mt-3 text-base font-bold text-slate-800">{{ fullName() }}</h2>
+            <p class="profile-card__email text-sm text-slate-400 mt-0.5">{{ email() }}</p>
+            <button (click)="editProfile()"
+              class="profile-card__edit mt-4 flex items-center gap-2 px-6 py-2.5 border border-[#e8570a] rounded-full text-[#e8570a] text-sm font-semibold active:bg-orange-50 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+              </svg>
+              Edit Profile
+            </button>
+          </div>
+        </div>
+
+        <!-- Settings & Preferences -->
+        <div class="profile-preferences px-5 mt-6">
+        <p class="profile-preferences__label ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Settings & Preferences</p>
+        <div class="profile-preferences__list bg-white rounded-2xl shadow-sm overflow-hidden">
+
+          <button (click)="goToInterests()" class="profile-preferences__row w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
+            <div class="profile-preferences__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+              <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+              </svg>
+            </div>
+            <span class="profile-preferences__row-text flex-1 text-left text-sm font-medium text-slate-700">My Interests</span>
+            <svg class="profile-preferences__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+
+          <button (click)="goToContributions()" class="profile-preferences__row w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
+            <div class="profile-preferences__icon w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
+              <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+              </svg>
+            </div>
+            <span class="profile-preferences__row-text flex-1 text-left text-sm font-medium text-slate-700">My Contributions</span>
+            <svg class="profile-preferences__chevron w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+
+        </div>
+        </div>
       </div>
-      <h2 class="mt-3 text-base font-bold text-slate-800">{{ fullName() }}</h2>
-      <p class="text-sm text-slate-400 mt-0.5">{{ email() }}</p>
-      <button (click)="editProfile()"
-        class="mt-4 flex items-center gap-2 px-6 py-2.5 border border-[#e8570a] rounded-full text-[#e8570a] text-sm font-semibold active:bg-orange-50 transition-colors">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-        </svg>
-        Edit Profile
-      </button>
-    </div>
 
-    <!-- Settings & Preferences -->
-    <div class="px-5 mt-6">
-    <p class="ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Settings & Preferences</p>
-    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <!-- My Collections -->
+      <div class="profile-collections px-5 mt-8">
+      <div class="profile-collections__header ml-1 flex items-center justify-between mb-3">
+        <p class="profile-collections__title text-base font-bold text-slate-800">My Collections</p>
+        <button (click)="seeAllCollections()" class="profile-collections__see-all text-base font-semibold text-[#e8570a]">See all</button>
+      </div>
 
-      <button (click)="goToInterests()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
-        <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
-          <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-          </svg>
-        </div>
-        <span class="flex-1 text-left text-sm font-medium text-slate-700">My Interests</span>
-        <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-        </svg>
-      </button>
-
-      <button (click)="goToContributions()" class="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors">
-        <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-none">
-          <svg class="w-4 h-4 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-          </svg>
-        </div>
-        <span class="flex-1 text-left text-sm font-medium text-slate-700">My Contributions</span>
-        <svg class="w-4 h-4 text-slate-300 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-        </svg>
-      </button>
-
-    </div>
-    </div>
-
-    <!-- My Collections -->
-    <div class="px-5 mt-8">
-    <div class="ml-1 flex items-center justify-between mb-3">
-      <p class="text-base font-bold text-slate-800">My Collections</p>
-      <button (click)="seeAllCollections()" class="text-base font-semibold text-[#e8570a]">See all</button>
-    </div>
-
-    <div class="flex gap-3 overflow-x-auto pb-3 -mx-0" style="scrollbar-width:none">
-      @for (col of collections.slice(0, 3); track col.id) {
-        <div (click)="goToCollection(col.id)"
-          class="flex-none w-[160px] bg-white rounded-2xl shadow-sm overflow-hidden cursor-pointer active:scale-[0.97] transition-transform">
-          <!-- cover mosaic -->
-          <div class="relative w-full h-[120px] overflow-hidden flex">
-            @if (col.coverImages.length === 0) { <div class="w-full h-full bg-slate-100 flex items-center justify-center">...</div> }
-            @if (col.coverImages.length === 1) { <img appImageFallback [src]="col.coverImages[0]" class="w-full h-full object-cover"/> }
-            @if (col.coverImages.length === 2) {
-              <img appImageFallback [src]="col.coverImages[0]" class="w-1/2 h-full object-cover border-r-2 border-white"/>
-              <img appImageFallback [src]="col.coverImages[1]" class="w-1/2 h-full object-cover"/>
-            }
-            @if (col.coverImages.length >= 3) {
-              <img appImageFallback [src]="col.coverImages[0]" class="w-1/2 h-full object-cover border-r-2 border-white"/>
-              <div class="w-1/2 h-full flex flex-col">
-                <img appImageFallback [src]="col.coverImages[1]" class="w-full h-1/2 object-cover border-b-2 border-white"/>
-                <img appImageFallback [src]="col.coverImages[2]" class="w-full h-1/2 object-cover"/>
-              </div>
-            }
-            <span class="absolute top-1.5 right-1.5 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-sm">
-              <svg class="w-2 h-2 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </span>
+      <div class="profile-collections__track flex gap-3 overflow-x-auto pb-3 -mx-0" style="scrollbar-width:none">
+        @for (col of collections.slice(0, 3); track col.id) {
+          <div (click)="goToCollection(col.id)"
+            class="profile-collection-card flex-none w-[160px] bg-white rounded-2xl shadow-sm overflow-hidden cursor-pointer active:scale-[0.97] transition-transform">
+            <!-- cover mosaic -->
+            <div class="profile-collection-card__cover relative w-full h-[120px] overflow-hidden flex">
+              @if (col.coverImages.length === 0) { <div class="w-full h-full bg-slate-100 flex items-center justify-center">...</div> }
+              @if (col.coverImages.length === 1) { <img appImageFallback [src]="col.coverImages[0]" class="w-full h-full object-cover"/> }
+              @if (col.coverImages.length === 2) {
+                <img appImageFallback [src]="col.coverImages[0]" class="w-1/2 h-full object-cover border-r-2 border-white"/>
+                <img appImageFallback [src]="col.coverImages[1]" class="w-1/2 h-full object-cover"/>
+              }
+              @if (col.coverImages.length >= 3) {
+                <img appImageFallback [src]="col.coverImages[0]" class="w-1/2 h-full object-cover border-r-2 border-white"/>
+                <div class="w-1/2 h-full flex flex-col">
+                  <img appImageFallback [src]="col.coverImages[1]" class="w-full h-1/2 object-cover border-b-2 border-white"/>
+                  <img appImageFallback [src]="col.coverImages[2]" class="w-full h-1/2 object-cover"/>
+                </div>
+              }
+              <span class="profile-collection-card__arrow absolute top-1.5 right-1.5 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-sm">
+                <svg class="w-2 h-2 text-[#1a2b4a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </span>
+            </div>
+            <div class="profile-collection-card__body px-2.5 py-2">
+              <p class="profile-collection-card__title text-[14px] font-semibold text-slate-800 truncate">{{ col.title }}</p>
+              <p class="profile-collection-card__meta text-[12px] text-slate-500">{{ col.itemsCount }} {{ col.itemsCount === 1 ? 'item' : 'items' }}</p>
+            </div>
           </div>
-          <div class="px-2.5 py-2">
-            <p class="text-[14px] font-semibold text-slate-800 truncate">{{ col.title }}</p>
-            <p class="text-[12px] text-slate-500">{{ col.itemsCount }} {{ col.itemsCount === 1 ? 'item' : 'items' }}</p>
+        }
+        <!-- Empty state -->
+        @if (collections.length === 0) {
+          <div
+            class="profile-collections__empty bg-white rounded-2xl shadow-sm px-5 py-8 flex flex-col items-center gap-2">
+            <svg class="w-8 h-8 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+            <p class="text-sm text-slate-400 text-center">No collections yet.</p>
           </div>
-        </div>
-      }
-      <!-- Empty state -->
-      @if (collections.length === 0) {
-        <div
-          class="bg-white rounded-2xl shadow-sm px-5 py-8 flex flex-col items-center gap-2">
-          <svg class="w-8 h-8 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-          </svg>
-          <p class="text-sm text-slate-400 text-center">No collections yet.</p>
-        </div>
-      }
-      <!-- New collection card -->
-      <button (click)="newSheet.open()"
-        class="flex-none w-[120px] h-[120px] bg-white rounded-2xl border border-dashed border-slate-300 flex flex-col items-center justify-center gap-1 self-center">
-        <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        <span class="text-[12px] font-medium text-slate-400">New</span>
-      </button>
-    </div>
+        }
+        <!-- New collection card -->
+        <button (click)="newSheet.open()"
+          class="profile-new-collection flex-none w-[120px] h-[120px] bg-white rounded-2xl border border-dashed border-slate-300 flex flex-col items-center justify-center gap-1 self-center">
+          <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          <span class="profile-new-collection__label text-[12px] font-medium text-slate-400">New</span>
+        </button>
+      </div>
+      </div>
     </div>
   </div>
 

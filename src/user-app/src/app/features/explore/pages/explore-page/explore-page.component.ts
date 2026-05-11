@@ -1,9 +1,13 @@
-import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
+import { AfterViewInit, Component, computed, DestroyRef, effect, ElementRef, inject, OnDestroy, signal } from '@angular/core';
 import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { catchError, of } from 'rxjs';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
+import { hasAnyInterestSource, TagService, type UserInterestsResponse } from '../../../../core/services/tag.service';
+import { UserService } from '../../../../core/services/user.service';
 import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
 import { SearchBarComponent } from '../../../../shared/components/search-bar/search-bar.component';
@@ -48,10 +52,13 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly auth        = inject(AuthService);
   private readonly destinationSvc = inject(DestinationService);
   private readonly locationSvc = inject(LocationService);
+  private readonly tagService = inject(TagService);
+  private readonly userService = inject(UserService);
   private readonly router      = inject(Router);
   private readonly route       = inject(ActivatedRoute);
   private readonly location    = inject(Location);
   private readonly elRef       = inject(ElementRef<HTMLElement>);
+  private readonly destroyRef   = inject(DestroyRef);
   private readonly scrollState = inject(ExploreScrollStateService);
   private readonly analytics   = inject(AnalyticsService);
   private readonly notifications = inject(AppNotificationsService);
@@ -59,6 +66,15 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
   protected readonly hasUnreadNotifications = computed(() => this.notifications.unreadCount() > 0);
   protected readonly loadError  = this.explore.loadError;
+  protected readonly interestPresenceLoaded = signal(false);
+  protected readonly hasCuratedInterestSource = signal(false);
+  protected readonly showCuratedForYou = computed(() =>
+    this.isLoggedIn() && this.interestPresenceLoaded() && this.hasCuratedInterestSource(),
+  );
+  protected readonly curatedLoading = computed(() =>
+    this.showCuratedForYou() && (this.explore.loading() || !this.explore.loaded()),
+  );
+  private interestPresenceRequestVersion = 0;
 
   constructor() {
     const routeDestinationId = Number(this.route.snapshot.queryParamMap.get('destinationId'));
@@ -74,6 +90,25 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     // Opening Explore is an intentional location-aware flow. If GPS is denied
     // or unavailable, approximate fallback runs automatically.
     void this.locationSvc.resolveLocationForProductFlow();
+
+    effect(() => {
+      if (!this.auth.isLoggedIn()) {
+        this.interestPresenceRequestVersion++;
+        this.hasCuratedInterestSource.set(false);
+        this.interestPresenceLoaded.set(true);
+        return;
+      }
+
+      if (!this.userService.profile()) {
+        this.interestPresenceRequestVersion++;
+        this.hasCuratedInterestSource.set(false);
+        this.interestPresenceLoaded.set(false);
+        return;
+      }
+
+      this.tagService.interestRevision();
+      this.loadInterestPresence();
+    });
   }
 
   private readonly heroLocation = computed(() => {
@@ -265,6 +300,19 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected onCuratedMore(): void {
     this.router.navigate(['/recommendations']);
+  }
+
+  private loadInterestPresence(): void {
+    const requestId = ++this.interestPresenceRequestVersion;
+    this.interestPresenceLoaded.set(false);
+    this.tagService.loadUserInterests().pipe(
+      catchError(() => of<UserInterestsResponse>({ tags: [], explicitTags: [], inferredTags: [] })),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((interests) => {
+      if (requestId !== this.interestPresenceRequestVersion) return;
+      this.hasCuratedInterestSource.set(hasAnyInterestSource(interests));
+      this.interestPresenceLoaded.set(true);
+    });
   }
 
   protected onEvent(id: string): void {

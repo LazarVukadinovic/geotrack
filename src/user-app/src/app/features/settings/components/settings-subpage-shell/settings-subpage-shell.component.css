@@ -56,6 +56,17 @@
   text-align: center;
 }
 
+.settings-shell__title-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
+.settings-shell__header-description {
+  display: none;
+}
+
 .settings-shell__body {
   flex: 1;
   min-height: 0;
@@ -71,4 +82,117 @@
   color: #64748b;
   font-size: 0.9375rem;
   line-height: 1.65;
+}
+
+@media (min-width: 1024px) {
+  .settings-shell {
+    background: transparent;
+  }
+
+  .settings-shell__header {
+    margin: var(--space-6) var(--desktop-page-gutter) 0;
+    padding: var(--space-5) var(--space-6);
+    border-radius: 24px;
+    box-shadow: 0 14px 34px rgba(26, 43, 76, 0.14);
+  }
+
+  .settings-shell__content {
+    padding: var(--space-6) var(--desktop-page-gutter);
+  }
+
+  :host(.settings-shell--desktop-intro) .settings-shell__header {
+    min-height: 112px;
+    margin: var(--space-5) var(--desktop-page-gutter) 0;
+    padding: var(--space-5) var(--space-6);
+    border-radius: 22px;
+    display: flex;
+    align-items: center;
+  }
+
+  :host(.settings-shell--desktop-intro) .settings-shell__header-row {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  :host(.settings-shell--desktop-intro) .settings-shell__back,
+  :host(.settings-shell--desktop-intro) .settings-shell__spacer {
+    width: 44px;
+    height: 44px;
+  }
+
+  :host(.settings-shell--desktop-intro) .settings-shell__back {
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  :host(.settings-shell--desktop-intro) .settings-shell__back:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  :host(.settings-shell--desktop-intro) .settings-shell__back:active {
+    transform: scale(0.98);
+  }
+
+  :host(.settings-shell--desktop-intro) .settings-shell__title {
+    font-size: var(--text-lg);
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1.1;
+  }
+
+  :host(.settings-shell--desktop-intro) .settings-shell__header-description {
+    display: block;
+    max-width: 680px;
+    margin-top: var(--space-2);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: 1.35;
+    text-align: center;
+  }
+
+  :host(.settings-shell--desktop-intro) .settings-shell__description {
+    display: none;
+  }
+
+  :host(.settings-shell--desktop-keep-description) .settings-shell__description {
+    display: block;
+    margin: 0 0 var(--space-5);
+    color: rgba(26, 43, 76, 0.66);
+    font-size: var(--text-base);
+    font-weight: 600;
+    line-height: 1.55;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__header-row {
+    grid-template-columns: 46px minmax(0, 1fr);
+    justify-content: flex-start;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__back {
+    width: 46px;
+    height: 46px;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__back-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__title-stack {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__header-description {
+    max-width: none;
+    font-weight: 500;
+    text-align: left;
+  }
+
+  :host(.settings-shell--desktop-left-intro) .settings-shell__spacer {
+    display: none;
+  }
 }

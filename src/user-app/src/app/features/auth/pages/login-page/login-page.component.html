@@ -1,12 +1,36 @@
-<div class="min-h-full bg-white flex flex-col">
+<div class="auth-login min-h-full bg-white flex flex-col">
+
+  <aside class="auth-login__showcase" aria-hidden="true">
+    <div class="auth-login__showcase-content">
+      <div class="auth-login__showcase-brand">
+        <img src="images/logo.png" alt="" class="auth-login__showcase-logo" />
+        <span>GeoTrack</span>
+      </div>
+
+      <div class="auth-login__showcase-rule"></div>
+
+      <div class="auth-login__showcase-copy">
+        <h2>Welcome to GeoTrack</h2>
+        <p>Your smart companion for tracking, exploring, and staying connected wherever you go.</p>
+      </div>
+    </div>
+
+    <div class="auth-login__map-visual">
+      <span class="auth-login__route auth-login__route--green"></span>
+      <span class="auth-login__route auth-login__route--blue"></span>
+      <span class="auth-login__pin auth-login__pin--primary"></span>
+      <span class="auth-login__pin auth-login__pin--green"></span>
+      <span class="auth-login__pin auth-login__pin--orange"></span>
+    </div>
+  </aside>
 
   <!-- Top dark header -->
-  <div class="bg-[#1a2b4a] flex flex-col items-center justify-center pt-6 pb-14 rounded-b-[2.5rem]">
+  <div class="auth-login__brand bg-[#1a2b4a] flex flex-col items-center justify-center pt-6 pb-14 rounded-b-[2.5rem]">
     <img src="images/logo.png" alt="Logo" class="w-28 h-28 object-contain" />
   </div>
 
   <!-- Off-white card overlapping header -->
-  <div class="mx-4 -mt-14 bg-[#fafaf9] rounded-[2rem] px-7 pt-8 pb-10 flex flex-col gap-2 shadow-sm">
+  <div class="auth-login__card mx-4 -mt-14 bg-[#fafaf9] rounded-[2rem] px-7 pt-8 pb-10 flex flex-col gap-2 shadow-sm">
 
     <!-- Centered heading -->
     <div class="text-center mb-6">
@@ -84,8 +108,8 @@
     </div>
 
     <!-- Remember me + Forgot -->
-    <div class="flex items-center justify-between mb-5">
-      <label class="flex items-center gap-2.5 cursor-pointer">
+    <div class="auth-login__options flex items-center justify-between mb-5">
+      <label class="auth-login__remember flex items-center gap-2.5 cursor-pointer">
         <button
           (click)="rememberMe = !rememberMe"
           type="button"
@@ -99,7 +123,7 @@
         </button>
         <span class="text-base text-slate-500">Remember me</span>
       </label>
-      <span class="text-sm text-slate-400 text-right">Password reset is not available.</span>
+      <span class="auth-login__reset text-sm text-slate-400 text-right">Password reset is not available.</span>
     </div>
 
     <!-- Error message -->
@@ -124,10 +148,21 @@
         </svg>
       }
     </button>
+
+    <div class="auth-login__divider" aria-hidden="true">
+      <span></span>
+      <strong>OR</strong>
+      <span></span>
+    </div>
+
+    <p class="auth-login__card-footer">
+      Don't have an account?
+      <button type="button" (click)="goToRegister()">Create one</button>
+    </p>
   </div>
 
   <!-- Create account -->
-  <p class="text-center text-base text-slate-400 mt-6 mb-4">
+  <p class="auth-login__footer text-center text-base text-slate-400 mt-6 mb-4">
     Don't have an account?
     <button type="button" (click)="goToRegister()" class="font-bold text-[#e8570a] ml-1">Create one</button>
   </p>

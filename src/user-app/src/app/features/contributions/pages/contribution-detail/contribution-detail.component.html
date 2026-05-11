@@ -1,21 +1,24 @@
-<div class="h-full flex flex-col bg-[#fafafa]">
+<div class="contribution-detail h-full flex flex-col bg-[#fafafa]">
 
   <!-- Header -->
-  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem] flex-none">
-    <div class="flex items-center justify-between">
-      <button type="button" (click)="goBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+  <div class="contribution-detail__header bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem] flex-none">
+    <div class="contribution-detail__header-row flex items-center justify-between">
+      <button type="button" (click)="goBack()" aria-label="Go back" class="contribution-detail__back w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
-      <span class="text-base font-bold text-white tracking-wide">
-        {{ detail()?.entityType ?? 'Place' }} Detail
-      </span>
-      <div class="w-9"></div>
+      <div class="contribution-detail__header-copy">
+        <span class="contribution-detail__title text-base font-bold text-white tracking-wide">
+          {{ detail()?.entityType ?? 'Place' }} Detail
+        </span>
+        <span class="contribution-detail__subtitle">Review your submitted place</span>
+      </div>
+      <div class="contribution-detail__header-spacer w-9"></div>
     </div>
   </div>
 
-  <div class="flex-1 min-h-0 overflow-y-auto pb-10">
+  <div class="contribution-detail__scroll flex-1 min-h-0 overflow-y-auto pb-10">
     <!-- Loading -->
     @if (isLoading()) {
       <div class="flex flex-col items-center justify-center py-24 gap-3">
@@ -41,15 +44,15 @@
     <!-- Content -->
     @if (detail(); as d) {
       <!-- Cover image -->
-      <div class="mx-5 mt-5 rounded-2xl overflow-hidden h-52 relative bg-slate-100">
+      <div class="contribution-detail__hero mx-5 mt-5 rounded-2xl overflow-hidden h-52 relative bg-slate-100">
         @if (d.coverImageUrl) {
-          <div class="absolute inset-0"
+          <div class="contribution-detail__hero-image absolute inset-0"
             [appBackgroundImageFallback]="d.coverImageUrl"
             [backgroundImageFallbackSize]="d.imageSize || 'cover'"
             [backgroundImageFallbackPosition]="d.imagePosition || '50% 50%'">
           </div>
         } @else {
-          <div class="absolute inset-0 flex items-center justify-center">
+          <div class="contribution-detail__hero-fallback absolute inset-0 flex items-center justify-center">
             <svg class="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
             </svg>
@@ -57,7 +60,7 @@
         }
 
         <!-- Status pill -->
-        <div class="absolute top-3 right-3 flex items-center gap-1.5 rounded-full px-3 py-1.5 backdrop-blur-sm text-[11px] font-bold"
+        <div class="contribution-detail__status-pill absolute top-3 right-3 flex items-center gap-1.5 rounded-full px-3 py-1.5 backdrop-blur-sm text-[11px] font-bold"
           [class.bg-white/80]="d.status !== 'Rejected'"
           [class.text-slate-800]="d.status !== 'Rejected'"
           [class.bg-red-500/20]="d.status === 'Rejected'"
@@ -81,10 +84,10 @@
         </div>
       </div>
 
-      <div class="px-5 mt-4 flex flex-col gap-4">
+      <div class="contribution-detail__content px-5 mt-4 flex flex-col gap-4">
 
         <!-- Status banner -->
-        <div class="rounded-r-xl border-l-[3px] px-3 py-2.5 text-xs leading-relaxed"
+        <div class="contribution-detail__status-banner rounded-r-xl border-l-[3px] px-3 py-2.5 text-xs leading-relaxed"
           [class.bg-green-50]="d.status === 'Approved'"
           [class.border-green-500]="d.status === 'Approved'"
           [class.text-green-800]="d.status === 'Approved'"
@@ -100,126 +103,129 @@
           }
         </div>
 
-        <!-- Name + type + location -->
-        <div>
-          <div class="flex items-center gap-2 mb-1.5">
-            <span class="bg-orange-50 text-[#e8722a] text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-              {{ d.placeType || 'Place' }}
-            </span>
-            @if (d.stayType) {
-              <span class="bg-slate-100 text-slate-600 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                {{ d.stayType }}
+        <section class="contribution-detail__card">
+          <!-- Name + type + location -->
+          <div class="contribution-detail__summary">
+            <div class="contribution-detail__type-row flex items-center gap-2 mb-1.5">
+              <span class="contribution-detail__type-pill contribution-detail__type-pill--primary bg-orange-50 text-[#e8722a] text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+                {{ d.placeType || 'Place' }}
               </span>
-            }
-          </div>
-          <h2 class="text-xl font-bold text-slate-800 mb-1.5">{{ d.name }}</h2>
-          <div class="flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5 text-[#e8722a] flex-none" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-            <span class="text-sm text-slate-500">{{ d.location }}</span>
-          </div>
-        </div>
-
-        <!-- Meta -->
-        <div class="flex flex-wrap items-center gap-2">
-          <div class="flex items-center gap-1 text-xs text-slate-400">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            {{ d.updatedLabel }}
-          </div>
-          @if (d.address) {
-            <div class="flex items-center gap-1 text-xs text-slate-400">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-              </svg>
-              {{ d.address }}
-            </div>
-          }
-          @if (d.latitude !== null && d.longitude !== null) {
-            <div class="flex items-center gap-1 bg-slate-100 rounded-full px-2.5 py-1 text-xs text-slate-500 font-medium">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                <path stroke-linecap="round" d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
-              </svg>
-              {{ d.latitude.toFixed(5) }}, {{ d.longitude.toFixed(5) }}
-            </div>
-          }
-        </div>
-
-        <div class="h-px bg-slate-200"></div>
-
-        <!-- Description -->
-        @if (d.description) {
-          <div>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">About this place</p>
-            <p class="text-sm text-slate-600 leading-relaxed">{{ d.description }}</p>
-          </div>
-          <div class="h-px bg-slate-100"></div>
-        }
-
-        <!-- Tags -->
-        @if (d.tags.length) {
-          <div>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Tags</p>
-            <div class="flex flex-wrap gap-2">
-              @for (tag of d.tags; track tag) {
-                <span class="px-3 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-600">
-                  {{ tag }}
+              @if (d.stayType) {
+                <span class="contribution-detail__type-pill bg-slate-100 text-slate-600 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+                  {{ d.stayType }}
                 </span>
               }
             </div>
-          </div>
-          <div class="h-px bg-slate-100"></div>
-        }
-
-        <!-- Amenities -->
-        @if (d.amenities.length) {
-          <div>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Amenities</p>
-            <div class="grid grid-cols-2 gap-2">
-              @for (id of d.amenities; track id) {
-                <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full bg-[#e8722a] flex-none"></span>
-                  <span class="text-xs text-slate-600 font-medium">{{ getAmenityLabel(id) }}</span>
-                </div>
-              }
+            <h2 class="contribution-detail__place-title text-xl font-bold text-slate-800 mb-1.5">{{ d.name }}</h2>
+            <div class="contribution-detail__location-row flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-[#e8722a] flex-none" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+              </svg>
+              <span class="text-sm text-slate-500">{{ d.location }}</span>
             </div>
           </div>
-          <div class="h-px bg-slate-100"></div>
-        }
+
+          <!-- Meta -->
+          <div class="contribution-detail__meta flex flex-wrap items-center gap-2">
+            <div class="contribution-detail__meta-item flex items-center gap-1 text-xs text-slate-400">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              {{ d.updatedLabel }}
+            </div>
+            @if (d.address) {
+              <div class="contribution-detail__meta-item flex items-center gap-1 text-xs text-slate-400">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                </svg>
+                {{ d.address }}
+              </div>
+            }
+            @if (d.latitude !== null && d.longitude !== null) {
+              <div class="contribution-detail__meta-item contribution-detail__meta-item--coordinates flex items-center gap-1 bg-slate-100 rounded-full px-2.5 py-1 text-xs text-slate-500 font-medium">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                  <path stroke-linecap="round" d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+                </svg>
+                {{ d.latitude.toFixed(5) }}, {{ d.longitude.toFixed(5) }}
+              </div>
+            }
+          </div>
+
+          <div class="contribution-detail__divider contribution-detail__divider--main h-px bg-slate-200"></div>
+
+          <div class="contribution-detail__info-grid" [class.contribution-detail__info-grid--empty]="!d.description && !d.tags.length && !d.amenities.length">
+            <!-- Description -->
+            @if (d.description) {
+              <div class="contribution-detail__section contribution-detail__section--about">
+                <p class="contribution-detail__section-label text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">About this place</p>
+                <p class="contribution-detail__description text-sm text-slate-600 leading-relaxed">{{ d.description }}</p>
+              </div>
+              <div class="contribution-detail__divider contribution-detail__divider--info h-px bg-slate-100"></div>
+            }
+
+            <!-- Tags -->
+            @if (d.tags.length) {
+              <div class="contribution-detail__section contribution-detail__section--tags">
+                <p class="contribution-detail__section-label text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Tags</p>
+                <div class="contribution-detail__tag-list flex flex-wrap gap-2">
+                  @for (tag of d.tags; track tag) {
+                    <span class="contribution-detail__tag-chip px-3 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-600">
+                      {{ tag }}
+                    </span>
+                  }
+                </div>
+              </div>
+              <div class="contribution-detail__divider contribution-detail__divider--info h-px bg-slate-100"></div>
+            }
+
+            <!-- Amenities -->
+            @if (d.amenities.length) {
+              <div class="contribution-detail__section contribution-detail__section--amenities">
+                <p class="contribution-detail__section-label text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Amenities</p>
+                <div class="contribution-detail__amenities-grid grid grid-cols-2 gap-2">
+                  @for (id of d.amenities; track id) {
+                    <div class="contribution-detail__amenity-item flex items-center gap-2">
+                      <span class="contribution-detail__amenity-dot w-2 h-2 rounded-full bg-[#e8722a] flex-none"></span>
+                      <span class="contribution-detail__amenity-label text-xs text-slate-600 font-medium">{{ getAmenityLabel(id) }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+              <div class="contribution-detail__divider contribution-detail__divider--info h-px bg-slate-100"></div>
+            }
+          </div>
 
         <!-- Booking partners -->
         @if (d.bookingPartners.length) {
-          <div>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Booking Partners</p>
-            <div class="flex flex-wrap gap-2">
+          <div class="contribution-detail__section contribution-detail__section--extra">
+            <p class="contribution-detail__section-label text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Booking Partners</p>
+            <div class="contribution-detail__partner-list flex flex-wrap gap-2">
               @for (partner of d.bookingPartners; track partner.id) {
                 @if (partner.url) {
                   <a [href]="partner.url" target="_blank" rel="noopener noreferrer"
-                    class="flex items-center gap-1.5 border border-slate-200 rounded-xl px-3 py-2">
+                    class="contribution-detail__partner-link flex items-center gap-1.5 border border-slate-200 rounded-xl px-3 py-2">
                     <span class="text-xs font-semibold text-[#e8722a]">{{ getPartnerLabel(partner.id) }}</span>
                     <svg class="w-3 h-3 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                     </svg>
                   </a>
                 } @else {
-                  <div class="flex items-center gap-1.5 border border-slate-200 rounded-xl px-3 py-2">
+                  <div class="contribution-detail__partner-link flex items-center gap-1.5 border border-slate-200 rounded-xl px-3 py-2">
                     <span class="text-xs font-semibold text-slate-700">{{ getPartnerLabel(partner.id) }}</span>
                   </div>
                 }
               }
             </div>
           </div>
-          <div class="h-px bg-slate-100"></div>
+          <div class="contribution-detail__divider contribution-detail__divider--extra h-px bg-slate-100"></div>
         }
 
         <!-- Contact -->
         @if (d.phone || d.contactEmail || d.website) {
-          <div>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Contact</p>
+          <div class="contribution-detail__section contribution-detail__section--extra">
+            <p class="contribution-detail__section-label text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Contact</p>
             @if (d.phone) {
-              <div class="flex items-center gap-2 text-sm text-slate-600 mb-1.5">
+              <div class="contribution-detail__contact-row flex items-center gap-2 text-sm text-slate-600 mb-1.5">
                 <svg class="w-3.5 h-3.5 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
                 </svg>
@@ -227,7 +233,7 @@
               </div>
             }
             @if (d.contactEmail) {
-              <div class="flex items-center gap-2 text-sm text-slate-600 mb-1.5">
+              <div class="contribution-detail__contact-row flex items-center gap-2 text-sm text-slate-600 mb-1.5">
                 <svg class="w-3.5 h-3.5 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                     d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z"/>
@@ -236,7 +242,7 @@
               </div>
             }
             @if (d.website) {
-              <div class="flex items-center gap-2 text-sm text-[#e8722a]">
+              <div class="contribution-detail__contact-row flex items-center gap-2 text-sm text-[#e8722a]">
                 <svg class="w-3.5 h-3.5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064"/>
                 </svg>
@@ -244,17 +250,18 @@
               </div>
             }
           </div>
-          <div class="h-px bg-slate-100"></div>
+          <div class="contribution-detail__divider contribution-detail__divider--extra h-px bg-slate-100"></div>
         }
 
         <!-- Edit button -->
         <button type="button" (click)="onEdit()"
-          class="w-full flex items-center justify-center gap-2 py-4 bg-[#e8722a] rounded-2xl text-white text-sm font-bold active:scale-[0.98] transition-all mt-2">
+          class="contribution-detail__edit-button w-full flex items-center justify-center gap-2 py-4 bg-[#e8722a] rounded-2xl text-white text-sm font-bold active:scale-[0.98] transition-all mt-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
           </svg>
           Edit Contribution
         </button>
+        </section>
 
       </div>
     }

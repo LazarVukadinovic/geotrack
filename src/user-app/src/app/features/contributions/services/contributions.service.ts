@@ -5,6 +5,10 @@ import { AnalyticsService } from '../../../core/services/analytics.service';
 import { BasicsData } from '../pages/submit-contribution/steps/step-basics/step-basics.component';
 import { DetailsData } from '../pages/submit-contribution/steps/step-details/step-details.component';
 import { FeaturesData } from '../pages/submit-contribution/steps/step-features/step-features.component';
+import {
+  normalizeContributionAmenityIds,
+  toContributionAmenityApiValues,
+} from './contribution-amenities';
 
 export type ContributionStatus = 'PendingReview' | 'Approved' | 'Rejected';
 export type ContributionEntityType = 'Place';
@@ -91,9 +95,10 @@ interface ApiContributionDetail extends ApiContributionListItem {
   phone: string;
   contactEmail: string;
   website: string;
-  tags: string[];
-  amenities: string[];
-  bookingPartners: ContributionBookingPartner[];
+  tags?: string[] | null;
+  amenities?: string[] | null;
+  stayAmenities?: string[] | null;
+  bookingPartners?: ContributionBookingPartner[] | null;
   reviewNote?: string | null;
   reviewedAt?: string | null;
 }
@@ -204,7 +209,7 @@ export class ContributionsService {
       },
       features: {
         tags: detail.tags ?? [],
-        amenities: detail.amenities ?? [],
+        amenities: normalizeContributionAmenityIds(detail.amenities),
       },
       details: {
         description: detail.description ?? '',
@@ -240,7 +245,7 @@ export class ContributionsService {
       contactEmail: details.contactEmail,
       website: details.website,
       tags: features.tags,
-      amenities: features.amenities,
+      amenities: toContributionAmenityApiValues(features.amenities, isAccommodation),
       bookingPartners: isAccommodation ? details.bookingPartners : [],
     };
 
@@ -266,7 +271,7 @@ function requireBasics(basics: BasicsData | null): BasicsData {
 function normalizeFeatures(features: FeaturesData | null): FeaturesData {
   return {
     tags: features?.tags ?? [],
-    amenities: features?.amenities ?? [],
+    amenities: normalizeContributionAmenityIds(features?.amenities),
   };
 }
 
@@ -338,7 +343,10 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     contactEmail: item.contactEmail ?? '',
     website: item.website ?? '',
     tags: item.tags ?? [],
-    amenities: item.amenities ?? [],
+    amenities: normalizeContributionAmenityIds([
+      ...(item.amenities ?? []),
+      ...(item.stayAmenities ?? []),
+    ]),
     bookingPartners: item.bookingPartners ?? [],
     reviewNote: item.reviewNote ?? null,
     reviewedAt: item.reviewedAt ?? null,

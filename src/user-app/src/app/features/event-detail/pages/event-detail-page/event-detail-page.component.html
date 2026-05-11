@@ -1,5 +1,5 @@
 @if (event(); as ev) {
-  <article class="ed">
+  <article class="ed gt-detail gt-detail--event">
 
     <!-- ── Top bar: absolute, above scroll container, transparent → navy ─── -->
     <header class="ed__top-bar" [style.--progress]="scrollProgress()">
@@ -57,7 +57,7 @@
     <div class="ed__scroll" #edScroll (scroll)="onScroll($event)">
       <div class="ed__scroll-spacer" aria-hidden="true"></div>
 
-      <div class="ed__card">
+      <div class="ed__card" [class.ed__card--has-gallery]="ev.images.length > 1">
 
         <!-- Category tags -->
         <div class="ed__tags" role="list" aria-label="Categories">
@@ -158,192 +158,199 @@
           </section>
         }
 
-        <div class="ed__divider"></div>
+        <div class="ed__detail-grid">
+          <div class="ed__detail-main">
+            <div class="ed__divider ed__divider--about"></div>
 
-        <section class="ed__section">
-          <h2 class="ed__section-title">About the Event</h2>
-          <p class="ed__about">{{ ev.about }}</p>
-        </section>
+            <section class="ed__section ed__section--about">
+              <h2 class="ed__section-title">About the Event</h2>
+              <p class="ed__about">{{ ev.about }}</p>
+            </section>
 
-        <!-- ── Event Details ───────────────────────────────────────────── -->
-        <div class="ed__divider"></div>
+            @if (ev.similar.length > 0) {
+              <div class="ed__divider ed__divider--similar"></div>
 
-        <section class="ed__section">
-          <h2 class="ed__section-title">Event Details</h2>
+              <section class="ed__section ed__section--similar ed__section--last">
+                <app-section-header
+                  title="You May Also Like"
+                />
 
-          <div class="ed__info-card">
-            <div class="ed__info-row">
-              <span class="ed__info-icon" aria-hidden="true">
-                <!-- Calendar -->
-                <svg viewBox="0 0 24 24" fill="none">
-                  <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/>
-                </svg>
-              </span>
-              <div class="ed__info-text">
-                <span class="ed__info-label">Date</span>
-                <span class="ed__info-value">{{ ev.info.date }}</span>
-              </div>
-            </div>
+                <div class="ed__similar-viewport">
+                  <div class="ed__similar-track" role="list">
+                    @for (s of ev.similar; track s.id) {
+                      <article
+                        class="ed__similar-card"
+                        role="button"
+                        tabindex="0"
+                        [attr.aria-label]="s.title"
+                        (click)="navigateToSimilar(s.id)"
+                        (keydown.enter)="navigateToSimilar(s.id)"
+                        (keydown.space)="$event.preventDefault(); navigateToSimilar(s.id)"
+                      >
+                        <div class="ed__similar-media">
+                          <img
+                            appImageFallback
+                            class="ed__similar-img"
+                            [src]="s.image"
+                            [alt]="s.title"
+                            width="200"
+                            height="120"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </div>
 
-            <div class="ed__info-row">
-              <span class="ed__info-icon" aria-hidden="true">
-                <!-- Clock -->
-                <svg viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
-                </svg>
-              </span>
-              <div class="ed__info-text">
-                <span class="ed__info-label">Start &amp; End Time</span>
-                <span class="ed__info-value">{{ ev.info.timeRange }}</span>
-              </div>
-            </div>
-
-            <div class="ed__info-row">
-              <span class="ed__info-icon" aria-hidden="true">
-                <!-- Location pin -->
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M12 21s7-4.35 7-10a7 7 0 1 0-14 0c0 5.65 7 10 7 10Zm0-8.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/>
-                </svg>
-              </span>
-              <div class="ed__info-text">
-                <span class="ed__info-label">Venue</span>
-                <span class="ed__info-value">{{ ev.info.venue }}</span>
-              </div>
-            </div>
-
-            <div class="ed__info-row">
-              <span class="ed__info-icon" aria-hidden="true">
-                <!-- Ticket -->
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M2 9a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4V9Z"/>
-                </svg>
-              </span>
-              <div class="ed__info-text">
-                <span class="ed__info-label">Ticket</span>
-                <span class="ed__info-value">{{ ev.info.ticket }}</span>
-              </div>
-            </div>
-
-            <div class="ed__info-row">
-              <span class="ed__info-icon" aria-hidden="true">
-                <!-- Hourglass -->
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12m5 10H7m10-10L12 12M7 22v-4.17a2 2 0 0 1 .59-1.42L12 12M7 2v4.17a2 2 0 0 0 .59 1.42L12 12m-5-10h10"/>
-                </svg>
-              </span>
-              <div class="ed__info-text">
-                <span class="ed__info-label">Duration</span>
-                <span class="ed__info-value">{{ ev.info.duration }}</span>
-              </div>
-            </div>
-
-            <div class="ed__info-row ed__info-row--last">
-              <span class="ed__info-icon" aria-hidden="true">
-                <!-- Person -->
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/>
-                </svg>
-              </span>
-              <div class="ed__info-text">
-                <span class="ed__info-label">Hosted by</span>
-                <span class="ed__info-value">{{ ev.info.hostedBy }}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ── Venue Info ──────────────────────────────────────────────── -->
-        <div class="ed__divider"></div>
-
-        <section class="ed__section">
-          <h2 class="ed__section-title">Venue Info</h2>
-
-          <div class="ed__venue-card">
-            <p class="ed__venue-desc">{{ ev.venueInfo.description }}</p>
-
-            <div class="ed__venue-row">
-              <span class="ed__venue-icon" aria-hidden="true">
-                <!-- Navigation arrow -->
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M3 11l19-9-9 19-2-8-8-2z"/>
-                </svg>
-              </span>
-              <div class="ed__venue-text">
-                <span class="ed__venue-label">Arrival Tips</span>
-                <span class="ed__venue-value">{{ ev.venueInfo.arrivalTips }}</span>
-              </div>
-            </div>
-
-            <div class="ed__venue-row">
-              <span class="ed__venue-icon" aria-hidden="true">
-                <!-- Info circle -->
-                <svg viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/>
-                </svg>
-              </span>
-              <div class="ed__venue-text">
-                <span class="ed__venue-label">Parking &amp; Accessibility</span>
-                <span class="ed__venue-value">{{ ev.venueInfo.accessibility }}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ── You May Also Like ──────────────────────────────────────── -->
-        <div class="ed__divider"></div>
-
-        <section class="ed__section ed__section--last">
-          <app-section-header
-            title="You May Also Like"
-          />
-
-          <div class="ed__similar-viewport">
-            <div class="ed__similar-track" role="list">
-              @for (s of ev.similar; track s.id) {
-                <article
-                  class="ed__similar-card"
-                  role="button"
-                  tabindex="0"
-                  [attr.aria-label]="s.title"
-                  (click)="navigateToSimilar(s.id)"
-                  (keydown.enter)="navigateToSimilar(s.id)"
-                  (keydown.space)="$event.preventDefault(); navigateToSimilar(s.id)"
-                >
-                  <div class="ed__similar-media">
-                    <img
-                      appImageFallback
-                      class="ed__similar-img"
-                      [src]="s.image"
-                      [alt]="s.title"
-                      width="200"
-                      height="120"
-                      loading="lazy"
-                      decoding="async"
-                    />
+                        <div class="ed__similar-body">
+                          <h3 class="ed__similar-title">{{ s.title }}</h3>
+                          <p class="ed__similar-sub">{{ s.subtitle }}</p>
+                        </div>
+                      </article>
+                    }
                   </div>
-
-                  <div class="ed__similar-body">
-                    <h3 class="ed__similar-title">{{ s.title }}</h3>
-                    <p class="ed__similar-sub">{{ s.subtitle }}</p>
-                  </div>
-                </article>
-              }
-            </div>
+                </div>
+              </section>
+            }
           </div>
-        </section>
+
+          <div class="ed__detail-side">
+            <!-- ── Event Details ───────────────────────────────────────────── -->
+            <div class="ed__divider ed__divider--details"></div>
+
+            <section class="ed__section ed__section--details">
+              <h2 class="ed__section-title">Event Details</h2>
+
+              <div class="ed__info-card">
+                <div class="ed__info-row">
+                  <span class="ed__info-icon" aria-hidden="true">
+                    <!-- Calendar -->
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/>
+                    </svg>
+                  </span>
+                  <div class="ed__info-text">
+                    <span class="ed__info-label">Date</span>
+                    <span class="ed__info-value">{{ ev.info.date }}</span>
+                  </div>
+                </div>
+
+                <div class="ed__info-row">
+                  <span class="ed__info-icon" aria-hidden="true">
+                    <!-- Clock -->
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
+                    </svg>
+                  </span>
+                  <div class="ed__info-text">
+                    <span class="ed__info-label">Start &amp; End Time</span>
+                    <span class="ed__info-value">{{ ev.info.timeRange }}</span>
+                  </div>
+                </div>
+
+                <div class="ed__info-row">
+                  <span class="ed__info-icon" aria-hidden="true">
+                    <!-- Location pin -->
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M12 21s7-4.35 7-10a7 7 0 1 0-14 0c0 5.65 7 10 7 10Zm0-8.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/>
+                    </svg>
+                  </span>
+                  <div class="ed__info-text">
+                    <span class="ed__info-label">Venue</span>
+                    <span class="ed__info-value">{{ ev.info.venue }}</span>
+                  </div>
+                </div>
+
+                <div class="ed__info-row">
+                  <span class="ed__info-icon" aria-hidden="true">
+                    <!-- Ticket -->
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M2 9a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4V9Z"/>
+                    </svg>
+                  </span>
+                  <div class="ed__info-text">
+                    <span class="ed__info-label">Ticket</span>
+                    <span class="ed__info-value">{{ ev.info.ticket }}</span>
+                  </div>
+                </div>
+
+                <div class="ed__info-row">
+                  <span class="ed__info-icon" aria-hidden="true">
+                    <!-- Hourglass -->
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12m5 10H7m10-10L12 12M7 22v-4.17a2 2 0 0 1 .59-1.42L12 12M7 2v4.17a2 2 0 0 0 .59 1.42L12 12m-5-10h10"/>
+                    </svg>
+                  </span>
+                  <div class="ed__info-text">
+                    <span class="ed__info-label">Duration</span>
+                    <span class="ed__info-value">{{ ev.info.duration }}</span>
+                  </div>
+                </div>
+
+                <div class="ed__info-row ed__info-row--last">
+                  <span class="ed__info-icon" aria-hidden="true">
+                    <!-- Person -->
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/>
+                    </svg>
+                  </span>
+                  <div class="ed__info-text">
+                    <span class="ed__info-label">Hosted by</span>
+                    <span class="ed__info-value">{{ ev.info.hostedBy }}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ── Venue Info ──────────────────────────────────────────────── -->
+            <div class="ed__divider ed__divider--venue"></div>
+
+            <section class="ed__section ed__section--venue">
+              <h2 class="ed__section-title">Venue Info</h2>
+
+              <div class="ed__venue-card">
+                <p class="ed__venue-desc">{{ ev.venueInfo.description }}</p>
+
+                <div class="ed__venue-row">
+                  <span class="ed__venue-icon" aria-hidden="true">
+                    <!-- Navigation arrow -->
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M3 11l19-9-9 19-2-8-8-2z"/>
+                    </svg>
+                  </span>
+                  <div class="ed__venue-text">
+                    <span class="ed__venue-label">Arrival Tips</span>
+                    <span class="ed__venue-value">{{ ev.venueInfo.arrivalTips }}</span>
+                  </div>
+                </div>
+
+                <div class="ed__venue-row">
+                  <span class="ed__venue-icon" aria-hidden="true">
+                    <!-- Info circle -->
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/>
+                    </svg>
+                  </span>
+                  <div class="ed__venue-text">
+                    <span class="ed__venue-label">Parking &amp; Accessibility</span>
+                    <span class="ed__venue-value">{{ ev.venueInfo.accessibility }}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
 
       </div><!-- /.ed__card -->
     </div><!-- /.ed__scroll -->

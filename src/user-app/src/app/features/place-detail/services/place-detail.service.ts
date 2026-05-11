@@ -25,7 +25,7 @@ interface ApiPlaceDetail {
   openStatus?: string;
   about?: string;
   reviews: { id: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean }[];
-  similar: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[];
+  similar?: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[] | null;
   isSaved: boolean;
   contentType: string;
   category?: string;
@@ -102,7 +102,7 @@ export class PlaceDetailService {
             helpfulCount: r.helpfulCount,
             reportedByCurrentUser: r.reportedByCurrentUser ?? false,
           })),
-          similar: dto.similar.map(s => ({
+          similar: (dto.similar ?? []).map(s => ({
             id: String(s.id),
             title: s.title,
             image: s.image ?? '',

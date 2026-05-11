@@ -10,6 +10,12 @@ interface SupportCategoryOption {
   helper: string;
 }
 
+interface SupportGuidanceItem {
+  icon: 'document' | 'location' | 'camera' | 'lock';
+  title: string;
+  description: string;
+}
+
 const SUPPORT_CATEGORIES: SupportCategoryOption[] = [
   {
     value: 'account-access',
@@ -43,6 +49,29 @@ const SUPPORT_CATEGORIES: SupportCategoryOption[] = [
   },
 ];
 
+const SUPPORT_GUIDANCE: SupportGuidanceItem[] = [
+  {
+    icon: 'document',
+    title: 'Describe the issue clearly',
+    description: 'Include what happened, what you expected, and any error messages.',
+  },
+  {
+    icon: 'location',
+    title: 'Mention the city or page',
+    description: 'Tell us the city, page, or feature you were using when the issue occurred.',
+  },
+  {
+    icon: 'camera',
+    title: 'Attach screenshots if helpful',
+    description: 'Screenshots can help the team understand the issue faster.',
+  },
+  {
+    icon: 'lock',
+    title: 'Avoid sharing sensitive information',
+    description: 'Do not include passwords, payment details, or personal information.',
+  },
+];
+
 @Component({
   selector: 'app-contact-support-page',
   standalone: true,
@@ -54,6 +83,7 @@ export class ContactSupportPageComponent {
   private readonly settingsService = inject(UserSettingsService);
 
   protected readonly categories = SUPPORT_CATEGORIES;
+  protected readonly guidanceItems = SUPPORT_GUIDANCE;
   protected readonly selectedCategory = signal<string>(SUPPORT_CATEGORIES[0].value);
   protected readonly subject = signal('');
   protected readonly message = signal('');

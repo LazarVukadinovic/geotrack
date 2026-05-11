@@ -1,28 +1,48 @@
-<div class="h-full bg-[#fafafa] flex flex-col">
+<div class="submit-contribution__root h-full bg-[#fafafa] flex flex-col">
 
   <!-- Header -->
-  <div class="bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem] relative flex-none">
-    <div class="flex items-center justify-between">
-      <button type="button" (click)="handleBack()" class="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
+  <div class="submit-contribution__header bg-[#1a2b4a] px-6 pt-6 pb-6 rounded-b-[2.5rem] relative flex-none">
+    <div class="submit-contribution__header-row flex items-center justify-between">
+      <button type="button" (click)="handleBack()" class="submit-contribution__back w-9 h-9 bg-white/15 rounded-full flex items-center justify-center text-white">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
-      <span class="text-[16px] font-bold text-white tracking-wide text-center">
+      <span class="submit-contribution__title text-[16px] font-bold text-white tracking-wide text-center">
         {{ pageTitle() }}
       </span>
 
-      <div class="w-9"></div>
+      <div class="submit-contribution__header-spacer w-9"></div>
     </div>
     @if (currentStep() < 5) {
-      <p class="text-white/50 text-xs text-center absolute left-0 right-0 bottom-2">
+      <p class="submit-contribution__progress text-white/50 text-xs text-center absolute left-0 right-0 bottom-2">
         Step {{ currentStep() }} of 4
       </p>
     }
   </div>
 
   <!-- Steps -->
-  <div class="flex-1 min-h-0 overflow-y-auto flex flex-col">
+  <div class="submit-contribution__body flex-1 min-h-0 overflow-y-auto flex flex-col">
+    @if (currentStep() < 5) {
+      <ol class="submit-contribution__step-indicator" aria-label="Contribution progress">
+        @for (step of desktopSteps; track step.number) {
+          <li
+            class="submit-contribution__step"
+            [class.submit-contribution__step--active]="currentStep() === step.number"
+            [class.submit-contribution__step--completed]="currentStep() > step.number"
+          >
+            <span
+              class="submit-contribution__step-circle"
+              [attr.aria-current]="currentStep() === step.number ? 'step' : null"
+            >
+              {{ step.number }}
+            </span>
+            <span class="submit-contribution__step-label">{{ step.label }}</span>
+          </li>
+        }
+      </ol>
+    }
+
     @if (isLoading()) {
       <div class="flex flex-col items-center justify-center py-24 gap-3">
         <div class="w-8 h-8 border-2 border-[#e8722a] border-t-transparent rounded-full animate-spin"></div>

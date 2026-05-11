@@ -50,6 +50,10 @@
   z-index: var(--map-layer-info);
 }
 
+.map-page__more-panel {
+  display: none;
+}
+
 @keyframes map-bottom-card-enter {
   from {
     opacity: 0;
@@ -66,5 +70,193 @@
   .map-page__status-card,
   .map-page__preview-card {
     animation: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  :host {
+    --map-bottom-gap: var(--space-6, 1.5rem);
+    --map-card-gutter: var(--space-6, 1.5rem);
+    --map-status-gutter: var(--space-6, 1.5rem);
+  }
+
+  .map-page {
+    padding: 0;
+    background: transparent;
+  }
+
+  .map-page__stage {
+    border-radius: 0;
+    box-shadow: none;
+    border: 0;
+  }
+
+  #map {
+    border-radius: 0;
+    overflow: hidden;
+  }
+
+  .map-page__controls-panel {
+    top: var(--space-6, 1.5rem) !important;
+    left: var(--space-6, 1.5rem) !important;
+    right: auto !important;
+    width: min(480px, calc(100% - 3rem));
+    padding: var(--space-4, 1rem) !important;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(26, 43, 76, 0.1);
+    box-shadow: 0 18px 36px rgba(26, 43, 76, 0.16);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .map-page__controls-panel > .relative {
+    margin-bottom: var(--space-4, 1rem);
+  }
+
+  .map-page__controls-panel input {
+    box-shadow: none;
+    border: 1px solid rgba(26, 43, 76, 0.1);
+  }
+
+  .map-page__controls-panel .overflow-x-auto {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--space-2, 0.5rem);
+    margin-top: 0;
+    padding-bottom: 0;
+    overflow: visible;
+  }
+
+  .map-page__more-panel {
+    display: block;
+    margin-top: var(--space-3, 0.75rem);
+    padding-top: var(--space-3, 0.75rem);
+    border-top: 1px solid rgba(26, 43, 76, 0.08);
+  }
+
+  .map-page__more-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3, 0.75rem);
+    margin-bottom: var(--space-2, 0.5rem);
+  }
+
+  .map-page__more-title {
+    margin: 0;
+    color: #1a2b4c;
+    font-size: 0.875rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .map-page__more-kicker {
+    margin: 0.125rem 0 0;
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .map-page__more-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+  }
+
+  .map-page__more-clear,
+  .map-page__more-close {
+    border: 0;
+    background: transparent;
+    color: #e8570a;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .map-page__more-clear {
+    padding: 0.35rem 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  .map-page__more-close {
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(232, 87, 10, 0.08);
+  }
+
+  .map-page__more-chip-list {
+    max-height: min(28vh, 13.5rem);
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2, 0.5rem);
+    padding: 0.125rem 0.125rem var(--space-1, 0.25rem);
+  }
+
+  .map-page__more-chip {
+    min-width: 0;
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 999px;
+    background: #ffffff;
+    color: #475569;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1.1;
+    white-space: normal;
+    text-align: left;
+    box-shadow: 0 1px 2px rgba(26, 43, 76, 0.06);
+  }
+
+  .map-page__more-chip--active {
+    border-color: #1a2b4c;
+    background: #1a2b4c;
+    color: #ffffff;
+  }
+
+  .map-page__more-count {
+    flex: none;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(26, 43, 76, 0.08);
+    color: inherit;
+    font-size: 0.6875rem;
+    font-weight: 800;
+  }
+
+  .map-page__more-chip--active .map-page__more-count {
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .map-page__more-empty {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .map-page__status-card,
+  .map-page__preview-card {
+    left: var(--space-6, 1.5rem);
+    right: auto;
+    width: min(390px, calc(100% - 3rem));
+  }
+
+  .map-page__locate-button {
+    right: var(--space-6, 1.5rem);
   }
 }

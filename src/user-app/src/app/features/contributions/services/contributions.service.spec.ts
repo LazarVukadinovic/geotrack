@@ -47,6 +47,7 @@ describe('ContributionsService', () => {
     expect(payload['placeType']).toBe('Cafe');
     expect(payload['entityType']).toBeUndefined();
     expect(payload['stayType']).toBeUndefined();
+    expect(payload['amenities']).toEqual(['wifi']);
     expect(payload['bookingPartners']).toEqual([]);
 
     req.flush({ contribution: makeApiContribution({ entityType: 'Place', placeType: 'Cafe', stayType: null }) });
@@ -69,6 +70,7 @@ describe('ContributionsService', () => {
     const payload = JSON.parse((req.request.body as FormData).get('payload') as string) as Record<string, unknown>;
     expect(payload['placeType']).toBe('Stay');
     expect(payload['stayType']).toBe('Villa');
+    expect(payload['amenities']).toEqual(['free-wifi']);
     expect(payload['bookingPartners']).toEqual([
       { id: 'booking', url: 'https://booking.example/villa' },
     ]);
@@ -90,6 +92,61 @@ describe('ContributionsService', () => {
     expect(actual?.entityType).toBe('Place');
     expect(actual?.placeType).toBe('Stay');
     expect(actual?.stayType).toBe('Villa');
+  });
+
+  it('normalizes backend amenity values to frontend option ids for edit drafts', () => {
+    let actual: ContributionDetail | undefined;
+
+    service.getDetail(7).subscribe(detail => {
+      actual = detail;
+    });
+
+    const req = httpMock.expectOne('/api/contributions/7');
+    req.flush(makeApiContribution({
+      id: 7,
+      entityType: 'Place',
+      placeType: 'Stay',
+      stayType: 'Villa',
+      amenities: [
+        'free-wifi',
+        'Breakfast Included',
+        'On-site Dining',
+        'air-conditioning',
+        'Fitness Center',
+        'Swimming Pool',
+        'WIFI',
+        'sea-view',
+      ],
+      stayAmenities: ['free-wifi'],
+    }));
+
+    expect(actual?.amenities).toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea-view']);
+    expect(service.detailToDraft(actual!).features?.amenities)
+      .toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea-view']);
+  });
+
+  it('sends normalized backend amenity values in update payload without dropping unknown amenities', () => {
+    const draft = makeStayDraft();
+    draft.features = {
+      tags: ['Coastal'],
+      amenities: ['free-wifi', 'wifi', 'Breakfast Included', 'On-site Dining', 'sea-view', 'A/C'],
+    };
+
+    service.updatePlace(42, draft).subscribe();
+
+    const req = httpMock.expectOne('/api/contributions/places/42');
+    const payload = JSON.parse((req.request.body as FormData).get('payload') as string) as Record<string, unknown>;
+
+    expect(payload['amenities']).toEqual([
+      'free-wifi',
+      'breakfast-included',
+      'restaurant',
+      'sea-view',
+      'air-conditioning',
+    ]);
+
+    req.flush({ contribution: makeApiContribution({ entityType: 'Place', placeType: 'Stay', stayType: 'Villa' }) });
+    httpMock.expectOne('/api/contributions').flush({ contributions: [] });
   });
 });
 

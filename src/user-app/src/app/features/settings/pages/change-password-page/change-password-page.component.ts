@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -16,10 +16,14 @@ export class ChangePasswordPageComponent {
   private readonly settingsService = inject(UserSettingsService);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly location = inject(Location);
 
   protected readonly currentPassword = signal('');
   protected readonly newPassword = signal('');
   protected readonly confirmPassword = signal('');
+  protected readonly showCurrentPassword = signal(false);
+  protected readonly showNewPassword = signal(false);
+  protected readonly showConfirmPassword = signal(false);
   protected readonly isSaving = signal(false);
   protected readonly hasSubmitted = signal(false);
   protected readonly feedbackMessage = signal('');
@@ -112,5 +116,28 @@ export class ChangePasswordPageComponent {
         this.errorMessage.set(error.error?.message ?? 'We could not update your password right now.');
       },
     });
+  }
+
+  protected cancel(): void {
+    const navigationId = Number(globalThis.history?.state?.navigationId ?? 0);
+
+    if (navigationId > 1) {
+      this.location.back();
+      return;
+    }
+
+    void this.router.navigate(['/settings']);
+  }
+
+  protected toggleCurrentPasswordVisibility(): void {
+    this.showCurrentPassword.update(value => !value);
+  }
+
+  protected toggleNewPasswordVisibility(): void {
+    this.showNewPassword.update(value => !value);
+  }
+
+  protected toggleConfirmPasswordVisibility(): void {
+    this.showConfirmPassword.update(value => !value);
   }
 }

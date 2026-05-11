@@ -4,6 +4,7 @@ import { ActivatedRoute, NavigationEnd, NavigationStart, Router, RouterOutlet } 
 import { filter } from 'rxjs/operators';
 import { BottomNavComponent } from '../../../shared/components/bottom-nav/bottom-nav.component';
 import { SaveToCollectionSheetComponent } from '../../../shared/components/save-to-collection-sheet/save-to-collection-sheet.component';
+import { DesktopSidebarComponent } from '../desktop-sidebar/desktop-sidebar.component';
 import { AuthService } from '../../services/auth.service';
 import { TokenStorageService } from '../../services/token-storage.service';
 import { TokenRefreshService } from '../../services/token-refresh.service';
@@ -22,10 +23,12 @@ const AUTH_REQUIRED_PREFIXES = [
   '/settings',
 ];
 
+type DesktopLayoutMode = 'contained' | 'wide' | 'narrow' | 'full';
+
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [RouterOutlet, BottomNavComponent, SaveToCollectionSheetComponent],
+  imports: [RouterOutlet, BottomNavComponent, DesktopSidebarComponent, SaveToCollectionSheetComponent],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.scss',
 })
@@ -38,6 +41,7 @@ export class AppShellComponent implements OnInit {
   private readonly analytics        = inject(AnalyticsService);
   private readonly locationService  = inject(LocationService);
   protected readonly showBottomNav  = signal(true);
+  protected readonly desktopLayout  = signal<DesktopLayoutMode>('contained');
 
   private readonly viewport = viewChild<ElementRef<HTMLElement>>('viewport');
   private currentTrigger: 'imperative' | 'popstate' | 'hashchange' = 'imperative';
@@ -73,7 +77,7 @@ export class AppShellComponent implements OnInit {
             this.scrollHistory.set(this.router.url, el.scrollTop);
           }
         } else {
-          this.syncBottomNav();
+          this.syncShellRouteState();
           // Fire a page_view for every navigation. AnalyticsService normalizes
           // the URL into a route template (`/places/:id`) and enriches with
           // destination + region context. Failures are swallowed inside the
@@ -105,13 +109,14 @@ export class AppShellComponent implements OnInit {
       });
 
     // Router tree / snapshots may not be final during the first tick; defer reads slightly.
-    queueMicrotask(() => this.syncBottomNav());
+    queueMicrotask(() => this.syncShellRouteState());
   }
 
-  private syncBottomNav(): void {
+  private syncShellRouteState(): void {
     const root = this.router.routerState?.root;
     if (!root) {
       this.showBottomNav.set(true);
+      this.desktopLayout.set('contained');
       return;
     }
 
@@ -122,5 +127,10 @@ export class AppShellComponent implements OnInit {
 
     const hideBottomNav = route.snapshot?.data?.['hideBottomNav'] === true;
     this.showBottomNav.set(!hideBottomNav);
+    this.desktopLayout.set(this.toDesktopLayout(route.snapshot?.data?.['desktopLayout']));
+  }
+
+  private toDesktopLayout(value: unknown): DesktopLayoutMode {
+    return value === 'wide' || value === 'narrow' || value === 'full' ? value : 'contained';
   }
 }

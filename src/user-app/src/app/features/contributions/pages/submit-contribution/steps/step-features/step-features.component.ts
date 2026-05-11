@@ -1,5 +1,9 @@
-import { Component, input, output, OnInit, effect, OnDestroy } from '@angular/core';
+import { Component, input, output, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import {
+  CONTRIBUTION_AMENITY_OPTIONS,
+  normalizeContributionAmenityIds,
+} from '../../../../services/contribution-amenities';
 
 export interface FeaturesData {
   tags: string[];
@@ -26,16 +30,7 @@ export class StepFeaturesComponent {
   'Lakefront', 'Historic'
 ];
 
-  amenities = [
-    { id: 'pool', label: 'POOL' },
-    { id: 'wifi', label: 'WIFI' },
-    { id: 'breakfast', label: 'BREAKFAST' },
-    { id: 'parking', label: 'PARKING' },
-    { id: 'spa', label: 'SPA' },
-    { id: 'gym', label: 'GYM' },
-    { id: 'dining', label: 'DINING' },
-    { id: 'ac', label: 'A/C' },
-  ];
+  amenities = CONTRIBUTION_AMENITY_OPTIONS;
 
   selectedTags: string[] = [];
   selectedAmenities: string[] = [];
@@ -45,7 +40,7 @@ export class StepFeaturesComponent {
       const d = this.data();
       if (d) {
         this.selectedTags = [...(d.tags ?? [])];
-        this.selectedAmenities = [...(d.amenities ?? [])];
+        this.selectedAmenities = normalizeContributionAmenityIds(d.amenities);
       }
     });
   }
@@ -53,7 +48,7 @@ export class StepFeaturesComponent {
   toggleTag(tag: string): void {
     if (this.isTagSelected(tag)) this.selectedTags = this.selectedTags.filter(t => t !== tag);
     else this.selectedTags = [...this.selectedTags, tag];
-    this.changed.emit({ tags: this.selectedTags, amenities: this.selectedAmenities });
+    this.changed.emit(this.currentData());
   }
 
   isTagSelected(tag: string): boolean { return this.selectedTags.includes(tag); }
@@ -61,12 +56,19 @@ export class StepFeaturesComponent {
   toggleAmenity(id: string): void {
     if (this.isAmenitySelected(id)) this.selectedAmenities = this.selectedAmenities.filter(a => a !== id);
     else this.selectedAmenities = [...this.selectedAmenities, id];
-    this.changed.emit({ tags: this.selectedTags, amenities: this.selectedAmenities });
+    this.changed.emit(this.currentData());
   }
 
   isAmenitySelected(id: string): boolean { return this.selectedAmenities.includes(id); }
 
   onContinue(): void {
-    this.saved.emit({ tags: this.selectedTags, amenities: this.selectedAmenities });
+    this.saved.emit(this.currentData());
+  }
+
+  private currentData(): FeaturesData {
+    return {
+      tags: this.selectedTags,
+      amenities: normalizeContributionAmenityIds(this.selectedAmenities),
+    };
   }
 }

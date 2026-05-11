@@ -14,6 +14,7 @@ import { FavoriteButtonComponent } from '../../../../shared/components/favorite-
 })
 export class CuratedForYouComponent {
   readonly items = input.required<ExploreCuratedItem[]>();
+  readonly loading = input(false);
 
   readonly bookmarkToggled = output<string>();
   readonly cardActivated   = output<string>();

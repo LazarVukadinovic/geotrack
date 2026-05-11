@@ -10,7 +10,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
         </svg>
       </button>
-      <span class="settings-shell__title">{{ title() }}</span>
+      <div class="settings-shell__title-stack">
+        <span class="settings-shell__title">{{ title() }}</span>
+        @if (resolvedHeaderDescription()) {
+          <span class="settings-shell__header-description">{{ resolvedHeaderDescription() }}</span>
+        }
+      </div>
       <div class="settings-shell__spacer" aria-hidden="true"></div>
     </div>
   </div>

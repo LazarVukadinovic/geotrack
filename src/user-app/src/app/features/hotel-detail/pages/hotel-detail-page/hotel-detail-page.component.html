@@ -1,5 +1,5 @@
 @if (hotel(); as h) {
-  <article class="hd">
+  <article class="hd gt-detail gt-detail--stay">
 
     <!-- ── Top bar: absolute, above scroll container, transparent → navy ─── -->
     <header class="hd__top-bar" [style.--progress]="scrollProgress()">
@@ -57,7 +57,7 @@
     <div class="hd__scroll" #hdScroll (scroll)="onScroll($event)">
       <div class="hd__scroll-spacer" aria-hidden="true"></div>
 
-      <div class="hd__card">
+      <div class="hd__card" [class.hd__card--has-gallery]="h.images.length > 1">
 
         <!-- Category tags -->
         <div class="hd__tags" role="list" aria-label="Categories">
@@ -108,14 +108,6 @@
             </div>
           }
 
-          @if (h.pricePerNight != null) {
-            <span class="hd__stat-dot" aria-hidden="true"></span>
-
-            <div class="hd__stat">
-              <span class="hd__stat-val">${{ h.pricePerNight }}</span>
-              <span class="hd__stat-sub">/ night</span>
-            </div>
-          }
         </div>
 
         <!-- CTA buttons -->
@@ -186,10 +178,12 @@
           </section>
         }
 
+        <div class="hd__detail-grid">
+          <div class="hd__detail-side">
         @if (hasBookingPartners()) {
-          <div class="hd__divider"></div>
+          <div class="hd__divider hd__divider--booking"></div>
 
-          <section class="hd__section">
+          <section class="hd__section hd__section--booking">
             <div class="hd__booking">
               <p class="hd__booking-heading">Bookings completed on partner sites</p>
 
@@ -236,34 +230,112 @@
           </section>
         }
 
-        <!-- ── About ──────────────────────────────────────────────────────── -->
-        <div class="hd__divider"></div>
+            @if (h.contactEmail || h.phoneNumber) {
+              <div class="hd__divider hd__divider--contact"></div>
 
-        <section class="hd__section">
+              <section class="hd__section hd__section--contact">
+                <h2 class="hd__section-title">Contact</h2>
+                <div class="flex flex-col gap-2 text-sm">
+                  @if (h.contactEmail) {
+                    <a [href]="'mailto:' + h.contactEmail" class="text-[#e8570a] break-all">{{ h.contactEmail }}</a>
+                  }
+                  @if (h.phoneNumber) {
+                    <p class="text-slate-600">{{ h.phoneNumber }}</p>
+                  }
+                </div>
+              </section>
+            }
+
+            <div class="hd__divider hd__divider--reviews"></div>
+
+            <section class="hd__section hd__section--reviews">
+              <app-section-header
+                title="Reviews"
+                actionLabel="More"
+                (action)="openReviews()"
+              />
+
+              <app-review-entry
+                [isLoggedIn]="isLoggedIn()"
+                [entityName]="h.title"
+                [submitRequest]="submitReview"
+                (loginRequested)="goToLogin()"
+                (reviewSubmitted)="onReviewSubmitted($event)"
+              />
+
+              @if (reportMessage()) {
+                <p class="hd__review-notice hd__review-notice--success" role="status">{{ reportMessage() }}</p>
+              }
+              @if (reportError()) {
+                <p class="hd__review-notice hd__review-notice--error" role="alert">{{ reportError() }}</p>
+              }
+
+              <!-- Review cards -->
+              <div class="hd__reviews-list">
+                @for (review of h.reviews; track review.id) {
+                  <div class="hd__review">
+                    <div class="hd__review-top">
+                      <img
+                        class="hd__review-avatar"
+                        [src]="review.avatarUrl"
+                        [alt]="review.authorName"
+                        width="44"
+                        height="44"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <div class="hd__review-meta">
+                        <span class="hd__review-name">{{ review.authorName }}</span>
+                        <span class="hd__review-time">{{ review.timeAgo }}</span>
+                      </div>
+                      <div class="hd__review-rating">
+                        <svg class="hd__review-star" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="currentColor"
+                                d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                        </svg>
+                        <span>{{ review.rating.toFixed(1) }}</span>
+                      </div>
+                    </div>
+
+                    <p class="hd__review-body">{{ review.body }}</p>
+
+                    <button
+                      type="button"
+                      class="hd__review-report"
+                      [class.hd__review-report--reported]="isReviewReported(review)"
+                      [disabled]="isReviewReported(review) || isReviewReporting(review.id)"
+                      (click)="reportReview(review.id)"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                              d="M5 21V4.6c0-.9.74-1.6 1.65-1.6h9.7c.83 0 1.5.67 1.5 1.5v7.2c0 .83-.67 1.5-1.5 1.5H6"/>
+                      </svg>
+                      @if (isReviewReporting(review.id)) {
+                        Reporting...
+                      } @else if (isReviewReported(review)) {
+                        Reported
+                      } @else {
+                        Report
+                      }
+                    </button>
+                  </div>
+                }
+              </div>
+            </section>
+          </div>
+
+          <div class="hd__detail-main">
+        <div class="hd__divider hd__divider--about"></div>
+
+        <section class="hd__section hd__section--about">
           <h2 class="hd__section-title">About this property</h2>
           <p class="hd__about">{{ h.about }}</p>
         </section>
 
-        @if (h.contactEmail || h.phoneNumber) {
-          <div class="hd__divider"></div>
-
-          <section class="hd__section">
-            <h2 class="hd__section-title">Contact</h2>
-            <div class="flex flex-col gap-2 text-sm">
-              @if (h.contactEmail) {
-                <a [href]="'mailto:' + h.contactEmail" class="text-[#e8570a] break-all">{{ h.contactEmail }}</a>
-              }
-              @if (h.phoneNumber) {
-                <p class="text-slate-600">{{ h.phoneNumber }}</p>
-              }
-            </div>
-          </section>
-        }
-
         <!-- ── Amenities ──────────────────────────────────────────────────── -->
-        <div class="hd__divider"></div>
+        <div class="hd__divider hd__divider--amenities"></div>
 
-        <section class="hd__section">
+        <section class="hd__section hd__section--amenities">
           <div class="hd__amenities" role="list" aria-label="Amenities">
             @for (amenity of h.amenities; track amenity.id) {
               <div class="hd__amenity" role="listitem">
@@ -284,88 +356,10 @@
           </div>
         </section>
 
-        <!-- ── Reviews ───────────────────────────────────────────────────── -->
-        <div class="hd__divider"></div>
-
-        <section class="hd__section">
-          <app-section-header
-            title="Reviews"
-            actionLabel="More"
-            (action)="openReviews()"
-          />
-
-          <app-review-entry
-            [isLoggedIn]="isLoggedIn()"
-            [entityName]="h.title"
-            [submitRequest]="submitReview"
-            (loginRequested)="goToLogin()"
-            (reviewSubmitted)="onReviewSubmitted($event)"
-          />
-
-          @if (reportMessage()) {
-            <p class="hd__review-notice hd__review-notice--success" role="status">{{ reportMessage() }}</p>
-          }
-          @if (reportError()) {
-            <p class="hd__review-notice hd__review-notice--error" role="alert">{{ reportError() }}</p>
-          }
-
-          <!-- Review cards -->
-          <div class="hd__reviews-list">
-            @for (review of h.reviews; track review.id) {
-              <div class="hd__review">
-                <div class="hd__review-top">
-                  <img
-                    class="hd__review-avatar"
-                    [src]="review.avatarUrl"
-                    [alt]="review.authorName"
-                    width="44"
-                    height="44"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <div class="hd__review-meta">
-                    <span class="hd__review-name">{{ review.authorName }}</span>
-                    <span class="hd__review-time">{{ review.timeAgo }}</span>
-                  </div>
-                  <div class="hd__review-rating">
-                    <svg class="hd__review-star" viewBox="0 0 24 24" aria-hidden="true">
-                      <path fill="currentColor"
-                            d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
-                    </svg>
-                    <span>{{ review.rating.toFixed(1) }}</span>
-                  </div>
-                </div>
-
-                <p class="hd__review-body">{{ review.body }}</p>
-
-                <button
-                  type="button"
-                  class="hd__review-report"
-                  [class.hd__review-report--reported]="isReviewReported(review)"
-                  [disabled]="isReviewReported(review) || isReviewReporting(review.id)"
-                  (click)="reportReview(review.id)"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
-                          d="M5 21V4.6c0-.9.74-1.6 1.65-1.6h9.7c.83 0 1.5.67 1.5 1.5v7.2c0 .83-.67 1.5-1.5 1.5H6"/>
-                  </svg>
-                  @if (isReviewReporting(review.id)) {
-                    Reporting...
-                  } @else if (isReviewReported(review)) {
-                    Reported
-                  } @else {
-                    Report
-                  }
-                </button>
-              </div>
-            }
-          </div>
-        </section>
-
         <!-- ── Similar Stays ─────────────────────────────────────────────── -->
-        <div class="hd__divider"></div>
+        <div class="hd__divider hd__divider--similar"></div>
 
-        <section class="hd__section hd__section--last">
+        <section class="hd__section hd__section--similar hd__section--last">
           <app-section-header
             title="Similar Stays"
           />
@@ -411,6 +405,9 @@
             </div>
           </div>
         </section>
+
+          </div><!-- /.hd__detail-main -->
+        </div><!-- /.hd__detail-grid -->
 
       </div><!-- /.hd__card -->
     </div><!-- /.hd__scroll -->

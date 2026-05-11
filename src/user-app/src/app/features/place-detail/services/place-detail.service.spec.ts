@@ -102,4 +102,21 @@ describe('PlaceDetailService image mapping', () => {
     expect(detail?.heroImage).toBe('/legacy-main.svg');
     expect(detail?.images).toEqual([]);
   });
+
+  it('normalizes missing similar places to an empty array', () => {
+    service.loadPlaceDetail('9');
+
+    const req = httpMock.expectOne('/api/places/9');
+    req.flush({
+      id: 9,
+      title: 'Quiet Place',
+      tags: [],
+      reviews: [],
+      isSaved: false,
+      contentType: 'place',
+    });
+
+    const detail = service.getPlaceDetailPageData('9');
+    expect(detail?.similar).toEqual([]);
+  });
 });
