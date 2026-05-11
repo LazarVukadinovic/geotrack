@@ -98,6 +98,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   // Fields
   placeName  = '';
   placeType  = 'Museum';
+  summary    = '';
   opsEnabled = false;
 
   allHours: string[] = [
@@ -449,6 +450,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private populateFromPlace(place: any): void {
     this.placeName     = place.name     ?? '';
     this.placeType     = place.category ?? '';
+    this.summary       = place.summary  ?? '';
     this.streetAddress = place.address  ?? '';
     this.pinLat        = place.lat?.toFixed(6) ?? '';
     this.pinLng        = place.lng?.toFixed(6) ?? '';
@@ -530,7 +532,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         lng,
         status:         'Published',
         description:    descriptionHtml,
-        summary:        descriptionText.slice(0, 160),
+        summary:        this.summary || descriptionText.slice(0, 160),
         classification: classification.length ? classification : undefined,
         tags:           this.tags.length ? this.tags : undefined,
         coverImageUrl:  this.coverImageUrl ?? undefined,
@@ -567,7 +569,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         this.placesListSvc.addItem({
           id:            saved.id,
           name:          saved.name,
-          summary:       descriptionText.slice(0, 160),
+          summary:       this.summary || descriptionText.slice(0, 160),
           region:        'Šumadija, Srbija',
           status:        'Published',
           lastUpdated:   new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),

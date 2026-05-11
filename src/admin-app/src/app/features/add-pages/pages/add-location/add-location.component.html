@@ -33,7 +33,8 @@
                   Parent Destination <span class="text-red-500">*</span>
                 </label>
                 <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none"
-                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;">
+                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
+                        [(ngModel)]="parentDestination">
                   <option value="">Select parent destination...</option>
                   <option>Kragujevac</option>
                   <option>Central District</option>
@@ -48,7 +49,8 @@
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Location Type/Category</label>
                 <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none"
-                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;">
+                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
+                        [(ngModel)]="locationCategory">
                   <option value="">e.g. Park Area, Historic Quarter...</option>
                   <option>Park Area</option>
                   <option>Historic Quarter</option>
@@ -72,7 +74,8 @@
                 Short Excerpt/Summary <span class="text-gray-400 font-normal">(Max 160 chars)</span>
               </label>
               <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
-                        placeholder="Brief summary of the location..." rows="2" maxlength="160"></textarea>
+                        placeholder="Brief summary of the location..." rows="2" maxlength="160"
+                        [(ngModel)]="summary"></textarea>
             </div>
 
             <!-- Rich text editor -->

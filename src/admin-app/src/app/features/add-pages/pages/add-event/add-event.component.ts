@@ -53,8 +53,10 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
   // Basic fields
-  eventTitle = '';
-  venueType  = 'location';
+  eventTitle    = '';
+  eventCategory = '';
+  summary       = '';
+  venueType     = 'location';
   allDay     = false;
   freeEvent  = false;
   recurring  = false;
@@ -650,6 +652,8 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       this.isEditMode = true;
       const p = state.place;
       this.eventTitle          = p.name      ?? '';
+      this.eventCategory       = p.category  ?? '';
+      this.summary             = p.summary   ?? '';
       this._pendingDescription = p.description ?? '';
       this.startDate = this._parseDisplayDateToIso(p.startDate) ?? this.startDate;
       this.endDate   = this._parseDisplayDateToIso(p.endDate)   ?? this.endDate;
@@ -783,6 +787,8 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
       if (this.isEditMode && history.state?.place?.id) {
         this.eventsListSvc.updateItem(history.state.place.id, {
           name:           this.eventTitle,
+          category:       this.eventCategory || 'Event',
+          summary:        this.summary || descriptionText.slice(0, 160),
           lat,
           lng,
           address:        this.streetAddress || this.selectedVenue?.address,
@@ -803,14 +809,14 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
         this.eventsListSvc.addItem({
           id:            Date.now().toString(),
           name:          this.eventTitle,
-          summary:       descriptionText.slice(0, 160),
+          summary:       this.summary || descriptionText.slice(0, 160),
           region:        'Šumadija, Srbija',
           status:        'Published',
           lastUpdated:   new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
           imageBg:       this.coverImageUrl
                           ? `url(${this.coverImageUrl}) center/cover`
                           : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
-          category:      'Event',
+          category:      this.eventCategory || 'Event',
           lat,
           lng,
           address:       this.streetAddress || this.selectedVenue?.address,

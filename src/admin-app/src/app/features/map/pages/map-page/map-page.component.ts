@@ -6,6 +6,9 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { MapPlace } from '../../../../core/models/map-place.model';
 import { MapPlacesService } from '../../../../core/services/map-places.service';
+import { PlacesListService } from '../../../../core/services/places-list.service';
+import { LocationsListService } from '../../../../core/services/locations-list.service';
+import { DestinationsListService } from '../../../../core/services/destinations-list.service';
 declare const L: any;
 
 
@@ -16,7 +19,15 @@ declare const L: any;
   templateUrl: './map-page.component.html',
 })
 export class MapPageComponent implements OnInit, OnDestroy {
-  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private router: Router, private mapPlacesService:MapPlacesService) {}
+  constructor(
+    private zone: NgZone,
+    private cdr: ChangeDetectorRef,
+    private router: Router,
+    private mapPlacesService: MapPlacesService,
+    private placesListSvc: PlacesListService,
+    private locationsListSvc: LocationsListService,
+    private destinationsListSvc: DestinationsListService,
+  ) {}
 
   region   = 'Šumadija, Srbija';
   userName = 'Sarah Jenkins';
@@ -375,11 +386,14 @@ export class MapPageComponent implements OnInit, OnDestroy {
 
   editPlace(place: MapPlace): void {
     if (place.type === 'Location') {
-      this.router.navigate(['/locations/new'], { state: { place } });
+      const full = this.locationsListSvc.findById(place.id) ?? place;
+      this.router.navigate(['/locations/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
     } else if (place.type === 'Destination') {
-      this.router.navigate(['/destinations/new'], { state: { place } });
+      const full = this.destinationsListSvc.findById(place.id) ?? place;
+      this.router.navigate(['/destinations/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
     } else {
-      this.router.navigate(['/places/edit', place.id], { state: { place } });
+      const full = this.placesListSvc.findById(place.id) ?? place;
+      this.router.navigate(['/places/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
     }
     this.closePopup();
   }

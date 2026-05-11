@@ -118,7 +118,7 @@ export class AllEventsComponent implements OnInit, AfterViewInit, OnDestroy {
       this.items      = page.items;
       this.totalItems = page.total;
       this.isLoading  = false;
-      this.cdr.markForCheck();
+      this.cdr.detectChanges();
     });
   }
 
@@ -133,7 +133,7 @@ export class AllEventsComponent implements OnInit, AfterViewInit, OnDestroy {
       this.items         = page.items;
       this.totalItems    = page.total;
       this.isLoadingMore = false;
-      this.cdr.markForCheck();
+      this.cdr.detectChanges();
     });
   }
 

@@ -38,7 +38,8 @@
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Event Category/Type <span class="text-red-500">*</span></label>
                 <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none"
-                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;">
+                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
+                        [(ngModel)]="eventCategory">
                   <option value="">Select Event Category/Type...</option>
                   <option>Festival</option><option>Concert</option><option>Exhibition</option>
                   <option>Sports</option><option>Workshop</option><option>Market</option>
@@ -51,7 +52,7 @@
             </div>
             <div class="mb-3">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Short Excerpt/Summary <span class="text-red-500">*</span></label>
-              <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans" placeholder="A brief, engaging summary (max 160 characters)..." rows="2" maxlength="160"></textarea>
+              <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans" placeholder="A brief, engaging summary (max 160 characters)..." rows="2" maxlength="160" [(ngModel)]="summary"></textarea>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Full Description</label>

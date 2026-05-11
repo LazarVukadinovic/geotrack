@@ -55,6 +55,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   // Basic fields
   destinationName = '';
   streetAddress   = '';
+  summary         = '';
 
   // Rich text editor
   isBold        = false;
@@ -373,8 +374,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private _pendingDescription = '';
 
   private _loadFromRouterState(p: any): void {
-    this.destinationName = p.name ?? '';
+    this.destinationName = p.name    ?? '';
     this.streetAddress   = p.address ?? '';
+    this.summary         = p.summary ?? '';
 
     // Cover image
     if (p.coverImageUrl) {
@@ -455,7 +457,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         address:        this.streetAddress || undefined,
         status:         'Published',
         description:    descriptionHtml,
-        summary:        descriptionText.slice(0, 160),
+        summary:        this.summary || descriptionText.slice(0, 160),
         classification: classification.length ? classification : undefined,
         tags:           this.tags.length ? this.tags : undefined,
         coverImageUrl:  this.coverImageUrl ?? undefined,
@@ -492,7 +494,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         this.destinationsListSvc.addItem({
           id:            saved.id,
           name:          saved.name,
-          summary:       descriptionText.slice(0, 160),
+          summary:       this.summary || descriptionText.slice(0, 160),
           region:        'Šumadija, Srbija',
           status:        'Published',
           lastUpdated:   new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),

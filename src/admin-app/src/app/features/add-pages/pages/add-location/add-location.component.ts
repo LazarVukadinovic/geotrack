@@ -53,8 +53,11 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
   // Basic fields
-  locationName  = '';
-  streetAddress = '';
+  locationName       = '';
+  streetAddress      = '';
+  summary            = '';
+  parentDestination  = '';
+  locationCategory   = '';
 
   // Rich text editor
   isBold        = false;
@@ -373,8 +376,11 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private _loadFromRouterState(p: any): void {
-    this.locationName  = p.name    ?? '';
-    this.streetAddress = p.address ?? '';
+    this.locationName      = p.name             ?? '';
+    this.streetAddress     = p.address          ?? '';
+    this.summary           = p.summary          ?? '';
+    this.parentDestination = p.parentDestination ?? '';
+    this.locationCategory  = p.category         ?? '';
 
     if (p.coverImageUrl) {
       this.coverImageUrl  = p.coverImageUrl;
@@ -442,15 +448,16 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (this.isEditMode && this.editId) {
       this.locationsListSvc.updateItem(this.editId, {
-        name:           this.locationName || 'New Location',
-        lat:            centerLat,
-        lng:            centerLng,
+        name:              this.locationName || 'New Location',
+        lat:               centerLat,
+        lng:               centerLng,
         zone,
-        category:       'Location',
-        address:        this.streetAddress || undefined,
-        status:         'Published',
-        description:    descriptionHtml,
-        summary:        descriptionText.slice(0, 160),
+        category:          this.locationCategory || 'Location',
+        parentDestination: this.parentDestination || undefined,
+        address:           this.streetAddress || undefined,
+        status:            'Published',
+        description:       descriptionHtml,
+        summary:           this.summary || descriptionText.slice(0, 160),
         classification: classification.length ? classification : undefined,
         tags:           this.tags.length ? this.tags : undefined,
         coverImageUrl:  this.coverImageUrl ?? undefined,
@@ -485,16 +492,17 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         const returnTo = history.state?.returnTo as string | undefined;
 
         this.locationsListSvc.addItem({
-          id:            saved.id,
-          name:          saved.name,
-          summary:       descriptionText.slice(0, 160),
-          region:        'Šumadija, Srbija',
-          status:        'Published',
-          lastUpdated:   new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          imageBg:       this.coverImageUrl
-                          ? `url(${this.coverImageUrl}) center/cover`
-                          : 'linear-gradient(135deg,#0891b2 0%,#0e7490 100%)',
-          category:      saved.category,
+          id:                saved.id,
+          name:              saved.name,
+          summary:           this.summary || descriptionText.slice(0, 160),
+          region:            'Šumadija, Srbija',
+          status:            'Published',
+          lastUpdated:       new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          imageBg:           this.coverImageUrl
+                              ? `url(${this.coverImageUrl}) center/cover`
+                              : 'linear-gradient(135deg,#0891b2 0%,#0e7490 100%)',
+          category:          this.locationCategory || saved.category,
+          parentDestination: this.parentDestination || undefined,
           lat:           saved.lat,
           lng:           saved.lng,
           zone:          saved.zone,
