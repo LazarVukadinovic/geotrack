@@ -8,28 +8,18 @@
       [userName]="userName"
       [userRole]="userRole"
       title="User Administration"
+      [showBack]="true"
+      backRoute="/national-dashboard"
     />
 
     <div class="flex-1 overflow-y-auto px-8 py-6">
 
       <!-- Page header -->
-      <div class="flex items-start justify-between mb-6">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900">Regional Users & Access</h1>
-          <p class="text-sm text-gray-500 mt-0.5">
-            Manage regional organization accounts, access status, and region assignments.
-          </p>
-        </div>
-        <button
-          (click)="openCreateModal()"
-          class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white border-0 cursor-pointer"
-          style="background: linear-gradient(135deg, #1565d8 0%, #1a86e8 100%);"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Create Regional User
-        </button>
+      <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Regional Users & Access</h1>
+        <p class="text-sm text-gray-500 mt-0.5">
+          Manage regional organization accounts, access status, and region assignments.
+        </p>
       </div>
 
       <!-- Search -->
@@ -51,6 +41,39 @@
             (click)="searchQuery = ''; onSearchChange()"
             class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer p-0 leading-none text-lg flex-shrink-0"
           >&times;</button>
+        </div>
+
+        <!-- Sort dropdown -->
+        <div class="relative ml-1" (click)="$event.stopPropagation()">
+          <button
+            (click)="sortOpen = !sortOpen"
+            class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200
+                   rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300
+                   cursor-pointer transition-colors"
+          >
+            <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+            </svg>
+            Sort: {{ currentSortLabel }}
+            <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          <div
+            *ngIf="sortOpen"
+            class="absolute left-0 top-full mt-1 bg-white border border-gray-200
+                   rounded-lg shadow-lg z-10 w-52 py-1 overflow-hidden"
+          >
+            <button
+              *ngFor="let opt of sortOptions"
+              (click)="applySortOption(opt); sortOpen = false"
+              class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50
+                     transition-colors cursor-pointer border-none bg-transparent"
+              [ngClass]="currentSortLabel === opt.label ? 'font-semibold text-blue-700 bg-blue-50' : ''"
+            >{{ opt.label }}</button>
+          </div>
         </div>
 
         <div class="flex-1"></div>
@@ -106,8 +129,9 @@
         <ng-container *ngIf="!isLoading">
           <div
             *ngFor="let user of items; trackBy: trackById"
-            class="grid items-center px-5 py-3.5 border-b border-gray-50 hover:bg-blue-50/20 transition-colors group"
+            class="grid items-center px-5 py-3.5 border-b border-gray-50 hover:bg-blue-50/30 transition-colors group cursor-pointer"
             style="grid-template-columns: 2fr 160px 220px 140px 160px 48px;"
+            (click)="openViewModal(user)"
           >
             <!-- User -->
             <div class="flex items-center gap-3 min-w-0">
@@ -299,6 +323,128 @@
         </div>
 
       </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     VIEW USER MODAL (read-only)
+════════════════════════════════════════════════════ -->
+<div
+  *ngIf="viewUser"
+  class="fixed inset-0 z-50 flex items-center justify-center"
+  style="background: rgba(0,0,0,0.45); backdrop-filter: blur(3px);"
+  (click)="closeViewModal()"
+>
+  <div
+    class="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+    style="width: 520px; max-width: 96vw; max-height: 90vh;"
+    (click)="$event.stopPropagation()"
+  >
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+      <h3 class="text-base font-bold text-gray-900">User Details</h3>
+      <button
+        (click)="closeViewModal()"
+        class="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer text-xl leading-none"
+      >&times;</button>
+    </div>
+
+    <!-- Body -->
+    <div class="overflow-y-auto flex-1 px-6 py-5 space-y-6">
+
+      <!-- User identity -->
+      <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+        <div
+          class="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+          [style.background]="viewUser.avatarColor"
+        >{{ viewUser.avatarInitials }}</div>
+        <div>
+          <p class="text-base font-bold text-gray-900">{{ viewUser.firstName }} {{ viewUser.lastName }}</p>
+          <p class="text-sm text-gray-400">{{ viewUser.email }}</p>
+        </div>
+        <div class="ml-auto">
+          <span
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+            [ngClass]="statusClass(viewUser.status)"
+          >
+            <span class="w-1.5 h-1.5 rounded-full"
+              [class.bg-emerald-500]="viewUser.status === 'Active'"
+              [class.bg-gray-400]="viewUser.status === 'Inactive'">
+            </span>
+            {{ viewUser.status }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Role section (read-only) -->
+      <div>
+        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Role</h4>
+        <div class="flex items-center p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <div>
+            <p class="text-sm font-semibold text-gray-800">Current Role</p>
+            <span
+              class="inline-flex items-center mt-1 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+              [ngClass]="roleClass(viewUser.role)"
+            >{{ viewUser.role }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assigned regions (read-only) -->
+      <div>
+        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Assigned Regions</h4>
+
+        <div *ngIf="viewUser.assignedRegions.length > 0; else noRegionsView"
+             class="flex flex-col gap-2">
+          <div
+            *ngFor="let r of viewUser.assignedRegions"
+            class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100"
+          >
+            <svg class="w-3.5 h-3.5 text-blue-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
+            </svg>
+            <span class="text-sm font-medium text-gray-700">{{ r }}</span>
+          </div>
+        </div>
+        <ng-template #noRegionsView>
+          <div class="flex items-center justify-center py-6 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+            <div class="text-center">
+              <svg class="w-8 h-8 mx-auto mb-2 text-gray-200" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
+              </svg>
+              <p class="text-sm text-gray-400">No regions assigned</p>
+            </div>
+          </div>
+        </ng-template>
+      </div>
+
+      <!-- Metadata -->
+      <div class="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">User ID</span>
+          <span class="text-xs font-mono text-gray-600">{{ viewUser.id }}</span>
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Member Since</span>
+          <span class="text-xs text-gray-600">{{ viewUser.createdAt }}</span>
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Last Login</span>
+          <span class="text-xs text-gray-600">{{ formatLastLogin(viewUser.lastLogin) }}</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="flex items-center justify-end px-6 py-4 border-t border-gray-100 bg-gray-50/60">
+      <button
+        (click)="closeViewModal()"
+        class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-white
+               border border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
+      >Close</button>
     </div>
   </div>
 </div>
