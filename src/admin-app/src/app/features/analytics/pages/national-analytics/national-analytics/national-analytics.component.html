@@ -1,0 +1,539 @@
+<div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans" (click)="showColumnPicker = false">
+
+  <app-sidebar [region]="region" />
+
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+    <app-topbar
+      [userName]="userName"
+      [userRole]="userRole"
+      title="National Analytics & Insights"
+    />
+
+    <div class="flex-1 overflow-y-auto px-8 py-6">
+
+      <!-- Page header -->
+      <div class="flex items-start justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900">National Analytics & Insights</h1>
+          <p class="text-sm text-gray-500 mt-1 max-w-xl">
+            Compare regional performance, user engagement, and content quality across the country.
+            Monitor nationwide trends to allocate resources effectively.
+          </p>
+        </div>
+        <button
+          (click)="exportReport()"
+          class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white border-0 cursor-pointer"
+          style="background: linear-gradient(135deg, #1565d8 0%, #1a86e8 100%);"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Export Report
+        </button>
+      </div>
+
+      <!-- ── Filter bar ── -->
+      <div class="flex items-center gap-3 mb-6 flex-wrap">
+
+        <!-- Date range -->
+        <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 shadow-sm cursor-pointer hover:border-gray-300 transition-colors">
+          <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <select [(ngModel)]="selectedPeriod" class="bg-transparent outline-none cursor-pointer text-sm text-gray-700">
+            <option *ngFor="let o of periodOptions">{{ o }}</option>
+          </select>
+        </div>
+
+        <!-- Regions -->
+        <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 shadow-sm cursor-pointer hover:border-gray-300 transition-colors">
+          <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+          </svg>
+          <select [(ngModel)]="selectedRegion" class="bg-transparent outline-none cursor-pointer text-sm text-gray-700">
+            <option *ngFor="let o of regionOptions">{{ o }}</option>
+          </select>
+        </div>
+
+        <!-- Entity type -->
+        <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 shadow-sm cursor-pointer hover:border-gray-300 transition-colors">
+          <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+          Entity Type:
+          <select [(ngModel)]="selectedEntity" class="bg-transparent outline-none cursor-pointer text-sm text-gray-700">
+            <option *ngFor="let o of entityOptions">{{ o }}</option>
+          </select>
+        </div>
+
+        <!-- Status -->
+        <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 shadow-sm cursor-pointer hover:border-gray-300 transition-colors">
+          Status:
+          <select [(ngModel)]="selectedStatus" class="bg-transparent outline-none cursor-pointer text-sm text-gray-700">
+            <option *ngFor="let o of statusOptions">{{ o }}</option>
+          </select>
+        </div>
+
+        <!-- View mode toggle -->
+        <div class="ml-auto flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+          <button
+            (click)="viewMode = 'standard'"
+            class="px-4 py-2 text-sm font-medium transition-colors border-0 cursor-pointer"
+            [ngClass]="viewMode === 'standard' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'"
+          >Standard View</button>
+          <button
+            (click)="viewMode = 'compare'"
+            class="px-4 py-2 text-sm font-medium transition-colors border-0 cursor-pointer"
+            [ngClass]="viewMode === 'compare' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'"
+          >Compare Mode</button>
+        </div>
+
+      </div>
+
+      <!-- ── Main grid: KPIs + right sidebar ── -->
+      <div class="flex gap-5 mb-5">
+
+        <!-- Left: KPIs + charts -->
+        <div class="flex-1 min-w-0 space-y-5">
+
+          <!-- KPI cards -->
+          <div class="grid grid-cols-3 gap-3">
+            <div
+              *ngFor="let kpi of kpis"
+              class="bg-white rounded-xl border border-gray-100 px-5 py-4"
+              style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);"
+            >
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-medium text-gray-400">{{ kpi.label }}</span>
+
+                <!-- icon -->
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:#eff6ff;">
+                  <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <ng-container [ngSwitch]="kpi.icon">
+                      <ng-container *ngSwitchCase="'eye'">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                      </ng-container>
+                      <ng-container *ngSwitchCase="'users'">
+                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+                      </ng-container>
+                      <ng-container *ngSwitchCase="'link'">
+                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                      </ng-container>
+                      <ng-container *ngSwitchCase="'bookmark'">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                      </ng-container>
+                      <ng-container *ngSwitchCase="'chat'">
+                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                      </ng-container>
+                      <ng-container *ngSwitchCase="'star'">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                      </ng-container>
+                    </ng-container>
+                  </svg>
+                </div>
+              </div>
+              <p class="text-2xl font-bold text-gray-900 mb-1">{{ kpi.value }}</p>
+              <p class="text-xs" [ngClass]="kpi.up ? 'text-emerald-500' : 'text-red-400'">
+                {{ kpi.up ? '↑' : '↓' }} {{ kpi.change }} from last period
+              </p>
+            </div>
+          </div>
+
+          <!-- Page Views Over Time chart -->
+          <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+            <div class="px-6 py-4 border-b border-gray-50">
+              <h2 class="text-sm font-bold text-gray-900">Page Views Over Time</h2>
+              <p class="text-xs text-gray-400 mt-0.5">Top 3 regions compared month-over-month.</p>
+            </div>
+            <div class="px-6 py-5">
+              <!-- SVG line chart -->
+              <svg viewBox="0 0 680 180" class="w-full" style="height:180px;">
+                <!-- Grid lines -->
+                <line x1="40" y1="20" x2="660" y2="20" stroke="#f1f5f9" stroke-width="1"/>
+                <line x1="40" y1="60" x2="660" y2="60" stroke="#f1f5f9" stroke-width="1"/>
+                <line x1="40" y1="100" x2="660" y2="100" stroke="#f1f5f9" stroke-width="1"/>
+                <line x1="40" y1="140" x2="660" y2="140" stroke="#f1f5f9" stroke-width="1"/>
+                <!-- Y labels -->
+                <text x="34" y="24" text-anchor="end" font-size="10" fill="#94a3b8">100K</text>
+                <text x="34" y="64" text-anchor="end" font-size="10" fill="#94a3b8">75K</text>
+                <text x="34" y="104" text-anchor="end" font-size="10" fill="#94a3b8">50K</text>
+                <text x="34" y="144" text-anchor="end" font-size="10" fill="#94a3b8">25K</text>
+
+                <!-- X labels (months) -->
+                <text x="52"  y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Jan</text>
+                <text x="103" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Feb</text>
+                <text x="154" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Mar</text>
+                <text x="205" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Apr</text>
+                <text x="256" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">May</text>
+                <text x="307" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Jun</text>
+                <text x="358" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Jul</text>
+                <text x="409" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Aug</text>
+                <text x="460" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Sep</text>
+                <text x="511" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Oct</text>
+                <text x="562" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Nov</text>
+                <text x="613" y="165" text-anchor="middle" font-size="10" fill="#94a3b8">Dec</text>
+
+                <!-- Šumadija area fill -->
+                <path d="M52,110 L103,92 L154,100 L205,74 L256,82 L307,62 L358,66 L409,46 L460,52 L511,30 L562,34 L613,20 L613,140 L52,140 Z"
+                      fill="#2563eb" fill-opacity="0.06"/>
+                <!-- Šumadija line -->
+                <polyline
+                  points="52,110 103,92 154,100 205,74 256,82 307,62 358,66 409,46 460,52 511,30 562,34 613,20"
+                  fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+                <!-- Banat area fill -->
+                <path d="M52,124 L103,114 L154,118 L205,106 L256,110 L307,98 L358,102 L409,90 L460,94 L511,80 L562,84 L613,72 L613,140 L52,140 Z"
+                      fill="#16a34a" fill-opacity="0.05"/>
+                <!-- Banat line -->
+                <polyline
+                  points="52,124 103,114 154,118 205,106 256,110 307,98 358,102 409,90 460,94 511,80 562,84 613,72"
+                  fill="none" stroke="#16a34a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="0"/>
+
+                <!-- Pomoravlje line -->
+                <polyline
+                  points="52,130 103,124 154,126 205,120 256,122 307,114 358,116 409,108 460,112 511,104 562,106 613,98"
+                  fill="none" stroke="#d97706" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+
+                <!-- Dots on Šumadija -->
+                <circle cx="613" cy="20"  r="3.5" fill="#2563eb"/>
+                <circle cx="511" cy="30"  r="3.5" fill="#2563eb"/>
+              </svg>
+
+              <!-- Legend -->
+              <div class="flex items-center gap-5 mt-2">
+                <div *ngFor="let s of pageViewsData" class="flex items-center gap-1.5">
+                  <span class="w-5 h-0.5 inline-block rounded" [style.background]="s.color"></span>
+                  <span class="text-xs text-gray-500">{{ s.label }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom charts row -->
+          <div class="grid grid-cols-2 gap-4">
+
+            <!-- Top Destinations Nationwide -->
+            <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+              <div class="px-5 py-4 border-b border-gray-50">
+                <h3 class="text-sm font-bold text-gray-900">Top Destinations Nationwide</h3>
+                <p class="text-xs text-gray-400 mt-0.5">By total page views (thousands).</p>
+              </div>
+              <div class="px-5 py-4 space-y-3">
+                <div *ngFor="let d of topDestinations; let i = index" class="flex items-center gap-3">
+                  <span class="text-xs font-bold text-gray-300 w-4 flex-shrink-0">{{ i + 1 }}</span>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-xs font-medium text-gray-800 truncate">{{ d.name }}</span>
+                      <span class="text-xs font-semibold text-blue-600 ml-2 flex-shrink-0">{{ d.views }}K</span>
+                    </div>
+                    <div class="w-full bg-gray-100 rounded-full h-1.5">
+                      <div class="h-1.5 rounded-full bg-blue-500"
+                           [style.width]="(d.views / 100 * 100) + '%'"
+                           [style.opacity]="1 - i * 0.12"></div>
+                    </div>
+                    <span class="text-[10px] text-gray-400">{{ d.region }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Top Events Nationwide -->
+            <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+              <div class="px-5 py-4 border-b border-gray-50">
+                <h3 class="text-sm font-bold text-gray-900">Top Events Nationwide</h3>
+                <p class="text-xs text-gray-400 mt-0.5">By total user registrations/saves.</p>
+              </div>
+              <div class="px-5 py-4 space-y-3">
+                <div *ngFor="let e of topEvents; let i = index" class="flex items-center gap-3">
+                  <span class="text-xs font-bold text-gray-300 w-4 flex-shrink-0">{{ i + 1 }}</span>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-xs font-medium text-gray-800 truncate">{{ e.name }}</span>
+                      <span class="text-xs font-semibold text-emerald-600 ml-2 flex-shrink-0">{{ e.saves }}K</span>
+                    </div>
+                    <div class="w-full bg-gray-100 rounded-full h-1.5">
+                      <div class="h-1.5 rounded-full bg-emerald-500"
+                           [style.width]="(e.saves / 45 * 100) + '%'"
+                           [style.opacity]="1 - i * 0.12"></div>
+                    </div>
+                    <span class="text-[10px] text-gray-400">{{ e.region }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Content Quality by Region -->
+          <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+            <div class="px-6 py-4 border-b border-gray-50">
+              <h3 class="text-sm font-bold text-gray-900">Content Quality by Region</h3>
+              <p class="text-xs text-gray-400 mt-0.5">Total Reviews vs Average User Rating.</p>
+            </div>
+            <div class="px-6 py-5">
+              <svg viewBox="0 0 640 160" class="w-full" style="height:160px;">
+                <!-- Grid -->
+                <line x1="60" y1="10" x2="630" y2="10" stroke="#f1f5f9" stroke-width="1"/>
+                <line x1="60" y1="50" x2="630" y2="50" stroke="#f1f5f9" stroke-width="1"/>
+                <line x1="60" y1="90" x2="630" y2="90" stroke="#f1f5f9" stroke-width="1"/>
+                <line x1="60" y1="130" x2="630" y2="130" stroke="#f1f5f9" stroke-width="1"/>
+                <!-- Y labels -->
+                <text x="54" y="14"  text-anchor="end" font-size="10" fill="#94a3b8">600</text>
+                <text x="54" y="54"  text-anchor="end" font-size="10" fill="#94a3b8">400</text>
+                <text x="54" y="94"  text-anchor="end" font-size="10" fill="#94a3b8">200</text>
+                <text x="54" y="134" text-anchor="end" font-size="10" fill="#94a3b8">0</text>
+
+                <!-- Bars (reviews) -->
+                <rect x="80"  y="36"  width="40" height="94" rx="3" fill="#dbeafe"/>
+                <rect x="176" y="59"  width="40" height="71" rx="3" fill="#dbeafe"/>
+                <rect x="272" y="23"  width="40" height="107" rx="3" fill="#dbeafe"/>
+                <rect x="368" y="76"  width="40" height="54" rx="3" fill="#dbeafe"/>
+                <rect x="464" y="69"  width="40" height="61" rx="3" fill="#dbeafe"/>
+                <rect x="560" y="84"  width="40" height="46" rx="3" fill="#dbeafe"/>
+
+                <!-- Rating dots (secondary axis: 3.0–5.0 mapped to y 130–10) -->
+                <!-- avg 4.8 = 10 + (5.0-4.8)/(5.0-3.0)*(130-10)=10+12=22 but simpler: (5.0-rating)/(2.0)*120 + 10 -->
+                <circle cx="100" cy="22"  r="5" fill="#2563eb"/>
+                <circle cx="196" cy="40"  r="5" fill="#2563eb"/>
+                <circle cx="292" cy="28"  r="5" fill="#2563eb"/>
+                <circle cx="388" cy="94"  r="5" fill="#2563eb"/>
+                <circle cx="484" cy="70"  r="5" fill="#2563eb"/>
+                <circle cx="580" cy="58"  r="5" fill="#2563eb"/>
+
+                <!-- Connect rating dots -->
+                <polyline points="100,22 196,40 292,28 388,94 484,70 580,58"
+                  fill="none" stroke="#2563eb" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4,3" opacity="0.5"/>
+
+                <!-- X labels -->
+                <text x="100"  y="150" text-anchor="middle" font-size="10" fill="#94a3b8">Šumadija</text>
+                <text x="196"  y="150" text-anchor="middle" font-size="10" fill="#94a3b8">Banat</text>
+                <text x="292"  y="150" text-anchor="middle" font-size="10" fill="#94a3b8">Raška</text>
+                <text x="388"  y="150" text-anchor="middle" font-size="10" fill="#94a3b8">Pomoravlje</text>
+                <text x="484"  y="150" text-anchor="middle" font-size="10" fill="#94a3b8">Mačva</text>
+                <text x="580"  y="150" text-anchor="middle" font-size="10" fill="#94a3b8">Podunavlje</text>
+              </svg>
+              <div class="flex items-center gap-6 mt-1">
+                <div class="flex items-center gap-2">
+                  <span class="w-4 h-3 rounded inline-block" style="background:#dbeafe;"></span>
+                  <span class="text-xs text-gray-500">Total reviews</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-4 h-0.5 inline-block" style="background:#2563eb; border-top: 2px dashed #2563eb;"></span>
+                  <span class="text-xs text-gray-500">Avg rating</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ── Right sidebar panel ── -->
+        <div class="flex-shrink-0 space-y-4" style="width: 260px;">
+
+          <!-- Top Region -->
+          <div class="rounded-xl overflow-hidden text-white" style="background: linear-gradient(135deg, #1a3aaf 0%, #1e4fd4 100%);">
+            <div class="px-5 pt-5 pb-4">
+              <div class="flex items-center gap-1.5 mb-3 text-white/70 text-xs font-bold tracking-wider uppercase">
+                <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                Top Region
+              </div>
+              <h3 class="text-2xl font-bold mb-1">{{ topRegion.name }}</h3>
+              <p class="text-sm text-white/70 leading-snug mb-4">{{ topRegion.note }}</p>
+              <div class="flex items-center justify-between py-2.5 border-t border-white/15">
+                <span class="text-sm font-medium text-white/70">Score</span>
+                <span class="text-base font-bold">{{ topRegion.score }}/100</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fastest Growing -->
+          <div class="bg-white rounded-xl border border-gray-100 px-5 py-4" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+            <div class="flex items-center gap-1.5 text-xs font-bold text-gray-400 tracking-wider uppercase mb-2">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              Fastest Growing
+            </div>
+            <p class="text-base font-bold text-gray-900">{{ fastestGrowing.name }}</p>
+            <p class="text-sm text-emerald-500 font-medium mt-0.5">↑ {{ fastestGrowing.change }}</p>
+          </div>
+
+          <!-- Top Entities -->
+          <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+            <div class="px-5 py-4 border-b border-gray-50">
+              <h3 class="text-sm font-bold text-gray-900">Top Entities</h3>
+            </div>
+            <div class="py-2">
+              <div *ngFor="let e of topEntities" class="flex items-center gap-3 px-5 py-2.5 border-b border-gray-50 last:border-0 hover:bg-blue-50/30 transition-colors">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:#eff6ff;">
+                  <svg class="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <ng-container [ngSwitch]="e.icon">
+                      <ng-container *ngSwitchCase="'destination'">
+                        <path d="M5 3a1 1 0 011 1v.5l12.447-1.763A1 1 0 0119.5 3.75v8.5a1 1 0 01-1.053.997L6 11.5V20a1 1 0 01-2 0V4a1 1 0 011-1z"/>
+                      </ng-container>
+                      <ng-container *ngSwitchCase="'event'">
+                        <path d="M19 4h-1V2h-2v2H8V2H6v2H5C3.895 4 3 4.895 3 6v14c0 1.105.895 2 2 2h14c1.105 0 2-.895 2-2V6c0-1.105-.895-2-2-2zm0 16H5V9h14v11z"/>
+                      </ng-container>
+                    </ng-container>
+                  </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-gray-800 truncate">{{ e.name }}</p>
+                  <p class="text-xs text-gray-400">{{ e.sub }}</p>
+                </div>
+                <span class="text-xs font-bold text-blue-600">#{{ e.rank }}</span>
+              </div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-50">
+              <button class="w-full text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors bg-transparent border-none cursor-pointer text-center">
+                View Full Directory →
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Regional Performance Comparison Table ── -->
+      <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-50">
+          <div>
+            <h2 class="text-sm font-bold text-gray-900">Regional Performance Comparison</h2>
+            <p class="text-xs text-gray-400 mt-0.5">Detailed breakdown of all tracked metrics per region.</p>
+          </div>
+
+          <!-- Column picker -->
+          <div class="relative" (click)="$event.stopPropagation()">
+            <button
+              (click)="toggleColumnPicker($event)"
+              class="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 cursor-pointer transition-colors"
+            >
+              <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+              </svg>
+              Columns
+            </button>
+
+            <div
+              *ngIf="showColumnPicker"
+              class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 w-52 py-2 overflow-hidden"
+            >
+              <div *ngFor="let col of ['pageViews','visitors','saves','avgRating','entities','status','qualityScore']"
+                class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
+                (click)="toggleColumn(col)"
+              >
+                <span
+                  class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0"
+                  [ngClass]="isColumnVisible(col) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'"
+                >
+                  <svg *ngIf="isColumnVisible(col)" class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </span>
+                {{ columnLabel(col) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table header -->
+        <div
+          class="grid items-center gap-2 px-6 py-3 bg-gray-50/60 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider"
+          [ngStyle]="{'grid-template-columns': 'minmax(140px,1fr)' + (isColumnVisible('pageViews') ? ' 90px' : '') + (isColumnVisible('visitors') ? ' 90px' : '') + (isColumnVisible('saves') ? ' 70px' : '') + (isColumnVisible('avgRating') ? ' 90px' : '') + (isColumnVisible('entities') ? ' 110px' : '') + (isColumnVisible('status') ? ' 140px' : '') + (isColumnVisible('qualityScore') ? ' 100px' : '')}"
+        >
+          <span>Region name</span>
+          <span *ngIf="isColumnVisible('pageViews')">Page<br>Views</span>
+          <span *ngIf="isColumnVisible('visitors')">Visitors</span>
+          <span *ngIf="isColumnVisible('saves')">Saves</span>
+          <span *ngIf="isColumnVisible('avgRating')">Avg<br>Rating</span>
+          <span *ngIf="isColumnVisible('entities')">Entities<br>(D/P/E)</span>
+          <span *ngIf="isColumnVisible('status')">Status</span>
+          <span *ngIf="isColumnVisible('qualityScore')">Quality<br>Score</span>
+        </div>
+
+        <!-- Table rows -->
+        <div
+          *ngFor="let row of tableRows"
+          class="grid items-center gap-2 px-6 py-4 border-b border-gray-50 hover:bg-blue-50/20 transition-colors cursor-pointer"
+          [ngStyle]="{'grid-template-columns': 'minmax(140px,1fr)' + (isColumnVisible('pageViews') ? ' 90px' : '') + (isColumnVisible('visitors') ? ' 90px' : '') + (isColumnVisible('saves') ? ' 70px' : '') + (isColumnVisible('avgRating') ? ' 90px' : '') + (isColumnVisible('entities') ? ' 110px' : '') + (isColumnVisible('status') ? ' 140px' : '') + (isColumnVisible('qualityScore') ? ' 100px' : '')}"
+        >
+          <div>
+            <p class="text-sm font-semibold text-gray-900">{{ row.name }}</p>
+            <p class="text-xs text-gray-400">{{ row.refId }}</p>
+          </div>
+          <span *ngIf="isColumnVisible('pageViews')" class="text-sm font-medium text-gray-700">{{ row.pageViews }}</span>
+          <span *ngIf="isColumnVisible('visitors')"  class="text-sm font-medium text-gray-700">{{ row.visitors }}</span>
+          <span *ngIf="isColumnVisible('saves')"     class="text-sm font-medium text-gray-700">{{ row.saves }}</span>
+          <div *ngIf="isColumnVisible('avgRating')" class="flex items-center gap-1">
+            <span class="text-sm font-medium text-gray-700">{{ row.avgRating }}</span>
+            <svg class="w-3 h-3 text-amber-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <span *ngIf="isColumnVisible('entities')"  class="text-sm text-gray-600">{{ row.entities }}</span>
+          <div *ngIf="isColumnVisible('status')">
+            <span
+              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold"
+              [ngClass]="statusClass(row.status)"
+            >{{ row.status }}</span>
+          </div>
+          <div *ngIf="isColumnVisible('qualityScore')" class="flex items-center gap-2">
+            <!-- Circular progress approximation -->
+            <svg width="32" height="32" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+              <circle cx="18" cy="18" r="15" fill="none"
+                [attr.stroke]="scoreColor(row.qualityScore)"
+                stroke-width="3" stroke-linecap="round"
+                [attr.stroke-dasharray]="(row.qualityScore / 100 * 94.25) + ' 94.25'"
+                stroke-dashoffset="23.56"
+                transform="rotate(-90 18 18)"/>
+            </svg>
+            <span class="text-sm font-semibold" [style.color]="scoreColor(row.qualityScore)">{{ row.qualityScore }}</span>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-gray-50/40">
+          <p class="text-sm text-gray-500">
+            Showing <span class="font-semibold text-gray-700">{{ (tablePage - 1) * tablePageSize + 1 }}</span>
+            to <span class="font-semibold text-gray-700">{{ tablePage * tablePageSize > allRows.length ? allRows.length : tablePage * tablePageSize }}</span>
+            of <span class="font-semibold text-gray-700">{{ allRows.length }}</span> regions
+          </p>
+          <div class="flex items-center gap-2">
+            <button
+              (click)="prevPage()"
+              [disabled]="!hasPrevPage"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600
+                     hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-white transition-colors"
+            >Prev</button>
+
+            <button
+              *ngFor="let p of [1, 2]"
+              (click)="goToPage(p)"
+              class="w-8 h-8 rounded-lg text-sm font-medium border cursor-pointer transition-colors"
+              [ngClass]="tablePage === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'"
+            >{{ p }}</button>
+
+            <button
+              (click)="nextPage()"
+              [disabled]="!hasNextPage"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600
+                     hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-white transition-colors"
+            >Next</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

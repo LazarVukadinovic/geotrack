@@ -40,17 +40,15 @@ export class SidebarComponent {
 
   get nationalMainNav(): SidebarNavItem[] {
     return [
-      { label: 'National Overview',    path: '/national-overview',    icon: 'dashboard',  exact: true },
-      { label: 'Regional Management',  path: '/regional-management',  icon: 'map'                     },
-      { label: 'Content Directory',    path: '/content-directory',    icon: 'folder'                  },
-      { label: 'User Administration',  path: '/user-administration',  icon: 'users'                   },
+      { label: 'National Overview',   path: '/national-dashboard',  icon: 'dashboard', exact: true },
+      { label: 'Regional Management', path: '/regions',             icon: 'map'                    },
+      { label: 'User Administration', path: '/user-administration', icon: 'users'                  },
     ];
   }
 
   get nationalAnalyticsNav(): SidebarNavItem[] {
     return [
-      { label: 'Analytics & Insights', path: '/analytics',           icon: 'chart' },
-      { label: 'National Analytics',   path: '/national-analytics',  icon: 'globe' },
+      { label: 'Analytics & Insights', path: '/national-analytics', icon: 'chart' },
     ];
   }
 

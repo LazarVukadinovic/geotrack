@@ -127,6 +127,11 @@ export const routes: Routes = [
     //         .then(m => m.AnalyticsPageComponent),
     //   },
       {
+        path:'national-analytics',
+        canActivate:[nationalManagerGuard],
+        loadComponent: () => import('./features/analytics/pages/national-analytics/national-analytics/national-analytics.component').then(m=>m.NationalAnalyticsComponent),
+      },
+      {
         path: 'national-dashboard',
         canActivate:[nationalManagerGuard],
         loadComponent: () => import('./features/dashboard/pages/national-dashboard/national-dashboard.component').then(m=>m.NationalDashboardComponent),
