@@ -58,6 +58,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   summary            = '';
   parentDestination  = '';
   locationCategory   = '';
+  internalRefId      = '';
 
   // Rich text editor
   isBold        = false;
@@ -381,6 +382,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     this.summary           = p.summary          ?? '';
     this.parentDestination = p.parentDestination ?? '';
     this.locationCategory  = p.category         ?? '';
+    this.internalRefId     = p.internalRefId    ?? '';
 
     if (p.coverImageUrl) {
       this.coverImageUrl  = p.coverImageUrl;
@@ -463,6 +465,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         coverImageUrl:  this.coverImageUrl ?? undefined,
         coverImageName: this.coverImageName || undefined,
         galleryImages:  this.galleryImages.length ? [...this.galleryImages] : undefined,
+        internalRefId:  this.internalRefId || undefined,
         ...(this.coverImageUrl ? { imageBg: `url(${this.coverImageUrl}) center/cover` } : {}),
       });
 
@@ -503,6 +506,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
                               : 'linear-gradient(135deg,#0891b2 0%,#0e7490 100%)',
           category:          this.locationCategory || saved.category,
           parentDestination: this.parentDestination || undefined,
+          internalRefId:     this.internalRefId || undefined,
           lat:           saved.lat,
           lng:           saved.lng,
           zone:          saved.zone,

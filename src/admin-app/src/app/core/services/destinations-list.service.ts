@@ -22,6 +22,7 @@ export interface DestinationListItem {
   coverImageUrl?: string;
   coverImageName?: string;
   galleryImages?: { url: string; name: string }[];
+  internalRefId?: string;
 }
 
 export type DestinationSortField = 'name' | 'lastUpdated' | 'status';

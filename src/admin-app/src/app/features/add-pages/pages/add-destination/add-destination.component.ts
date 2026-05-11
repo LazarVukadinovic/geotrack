@@ -56,6 +56,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   destinationName = '';
   streetAddress   = '';
   summary         = '';
+  internalRefId   = '';
 
   // Rich text editor
   isBold        = false;
@@ -374,9 +375,10 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private _pendingDescription = '';
 
   private _loadFromRouterState(p: any): void {
-    this.destinationName = p.name    ?? '';
-    this.streetAddress   = p.address ?? '';
-    this.summary         = p.summary ?? '';
+    this.destinationName = p.name          ?? '';
+    this.streetAddress   = p.address       ?? '';
+    this.summary         = p.summary       ?? '';
+    this.internalRefId   = p.internalRefId ?? '';
 
     // Cover image
     if (p.coverImageUrl) {
@@ -463,6 +465,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         coverImageUrl:  this.coverImageUrl ?? undefined,
         coverImageName: this.coverImageName || undefined,
         galleryImages:  this.galleryImages.length ? [...this.galleryImages] : undefined,
+        internalRefId:  this.internalRefId || undefined,
         ...(this.coverImageUrl ? { imageBg: `url(${this.coverImageUrl}) center/cover` } : {}),
       });
 
@@ -512,6 +515,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
           galleryImages: this.galleryImages.length ? [...this.galleryImages] : undefined,
           classification: classification.length ? classification : undefined,
           tags:          this.tags.length ? this.tags : undefined,
+          internalRefId: this.internalRefId || undefined,
         });
 
         this.mapPlacesSvc.addPlace(saved);

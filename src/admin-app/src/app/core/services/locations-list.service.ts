@@ -24,6 +24,7 @@ export interface LocationListItem {
   coverImageName?: string;
   galleryImages?: { url: string; name: string }[];
   parentDestination?: string;
+  internalRefId?: string;
 }
 
 export type LocationSortField = 'name' | 'lastUpdated' | 'status';
