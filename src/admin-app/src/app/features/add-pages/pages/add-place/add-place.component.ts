@@ -7,6 +7,8 @@ import { ActivatedRoute } from '@angular/router';
 import { Router } from '@angular/router';
 import { PlacesService } from '../../../../core/services/places.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
+import { PlacesListService } from '../../../../core/services/places-list.service';
+import { MapPlacesService } from '../../../../core/services/map-places.service';
 declare const L: any;
 
 interface ClassItem {
@@ -42,14 +44,22 @@ interface DayHours {
 })
 export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private route: ActivatedRoute, private router: Router,private placesService: PlacesService,private lightboxService: LightboxService) {}
+  constructor(
+    private zone: NgZone,
+    private cdr: ChangeDetectorRef,
+    private route: ActivatedRoute,
+    private router: Router,
+    private placesService: PlacesService,
+    private lightboxService: LightboxService,
+    private placesListSvc: PlacesListService,
+    private mapPlacesService: MapPlacesService
+  ) {}
 
-  //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
-  //Rich text editor
+  // Rich text editor
   isBold        = false;
   isItalic      = false;
   isUnderline   = false;
@@ -61,15 +71,9 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.syncToolbarState();
   }
 
-  onEditorChange(): void {
-    this.syncToolbarState();
-    this.syncEmptyState();
-  }
-  onEditorFocus(): void {
-    this.syncToolbarState();
-    this.syncEmptyState();
-  }
-  onEditorBlur(): void {
+  onEditorChange(): void { this.syncToolbarState(); this.syncEmptyState(); }
+  onEditorFocus():  void { this.syncToolbarState(); this.syncEmptyState(); }
+  onEditorBlur():   void {
     this.syncToolbarState();
     const el = this.editorRef?.nativeElement;
     if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
@@ -82,7 +86,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const el = this.editorRef?.nativeElement;
     if (!el) return;
     const text = el.innerText ?? el.textContent ?? '';
-    this.editorIsEmpty = text.trim() === '' && el.innerHTML !== '<img' && !el.querySelector('img');
+    this.editorIsEmpty = text.trim() === '' && !el.querySelector('img');
   }
 
   private syncToolbarState(): void {
@@ -91,8 +95,21 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isUnderline = document.queryCommandState('underline');
   }
 
-  placeType  = 'Museum';
-  opsEnabled = false;
+  // Fields
+  placeName           = '';
+  placeType           = 'Museum';
+  summary             = '';
+  opsEnabled          = false;
+  internalRefId       = '';
+  parentLocation      = '';
+  bestTimeToVisit     = '';
+  visitorTips         = '';
+  accessNotes         = '';
+  accessibilityNotes  = '';
+  website             = '';
+  contactPhone        = '';
+  admissionPrice      = '';
+  bookingLink         = '';
 
   allHours: string[] = [
     '12:00 AM','01:00 AM','02:00 AM','03:00 AM','04:00 AM','05:00 AM',
@@ -111,7 +128,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     { name: 'Sunday',    open: false, openTime: '09:00 AM', closeTime: '05:00 PM' },
   ];
 
-  //Cover image
+  // Cover image
   coverImageUrl : string | null = null;
   coverImageName: string        = '';
 
@@ -119,35 +136,51 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const file  = input.files?.[0];
     if (!file) return;
-    this.coverImageUrl  = URL.createObjectURL(file);
-    this.coverImageName = file.name;
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.zone.run(() => {
+        this.coverImageUrl  = reader.result as string;
+        this.coverImageName = file.name;
+        this.cdr.detectChanges();
+      });
+    };
+    reader.readAsDataURL(file);
     input.value = '';
   }
 
   removeCoverImage(): void {
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     this.coverImageUrl  = null;
     this.coverImageName = '';
   }
 
-  //Gallery
+  // Gallery
   galleryImages: { url: string; name: string }[] = [];
 
   onGalleryImagesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     for (const file of files) {
-      this.galleryImages.push({ url: URL.createObjectURL(file), name: file.name });
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.zone.run(() => {
+          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name }];
+          this.cdr.detectChanges();
+        });
+      };
+      reader.readAsDataURL(file);
     }
     input.value = '';
   }
 
   removeGalleryImage(index: number): void {
-    URL.revokeObjectURL(this.galleryImages[index].url);
     this.galleryImages.splice(index, 1);
   }
 
-  //Classification
+  openLightbox(images: { url: string; name: string }[], index: number): void {
+    this.lightboxService.open(images, index);
+  }
+
+  // Classification
   classItems: ClassItem[] = [
     { label: 'Coastal & Marine',     checked: false },
     { label: 'Mountain & Forest',    checked: false },
@@ -156,7 +189,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     { label: 'National Park Access', checked: false },
   ];
 
-  //Tags
+  // Tags
   tags    : string[] = [];
   tagInput: string   = '';
 
@@ -172,7 +205,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.tags = this.tags.filter(t => t !== tag);
   }
 
-  //Geographic pin / Leaflet
+  // Geographic pin / Leaflet
   pinModalOpen  = false;
   pinConfirmed  = false;
 
@@ -202,45 +235,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       className:  '',
     });
   }
-  isSaving = false;
 
-  publish(): void {
-    if (!this.pinConfirmed) {
-      alert('Please pin the location on the map first.');
-      return;
-    }
-
-    this.isSaving = true;
-    const payload: Omit<import('../../../../core/models/map-place.model').MapPlace, 'id'> = {
-      name:        this.placeName || 'New Place',
-      type:        'Place',
-      category:    this.placeType || 'Place',
-      description: this.editorRef?.nativeElement?.innerHTML ?? '',
-      status:      'Active',
-      eventsToday: 0,
-      lat:         parseFloat(this.pinLat),
-      lng:         parseFloat(this.pinLng),
-      address:     this.streetAddress,
-    };
-
-    const action$ = this.isEditMode && this.editPlaceId
-      ? this.placesService.update(this.editPlaceId, payload)
-      : this.placesService.add(payload);
-
-    action$.subscribe({
-      next: (saved) => {
-        this.isSaving = false;
-        this.router.navigate(['/map'], { state: { newPlace: saved } });
-      },
-      error: () => {
-        this.isSaving = false;
-        alert('Failed to save. Please try again.');
-      }
-    });
-  }
-  openLightbox(images: { url: string; name: string }[], index: number): void {
-    this.lightboxService.open(images, index);
-  }
   private initMiniMap(): void {
     if (this.miniMap) return;
     const el = this.miniMapContainer?.nativeElement;
@@ -362,7 +357,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.reverseGeocode(this.modalPinLat, this.modalPinLng);
     this.closePinModal();
   }
- 
+
   onCoordInputChange(): void {
     const lat = parseFloat(this.pinLat);
     const lng = parseFloat(this.pinLng);
@@ -421,42 +416,87 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.miniMap.setView([lat, lng], 14);
   }
 
-  isEditMode = false;
+  // Lifecycle
+
+  isEditMode   = false;
   editPlaceId: string | null = null;
-  //Lifecycle
+  private _pendingDescription = '';
+
   ngOnInit(): void {
-    const nav = history.state?.place;
-    if (nav) {
-      this.isEditMode = true;
-      this.editPlaceId = nav.id;
-      this.populateFromPlace(nav);
+    const state = history.state as any;
+
+    if (state?.place) {
+      this.isEditMode    = true;
+      this.editPlaceId   = state.place.id ?? null;
+      this._pendingDescription = state.place.description ?? '';
+      this.populateFromPlace(state.place);
+
+    } else if (state?.droppedPin) {
+      const pin = state.droppedPin;
+      this.pinLat       = pin.lat.toFixed(6);
+      this.pinLng       = pin.lng.toFixed(6);
+      this.pinConfirmed = true;
+      setTimeout(() => {
+        this.updateMiniMapPin(pin.lat, pin.lng);
+        this.reverseGeocode(pin.lat, pin.lng);
+      }, 200);
+
     } else {
-      const pinState = history.state?.droppedPin;
-      if (pinState?.lat && pinState?.lng) {
-        this.pinLat = pinState.lat.toFixed(6);
-        this.pinLng = pinState.lng.toFixed(6);
-        this.pinConfirmed = true;
-        setTimeout(() => {
-          this.updateMiniMapPin(pinState.lat, pinState.lng);
-          this.reverseGeocode(pinState.lat, pinState.lng);
-        }, 200);
-      } else {
-        this.route.paramMap.subscribe(params => {
-          const id = params.get('id');
-          if (id) {
-            this.isEditMode = true;
-            this.editPlaceId = id;
+      this.route.paramMap.subscribe(params => {
+        const id = params.get('id');
+        if (id) {
+          this.isEditMode  = true;
+          this.editPlaceId = id;
+          const found = this.placesListSvc.findById(id);
+          if (found) {
+            this._pendingDescription = (found as any).description ?? '';
+            this.populateFromPlace(found);
           }
-        });
-      }
+        }
+      });
     }
   }
-  placeName = '';
+
   private populateFromPlace(place: any): void {
-    this.placeName = place.name ?? '';
-    this.placeType = place.category ?? '';
-    this.pinLat    = place.lat?.toFixed(6) ?? '';
-    this.pinLng    = place.lng?.toFixed(6) ?? '';
+    this.placeName          = place.name              ?? '';
+    this.placeType          = place.category          ?? '';
+    this.summary            = place.summary           ?? '';
+    this.streetAddress      = place.address           ?? '';
+    this.pinLat             = place.lat?.toFixed(6)   ?? '';
+    this.pinLng             = place.lng?.toFixed(6)   ?? '';
+    this.internalRefId      = place.internalRefId     ?? '';
+    this.parentLocation     = place.parentLocation    ?? '';
+    this.bestTimeToVisit    = place.bestTimeToVisit   ?? '';
+    this.visitorTips        = place.visitorTips       ?? '';
+    this.accessNotes        = place.accessNotes       ?? '';
+    this.accessibilityNotes = place.accessibilityNotes ?? '';
+    this.website            = place.website           ?? '';
+    this.contactPhone       = place.contactPhone      ?? '';
+    this.admissionPrice     = place.admissionPrice    ?? '';
+    this.bookingLink        = place.bookingLink       ?? '';
+
+    if (place.coverImageUrl) {
+      this.coverImageUrl  = place.coverImageUrl;
+      this.coverImageName = place.coverImageName ?? 'cover';
+    }
+
+    if (Array.isArray(place.galleryImages)) {
+      this.galleryImages = [...place.galleryImages];
+    }
+
+    if (Array.isArray(place.hours)) {
+      this.days      = place.hours.map((h: any) => ({ ...h }));
+      this.opsEnabled = true;
+    }
+
+    if (Array.isArray(place.classification)) {
+      this.classItems = this.classItems.map(c => ({
+        ...c,
+        checked: (place.classification as string[]).includes(c.label),
+      }));
+    }
+
+    this.tags = Array.isArray(place.tags) ? [...place.tags] : [];
 
     setTimeout(() => {
       if (place.lat && place.lng) {
@@ -465,17 +505,143 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     }, 200);
   }
+
   ngAfterViewInit(): void {
-    setTimeout(() => this.initMiniMap(), 0);
+    setTimeout(() => {
+      this.initMiniMap();
+      if (this._pendingDescription && this.editorRef?.nativeElement) {
+        this.editorRef.nativeElement.innerHTML = this._pendingDescription;
+        this.syncEmptyState();
+        this.cdr.detectChanges();
+      }
+    }, 0);
   }
 
   ngOnDestroy(): void {
     this.destroyModalMap();
     this.lightboxService.close();
-    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
     if (this._geocodeDebounce) clearTimeout(this._geocodeDebounce);
   }
-  
+
+  isSaving = false;
+
+  publish(): void {
+    if (!this.pinConfirmed || !this.pinLat || !this.pinLng) {
+      alert('Please pin the location on the map first.');
+      return;
+    }
+
+    const lat = parseFloat(this.pinLat);
+    const lng = parseFloat(this.pinLng);
+    if (isNaN(lat) || isNaN(lng)) {
+      alert('Invalid coordinates. Please re-pin the location.');
+      return;
+    }
+
+    this.isSaving = true;
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML ?? '';
+    const descriptionText = this.editorRef?.nativeElement?.innerText  ?? '';
+    const classification  = this.classItems.filter(c => c.checked).map(c => c.label);
+
+    if (this.isEditMode && this.editPlaceId) {
+      this.placesListSvc.updateItem(this.editPlaceId, {
+        name:               this.placeName || 'New Place',
+        category:           this.placeType || 'Place',
+        address:            this.streetAddress || undefined,
+        lat,
+        lng,
+        status:             'Published',
+        description:        descriptionHtml,
+        summary:            this.summary || descriptionText.slice(0, 160),
+        classification:     classification.length ? classification : undefined,
+        tags:               this.tags.length ? this.tags : undefined,
+        coverImageUrl:      this.coverImageUrl ?? undefined,
+        coverImageName:     this.coverImageName || undefined,
+        galleryImages:      this.galleryImages.length ? [...this.galleryImages] : undefined,
+        hours:              this.opsEnabled ? this.days.map(d => ({ ...d })) : undefined,
+        internalRefId:      this.internalRefId      || undefined,
+        parentLocation:     this.parentLocation     || undefined,
+        bestTimeToVisit:    this.bestTimeToVisit    || undefined,
+        visitorTips:        this.visitorTips        || undefined,
+        accessNotes:        this.accessNotes        || undefined,
+        accessibilityNotes: this.accessibilityNotes || undefined,
+        website:            this.website            || undefined,
+        contactPhone:       this.contactPhone       || undefined,
+        admissionPrice:     this.admissionPrice     || undefined,
+        bookingLink:        this.bookingLink        || undefined,
+        ...(this.coverImageUrl ? { imageBg: `url(${this.coverImageUrl}) center/cover` } : {}),
+      });
+
+      this.isSaving = false;
+      const returnTo = history.state?.returnTo as string | undefined;
+      this.router.navigate([returnTo ?? '/places']);
+      return;
+    }
+
+    // ── ADD MODE ──
+    const payload = {
+      name:        this.placeName || 'New Place',
+      type:        'Place' as const,
+      category:    this.placeType || 'Place',
+      description: descriptionHtml,
+      status:      'Active',
+      eventsToday: 0,
+      lat,
+      lng,
+      address:     this.streetAddress,
+    };
+
+    this.placesService.add(payload).subscribe({
+      next: (saved) => {
+        this.isSaving = false;
+        const returnTo = history.state?.returnTo as string | undefined;
+
+        this.placesListSvc.addItem({
+          id:                 saved.id,
+          name:               saved.name,
+          summary:            this.summary || descriptionText.slice(0, 160),
+          region:             'Šumadija, Srbija',
+          status:             'Published',
+          lastUpdated:        new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          imageBg:            this.coverImageUrl
+                               ? `url(${this.coverImageUrl}) center/cover`
+                               : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+          category:           saved.category,
+          lat:                saved.lat,
+          lng:                saved.lng,
+          address:            saved.address,
+          description:        descriptionHtml,
+          coverImageUrl:      this.coverImageUrl ?? undefined,
+          coverImageName:     this.coverImageName || undefined,
+          galleryImages:      this.galleryImages.length ? [...this.galleryImages] : undefined,
+          classification:     classification.length ? classification : undefined,
+          tags:               this.tags.length ? this.tags : undefined,
+          hours:              this.opsEnabled ? this.days.map(d => ({ ...d })) : undefined,
+          internalRefId:      this.internalRefId      || undefined,
+          parentLocation:     this.parentLocation     || undefined,
+          bestTimeToVisit:    this.bestTimeToVisit    || undefined,
+          visitorTips:        this.visitorTips        || undefined,
+          accessNotes:        this.accessNotes        || undefined,
+          accessibilityNotes: this.accessibilityNotes || undefined,
+          website:            this.website            || undefined,
+          contactPhone:       this.contactPhone       || undefined,
+          admissionPrice:     this.admissionPrice     || undefined,
+          bookingLink:        this.bookingLink        || undefined,
+        });
+
+        this.mapPlacesService.addPlace(saved);
+
+        if (returnTo) {
+          this.router.navigate([returnTo], { state: { place: saved } });
+        } else {
+          this.router.navigate(['/map'], { state: { newPlace: saved } });
+        }
+      },
+      error: () => {
+        this.isSaving = false;
+        alert('Failed to save. Please try again.');
+      }
+    });
+  }
 }

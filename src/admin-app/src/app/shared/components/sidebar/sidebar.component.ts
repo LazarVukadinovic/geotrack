@@ -1,7 +1,8 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterLink, RouterLinkActive, Router } from '@angular/router';
 import { ReviewRequestsService } from '../../../core/services/review-requests.service';
+import { AuthService } from '../../../core/services/auth.service';
 
 export interface SidebarNavItem {
   label: string;
@@ -19,8 +20,39 @@ export interface SidebarNavItem {
   styleUrl: './sidebar.component.css',
 })
 export class SidebarComponent {
-  @Input() region = 'Šumadija, Srbija';
-  constructor(private requestsService: ReviewRequestsService) {}
+  @Input() region = '';
+
+  private readonly auth            = inject(AuthService);
+  private readonly requestsService = inject(ReviewRequestsService);
+  private readonly router          = inject(Router);
+
+  get pickerLabel(): string {
+    return this.auth.isNationalManager() ? 'COUNTRY' : 'REGION';
+  }
+
+  get pickerValue(): string {
+    return this.region || this.auth.getUser()?.region || '';
+  }
+
+  get isNational(): boolean {
+    return this.auth.isNationalManager();
+  }
+
+  get nationalMainNav(): SidebarNavItem[] {
+    return [
+      { label: 'National Overview',    path: '/national-overview',    icon: 'dashboard',  exact: true },
+      { label: 'Regional Management',  path: '/regional-management',  icon: 'map'                     },
+      { label: 'Content Directory',    path: '/content-directory',    icon: 'folder'                  },
+      { label: 'User Administration',  path: '/user-administration',  icon: 'users'                   },
+    ];
+  }
+
+  get nationalAnalyticsNav(): SidebarNavItem[] {
+    return [
+      { label: 'Analytics & Insights', path: '/analytics',           icon: 'chart' },
+      { label: 'National Analytics',   path: '/national-analytics',  icon: 'globe' },
+    ];
+  }
 
   get mainNav(): SidebarNavItem[] {
     return [
@@ -41,4 +73,9 @@ export class SidebarComponent {
   analyticsNav: SidebarNavItem[] = [
     { label: 'Analytics & Insights', path: '/analytics', icon: 'chart' },
   ];
+
+  signOut(): void {
+    this.auth.logout();
+    this.router.navigate(['/login']);
+  }
 }

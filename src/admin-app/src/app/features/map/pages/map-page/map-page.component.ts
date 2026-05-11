@@ -6,6 +6,9 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { MapPlace } from '../../../../core/models/map-place.model';
 import { MapPlacesService } from '../../../../core/services/map-places.service';
+import { PlacesListService } from '../../../../core/services/places-list.service';
+import { LocationsListService } from '../../../../core/services/locations-list.service';
+import { DestinationsListService } from '../../../../core/services/destinations-list.service';
 declare const L: any;
 
 
@@ -16,7 +19,15 @@ declare const L: any;
   templateUrl: './map-page.component.html',
 })
 export class MapPageComponent implements OnInit, OnDestroy {
-  constructor(private zone: NgZone, private cdr: ChangeDetectorRef, private router: Router, private mapPlacesService:MapPlacesService) {}
+  constructor(
+    private zone: NgZone,
+    private cdr: ChangeDetectorRef,
+    private router: Router,
+    private mapPlacesService: MapPlacesService,
+    private placesListSvc: PlacesListService,
+    private locationsListSvc: LocationsListService,
+    private destinationsListSvc: DestinationsListService,
+  ) {}
 
   region   = 'Šumadija, Srbija';
   userName = 'Sarah Jenkins';
@@ -40,11 +51,16 @@ export class MapPageComponent implements OnInit, OnDestroy {
 
   
   private dynamicPlaces: MapPlace[] = [];
+  newEventNotification: { id: string; name: string } | null = null;
+
   ngOnInit(): void {
-      const state = history.state as { newPlace?: MapPlace };
-      if (state?.newPlace) {
-        this.dynamicPlaces = [state.newPlace];
-      }
+    const state = history.state as { newPlace?: MapPlace; newEvent?: { id: string; name: string } };
+    if (state?.newPlace) {
+      this.dynamicPlaces = [state.newPlace];
+    }
+    if (state?.newEvent) {
+      this.newEventNotification = state.newEvent;
+    }
     setTimeout(() => this.initMap(), 100);
   }
 
@@ -154,6 +170,15 @@ export class MapPageComponent implements OnInit, OnDestroy {
     return { color: '#2563eb', fill: '#3b82f6' };
   }
 
+  private shrinkZone(zone: [number, number][], factor: number): [number, number][] {
+    const centLat = zone.reduce((s, p) => s + p[0], 0) / zone.length;
+    const centLng = zone.reduce((s, p) => s + p[1], 0) / zone.length;
+    return zone.map(([lat, lng]) => [
+      centLat + (lat - centLat) * factor,
+      centLng + (lng - centLng) * factor,
+    ] as [number, number]);
+  }
+
   // Map Init
 
   private initMap(): void {
@@ -174,8 +199,9 @@ export class MapPageComponent implements OnInit, OnDestroy {
     this.mapPlacesService.getAll().forEach(place => {
       if (!place.zone) return;
       const { color, fill } = this.zoneColor(place.type);
+      const coords = place.type === 'Location' ? this.shrinkZone(place.zone, 0.82) : place.zone;
 
-      const polygon = L.polygon(place.zone, {
+      const polygon = L.polygon(coords, {
         color,
         fillColor: fill,
         fillOpacity: 0.15,
@@ -275,7 +301,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       });
     });
-    this.dynamicPlaces.forEach(place => this._addPlaceToMap(place));
+    
 
     if (this.dynamicPlaces.length > 0) {
       const p = this.dynamicPlaces[0];
@@ -299,7 +325,8 @@ export class MapPageComponent implements OnInit, OnDestroy {
   private _addPlaceToMap(place: MapPlace): void {
     if (place.zone) {
       const { color, fill } = this.zoneColor(place.type);
-      const polygon = L.polygon(place.zone, {
+      const coords = place.type === 'Location' ? this.shrinkZone(place.zone, 0.82) : place.zone;
+      const polygon = L.polygon(coords, {
         color, fillColor: fill, fillOpacity: 0.15, weight: 2, dashArray: '6 4', opacity: 0.8,
       }).addTo(this.map);
 
@@ -375,17 +402,24 @@ export class MapPageComponent implements OnInit, OnDestroy {
 
   editPlace(place: MapPlace): void {
     if (place.type === 'Location') {
-      this.router.navigate(['/locations/new'], { state: { place } });
+      const full = this.locationsListSvc.findById(place.id) ?? place;
+      this.router.navigate(['/locations/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
     } else if (place.type === 'Destination') {
-      this.router.navigate(['/destinations/new'], { state: { place } });
+      const full = this.destinationsListSvc.findById(place.id) ?? place;
+      this.router.navigate(['/destinations/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
     } else {
-      this.router.navigate(['/places/edit', place.id], { state: { place } });
+      const full = this.placesListSvc.findById(place.id) ?? place;
+      this.router.navigate(['/places/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
     }
     this.closePopup();
   }
 
+  dismissEventNotification(): void {
+    this.newEventNotification = null;
+  }
+
   navigateToNewEvent(): void {
-    this.router.navigate(['/events/new'], { state: { place: this.selectedPlace } });
+    this.router.navigate(['/events/new'], { state: { place: this.selectedPlace, returnTo: '/map', } });
     this.closePopup();
   }
   navigateToNewPlaceWithPin(): void {
@@ -395,7 +429,8 @@ export class MapPageComponent implements OnInit, OnDestroy {
         droppedPin: {
           lat: this.droppedPin.lat,
           lng: this.droppedPin.lng,
-        }
+        },
+        returnTo: '/map',
       }
     });
     this.cancelDroppedPin();

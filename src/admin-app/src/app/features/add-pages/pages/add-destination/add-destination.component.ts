@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit, NgZone } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit, NgZone, ChangeDetectorRef } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
@@ -7,6 +7,8 @@ import { Router } from '@angular/router';
 import { DestinationsService } from '../../../../core/services/destinations.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { ZoneDrawService } from '../../../../core/services/zone-draw.service';
+import { DestinationsListService } from '../../../../core/services/destinations-list.service';
+import { MapPlacesService } from '../../../../core/services/map-places.service';
 declare const L: any;
 
 interface ClassItem {
@@ -35,17 +37,28 @@ interface ClassItem {
 })
 export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy {
 
-  constructor(private zone: NgZone, private router: Router,private destinationsService: DestinationsService, private lightboxService: LightboxService, private zoneDrawService: ZoneDrawService) {}
+  constructor(
+    private zone: NgZone,
+    private cdr: ChangeDetectorRef,
+    private router: Router,
+    private destinationsService: DestinationsService,
+    private lightboxService: LightboxService,
+    private zoneDrawService: ZoneDrawService,
+    private destinationsListSvc: DestinationsListService,
+    private mapPlacesSvc: MapPlacesService
+  ) {}
 
-  //ViewChild refs
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
   @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
 
-  //Basic fields
+  // Basic fields
   destinationName = '';
+  streetAddress   = '';
+  summary         = '';
+  internalRefId   = '';
 
-  //Rich text editor
+  // Rich text editor
   isBold        = false;
   isItalic      = false;
   isUnderline   = false;
@@ -81,7 +94,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.isUnderline = document.queryCommandState('underline');
   }
 
-  //Cover image
+  // Cover image
   coverImageUrl : string | null = null;
   coverImageName: string        = '';
 
@@ -89,34 +102,76 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     const input = event.target as HTMLInputElement;
     const file  = input.files?.[0];
     if (!file) return;
-    this.coverImageUrl  = URL.createObjectURL(file);
-    this.coverImageName = file.name;
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.zone.run(() => {
+        this.coverImageUrl  = reader.result as string;
+        this.coverImageName = file.name;
+        this.cdr.detectChanges();
+      });
+    };
+    reader.readAsDataURL(file);
     input.value = '';
   }
 
   removeCoverImage(): void {
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     this.coverImageUrl  = null;
     this.coverImageName = '';
   }
 
-  //Gallery
+  // Gallery
   galleryImages: { url: string; name: string }[] = [];
 
   onGalleryImagesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     for (const file of files) {
-      this.galleryImages.push({ url: URL.createObjectURL(file), name: file.name });
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.zone.run(() => {
+          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name }];
+          this.cdr.detectChanges();
+        });
+      };
+      reader.readAsDataURL(file);
     }
     input.value = '';
   }
 
   removeGalleryImage(index: number): void {
-    URL.revokeObjectURL(this.galleryImages[index].url);
     this.galleryImages.splice(index, 1);
   }
-  //Geographic zone / Leaflet
+
+  openLightbox(images: { url: string; name: string }[], index: number): void {
+    this.lightboxService.open(images, index);
+  }
+
+  // Classification
+  classItems: ClassItem[] = [
+    { label: 'Nature & Outdoors', checked: false },
+    { label: 'Culture & Heritage', checked: false },
+    { label: 'Urban & City',       checked: false },
+    { label: 'Adventure & Sport',  checked: false },
+    { label: 'Family Friendly',    checked: false },
+  ];
+
+  // Tags
+  tags    : string[] = [];
+  tagInput: string   = '';
+
+  addTag(event: Event): void {
+    event.preventDefault();
+    const value = this.tagInput.trim();
+    if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
+    this.tags     = [...this.tags, value];
+    this.tagInput = '';
+  }
+
+  removeTag(tag: string): void {
+    this.tags = this.tags.filter(t => t !== tag);
+  }
+
+  // Geographic zone / Leaflet
   zoneModalOpen = false;
   zoneConfirmed = false;
   zoneAreaKm2: number | null = null;
@@ -303,45 +358,51 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     } catch {}
   }
 
-  //Classification
-    classItems: ClassItem[] = [
-      { label: 'Nature & Outdoors', checked: false },
-      { label: 'Culture & Heritage', checked: false },
-      { label: 'Urban & City',       checked: false },
-      { label: 'Adventure & Sport',  checked: false },
-      { label: 'Family Friendly',    checked: false },
-    ];
-
-    //Tags
-    tags    : string[] = [];
-    tagInput: string   = '';
-
-    addTag(event: Event): void {
-      event.preventDefault();
-      const value = this.tagInput.trim();
-      if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
-      this.tags     = [...this.tags, value];
-      this.tagInput = '';
-    }
-
-    removeTag(tag: string): void {
-      this.tags = this.tags.filter(t => t !== tag);
-    }
- 
-
   //Lifecycle
+
   isEditMode = false;
+  private editId: string | null = null;
 
   ngOnInit(): void {
     const state = history.state as { place?: any };
     if (state?.place) {
       this.isEditMode = true;
+      this.editId = state.place.id ?? null;
+      this._pendingDescription = state.place.description ?? state.place.summary ?? '';
       this._loadFromRouterState(state.place);
     }
   }
+  private _pendingDescription = '';
 
   private _loadFromRouterState(p: any): void {
-    this.destinationName = p.name ?? '';
+    this.destinationName = p.name          ?? '';
+    this.streetAddress   = p.address       ?? '';
+    this.summary         = p.summary       ?? '';
+    this.internalRefId   = p.internalRefId ?? '';
+
+    // Cover image
+    if (p.coverImageUrl) {
+      this.coverImageUrl  = p.coverImageUrl;
+      this.coverImageName = p.coverImageName ?? 'cover';
+    }
+
+    // Gallery
+    if (Array.isArray(p.galleryImages)) {
+      this.galleryImages = [...p.galleryImages];
+    }
+
+    // Classification
+    if (Array.isArray(p.classification)) {
+      this.classItems = this.classItems.map(c => ({
+        ...c,
+        checked: (p.classification as string[]).includes(c.label),
+      }));
+    }
+
+    // Tags
+    this.tags = Array.isArray(p.tags) ? [...p.tags] : [];
+
+    // Zone
     if (p.zone) {
       setTimeout(() => {
         if (!this.miniMap) this.initMiniMap();
@@ -350,7 +411,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         });
         (polygon as any)._isConfirmedZone = true;
         polygon.addTo(this.miniMap);
-        this.zoneConfirmed = true;
+        this.zoneConfirmed  = true;
         this.confirmedLayer = polygon;
         try { this.miniMap.fitBounds(polygon.getBounds(), { padding: [10, 10] }); } catch {}
       }, 200);
@@ -358,18 +419,22 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   ngAfterViewInit(): void {
-    setTimeout(() => this.initMiniMap(), 0);
+    setTimeout(() => {
+      this.initMiniMap();
+      if (this._pendingDescription && this.editorRef?.nativeElement) {
+        this.editorRef.nativeElement.innerHTML = this._pendingDescription;
+        this.syncEmptyState();
+        this.cdr.detectChanges();
+      }
+    }, 0);
   }
-  openLightbox(images: { url: string; name: string }[], index: number): void {
-    this.lightboxService.open(images, index);
-  }
+
   ngOnDestroy(): void {
     this.destroyModalMap();
     this.lightboxService.close();
-    this.galleryImages.forEach(img => URL.revokeObjectURL(img.url));
-    if (this.coverImageUrl) URL.revokeObjectURL(this.coverImageUrl);
     if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
   }
+
   isSaving = false;
 
   publish(): void {
@@ -377,30 +442,89 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       alert('Please draw a zone on the map first.');
       return;
     }
+
     this.isSaving = true;
     const { zone, centerLat, centerLng } = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
-    const areaKm2 = this.zoneDrawService.calculateAreaKm2(this.confirmedLayer);
+    const descriptionHtml  = this.editorRef?.nativeElement?.innerHTML ?? '';
+    const descriptionText  = this.editorRef?.nativeElement?.innerText ?? '';
+    const classification   = this.classItems.filter(c => c.checked).map(c => c.label);
 
+    if (this.isEditMode && this.editId) {
+      this.destinationsListSvc.updateItem(this.editId, {
+        name:           this.destinationName || 'New Destination',
+        lat:            centerLat,
+        lng:            centerLng,
+        zone,
+        category:       'Destination',
+        address:        this.streetAddress || undefined,
+        status:         'Published',
+        description:    descriptionHtml,
+        summary:        this.summary || descriptionText.slice(0, 160),
+        classification: classification.length ? classification : undefined,
+        tags:           this.tags.length ? this.tags : undefined,
+        coverImageUrl:  this.coverImageUrl ?? undefined,
+        coverImageName: this.coverImageName || undefined,
+        galleryImages:  this.galleryImages.length ? [...this.galleryImages] : undefined,
+        internalRefId:  this.internalRefId || undefined,
+        ...(this.coverImageUrl ? { imageBg: `url(${this.coverImageUrl}) center/cover` } : {}),
+      });
+
+      this.isSaving = false;
+      const returnTo = history.state?.returnTo as string | undefined;
+      this.router.navigate([returnTo ?? '/destinations']);
+      return;
+    }
+
+    // ── ADD MODE ──
     const payload = {
       name:        this.destinationName || 'New Destination',
       type:        'Destination' as const,
       category:    'Destination',
-      description: this.editorRef?.nativeElement?.innerHTML ?? '',
+      description: descriptionHtml,
       status:      'Active',
       eventsToday: 0,
       lat:         centerLat,
       lng:         centerLng,
       zone,
+      address:     this.streetAddress || undefined,
     };
 
-    const action$ = this.isEditMode
-      ? this.destinationsService.update(history.state?.place?.id, payload)
-      : this.destinationsService.add(payload);
-
-    action$.subscribe({
+    this.destinationsService.add(payload).subscribe({
       next: (saved) => {
         this.isSaving = false;
-        this.router.navigate(['/map'], { state: { newPlace: saved } });
+        const returnTo = history.state?.returnTo as string | undefined;
+
+        this.destinationsListSvc.addItem({
+          id:            saved.id,
+          name:          saved.name,
+          summary:       this.summary || descriptionText.slice(0, 160),
+          region:        'Šumadija, Srbija',
+          status:        'Published',
+          lastUpdated:   new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          imageBg:       this.coverImageUrl
+                          ? `url(${this.coverImageUrl}) center/cover`
+                          : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+          category:      saved.category,
+          lat:           saved.lat,
+          lng:           saved.lng,
+          zone:          saved.zone,
+          address:       saved.address,
+          description:   descriptionHtml,
+          coverImageUrl: this.coverImageUrl ?? undefined,
+          coverImageName: this.coverImageName || undefined,
+          galleryImages: this.galleryImages.length ? [...this.galleryImages] : undefined,
+          classification: classification.length ? classification : undefined,
+          tags:          this.tags.length ? this.tags : undefined,
+          internalRefId: this.internalRefId || undefined,
+        });
+
+        this.mapPlacesSvc.addPlace(saved);
+
+        if (returnTo) {
+          this.router.navigate([returnTo], { state: { place: saved } });
+        } else {
+          this.router.navigate(['/map'], { state: { newPlace: saved } });
+        }
       },
       error: () => { this.isSaving = false; alert('Failed to save.'); }
     });
