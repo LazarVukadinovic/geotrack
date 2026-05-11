@@ -178,6 +178,28 @@ describe('LocationService', () => {
     httpMock.expectNone('/api/locations/approximate');
   });
 
+  it('removes invalid session location payloads without restoring them', () => {
+    sessionStorage.setItem(LOCATION_KEY, JSON.stringify({
+      schemaVersion: 2,
+      location: {
+        latitude: 0,
+        longitude: 0,
+        city: 'Null Island',
+        region: '',
+        country: '',
+        displayLabel: 'Null Island',
+        source: 'gps',
+        cachedAt: Date.now(),
+      },
+    }));
+
+    setup();
+
+    expect(service.location()).toBeNull();
+    expect(sessionStorage.getItem(LOCATION_KEY)).toBeNull();
+    httpMock.expectNone('/api/locations/approximate');
+  });
+
   it('uses precise GPS when browser permission is granted', async () => {
     mockGeolocationPermission('granted');
     mockGeolocationSuccess(44.8125, 20.4612);
@@ -197,6 +219,166 @@ describe('LocationService', () => {
       country: 'Serbia',
       displayLabel: 'Belgrade, Serbia',
     });
+  });
+
+  it('requests precise GPS during background refresh when permission is already granted', async () => {
+    mockGeolocationPermission('granted');
+    const geolocation = mockGeolocationSuccess(44.0128, 20.9114);
+    setup();
+
+    service.tryBackgroundGpsRefresh();
+    await vi.waitFor(() => expect(geolocation.getCurrentPosition).toHaveBeenCalled());
+
+    expect(service.location()).toMatchObject({
+      latitude: 44.0128,
+      longitude: 20.9114,
+      source: 'gps',
+    });
+    expect(localStorage.getItem(LOCATION_KEY)).toBeNull();
+
+    const reverseReq = httpMock.expectOne(req => req.url === '/api/map/reverse');
+    reverseReq.flush({
+      city: 'Kragujevac',
+      region: 'Sumadija',
+      country: 'Serbia',
+      displayLabel: 'Kragujevac, Serbia',
+    });
+  });
+
+  it('refreshes a session precise location on forced startup when permission is already granted', async () => {
+    sessionStorage.setItem(LOCATION_KEY, JSON.stringify({
+      schemaVersion: 2,
+      location: {
+        latitude: 43.985,
+        longitude: 20.89,
+        city: 'Old Session City',
+        region: '',
+        country: 'Serbia',
+        displayLabel: 'Old Session City, Serbia',
+        source: 'gps',
+        cachedAt: Date.now(),
+      },
+    }));
+    mockGeolocationPermission('granted');
+    const geolocation = mockGeolocationSuccess(44.0128, 20.9114);
+    setup();
+
+    expect(service.location()).toMatchObject({
+      latitude: 43.985,
+      longitude: 20.89,
+      source: 'gps',
+    });
+
+    service.tryBackgroundGpsRefresh({ force: true });
+    await vi.waitFor(() => expect(geolocation.getCurrentPosition).toHaveBeenCalled());
+
+    expect(service.location()).toMatchObject({
+      latitude: 44.0128,
+      longitude: 20.9114,
+      source: 'gps',
+    });
+    expect(readStoredLocation()).toMatchObject({
+      latitude: 44.0128,
+      longitude: 20.9114,
+      source: 'gps',
+    });
+    httpMock.expectNone(req => req.url === '/api/map/reverse');
+  });
+
+  it('keeps fallback temporary when it resolves before precise GPS', async () => {
+    const geolocation = mockGeolocationDeferred();
+    setup();
+
+    const fallback = service.ensureIpFallback();
+    const precise = service.requestGps();
+
+    const fallbackReq = httpMock.expectOne('/api/locations/approximate');
+    fallbackReq.flush(approximateResponse());
+
+    await expect(fallback).resolves.toMatchObject({ source: 'approximate' });
+    expect(service.location()).toMatchObject({
+      latitude: 44.8706,
+      longitude: 20.6403,
+      source: 'approximate',
+    });
+
+    geolocation.succeed(44.0128, 20.9114);
+    const reverseReq = httpMock.expectOne(req => req.url === '/api/map/reverse');
+    reverseReq.flush({
+      city: 'Kragujevac',
+      region: 'Sumadija',
+      country: 'Serbia',
+      displayLabel: 'Kragujevac, Serbia',
+    });
+
+    await precise;
+    expect(service.location()).toMatchObject({
+      latitude: 44.0128,
+      longitude: 20.9114,
+      city: 'Kragujevac',
+      source: 'gps',
+    });
+    expect(readStoredLocation()?.source).toBe('gps');
+  });
+
+  it('ignores fallback when precise GPS resolves before the fallback response', async () => {
+    const geolocation = mockGeolocationDeferred();
+    setup();
+
+    const fallback = service.ensureIpFallback();
+    const precise = service.requestGps();
+
+    geolocation.succeed(44.0128, 20.9114);
+    const reverseReq = httpMock.expectOne(req => req.url === '/api/map/reverse');
+    reverseReq.flush({
+      city: 'Kragujevac',
+      region: 'Sumadija',
+      country: 'Serbia',
+      displayLabel: 'Kragujevac, Serbia',
+    });
+    await precise;
+
+    const fallbackReq = httpMock.expectOne('/api/locations/approximate');
+    fallbackReq.flush(approximateResponse());
+    await expect(fallback).resolves.toMatchObject({ source: 'approximate' });
+
+    expect(service.location()).toMatchObject({
+      latitude: 44.0128,
+      longitude: 20.9114,
+      source: 'gps',
+    });
+    expect(readStoredLocation()).toMatchObject({
+      latitude: 44.0128,
+      longitude: 20.9114,
+      source: 'gps',
+    });
+  });
+
+  it('replaces a stale session approximate location when new precise GPS arrives', async () => {
+    sessionStorage.setItem(LOCATION_KEY, JSON.stringify({
+      schemaVersion: 2,
+      location: {
+        ...approximateResponse(),
+        source: 'approximate',
+        cachedAt: Date.now(),
+      },
+    }));
+    mockGeolocationPermission('granted');
+    mockGeolocationSuccess(44.0128, 20.9114);
+    setup();
+
+    expect(service.location()).toMatchObject({ source: 'approximate' });
+
+    const loc = await service.resolveLocationForProductFlow();
+
+    expect(loc).toMatchObject({
+      latitude: 44.0128,
+      longitude: 20.9114,
+      source: 'gps',
+    });
+    expect(service.location()).toMatchObject({ source: 'gps' });
+    expect(readStoredLocation()?.source).toBe('gps');
+    httpMock.expectNone(req => req.url === '/api/map/reverse');
   });
 
   it('falls back to approximate location automatically when GPS is denied', async () => {
@@ -255,17 +437,49 @@ function mockGeolocationPermission(state: PermissionState): void {
   });
 }
 
-function mockGeolocationSuccess(latitude: number, longitude: number): void {
+function mockGeolocationSuccess(latitude: number, longitude: number): { getCurrentPosition: ReturnType<typeof vi.fn> } {
+  const getCurrentPosition = vi.fn((success: PositionCallback) => {
+    success({ coords: { latitude, longitude } } as GeolocationPosition);
+  });
   Object.defineProperty(navigator, 'geolocation', {
     configurable: true,
     value: {
-      getCurrentPosition: vi.fn((success: PositionCallback) => {
-        success({ coords: { latitude, longitude } } as GeolocationPosition);
+      getCurrentPosition,
+      watchPosition: vi.fn(),
+      clearWatch: vi.fn(),
+    },
+  });
+
+  return { getCurrentPosition };
+}
+
+function mockGeolocationDeferred(): {
+  succeed(latitude: number, longitude: number): void;
+  fail(code: number): void;
+} {
+  let successCallback: PositionCallback | null = null;
+  let errorCallback: PositionErrorCallback | undefined;
+
+  Object.defineProperty(navigator, 'geolocation', {
+    configurable: true,
+    value: {
+      getCurrentPosition: vi.fn((success: PositionCallback, error?: PositionErrorCallback) => {
+        successCallback = success;
+        errorCallback = error;
       }),
       watchPosition: vi.fn(),
       clearWatch: vi.fn(),
     },
   });
+
+  return {
+    succeed(latitude: number, longitude: number): void {
+      successCallback?.({ coords: { latitude, longitude } } as GeolocationPosition);
+    },
+    fail(code: number): void {
+      errorCallback?.({ code } as GeolocationPositionError);
+    },
+  };
 }
 
 function mockGeolocationFailure(code: number): void {
@@ -298,4 +512,35 @@ function restoreNavigatorProperty(
   }
 
   delete (navigator as unknown as Record<string, unknown>)[key];
+}
+
+function approximateResponse(): {
+  latitude: number;
+  longitude: number;
+  city: string;
+  region: string;
+  country: string;
+  displayLabel: string;
+  source: string;
+} {
+  return {
+    latitude: 44.8706,
+    longitude: 20.6403,
+    city: 'Pancevo',
+    region: 'Vojvodina',
+    country: 'Serbia',
+    displayLabel: 'Pancevo, Serbia',
+    source: 'ip',
+  };
+}
+
+function readStoredLocation(): {
+  latitude?: number;
+  longitude?: number;
+  source?: string;
+} | null {
+  const stored = JSON.parse(sessionStorage.getItem(LOCATION_KEY) ?? '{}') as {
+    location?: { latitude?: number; longitude?: number; source?: string };
+  };
+  return stored.location ?? null;
 }
