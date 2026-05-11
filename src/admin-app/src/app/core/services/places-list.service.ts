@@ -22,6 +22,16 @@ export interface PlaceListItem {
   coverImageName?: string;
   galleryImages?: { url: string; name: string }[];
   hours?: { name: string; open: boolean; openTime: string; closeTime: string }[];
+  internalRefId?: string;
+  parentLocation?: string;
+  bestTimeToVisit?: string;
+  visitorTips?: string;
+  accessNotes?: string;
+  accessibilityNotes?: string;
+  website?: string;
+  contactPhone?: string;
+  admissionPrice?: string;
+  bookingLink?: string;
 }
 
 export type PlaceSortField = 'name' | 'lastUpdated' | 'status';

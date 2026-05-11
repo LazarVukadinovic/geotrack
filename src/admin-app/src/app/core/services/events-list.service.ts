@@ -30,6 +30,12 @@ export interface EventListItem {
   coverImageUrl?: string;
   coverImageName?: string;
   galleryImages?: { url: string; name: string }[];
+  zone?: [number, number][];
+  venueType?: string;
+  organizerName?: string;
+  contactEmail?: string;
+  attendanceLimit?: string;
+  ageRestriction?: string;
 }
 
 export type EventSortField = 'name' | 'lastUpdated' | 'status';

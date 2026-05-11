@@ -38,7 +38,8 @@
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Parent Location <span class="text-red-500">*</span></label>
                 <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none"
-                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;">
+                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
+                        [(ngModel)]="parentLocation">
                   <option value="">Select parent location...</option>
                   <option>Oplenac Area</option>
                   <option>Central Zone</option>
@@ -67,7 +68,7 @@
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Internal Reference ID</label>
                 <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="e.g. PLC-001" />
+                       placeholder="e.g. PLC-001" [(ngModel)]="internalRefId" />
               </div>
             </div>
 
@@ -140,22 +141,22 @@
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Best Time to Visit</label>
                 <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="e.g. Spring mornings" />
+                       placeholder="e.g. Spring mornings" [(ngModel)]="bestTimeToVisit" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Visitor Tips</label>
                 <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="e.g. Book in advance" />
+                       placeholder="e.g. Book in advance" [(ngModel)]="visitorTips" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Access Notes</label>
                 <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
-                          placeholder="Parking details, walk distance..." rows="3"></textarea>
+                          placeholder="Parking details, walk distance..." rows="3" [(ngModel)]="accessNotes"></textarea>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Accessibility Notes</label>
                 <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
-                          placeholder="Wheelchair access, ramps..." rows="3"></textarea>
+                          placeholder="Wheelchair access, ramps..." rows="3" [(ngModel)]="accessibilityNotes"></textarea>
               </div>
             </div>
           </div>
@@ -168,22 +169,22 @@
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Website</label>
                 <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="https://" />
+                       placeholder="https://" [(ngModel)]="website" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Contact Phone</label>
                 <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="+1 (555) 000-0000" />
+                       placeholder="+1 (555) 000-0000" [(ngModel)]="contactPhone" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Admission / Price Range</label>
                 <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="e.g. $10 - $25 Adults" />
+                       placeholder="e.g. $10 - $25 Adults" [(ngModel)]="admissionPrice" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Booking / External Link</label>
                 <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="https://tickets..." />
+                       placeholder="https://tickets..." [(ngModel)]="bookingLink" />
               </div>
             </div>
           </div>

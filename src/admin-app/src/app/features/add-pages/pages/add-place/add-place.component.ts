@@ -96,10 +96,20 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // Fields
-  placeName  = '';
-  placeType  = 'Museum';
-  summary    = '';
-  opsEnabled = false;
+  placeName           = '';
+  placeType           = 'Museum';
+  summary             = '';
+  opsEnabled          = false;
+  internalRefId       = '';
+  parentLocation      = '';
+  bestTimeToVisit     = '';
+  visitorTips         = '';
+  accessNotes         = '';
+  accessibilityNotes  = '';
+  website             = '';
+  contactPhone        = '';
+  admissionPrice      = '';
+  bookingLink         = '';
 
   allHours: string[] = [
     '12:00 AM','01:00 AM','02:00 AM','03:00 AM','04:00 AM','05:00 AM',
@@ -448,12 +458,22 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private populateFromPlace(place: any): void {
-    this.placeName     = place.name     ?? '';
-    this.placeType     = place.category ?? '';
-    this.summary       = place.summary  ?? '';
-    this.streetAddress = place.address  ?? '';
-    this.pinLat        = place.lat?.toFixed(6) ?? '';
-    this.pinLng        = place.lng?.toFixed(6) ?? '';
+    this.placeName          = place.name              ?? '';
+    this.placeType          = place.category          ?? '';
+    this.summary            = place.summary           ?? '';
+    this.streetAddress      = place.address           ?? '';
+    this.pinLat             = place.lat?.toFixed(6)   ?? '';
+    this.pinLng             = place.lng?.toFixed(6)   ?? '';
+    this.internalRefId      = place.internalRefId     ?? '';
+    this.parentLocation     = place.parentLocation    ?? '';
+    this.bestTimeToVisit    = place.bestTimeToVisit   ?? '';
+    this.visitorTips        = place.visitorTips       ?? '';
+    this.accessNotes        = place.accessNotes       ?? '';
+    this.accessibilityNotes = place.accessibilityNotes ?? '';
+    this.website            = place.website           ?? '';
+    this.contactPhone       = place.contactPhone      ?? '';
+    this.admissionPrice     = place.admissionPrice    ?? '';
+    this.bookingLink        = place.bookingLink       ?? '';
 
     if (place.coverImageUrl) {
       this.coverImageUrl  = place.coverImageUrl;
@@ -526,20 +546,30 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (this.isEditMode && this.editPlaceId) {
       this.placesListSvc.updateItem(this.editPlaceId, {
-        name:           this.placeName || 'New Place',
-        category:       this.placeType || 'Place',
-        address:        this.streetAddress || undefined,
+        name:               this.placeName || 'New Place',
+        category:           this.placeType || 'Place',
+        address:            this.streetAddress || undefined,
         lat,
         lng,
-        status:         'Published',
-        description:    descriptionHtml,
-        summary:        this.summary || descriptionText.slice(0, 160),
-        classification: classification.length ? classification : undefined,
-        tags:           this.tags.length ? this.tags : undefined,
-        coverImageUrl:  this.coverImageUrl ?? undefined,
-        coverImageName: this.coverImageName || undefined,
-        galleryImages:  this.galleryImages.length ? [...this.galleryImages] : undefined,
-        hours:          this.days.map(d => ({ ...d })),
+        status:             'Published',
+        description:        descriptionHtml,
+        summary:            this.summary || descriptionText.slice(0, 160),
+        classification:     classification.length ? classification : undefined,
+        tags:               this.tags.length ? this.tags : undefined,
+        coverImageUrl:      this.coverImageUrl ?? undefined,
+        coverImageName:     this.coverImageName || undefined,
+        galleryImages:      this.galleryImages.length ? [...this.galleryImages] : undefined,
+        hours:              this.opsEnabled ? this.days.map(d => ({ ...d })) : undefined,
+        internalRefId:      this.internalRefId      || undefined,
+        parentLocation:     this.parentLocation     || undefined,
+        bestTimeToVisit:    this.bestTimeToVisit    || undefined,
+        visitorTips:        this.visitorTips        || undefined,
+        accessNotes:        this.accessNotes        || undefined,
+        accessibilityNotes: this.accessibilityNotes || undefined,
+        website:            this.website            || undefined,
+        contactPhone:       this.contactPhone       || undefined,
+        admissionPrice:     this.admissionPrice     || undefined,
+        bookingLink:        this.bookingLink        || undefined,
         ...(this.coverImageUrl ? { imageBg: `url(${this.coverImageUrl}) center/cover` } : {}),
       });
 
@@ -568,26 +598,36 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         const returnTo = history.state?.returnTo as string | undefined;
 
         this.placesListSvc.addItem({
-          id:            saved.id,
-          name:          saved.name,
-          summary:       this.summary || descriptionText.slice(0, 160),
-          region:        'Šumadija, Srbija',
-          status:        'Published',
-          lastUpdated:   new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          imageBg:       this.coverImageUrl
-                          ? `url(${this.coverImageUrl}) center/cover`
-                          : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
-          category:      saved.category,
-          lat:           saved.lat,
-          lng:           saved.lng,
-          address:       saved.address,
-          description:   descriptionHtml,
-          coverImageUrl: this.coverImageUrl ?? undefined,
-          coverImageName: this.coverImageName || undefined,
-          galleryImages: this.galleryImages.length ? [...this.galleryImages] : undefined,
-          classification: classification.length ? classification : undefined,
-          tags:          this.tags.length ? this.tags : undefined,
-          hours:         this.days.map(d => ({ ...d })),
+          id:                 saved.id,
+          name:               saved.name,
+          summary:            this.summary || descriptionText.slice(0, 160),
+          region:             'Šumadija, Srbija',
+          status:             'Published',
+          lastUpdated:        new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          imageBg:            this.coverImageUrl
+                               ? `url(${this.coverImageUrl}) center/cover`
+                               : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
+          category:           saved.category,
+          lat:                saved.lat,
+          lng:                saved.lng,
+          address:            saved.address,
+          description:        descriptionHtml,
+          coverImageUrl:      this.coverImageUrl ?? undefined,
+          coverImageName:     this.coverImageName || undefined,
+          galleryImages:      this.galleryImages.length ? [...this.galleryImages] : undefined,
+          classification:     classification.length ? classification : undefined,
+          tags:               this.tags.length ? this.tags : undefined,
+          hours:              this.opsEnabled ? this.days.map(d => ({ ...d })) : undefined,
+          internalRefId:      this.internalRefId      || undefined,
+          parentLocation:     this.parentLocation     || undefined,
+          bestTimeToVisit:    this.bestTimeToVisit    || undefined,
+          visitorTips:        this.visitorTips        || undefined,
+          accessNotes:        this.accessNotes        || undefined,
+          accessibilityNotes: this.accessibilityNotes || undefined,
+          website:            this.website            || undefined,
+          contactPhone:       this.contactPhone       || undefined,
+          admissionPrice:     this.admissionPrice     || undefined,
+          bookingLink:        this.bookingLink        || undefined,
         });
 
         this.mapPlacesService.addPlace(saved);

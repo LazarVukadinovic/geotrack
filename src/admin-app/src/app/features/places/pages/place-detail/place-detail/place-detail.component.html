@@ -93,9 +93,81 @@
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Last Updated</span>
                   <span class="text-sm font-medium text-gray-700">{{ item.lastUpdated }}</span>
                 </div>
+                <ng-container *ngIf="(item)['parentLocation']">
+                  <div class="flex flex-col gap-1 col-span-2">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent Location</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['parentLocation'] }}</span>
+                  </div>
+                </ng-container>
+                <ng-container *ngIf="(item)['internalRefId']">
+                  <div class="flex flex-col gap-1 col-span-2">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Internal Reference ID</span>
+                    <span class="text-sm font-medium text-gray-700 font-mono">{{ (item)['internalRefId'] }}</span>
+                  </div>
+                </ng-container>
               </div>
             </div>
           </div>
+
+          <!-- Context & Visit Information -->
+          <ng-container *ngIf="(item)['bestTimeToVisit'] || (item)['visitorTips'] || (item)['accessNotes'] || (item)['accessibilityNotes']">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-bold text-gray-800">Context &amp; Visit Information</h3>
+              </div>
+              <div class="px-6 py-5">
+                <div class="grid grid-cols-2 gap-4">
+                  <div *ngIf="(item)['bestTimeToVisit']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Best Time to Visit</span>
+                    <span class="text-sm text-gray-700">{{ (item)['bestTimeToVisit'] }}</span>
+                  </div>
+                  <div *ngIf="(item)['visitorTips']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Visitor Tips</span>
+                    <span class="text-sm text-gray-700">{{ (item)['visitorTips'] }}</span>
+                  </div>
+                  <div *ngIf="(item)['accessNotes']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Access Notes</span>
+                    <span class="text-sm text-gray-700 leading-relaxed">{{ (item)['accessNotes'] }}</span>
+                  </div>
+                  <div *ngIf="(item)['accessibilityNotes']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Accessibility Notes</span>
+                    <span class="text-sm text-gray-700 leading-relaxed">{{ (item)['accessibilityNotes'] }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- Operational Information -->
+          <ng-container *ngIf="(item)['website'] || (item)['contactPhone'] || (item)['admissionPrice'] || (item)['bookingLink']">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-bold text-gray-800">Operational Information</h3>
+              </div>
+              <div class="px-6 py-5">
+                <div class="grid grid-cols-2 gap-4">
+                  <div *ngIf="(item)['website']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Website</span>
+                    <a [href]="(item)['website']" target="_blank" rel="noopener"
+                       class="text-sm text-blue-700 hover:underline break-all">{{ (item)['website'] }}</a>
+                  </div>
+                  <div *ngIf="(item)['contactPhone']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Contact Phone</span>
+                    <span class="text-sm text-gray-700">{{ (item)['contactPhone'] }}</span>
+                  </div>
+                  <div *ngIf="(item)['admissionPrice']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Admission / Price</span>
+                    <span class="text-sm text-gray-700">{{ (item)['admissionPrice'] }}</span>
+                  </div>
+                  <div *ngIf="(item)['bookingLink']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Booking Link</span>
+                    <a [href]="(item)['bookingLink']" target="_blank" rel="noopener"
+                       class="text-sm text-blue-700 hover:underline break-all">{{ (item)['bookingLink'] }}</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ng-container>
 
           <!-- Description -->
           <ng-container *ngIf="(item)['description']">

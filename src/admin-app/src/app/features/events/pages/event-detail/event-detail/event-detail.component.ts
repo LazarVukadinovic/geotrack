@@ -43,10 +43,12 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   deleteTarget: EventListItem | null = null;
   isDeleting    = false;
 
-  private miniMap:     any = null;
-  private modalMap:    any = null;
-  private miniMarker:  any = null;
-  private modalMarker: any = null;
+  private miniMap:        any = null;
+  private modalMap:       any = null;
+  private miniMarker:     any = null;
+  private modalMarker:    any = null;
+  private miniZoneLayer:  any = null;
+  private modalZoneLayer: any = null;
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
@@ -77,7 +79,11 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyModalMap();
-    if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
+    if (this.miniMap) {
+      if (this.miniZoneLayer) { this.miniMap.removeLayer(this.miniZoneLayer); this.miniZoneLayer = null; }
+      this.miniMap.remove();
+      this.miniMap = null;
+    }
   }
 
   private makePinIcon(): any {
@@ -94,6 +100,7 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   private initMiniMap(): void {
     if (this.miniMap || !this.miniMapContainer?.nativeElement) return;
     const el = this.miniMapContainer.nativeElement;
+    const zone: [number, number][] | undefined = (this.item as any)?.zone;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
     const hasCoords = (this.item as any)?.lat != null;
@@ -106,7 +113,12 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 })
       .addTo(this.miniMap);
 
-    if (hasCoords) {
+    if (zone?.length) {
+      this.miniZoneLayer = L.polygon(zone, {
+        color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
+      }).addTo(this.miniMap);
+      try { this.miniMap.fitBounds(this.miniZoneLayer.getBounds(), { padding: [10, 10] }); } catch {}
+    } else if (hasCoords) {
       this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
         .addTo(this.miniMap);
     }
@@ -115,6 +127,7 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap) return;
+    const zone: [number, number][] | undefined = (this.item as any)?.zone;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
     const hasCoords = (this.item as any)?.lat != null;
@@ -125,7 +138,12 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 })
       .addTo(this.modalMap);
 
-    if (hasCoords) {
+    if (zone?.length) {
+      this.modalZoneLayer = L.polygon(zone, {
+        color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
+      }).addTo(this.modalMap);
+      try { this.modalMap.fitBounds(this.modalZoneLayer.getBounds(), { padding: [30, 30] }); } catch {}
+    } else if (hasCoords) {
       this.modalMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
         .addTo(this.modalMap);
     }
@@ -133,7 +151,20 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private destroyModalMap(): void {
-    if (this.modalMap) { this.modalMap.remove(); this.modalMap = null; this.modalMarker = null; }
+    if (this.modalMap) {
+      this.modalMap.remove();
+      this.modalMap = null;
+      this.modalMarker = null;
+      this.modalZoneLayer = null;
+    }
+  }
+
+  get itemZone(): [number, number][] | undefined {
+    return (this.item as any)?.zone;
+  }
+
+  get itemVenueType(): string {
+    return (this.item as any)?.venueType ?? 'location';
   }
 
   openMapModal(): void {

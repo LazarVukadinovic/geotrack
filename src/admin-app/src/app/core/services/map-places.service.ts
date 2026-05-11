@@ -74,6 +74,10 @@ export class MapPlacesService {
     return this.places.filter(p => p.type === 'Place');
   }
 
+  getDestinations(): MapPlace[] {
+    return this.places.filter(p => p.type === 'Destination');
+  }
+
   search(query: string): MapPlace[] {
     const q = query.trim().toLowerCase();
     return this.places.filter(p =>
