@@ -147,7 +147,21 @@ describe('AgentPageComponent', () => {
 
     expect(nativeElement.querySelector('#agent-settings-dialog')).toBeNull();
     expect(nativeElement.querySelector('.agent__field')).toBeNull();
+    expect(nativeElement.querySelector('.agent__settings-button')?.getAttribute('aria-expanded')).toBe('false');
     expect(nativeElement.querySelector('.agent__settings-button')?.getAttribute('aria-label')).toBe('Agent settings');
+  });
+
+  it('renders selected provider, model, and key mode in the header status', () => {
+    expect(headerStatusText()).toBe('Gemini / Gemini 2.5 Flash / Saved key');
+  });
+
+  it('renders a safe header status when the selected provider is unavailable', () => {
+    agentService.providers.set([
+      agentProvider({ enabled: false }),
+    ]);
+    fixture.detectChanges();
+
+    expect(headerStatusText()).toBe('Gemini unavailable');
   });
 
   it('opens and closes the settings popup from the header button', () => {
@@ -182,6 +196,30 @@ describe('AgentPageComponent', () => {
     expect(agentService.testKey).toHaveBeenCalledWith('new-provider-key', 'session');
     expect(agentService.saveApiKey).toHaveBeenCalledWith('new-provider-key');
     expect(agentService.deleteSavedKey).toHaveBeenCalledTimes(1);
+  });
+
+  it('tests an existing saved key without exposing the key in frontend state', () => {
+    openSettings();
+
+    findButton('Test key').click();
+
+    expect(agentService.testKey).toHaveBeenCalledWith('', 'saved');
+  });
+
+  it('keeps saved-key testing disabled when there is no saved key or draft key', () => {
+    agentService.providers.set([
+      agentProvider({ hasSavedKey: false, keyLast4: null }),
+    ]);
+    agentService.keyMode.set('project-demo');
+    fixture.detectChanges();
+    openSettings();
+
+    const testKey = findButton('Test key');
+    expect(testKey.disabled).toBe(true);
+
+    testKey.click();
+
+    expect(agentService.testKey).not.toHaveBeenCalled();
   });
 
   it('keeps temporary keys in component state and never writes them to browser storage', () => {
@@ -375,6 +413,11 @@ describe('AgentPageComponent', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     (nativeElement.querySelector('.agent__settings-button') as HTMLButtonElement).click();
     fixture.detectChanges();
+  }
+
+  function headerStatusText(): string {
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    return nativeElement.querySelector('.agent__header-meta')?.textContent?.trim() ?? '';
   }
 
   function findButton(label: string): HTMLButtonElement {
