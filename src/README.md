@@ -37,9 +37,6 @@ Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom.
   - `Geotrack.Infrastructure` - EF Core `AppDbContext`, repozitorijumi, servisi, migracije i Agent/MCP alatni sloj.
   - `Geotrack.Server` - API kontroleri, DI/startup, middleware i statički `/media` fajlovi.
   - `Geotrack.IntegrationTests` - integracioni testovi.
-- `CLAUDE.md` - radni izvor istine za agente, ali kod ima prednost.
-- `AGENT_SETUP.md` - kraće uputstvo za Ask Agent podešavanje.
-- `MCP_TOOLS.md` - trenutni MCP allowlist i pravila.
 
 ## Pokretanje frontend-a
 
