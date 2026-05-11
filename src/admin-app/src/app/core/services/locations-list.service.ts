@@ -243,6 +243,8 @@ export class LocationsListService {
 
   // ── Public accessors ─────────────────────────────────────────────────────
 
+  getAllItems(): LocationListItem[] { return [...this._all]; }
+
   addItem(item: Omit<LocationListItem, 'sortTimestamp'>): void {
     const ts = Date.now();
     this._all.unshift({ ...item, sortTimestamp: ts });

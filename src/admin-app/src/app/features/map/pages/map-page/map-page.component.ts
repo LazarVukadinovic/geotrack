@@ -286,7 +286,7 @@ export class MapPageComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       });
     });
-    this.dynamicPlaces.forEach(place => this._addPlaceToMap(place));
+    
 
     if (this.dynamicPlaces.length > 0) {
       const p = this.dynamicPlaces[0];

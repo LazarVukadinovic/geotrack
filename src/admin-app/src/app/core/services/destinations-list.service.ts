@@ -186,6 +186,8 @@ export class DestinationsListService {
 
   // ── Public accessors ─────────────────────────────────────────────────────
 
+  getAllItems(): DestinationListItem[] { return [...this._all]; }
+
   addItem(item: Omit<DestinationListItem, 'sortTimestamp'>): void {
     const ts = Date.now();
     this._all.unshift({ ...item, sortTimestamp: ts });

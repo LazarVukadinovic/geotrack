@@ -180,6 +180,8 @@ export class PlacesListService {
 
   // ── Public accessors ─────────────────────────────────────────────────────
 
+  getAllItems(): PlaceListItem[] { return [...this._all]; }
+
   addItem(item: Omit<PlaceListItem, 'sortTimestamp'>): void {
     const ts = Date.now();
     this._all.unshift({ ...item, sortTimestamp: ts });
