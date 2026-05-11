@@ -57,6 +57,7 @@ public class AppDbContext : DbContext
     public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<UserPlace> UserPlaces => Set<UserPlace>();
+    public DbSet<UserAiProviderKey> UserAiProviderKeys => Set<UserAiProviderKey>();
 
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<TagType> TagTypes => Set<TagType>();
@@ -849,6 +850,50 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(x => x.PlaceId);
+        });
+
+        modelBuilder.Entity<UserAiProviderKey>(entity =>
+        {
+            entity.ToTable("UserAiProviderKeys");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Provider)
+                .IsRequired()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.EncryptedApiKey)
+                .IsRequired()
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.KeyLast4)
+                .IsRequired()
+                .HasMaxLength(8);
+
+            entity.Property(x => x.DisplayName)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.IsActive)
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.FailedUseCount)
+                .HasDefaultValue(0);
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.AiProviderKeys)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.Provider });
+            entity.HasIndex(x => new { x.UserId, x.Provider, x.IsActive })
+                .IsUnique()
+                .HasFilter("\"IsActive\" = true");
         });
 
         modelBuilder.Entity<RefreshToken>(entity =>
