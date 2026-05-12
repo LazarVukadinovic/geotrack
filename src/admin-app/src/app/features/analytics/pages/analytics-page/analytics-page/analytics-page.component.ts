@@ -477,7 +477,6 @@ export class AnalyticsPageComponent implements OnInit {
   applySortOption(opt: { field: EntitySortField; dir: 'asc' | 'desc' }): void {
     this.sortFieldSig.set(opt.field);
     this.sortDirSig.set(opt.dir);
-    this.visibleCount.set(10);
     this.sortOpen = false;
   }
 

@@ -139,7 +139,7 @@ export class NationalAnalyticsService {
       contentQuality:  MOCK_CONTENT_QUALITY,
       regionRows:      MOCK_REGION_ROWS,
       alerts:          MOCK_ALERTS,
-    }).pipe(delay(this.MOCK_DELAY_MS));
+    });
   }
 
   // TODO: replace each `of(...)` with the corresponding HTTP call.

@@ -498,14 +498,14 @@
         <div class="grid items-center gap-2 px-6 py-3 bg-gray-50/60 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider"
              style="grid-template-columns: minmax(140px,1fr) 90px 90px 70px 90px 160px 140px 100px 90px">
           <span>Region name</span>
-          <span>Page<br>Views</span>
-          <span>Visitors</span>
-          <span>Saves</span>
-          <span>Avg<br>Rating</span>
-          <span>Entities</span>
-          <span>Status</span>
-          <span>Quality<br>Score</span>
-          <span>Manager</span>
+          <span class="text-center">Page<br>Views</span>
+          <span class="text-center">Visitors</span>
+          <span class="text-center">Saves</span>
+          <span class="text-center">Avg<br>Rating</span>
+          <span class="text-center">Entities</span>
+          <span class="text-center">Status</span>
+          <span class="text-center">Quality<br>Score</span>
+          <span class="text-center">Manager</span>
         </div>
 
         <!-- Table rows -->
@@ -518,10 +518,10 @@
             <p class="text-sm font-semibold text-gray-900">{{ row.name }}</p>
             <p class="text-xs text-gray-400">{{ row.refId }}</p>
           </div>
-          <span class="text-sm font-medium text-gray-700">{{ row.pageViews }}</span>
-          <span class="text-sm font-medium text-gray-700">{{ row.visitors }}</span>
-          <span class="text-sm font-medium text-gray-700">{{ row.saves }}</span>
-          <div class="flex items-center gap-1">
+          <span class="text-center text-sm font-medium text-gray-700">{{ row.pageViews }}</span>
+          <span class="text-center text-sm font-medium text-gray-700">{{ row.visitors }}</span>
+          <span class="text-center text-sm font-medium text-gray-700">{{ row.saves }}</span>
+          <div class="flex items-center justify-center gap-1">
             <span class="text-sm font-medium text-gray-700">{{ row.avgRating }}</span>
             <svg class="w-3 h-3 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -529,7 +529,7 @@
           </div>
 
           <!-- Entities: 2x2 icon grid (D / L / P / E) -->
-          <div class="grid grid-cols-2 gap-x-2 gap-y-1.5">
+          <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 mx-auto">
             <!-- Destinations -->
             <div class="flex items-center gap-1">
               <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -566,10 +566,10 @@
             </div>
           </div>
 
-          <div>
+          <div class="flex justify-center">
             <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold" [ngClass]="statusClass(row.status)">{{ row.status }}</span>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center justify-center gap-2">
             <svg width="32" height="32" viewBox="0 0 36 36">
               <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" stroke-width="3"/>
               <circle cx="18" cy="18" r="15" fill="none"
@@ -581,7 +581,7 @@
             </svg>
             <span class="text-sm font-semibold" [style.color]="scoreColor(row.qualityScore)">{{ row.qualityScore }}</span>
           </div>
-          <div>
+          <div class="flex justify-center">
             <span *ngIf="row.hasManager" class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
               <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
               Assigned

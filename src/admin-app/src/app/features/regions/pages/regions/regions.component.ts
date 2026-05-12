@@ -66,9 +66,8 @@ export class AllRegionsComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   applySortOption(opt: { label: string; field: RegionSortField; dir: RegionSortDir }): void {
-    this.sortField    = opt.field;
-    this.sortDir      = opt.dir;
-    this.displayCount = PAGE_SIZE_INITIAL;
+    this.sortField = opt.field;
+    this.sortDir   = opt.dir;
     this.loadItems();
   }
 
