@@ -26,33 +26,6 @@ public class DestinationController : ControllerBase
         _logger = logger;
     }
 
-    [Obsolete("Use GET /api/explore?latitude={latitude}&longitude={longitude}. This compatibility endpoint is bounded by the shared Explore service.")]
-    [HttpPost("explore-by-location")]
-    public async Task<IActionResult> ExploreByLocation([FromBody] ExploreByLocationRequestDto request)
-    {
-        if (!HasValidCoordinates(request.Latitude, request.Longitude))
-        {
-            return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
-        }
-
-        Response.Headers["Deprecation"] = "true";
-        Response.Headers["Link"] = "</api/explore>; rel=\"successor-version\"";
-
-        try
-        {
-            var result = await _exploreService.GetExplorePageAsync(
-                request.Latitude,
-                request.Longitude,
-                TryGetUserId());
-
-            return Ok(MapLegacyExploreResponse(result));
-        }
-        catch (Exception ex)
-        {
-            return MapException(ex);
-        }
-    }
-
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string? query)
     {
@@ -158,92 +131,7 @@ public class DestinationController : ControllerBase
         return int.TryParse(userIdClaim, out var userId) ? userId : null;
     }
 
-    private static ExploreByLocationResponseDto MapLegacyExploreResponse(ExplorePageDto page)
-    {
-        var sections = new List<ExploreSectionDto>();
-
-        AddSection(
-            sections,
-            "events-this-week",
-            "Events This Week",
-            page.EventsThisWeek.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "event",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Subtitle ?? string.Empty
-            }));
-
-        AddSection(
-            sections,
-            "top-stays",
-            "Top Stays",
-            page.TopStays.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Distance ?? string.Empty,
-                AverageRating = item.Rating ?? 0
-            }));
-
-        AddSection(
-            sections,
-            "popular-nearby",
-            "Popular Nearby",
-            page.PopularNearby.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.CategoryLabel ?? string.Empty,
-                AverageRating = item.Rating ?? 0
-            }));
-
-        AddSection(
-            sections,
-            "must-see-attractions",
-            "Must-See Attractions",
-            page.MustSeeAttractions.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Type ?? string.Empty
-            }));
-
-        AddSection(
-            sections,
-            "local-favorites",
-            "Local Favorites",
-            page.LocalFavorites.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Description ?? item.Type ?? string.Empty,
-                AverageRating = item.Rating ?? 0
-            }));
-
-        AddSection(
-            sections,
-            "curated-for-you",
-            "Curated For You",
-            page.CuratedForYou.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Subtitle ?? item.CategoryLabel ?? string.Empty
-            }));
-
-        return new ExploreByLocationResponseDto
-        {
-            SelectedDestination = page.SelectedDestination,
-            Sections = sections
-        };
-    }
-
+ 
     private static void AddSection(
         List<ExploreSectionDto> sections,
         string key,

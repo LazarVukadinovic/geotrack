@@ -16,7 +16,11 @@ public class TagRepository : ITagRepository
 
     public async Task<List<Tag>> GetTagsAsync(IReadOnlyCollection<string>? slugs = null)
     {
-        var query = _db.Tags.AsNoTracking().AsQueryable();
+        var query = _db.Tags
+            .AsNoTracking()
+            .Include(tag => tag.TagType)
+                .ThenInclude(tagType => tagType!.PlaceTypes)
+            .AsQueryable();
 
         if (slugs is { Count: > 0 })
         {
@@ -24,7 +28,8 @@ public class TagRepository : ITagRepository
         }
 
         return await query
-            .OrderBy(tag => tag.Name)
+            .OrderBy(tag => tag.TagType != null ? tag.TagType.Name : string.Empty)
+            .ThenBy(tag => tag.Name)
             .ToListAsync();
     }
 

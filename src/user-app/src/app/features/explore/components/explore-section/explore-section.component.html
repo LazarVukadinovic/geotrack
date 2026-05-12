@@ -1,0 +1,92 @@
+<section class="explore-section" [attr.aria-label]="section().title">
+  <app-section-header
+    [title]="section().title"
+    [subtitle]="section().subtitle ?? ''"
+    [actionLabel]="actionLabel()"
+    (action)="openMore()"
+  />
+
+  <div class="explore-section__viewport">
+    <div
+      class="explore-section__track"
+      [class.explore-section__track--grid]="section().layout === 'grid'"
+      [attr.data-slider-id]="sliderId()"
+      role="list"
+    >
+      @for (item of section().items; track item.id) {
+        <article
+          class="explore-section__card"
+          [class.explore-section__card--stay]="isStay(item)"
+          [class.explore-section__card--event]="isEvent(item)"
+          role="button"
+          tabindex="0"
+          [attr.data-item-id]="item.id"
+          [attr.aria-label]="item.title"
+          (click)="openItem(item)"
+          (keydown.enter)="openItem(item)"
+          (keydown.space)="$event.preventDefault(); openItem(item)"
+        >
+          <div class="explore-section__media">
+            <img
+              class="explore-section__img"
+              [src]="imgSrcById()[item.id]"
+              [alt]="''"
+              width="220"
+              height="160"
+              loading="lazy"
+              decoding="async"
+              (error)="onImgError(item.id)"
+            />
+
+            @if (showFavoriteButton() && canSave(item)) {
+              <app-favorite-button
+                class="explore-section__save"
+                [saved]="item.isSaved"
+                [itemLabel]="item.title"
+                (clicked)="saveItem(item)"
+              />
+            }
+          </div>
+
+          <div class="explore-section__body">
+            @if (item.categoryLabel) {
+              <p class="explore-section__category">{{ item.categoryLabel }}</p>
+            }
+
+            <h3 class="explore-section__title">{{ item.title }}</h3>
+
+            @if (item.subtitle) {
+              <p class="explore-section__subtitle">{{ item.subtitle }}</p>
+            } @else if (item.description) {
+              <p class="explore-section__subtitle">{{ item.description }}</p>
+            }
+
+            <div class="explore-section__meta">
+              @if (item.rating != null) {
+                <span class="explore-section__rating">
+                  ★ {{ item.rating.toFixed(1) }}
+                </span>
+              }
+
+              @if (item.reviewCount) {
+                <span>{{ item.reviewCount }}</span>
+              }
+
+              @if (item.distance) {
+                <span>{{ item.distance }}</span>
+              }
+
+              @if (item.dateLabel) {
+                <span>{{ item.dateLabel }}</span>
+              }
+
+              @if (item.pricePerNight != null) {
+                <span>€{{ item.pricePerNight }}/night</span>
+              }
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  </div>
+</section>

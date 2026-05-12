@@ -23,6 +23,7 @@ public class Place
     public Location Location { get; set; } = null!;
 
     public Stay? Stay { get; set; }
+    public Restaurant? Restaurant { get; set; }
 
     public ICollection<Event> Events { get; set; } = new List<Event>();
     public ICollection<PlaceTag> PlaceTags { get; set; } = new List<PlaceTag>();

@@ -3,10 +3,14 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 export interface MapSearchResult {
+  id?: number | null;
+  type?: 'destination' | 'location' | 'place' | 'event' | string | null;
   name: string;
+  description?: string | null;
   subtitle?: string | null;
   latitude: number;
   longitude: number;
+  parentName?: string | null;
 }
 
 export interface MapReverseGeocodeResult {
@@ -69,7 +73,9 @@ export class MapApiService {
 
   search(query: string): Observable<MapSearchResult[]> {
     return this.http.get<MapSearchResult[]>('/api/map/search', {
-      params: new HttpParams().set('query', query),
+      params: new HttpParams()
+        .set('query', query)
+        .set('types', 'destination,location,place,event'),
     });
   }
 

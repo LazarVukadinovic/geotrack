@@ -644,6 +644,8 @@ public class PlaceContributionService : IPlaceContributionService
             .Include(p => p.Images)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
+                    .ThenInclude(tag => tag.TagType)
+                        .ThenInclude(tagType => tagType!.PlaceTypes)
             .Include(p => p.PlaceAmenities)
                 .ThenInclude(pa => pa.Amenity)
             .Include(p => p.PlaceBookingPartners)
@@ -1130,7 +1132,6 @@ public class PlaceContributionService : IPlaceContributionService
                 place.Stay = new Stay
                 {
                     PlaceId = place.Id,
-                    CreatedAt = now
                 };
             }
 
@@ -1138,7 +1139,6 @@ public class PlaceContributionService : IPlaceContributionService
             place.Stay.PricePerNight = contribution.PricePerNight;
             place.Stay.CheckInTime = contribution.CheckInTime;
             place.Stay.CheckOutTime = contribution.CheckOutTime;
-            place.Stay.UpdatedAt = now;
 
             await SyncStayAmenitiesAsync(place.Id, stayAmenityNames);
         }

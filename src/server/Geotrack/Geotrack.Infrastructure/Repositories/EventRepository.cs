@@ -23,6 +23,8 @@ public class EventRepository : Repository<Event>, IEventRepository
             .Include(e => e.EventReviews)
             .Include(e => e.EventTags)
                 .ThenInclude(et => et.Tag)
+                    .ThenInclude(tag => tag.TagType)
+                        .ThenInclude(tagType => tagType!.PlaceTypes)
             .FirstOrDefaultAsync(e => e.Id == eventId);
     }
 
