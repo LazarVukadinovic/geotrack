@@ -18,19 +18,39 @@
     <span class="block text-white/40 text-[10px] font-semibold tracking-widest mb-1.5">
       {{ pickerLabel }}
     </span>
-    <button
-      class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-white/90 text-xs font-medium border border-white/20 hover:bg-white/15 cursor-pointer transition-colors"
-      style="background: rgba(255,255,255,0.1);"
-    >
-      <svg class="w-4 h-4 text-white/50 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="10" r="3"/>
-        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-      </svg>
-      <span class="truncate flex-1 text-left">{{ pickerValue }}</span>
-      <svg class="w-3 h-3 text-white/40 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M6 9l6 6 6-6"/>
-      </svg>
-    </button>
+    @if (canSelectRegion) {
+      <label
+        class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-white/90 text-xs font-medium border border-white/20 hover:bg-white/15 cursor-pointer transition-colors"
+        style="background: rgba(255,255,255,0.1);"
+      >
+        <svg class="w-4 h-4 text-white/50 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="10" r="3"/>
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+        </svg>
+        <select
+          class="min-w-0 flex-1 bg-transparent border-0 text-white text-xs font-medium outline-none cursor-pointer"
+          [value]="activeRegionId ?? ''"
+          [disabled]="regionLoading"
+          (change)="onRegionChange($any($event.target).value)"
+          aria-label="Active region"
+        >
+          @for (item of regions; track item.id) {
+            <option class="text-gray-900" [value]="item.id">{{ item.displayName }}</option>
+          }
+        </select>
+      </label>
+    } @else {
+      <div
+        class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-white/90 text-xs font-medium border border-white/20"
+        style="background: rgba(255,255,255,0.1);"
+      >
+        <svg class="w-4 h-4 text-white/50 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="10" r="3"/>
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+        </svg>
+        <span class="truncate flex-1 text-left">{{ regionLoading ? 'Loading...' : pickerValue }}</span>
+      </div>
+    }
   </div>
 
   <!-- ══ NATIONAL MANAGER navigation ══ -->

@@ -1,8 +1,8 @@
-import { Component, Input, inject } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, Router } from '@angular/router';
-import { ReviewRequestsService } from '../../../core/services/review-requests.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { RegionalAssignedRegion } from '../../../core/models/dashboard.model';
 
 export interface SidebarNavItem {
   label: string;
@@ -21,9 +21,13 @@ export interface SidebarNavItem {
 })
 export class SidebarComponent {
   @Input() region = '';
+  @Input() regions: RegionalAssignedRegion[] = [];
+  @Input() activeRegionId: number | null = null;
+  @Input() pendingRequestsCount: number | null = null;
+  @Input() regionLoading = false;
+  @Output() regionChange = new EventEmitter<number>();
 
   private readonly auth            = inject(AuthService);
-  private readonly requestsService = inject(ReviewRequestsService);
   private readonly router          = inject(Router);
 
   get pickerLabel(): string {
@@ -31,7 +35,12 @@ export class SidebarComponent {
   }
 
   get pickerValue(): string {
-    return this.region || this.auth.getUser()?.region || '';
+    const activeRegion = this.regions.find(region => region.id === this.activeRegionId);
+    return this.region || activeRegion?.displayName || this.auth.getUser()?.region || 'No assigned regions';
+  }
+
+  get canSelectRegion(): boolean {
+    return this.regions.length > 1;
   }
 
   get isNational(): boolean {
@@ -58,7 +67,7 @@ export class SidebarComponent {
     return [
       { label: 'Dashboard',      path: '/dashboard', icon: 'dashboard', exact: true },
       { label: 'Requests Queue', path: '/requests',  icon: 'inbox',
-        badge: this.requestsService.pendingCount || undefined },
+        badge: this.pendingRequestsCount || undefined },
       { label: 'Map',            path: '/map',       icon: 'map' },
     ];
   }
@@ -77,5 +86,12 @@ export class SidebarComponent {
   signOut(): void {
     this.auth.logout();
     this.router.navigate(['/login']);
+  }
+
+  onRegionChange(value: string): void {
+    const regionId = Number(value);
+    if (Number.isFinite(regionId) && regionId > 0) {
+      this.regionChange.emit(regionId);
+    }
   }
 }
