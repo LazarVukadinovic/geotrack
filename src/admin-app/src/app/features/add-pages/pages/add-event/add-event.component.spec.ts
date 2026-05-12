@@ -1,19 +1,20 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
-import { AddEventComponent } from './add-event.component';
+import { NewEventComponent } from './add-event.component';
 
-describe('AddEventComponent', () => {
-  let component: AddEventComponent;
-  let fixture: ComponentFixture<AddEventComponent>;
+describe('NewEventComponent', () => {
+  let component: NewEventComponent;
+  let fixture: ComponentFixture<NewEventComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AddEventComponent],
+      imports: [NewEventComponent],
+      providers: [provideRouter([])],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(AddEventComponent);
+    fixture = TestBed.createComponent(NewEventComponent);
     component = fixture.componentInstance;
-    await fixture.whenStable();
   });
 
   it('should create', () => {

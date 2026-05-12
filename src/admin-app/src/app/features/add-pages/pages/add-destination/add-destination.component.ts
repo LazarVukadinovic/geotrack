@@ -9,6 +9,7 @@ import { LightboxService } from '../../../../core/services/lightbox.service';
 import { ZoneDrawService } from '../../../../core/services/zone-draw.service';
 import { DestinationsListService } from '../../../../core/services/destinations-list.service';
 import { MapPlacesService } from '../../../../core/services/map-places.service';
+import { AuthService } from '../../../../core/services/auth.service';
 declare const L: any;
 
 interface ClassItem {
@@ -45,7 +46,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     private lightboxService: LightboxService,
     private zoneDrawService: ZoneDrawService,
     private destinationsListSvc: DestinationsListService,
-    private mapPlacesSvc: MapPlacesService
+    private mapPlacesSvc: MapPlacesService,
+    private auth: AuthService
   ) {}
 
   @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
@@ -57,6 +59,10 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   streetAddress   = '';
   summary         = '';
   internalRefId   = '';
+
+  get currentUserName(): string {
+    return this.auth.fullName || this.auth.getUser()?.email || '';
+  }
 
   // Rich text editor
   isBold        = false;

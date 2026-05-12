@@ -1,19 +1,20 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
-import { AddLocationComponent } from './add-location.component';
+import { NewLocationComponent } from './add-location.component';
 
-describe('AddLocationComponent', () => {
-  let component: AddLocationComponent;
-  let fixture: ComponentFixture<AddLocationComponent>;
+describe('NewLocationComponent', () => {
+  let component: NewLocationComponent;
+  let fixture: ComponentFixture<NewLocationComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AddLocationComponent],
+      imports: [NewLocationComponent],
+      providers: [provideRouter([])],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(AddLocationComponent);
+    fixture = TestBed.createComponent(NewLocationComponent);
     component = fixture.componentInstance;
-    await fixture.whenStable();
   });
 
   it('should create', () => {
