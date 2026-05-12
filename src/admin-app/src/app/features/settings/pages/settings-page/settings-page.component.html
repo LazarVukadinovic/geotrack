@@ -133,11 +133,13 @@
         </div>
       </div>
 
-      <!-- ══ Section: Regional Manager Assignment ══ -->
+      <!-- ══ Section: Role Assignment ══ -->
       <div class="bg-white rounded-xl border border-gray-100 mb-4 overflow-hidden"
            style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
         <div class="px-6 py-4 border-b border-gray-50">
-          <h2 class="text-base font-semibold text-gray-900">Regional Manager Assignment</h2>
+          <h2 class="text-base font-semibold text-gray-900">
+            {{ isNational() ? 'National Manager Assignment' : 'Regional Manager Assignment' }}
+          </h2>
           <p class="text-xs text-gray-500 mt-0.5">Details regarding your official role and responsibilities within the portal.</p>
         </div>
 
@@ -156,10 +158,18 @@
             <div class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50">
               <div class="flex items-center gap-1.5 mb-1.5">
                 <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="10" r="3"/>
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                  @if (isNational()) {
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                    <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+                  } @else {
+                    <circle cx="12" cy="10" r="3"/>
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                  }
                 </svg>
-                <span class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Assigned Region</span>
+                <span class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
+                  {{ isNational() ? 'Managed Country' : 'Assigned Region' }}
+                </span>
               </div>
               <p class="text-sm font-semibold text-gray-800">{{ assignedRegion }}</p>
             </div>
@@ -245,41 +255,77 @@
               <h3 class="text-sm font-semibold text-gray-800">Email Notifications</h3>
             </div>
 
-            <!-- Toggle row: Requests -->
-            <div class="flex items-center justify-between py-3 border-b border-gray-50">
-              <div>
-                <p class="text-sm font-medium text-gray-800">Requests</p>
-                <p class="text-xs text-gray-500 mt-0.5">Receive an email when someone submits a request.</p>
+            @if (isNational()) {
+              <!-- National Manager notifications -->
+              <div class="flex items-center justify-between py-3 border-b border-gray-50">
+                <div>
+                  <p class="text-sm font-medium text-gray-800">Regional Activity Reports</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Receive a summary when a region submits its periodic activity report.</p>
+                </div>
+                <button
+                  type="button"
+                  class="toggle-track"
+                  [class.on]="notifyRequests()"
+                  (click)="notifyRequests.update(v => !v)"
+                  [attr.aria-checked]="notifyRequests()"
+                  role="switch"
+                >
+                  <span class="toggle-thumb"></span>
+                </button>
               </div>
-              <button
-                type="button"
-                class="toggle-track"
-                [class.on]="notifyRequests()"
-                (click)="notifyRequests.update(v => !v)"
-                [attr.aria-checked]="notifyRequests()"
-                role="switch"
-              >
-                <span class="toggle-thumb"></span>
-              </button>
-            </div>
 
-            <!-- Toggle row: New Review -->
-            <div class="flex items-center justify-between py-3">
-              <div>
-                <p class="text-sm font-medium text-gray-800">New Review</p>
-                <p class="text-xs text-gray-500 mt-0.5">Get notified when someone leaves a review on your content.</p>
+              <div class="flex items-center justify-between py-3">
+                <div>
+                  <p class="text-sm font-medium text-gray-800">New Regional Manager Registered</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Get notified when a new regional manager account is created on the platform.</p>
+                </div>
+                <button
+                  type="button"
+                  class="toggle-track"
+                  [class.on]="notifyNewReview()"
+                  (click)="notifyNewReview.update(v => !v)"
+                  [attr.aria-checked]="notifyNewReview()"
+                  role="switch"
+                >
+                  <span class="toggle-thumb"></span>
+                </button>
               </div>
-              <button
-                type="button"
-                class="toggle-track"
-                [class.on]="notifyNewReview()"
-                (click)="notifyNewReview.update(v => !v)"
-                [attr.aria-checked]="notifyNewReview()"
-                role="switch"
-              >
-                <span class="toggle-thumb"></span>
-              </button>
-            </div>
+            } @else {
+              <!-- Regional Manager notifications -->
+              <div class="flex items-center justify-between py-3 border-b border-gray-50">
+                <div>
+                  <p class="text-sm font-medium text-gray-800">Requests</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Receive an email when someone submits a request.</p>
+                </div>
+                <button
+                  type="button"
+                  class="toggle-track"
+                  [class.on]="notifyRequests()"
+                  (click)="notifyRequests.update(v => !v)"
+                  [attr.aria-checked]="notifyRequests()"
+                  role="switch"
+                >
+                  <span class="toggle-thumb"></span>
+                </button>
+              </div>
+
+              <div class="flex items-center justify-between py-3">
+                <div>
+                  <p class="text-sm font-medium text-gray-800">New Review</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Get notified when someone leaves a review on your content.</p>
+                </div>
+                <button
+                  type="button"
+                  class="toggle-track"
+                  [class.on]="notifyNewReview()"
+                  (click)="notifyNewReview.update(v => !v)"
+                  [attr.aria-checked]="notifyNewReview()"
+                  role="switch"
+                >
+                  <span class="toggle-thumb"></span>
+                </button>
+              </div>
+            }
           </div>
         </div>
       </div>

@@ -32,4 +32,12 @@ export class NationalDashboardComponent {
   navigate(): void {
     this.router.navigate(['/regions']);
   }
+
+  navigateToUsers(): void {
+    this.router.navigate(['/user-administration']);
+  }
+
+  navigateToAnalytics(): void {
+    this.router.navigate(['/national-analytics']);
+  }
 }

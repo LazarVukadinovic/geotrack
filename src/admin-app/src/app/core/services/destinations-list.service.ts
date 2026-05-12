@@ -23,6 +23,13 @@ export interface DestinationListItem {
   coverImageName?: string;
   galleryImages?: { url: string; name: string }[];
   internalRefId?: string;
+  analyticsViews?: number;
+  analyticsVisitors?: number;
+  analyticsSaves?: number;
+  analyticsActions?: number;
+  analyticsReviewAvg?: number;
+  analyticsReviewCount?: number;
+  analyticsTrend?: 'up' | 'stable' | 'down';
 }
 
 export type DestinationSortField = 'name' | 'lastUpdated' | 'status';
@@ -48,7 +55,8 @@ export class DestinationsListService {
 
   private _all: DestinationListItem[] = [
     {
-      id: 'd1', name: 'Šumadija Heartland',
+      id: 'd1',  name: 'Šumadija Heartland',
+      analyticsViews: 38900, analyticsVisitors: 29500, analyticsSaves: 6200, analyticsActions:  9800, analyticsReviewAvg: 4.5, analyticsReviewCount: 890, analyticsTrend: 'stable',
       summary: 'The geographic and cultural core of central Serbia, known for vineyards and medieval heritage.',
       description: 'Šumadija Heartland covers the rolling hills between Kragujevac and Topola, a region celebrated for its Oplenac wines, medieval monasteries and traditional village life. The area was the cradle of the First Serbian Uprising in the 19th century and remains a cornerstone of Serbian national identity.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 24, 2023', sortTimestamp: makeTimestamp('Oct 24, 2023'),
@@ -57,76 +65,84 @@ export class DestinationsListService {
       zone: [[44.05,20.85],[44.08,20.97],[44.02,21.00],[43.98,20.93],[43.97,20.85]],
     },
     {
-      id: 'd2', name: 'Kragujevac Urban Zone',
+      id: 'd2',  name: 'Kragujevac Urban Zone',
       summary: 'The largest city in Šumadija, blending industrial heritage with cultural institutions.',
       description: 'Kragujevac is the fourth-largest city in Serbia and the historical capital of the country during the 19th century. The city houses the Narodni muzej, the Zastava car factory heritage site, and the Šumarice Memorial Park — one of the most poignant WWII monuments in the Balkans.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 22, 2023', sortTimestamp: makeTimestamp('Oct 22, 2023'),
       imageBg: 'url(https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=400&q=80) center/cover',
       category: 'Destination', lat: 44.0128, lng: 20.9237, address: 'Kragujevac, Šumadija',
       zone: [[44.03,20.89],[44.03,20.95],[44.00,20.96],[43.99,20.90]],
+      analyticsViews: 24600, analyticsVisitors: 19200, analyticsSaves: 4100, analyticsActions: 6200, analyticsReviewAvg: 4.6, analyticsReviewCount: 480, analyticsTrend: 'up',
     },
     {
-      id: 'd3', name: 'Topola & Oplenac Region',
+      id: 'd3',  name: 'Topola & Oplenac Region',
       summary: 'Royal Serbian dynasty homeland with the famous Oplenac mausoleum and wine tradition.',
       description: 'Topola is the birthplace of Karađorđe, the leader of the First Serbian Uprising. The town is crowned by the Church of Saint George on Oplenac hill, a royal mausoleum covered entirely in mosaic reproductions of medieval Serbian frescoes. The surrounding vineyards produce award-winning Oplenac wines.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 20, 2023', sortTimestamp: makeTimestamp('Oct 20, 2023'),
       imageBg: 'url(https://images.unsplash.com/photo-1529420705456-b94baeebe4b5?w=400&q=80) center/cover',
       category: 'Destination', lat: 44.2558, lng: 20.6817, address: 'Topola, Šumadija',
       zone: [[44.27,20.67],[44.27,20.70],[44.24,20.71],[44.23,20.68]],
+      analyticsViews: 16200, analyticsVisitors: 12800, analyticsSaves: 2400, analyticsActions: 3600, analyticsReviewAvg: 4.4, analyticsReviewCount: 210, analyticsTrend: 'up',
     },
     {
-      id: 'd4', name: 'Aranđelovac Spa Territory',
+      id: 'd4',  name: 'Aranđelovac Spa Territory',
       summary: 'Mineral spring resort area centered around Bukovička Banja with therapeutic waters.',
       description: 'Aranđelovac has been a spa destination since the 19th century. The Bukovička Banja park features mineral springs, shaded promenades and the famous marble sculpture collection. The town also hosts the Mermer i zvuci (Marble and Sounds) international art festival each summer.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 18, 2023', sortTimestamp: makeTimestamp('Oct 18, 2023'),
       imageBg: 'url(https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&q=80) center/cover',
       category: 'Destination', lat: 44.3017, lng: 20.5631, address: 'Aranđelovac, Šumadija',
       zone: [[44.32,20.55],[44.32,20.58],[44.29,20.58],[44.29,20.55]],
+      analyticsViews:  9600, analyticsVisitors:  7700, analyticsSaves: 1600, analyticsActions: 2400, analyticsReviewAvg: 4.5, analyticsReviewCount: 130, analyticsTrend: 'up',
     },
     {
-      id: 'd5', name: 'Rudnik Mountain Area',
+      id: 'd5',  name: 'Rudnik Mountain Area',
       summary: 'Ancient mining mountain with medieval monasteries, hiking routes and forest landscapes.',
       description: 'Rudnik is one of the oldest mining areas in the Balkans, documented since Roman times. The forested slopes at 1,100 m elevation shelter several medieval monasteries and provide excellent hiking, mountain biking, and paragliding conditions throughout the year.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 15, 2023', sortTimestamp: makeTimestamp('Oct 15, 2023'),
       imageBg: 'url(https://images.unsplash.com/photo-1470770903676-69b98201ea1c?w=400&q=80) center/cover',
       category: 'Destination', lat: 44.1228, lng: 20.5142, address: 'Rudnik planina, Šumadija',
       zone: [[44.14,20.49],[44.14,20.54],[44.10,20.54],[44.10,20.49]],
+      analyticsViews: 11200, analyticsVisitors:  8900, analyticsSaves: 1800, analyticsActions: 2700, analyticsReviewAvg: 4.3, analyticsReviewCount: 150, analyticsTrend: 'stable',
     },
     {
-      id: 'd6', name: 'Gruža Lake Corridor',
+      id: 'd6',  name: 'Gruža Lake Corridor',
       summary: 'Recreational corridor along the Gruža reservoir with fishing, beaches and village tourism.',
       description: 'The Gruža reservoir stretches for 12 km through an idyllic valley flanked by traditional Serbian villages. Popular activities include freshwater fishing, kayaking, and agritourism stays at local farms. The corridor connects several historic mills and rural Orthodox churches.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 12, 2023', sortTimestamp: makeTimestamp('Oct 12, 2023'),
       imageBg: 'linear-gradient(135deg,#0ea5e9 0%,#0369a1 100%)',
       category: 'Destination', lat: 43.9347, lng: 20.6812, address: 'Gruža jezero, Knić, Šumadija',
       zone: [[43.96,20.66],[43.96,20.70],[43.91,20.70],[43.91,20.66]],
+      analyticsViews:  7400, analyticsVisitors:  5900, analyticsSaves: 1100, analyticsActions: 1650, analyticsReviewAvg: 4.2, analyticsReviewCount:  98, analyticsTrend: 'stable',
     },
     {
-      id: 'd7', name: 'Jasenica Ethnographic Zone',
+      id: 'd7',  name: 'Jasenica Ethnographic Zone',
       summary: 'A belt of traditional Serbian villages preserving folk architecture and rural customs.',
       description: 'Jasenica is a sub-region of Šumadija where 19th-century village architecture, folk crafts and traditional slava celebrations have been particularly well preserved. The open-air ethnographic museum at Jasenica displays authentic farmsteads, craft workshops, and textile looms.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 10, 2023', sortTimestamp: makeTimestamp('Oct 10, 2023'),
       imageBg: 'linear-gradient(135deg,#a855f7 0%,#9333ea 100%)',
       category: 'Destination', lat: 44.1803, lng: 20.7451, address: 'Jasenica, Šumadija',
       zone: [[44.20,20.72],[44.20,20.77],[44.16,20.77],[44.16,20.72]],
+      analyticsViews:  6100, analyticsVisitors:  4800, analyticsSaves:  820, analyticsActions: 1200, analyticsReviewAvg: 4.1, analyticsReviewCount:  74, analyticsTrend: 'stable',
     },
     {
-      id: 'd8', name: 'Gledić Mountains Reserve',
+      id: 'd8',  name: 'Gledić Mountains Reserve',
       summary: 'Undeveloped highland reserve with traditional shepherding communities and endemic flora.',
       description: 'The Gledić Mountains form a wild highland belt east of Kragujevac, with shepherding communities maintaining ancient transhumance traditions. The reserve protects rare endemic plant species and provides habitat for wolves, lynx and golden eagles.',
       region: 'Šumadija, Srbija', status: 'Draft', lastUpdated: 'Oct 8, 2023', sortTimestamp: makeTimestamp('Oct 8, 2023'),
       imageBg: 'linear-gradient(135deg,#10b981 0%,#059669 100%)',
       category: 'Destination', lat: 43.8912, lng: 20.9834, address: 'Gledićke planine, Šumadija',
       zone: [[43.91,20.96],[43.91,21.01],[43.87,21.01],[43.87,20.96]],
+      analyticsViews:  4300, analyticsVisitors:  3400, analyticsSaves:  510, analyticsActions:  740, analyticsReviewAvg: 3.9, analyticsReviewCount:  52, analyticsTrend: 'down',
     },
     {
-      id: 'd9', name: 'Rača River Valley',
+      id: 'd9',  name: 'Rača River Valley',
       summary: 'Scenic gorge destination popular for kayaking, fly-fishing and riverside camping.',
       description: 'The Rača gorge cuts through limestone cliffs for over 8 km, creating one of the most dramatic river landscapes in central Serbia. Rapids ranging from Grade II to IV attract whitewater enthusiasts, while calmer stretches are ideal for fly-fishing for brown trout.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 5, 2023', sortTimestamp: makeTimestamp('Oct 5, 2023'),
       imageBg: 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
       category: 'Destination', lat: 43.9651, lng: 20.5728, address: 'Rača klisura, Šumadija',
       zone: [[43.98,20.55],[43.98,20.60],[43.95,20.60],[43.95,20.55]],
+      analyticsViews:  8800, analyticsVisitors:  6900, analyticsSaves: 1300, analyticsActions: 1950, analyticsReviewAvg: 4.5, analyticsReviewCount: 118, analyticsTrend: 'up',
     },
     {
       id: 'd10', name: 'Kalenić Monastery Heritage Zone',
@@ -136,6 +152,7 @@ export class DestinationsListService {
       imageBg: 'linear-gradient(135deg,#92400e 0%,#78350f 100%)',
       category: 'Destination', lat: 43.8743, lng: 20.9156, address: 'Manastir Kalenić, Rekovac, Šumadija',
       zone: [[43.89,20.89],[43.89,20.94],[43.86,20.94],[43.86,20.89]],
+      analyticsViews: 13400, analyticsVisitors: 10500, analyticsSaves: 2100, analyticsActions: 3150, analyticsReviewAvg: 4.8, analyticsReviewCount: 190, analyticsTrend: 'up',
     },
     {
       id: 'd11', name: 'Divčibare Highland Resort',
@@ -145,6 +162,7 @@ export class DestinationsListService {
       imageBg: 'linear-gradient(135deg,#84cc16 0%,#65a30d 100%)',
       category: 'Destination', lat: 44.1251, lng: 20.1034, address: 'Divčibare, Maljen planina',
       zone: [[44.14,20.08],[44.14,20.13],[44.11,20.13],[44.11,20.08]],
+      analyticsViews: 18700, analyticsVisitors: 14500, analyticsSaves: 3200, analyticsActions: 4800, analyticsReviewAvg: 4.2, analyticsReviewCount: 390, analyticsTrend: 'stable',
     },
     {
       id: 'd12', name: 'Mladenovac Green Belt',
@@ -154,6 +172,7 @@ export class DestinationsListService {
       imageBg: 'linear-gradient(135deg,#78716c 0%,#57534e 100%)',
       category: 'Destination', lat: 44.4328, lng: 20.6934, address: 'Mladenovac, Šumadija',
       zone: [[44.45,20.67],[44.45,20.72],[44.42,20.72],[44.42,20.67]],
+      analyticsViews:  5200, analyticsVisitors:  4100, analyticsSaves:  620, analyticsActions:  910, analyticsReviewAvg: 3.8, analyticsReviewCount:  63, analyticsTrend: 'down',
     },
     {
       id: 'd13', name: 'Opovo Wetland Sanctuary',
@@ -163,6 +182,7 @@ export class DestinationsListService {
       imageBg: 'linear-gradient(135deg,#16a34a 0%,#15803d 100%)',
       category: 'Destination', lat: 45.0512, lng: 20.4317, address: 'Opovo, Vojvodina',
       zone: [[45.07,20.41],[45.07,20.46],[45.03,20.46],[45.03,20.41]],
+      analyticsViews:  3800, analyticsVisitors:  2900, analyticsSaves:  430, analyticsActions:  640, analyticsReviewAvg: 4.0, analyticsReviewCount:  46, analyticsTrend: 'down',
     },
     {
       id: 'd14', name: 'Kladnica Valley Retreat',
@@ -172,6 +192,7 @@ export class DestinationsListService {
       imageBg: 'linear-gradient(135deg,#dc2626 0%,#b91c1c 100%)',
       category: 'Destination', lat: 44.0812, lng: 20.6341, address: 'Kladnica dolina, Šumadija',
       zone: [[44.10,20.61],[44.10,20.66],[44.06,20.66],[44.06,20.61]],
+      analyticsViews:  6700, analyticsVisitors:  5300, analyticsSaves:  890, analyticsActions: 1300, analyticsReviewAvg: 4.3, analyticsReviewCount:  86, analyticsTrend: 'stable',
     },
     {
       id: 'd15', name: 'Stragari Medieval Corridor',
@@ -181,6 +202,7 @@ export class DestinationsListService {
       imageBg: 'linear-gradient(135deg,#fb923c 0%,#f97316 100%)',
       category: 'Destination', lat: 44.0534, lng: 20.7823, address: 'Stragari, Šumadija',
       zone: [[44.07,20.76],[44.07,20.81],[44.04,20.81],[44.04,20.76]],
+      analyticsViews:  4900, analyticsVisitors:  3800, analyticsSaves:  590, analyticsActions:  860, analyticsReviewAvg: 4.1, analyticsReviewCount:  58, analyticsTrend: 'stable',
     },
   ];
 

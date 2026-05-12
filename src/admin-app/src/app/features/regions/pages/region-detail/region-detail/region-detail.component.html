@@ -183,7 +183,11 @@
             <ng-container *ngIf="region.team.length > 0; else emptyTeam">
               <div
                 *ngFor="let member of region.team"
-                class="grid items-center px-6 py-3.5 border-b border-gray-50 hover:bg-blue-50/20 transition-colors"
+                class="grid items-center px-6 py-3.5 border-b border-gray-50 transition-colors"
+                [class.hover:bg-blue-50/30]="isViewMode"
+                [class.cursor-pointer]="isViewMode"
+                [class.hover:bg-blue-50/20]="!isViewMode"
+                (click)="isViewMode ? openViewMember(member) : null"
                 style="grid-template-columns: 1fr 160px 100px 160px 120px;"
               >
                 <div class="flex items-center gap-3">
@@ -208,20 +212,19 @@
                   {{ member.status }}
                 </span>
                 <span class="text-sm text-gray-500">{{ member.assignedDate }}</span>
-                <div class="flex items-center justify-end gap-2">
-                  <button
-                    class="text-xs font-semibold text-blue-700 hover:text-blue-900 cursor-pointer
-                           bg-transparent border-none transition-colors"
-                    [class.opacity-40]="isViewMode"
-                    [disabled]="isViewMode"
-                  >Edit</button>
-                  <button
-                    (click)="isViewMode ? null : promptRemove(member)"
-                    class="text-xs font-semibold text-red-600 hover:text-red-800 cursor-pointer
-                           bg-transparent border-none transition-colors"
-                    [class.opacity-40]="isViewMode"
-                    [disabled]="isViewMode"
-                  >Remove</button>
+                <div class="flex items-center justify-end gap-2" (click)="$event.stopPropagation()">
+                  <ng-container *ngIf="!isViewMode">
+                    <button
+                      (click)="openEditMember(member)"
+                      class="text-xs font-semibold text-blue-700 hover:text-blue-900 cursor-pointer
+                             bg-transparent border-none transition-colors"
+                    >Edit</button>
+                    <button
+                      (click)="promptRemove(member)"
+                      class="text-xs font-semibold text-red-600 hover:text-red-800 cursor-pointer
+                             bg-transparent border-none transition-colors"
+                    >Remove</button>
+                  </ng-container>
                 </div>
               </div>
             </ng-container>
@@ -301,25 +304,22 @@
               <ng-container *ngIf="!isViewMode">
                 <button
                   (click)="saveChanges()"
-                  [disabled]="isSaving"
                   class="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm
-                         font-semibold text-white border-0 cursor-pointer
-                         disabled:opacity-60 disabled:cursor-not-allowed"
+                         font-semibold text-white border-0 cursor-pointer"
                   style="background: linear-gradient(135deg,#1565d8 0%,#1a86e8 100%);"
                 >
-                  <svg *ngIf="isSaving" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                  </svg>
-                  {{ isSaving ? 'Saving…' : 'Save Changes' }}
+                  Save Changes
                 </button>
                 <button
                   (click)="discardChanges()"
-                  [disabled]="isSaving"
                   class="w-full py-2.5 rounded-lg text-sm font-semibold text-gray-600 bg-white
-                         border border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors
-                         disabled:opacity-60 disabled:cursor-not-allowed"
+                         border border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
                 >Discard Changes</button>
+                <button
+                  (click)="cancelEdit()"
+                  class="w-full py-2.5 rounded-lg text-sm font-semibold text-gray-400 bg-transparent
+                         border-0 hover:text-gray-600 cursor-pointer transition-colors"
+                >Cancel</button>
               </ng-container>
 
             </div>
@@ -365,16 +365,6 @@
                   <p class="text-xs font-semibold text-gray-700">Activity Score</p>
                   <p class="text-[10px] text-gray-400">Top 10% nationwide</p>
                 </div>
-              </div>
-              <div class="flex flex-wrap gap-1.5">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold
-                             bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {{ region.activityLabel }}
-                </span>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold
-                             bg-orange-50 text-orange-600 border border-orange-200">
-                  {{ region.processingLabel }}
-                </span>
               </div>
             </div>
           </div>
@@ -445,26 +435,90 @@
       >&times;</button>
     </div>
     <div class="px-6 py-5 space-y-4">
-      <div>
+
+      <!-- Full Name with dropdown -->
+      <div class="relative">
         <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Full Name</label>
         <input
           type="text"
           [(ngModel)]="newUserName"
-          placeholder="e.g. Ana Nikolić"
+          placeholder="Izaberite korisnika..."
+          autocomplete="off"
+          (focus)="onNameFocus()"
+          (input)="onNameInput()"
+          (blur)="scheduleCloseNameDropdown()"
           class="w-full px-3 py-2.5 text-sm text-gray-800 border border-gray-200 rounded-lg outline-none
                  focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors"
         />
+        <div
+          *ngIf="showNameDropdown"
+          class="absolute left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg
+                 max-h-48 overflow-y-auto mt-1"
+          style="top: 100%;"
+        >
+          <div
+            *ngFor="let user of filteredByName"
+            (mousedown)="selectUserForAssign(user)"
+            class="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 cursor-pointer transition-colors"
+          >
+            <div
+              class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+              [style.background]="user.avatarColor"
+            >{{ user.avatarInitials }}</div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-gray-800 truncate">{{ user.firstName }} {{ user.lastName }}</p>
+              <p class="text-xs text-gray-400 truncate">{{ user.email }}</p>
+            </div>
+          </div>
+          <div *ngIf="filteredByName.length === 0"
+               class="px-3 py-3 text-sm text-gray-400 text-center">
+            Nema korisnika
+          </div>
+        </div>
       </div>
-      <div>
+
+      <!-- Email with dropdown -->
+      <div class="relative">
         <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email</label>
         <input
-          type="email"
+          type="text"
           [(ngModel)]="newUserEmail"
-          placeholder="e.g. ana.n@example.com"
+          placeholder="Izaberite korisnika..."
+          autocomplete="off"
+          (focus)="onEmailFocus()"
+          (input)="onEmailInput()"
+          (blur)="scheduleCloseEmailDropdown()"
           class="w-full px-3 py-2.5 text-sm text-gray-800 border border-gray-200 rounded-lg outline-none
                  focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors"
         />
+        <div
+          *ngIf="showEmailDropdown"
+          class="absolute left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg
+                 max-h-48 overflow-y-auto mt-1"
+          style="top: 100%;"
+        >
+          <div
+            *ngFor="let user of filteredByEmail"
+            (mousedown)="selectUserForAssign(user)"
+            class="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 cursor-pointer transition-colors"
+          >
+            <div
+              class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+              [style.background]="user.avatarColor"
+            >{{ user.avatarInitials }}</div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-gray-800 truncate">{{ user.firstName }} {{ user.lastName }}</p>
+              <p class="text-xs text-gray-400 truncate">{{ user.email }}</p>
+            </div>
+          </div>
+          <div *ngIf="filteredByEmail.length === 0"
+               class="px-3 py-3 text-sm text-gray-400 text-center">
+            No user
+          </div>
+        </div>
       </div>
+
+      <!-- Role -->
       <div>
         <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Role</label>
         <select
@@ -472,11 +526,11 @@
           class="w-full px-3 py-2.5 text-sm text-gray-800 border border-gray-200 rounded-lg outline-none
                  focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors bg-white"
         >
-          <option>Regional Admin</option>
-          <option>Regional Editor</option>
-          <option>Regional Viewer</option>
+          <option value="Viewer">Viewer</option>
+          <option value="Regional Manager">Regional Manager</option>
         </select>
       </div>
+
     </div>
     <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50/60">
       <button
@@ -496,6 +550,180 @@
         </svg>
         Assign
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ EDIT MEMBER MODAL ═══════════════ -->
+<div
+  *ngIf="editMember"
+  class="fixed inset-0 z-50 flex items-center justify-center"
+  style="background: rgba(0,0,0,0.45); backdrop-filter: blur(3px);"
+  (click)="closeEditMember()"
+>
+  <div
+    class="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+    style="width: 520px; max-width: 96vw; max-height: 90vh;"
+    (click)="$event.stopPropagation()"
+  >
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+      <h3 class="text-base font-bold text-gray-900">{{ isMemberReadOnly ? 'User Details' : 'Edit User' }}</h3>
+      <button
+        (click)="closeEditMember()"
+        class="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer text-xl leading-none"
+      >&times;</button>
+    </div>
+
+    <!-- Body -->
+    <div class="overflow-y-auto flex-1 px-6 py-5 space-y-6">
+
+      <!-- User identity -->
+      <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+        <div
+          class="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+          [style.background]="editMember.avatarColor"
+        >{{ editMember.avatarInitials }}</div>
+        <div>
+          <p class="text-base font-bold text-gray-900">{{ editMember.firstName }} {{ editMember.lastName }}</p>
+          <p class="text-sm text-gray-400">{{ editMember.email }}</p>
+        </div>
+        <div class="ml-auto">
+          <span
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+            [ngClass]="statusClass(editMember.status)"
+          >
+            <span class="w-1.5 h-1.5 rounded-full"
+              [class.bg-emerald-500]="editMember.status === 'Active'"
+              [class.bg-gray-400]="editMember.status === 'Inactive'">
+            </span>
+            {{ editMember.status }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Role section -->
+      <div>
+        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Role Management</h4>
+        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <div>
+            <p class="text-sm font-semibold text-gray-800">Current Role</p>
+            <span
+              class="inline-flex items-center mt-1 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+              [ngClass]="roleClass(editMember.role)"
+            >{{ editMember.role }}</span>
+          </div>
+          <ng-container *ngIf="!isMemberReadOnly">
+            <ng-container *ngIf="editMember.role !== 'Regional Manager'">
+              <button
+                (click)="toggleMemberRole()"
+                [disabled]="isTogglingRole"
+                class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold
+                       text-white border-0 cursor-pointer transition-colors
+                       disabled:opacity-60 disabled:cursor-not-allowed"
+                style="background: linear-gradient(135deg, #1565d8 0%, #1a86e8 100%);"
+              >
+                <svg *ngIf="isTogglingRole" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+                <svg *ngIf="!isTogglingRole" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                {{ isTogglingRole ? 'Updating…' : 'Assign Manager Role' }}
+              </button>
+            </ng-container>
+            <ng-container *ngIf="editMember.role === 'Regional Manager'">
+              <button
+                (click)="toggleMemberRole()"
+                [disabled]="isTogglingRole"
+                class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold
+                       text-red-600 bg-white border border-red-200 hover:bg-red-50 cursor-pointer
+                       transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <svg *ngIf="isTogglingRole" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+                <svg *ngIf="!isTogglingRole" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+                {{ isTogglingRole ? 'Updating…' : 'Remove Manager Role' }}
+              </button>
+            </ng-container>
+          </ng-container>
+        </div>
+        <p *ngIf="!isMemberReadOnly" class="text-xs text-gray-400 mt-2">
+          <ng-container *ngIf="editMember.role !== 'Regional Manager'">
+            Assigning the Regional Manager role will set this user's status to <strong>Active</strong>.
+          </ng-container>
+          <ng-container *ngIf="editMember.role === 'Regional Manager'">
+            Removing the manager role will set this user's status to <strong>Inactive</strong>.
+          </ng-container>
+        </p>
+      </div>
+
+      <!-- Assigned regions -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Regions</h4>
+        </div>
+        <div *ngIf="editMember.assignedRegions.length > 0; else noRegionsMember"
+             class="flex flex-col gap-2">
+          <div
+            *ngFor="let r of editMember.assignedRegions"
+            class="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100"
+          >
+            <div class="flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 text-blue-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
+              </svg>
+              <span class="text-sm font-medium text-gray-700">{{ r }}</span>
+            </div>
+            <button
+              *ngIf="!isMemberReadOnly"
+              (click)="removeRegionFromMember(r)"
+              class="text-xs text-red-500 hover:text-red-700 bg-transparent border-none cursor-pointer transition-colors font-medium"
+            >Remove</button>
+          </div>
+        </div>
+        <ng-template #noRegionsMember>
+          <div class="flex items-center justify-center py-6 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+            <div class="text-center">
+              <svg class="w-8 h-8 mx-auto mb-2 text-gray-200" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
+              </svg>
+              <p class="text-sm text-gray-400">No regions assigned</p>
+            </div>
+          </div>
+        </ng-template>
+      </div>
+
+      <!-- Metadata -->
+      <div class="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">User ID</span>
+          <span class="text-xs font-mono text-gray-600">{{ editMember.id }}</span>
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Member Since</span>
+          <span class="text-xs text-gray-600">{{ editMember.createdAt }}</span>
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Last Login</span>
+          <span class="text-xs text-gray-600">{{ formatLastLogin(editMember.lastLogin) }}</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="flex items-center justify-end px-6 py-4 border-t border-gray-100 bg-gray-50/60">
+      <button
+        (click)="closeEditMember()"
+        class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-white
+               border border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
+      >Close</button>
     </div>
   </div>
 </div>
