@@ -25,8 +25,8 @@ export class ReviewQueueComponent {
   constructor(private router: Router, private requestsService: ReviewRequestsService) {}
 
   region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  userName = '';
+  userRole = '';
 
   get requests() { return this.requestsService.requests; }
 

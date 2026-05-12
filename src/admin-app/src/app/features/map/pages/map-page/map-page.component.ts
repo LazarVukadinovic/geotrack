@@ -30,8 +30,8 @@ export class MapPageComponent implements OnInit, OnDestroy {
   ) {}
 
   region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  userName = '';
+  userRole = '';
 
   searchQuery = '';
   searchResults: MapPlace[] = [];

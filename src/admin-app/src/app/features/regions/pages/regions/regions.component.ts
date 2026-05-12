@@ -31,8 +31,8 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
     if (this.sortOpen) { this.sortOpen = false; this.cdr.markForCheck(); }
   }
 
-  userName = 'Sarah Jenkins';
-  userRole = 'National Manager';
+  userName = '';
+  userRole = '';
 
   items:        RegionListItem[] = [];
   totalItems    = 0;

@@ -26,8 +26,8 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
-  userName = 'Sarah Jenkins';
-  userRole = 'National Manager';
+  userName = '';
+  userRole = '';
   isViewMode = true;
 
   region: RegionDetail | null = null;

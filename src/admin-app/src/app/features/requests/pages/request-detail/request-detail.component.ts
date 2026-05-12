@@ -32,8 +32,8 @@ export class RequestDetailComponent implements OnInit, AfterViewInit, OnDestroy 
   notFound   = false;
 
   region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  userName = '';
+  userRole = '';
 
   reviewerNotes = '';
   mapModalOpen  = false;

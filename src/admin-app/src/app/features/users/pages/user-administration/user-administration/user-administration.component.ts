@@ -33,8 +33,8 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
   private destroy$      = new Subject<void>();
   private searchSubject = new Subject<string>();
 
-  userName = 'Sarah Jenkins';
-  userRole = 'National Manager';
+  userName = '';
+  userRole = '';
 
   items:        PlatformUser[] = [];
   totalItems    = 0;

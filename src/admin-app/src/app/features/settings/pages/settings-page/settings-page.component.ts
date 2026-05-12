@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-settings',
@@ -15,23 +16,29 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 export class SettingsComponent {
   // ── User data ──────────────────────────────────────────────────
   region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  userName = '';
+  userRole = '';
 
   // ── Public Profile ─────────────────────────────────────────────
-  readonly firstName    = signal('Sarah');
-  readonly lastName     = signal('Jenkins');
-  readonly email        = signal('sarah.jenkins@voyagesphere.com');
-  readonly bio          = signal(
-    'Passionate local explorer and photographer based in Kragujevac. I love uncovering hidden gems and sharing the rich history of central Serbia with the world.'
-  );
+  readonly firstName    = signal('');
+  readonly lastName     = signal('');
+  readonly email        = signal('');
+  readonly bio          = signal('');
   readonly bioMaxLength = 300;
   readonly bioLength    = computed(() => this.bio().length);
 
   // ── Role info (read-only) ──────────────────────────────────────
-  readonly currentRole     = 'Regional Manager';
-  readonly assignedRegion  = 'Šumadija, Srbija';
-  readonly memberSince     = 'October 12, 2023';
+  get currentRole(): string {
+    return this.auth.getUser()?.role ?? '';
+  }
+
+  get assignedRegion(): string {
+    return this.auth.getUser()?.region || this.region;
+  }
+
+  get memberSince(): string {
+    return this.auth.getUser()?.memberSince ?? '';
+  }
 
   // ── Preferences ───────────────────────────────────────────────
   readonly language           = signal('English (US)');
@@ -44,7 +51,18 @@ export class SettingsComponent {
   readonly saveSuccess    = signal(false);
   readonly avatarPreview  = signal<string | null>(null);
 
-  constructor(private readonly router: Router) {}
+  constructor(private readonly router: Router, private readonly auth: AuthService) {
+    const user = this.auth.getUser();
+    if (user) {
+      this.firstName.set(user.firstName);
+      this.lastName.set(user.lastName);
+      this.email.set(user.email);
+      this.language.set(user.language);
+      this.timezone.set(user.timezone);
+      this.notifyRequests.set(user.notifyRequests);
+      this.notifyNewReview.set(user.notifyNewReview);
+    }
+  }
 
   // ── Handlers ───────────────────────────────────────────────────
 
