@@ -12,6 +12,7 @@ import {
   TopEvent,
   ContentQualityPoint,
   RegionAnalyticRow,
+  OperationalAlert,
 } from '../../models/national-analytics.model';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,13 +78,20 @@ const MOCK_CONTENT_QUALITY: ContentQualityPoint[] = [
 ];
 
 const MOCK_REGION_ROWS: RegionAnalyticRow[] = [
-  { name: 'Šumadija',   refId: 'REG-001', pageViews: '1.2M', visitors: '450K', saves: '85K',  avgRating: 4.8, entities: '45 / 315 / 18', status: 'Active / Fast',     qualityScore: 92 },
-  { name: 'Banat',      refId: 'REG-002', pageViews: '850K', visitors: '320K', saves: '62K',  avgRating: 4.5, entities: '28 / 190 / 5',  status: 'Processing Delays', qualityScore: 78 },
-  { name: 'Raška',      refId: 'REG-003', pageViews: '1.5M', visitors: '580K', saves: '110K', avgRating: 4.7, entities: '65 / 480 / 32', status: 'Active / Normal',   qualityScore: 88 },
-  { name: 'Pomoravlje', refId: 'REG-004', pageViews: '650K', visitors: '250K', saves: '45K',  avgRating: 4.0, entities: '40 / 275 / 21', status: 'Processing Delays', qualityScore: 71 },
-  { name: 'Mačva',      refId: 'REG-005', pageViews: '720K', visitors: '290K', saves: '51K',  avgRating: 4.2, entities: '35 / 210 / 8',  status: 'Active / Fast',     qualityScore: 81 },
-  { name: 'Podunavlje', refId: 'REG-006', pageViews: '540K', visitors: '210K', saves: '38K',  avgRating: 4.3, entities: '22 / 160 / 6',  status: 'Active / Normal',   qualityScore: 75 },
-  { name: 'Bačka',      refId: 'REG-007', pageViews: '480K', visitors: '185K', saves: '31K',  avgRating: 3.9, entities: '19 / 140 / 4',  status: 'Inactive',          qualityScore: 62 },
+  { name: 'Šumadija',   refId: 'REG-001', pageViews: '1.2M', visitors: '450K', saves: '85K',  avgRating: 4.8, entities: '45 / 315 / 18', status: 'Active / Fast',     qualityScore: 92, pendingRequests: 3,  lastManagerLogin: 'Today',      approvedLast30d: 42, rejectedLast30d: 5, hasManager: true  },
+  { name: 'Banat',      refId: 'REG-002', pageViews: '850K', visitors: '320K', saves: '62K',  avgRating: 4.5, entities: '28 / 190 / 5',  status: 'Processing Delays', qualityScore: 78, pendingRequests: 18, lastManagerLogin: '3 days ago', approvedLast30d: 12, rejectedLast30d: 3, hasManager: true  },
+  { name: 'Raška',      refId: 'REG-003', pageViews: '1.5M', visitors: '580K', saves: '110K', avgRating: 4.7, entities: '65 / 480 / 32', status: 'Active / Normal',   qualityScore: 88, pendingRequests: 5,  lastManagerLogin: 'Yesterday',  approvedLast30d: 55, rejectedLast30d: 8, hasManager: true  },
+  { name: 'Pomoravlje', refId: 'REG-004', pageViews: '650K', visitors: '250K', saves: '45K',  avgRating: 4.0, entities: '40 / 275 / 21', status: 'Processing Delays', qualityScore: 71, pendingRequests: 24, lastManagerLogin: '5 days ago', approvedLast30d: 8,  rejectedLast30d: 2, hasManager: true  },
+  { name: 'Mačva',      refId: 'REG-005', pageViews: '720K', visitors: '290K', saves: '51K',  avgRating: 4.2, entities: '35 / 210 / 8',  status: 'Active / Fast',     qualityScore: 81, pendingRequests: 7,  lastManagerLogin: 'Today',      approvedLast30d: 28, rejectedLast30d: 4, hasManager: true  },
+  { name: 'Podunavlje', refId: 'REG-006', pageViews: '540K', visitors: '210K', saves: '38K',  avgRating: 4.3, entities: '22 / 160 / 6',  status: 'Active / Normal',   qualityScore: 75, pendingRequests: 11, lastManagerLogin: '2 days ago', approvedLast30d: 19, rejectedLast30d: 6, hasManager: false },
+  { name: 'Bačka',      refId: 'REG-007', pageViews: '480K', visitors: '185K', saves: '31K',  avgRating: 3.9, entities: '19 / 140 / 4',  status: 'Inactive',          qualityScore: 62, pendingRequests: 2,  lastManagerLogin: 'N/A',        approvedLast30d: 0,  rejectedLast30d: 0, hasManager: false },
+];
+
+const MOCK_ALERTS: OperationalAlert[] = [
+  { type: 'no-manager',       regionName: 'Podunavlje', message: 'No manager assigned — region is unmanaged' },
+  { type: 'no-manager',       regionName: 'Bačka',      message: 'No manager assigned — region is unmanaged' },
+  { type: 'processing-delay', regionName: 'Banat',      message: '18 stay requests pending for 3+ days'      },
+  { type: 'high-pending',     regionName: 'Pomoravlje', message: '24 stay requests pending — manager inactive 5 days' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -106,6 +114,7 @@ export class NationalAnalyticsService {
       topEvents:       MOCK_TOP_EVENTS,
       contentQuality:  MOCK_CONTENT_QUALITY,
       regionRows:      MOCK_REGION_ROWS,
+      alerts:          MOCK_ALERTS,
     }).pipe(delay(this.MOCK_DELAY_MS));
   }
 
@@ -154,5 +163,10 @@ export class NationalAnalyticsService {
   getRegionRows$(): Observable<RegionAnalyticRow[]> {
     // return this.http.get<RegionAnalyticRow[]>(`${this.base}/analytics/national/regions`);
     return of(MOCK_REGION_ROWS).pipe(delay(this.MOCK_DELAY_MS));
+  }
+
+  getAlerts$(): Observable<OperationalAlert[]> {
+    // return this.http.get<OperationalAlert[]>(`${this.base}/analytics/national/alerts`);
+    return of(MOCK_ALERTS).pipe(delay(this.MOCK_DELAY_MS));
   }
 }

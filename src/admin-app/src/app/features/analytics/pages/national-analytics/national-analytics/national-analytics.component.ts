@@ -1,7 +1,4 @@
-import {
-  Component, OnInit, OnDestroy,
-  ChangeDetectionStrategy, ChangeDetectorRef,
-} from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -10,7 +7,7 @@ import { SidebarComponent } from '../../../../../shared/components/sidebar/sideb
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../../core/services/auth.service';
 import { NationalAnalyticsService } from '../../../../../core/services/national/national-analytics.service';
-import { NationalKpi, TopRegionHighlight, FastestGrowingRegion, TopEntityItem, PageViewSeries, TopDestination, TopEvent, ContentQualityPoint, RegionAnalyticRow, RegionStatus } from '../../../../../core/models/national-analytics.model';
+import { NationalKpi, TopRegionHighlight, FastestGrowingRegion, TopEntityItem, PageViewSeries, TopDestination, TopEvent, ContentQualityPoint, RegionAnalyticRow, RegionStatus, OperationalAlert } from '../../../../../core/models/national-analytics.model';
 
 @Component({
   selector: 'app-national-analytics',
@@ -59,12 +56,20 @@ export class NationalAnalyticsComponent implements OnInit, OnDestroy {
   topEvents:       TopEvent[]            = [];
   contentQuality:  ContentQualityPoint[] = [];
   allRows:         RegionAnalyticRow[]   = [];
+  alerts:          OperationalAlert[]    = [];
 
   // ── Table state ──────────────────────────────────────────────────────────
   tablePageSize = 5;
   tablePage     = 1;
-  visibleColumns: string[] = ['pageViews', 'visitors', 'saves', 'avgRating', 'entities', 'status', 'qualityScore'];
+  visibleColumns: string[] = ['pageViews', 'visitors', 'saves', 'avgRating', 'entities', 'status', 'qualityScore', 'pendingRequests', 'hasManager'];
   showColumnPicker = false;
+
+  sortCol = '';
+  sortDir: 'asc' | 'desc' = 'asc';
+
+  get totalPending(): number         { return this.allRows.reduce((s, r) => s + r.pendingRequests, 0); }
+  get regionsWithoutManager(): number { return this.allRows.filter(r => !r.hasManager).length; }
+  get regionsWithDelays(): number    { return this.allRows.filter(r => r.status === 'Processing Delays').length; }
 
   get tableRows(): RegionAnalyticRow[] {
     const start = (this.tablePage - 1) * this.tablePageSize;
@@ -92,6 +97,7 @@ export class NationalAnalyticsComponent implements OnInit, OnDestroy {
         this.topEvents       = data.topEvents;
         this.contentQuality  = data.contentQuality;
         this.allRows         = data.regionRows;
+        this.alerts          = data.alerts;
         this.isLoading       = false;
         this.cdr.markForCheck();
       });
@@ -123,15 +129,42 @@ export class NationalAnalyticsComponent implements OnInit, OnDestroy {
 
   columnLabel(col: string): string {
     const map: Record<string, string> = {
-      pageViews:    'Page Views',
-      visitors:     'Visitors',
-      saves:        'Saves',
-      avgRating:    'Avg Rating',
-      entities:     'Entities (D/P/E)',
-      status:       'Status',
-      qualityScore: 'Quality Score',
+      pageViews:       'Page Views',
+      visitors:        'Visitors',
+      saves:           'Saves',
+      avgRating:       'Avg Rating',
+      entities:        'Entities (D/P/E)',
+      status:          'Status',
+      qualityScore:    'Quality Score',
+      pendingRequests: 'Pending',
+      hasManager:      'Manager',
     };
     return map[col] ?? col;
+  }
+
+  sortBy(col: string): void {
+    if (this.sortCol === col) {
+      this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortCol = col;
+      this.sortDir = 'asc';
+    }
+    this.allRows = [...this.allRows].sort((a, b) => {
+      const mult = this.sortDir === 'asc' ? 1 : -1;
+      const aVal = (a as unknown as Record<string, unknown>)[col];
+      const bVal = (b as unknown as Record<string, unknown>)[col];
+      if (typeof aVal === 'number' && typeof bVal === 'number') return (aVal - bVal) * mult;
+      if (typeof aVal === 'boolean' && typeof bVal === 'boolean') return (Number(aVal) - Number(bVal)) * mult;
+      return String(aVal).localeCompare(String(bVal)) * mult;
+    });
+    this.tablePage = 1;
+    this.cdr.markForCheck();
+  }
+
+  alertIcon(type: OperationalAlert['type']): string {
+    if (type === 'no-manager')       return '#dc2626';
+    if (type === 'processing-delay') return '#d97706';
+    return '#d97706';
   }
 
   isColumnVisible(col: string): boolean { return this.visibleColumns.includes(col); }

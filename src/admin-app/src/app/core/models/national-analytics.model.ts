@@ -65,17 +65,31 @@ export interface ContentQualityPoint {
   avgRating: number;   // 0.0–5.0
 }
 
+// ── Operational alert ────────────────────────────────────────────────────────
+export type AlertType = 'no-manager' | 'processing-delay' | 'high-pending';
+
+export interface OperationalAlert {
+  type:       AlertType;
+  regionName: string;
+  message:    string;
+}
+
 // ── Regional performance table row ───────────────────────────────────────────
 export interface RegionAnalyticRow {
-  name:         string;
-  refId:        string;
-  pageViews:    string;   // formatted, e.g. "1.2M"
-  visitors:     string;   // formatted, e.g. "450K"
-  saves:        string;   // formatted, e.g. "85K"
-  avgRating:    number;
-  entities:     string;   // formatted "D / L / E", e.g. "45 / 315 / 18"
-  status:       RegionStatus;
-  qualityScore: number;   // 0–100
+  name:             string;
+  refId:            string;
+  pageViews:        string;   // formatted, e.g. "1.2M"
+  visitors:         string;   // formatted, e.g. "450K"
+  saves:            string;   // formatted, e.g. "85K"
+  avgRating:        number;
+  entities:         string;   // formatted "D / L / E", e.g. "45 / 315 / 18"
+  status:           RegionStatus;
+  qualityScore:     number;   // 0–100
+  pendingRequests:  number;
+  lastManagerLogin: string;   // e.g. "Today", "2 days ago", "N/A"
+  approvedLast30d:  number;
+  rejectedLast30d:  number;
+  hasManager:       boolean;
 }
 
 // ── Full response shape (mirrors what a real API would return) ────────────────
@@ -89,4 +103,5 @@ export interface NationalAnalyticsData {
   topEvents:        TopEvent[];
   contentQuality:   ContentQualityPoint[];
   regionRows:       RegionAnalyticRow[];
+  alerts:           OperationalAlert[];
 }
