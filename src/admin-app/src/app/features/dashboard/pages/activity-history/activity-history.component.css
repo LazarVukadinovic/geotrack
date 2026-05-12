@@ -1,0 +1,9 @@
+:host {
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  display: block;
+  height: 100vh;
+}
+
+.history-panel {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
