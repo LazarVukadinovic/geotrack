@@ -37,6 +37,13 @@ export interface EventListItem {
   attendanceLimit?: string;
   ageRestriction?: string;
   internalRefId?: string;
+  analyticsViews?: number;
+  analyticsVisitors?: number;
+  analyticsSaves?: number;
+  analyticsActions?: number;
+  analyticsReviewAvg?: number;
+  analyticsReviewCount?: number;
+  analyticsTrend?: 'up' | 'stable' | 'down';
 }
 
 export type EventSortField = 'name' | 'lastUpdated' | 'status';
@@ -62,7 +69,7 @@ export class EventsListService {
 
   private _all: EventListItem[] = [
     {
-      id: 'e1', name: 'Šumadija Wine Festival',
+      id: 'e1',  name: 'Šumadija Wine Festival',
       summary: 'Annual celebration of Oplenac wine heritage with tastings, cellar tours and live music.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 24, 2023', sortTimestamp: makeTimestamp('Oct 24, 2023'),
       imageBg: 'url(https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=120&q=60) center/cover',
@@ -70,9 +77,10 @@ export class EventsListService {
       lat: 44.2548, lng: 20.6912, address: 'Vinska 5, 34310 Topola',
       venueName: 'Oplenac Winery',
       description: 'The Šumadija Wine Festival is held annually in the vineyards surrounding Topola. Visitors can join guided cellar tours, meet local winemakers, attend grape-blending workshops, and enjoy live folk and jazz music across three evenings.',
+      analyticsViews: 15400, analyticsVisitors: 11200, analyticsSaves: 3100, analyticsActions: 5200, analyticsReviewAvg: 4.8, analyticsReviewCount: 410, analyticsTrend: 'up',
     },
     {
-      id: 'e2', name: 'Kragujevac Jazz Weekend',
+      id: 'e2',  name: 'Kragujevac Jazz Weekend',
       summary: 'Three-day outdoor jazz festival in the city centre featuring domestic and international artists.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 22, 2023', sortTimestamp: makeTimestamp('Oct 22, 2023'),
       imageBg: 'url(https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=120&q=60) center/cover',
@@ -80,9 +88,10 @@ export class EventsListService {
       lat: 44.0110, lng: 20.9162, address: 'Trg Radomira Putnika, 34000 Kragujevac',
       venueName: 'Trg Radomira Putnika',
       description: 'Kragujevac Jazz Weekend transforms the central square into an open-air concert venue for three nights. The 2023 edition features over 12 acts across two stages, with free entry to all performances.',
+      analyticsViews: 12100, analyticsVisitors:  9400, analyticsSaves: 2200, analyticsActions: 3300, analyticsReviewAvg: 4.4, analyticsReviewCount: 260, analyticsTrend: 'stable',
     },
     {
-      id: 'e3', name: 'Rudnik Trail Marathon',
+      id: 'e3',  name: 'Rudnik Trail Marathon',
       summary: 'Mountain trail running race across Rudnik with 21 km and 42 km distance categories.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 20, 2023', sortTimestamp: makeTimestamp('Oct 20, 2023'),
       imageBg: 'url(https://images.unsplash.com/photo-1530549387789-4c1017266635?w=120&q=60) center/cover',
@@ -90,9 +99,10 @@ export class EventsListService {
       lat: 44.1150, lng: 20.5230, address: 'Rudnik planina bb, 32252 Rudnik',
       venueName: 'Rudnik Mountain',
       description: 'The Rudnik Trail Marathon takes runners through ancient beech forests, past medieval monastery ruins, and over the 1,132 m summit. Categories include a 21 km semi-marathon and a 42 km full marathon. Registration closes two weeks before the event.',
+      analyticsViews:  6200, analyticsVisitors:  5100, analyticsSaves:  980, analyticsActions: 1400, analyticsReviewAvg: 4.7, analyticsReviewCount:  95, analyticsTrend: 'stable',
     },
     {
-      id: 'e4', name: 'Oplenac Harvest Days',
+      id: 'e4',  name: 'Oplenac Harvest Days',
       summary: 'Traditional grape harvest festival with folk costumes, folklore performances and grape stomping.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 18, 2023', sortTimestamp: makeTimestamp('Oct 18, 2023'),
       imageBg: 'url(https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=120&q=60) center/cover',
@@ -100,9 +110,10 @@ export class EventsListService {
       lat: 44.2561, lng: 20.6934, address: 'Oplenac bb, 34310 Topola',
       venueName: 'Oplenac Royal Complex',
       description: 'Oplenac Harvest Days celebrates the grape harvest with traditional Serbian folk costumes, kolo dancing, grape stomping competitions, and local food stalls. The festival takes place on the slopes of Oplenac Hill beneath the Church of Saint George.',
+      analyticsViews:  9800, analyticsVisitors:  7800, analyticsSaves: 1900, analyticsActions: 2900, analyticsReviewAvg: 4.8, analyticsReviewCount: 210, analyticsTrend: 'up',
     },
     {
-      id: 'e5', name: 'Medieval Stragari Reenactment',
+      id: 'e5',  name: 'Medieval Stragari Reenactment',
       summary: 'Living history event at the Stragari fortress ruins with knight combat and archery competitions.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 15, 2023', sortTimestamp: makeTimestamp('Oct 15, 2023'),
       imageBg: 'url(https://images.unsplash.com/photo-1548267882-23a4a7f3ab77?w=120&q=60) center/cover',
@@ -110,9 +121,10 @@ export class EventsListService {
       lat: 44.0840, lng: 20.8210, address: 'Stragari tvrđava bb, 34000 Kragujevac',
       venueName: 'Stragari Fortress Ruins',
       description: 'Historical reenactment groups from Serbia, Hungary and Bulgaria gather at the Stragari fortress site to recreate 14th-century Balkan life. Events include armoured combat tournaments, archery, blacksmithing demonstrations, and a medieval market.',
+      analyticsViews:  5700, analyticsVisitors:  4600, analyticsSaves:  840, analyticsActions: 1200, analyticsReviewAvg: 4.5, analyticsReviewCount:  78, analyticsTrend: 'stable',
     },
     {
-      id: 'e6', name: 'Šumarice Commemoration Ceremony',
+      id: 'e6',  name: 'Šumarice Commemoration Ceremony',
       summary: 'Annual state ceremony commemorating the victims of the 1941 Kragujevac massacre.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 12, 2023', sortTimestamp: makeTimestamp('Oct 12, 2023'),
       imageBg: 'linear-gradient(135deg,#475569 0%,#334155 100%)',
@@ -120,9 +132,10 @@ export class EventsListService {
       lat: 44.0213, lng: 20.8943, address: 'Park Šumarice bb, 34000 Kragujevac',
       venueName: 'Šumarice Memorial Park',
       description: 'On October 21, 1941, German forces executed approximately 2,800 Kragujevac citizens, including an entire high-school class. The annual state commemoration brings together dignitaries, survivors\' families and international guests for a solemn wreath-laying ceremony at the memorial.',
+      analyticsViews:  8400, analyticsVisitors:  6800, analyticsSaves: 1200, analyticsActions: 1800, analyticsReviewAvg: 4.6, analyticsReviewCount: 142, analyticsTrend: 'stable',
     },
     {
-      id: 'e7', name: 'Bubanj Lake Kayak Cup',
+      id: 'e7',  name: 'Bubanj Lake Kayak Cup',
       summary: 'Regional kayak and SUP competition on Bubanj lake open to amateur and professional paddlers.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 10, 2023', sortTimestamp: makeTimestamp('Oct 10, 2023'),
       imageBg: 'linear-gradient(135deg,#0ea5e9 0%,#0369a1 100%)',
@@ -130,9 +143,10 @@ export class EventsListService {
       lat: 44.0169, lng: 20.9258, address: 'Jezero Bubanj bb, 34000 Kragujevac',
       venueName: 'Bubanj Lake Area',
       description: 'The Bubanj Lake Kayak Cup attracts over 150 paddlers from across Serbia and neighbouring countries. Disciplines include 200 m sprint, 1,000 m endurance, and stand-up paddleboard relay. The event includes a youth category for paddlers under 16.',
+      analyticsViews:  4900, analyticsVisitors:  3900, analyticsSaves:  620, analyticsActions:  910, analyticsReviewAvg: 4.3, analyticsReviewCount:  62, analyticsTrend: 'up',
     },
     {
-      id: 'e8', name: 'Jasenica Folk Craft Market',
+      id: 'e8',  name: 'Jasenica Folk Craft Market',
       summary: 'Artisan market showcasing traditional Šumadija crafts: pottery, embroidery and woodcarving.',
       region: 'Šumadija, Srbija', status: 'Published', lastUpdated: 'Oct 8, 2023', sortTimestamp: makeTimestamp('Oct 8, 2023'),
       imageBg: 'linear-gradient(135deg,#f59e0b 0%,#d97706 100%)',
@@ -140,9 +154,10 @@ export class EventsListService {
       lat: 44.1862, lng: 20.7318, address: 'Jasenica bb, 34320 Mladenovac',
       venueName: 'Jasenica Ethnographic Zone',
       description: 'The Jasenica Folk Craft Market brings together over 80 artisans from the Šumadija region. Visitors can purchase handmade pottery, embroidered textiles, carved wooden items, and traditional musical instruments, with live demonstrations throughout both days.',
+      analyticsViews:  7300, analyticsVisitors:  5800, analyticsSaves: 1050, analyticsActions: 1520, analyticsReviewAvg: 4.4, analyticsReviewCount: 104, analyticsTrend: 'up',
     },
     {
-      id: 'e9', name: 'Divčibare Winter Opening',
+      id: 'e9',  name: 'Divčibare Winter Opening',
       summary: 'Ski season opening ceremony with freestyle ski show, DJ sets and après-ski party.',
       region: 'Šumadija, Srbija', status: 'Draft', lastUpdated: 'Oct 5, 2023', sortTimestamp: makeTimestamp('Oct 5, 2023'),
       imageBg: 'linear-gradient(135deg,#84cc16 0%,#65a30d 100%)',
@@ -150,6 +165,7 @@ export class EventsListService {
       lat: 44.1340, lng: 20.1120, address: 'Divčibare bb, 32240 Ljig',
       venueName: 'Divčibare Mountain Resort',
       description: 'The Divčibare Winter Opening marks the official start of the ski season on Maljen mountain. The day programme includes a freestyle ski and snowboard demonstration, a torchlight descent, and an evening après-ski party with live DJ sets.',
+      analyticsViews:  3800, analyticsVisitors:  3000, analyticsSaves:  460, analyticsActions:  670, analyticsReviewAvg: 4.2, analyticsReviewCount:  44, analyticsTrend: 'stable',
     },
     {
       id: 'e10', name: 'Photography Workshop – Rudnik',
@@ -160,6 +176,7 @@ export class EventsListService {
       lat: 44.1150, lng: 20.5230, address: 'Rudnik planina bb, 32252 Rudnik',
       venueName: 'Rudnik Mountain Area',
       description: 'The two-day landscape photography workshop on Rudnik mountain is limited to 12 participants. Led by award-winning photographer Marko Vasić, the programme covers golden-hour shooting, long-exposure forest scenes, and post-processing techniques. Accommodation at a mountain hut is included.',
+      analyticsViews:  2900, analyticsVisitors:  2300, analyticsSaves:  380, analyticsActions:  540, analyticsReviewAvg: 4.9, analyticsReviewCount:  34, analyticsTrend: 'up',
     },
     {
       id: 'e11', name: 'Šumadija Food & Rakija Fair',
@@ -170,6 +187,7 @@ export class EventsListService {
       lat: 44.0110, lng: 20.9162, address: 'Trg Radomira Putnika, 34000 Kragujevac',
       venueName: 'Trg Radomira Putnika',
       description: 'The Šumadija Food and Rakija Fair showcases regional gastronomy from across central Serbia. Over 60 producers present home-made šljivovica (plum brandy), quince and pear brandies, traditional smoked meats, cheeses, and preserved vegetables.',
+      analyticsViews: 11600, analyticsVisitors:  9200, analyticsSaves: 2100, analyticsActions: 3100, analyticsReviewAvg: 4.7, analyticsReviewCount: 238, analyticsTrend: 'up',
     },
     {
       id: 'e12', name: 'Kalenić Monastery Night Concert',
@@ -180,6 +198,7 @@ export class EventsListService {
       lat: 43.8960, lng: 20.9540, address: 'Manastir Kalenić bb, 34220 Rekovac',
       venueName: 'Kalenić Monastery',
       description: 'On the Feast of the Presentation of the Virgin Mary, the Kalenić Monastery courtyard hosts a candlelight sacred music concert by the Belgrade Choral Society. The programme includes Byzantine chant and 19th-century Serbian liturgical compositions.',
+      analyticsViews:  8900, analyticsVisitors:  7200, analyticsSaves: 1600, analyticsActions: 2400, analyticsReviewAvg: 4.6, analyticsReviewCount: 190, analyticsTrend: 'up',
     },
     {
       id: 'e13', name: 'Gruža Fishing Championship',
@@ -190,6 +209,7 @@ export class EventsListService {
       lat: 43.9558, lng: 20.6874, address: 'Akumulacija Gruža, 34208 Knić',
       venueName: 'Vikend Kamp Gruža',
       description: 'The Gruža Fishing Championship draws competitors from across Serbia and the region. Fishing runs from 6 AM to 2 PM in designated sectors along the reservoir shore. Prizes are awarded for the heaviest single catch, the most fish by weight, and a junior under-16 category.',
+      analyticsViews:  3200, analyticsVisitors:  2500, analyticsSaves:  380, analyticsActions:  550, analyticsReviewAvg: 4.1, analyticsReviewCount:  38, analyticsTrend: 'down',
     },
     {
       id: 'e14', name: 'Heritage Ceramics Exhibition',
@@ -200,6 +220,7 @@ export class EventsListService {
       lat: 44.0126, lng: 20.9131, address: 'Vuka Karadžića 1, 34000 Kragujevac',
       venueName: 'Narodni Muzej Kragujevac',
       description: 'The Heritage Ceramics Exhibition presents over 300 archaeological pottery artefacts excavated from sites across Šumadija, spanning the Bronze Age, Roman, and medieval periods. The exhibition includes a live pottery wheel demonstration every Saturday.',
+      analyticsViews:  6800, analyticsVisitors:  5400, analyticsSaves:  920, analyticsActions: 1340, analyticsReviewAvg: 4.5, analyticsReviewCount: 112, analyticsTrend: 'stable',
     },
     {
       id: 'e15', name: 'Rača River Rafting Day',
@@ -210,6 +231,7 @@ export class EventsListService {
       lat: 43.9820, lng: 20.9410, address: 'Klisura reke Rače, 34000 Kragujevac',
       venueName: 'Rača River Gorge',
       description: 'Guided rafting descent through 8 km of the Rača gorge, from the entry point at Rača village to the exit near Bagrdanski most. Suitable for participants aged 10 and over. Safety equipment, certified guides, and post-rafting lunch are included.',
+      analyticsViews:  4100, analyticsVisitors:  3300, analyticsSaves:  560, analyticsActions:  820, analyticsReviewAvg: 4.7, analyticsReviewCount:  52, analyticsTrend: 'stable',
     },
     {
       id: 'e16', name: 'Christmas Market Kragujevac',
@@ -220,6 +242,7 @@ export class EventsListService {
       lat: 44.0110, lng: 20.9162, address: 'Trg Radomira Putnika, 34000 Kragujevac',
       venueName: 'Trg Radomira Putnika',
       description: 'The Kragujevac Christmas Market runs for 18 days with over 50 artisan stalls, a 600 m² outdoor ice skating rink, mulled wine and hot food vendors, and nightly live music. The market is open daily from 10 AM to 11 PM.',
+      analyticsViews: 13900, analyticsVisitors: 11000, analyticsSaves: 2800, analyticsActions: 4100, analyticsReviewAvg: 4.6, analyticsReviewCount: 284, analyticsTrend: 'up',
     },
     {
       id: 'e17', name: 'Birdwatching Tour – Opovo Wetlands',
@@ -229,6 +252,7 @@ export class EventsListService {
       category: 'Workshop', dateRange: 'Nov 18, 2023', startDate: 'Nov 18, 2023', endDate: 'Nov 18, 2023',
       lat: 44.9860, lng: 20.4380, address: 'Opovačke bare, 26204 Opovo',
       description: 'Expert ornithologist Dragan Simić leads a full-day guided tour of the Opovo wetlands during peak autumn migration. Target species include white-tailed eagle, black stork, and flocks of wading birds. Binoculars and field guides are provided; group limited to 15.',
+      analyticsViews:  2400, analyticsVisitors:  1900, analyticsSaves:  310, analyticsActions:  450, analyticsReviewAvg: 4.9, analyticsReviewCount:  28, analyticsTrend: 'up',
     },
     {
       id: 'e18', name: 'Šumadija Half Marathon',
@@ -239,6 +263,7 @@ export class EventsListService {
       lat: 44.0110, lng: 20.9162, address: 'Start: Trg Radomira Putnika, 34000 Kragujevac',
       venueName: 'Trg Radomira Putnika',
       description: 'The Šumadija Half Marathon routes runners through Kragujevac\'s historic centre, Šumarice Park, and the riverside promenade. The 21 km competitive race is AIMS-certified, and a 10 km fun run is open to all fitness levels. Finisher medals and refreshments included.',
+      analyticsViews:  9300, analyticsVisitors:  7500, analyticsSaves: 1700, analyticsActions: 2500, analyticsReviewAvg: 4.5, analyticsReviewCount: 182, analyticsTrend: 'up',
     },
     {
       id: 'e19', name: 'Traditional Slava Workshop',
@@ -249,6 +274,7 @@ export class EventsListService {
       lat: 44.0126, lng: 20.9131, address: 'Narodni muzej, Vuka Karadžića 1, 34000 Kragujevac',
       venueName: 'Narodni Muzej Kragujevac',
       description: 'This half-day workshop guides participants through the preparation of Slava kolač (ritual bread) and žito (boiled wheat), the blessing ceremony, and the customs associated with family patron saint days. Suitable for foreign visitors and young Serbs reconnecting with heritage.',
+      analyticsViews:  3100, analyticsVisitors:  2500, analyticsSaves:  420, analyticsActions:  610, analyticsReviewAvg: 4.8, analyticsReviewCount:  40, analyticsTrend: 'stable',
     },
     {
       id: 'e20', name: 'New Year\'s Eve at Veliki Park',
@@ -259,10 +285,13 @@ export class EventsListService {
       lat: 44.0178, lng: 20.9042, address: 'Kragujevačkog oktobra bb, 34000 Kragujevac',
       venueName: 'Veliki Park',
       description: 'Kragujevac welcomes the New Year in Veliki Park with a free outdoor concert by two headline acts, a midnight fireworks display over the park lake, and food and drink stalls open from 8 PM.',
+      analyticsViews: 16800, analyticsVisitors: 13200, analyticsSaves: 3400, analyticsActions: 5100, analyticsReviewAvg: 4.7, analyticsReviewCount: 326, analyticsTrend: 'up',
     },
   ];
 
   // ── Public accessors ─────────────────────────────────────────────────────
+
+  getAllItems(): EventListItem[] { return [...this._all]; }
 
   addItem(item: Omit<EventListItem, 'sortTimestamp'>): void {
     const ts = Date.now();

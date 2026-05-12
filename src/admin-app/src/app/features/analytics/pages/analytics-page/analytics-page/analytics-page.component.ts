@@ -1,56 +1,12 @@
-import { Component, signal, computed } from '@angular/core';
+import { Component, signal, computed, inject, OnInit, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
-export interface MetricCard {
-  label: string;
-  value: string;
-  delta: number;
-  deltaLabel: string;
-  icon: string;
-}
+import {MetricCard, CategoryAggregate, EntityRow, AutoInsight, ActionableInsight, CategoryFilter, DistributionSlice, EntitySortField } from '../../../../../core/models/regional-analytics.model';
+import { RegionalAnalyticsService } from '../../../../../core/services/regional-analytics';
 
-export interface CategoryAggregate {
-  name: string;
-  count: number;
-  visits: number;
-  maxVisits: number;
-  color: string;
-}
-
-export interface EntityRow {
-  name: string;
-  type: 'PLACE' | 'DESTINATION' | 'EVENT' | 'HOTEL';
-  location: string;
-  views: number;
-  visitors: number;
-  saves: number;
-  actions: number;
-  reviewMin: number;
-  reviewAvg: number;
-  reviewMax: number;
-  reviewCount: number;
-  trend: 'up' | 'stable' | 'down';
-  imageBg: string;
-}
-
-export interface AutoInsight {
-  type: 'success' | 'warning' | 'danger' | 'info';
-  title: string;
-  detail: string;
-}
-
-export interface ActionableInsight {
-  icon: string;
-  label: string;
-  title: string;
-  subtitle: string;
-  highlight?: string;
-  highlightClass?: string;
-}
-
-export type CategoryFilter = 'all' | 'hotels' | 'destinations' | 'events' | 'places';
+export type { MetricCard, CategoryAggregate, EntityRow, AutoInsight, ActionableInsight, CategoryFilter };
 
 @Component({
   selector: 'app-analytics-page',
@@ -58,7 +14,9 @@ export type CategoryFilter = 'all' | 'hotels' | 'destinations' | 'events' | 'pla
   imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
   templateUrl: './analytics-page.component.html',
 })
-export class AnalyticsPageComponent {
+export class AnalyticsPageComponent implements OnInit {
+
+  private readonly analyticsService = inject(RegionalAnalyticsService);
 
   protected Math = Math;
 
@@ -66,109 +24,357 @@ export class AnalyticsPageComponent {
   userName = 'Sarah Jenkins';
   userRole = 'Regional Manager';
 
-  // ── Date range ──────────────────────────────────────────────────────
-  dateFrom = '2026-04-01';
-  dateTo   = '2026-05-09';
+  // ── Period filter ────────────────────────────────────────────────────
+  selectedPeriod     = 'Last 30 Days';
+  private previousPeriod = 'Last 30 Days';
+  showCustomDateModal = false;
+  customDateFrom = '';
+  customDateTo   = '';
+  fromDay = ''; fromMonth = ''; fromYear = '';
+  toDay   = ''; toMonth   = ''; toYear   = '';
 
-  // Search & filters
-  searchQuery = '';
-  selectedType = 'All Entities';
-  selectedCategory = 'Any';
-  selectedStatus = 'Active';
+  readonly periodOptions = ['Last 7 Days', 'Last 15 Days', 'Last 30 Days', 'Last 6 Months', 'Last 1 Year', 'Custom'];
 
-  typeOptions = ['All Entities', 'Place', 'Destination', 'Event', 'Hotel'];
-  categoryOptions = ['Any', 'Hoteli', 'Destinacije', 'Događaji', 'Mesta'];
-  statusOptions = ['Active', 'Inactive', 'Pending'];
+  get canApply(): boolean {
+    return this.fromDay.length === 2 && this.fromMonth.length === 2 && this.fromYear.length === 4
+        && this.toDay.length === 2   && this.toMonth.length === 2   && this.toYear.length === 4;
+  }
 
-  // ── Active category filter ──────────────────────────────────────────
+  // ── Type / category filter ───────────────────────────────────────────
   activeFilter = signal<CategoryFilter>('all');
 
   filters: { key: CategoryFilter; label: string }[] = [
-    { key: 'all',          label: 'Sve kategorije' },
-    { key: 'hotels',       label: 'Hoteli'         },
-    { key: 'destinations', label: 'Destinacije'    },
-    { key: 'events',       label: 'Događaji'       },
-    { key: 'places',       label: 'Mesta'          },
+    { key: 'all',          label: 'All Categories' },
+    { key: 'locations',    label: 'Locations'      },
+    { key: 'destinations', label: 'Destinations'   },
+    { key: 'events',       label: 'Events'         },
+    { key: 'places',       label: 'Places'         },
   ];
 
-  setFilter(f: CategoryFilter): void {
-    this.activeFilter.set(f);
-  }
+  readonly typeOptions = ['All Entities', 'Destination', 'Location', 'Place', 'Event'];
 
-  catToFilter(name: string): CategoryFilter {
-    const n = name.toLowerCase();
-    if (n === 'hoteli')       return 'hotels';
-    if (n === 'destinacije')  return 'destinations';
-    if (n.includes('aji'))    return 'events';
-    return 'places';
-  }
-
-  // ── KPI metrics ─────────────────────────────────────────────────────
-  private readonly allMetrics: MetricCard[] = [
-    { label: 'Total Page Views',        value: '248.5K', delta:  12.5, deltaLabel: 'vs last month', icon: 'trend'    },
-    { label: 'Unique Visitors',         value: '184.2K', delta:   8.2, deltaLabel: 'vs last month', icon: 'users'    },
-    { label: 'Total Saves / Favorites', value: '32.8K',  delta:  15.4, deltaLabel: 'vs last month', icon: 'bookmark' },
-    { label: 'Average Rating',          value: '4.6',    delta:   0.5, deltaLabel: 'vs last month', icon: 'star'     },
-    { label: 'Ext. Link Clicks',        value: '18.9K',  delta:  -2.1, deltaLabel: 'vs last month', icon: 'link'     },
-    { label: 'Total Reviews',           value: '4,821',  delta:   5.8, deltaLabel: 'vs last month', icon: 'chat'     },
-  ];
-
-  private readonly metricsByFilter: Record<CategoryFilter, MetricCard[]> = {
-    all: this.allMetrics,
-    hotels: [
-      { label: 'Page Views – Hotels',    value: '112K',  delta:  9.4, deltaLabel: 'vs prethodni', icon: 'trend'    },
-      { label: 'Visitors – Hotels',      value: '84.1K', delta:  7.1, deltaLabel: 'vs prethodni', icon: 'users'    },
-      { label: 'Saves – Hotels',         value: '14.2K', delta: 11.2, deltaLabel: 'vs prethodni', icon: 'bookmark' },
-      { label: 'Average Rating',         value: '4.4',   delta:  0.3, deltaLabel: 'vs prethodni', icon: 'star'     },
-      { label: 'Ext. Clicks – Hotels',   value: '6.8K',  delta: -1.5, deltaLabel: 'vs prethodni', icon: 'link'     },
-      { label: 'Reviews – Hotels',       value: '1,840', delta:  4.2, deltaLabel: 'vs prethodni', icon: 'chat'     },
-    ],
-    destinations: [
-      { label: 'Page Views – Dest.',     value: '78K',   delta: 14.2, deltaLabel: 'vs prethodni', icon: 'trend'    },
-      { label: 'Visitors – Dest.',       value: '56.3K', delta:  9.8, deltaLabel: 'vs prethodni', icon: 'users'    },
-      { label: 'Saves – Dest.',          value: '9.6K',  delta: 18.1, deltaLabel: 'vs prethodni', icon: 'bookmark' },
-      { label: 'Average Rating',         value: '4.7',   delta:  0.8, deltaLabel: 'vs prethodni', icon: 'star'     },
-      { label: 'Ext. Clicks – Dest.',    value: '5.2K',  delta:  3.1, deltaLabel: 'vs prethodni', icon: 'link'     },
-      { label: 'Reviews – Dest.',        value: '1,230', delta:  7.6, deltaLabel: 'vs prethodni', icon: 'chat'     },
-    ],
-    events: [
-      { label: 'Page Views – Events',    value: '22K',   delta: 21.3, deltaLabel: 'vs prethodni', icon: 'trend'    },
-      { label: 'Visitors – Events',      value: '18.9K', delta: 15.4, deltaLabel: 'vs prethodni', icon: 'users'    },
-      { label: 'Saves – Events',         value: '4.1K',  delta: 22.0, deltaLabel: 'vs prethodni', icon: 'bookmark' },
-      { label: 'Average Rating',         value: '4.8',   delta:  1.2, deltaLabel: 'vs prethodni', icon: 'star'     },
-      { label: 'Ext. Clicks – Events',   value: '3.1K',  delta:  8.4, deltaLabel: 'vs prethodni', icon: 'link'     },
-      { label: 'Reviews – Events',       value: '610',   delta: 12.3, deltaLabel: 'vs prethodni', icon: 'chat'     },
-    ],
-    places: [
-      { label: 'Page Views – Places',    value: '61K',   delta:  6.8, deltaLabel: 'vs prethodni', icon: 'trend'    },
-      { label: 'Visitors – Places',      value: '43.2K', delta:  4.5, deltaLabel: 'vs prethodni', icon: 'users'    },
-      { label: 'Saves – Places',         value: '8.2K',  delta:  9.3, deltaLabel: 'vs prethodni', icon: 'bookmark' },
-      { label: 'Average Rating',         value: '4.5',   delta: -0.2, deltaLabel: 'vs prethodni', icon: 'star'     },
-      { label: 'Ext. Clicks – Places',   value: '3.8K',  delta: -4.2, deltaLabel: 'vs prethodni', icon: 'link'     },
-      { label: 'Reviews – Places',       value: '1,141', delta:  2.1, deltaLabel: 'vs prethodni', icon: 'chat'     },
-    ],
+  private readonly filterToTypeMap: Record<CategoryFilter, string> = {
+    all: 'All Entities', locations: 'Location', destinations: 'Destination', events: 'Event', places: 'Place',
+  };
+  private readonly typeToFilterMap: Record<string, CategoryFilter> = {
+    'All Entities': 'all', 'Location': 'locations', 'Destination': 'destinations', 'Event': 'events', 'Place': 'places',
   };
 
-  filteredMetrics = computed(() => this.metricsByFilter[this.activeFilter()]);
+  get selectedType(): string { return this.filterToTypeMap[this.activeFilter()]; }
+  set selectedType(v: string) { this.activeFilter.set(this.typeToFilterMap[v] ?? 'all'); }
 
-  // ── Category aggregates ─────────────────────────────────────────────
-  categories: CategoryAggregate[] = [
-    { name: 'Hoteli',       count: 14, visits: 112000, maxVisits: 112000, color: '#1a4db5' },
-    { name: 'Destinacije',  count:  6, visits:  78000, maxVisits: 112000, color: '#1e6bb8' },
-    { name: 'Mesta',        count: 22, visits:  61000, maxVisits: 112000, color: '#2d8dd6' },
-    { name: 'Događaji',     count:  8, visits:  22000, maxVisits: 112000, color: '#5ab0e8' },
+  setFilter(f: CategoryFilter): void { this.activeFilter.set(f); }
+
+  // ── Search ───────────────────────────────────────────────────────────
+  searchQuery = signal('');
+
+  // ── Sort ─────────────────────────────────────────────────────────────
+  sortOpen      = false;
+  sortFieldSig  = signal<EntitySortField>('views');
+  sortDirSig    = signal<'asc' | 'desc'>('desc');
+
+  readonly sortOptions: { label: string; field: EntitySortField; dir: 'asc' | 'desc' }[] = [
+    { label: 'Most Views',    field: 'views',     dir: 'desc' },
+    { label: 'Most Visitors', field: 'visitors',  dir: 'desc' },
+    { label: 'Most Saves',    field: 'saves',     dir: 'desc' },
+    { label: 'Best Rating',   field: 'reviewAvg', dir: 'desc' },
+    { label: 'A–Z',           field: 'name',      dir: 'asc'  },
+    { label: 'Z–A',           field: 'name',      dir: 'desc' },
   ];
 
-  barWidth(cat: CategoryAggregate): number {
-    return Math.round((cat.visits / cat.maxVisits) * 100);
+  currentSortLabel = computed(() => {
+    const f = this.sortFieldSig(), d = this.sortDirSig();
+    return this.sortOptions.find(o => o.field === f && o.dir === d)?.label ?? 'Most Views';
+  });
+
+  // ── Page views trend chart ───────────────────────────────────────────
+  private pageViewsTrendSig = signal<Record<CategoryFilter, number[]>>({
+    all: [], locations: [], destinations: [], events: [], places: [],
+  });
+
+  trendChart = computed(() => this.buildTrendChart(
+    this.pageViewsTrendSig()[this.activeFilter()] ?? []
+  ));
+
+  private buildTrendChart(raw: number[]): {
+    linePath: string; areaPath: string;
+    yLabels: { y: number; text: string }[];
+  } {
+    const defaultLabels = [
+      { y: 18, text: '8K' }, { y: 58, text: '6K' },
+      { y: 98, text: '4K' }, { y: 138, text: '2K' },
+    ];
+    if (raw.length === 0) return { linePath: '', areaPath: '', yLabels: defaultLabels };
+
+    const maxVal  = Math.max(...raw);
+    const step    = this.niceStep(maxVal);
+    const gridMax = step * 4;
+    const n       = raw.length;
+
+    const toX = (i: number) => 24 + (i / (n - 1)) * 292;
+    const toY = (v: number) => Math.min(148, 134 - ((v - step) / (step * 3)) * 120);
+
+    const pts      = raw.map((v, i) => ({ x: toX(i), y: toY(v) }));
+    const linePath = this.smoothSVGPath(pts);
+    const areaPath = `${linePath} L${pts[n - 1].x.toFixed(1)},148 L${pts[0].x.toFixed(1)},148 Z`;
+
+    return {
+      linePath,
+      areaPath,
+      yLabels: [
+        { y: 18,  text: this.fmtK(gridMax) },
+        { y: 58,  text: this.fmtK(step * 3) },
+        { y: 98,  text: this.fmtK(step * 2) },
+        { y: 138, text: this.fmtK(step) },
+      ],
+    };
   }
 
-  formatVisits(v: number): string {
-    return v >= 1000 ? (v / 1000).toFixed(0) + 'K' : String(v);
+  private niceStep(maxVal: number): number {
+    if (maxVal <= 0) return 100;
+    const minStep  = maxVal / 4;
+    const mag      = Math.pow(10, Math.floor(Math.log10(minStep)));
+    const norm     = minStep / mag;
+    const niceBase = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+    return niceBase * mag;
   }
 
-  // ── Seasonal heatmap ────────────────────────────────────────────────
-  months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  private fmtK(n: number): string {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (n >= 1000)      return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return Math.round(n).toString();
+  }
+
+  private smoothSVGPath(pts: { x: number; y: number }[]): string {
+    if (pts.length === 0) return '';
+    if (pts.length === 1) return `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+    let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+    for (let i = 1; i < pts.length; i++) {
+      const p0  = pts[i - 2] ?? pts[i - 1];
+      const p1  = pts[i - 1];
+      const p2  = pts[i];
+      const p3  = pts[i + 1] ?? pts[i];
+      const cp1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
+      const cp2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+      d += ` C${cp1.x.toFixed(1)},${cp1.y.toFixed(1)} ${cp2.x.toFixed(1)},${cp2.y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+    }
+    return d;
+  }
+
+  // ── Data signals ─────────────────────────────────────────────────────
+  private metricsByFilterSig = signal<Record<CategoryFilter, MetricCard[]>>({
+    all: [], locations: [], destinations: [], events: [], places: [],
+  });
+  private entityRowsSig      = signal<EntityRow[]>([]);
+  private distributionSig    = signal<Record<CategoryFilter, DistributionSlice[]>>({
+    all: [], locations: [], destinations: [], events: [], places: [],
+  });
+  actionableInsightsSig = signal<ActionableInsight[]>([]);
+  insightsSig           = signal<AutoInsight[]>([]);
+
+  // ── Computed: metrics ────────────────────────────────────────────────
+  filteredMetrics = computed(() => this.metricsByFilterSig()[this.activeFilter()] ?? []);
+
+  // ── Computed: entity rows ────────────────────────────────────────────
+  private typeFilteredRows = computed(() => {
+    const f = this.activeFilter();
+    const q = this.searchQuery().toLowerCase();
+    const rows = this.entityRowsSig();
+    const typeMap: Record<CategoryFilter, EntityRow['type'][]> = {
+      all: [], locations: ['LOCATION'], destinations: ['DESTINATION'], events: ['EVENT'], places: ['PLACE'],
+    };
+    let result = f === 'all' ? rows : rows.filter(r => typeMap[f].includes(r.type));
+    if (q) result = result.filter(r => r.name.toLowerCase().includes(q) || r.location.toLowerCase().includes(q));
+    return result;
+  });
+
+  sortedRows = computed(() => {
+    const rows  = [...this.typeFilteredRows()];
+    const field = this.sortFieldSig();
+    const mult  = this.sortDirSig() === 'desc' ? -1 : 1;
+    return rows.sort((a, b) => {
+      const av = (a as unknown as Record<string, unknown>)[field];
+      const bv = (b as unknown as Record<string, unknown>)[field];
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * mult;
+      return String(av).localeCompare(String(bv)) * mult;
+    });
+  });
+
+  visibleCount  = signal(10);
+  tableHasMore  = computed(() => this.visibleCount() < this.sortedRows().length);
+  showMore(): void { this.visibleCount.update(n => n + 10); }
+
+  // ── Computed: top performers (bar chart) ─────────────────────────────
+  topPerformers = computed(() =>
+    [...this.typeFilteredRows()].sort((a, b) => b.views - a.views).slice(0, 5)
+  );
+
+  topPerformerBarPct(e: EntityRow): number {
+    const top = this.topPerformers()[0];
+    return top ? Math.round((e.views / top.views) * 100) : 0;
+  }
+
+  // ── Computed: donut chart ────────────────────────────────────────────
+  private readonly CIRCUMFERENCE = 2 * Math.PI * 64;
+
+  donutArcs = computed(() => {
+    const slices = this.distributionSig()[this.activeFilter()] ?? [];
+    const total  = slices.reduce((s, x) => s + x.count, 0);
+    let offset   = 0;
+    return slices.map(s => {
+      const arc = total > 0 ? (s.count / total) * this.CIRCUMFERENCE : 0;
+      const item = { ...s, dasharray: `${arc.toFixed(1)} ${(this.CIRCUMFERENCE - arc).toFixed(1)}`, dashoffset: `-${offset.toFixed(1)}` };
+      offset += arc;
+      return item;
+    });
+  });
+
+  donutTotal = computed(() =>
+    (this.distributionSig()[this.activeFilter()] ?? []).reduce((s, x) => s + x.count, 0)
+  );
+
+  donutTotalDisplay = computed(() => {
+    const n = this.donutTotal();
+    return n > 999 ? (n / 1000).toFixed(1) + 'k' : String(n);
+  });
+
+  distributionChartTitle = computed(() => {
+    const m: Record<CategoryFilter, string> = {
+      all:          'Entity Type Distribution',
+      places:       'Place Type Distribution',
+      destinations: 'Destination Type Distribution',
+      events:       'Event Type Distribution',
+      locations:    'Location Type Distribution',
+    };
+    return m[this.activeFilter()];
+  });
+
+  distributionChartSubtitle = computed(() => {
+    const m: Record<CategoryFilter, string> = {
+      all:          'Inventory breakdown',
+      places:       'Distribution by place type',
+      destinations: 'Distribution by destination type',
+      events:       'Distribution by event type',
+      locations:    'Distribution by location type',
+    };
+    return m[this.activeFilter()];
+  });
+
+  topPerformingTitle = computed(() => {
+    const m: Record<CategoryFilter, string> = {
+      all:          'Top Performing Entities',
+      places:       'Top Performing Places',
+      destinations: 'Top Performing Destinations',
+      events:       'Top Performing Events',
+      locations:    'Top Performing Locations',
+    };
+    return m[this.activeFilter()];
+  });
+
+  entityDetailsTitle = computed(() => {
+    const m: Record<CategoryFilter, string> = {
+      all:          'Entity Performance Details',
+      places:       'Place Performance Details',
+      destinations: 'Destination Performance Details',
+      events:       'Event Performance Details',
+      locations:    'Location Performance Details',
+    };
+    return m[this.activeFilter()];
+  });
+
+  entityTypeWord = computed(() => {
+    const m: Record<CategoryFilter, string> = {
+      all: 'entities', places: 'places', destinations: 'destinations', events: 'events', locations: 'locations',
+    };
+    return m[this.activeFilter()];
+  });
+
+  searchPlaceholder = computed(() => {
+    const m: Record<CategoryFilter, string> = {
+      all:          'Search entities...',
+      places:       'Search places...',
+      destinations: 'Search destinations...',
+      events:       'Search events...',
+      locations:    'Search locations...',
+    };
+    return m[this.activeFilter()];
+  });
+
+  // ── Computed: engagement funnel ──────────────────────────────────────
+  funnelData = computed(() => {
+    const metrics = this.filteredMetrics();
+    const get = (icon: string) => metrics.find(m => m.icon === icon)?.value ?? '0';
+    const toNum = (v: string) => {
+      const n = parseFloat(v.replace(/,/g, ''));
+      return v.includes('M') ? n * 1_000_000 : v.includes('K') ? n * 1_000 : n;
+    };
+    const viewsVal = toNum(get('trend'));
+    const items = [
+      { label: 'Viewed',          value: get('trend'),    raw: viewsVal,            color: '#185FA5' },
+      { label: 'Saved',           value: get('bookmark'), raw: toNum(get('bookmark')), color: '#2d8dd6' },
+      { label: 'External Clicks', value: get('link'),     raw: toNum(get('link')),     color: '#38bdf8' },
+      { label: 'Reviews',         value: get('chat'),     raw: toNum(get('chat')),     color: '#f59e0b' },
+    ];
+    return items.map(i => ({ ...i, pct: viewsVal > 0 ? Math.round((i.raw / viewsVal) * 100) : 0 }));
+  });
+
+  // ── Lifecycle ────────────────────────────────────────────────────────
+  ngOnInit(): void {
+    this.analyticsService.getData$().subscribe(data => {
+      this.metricsByFilterSig.set(data.metrics);
+      this.entityRowsSig.set(data.entityRows);
+      this.distributionSig.set(data.distribution);
+      this.pageViewsTrendSig.set(data.pageViewsTrend);
+      this.actionableInsightsSig.set(data.actionableInsights);
+      this.insightsSig.set(data.insights);
+    });
+  }
+
+  // ── Event handlers ───────────────────────────────────────────────────
+  @HostListener('document:click')
+  onDocumentClick(): void { if (this.sortOpen) this.sortOpen = false; }
+
+  onPeriodChange(value: string): void {
+    if (value === 'Custom') {
+      if (this.customDateFrom) { const p = this.customDateFrom.split('.'); this.fromDay = p[0]; this.fromMonth = p[1]; this.fromYear = p[2]; }
+      if (this.customDateTo)   { const p = this.customDateTo.split('.');   this.toDay   = p[0]; this.toMonth   = p[1]; this.toYear   = p[2]; }
+      this.showCustomDateModal = true;
+    } else {
+      this.previousPeriod = value;
+      this.customDateFrom = this.customDateTo = '';
+      this.fromDay = this.fromMonth = this.fromYear = this.toDay = this.toMonth = this.toYear = '';
+    }
+  }
+
+  applyCustomRange(): void {
+    if (!this.canApply) return;
+    this.customDateFrom      = `${this.fromDay}.${this.fromMonth}.${this.fromYear}`;
+    this.customDateTo        = `${this.toDay}.${this.toMonth}.${this.toYear}`;
+    this.showCustomDateModal = false;
+    this.previousPeriod      = 'Custom';
+  }
+
+  cancelCustomRange(): void {
+    this.selectedPeriod      = this.previousPeriod;
+    this.showCustomDateModal = false;
+  }
+
+  onPartInput(event: Event, nextEl: HTMLInputElement): void {
+    const el = event.target as HTMLInputElement;
+    if (el.value.length >= el.maxLength) { nextEl.focus(); nextEl.select(); }
+  }
+
+  applySortOption(opt: { field: EntitySortField; dir: 'asc' | 'desc' }): void {
+    this.sortFieldSig.set(opt.field);
+    this.sortDirSig.set(opt.dir);
+    this.visibleCount.set(10);
+    this.sortOpen = false;
+  }
+
+  exportData(): void { console.log('Export CSV'); }
+
+  // ── Seasonal heatmap ─────────────────────────────────────────────────
+  months        = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
   monthIntensity = [2, 2, 4, 6, 8, 9, 10, 10, 8, 6, 2, 1];
 
   private readonly heatPalette = [
@@ -176,176 +382,73 @@ export class AnalyticsPageComponent {
     '#4E9BD4', '#2E7EC0', '#185FA5', '#1252A0',
     '#0F4F9C', '#0B3E82', '#082F68', '#052150',
   ];
+  heatmapBg(i: number): string { return this.heatPalette[Math.min(i, this.heatPalette.length - 1)]; }
+  heatmapFg(i: number): string { return i >= 5 ? '#EBF3FC' : '#1a2f6b'; }
 
-  heatmapBg(intensity: number): string {
-    return this.heatPalette[Math.min(intensity, this.heatPalette.length - 1)];
-  }
-
-  heatmapFg(intensity: number): string {
-    return intensity >= 5 ? '#EBF3FC' : '#1a2f6b';
-  }
-
-  // ── Entity rows ─────────────────────────────────────────────────────
-  entityRows: EntityRow[] = [
-    { name: 'Oplenac Complex',      type: 'PLACE',       location: 'Šumadija › Topola',      views: 45200, visitors: 32100, saves: 8400, actions: 12500, reviewMin: 3.2, reviewAvg: 4.7, reviewMax: 5.0, reviewCount: 1200, trend: 'up',     imageBg: '#C7D9F5' },
-    { name: 'Šumadija Wine Route',  type: 'DESTINATION', location: 'Šumadija',               views: 38900, visitors: 29500, saves: 6200, actions:  9800, reviewMin: 2.8, reviewAvg: 4.5, reviewMax: 5.0, reviewCount:  890, trend: 'stable', imageBg: '#D4EAD4' },
-    { name: 'Oplenac Harvest Fest', type: 'EVENT',       location: 'Šumadija › Topola',      views: 15400, visitors: 11200, saves: 3100, actions:  5200, reviewMin: 4.1, reviewAvg: 4.8, reviewMax: 5.0, reviewCount:  410, trend: 'up',     imageBg: '#F5E6C7' },
-    { name: 'Kosmaj Monument',      type: 'PLACE',       location: 'Šumadija › Mladenovac',  views: 22100, visitors: 18400, saves: 2800, actions:  4100, reviewMin: 1.9, reviewAvg: 3.8, reviewMax: 4.8, reviewCount:  340, trend: 'down',   imageBg: '#E8D5C7' },
-    { name: 'Arandjelovac Spa',     type: 'PLACE',       location: 'Šumadija › Aranđelovac', views: 31000, visitors: 24200, saves: 4500, actions:  6300, reviewMin: 3.5, reviewAvg: 4.4, reviewMax: 5.0, reviewCount:  620, trend: 'up',     imageBg: '#C7E8F5' },
-  ];
-
-  filteredRows = computed(() => {
-    const f = this.activeFilter();
-    if (f === 'all') return this.entityRows;
-    const typeMap: Record<CategoryFilter, EntityRow['type'][]> = {
-      all:          [],
-      hotels:       ['HOTEL'],
-      destinations: ['DESTINATION'],
-      events:       ['EVENT'],
-      places:       ['PLACE'],
-    };
-    return this.entityRows.filter(r => typeMap[f].includes(r.type));
-  });
-
-  formatNum(n: number): string {
-    return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
-  }
-
-  visibleCount = 5;
-  showMore(): void { this.visibleCount += 5; }
-  get tableHasMore(): boolean { return this.visibleCount < this.filteredRows().length; }
+  // ── Display helpers ───────────────────────────────────────────────────
+  formatNum(n: number): string { return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n); }
 
   trendLabel(t: EntityRow['trend']): string {
     return t === 'up' ? 'Trending' : t === 'down' ? 'Low Engagement' : 'Stable';
   }
-
   trendClass(t: EntityRow['trend']): string {
-    const map: Record<EntityRow['trend'], string> = {
-      up:     'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-      down:   'bg-red-50 text-red-600 ring-1 ring-red-200',
+    const m: Record<EntityRow['trend'], string> = {
+      up: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+      down: 'bg-red-50 text-red-600 ring-1 ring-red-200',
       stable: 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',
     };
-    return map[t];
+    return m[t];
   }
-
-  reviewMinClass(val: number): string {
-    if (val < 2.5) return 'text-red-600 font-semibold';
-    if (val < 3.5) return 'text-amber-600';
+  typeClass(t: EntityRow['type']): string {
+    const m: Record<EntityRow['type'], string> = {
+      PLACE: 'bg-violet-100 text-violet-700', DESTINATION: 'bg-blue-100 text-blue-700',
+      EVENT: 'bg-emerald-100 text-emerald-700', LOCATION: 'bg-amber-100 text-amber-700',
+    };
+    return m[t];
+  }
+  typeLabel(t: EntityRow['type']): string {
+    const m: Record<EntityRow['type'], string> = { PLACE: 'Place', DESTINATION: 'Destination', EVENT: 'Event', LOCATION: 'Location' };
+    return m[t];
+  }
+  reviewMinClass(v: number): string {
+    if (v < 2.5) return 'text-red-600 font-semibold';
+    if (v < 3.5) return 'text-amber-600';
     return 'text-gray-500';
   }
-
-  reviewAvgClass(val: number): string {
-    if (val >= 4.5) return 'text-emerald-700 font-semibold';
-    if (val >= 3.5) return 'text-gray-800 font-semibold';
+  reviewAvgClass(v: number): string {
+    if (v >= 4.5) return 'text-emerald-700 font-semibold';
+    if (v >= 3.5) return 'text-gray-800 font-semibold';
     return 'text-red-600 font-semibold';
   }
 
-  typeClass(t: EntityRow['type']): string {
-    const map: Record<EntityRow['type'], string> = {
-      PLACE:       'bg-violet-100 text-violet-700',
-      DESTINATION: 'bg-blue-100 text-blue-700',
-      EVENT:       'bg-emerald-100 text-emerald-700',
-      HOTEL:       'bg-amber-100 text-amber-700',
-    };
-    return map[t];
+  // ── Actionable insights helpers ───────────────────────────────────────
+  insightCardBg(highlightClass?: string): string {
+    if (highlightClass === 'text-blue-600') return 'bg-blue-50 border-blue-100';
+    if (highlightClass === 'text-red-600')  return 'bg-red-50 border-red-100';
+    return 'bg-gray-50 border-gray-100';
   }
 
-  typeLabel(t: EntityRow['type']): string {
-    const map: Record<EntityRow['type'], string> = {
-      PLACE: 'Place', DESTINATION: 'Destination', EVENT: 'Event', HOTEL: 'Hotel',
-    };
-    return map[t];
-  }
-
-  // ── Actionable Insights (right sidebar panel) ───────────────────────
-  actionableInsights: ActionableInsight[] = [
-    {
-      icon: 'pin',
-      label: 'TOP VIEWED DESTINATION',
-      title: 'Šumadija Wine Route',
-      subtitle: '38.9K Views (+15%)',
-      highlightClass: 'text-blue-600',
-    },
-    {
-      icon: 'bookmark',
-      label: 'MOST SAVED PLACE',
-      title: 'Oplenac Complex',
-      subtitle: '8.4K Saves (High Intent)',
-      highlightClass: 'text-gray-700',
-    },
-    {
-      icon: 'calendar',
-      label: 'HIGHEST PERFORMING EVENT',
-      title: 'Oplenac Harvest Fest',
-      subtitle: '15.4K Views (Trending)',
-      highlightClass: 'text-gray-700',
-    },
-    {
-      icon: 'warning',
-      label: 'ACTION REQUIRED',
-      title: 'Kosmaj Monument',
-      subtitle: '-12% Engagement Rate',
-      highlightClass: 'text-red-600',
-    },
-  ];
-
-  // ── Auto insights ────────────────────────────────────────────────────
-  insights: AutoInsight[] = [
-    {
-      type: 'success',
-      title: 'Hotels — Weekend Effect +40%',
-      detail: 'Hotels record 40% more visits on weekends than weekdays. Recommended: increase promotional capacity during the week.',
-    },
-    {
-      type: 'warning',
-      title: 'Winter Drop is a Structural Issue',
-      detail: 'Visit drop Nov–Jan correlates with closure of 4 hotels and absence of winter content — not low interest. Aranđelovac Spa operating year-round shows stable traffic.',
-    },
-    {
-      type: 'danger',
-      title: 'Kosmaj Monument Requires Attention',
-      detail: 'Average rating 3.8 with 22K views — visitors come but leave unsatisfied. Recommended: review reviews to identify recurring complaints.',
-    },
-    {
-      type: 'info',
-      title: 'Aranđelovac Spa — Fastest Growing in Region',
-      detail: '+24% unique visitors in 7 days. The same content model can be applied to other facilities as best practice.',
-    },
-  ];
-
+  // ── Auto-insights helpers ─────────────────────────────────────────────
   insightIconBg(type: AutoInsight['type']): string {
-    const map: Record<AutoInsight['type'], string> = {
-      success: '#E1F5EE', warning: '#FAEEDA', danger: '#FCEBEB', info: '#E6F1FB',
-    };
-    return map[type];
+    const m: Record<AutoInsight['type'], string> = { success: '#E1F5EE', warning: '#FAEEDA', danger: '#FCEBEB', info: '#E6F1FB' };
+    return m[type];
   }
-
   insightIconColor(type: AutoInsight['type']): string {
-    const map: Record<AutoInsight['type'], string> = {
-      success: '#0F6E56', warning: '#854F0B', danger: '#A32D2D', info: '#185FA5',
-    };
-    return map[type];
+    const m: Record<AutoInsight['type'], string> = { success: '#0F6E56', warning: '#854F0B', danger: '#A32D2D', info: '#185FA5' };
+    return m[type];
   }
-
   insightIcon(type: AutoInsight['type']): string {
-    const map: Record<AutoInsight['type'], string> = {
-      success: '↑', warning: '❄', danger: '⚠', info: '★',
-    };
-    return map[type];
+    const m: Record<AutoInsight['type'], string> = { success: '↑', warning: '❄', danger: '⚠', info: '★' };
+    return m[type];
   }
 
-  exportData(): void {
-    console.log('Export CSV');
-  }
   getEntityImage(name: string): string {
-    const map: Record<string, string> = {
+    const m: Record<string, string> = {
       'Oplenac Complex': 'https://source.unsplash.com/100x100/?church',
-      'Avala Tower': 'https://source.unsplash.com/100x100/?tower',
-      'KosmajMonument': 'https://source.unsplash.com/100x100/?monument',
-      'Sumadija WineRoute': 'https://source.unsplash.com/100x100/?vineyard',
-      'Arandjelovac Spa': 'https://source.unsplash.com/100x100/?spa',
+      'Kosmaj Monument': 'https://source.unsplash.com/100x100/?monument',
+      'Arandjelovac Spa Hotel': 'https://source.unsplash.com/100x100/?spa',
+      'Šumadija Wine Route': 'https://source.unsplash.com/100x100/?vineyard',
     };
-
-    return map[name] || 'https://source.unsplash.com/100x100/?nature';
+    return m[name] || 'https://source.unsplash.com/100x100/?nature';
   }
 }
