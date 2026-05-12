@@ -1,7 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, NgModel } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
@@ -24,6 +24,7 @@ export class LoginComponent {
 
   constructor(
     private readonly router: Router,
+    private readonly route: ActivatedRoute,
     private readonly authService: AuthService,
   ) {}
 
@@ -74,16 +75,25 @@ export class LoginComponent {
     if (!this.email() || !this.password()) return;
     this.isLoading.set(true);
 
-    this.authService.login(this.email(), this.password()).subscribe({
+    this.authService.login(this.email(), this.password(), this.rememberMe()).subscribe({
       next: () => {
         this.isLoading.set(false);
-        this.router.navigate([this.authService.getHomeRoute()]);
+        this.router.navigateByUrl(this.safeReturnUrl() ?? this.authService.getHomeRoute());
       },
       error: (err: Error) => {
         this.isLoading.set(false);
         this.authError.set(err.message ?? 'Invalid email or password. Please try again.');
       },
     });
+  }
+
+  private safeReturnUrl(): string | null {
+    const value = this.route.snapshot.queryParamMap.get('returnUrl');
+    if (!value || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/login')) {
+      return null;
+    }
+
+    return value;
   }
 
   setSubmitHover(event: Event, isHover: boolean): void {

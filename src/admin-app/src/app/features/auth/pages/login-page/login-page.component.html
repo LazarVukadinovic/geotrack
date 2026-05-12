@@ -108,7 +108,6 @@
               (ngModelChange)="password.set($event); onValueChange($event, passwordInput)"
               placeholder="••••••••"
               required
-              minlength="6"
               autocomplete="current-password"
               class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 pr-10 text-sm text-gray-900 placeholder-[#aab4c4] transition-colors outline-none focus:bg-white"
               (focus)="onFieldFocus($event, passwordInput)"
@@ -137,9 +136,6 @@
             </svg>
             <span *ngIf="passwordInput.errors?.['required']" class="text-xs text-red-500">
               Password is required.
-            </span>
-            <span *ngIf="passwordInput.errors?.['minlength'] && !passwordInput.errors?.['required']" class="text-xs text-red-500">
-              Password must be at least 6 characters.
             </span>
           </div>
         </div>
