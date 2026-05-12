@@ -32,8 +32,8 @@ export class AllLocationsComponent implements OnInit, AfterViewInit, OnDestroy {
 
  
   region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  userName = '';
+  userRole = '';
 
   
   items:        LocationListItem[] = [];

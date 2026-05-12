@@ -36,8 +36,8 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   notFound   = false;
 
   region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  userName = '';
+  userRole = '';
 
   mapModalOpen  = false;
   deleteTarget: EventListItem | null = null;

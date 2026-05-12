@@ -34,8 +34,8 @@ export class AllDestinationsComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  userName = '';
+  userRole = '';
 
   items:        DestinationListItem[] = [];
   totalItems    = 0;

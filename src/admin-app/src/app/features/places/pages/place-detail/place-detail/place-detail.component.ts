@@ -36,8 +36,8 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   notFound   = false;
 
   region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  userName = '';
+  userRole = '';
 
   mapModalOpen  = false;
   deleteTarget: PlaceListItem | null = null;
