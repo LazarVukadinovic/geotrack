@@ -25,15 +25,25 @@ export class AnalyticsPageComponent implements OnInit {
   userRole = 'Regional Manager';
 
   // ── Period filter ────────────────────────────────────────────────────
-  selectedPeriod     = 'Last 30 Days';
+  selectedPeriod         = 'Last 30 Days';
   private previousPeriod = 'Last 30 Days';
+  private selectedPeriodSig = signal('Last 30 Days');
+
+  get customDays(): number {
+    if (!this.customDateFrom || !this.customDateTo) return 30;
+    const [d1, m1, y1] = this.customDateFrom.split('.').map(Number);
+    const [d2, m2, y2] = this.customDateTo.split('.').map(Number);
+    const from = new Date(y1, m1 - 1, d1);
+    const to   = new Date(y2, m2 - 1, d2);
+    return Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
+  }
   showCustomDateModal = false;
   customDateFrom = '';
   customDateTo   = '';
   fromDay = ''; fromMonth = ''; fromYear = '';
   toDay   = ''; toMonth   = ''; toYear   = '';
 
-  readonly periodOptions = ['Last 7 Days', 'Last 15 Days', 'Last 30 Days', 'Last 6 Months', 'Last 1 Year', 'Custom'];
+  readonly periodOptions = ['Last 7 Days', 'Last 15 Days', 'Last 30 Days', 'Last 6 Months', 'Last 12 Months', 'Custom'];
 
   get canApply(): boolean {
     return this.fromDay.length === 2 && this.fromMonth.length === 2 && this.fromYear.length === 4
@@ -93,41 +103,137 @@ export class AnalyticsPageComponent implements OnInit {
   });
 
   trendChart = computed(() => this.buildTrendChart(
-    this.pageViewsTrendSig()[this.activeFilter()] ?? []
+    this.pageViewsTrendSig()[this.activeFilter()] ?? [],
+    this.selectedPeriodSig(),
   ));
 
-  private buildTrendChart(raw: number[]): {
+  private buildTrendChart(raw: number[], period: string): {
     linePath: string; areaPath: string;
     yLabels: { y: number; text: string }[];
+    xLabels: { x: number; text: string }[];
+    subtitle: string;
   } {
-    const defaultLabels = [
-      { y: 18, text: '8K' }, { y: 58, text: '6K' },
-      { y: 98, text: '4K' }, { y: 138, text: '2K' },
-    ];
-    if (raw.length === 0) return { linePath: '', areaPath: '', yLabels: defaultLabels };
+    const { points, xLabels, subtitle } = this.getPeriodSlice(raw, period);
 
-    const maxVal  = Math.max(...raw);
-    const step    = this.niceStep(maxVal);
-    const gridMax = step * 4;
-    const n       = raw.length;
+    const fallback = {
+      linePath: '', areaPath: '',
+      yLabels: [
+        { y: 18, text: '8K' }, { y: 58, text: '6K' },
+        { y: 98, text: '4K' }, { y: 138, text: '2K' },
+      ],
+      xLabels, subtitle,
+    };
+    if (points.length === 0 || points.every(v => v === 0)) return fallback;
 
-    const toX = (i: number) => 24 + (i / (n - 1)) * 292;
+    const maxVal = Math.max(...points);
+    const step   = this.niceStep(maxVal);
+    const n      = points.length;
+
+    const toX = (i: number) => 24 + (n > 1 ? i / (n - 1) : 0) * 292;
     const toY = (v: number) => Math.min(148, 134 - ((v - step) / (step * 3)) * 120);
 
-    const pts      = raw.map((v, i) => ({ x: toX(i), y: toY(v) }));
+    const pts      = points.map((v, i) => ({ x: toX(i), y: toY(v) }));
     const linePath = this.smoothSVGPath(pts);
     const areaPath = `${linePath} L${pts[n - 1].x.toFixed(1)},148 L${pts[0].x.toFixed(1)},148 Z`;
 
     return {
-      linePath,
-      areaPath,
+      linePath, areaPath,
       yLabels: [
-        { y: 18,  text: this.fmtK(gridMax) },
+        { y: 18,  text: this.fmtK(step * 4) },
         { y: 58,  text: this.fmtK(step * 3) },
         { y: 98,  text: this.fmtK(step * 2) },
         { y: 138, text: this.fmtK(step) },
       ],
+      xLabels, subtitle,
     };
+  }
+
+  private getPeriodSlice(raw: number[], period: string): {
+    points: number[];
+    xLabels: { x: number; text: string }[];
+    subtitle: string;
+  } {
+    const px = (i: number, n: number) => +(24 + (n > 1 ? i / (n - 1) : 0) * 292).toFixed(1);
+
+    if (period === 'Last 7 Days') {
+      const pts = raw.slice(-7);
+      return {
+        points: pts,
+        xLabels: pts.map((_, i) => ({ x: px(i, pts.length), text: String(i + 1) })),
+        subtitle: 'Rolling 7-day view engagement',
+      };
+    }
+
+    if (period === 'Last 15 Days') {
+      const pts = raw.slice(-15);
+      const n   = pts.length;
+      return {
+        points: pts,
+        xLabels: [0, 4, 9, 14].map(i => ({ x: px(i, n), text: String(i + 1) })),
+        subtitle: 'Rolling 15-day view engagement',
+      };
+    }
+
+    if (period === 'Last 6 Months') {
+      const src  = raw.length >= 180 ? raw.slice(-180) : raw;
+      const size = Math.floor(src.length / 6);
+      const pts  = Array.from({ length: 6 }, (_, i) =>
+        src.slice(i * size, (i + 1) * size).reduce((s, v) => s + v, 0)
+      );
+      const labels = this.getLastNMonthLabels(6);
+      return {
+        points: pts,
+        xLabels: pts.map((_, i) => ({ x: px(i, pts.length), text: labels[i] })),
+        subtitle: 'Monthly view engagement – last 6 months',
+      };
+    }
+
+    if (period === 'Last 12 Months') {
+      const pts = Array.from({ length: 12 }, (_, i) => {
+        const start = Math.round(i * raw.length / 12);
+        const end   = Math.round((i + 1) * raw.length / 12);
+        return raw.slice(start, end).reduce((s, v) => s + v, 0);
+      });
+      const labels = this.getLastNMonthLabels(12);
+      return {
+        points: pts,
+        xLabels: pts.map((_, i) => ({ x: px(i, pts.length), text: labels[i] })),
+        subtitle: 'Monthly view engagement – last 12 months',
+      };
+    }
+
+    if (period === 'Custom') {
+      const days = this.customDays;
+      const pts  = raw.slice(-Math.min(days, raw.length));
+      const n    = pts.length;
+      const cnt  = n <= 7 ? n : Math.min(n, 6);
+      const xLabels = cnt <= 1
+        ? [{ x: px(0, n), text: '1' }]
+        : Array.from({ length: cnt }, (_, j) => {
+            const i = Math.round(j * (n - 1) / (cnt - 1));
+            return { x: px(i, n), text: String(i + 1) };
+          });
+      return { points: pts, xLabels, subtitle: `Custom period – ${n} day${n !== 1 ? 's' : ''}` };
+    }
+
+    // Default: Last 30 Days
+    const pts = raw.slice(-30);
+    const n   = pts.length;
+    return {
+      points: pts,
+      xLabels: ([[ 0,'1'],[4,'5'],[9,'10'],[14,'15'],[19,'20'],[n-1,'30']] as [number,string][])
+        .map(([i, text]) => ({ x: px(i, n), text })),
+      subtitle: 'Rolling 30-day view engagement',
+    };
+  }
+
+  private getLastNMonthLabels(count: number): string[] {
+    const abbr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const now  = new Date();
+    return Array.from({ length: count }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (count - 1 - i), 1);
+      return abbr[d.getMonth()];
+    });
   }
 
   private niceStep(maxVal: number): number {
@@ -302,20 +408,21 @@ export class AnalyticsPageComponent implements OnInit {
 
   // ── Computed: engagement funnel ──────────────────────────────────────
   funnelData = computed(() => {
-    const metrics = this.filteredMetrics();
-    const get = (icon: string) => metrics.find(m => m.icon === icon)?.value ?? '0';
-    const toNum = (v: string) => {
-      const n = parseFloat(v.replace(/,/g, ''));
-      return v.includes('M') ? n * 1_000_000 : v.includes('K') ? n * 1_000 : n;
-    };
-    const viewsVal = toNum(get('trend'));
-    const items = [
-      { label: 'Viewed',          value: get('trend'),    raw: viewsVal,            color: '#185FA5' },
-      { label: 'Saved',           value: get('bookmark'), raw: toNum(get('bookmark')), color: '#2d8dd6' },
-      { label: 'External Clicks', value: get('link'),     raw: toNum(get('link')),     color: '#38bdf8' },
-      { label: 'Reviews',         value: get('chat'),     raw: toNum(get('chat')),     color: '#f59e0b' },
+    const rows     = this.typeFilteredRows();
+    const views    = rows.reduce((s, r) => s + r.views,       0);
+    const visitors = rows.reduce((s, r) => s + r.visitors,    0);
+    const saves    = rows.reduce((s, r) => s + r.saves,       0);
+    const actions  = rows.reduce((s, r) => s + r.actions,     0);
+    const reviews  = rows.reduce((s, r) => s + r.reviewCount, 0);
+    const base = views || 1;
+    const pct  = (v: number) => Math.min(100, Math.round(v / base * 100));
+    return [
+      { label: 'Page Views',      value: this.formatNum(views),    pct: 100,          color: '#185FA5' },
+      { label: 'Unique Visitors', value: this.formatNum(visitors), pct: pct(visitors), color: '#2d8dd6' },
+      { label: 'Saved',           value: this.formatNum(saves),    pct: pct(saves),    color: '#38bdf8' },
+      { label: 'Ext. Clicks',     value: this.formatNum(actions),  pct: pct(actions),  color: '#60c4f5' },
+      { label: 'Reviews',         value: this.formatNum(reviews),  pct: pct(reviews),  color: '#f59e0b' },
     ];
-    return items.map(i => ({ ...i, pct: viewsVal > 0 ? Math.round((i.raw / viewsVal) * 100) : 0 }));
   });
 
   // ── Lifecycle ────────────────────────────────────────────────────────
@@ -341,6 +448,7 @@ export class AnalyticsPageComponent implements OnInit {
       this.showCustomDateModal = true;
     } else {
       this.previousPeriod = value;
+      this.selectedPeriodSig.set(value);
       this.customDateFrom = this.customDateTo = '';
       this.fromDay = this.fromMonth = this.fromYear = this.toDay = this.toMonth = this.toYear = '';
     }
@@ -352,10 +460,12 @@ export class AnalyticsPageComponent implements OnInit {
     this.customDateTo        = `${this.toDay}.${this.toMonth}.${this.toYear}`;
     this.showCustomDateModal = false;
     this.previousPeriod      = 'Custom';
+    this.selectedPeriodSig.set('Custom');
   }
 
   cancelCustomRange(): void {
     this.selectedPeriod      = this.previousPeriod;
+    this.selectedPeriodSig.set(this.previousPeriod);
     this.showCustomDateModal = false;
   }
 

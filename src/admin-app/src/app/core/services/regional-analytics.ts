@@ -171,16 +171,16 @@ export class RegionalAnalyticsService {
   ): Record<import('../models/regional-analytics.model').CategoryFilter, number[]> {
     const gen = (items: { analyticsViews?: number; analyticsTrend?: string }[]): number[] => {
       const total = items.reduce((s, i) => s + (i.analyticsViews ?? 0), 0);
-      if (total === 0) return Array(30).fill(0);
+      if (total === 0) return Array(365).fill(0);
       const upCount   = items.filter(i => i.analyticsTrend === 'up').length;
       const downCount = items.filter(i => i.analyticsTrend === 'down').length;
       const dir = upCount > downCount ? 1 : upCount < downCount ? -1 : 0;
-      const avg = total / 30;
-      return Array.from({ length: 30 }, (_, d) => {
-        const t     = d / 29;
-        const trend = 1 + dir * 0.4 * t;
-        const wave  = 0.15 * Math.sin(t * Math.PI * 2.5);
-        const noise = (this.seededRand(d * 137 + (total % 1000)) - 0.5) * 0.2;
+      const avg = total / 365;
+      return Array.from({ length: 365 }, (_, d) => {
+        const t     = d / 364;
+        const trend = 1 + dir * 0.5 * t;
+        const wave  = 0.18 * Math.sin(t * Math.PI * 6);
+        const noise = (this.seededRand(d * 137 + (total % 1000)) - 0.5) * 0.25;
         return Math.max(0, Math.round(avg * (trend + wave + noise)));
       });
     };

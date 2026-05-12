@@ -81,8 +81,10 @@ export interface RegionAnalyticRow {
   pageViews:        string;   // formatted, e.g. "1.2M"
   visitors:         string;   // formatted, e.g. "450K"
   saves:            string;   // formatted, e.g. "85K"
+  extClicks:        string;   // formatted, e.g. "42K"
+  totalReviews:     string;   // formatted, e.g. "18K"
   avgRating:        number;
-  entities:         string;   // formatted "D / L / E", e.g. "45 / 315 / 18"
+  entities:         string;   // formatted "D / L / P / E", e.g. "45 / 182 / 315 / 18"
   status:           RegionStatus;
   qualityScore:     number;   // 0–100
   pendingRequests:  number;
@@ -90,6 +92,20 @@ export interface RegionAnalyticRow {
   approvedLast30d:  number;
   rejectedLast30d:  number;
   hasManager:       boolean;
+}
+
+// ── Top place row (ranked bar list) ─────────────────────────────────────────
+export interface TopPlace {
+  name:   string;
+  region: string;
+  views:  number;
+}
+
+// ── Top location row (ranked bar list) ───────────────────────────────────────
+export interface TopLocation {
+  name:   string;
+  region: string;
+  views:  number;
 }
 
 // ── Full response shape (mirrors what a real API would return) ────────────────
@@ -101,6 +117,8 @@ export interface NationalAnalyticsData {
   pageViewsData:    PageViewSeries[];
   topDestinations:  TopDestination[];
   topEvents:        TopEvent[];
+  topPlaces:        TopPlace[];
+  topLocations:     TopLocation[];
   contentQuality:   ContentQualityPoint[];
   regionRows:       RegionAnalyticRow[];
   alerts:           OperationalAlert[];

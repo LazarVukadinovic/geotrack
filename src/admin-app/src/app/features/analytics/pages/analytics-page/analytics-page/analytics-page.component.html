@@ -121,8 +121,8 @@
             <!-- Page Views Trend chart (dynamic) -->
             <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
               <div class="text-sm font-semibold text-gray-800 mb-0.5">Page Views Trend</div>
-              <div class="text-xs text-gray-400 mb-4">Rolling 30-day view engagement</div>
               <ng-container *ngIf="trendChart() as chart">
+                <div class="text-xs text-gray-400 mb-4">{{ chart.subtitle }}</div>
                 <svg viewBox="0 0 320 160" class="w-full" style="height: 160px;">
                   <defs>
                     <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -137,12 +137,7 @@
                   <line x1="24" y1="134" x2="316" y2="134" stroke="#f3f4f6" stroke-width="1"/>
                   <path [attr.d]="chart.areaPath" fill="url(#areaGrad)"/>
                   <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round"/>
-                  <text x="24"  y="158" font-size="9" fill="#9ca3af" text-anchor="middle">1</text>
-                  <text x="80"  y="158" font-size="9" fill="#9ca3af" text-anchor="middle">5</text>
-                  <text x="138" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">10</text>
-                  <text x="196" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">15</text>
-                  <text x="247" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">20</text>
-                  <text x="316" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">30</text>
+                  <text *ngFor="let lbl of chart.xLabels" [attr.x]="lbl.x" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">{{ lbl.text }}</text>
                 </svg>
               </ng-container>
             </div>
