@@ -1,5 +1,6 @@
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Security;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure;
 using Geotrack.Infrastructure.Repositories;
@@ -15,6 +16,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
 using System.Net;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 
@@ -109,6 +111,7 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IPlaceContributionService, PlaceContributionService>();
 builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionRepository>();
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
+builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(5);
@@ -157,9 +160,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            NameClaimType = ClaimTypes.NameIdentifier,
+            RoleClaimType = ClaimTypes.Role
         };
     });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireRegionalManager", policy =>
+        policy.RequireRole(RoleNames.RegionalManager));
+});
 
 builder.Services.AddRateLimiter(options =>
 {
