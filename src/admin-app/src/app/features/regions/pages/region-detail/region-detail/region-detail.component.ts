@@ -266,12 +266,17 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
     };
 
     const updatedTeam = [...this.region.team, newMember];
+    const regionName  = this.region.name;
 
     this.region.team = updatedTeam;
     this.closeAssignModal();
     this.cdr.markForCheck();
 
     this.svc.updateTeam$(this.region.id, updatedTeam).pipe(takeUntil(this.destroy$)).subscribe();
+
+    if (matched) {
+      this.usersSvc.addRegion$(matched.id, regionName).pipe(takeUntil(this.destroy$)).subscribe();
+    }
   }
 
   // ── Remove Member ────────────────────────────────────────────────
@@ -288,12 +293,15 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
 
     const updatedTeam = this.region.team.filter(m => m.id !== this.removeTarget!.id);
     const regionId    = this.region.id;
+    const regionName  = this.region.name;
+    const removedId   = this.removeTarget.id;
 
     this.region.team  = updatedTeam;
     this.removeTarget = null;
     this.cdr.markForCheck();
 
     this.svc.updateTeam$(regionId, updatedTeam).pipe(takeUntil(this.destroy$)).subscribe();
+    this.usersSvc.removeRegion$(removedId, regionName).pipe(takeUntil(this.destroy$)).subscribe();
   }
 
   // ── Edit Member Modal ────────────────────────────────────────────
@@ -310,12 +318,6 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
 
   private _loadMember(member: RegionTeamMember): void {
     const found = this.allUsers.find(u => u.email === member.email || u.id === member.id);
-
-    const effectiveRole: 'Regional Manager' | 'Viewer' =
-      member.role === 'Regional Manager' ? 'Regional Manager' : 'Viewer';
-    const effectiveStatus: 'Active' | 'Inactive' =
-      effectiveRole === 'Regional Manager' ? 'Active' : 'Inactive';
-
     const currentRegion = this.region?.name ?? '';
 
     if (found) {
@@ -323,9 +325,11 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
         ? [...found.assignedRegions, currentRegion]
         : found.assignedRegions;
 
-      this.editMember = { ...found, role: effectiveRole, status: effectiveStatus, assignedRegions };
+      this.editMember = { ...found, assignedRegions };
     } else {
       const parts = member.name.split(' ');
+      const effectiveRole: 'Regional Manager' | 'Viewer' =
+        member.role === 'Regional Manager' ? 'Regional Manager' : 'Viewer';
       this.editMember = {
         id:              member.id,
         firstName:       parts[0] ?? member.name,
@@ -334,7 +338,7 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
         avatarInitials:  member.initials,
         avatarColor:     member.avatarColor,
         role:            effectiveRole,
-        status:          effectiveStatus,
+        status:          effectiveRole === 'Regional Manager' ? 'Active' : 'Inactive',
         assignedRegions: currentRegion ? [currentRegion] : [],
         lastLogin:       '—',
         createdAt:       member.assignedDate,
@@ -361,6 +365,14 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
     obs.pipe(takeUntil(this.destroy$)).subscribe(updated => {
       if (updated && this.editMember) {
         this.editMember = { ...this.editMember, role: updated.role, status: updated.status };
+
+        if (this.region) {
+          const updatedTeam = this.region.team.map(m =>
+            m.id === updated.id ? { ...m, role: updated.role, status: updated.status } : m
+          );
+          this.region.team = updatedTeam;
+          this.svc.updateTeam$(this.region.id, updatedTeam).pipe(takeUntil(this.destroy$)).subscribe();
+        }
       }
       this.isTogglingRole = false;
       this.cdr.markForCheck();

@@ -72,6 +72,7 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
 
   // Dropdown per row
   openDropdownId: string | null = null;
+  dropdownPos = { top: 0, right: 0 };
 
   // View modal (read-only)
   viewUser: PlatformUser | null = null;
@@ -180,7 +181,18 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
 
   toggleDropdown(id: string, event: MouseEvent): void {
     event.stopPropagation();
-    this.openDropdownId = this.openDropdownId === id ? null : id;
+    if (this.openDropdownId === id) {
+      this.openDropdownId = null;
+    } else {
+      const rect           = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      const dropdownHeight = 170;
+      const spaceBelow     = window.innerHeight - rect.bottom;
+      const top = spaceBelow < dropdownHeight
+        ? rect.top - dropdownHeight - 4
+        : rect.bottom + 4;
+      this.dropdownPos = { top, right: window.innerWidth - rect.right };
+      this.openDropdownId = id;
+    }
     this.cdr.detectChanges();
   }
 

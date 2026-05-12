@@ -212,9 +212,9 @@
               <!-- Dropdown -->
               <div
                 *ngIf="openDropdownId === user.id"
-                class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl
-                       shadow-lg z-20 w-52 py-1.5 overflow-hidden"
-                style="min-width: 200px;"
+                class="fixed bg-white border border-gray-200 rounded-xl shadow-lg z-50 w-52 py-1.5 overflow-hidden"
+                [style.top.px]="dropdownPos.top"
+                [style.right.px]="dropdownPos.right"
               >
                 <!-- Edit user -->
                 <button
