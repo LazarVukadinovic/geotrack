@@ -41,6 +41,30 @@ export class NationalAnalyticsComponent implements OnInit, OnDestroy {
   selectedStatus = 'Active';
   viewMode: 'standard' | 'compare' = 'standard';
 
+  customDateFrom      = '';
+  customDateTo        = '';
+  showCustomDateModal = false;
+  private previousPeriod = 'Last 6 Months';
+
+  fromDay   = '';
+  fromMonth = '';
+  fromYear  = '';
+  toDay     = '';
+  toMonth   = '';
+  toYear    = '';
+
+  get canApply(): boolean {
+    return this.fromDay.length === 2 && this.fromMonth.length === 2 && this.fromYear.length === 4
+        && this.toDay.length === 2 && this.toMonth.length === 2 && this.toYear.length === 4;
+  }
+
+  get activePeriodLabel(): string {
+    if (this.selectedPeriod === 'Custom' && this.customDateFrom && this.customDateTo) {
+      return `${this.customDateFrom} – ${this.customDateTo}`;
+    }
+    return this.selectedPeriod;
+  }
+
   readonly periodOptions = ['Last 7 Days', 'Last 30 Days', 'Last 6 Months', 'Last 12 Months', 'Custom'];
   readonly regionOptions = ['All Regions', 'Šumadija', 'Banat', 'Raška', 'Pomoravlje', 'Mačva', 'Podunavlje'];
   readonly entityOptions = ['All', 'Destinations', 'Locations', 'Places', 'Events'];
@@ -173,6 +197,50 @@ export class NationalAnalyticsComponent implements OnInit, OnDestroy {
     this.visibleColumns = this.visibleColumns.includes(col)
       ? this.visibleColumns.filter(c => c !== col)
       : [...this.visibleColumns, col];
+    this.cdr.markForCheck();
+  }
+
+  onPartInput(event: Event, nextEl: HTMLInputElement): void {
+    const input = event.target as HTMLInputElement;
+    if (input.value.length >= input.maxLength) {
+      nextEl.focus();
+      nextEl.select();
+    }
+  }
+
+  onPeriodChange(value: string): void {
+    if (value === 'Custom') {
+      if (this.customDateFrom) {
+        const p = this.customDateFrom.split('.');
+        this.fromDay = p[0] ?? ''; this.fromMonth = p[1] ?? ''; this.fromYear = p[2] ?? '';
+      }
+      if (this.customDateTo) {
+        const p = this.customDateTo.split('.');
+        this.toDay = p[0] ?? ''; this.toMonth = p[1] ?? ''; this.toYear = p[2] ?? '';
+      }
+      this.showCustomDateModal = true;
+    } else {
+      this.previousPeriod = value;
+      this.customDateFrom = '';
+      this.customDateTo   = '';
+      this.fromDay = this.fromMonth = this.fromYear = '';
+      this.toDay   = this.toMonth   = this.toYear   = '';
+    }
+    this.cdr.markForCheck();
+  }
+
+  applyCustomRange(): void {
+    if (!this.canApply) return;
+    this.customDateFrom     = `${this.fromDay}.${this.fromMonth}.${this.fromYear}`;
+    this.customDateTo       = `${this.toDay}.${this.toMonth}.${this.toYear}`;
+    this.showCustomDateModal = false;
+    this.previousPeriod     = 'Custom';
+    this.cdr.markForCheck();
+  }
+
+  cancelCustomRange(): void {
+    this.selectedPeriod      = this.previousPeriod;
+    this.showCustomDateModal = false;
     this.cdr.markForCheck();
   }
 

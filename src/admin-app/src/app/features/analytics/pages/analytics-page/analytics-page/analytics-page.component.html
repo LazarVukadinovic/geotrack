@@ -1,0 +1,502 @@
+<div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
+
+  <!-- ════════════════ SIDEBAR ════════════════ -->
+  <app-sidebar [region]="region" />
+
+  <!-- ════════════════ MAIN ════════════════ -->
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+    <!-- Topbar -->
+    <app-topbar [userName]="userName" [userRole]="userRole" title="Analytics & Insights" [showBack]="true" backRoute="/dashboard" />
+
+    <!-- Scrollable content -->
+    <div class="flex-1 overflow-y-auto px-8 py-6">
+
+      <!-- Page heading -->
+      <div class="mb-5">
+        <h1 class="text-2xl font-bold text-gray-900">Analytics & Insights</h1>
+        <p class="text-sm text-gray-500 mt-0.5">Track digital performance across destinations, locations, places, and events in your assigned region.</p>
+      </div>
+
+      <!-- ── Filter Bar ── -->
+      <div class="bg-white rounded-xl border border-gray-100 mb-6 shadow-sm" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+
+        <!-- Row 1: search + dropdowns -->
+        <div class="flex items-center gap-3 px-4 pt-4 pb-3 flex-wrap">
+
+          <!-- Search -->
+          <div class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-1 min-w-56">
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="text"
+              [(ngModel)]="searchQuery"
+              placeholder="Search entities..."
+              class="text-sm text-gray-700 border-0 bg-transparent outline-none w-full placeholder-gray-400"
+            />
+          </div>
+
+          <!-- Date -->
+          <div class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <span class="text-sm text-gray-500">Date:</span>
+            <span class="text-sm font-semibold text-gray-700">Last 30 Days</span>
+            <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+
+          <!-- Type -->
+          <div class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+            </svg>
+            <span class="text-sm text-gray-500">Type:</span>
+            <select [(ngModel)]="selectedType" class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer">
+              <option *ngFor="let opt of typeOptions">{{ opt }}</option>
+            </select>
+          </div>
+
+          <!-- Category -->
+          <div class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
+            <span class="text-sm text-gray-500">Category:</span>
+            <select [(ngModel)]="selectedCategory" class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer">
+              <option *ngFor="let opt of categoryOptions">{{ opt }}</option>
+            </select>
+          </div>
+
+          <!-- Status -->
+          <div class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
+            <span class="text-sm text-gray-500">Status:</span>
+            <select [(ngModel)]="selectedStatus" class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer">
+              <option *ngFor="let opt of statusOptions">{{ opt }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div class="border-t border-gray-100 mx-4"></div>
+
+        <!-- Row 2: sort label + export -->
+        <div class="flex items-center justify-between px-4 py-3">
+          <span class="text-sm text-gray-400 font-medium">Sort by:</span>
+          <button
+            (click)="exportData()"
+            class="flex items-center gap-2 text-sm font-semibold text-white px-4 py-2 rounded-lg transition-colors cursor-pointer border-0 bg-[#185FA5] hover:bg-[#0f4f8c]"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export Data
+          </button>
+        </div>
+      </div>
+
+      <!-- ══ Main layout: content + right panel ══════════════════════════ -->
+      <div class="flex gap-5">
+
+        <!-- ── Left/main column ───────────────────────────────────────── -->
+        <div class="flex-1 min-w-0 flex flex-col gap-5">
+
+          <!-- KPI Metrics Grid -->
+          <div class="grid gap-3" style="grid-template-columns: repeat(3, 1fr)">
+
+            <!-- Total Page Views -->
+            <div class="bg-white rounded-xl border border-gray-100 p-4" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="flex items-start justify-between mb-2">
+                <span class="text-xs text-gray-500">Total Page Views</span>
+                <svg class="w-4 h-4 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+              </div>
+              <div class="text-2xl font-bold text-gray-900 mb-1">248.5K</div>
+              <div class="text-xs text-emerald-600 font-medium">↑ 12.5% <span class="text-gray-400 font-normal">vs last month</span></div>
+            </div>
+
+            <!-- Unique Visitors -->
+            <div class="bg-white rounded-xl border border-gray-100 p-4" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="flex items-start justify-between mb-2">
+                <span class="text-xs text-gray-500">Unique Visitors</span>
+                <svg class="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+              </div>
+              <div class="text-2xl font-bold text-gray-900 mb-1">184.2K</div>
+              <div class="text-xs text-emerald-600 font-medium">↑ 8.2% <span class="text-gray-400 font-normal">vs last month</span></div>
+            </div>
+
+            <!-- Total Saves -->
+            <div class="bg-white rounded-xl border border-gray-100 p-4" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="flex items-start justify-between mb-2">
+                <span class="text-xs text-gray-500">Total Saves / Favorites</span>
+                <svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+              </div>
+              <div class="text-2xl font-bold text-gray-900 mb-1">32.8K</div>
+              <div class="text-xs text-emerald-600 font-medium">↑ 15.4% <span class="text-gray-400 font-normal">vs last month</span></div>
+            </div>
+
+            <!-- External Link Clicks -->
+            <div class="bg-white rounded-xl border border-gray-100 p-4" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="flex items-start justify-between mb-2">
+                <span class="text-xs text-gray-500">External Link Clicks</span>
+                <svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </div>
+              <div class="text-2xl font-bold text-gray-900 mb-1">18.9K</div>
+              <div class="text-xs text-red-500 font-medium">↓ 2.1% <span class="text-gray-400 font-normal">vs last month</span></div>
+            </div>
+
+            <!-- Average Rating -->
+            <div class="bg-white rounded-xl border border-gray-100 p-4" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="flex items-start justify-between mb-2">
+                <span class="text-xs text-gray-500">Average Rating</span>
+                <svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </div>
+              <div class="text-2xl font-bold text-gray-900 mb-1">4.6</div>
+              <div class="text-xs text-emerald-600 font-medium">↑ 0.5% <span class="text-gray-400 font-normal">vs last month</span></div>
+            </div>
+
+            <!-- Total Reviews -->
+            <div class="bg-white rounded-xl border border-gray-100 p-4" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="flex items-start justify-between mb-2">
+                <span class="text-xs text-gray-500">Total Reviews</span>
+                <svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              </div>
+              <div class="text-2xl font-bold text-gray-900 mb-1">4,821</div>
+              <div class="text-xs text-emerald-600 font-medium">↑ 5.8% <span class="text-gray-400 font-normal">vs last month</span></div>
+            </div>
+          </div>
+
+          <!-- Page Views Trend + Top Performing side by side -->
+          <div class="grid gap-4" style="grid-template-columns: 1fr 1fr">
+
+            <!-- Page Views Trend chart -->
+            <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="text-sm font-semibold text-gray-800 mb-0.5">Page Views Trend</div>
+              <div class="text-xs text-gray-400 mb-4">Rolling 30-day view engagement</div>
+              <svg viewBox="0 0 320 160" class="w-full" style="height: 160px;">
+                <defs>
+                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#185FA5" stop-opacity="0.15"/>
+                    <stop offset="100%" stop-color="#185FA5" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <text x="4" y="18"  font-size="9" fill="#9ca3af">8k</text>
+                <text x="4" y="58"  font-size="9" fill="#9ca3af">6k</text>
+                <text x="4" y="98"  font-size="9" fill="#9ca3af">4k</text>
+                <text x="4" y="138" font-size="9" fill="#9ca3af">2k</text>
+                <text x="4" y="154" font-size="9" fill="#9ca3af">0k</text>
+                <line x1="24" y1="14"  x2="316" y2="14"  stroke="#f3f4f6" stroke-width="1"/>
+                <line x1="24" y1="54"  x2="316" y2="54"  stroke="#f3f4f6" stroke-width="1"/>
+                <line x1="24" y1="94"  x2="316" y2="94"  stroke="#f3f4f6" stroke-width="1"/>
+                <line x1="24" y1="134" x2="316" y2="134" stroke="#f3f4f6" stroke-width="1"/>
+                <path d="M24,101 C40,104 55,109 70,107 C85,104 95,117 108,113 C120,109 130,99 145,96 C160,93 170,99 185,91 C200,83 215,67 232,53 C248,40 265,24 290,16 C300,13 308,12 316,10"
+                      fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round"/>
+                <path d="M24,101 C40,104 55,109 70,107 C85,104 95,117 108,113 C120,109 130,99 145,96 C160,93 170,99 185,91 C200,83 215,67 232,53 C248,40 265,24 290,16 C300,13 308,12 316,10 L316,148 L24,148 Z"
+                      fill="url(#areaGrad)"/>
+                <text x="24"  y="158" font-size="9" fill="#9ca3af" text-anchor="middle">1</text>
+                <text x="80"  y="158" font-size="9" fill="#9ca3af" text-anchor="middle">5</text>
+                <text x="138" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">10</text>
+                <text x="196" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">15</text>
+                <text x="247" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">20</text>
+                <text x="280" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">25</text>
+                <text x="316" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">30</text>
+              </svg>
+            </div>
+
+            <!-- Top Performing Entities bar chart — -->
+            <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="text-sm font-semibold text-gray-800 mb-0.5">Top Performing Entities</div>
+              <div class="text-xs text-gray-400 mb-4">By total page views</div>
+              <div class="flex flex-col gap-3">
+                <div class="flex items-center gap-3">
+                  <span class="text-xs text-gray-600 w-36 truncate flex-shrink-0">Oplenac Complex</span>
+                  <div class="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full rounded" style="background: #185FA5; width: 100%;"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs text-gray-600 w-36 truncate flex-shrink-0">Avala Tower</span>
+                  <div class="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full rounded" style="background: #185FA5; width: 78%;"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs text-gray-600 w-36 truncate flex-shrink-0">KosmajMonument</span>
+                  <div class="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full rounded" style="background: #185FA5; width: 62%;"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs text-gray-600 w-36 truncate flex-shrink-0">Sumadija WineRoute</span>
+                  <div class="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full rounded" style="background: #185FA5; width: 52%;"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs text-gray-600 w-36 truncate flex-shrink-0">Arandjelovac Spa</span>
+                  <div class="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full rounded" style="background: #185FA5; width: 40%;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Entity Type Distribution + Engagement Funnel -->
+          <div class="grid gap-4" style="grid-template-columns: 1fr 1fr">
+
+            <!-- Entity Type Distribution donut -->
+            <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="text-sm font-semibold text-gray-800 mb-0.5">Entity Type Distribution</div>
+              <div class="text-xs text-gray-400 mb-4">Inventory breakdown</div>
+              <div class="flex flex-col items-center gap-4">
+                <svg viewBox="0 0 160 160" class="w-40 h-40 flex-shrink-0">
+                  <circle cx="80" cy="80" r="64" fill="none" stroke="#1252A0" stroke-width="20"
+                    stroke-dasharray="352 50" stroke-dashoffset="0" transform="rotate(-90 80 80)"/>
+                  <circle cx="80" cy="80" r="64" fill="none" stroke="#2E7EC0" stroke-width="20"
+                    stroke-dasharray="35 367" stroke-dashoffset="-352" transform="rotate(-90 80 80)"/>
+                  <circle cx="80" cy="80" r="64" fill="none" stroke="#5ab0e8" stroke-width="20"
+                    stroke-dasharray="12 390" stroke-dashoffset="-387" transform="rotate(-90 80 80)"/>
+                  <circle cx="80" cy="80" r="64" fill="none" stroke="#f59e0b" stroke-width="20"
+                    stroke-dasharray="7 395" stroke-dashoffset="-399" transform="rotate(-90 80 80)"/>
+                  <text x="80" y="74" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">3.4k</text>
+                  <text x="80" y="91" text-anchor="middle" font-size="10" fill="#9ca3af">TOTAL</text>
+                </svg>
+                <!-- Legend below -->
+                <div class="flex items-center gap-5 flex-wrap justify-center">
+                  <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                    <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:#1252A0"></span>Places
+                  </div>
+                  <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                    <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:#2E7EC0"></span>Events
+                  </div>
+                  <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                    <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:#5ab0e8"></span>Destinations
+                  </div>
+                  <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                    <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:#f59e0b"></span>Locations
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Engagement Funnel -->
+            <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="text-sm font-semibold text-gray-800 mb-0.5">Engagement Funnel</div>
+              <div class="text-xs text-gray-400 mb-4">User journey completion</div>
+              <div class="flex flex-col gap-2.5">
+                <div class="flex flex-col gap-1">
+                  <div class="flex justify-between text-xs text-gray-600 font-medium">
+                    <span>Viewed</span><span class="text-gray-400">248.5K</span>
+                  </div>
+                  <div class="h-4 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full rounded" style="width:100%; background:#185FA5;"></div>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div class="flex justify-between text-xs text-gray-600 font-medium">
+                    <span>Saved</span><span class="text-gray-400">32.8K</span>
+                  </div>
+                  <div class="h-4 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full rounded" style="width:42%; background:#2d8dd6;"></div>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div class="flex justify-between text-xs text-gray-600 font-medium">
+                    <span>Map Click</span><span class="text-gray-400">14.2K</span>
+                  </div>
+                  <div class="h-4 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full rounded" style="width:22%; background:#38bdf8;"></div>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div class="flex justify-between text-xs text-gray-600 font-medium">
+                    <span>ExternalClick</span><span class="text-gray-400">18.9K</span>
+                  </div>
+                  <div class="h-4 bg-gray-100 rounded overflow-hidden">
+                    <div class="h-full rounded" style="width:14%; background:#f59e0b;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Entity Performance Details Table -->
+          <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+            <div class="flex items-start justify-between mb-4">
+              <div>
+                <div class="text-sm font-semibold text-gray-800 mb-0.5">Entity Performance Details</div>
+                <div class="text-xs text-gray-400">Comprehensive metrics for top 50 items.</div>
+              </div>
+              <button class="text-xs font-medium text-blue-600 bg-transparent border-0 cursor-pointer hover:text-blue-800">
+                View All Directory →
+              </button>
+            </div>
+
+            <div class="overflow-x-auto -mx-5 px-5">
+              <table class="w-full text-sm border-collapse" style="min-width: 680px">
+                <thead>
+                  <tr class="border-b border-gray-100">
+                    <th class="text-[10px] font-bold text-gray-400 pb-3 text-left tracking-wider uppercase">ENTITY</th>
+                    <th class="text-[10px] font-bold text-gray-400 pb-3 text-right tracking-wider uppercase">VIEWS</th>
+                    <th class="text-[10px] font-bold text-gray-400 pb-3 text-right tracking-wider uppercase">VISITORS</th>
+                    <th class="text-[10px] font-bold text-gray-400 pb-3 text-right tracking-wider uppercase">SAVES</th>
+                    <th class="text-[10px] font-bold text-gray-400 pb-3 text-right tracking-wider uppercase">ACTIONS</th>
+                    <th class="text-[10px] font-bold text-gray-400 pb-3 text-right tracking-wider uppercase">STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of filteredRows().slice(0, visibleCount)" class="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <td class="py-3">
+                      <div class="flex items-center gap-3">
+                        <div
+                          class="w-10 h-10 rounded-lg flex-shrink-0 bg-cover bg-center"
+                          [style.background]="'url(' + getEntityImage(row.name) + ') center/cover no-repeat, ' + row.imageBg"
+                        ></div>
+                        <div>
+                          <div class="text-sm font-semibold text-gray-800">{{ row.name }}</div>
+                          <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="text-[10px] px-1.5 py-px rounded font-medium" [ngClass]="typeClass(row.type)">
+                              {{ typeLabel(row.type).toUpperCase() }}
+                            </span>
+                            <span class="text-xs text-gray-400">{{ row.location }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="py-3 text-right text-sm text-gray-600">{{ formatNum(row.views) }}</td>
+                    <td class="py-3 text-right text-sm text-gray-600">{{ formatNum(row.visitors) }}</td>
+                    <td class="py-3 text-right text-sm text-blue-600 font-medium">{{ formatNum(row.saves) }}</td>
+                    <td class="py-3 text-right text-sm text-gray-600">{{ formatNum(row.actions) }}</td>
+                    <td class="py-3 text-right">
+                      <span class="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-semibold" [ngClass]="trendClass(row.trend)">
+                        <ng-container *ngIf="row.trend === 'up'">
+                          <svg class="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                        </ng-container>
+                        <ng-container *ngIf="row.trend === 'stable'">
+                          <svg class="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        </ng-container>
+                        <ng-container *ngIf="row.trend === 'down'">
+                          <svg class="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        </ng-container>
+                        {{ trendLabel(row.trend) }}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr *ngIf="filteredRows().length === 0">
+                    <td colspan="6" class="text-center text-sm text-gray-400 py-8">
+                      No data for selected category
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Show More footer -->
+            <div class="flex flex-col items-center gap-3 mt-4 pt-4 border-t border-gray-100">
+              <p class="text-sm text-gray-500">
+                Showing
+                <span class="font-semibold text-gray-700">{{ Math.min(visibleCount, filteredRows().length) }}</span>
+                of
+                <span class="font-semibold text-gray-700">{{ filteredRows().length }}</span>
+                entities
+              </p>
+              <button *ngIf="tableHasMore" (click)="showMore()"
+                      class="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold
+                             text-blue-700 bg-white border border-blue-200 hover:bg-blue-50
+                             transition-colors cursor-pointer">
+                <span>Show More</span>
+                <span class="text-[10px] font-bold bg-blue-100 text-blue-600 rounded-full px-1.5 py-0.5">
+                  +{{ filteredRows().length - visibleCount }}
+                </span>
+              </button>
+              <span *ngIf="!tableHasMore && filteredRows().length > 0"
+                    class="text-xs text-gray-400 italic">All entities loaded</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ── Right panel: Actionable Insights ───────────────────────── -->
+        <div class="w-72 flex-shrink-0 flex flex-col gap-4">
+
+          <!-- Actionable Insights card -->
+          <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+            <div class="flex items-center gap-2 mb-1">
+              <svg class="w-4 h-4 text-gray-800" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              <span class="text-sm font-semibold text-gray-800">Actionable Insights</span>
+            </div>
+            <p class="text-xs text-gray-400 mb-4">Automated analysis for Šumadija region.</p>
+
+            <div class="flex flex-col gap-3">
+
+              <!-- Top Viewed Destination -->
+              <div class="rounded-lg p-4 bg-blue-50 border border-blue-100">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                  <svg class="w-3.5 h-3.5 text-blue-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+                  <span class="text-[9px] font-bold text-gray-400 tracking-wider uppercase">Top Viewed Destination</span>
+                </div>
+                <div class="text-sm font-semibold text-gray-800">Šumadija Wine Route</div>
+                <div class="text-xs text-blue-600 font-medium mt-1">38.9K Views (+15%)</div>
+              </div>
+
+              <!-- Most Saved Place -->
+              <div class="rounded-lg p-4 bg-gray-50 border border-gray-100">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                  <svg class="w-3.5 h-3.5 text-gray-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                  <span class="text-[9px] font-bold text-gray-400 tracking-wider uppercase">Most Saved Place</span>
+                </div>
+                <div class="text-sm font-semibold text-gray-800">Oplenac Complex</div>
+                <div class="text-xs text-gray-600 font-medium mt-1">8.4K Saves (High Intent)</div>
+              </div>
+
+              <!-- Highest Performing Event -->
+              <div class="rounded-lg p-4 bg-gray-50 border border-gray-100">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                  <svg class="w-3.5 h-3.5 text-gray-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span class="text-[9px] font-bold text-gray-400 tracking-wider uppercase">Highest Performing Event</span>
+                </div>
+                <div class="text-sm font-semibold text-gray-800">Oplenac Harvest Fest</div>
+                <div class="text-xs text-gray-600 font-medium mt-1">15.4K Views (Trending)</div>
+              </div>
+
+              <!-- Action Required -->
+              <div class="rounded-lg p-4 bg-red-50 border border-red-100">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                  <svg class="w-3.5 h-3.5 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="7" x2="12" y2="13"/>
+                    <circle cx="12" cy="17" r="0.5" fill="currentColor" stroke="currentColor" stroke-width="1"/>
+                  </svg>
+                  <span class="text-[9px] font-bold text-gray-400 tracking-wider uppercase">Action Required</span>
+                </div>
+                <div class="text-sm font-semibold text-gray-800">Kosmaj Monument</div>
+                <div class="text-xs text-red-600 font-medium mt-1">-12% Engagement Rate</div>
+              </div>
+
+              <!-- Fastest Growing -->
+              <div class="rounded-lg p-4 bg-gray-50 border border-gray-100">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                  <svg class="w-3.5 h-3.5 text-gray-800 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                  <span class="text-[9px] font-bold text-gray-400 tracking-wider uppercase">Fastest Growing</span>
+                </div>
+                <div class="text-sm font-semibold text-gray-800">Arandjelovac Spa</div>
+                <div class="text-xs text-gray-600 font-medium mt-1">+24% Unique Visitors</div>
+              </div>
+
+            </div>
+
+            <!-- Generate Full Report -->
+            <button class="w-full mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 border border-blue-200 rounded-lg py-2.5 bg-white hover:bg-blue-50 transition-colors cursor-pointer">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+              Generate Full Report
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

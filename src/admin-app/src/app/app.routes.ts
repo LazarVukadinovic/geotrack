@@ -120,12 +120,13 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/map/pages/map-page/map-page.component').then(m => m.MapPageComponent),
       },
-    //   {
-    //     path: 'analytics',
-    //     loadComponent: () =>
-    //       import('./features/analytics/pages/analytics-page/analytics-page.component')
-    //         .then(m => m.AnalyticsPageComponent),
-    //   },
+      {
+        path: 'analytics',
+        canActivate:[regionalManagerGuard],
+        loadComponent: () =>
+          import('./features/analytics/pages/analytics-page/analytics-page/analytics-page.component')
+            .then(m => m.AnalyticsPageComponent),
+      },
       {
         path:'national-analytics',
         canActivate:[nationalManagerGuard],

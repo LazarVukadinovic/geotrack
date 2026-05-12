@@ -46,7 +46,11 @@
             <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
             <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
           </svg>
-          <select [(ngModel)]="selectedPeriod" class="bg-transparent outline-none cursor-pointer text-sm text-gray-700">
+          <select
+            [(ngModel)]="selectedPeriod"
+            (ngModelChange)="onPeriodChange($event)"
+            class="bg-transparent outline-none cursor-pointer text-sm text-gray-700"
+          >
             <option *ngFor="let o of periodOptions">{{ o }}</option>
           </select>
         </div>
@@ -581,4 +585,117 @@
 
     </div>
   </div>
+
+  <!-- ── Custom date range modal ── -->
+  <div
+    *ngIf="showCustomDateModal"
+    class="fixed inset-0 z-50 flex items-center justify-center"
+    style="background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
+    (click)="cancelCustomRange()"
+  >
+    <div
+      class="bg-white rounded-2xl shadow-2xl overflow-hidden w-[420px] max-w-[92vw]"
+      (click)="$event.stopPropagation()"
+    >
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:#eff6ff;">
+            <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-gray-900">Select date range</h3>
+            <p class="text-xs text-gray-400 mt-0.5">Enter start and end date</p>
+          </div>
+        </div>
+        <button
+          (click)="cancelCustomRange()"
+          class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer border-0 bg-transparent"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="px-6 py-6 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">From</label>
+          <div class="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-blue-400 transition-colors">
+            <svg class="w-4 h-4 text-gray-400 flex-shrink-0 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <input #fromDayRef type="text" maxlength="2" placeholder="DD"
+              [(ngModel)]="fromDay"
+              (input)="onPartInput($event, fromMonthRef)"
+              class="w-7 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"
+            />
+            <span class="text-gray-300 text-sm">/</span>
+            <input #fromMonthRef type="text" maxlength="2" placeholder="MM"
+              [(ngModel)]="fromMonth"
+              (input)="onPartInput($event, fromYearRef)"
+              class="w-7 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"
+            />
+            <span class="text-gray-300 text-sm">/</span>
+            <input #fromYearRef type="text" maxlength="4" placeholder="YYYY"
+              [(ngModel)]="fromYear"
+              class="w-12 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">To</label>
+          <div class="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-blue-400 transition-colors">
+            <svg class="w-4 h-4 text-gray-400 flex-shrink-0 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <input #toDayRef type="text" maxlength="2" placeholder="DD"
+              [(ngModel)]="toDay"
+              (input)="onPartInput($event, toMonthRef)"
+              class="w-7 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"
+            />
+            <span class="text-gray-300 text-sm">/</span>
+            <input #toMonthRef type="text" maxlength="2" placeholder="MM"
+              [(ngModel)]="toMonth"
+              (input)="onPartInput($event, toYearRef)"
+              class="w-7 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"
+            />
+            <span class="text-gray-300 text-sm">/</span>
+            <input #toYearRef type="text" maxlength="4" placeholder="YYYY"
+              [(ngModel)]="toYear"
+              class="w-12 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/40">
+        <button
+          (click)="cancelCustomRange()"
+          class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
+        >Cancel</button>
+        <button
+          (click)="applyCustomRange()"
+          [disabled]="!customDateFrom || !customDateTo"
+          class="px-4 py-2 rounded-lg text-sm font-semibold text-white border-0 cursor-pointer transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+          style="background: linear-gradient(135deg, #1565d8 0%, #1a86e8 100%);"
+        >Apply</button>
+      </div>
+    </div>
+  </div>
+
 </div>
