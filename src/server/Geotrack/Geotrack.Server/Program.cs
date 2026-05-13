@@ -341,13 +341,11 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-var developmentCorsOrigins = GetDevelopmentCorsOrigins(builder.Configuration);
-
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontendDev", policy =>
+    options.AddPolicy("AllowAllOrigins", policy =>
     {
-        policy.WithOrigins(developmentCorsOrigins)
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -402,8 +400,9 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    app.UseCors("AllowFrontendDev");
 }
+
+app.UseCors("AllowAllOrigins");
 
 if (forwardedHeadersEnabled)
 {
@@ -532,29 +531,6 @@ if (File.Exists(Path.Combine(webRoot, "index.html")))
 }
 
 app.Run();
-
-static string[] GetDevelopmentCorsOrigins(IConfiguration configuration)
-{
-    var configuredOrigins = configuration
-        .GetSection("Cors:AllowedOrigins")
-        .Get<string[]>() ?? Array.Empty<string>();
-
-    var origins = configuredOrigins
-        .Select(origin => origin.Trim())
-        .Where(origin => !string.IsNullOrWhiteSpace(origin))
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .ToArray();
-
-    return origins.Length > 0
-        ? origins
-        : new[]
-        {
-            "http://localhost:4200",
-            "http://127.0.0.1:4200",
-            "http://localhost:4300",
-            "http://127.0.0.1:4300"
-        };
-}
 
 static bool ConfigureForwardedHeaders(WebApplicationBuilder builder)
 {
