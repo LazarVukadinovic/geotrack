@@ -63,6 +63,7 @@ builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("Mcp"));
 builder.Services.AddDataProtection()
     .SetApplicationName("GeoTrack");
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
@@ -481,26 +482,49 @@ app.UseStaticFiles(new StaticFileOptions
     }
 });
 
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+
+    var isAdminSpaRequest =
+        HttpMethods.IsGet(context.Request.Method) &&
+        (
+            path.Equals("/admin", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/admin/", StringComparison.OrdinalIgnoreCase) ||
+            (
+                path.StartsWithSegments("/admin", out var adminRemainingPath) &&
+                !Path.HasExtension(adminRemainingPath.Value)
+            )
+        );
+
+    if (isAdminSpaRequest)
+    {
+        var adminIndexPath = Path.Combine(
+            app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"),
+            "admin",
+            "index.html");
+
+        if (!File.Exists(adminIndexPath))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsync("Admin index.html not found.");
+            return;
+        }
+
+        context.Response.ContentType = "text/html";
+        await context.Response.SendFileAsync(adminIndexPath);
+        return;
+    }
+
+    await next();
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseRateLimiter();
 
 app.MapControllers();
-
-var adminIndexPath = Path.Combine(webRoot, "admin", "index.html");
-if (File.Exists(adminIndexPath))
-{
-    app.MapGet("/admin", () => Results.Redirect("/admin/"));
-
-    app.MapGet("/admin/", async context =>
-    {
-        context.Response.ContentType = "text/html";
-        await context.Response.SendFileAsync(adminIndexPath);
-    });
-
-    app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
-}
 
 if (File.Exists(Path.Combine(webRoot, "index.html")))
 {

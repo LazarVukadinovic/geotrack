@@ -2,9 +2,9 @@
 
 GeoTrack je web aplikacija za istraživanje destinacija, mesta, smeštaja i događaja. Korisnička aplikacija je Angular frontend koji pokriva Explore, Map, listing stranice, detalje mesta/smeštaja/događaja, pretragu, profil, omiljene stavke, kolekcije, interesovanja, preporuke i korisničke doprinose.
 
-Bekend je ASP.NET Core API koji čuva katalog, korisnike, recenzije, kolekcije, doprinose, notifikacije, analitiku, mapne pretrage i AI/MCP integracije. Frontend ne koristi direktne pozive ka eksternim mapnim i AI provider servisima za glavne tokove: ti pozivi idu kroz bekend.
+Backend je ASP.NET Core API koji čuva katalog, korisnike, recenzije, kolekcije, doprinose, notifikacije, analitiku, mapne pretrage i AI/MCP integracije. Frontend ne koristi direktne pozive ka eksternim mapnim i AI provider servisima za glavne tokove: ti pozivi idu kroz backend.
 
-Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom. Angular prikazuje provider/model/key opcije koje dobije od bekenda, a chat se izvršava preko servera. GeoTrack MCP je zaseban remote HTTP JSON-RPC tool endpoint za spoljne AI alate koji podržavaju MCP.
+Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom. Angular prikazuje provider/model/key opcije koje dobije od backend-a, a chat se izvršava preko servera. GeoTrack MCP je zaseban remote HTTP JSON-RPC tool endpoint za spoljne AI alate koji podržavaju MCP.
 
 ## Tehnologije
 
@@ -16,7 +16,7 @@ Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom.
 - MapLibre GL za mapu i map picker tokove
 - RxJS
 
-**Bekend**
+**Backend**
 
 - .NET 8 / ASP.NET Core Web API
 - EF Core 8
@@ -30,7 +30,7 @@ Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom.
 ## Struktura projekta
 
 - `user-app` - Angular korisnički frontend.
-- `admin-app` - Angular admin površina u repozitorijumu; nije primarni fokus ovog README-a.
+- `admin-app` - Angular Regional Manager/admin površina.
 - `server/Geotrack` - .NET solution.
   - `Geotrack.Domain` - entiteti i enum-i.
   - `Geotrack.Application` - DTO-ovi, interfejsi servisa i opcije.
@@ -38,7 +38,7 @@ Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom.
   - `Geotrack.Server` - API kontroleri, DI/startup, middleware i statički `/media` fajlovi.
   - `Geotrack.IntegrationTests` - integracioni testovi.
 
-## Pokretanje frontend-a
+## Pokretanje frontend-a lokalno
 
 Komande se pokreću iz ovog `src` foldera:
 
@@ -48,7 +48,17 @@ npm install
 npm run start
 ```
 
-Angular dev server je podrazumevano na `http://localhost:4200/`. `user-app/proxy.conf.json` prosleđuje `/api` i `/media` ka `http://localhost:5003`, pa lokalni frontend očekuje da bekend radi na tom portu. U Windows PowerShell-u možete koristiti `npm.cmd` umesto `npm` ako je potrebno.
+Angular dev server za korisničku aplikaciju je podrazumevano na `http://localhost:4200/`. `user-app/proxy.conf.json` prosleđuje `/api` i `/media` ka `http://localhost:5003`, pa lokalni frontend očekuje da backend radi na tom portu. U Windows PowerShell-u možete koristiti `npm.cmd` umesto `npm` ako je potrebno.
+
+Admin aplikacija koristi isti backend i lokalno se obično pokreće na `http://localhost:4300/`:
+
+```bash
+cd admin-app
+npm install
+npm run start -- --port 4300
+```
+
+`admin-app/proxy.conf.json` takođe prosleđuje `/api` i `/media` ka `http://localhost:5003`. Backend Development CORS politika dozvoljava lokalne origin-e za korisničku aplikaciju na portu `4200` i admin aplikaciju na portu `4300`.
 
 Build frontend-a:
 
@@ -83,9 +93,9 @@ dotnet build server/Geotrack/Geotrack.sln
 dotnet run --project server/Geotrack/Geotrack.Server
 ```
 
-Bekend u razvojnom profilu sluša na `http://localhost:5003`. U Development modu pri startu proverava PostGIS, automatski primenjuje EF migracije i pokreće seed podataka.
+Backend u razvojnom profilu sluša na `http://localhost:5003`. U Development modu pri startu proverava PostGIS, automatski primenjuje EF migracije i pokreće seed podataka.
 
-Demo korisnik iz seed podataka:
+Demo regional manager korisnik iz seed podataka:
 
 - regional manager
 - email: `pera@gmail.com`
@@ -123,11 +133,11 @@ Glavni chat ide preko:
 
 Legacy endpoint `POST /api/agent/message` još postoji zbog kompatibilnosti, ali novi tok koristi `/api/agent/chat`.
 
-Provider i model liste dolaze sa bekenda. Gemini je trenutno implementirani provider adapter. OpenAI i Claude postoje u konfiguraciji kao nedostupni scaffolding provideri dok se ne dodaju realni adapteri i server-side konfiguracija.
+Provider i model liste dolaze sa backend-a. Gemini je trenutno implementirani provider adapter. OpenAI i Claude postoje u konfiguraciji kao nedostupni scaffolding provideri dok se ne dodaju realni adapteri i server-side konfiguracija.
 
 Korisnik može da koristi:
 
-- `project-demo` key, ako je Gemini API key podešen na bekendu;
+- `project-demo` key, ako je Gemini API key podešen na backend;
 - sačuvani korisnički API key;
 - privremeni session key koji se šalje samo za jedan zahtev.
 
@@ -151,7 +161,7 @@ Agent__AllowProjectDemoProvider=true
 Agent__Providers__gemini__ApiKey=<gemini-api-key>
 ```
 
-`project-demo` režim se prikazuje samo kada je dozvoljen i kada bekend ima stvaran Gemini API key. Alternativno, prijavljen korisnik može u Ask Agent podešavanjima da unese Gemini key kao sačuvani key ili privremeni session key.
+`project-demo` režim se prikazuje samo kada je dozvoljen i kada backend ima stvaran Gemini API key. Alternativno, prijavljen korisnik može u Ask Agent podešavanjima da unese Gemini key kao sačuvani key ili privremeni session key.
 
 Free quota i uslovi korišćenja zavise od Google AI Studio/Gemini pravila. Za produkciju moraju da se kontrolišu kvote, rate-limit-i, monitoring i trajno čuvanje Data Protection ključeva.
 
@@ -176,8 +186,8 @@ Trenutni allowlist:
 
 Lokalno povezivanje u Codex aplikaciji:
 
-- prvo pokrenite bekend;
-- koristite bekend port, ne Angular port, osim ako ste posebno proverili proxy;
+- prvo pokrenite backend;
+- koristite backend port, ne Angular port, osim ako ste posebno proverili proxy;
 - MCP URL: `http://localhost:5003/api/mcp`
 - Transport: `Streamable HTTP`
 - Bearer token: prazno za trenutni public read-only MVP
@@ -201,7 +211,7 @@ Za javni ChatGPT/Claude connector potreban je javni HTTPS URL, ne `localhost`. P
 - Privremeni session key koristi se samo za zahtev koji ga šalje.
 - Precizna GPS lokacija ne sme da se čuva u `localStorage`; trenutni kod koristi `sessionStorage` za `geotrack_location` i briše staru `localStorage` kopiju.
 - MCP trenutno ne izlaže write, admin, moderation ili private user tools.
-- Bekend endpoint-i treba da zadrže postojeću validaciju i rate-limit politike.
+- Backend endpoint-i treba da zadrže postojeću validaciju i rate-limit politike.
 
 ## Poznata ograničenja i budući rad
 
@@ -210,5 +220,5 @@ Za javni ChatGPT/Claude connector potreban je javni HTTPS URL, ne `localhost`. P
 - Produkcioni deployment treba da podesi trajno čuvanje Data Protection ključeva pre oslanjanja na sačuvane korisničke AI ključeve.
 - Javni MCP connector zahteva HTTPS deployment.
 - Notification center postoji, ali `/settings/notifications` trenutno preusmerava nazad na `/settings`.
-- `admin-app` postoji u repozitorijumu, ali nije opisan kao kompletan produkcioni admin proizvod u ovom README-u.
+- `admin-app` ima lokalni Regional Manager tok; produkcioni packaging/deployment treba posebno proveriti.
 - Angular build ima stroge bundle/style budget-e u `user-app/angular.json`; veće SCSS izmene mogu da izazovu budget upozorenja.
