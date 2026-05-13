@@ -1,87 +1,137 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50">
-  <app-sidebar></app-sidebar>
+  <app-sidebar
+    [region]="regionDisplayName"
+    [regions]="assignedRegions"
+    [activeRegionId]="activeRegionId"
+    [regionLoading]="regionLoading"
+    (regionChange)="onRegionSelected($event)"
+  ></app-sidebar>
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
     <app-topbar [title]="isEditMode ? 'Edit Place' : 'New Place'" [showBack]="true"></app-topbar>
-    
+
     @if (isEditMode) {
-      <div class="px-8 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
-        <svg class="w-3.5 h-3.5 text-amber-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
-        <span class="text-xs text-amber-700 font-medium">Editing: <strong>{{ placeName }}</strong></span>
+      <div class="px-8 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-700 font-medium">
+        This screen is create-only for now. Existing places are still protected from local mock edits.
       </div>
     }
+
     <div class="flex-1 overflow-y-auto px-8 py-6">
+      @if (errorMessage) {
+        <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {{ errorMessage }}
+        </div>
+      }
+      @if (feedbackMessage) {
+        <div class="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          {{ feedbackMessage }}
+        </div>
+      }
+
       <div class="flex gap-5 items-start">
-
-        <!-- ═══ LEFT COLUMN ═══ -->
         <div class="flex-1 min-w-0">
-
-          <!-- Basic Information -->
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
-            <h3 class="text-sm font-bold text-gray-900 mb-0.5">Basic Information</h3>
-            <p class="text-xs text-gray-500 mb-4">Core details and hierarchy of the place.</p>
+            <h3 class="text-sm font-bold text-gray-900 mb-4">Basic Information</h3>
 
             <div class="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Region (Locked)</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none"
-                       value="Šumadija, Srbija" readonly />
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none"
+                  [value]="regionDisplayName || 'No active assigned region'"
+                  readonly
+                />
               </div>
+
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Parent Destination (Locked)</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none"
-                       value="Central District" readonly />
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none"
+                  [value]="selectedParentDestinationName || 'Select a parent location first'"
+                  readonly
+                />
               </div>
+
               <div>
-                <label class="block text-xs font-semibold text-gray-600 mb-1">Parent Location <span class="text-red-500">*</span></label>
-                <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none"
-                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
-                        [(ngModel)]="parentLocation">
-                  <option value="">Select parent location...</option>
-                  <option>Oplenac Area</option>
-                  <option>Central Zone</option>
-                  <option>Old Town</option>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  Parent Location <span class="text-red-500">*</span>
+                </label>
+                <select
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none disabled:bg-gray-100 disabled:text-gray-400"
+                  style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
+                  [(ngModel)]="parentLocationId"
+                  (ngModelChange)="onParentLocationChanged()"
+                  [disabled]="!activeRegionId || parentLocationsLoading || parentLocations.length === 0"
+                >
+                  <option [ngValue]="null">
+                    {{ parentLocationsLoading ? 'Loading locations...' : 'Select parent location...' }}
+                  </option>
+                  @for (location of parentLocations; track location.id) {
+                    <option [ngValue]="location.id">{{ location.displayName }} - {{ location.destinationName }}</option>
+                  }
                 </select>
+                @if (!parentLocationsLoading && activeRegionId && parentLocations.length === 0) {
+                  <p class="text-[11px] text-amber-600 mt-1">Create a location in this region before publishing a place.</p>
+                }
               </div>
+
               <div>
-                <label class="block text-xs font-semibold text-gray-600 mb-1">Place Type/Category <span class="text-red-500">*</span></label>
-                <select class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none"
-                        [(ngModel)]="placeType"
-                        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;">
-                  <option value="">Select type...</option>
-                  <option value="Museum">Museum</option>
-                  <option value="Restaurant">Restaurant</option>
-                  <option value="Park">Park</option>
-                  <option value="Landmark">Landmark</option>
-                  <option value="Hotel">Hotel</option>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  Place Type/Category <span class="text-red-500">*</span>
+                </label>
+                <select
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none disabled:bg-gray-100 disabled:text-gray-400"
+                  style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
+                  [(ngModel)]="placeTypeId"
+                  [disabled]="placeTypesLoading || placeTypes.length === 0"
+                >
+                  <option [ngValue]="null">
+                    {{ placeTypesLoading ? 'Loading place types...' : 'Select type...' }}
+                  </option>
+                  @for (type of placeTypes; track type.id) {
+                    <option [ngValue]="type.id">{{ type.name }}</option>
+                  }
                 </select>
+                @if (!placeTypesLoading && placeTypes.length === 0) {
+                  <p class="text-[11px] text-amber-600 mt-1">Place types are unavailable.</p>
+                }
               </div>
+
               <div>
-                <label class="block text-xs font-semibold text-gray-600 mb-1">Place Name <span class="text-red-500">*</span></label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="e.g. National History Museum"
-                       [(ngModel)]="placeName" />
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  Place Name <span class="text-red-500">*</span>
+                </label>
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  placeholder="Enter place name"
+                  [(ngModel)]="placeName"
+                />
               </div>
+
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Internal Reference ID</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="e.g. PLC-001" [(ngModel)]="internalRefId" />
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none"
+                  value="Generated automatically after publish"
+                  readonly
+                />
               </div>
             </div>
 
             <div class="mb-3">
               <label class="block text-xs font-semibold text-gray-600 mb-1">
                 Short Excerpt / Summary <span class="text-red-500">*</span>
+                <span class="text-gray-400 font-normal">(Max 160 chars)</span>
               </label>
-              <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
-                        placeholder="Max 160 characters..." rows="2" maxlength="160"
-                        [(ngModel)]="summary"></textarea>
+              <textarea
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
+                placeholder="Brief summary of the place..."
+                rows="2"
+                maxlength="160"
+                [(ngModel)]="summary"
+              ></textarea>
             </div>
 
-            <!-- Rich text editor -->
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Full Description</label>
               <div class="border border-gray-300 rounded-lg overflow-hidden">
@@ -134,91 +184,110 @@
             </div>
           </div>
 
-          <!-- Context & Visit Information -->
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
             <h3 class="text-sm font-bold text-gray-900 mb-4">Context &amp; Visit Information</h3>
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Best Time to Visit</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="e.g. Spring mornings" [(ngModel)]="bestTimeToVisit" />
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  placeholder="Season, time of day, or conditions"
+                  [(ngModel)]="bestTimeToVisit"
+                />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Visitor Tips</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="e.g. Book in advance" [(ngModel)]="visitorTips" />
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  placeholder="Booking, arrival, or planning tips"
+                  [(ngModel)]="visitorTips"
+                />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Access Notes</label>
-                <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
-                          placeholder="Parking details, walk distance..." rows="3" [(ngModel)]="accessNotes"></textarea>
+                <textarea
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
+                  placeholder="Parking, entrance, transit, or walking details"
+                  rows="3"
+                  [(ngModel)]="accessNotes"
+                ></textarea>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Accessibility Notes</label>
-                <textarea class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
-                          placeholder="Wheelchair access, ramps..." rows="3" [(ngModel)]="accessibilityNotes"></textarea>
+                <textarea
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none resize-y font-sans"
+                  placeholder="Wheelchair access, ramps, steps, or assistance"
+                  rows="3"
+                  [(ngModel)]="accessibilityNotes"
+                ></textarea>
               </div>
             </div>
           </div>
 
-          <!-- Operational Information -->
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
-            <h3 class="text-sm font-bold text-gray-900 mb-0.5">Operational Information</h3>
-            <p class="text-xs text-blue-500 mb-4">Showing operational fields for '{{ placeType || 'Museum' }}' place type.</p>
+            <h3 class="text-sm font-bold text-gray-900 mb-4">Operational Information</h3>
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Website</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="https://" [(ngModel)]="website" />
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  placeholder="https://"
+                  [(ngModel)]="website"
+                />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Contact Phone</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="+1 (555) 000-0000" [(ngModel)]="contactPhone" />
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  placeholder="+1 555 000 0000"
+                  [(ngModel)]="contactPhone"
+                />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Admission / Price Range</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="e.g. $10 - $25 Adults" [(ngModel)]="admissionPrice" />
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  placeholder="Price or admission note"
+                  [(ngModel)]="admissionPrice"
+                />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Booking / External Link</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                       placeholder="https://tickets..." [(ngModel)]="bookingLink" />
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  placeholder="https://"
+                  [(ngModel)]="bookingLink"
+                />
               </div>
             </div>
           </div>
 
-          <!-- Operating Hours -->
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
             <div class="flex items-center justify-between mb-4">
               <div>
                 <h3 class="text-sm font-bold text-gray-900 mb-0.5">Operating Hours</h3>
                 <p class="text-xs text-gray-500">Set weekly opening and closing times.</p>
               </div>
-              <!-- Toggle -->
-              <div
-                class="relative cursor-pointer flex-shrink-0"
+              <button
+                type="button"
+                class="relative flex-shrink-0 border-none bg-transparent cursor-pointer"
                 style="width: 44px; height: 24px;"
                 (click)="opsEnabled = !opsEnabled"
                 [title]="opsEnabled ? 'Disable operating hours' : 'Enable operating hours'"
               >
-                <div
+                <span
                   class="absolute inset-0 rounded-full transition-colors duration-200"
                   [class.bg-blue-600]="opsEnabled"
                   [class.bg-gray-300]="!opsEnabled"
-                ></div>
-                <div
+                ></span>
+                <span
                   class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200"
                   style="width: 20px; height: 20px;"
                   [style.left]="opsEnabled ? '22px' : '2px'"
-                ></div>
-              </div>
+                ></span>
+              </button>
             </div>
 
-            <p class="text-xs font-semibold text-gray-700 mb-3">Regular Opening Hours</p>
-
-            <!-- Operating hours table -->
             <div
               class="border border-gray-200 rounded-lg overflow-hidden transition-all duration-200"
               [class.opacity-40]="!opsEnabled"
@@ -226,37 +295,45 @@
               [class.select-none]="!opsEnabled"
             >
               @for (day of days; track day.name; let last = $last) {
-                <div class="flex items-center gap-3 px-4 py-2.5"
-                     [class.border-b]="!last"
-                     [class.border-gray-100]="!last">
-
-                  <span class="text-xs font-medium w-24 flex-shrink-0"
-                        [class.text-blue-600]="day.name === 'Saturday'"
-                        [class.text-gray-600]="day.name !== 'Saturday'">
-                    {{ day.name }}
-                  </span>
+                <div
+                  class="flex items-center gap-3 px-4 py-2.5"
+                  [class.border-b]="!last"
+                  [class.border-gray-100]="!last"
+                >
+                  <span class="text-xs font-medium text-gray-600 w-24 flex-shrink-0">{{ day.name }}</span>
 
                   @if (day.open) {
-                    <select class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-700 bg-white outline-none appearance-none"
-                            style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px;"
-                            [(ngModel)]="day.openTime">
-                      @for (t of allHours; track t) { <option>{{ t }}</option> }
+                    <select
+                      class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-700 bg-white outline-none appearance-none"
+                      style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px;"
+                      [(ngModel)]="day.openTime"
+                    >
+                      @for (time of allHours; track time) {
+                        <option>{{ time }}</option>
+                      }
                     </select>
-
                     <span class="text-xs text-gray-400 flex-shrink-0">to</span>
-
-                    <select class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-700 bg-white outline-none appearance-none"
-                            style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px;"
-                            [(ngModel)]="day.closeTime">
-                      @for (t of allHours; track t) { <option>{{ t }}</option> }
+                    <select
+                      class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-700 bg-white outline-none appearance-none"
+                      style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px;"
+                      [(ngModel)]="day.closeTime"
+                    >
+                      @for (time of allHours; track time) {
+                        <option>{{ time }}</option>
+                      }
                     </select>
-
-                    <button class="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 text-base border-none bg-transparent cursor-pointer"
-                            (click)="day.open = false">×</button>
+                    <button
+                      type="button"
+                      class="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 text-base border-none bg-transparent cursor-pointer"
+                      (click)="day.open = false"
+                    >x</button>
                   } @else {
                     <span class="flex-1 text-xs text-gray-400 italic">Closed</span>
-                    <button class="flex-shrink-0 text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded-md px-3 py-1 bg-blue-50 cursor-pointer"
-                            (click)="day.open = true">Set Hours</button>
+                    <button
+                      type="button"
+                      class="flex-shrink-0 text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded-md px-3 py-1 bg-blue-50 cursor-pointer"
+                      (click)="day.open = true"
+                    >Set Hours</button>
                   }
                 </div>
               }
@@ -267,19 +344,14 @@
             }
           </div>
 
-          <!-- Hero Media -->
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
             <div class="flex items-center justify-between mb-3">
               <div>
                 <h3 class="text-sm font-bold text-gray-900 mb-0.5">Hero Media</h3>
                 <p class="text-xs text-gray-500">Main cover image and optional gallery</p>
               </div>
-              <button type="button" class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 cursor-pointer">
-                Library
-              </button>
             </div>
 
-            <!-- Cover image upload zone -->
             @if (!coverImageUrl) {
               <label
                 class="border-2 border-dashed border-gray-300 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors"
@@ -295,45 +367,49 @@
               </label>
             }
 
-            <!-- Cover image preview -->
-            @if (coverImageUrl) {
+            @if (coverImageUrl; as coverUrl) {
               <div class="relative rounded-xl overflow-hidden group">
                 <img
-                  [src]="coverImageUrl"
+                  [src]="coverUrl"
                   alt="Cover preview"
                   class="w-full object-cover rounded-xl cursor-zoom-in"
                   style="max-height: 280px;"
-                  (click)="openLightbox([{ url: coverImageUrl!, name: coverImageName }], 0)"
+                  (click)="openLightbox([{ url: coverUrl, name: coverImageName }], 0)"
                 />
                 <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 pointer-events-none">
-                  <label for="coverImageInput"
-                         class="bg-white text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 pointer-events-auto">
-                    Replace
-                  </label>
-                  <button type="button" (click)="removeCoverImage()"
-                          class="bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto">
-                    Remove
-                  </button>
+                  <label
+                    for="coverImageInput"
+                    class="bg-white text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 pointer-events-auto"
+                  >Replace</label>
+                  <button
+                    type="button"
+                    (click)="removeCoverImage()"
+                    class="bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto"
+                  >Remove</button>
                 </div>
               </div>
               <p class="text-xs text-gray-400 mt-2 mb-4">{{ coverImageName }}</p>
             }
 
-            <input id="coverImageInput" type="file" accept="image/*" class="hidden"
-                   (change)="onCoverImageSelected($event)" />
+            <input
+              id="coverImageInput"
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp"
+              class="hidden"
+              (change)="onCoverImageSelected($event)"
+            />
 
             <div class="border-t border-gray-100 my-4"></div>
 
-            <!-- Gallery -->
             <div class="flex items-center justify-between mb-2">
               <p class="text-xs font-semibold text-gray-600">
                 Gallery Images <span class="text-gray-400 font-normal">(Optional)</span>
               </p>
               @if (galleryImages.length > 0) {
-                <label for="galleryInput"
-                       class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1 cursor-pointer hover:bg-blue-100">
-                  + Add
-                </label>
+                <label
+                  for="galleryInput"
+                  class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1 cursor-pointer hover:bg-blue-100"
+                >+ Add</label>
               }
             </div>
 
@@ -349,10 +425,11 @@
                         (click)="openLightbox(galleryImages, i)"
                       />
                       <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
-                        <button type="button" (click)="removeGalleryImage(i)"
-                                class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto">
-                          Remove
-                        </button>
+                        <button
+                          type="button"
+                          (click)="removeGalleryImage(i)"
+                          class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto"
+                        >Remove</button>
                       </div>
                     </div>
                   }
@@ -374,42 +451,49 @@
                   </svg>
                 </div>
                 <span>Click to add Gallery Images</span>
-                <span class="text-xs text-gray-400">PNG, JPG, WEBP · Multiple selection allowed</span>
+                <span class="text-xs text-gray-400">PNG, JPG, WEBP</span>
               </label>
             }
 
-            <input id="galleryInput" type="file" accept="image/*" multiple class="hidden"
-                   (change)="onGalleryImagesSelected($event)" />
+            <input
+              id="galleryInput"
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp"
+              multiple
+              class="hidden"
+              (change)="onGalleryImagesSelected($event)"
+            />
           </div>
-
         </div>
 
-        <!-- ═══ RIGHT PANEL ═══ -->
         <div class="w-90 min-w-[350px]">
-
-          <!-- Publishing -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
             <h4 class="text-sm font-bold text-gray-900 mb-3">Publishing</h4>
-            <button type="button" (click)="publish()"
-                    class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors">
-              {{ isEditMode ? 'Save Changes' : 'Publish' }}
+            <button
+              type="button"
+              (click)="publish()"
+              [disabled]="!canPublish"
+              class="w-full text-white text-sm font-semibold rounded-lg py-2 border-none transition-colors"
+              [class.bg-blue-700]="canPublish"
+              [class.hover:bg-blue-800]="canPublish"
+              [class.cursor-pointer]="canPublish"
+              [class.bg-gray-300]="!canPublish"
+              [class.cursor-not-allowed]="!canPublish"
+            >
+              {{ isSaving ? 'Publishing...' : 'Publish' }}
             </button>
           </div>
 
-          <!-- Geographic Context — pin mode -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
             <div class="flex items-center justify-between mb-2">
               <h4 class="text-sm font-bold text-gray-900">Geographic Context</h4>
-              <button type="button" (click)="openPinModal()"
-                      class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2 py-1 cursor-pointer">
-                Pin on map
-              </button>
+              <button
+                type="button"
+                (click)="openPinModal()"
+                class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2 py-1 cursor-pointer"
+              >Pin on map</button>
             </div>
-            <p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3">
-              <strong>Note:</strong> A Place is a specific pinnable location on the map.
-            </p>
 
-            <!-- Mini map preview -->
             <div
               class="relative rounded-lg overflow-hidden mb-3 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
               style="height: 200px;"
@@ -426,13 +510,12 @@
               }
             </div>
 
-            <!-- Lat/Lng inputs -->
             <div class="grid grid-cols-2 gap-2 mb-3">
               <div>
                 <label class="block text-[11px] font-semibold text-gray-600 mb-1">Latitude</label>
                 <input
                   class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500"
-                  placeholder="e.g. 44.0165"
+                  placeholder="Latitude"
                   [(ngModel)]="pinLat"
                   (change)="onCoordInputChange()"
                 />
@@ -441,7 +524,7 @@
                 <label class="block text-[11px] font-semibold text-gray-600 mb-1">Longitude</label>
                 <input
                   class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500"
-                  placeholder="e.g. 20.9114"
+                  placeholder="Longitude"
                   [(ngModel)]="pinLng"
                   (change)="onCoordInputChange()"
                 />
@@ -454,7 +537,7 @@
                 <input
                   class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500"
                   [class.pr-6]="isGeocodingAddress"
-                  placeholder="123 Main Street"
+                  placeholder="Street address"
                   [(ngModel)]="streetAddress"
                 />
                 @if (isGeocodingAddress) {
@@ -469,34 +552,72 @@
             </div>
           </div>
 
-          <!-- Classification -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
             <h4 class="text-sm font-bold text-gray-900 mb-3">Classification</h4>
 
-            @for (item of classItems; track item.label) {
-              <label class="flex items-center gap-2 text-sm text-gray-700 mb-2 cursor-pointer">
-                <input type="checkbox" [(ngModel)]="item.checked" class="w-4 h-4 accent-blue-700" />
-                {{ item.label }}
-              </label>
+            @if (tagsLoading) {
+              <p class="text-xs text-gray-500">Loading tags...</p>
+            } @else if (classItems.length === 0) {
+              <p class="text-xs text-amber-600">No place-compatible tags are available.</p>
+            } @else {
+              @for (item of visibleClassItems; track item.tag.id) {
+                <label class="flex items-center gap-2 text-sm text-gray-700 mb-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    [ngModel]="item.checked"
+                    (ngModelChange)="item.checked = $event; onClassItemChange(item)"
+                    class="w-4 h-4 accent-blue-700"
+                  />
+                  {{ item.tag.name }}
+                </label>
+              }
+              @if (showClassificationToggle) {
+                <button
+                  type="button"
+                  class="text-xs font-semibold text-blue-700 border-none bg-transparent cursor-pointer px-0"
+                  (click)="toggleClassificationExpanded()"
+                >
+                  {{ classificationExpanded ? 'Show fewer' : 'Show more' }}
+                </button>
+              }
             }
 
             <div class="mt-3">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Additional Tags</label>
               <input
                 class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500"
-                placeholder="Type and press Enter..."
+                placeholder="Search place tags..."
                 [(ngModel)]="tagInput"
+                (input)="onTagInputChange()"
                 (keydown.enter)="addTag($event)"
               />
-              @if (tags.length > 0) {
+
+              @if (tagSearchLoading) {
+                <p class="text-[11px] text-gray-400 mt-1">Searching...</p>
+              }
+
+              @if (additionalTagResults.length > 0) {
+                <div class="mt-2 rounded-lg border border-gray-200 overflow-hidden bg-white">
+                  @for (tag of additionalTagResults; track tag.id) {
+                    <button
+                      type="button"
+                      class="w-full text-left text-xs text-gray-700 px-2.5 py-2 bg-white hover:bg-blue-50 border-none border-b border-gray-100 cursor-pointer"
+                      (click)="selectAdditionalTag(tag)"
+                    >{{ tag.name }}</button>
+                  }
+                </div>
+              }
+
+              @if (selectedAdditionalTags.length > 0) {
                 <div class="flex gap-1.5 mt-2 overflow-x-auto pb-1" style="scrollbar-width: thin;">
-                  @for (tag of tags; track tag) {
+                  @for (tag of selectedAdditionalTags; track tag.id) {
                     <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5 whitespace-nowrap flex-shrink-0">
-                      {{ tag }}
-                      <button type="button" (click)="removeTag(tag)"
-                              class="border-none bg-transparent text-blue-500 hover:text-blue-800 cursor-pointer p-0 leading-none text-sm">
-                        &times;
-                      </button>
+                      {{ tag.name }}
+                      <button
+                        type="button"
+                        (click)="removeTag(tag)"
+                        class="border-none bg-transparent text-blue-500 hover:text-blue-800 cursor-pointer p-0 leading-none text-sm"
+                      >x</button>
                     </span>
                   }
                 </div>
@@ -504,79 +625,81 @@
             </div>
           </div>
 
-          <!-- Metadata -->
           <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
             <h4 class="text-sm font-bold text-gray-900 mb-3">Metadata</h4>
-            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs">
-              <span class="text-gray-500">Created By</span><span class="text-gray-900 font-semibold">Sarah J.</span>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs gap-4">
+              <span class="text-gray-500">Created By</span>
+              <span class="text-gray-900 font-semibold truncate">{{ currentUserName || 'Current user' }}</span>
             </div>
-            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs">
-              <span class="text-gray-500">Assigned Region</span><span class="text-gray-900 font-semibold">Šumadija</span>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs gap-4">
+              <span class="text-gray-500">Assigned Region</span>
+              <span class="text-gray-900 font-semibold truncate">{{ regionDisplayName || '-' }}</span>
             </div>
-            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs">
-              <span class="text-gray-500">Parent Dest.</span><span class="text-gray-900 font-semibold">Central District</span>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs gap-4">
+              <span class="text-gray-500">Parent Dest.</span>
+              <span class="text-gray-900 font-semibold truncate">{{ selectedParentDestinationName || '-' }}</span>
             </div>
-            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs">
-              <span class="text-gray-500">Parent Location</span><span class="text-gray-900 font-semibold">Oplenac Area</span>
+            <div class="flex justify-between items-center py-1.5 border-b border-gray-100 text-xs gap-4">
+              <span class="text-gray-500">Parent Location</span>
+              <span class="text-gray-900 font-semibold truncate">{{ selectedParentLocation?.displayName || '-' }}</span>
             </div>
-            <div class="flex justify-between items-center py-1.5 text-xs">
-              <span class="text-gray-500">Created</span><span class="text-gray-900 font-semibold">Oct 12, 2023</span>
+            <div class="flex justify-between items-center py-1.5 text-xs gap-4">
+              <span class="text-gray-500">Created</span>
+              <span class="text-gray-900 font-semibold">{{ createdDateDisplay }}</span>
             </div>
           </div>
-
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ═══ PIN MODAL ═══ -->
 <div
   class="fixed inset-0 z-50 flex items-center justify-center"
   style="background: rgba(0,0,0,0.55);"
   [style.display]="pinModalOpen ? 'flex' : 'none'"
-  (click)="onPinModalBackdropClick($event)">
-
-  <div class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-       style="width: 760px; max-width: 95vw; max-height: 90vh;"
-       (click)="$event.stopPropagation()">
-
-    <!-- Header -->
+  (click)="onPinModalBackdropClick($event)"
+>
+  <div
+    class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+    style="width: 760px; max-width: 95vw; max-height: 90vh;"
+    (click)="$event.stopPropagation()"
+  >
     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
       <div>
         <h4 class="text-sm font-bold text-gray-900">Pin Location on Map</h4>
         <p class="text-xs text-gray-500 mt-0.5">Click anywhere on the map to place the pin.</p>
       </div>
-      <button type="button" (click)="closePinModal()"
-              class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">
-        &times;
-      </button>
+      <button
+        type="button"
+        (click)="closePinModal()"
+        class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none"
+      >x</button>
     </div>
 
-    <!-- Leaflet map -->
     <div #modalMapContainer style="height: 420px; width: 100%; cursor: crosshair;"></div>
 
-    <!-- Coordinates bar -->
     <div class="px-5 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center gap-4">
       @if (modalPinLat !== null && modalPinLng !== null) {
         <span class="text-xs text-gray-600">
-          📍 <strong>{{ modalPinLat | number:'1.4-6' }}</strong>, <strong>{{ modalPinLng | number:'1.4-6' }}</strong>
+          <strong>{{ modalPinLat | number:'1.4-6' }}</strong>, <strong>{{ modalPinLng | number:'1.4-6' }}</strong>
         </span>
       } @else {
-        <span class="text-xs text-gray-400">No pin placed yet — click on the map</span>
+        <span class="text-xs text-gray-400">No pin placed yet. Click on the map.</span>
       }
     </div>
 
-    <!-- Footer -->
     <div class="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200">
-      <button type="button" (click)="closePinModal()"
-              class="text-sm text-gray-600 font-medium px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">
-        Cancel
-      </button>
-      <button type="button" (click)="confirmPin()"
-              class="text-sm text-white font-semibold px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer">
-        Confirm Pin
-      </button>
+      <button
+        type="button"
+        (click)="closePinModal()"
+        class="text-sm text-gray-600 font-medium px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer"
+      >Cancel</button>
+      <button
+        type="button"
+        (click)="confirmPin()"
+        class="text-sm text-white font-semibold px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer"
+      >Confirm Pin</button>
     </div>
   </div>
 </div>

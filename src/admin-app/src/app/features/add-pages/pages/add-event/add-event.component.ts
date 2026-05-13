@@ -1,28 +1,51 @@
-import { Component, ElementRef, ViewChild, NgZone, ChangeDetectorRef, AfterViewInit, OnDestroy, HostListener } from '@angular/core';
-import { CommonModule, DecimalPipe } from '@angular/common';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  NgZone,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ActivatedRoute, Router } from '@angular/router';
+import { finalize, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
-import { MapPlacesService } from '../../../../core/services/map-places.service';
-import { MapPlace } from '../../../../core/models/map-place.model';
+import { DashboardService } from '../../../../core/services/dashboard.service';
+import { AuthService } from '../../../../core/services/auth.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
+import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
+import {
+  RegionalEventCreateRequest,
+  RegionalEventParentDestinationDto,
+  RegionalEventParentLocationDto,
+  RegionalEventParentPlaceDto,
+  RegionalEventTagDto,
+  RegionalEventTypeDto,
+} from '../../../../core/models/event.model';
 import { EventsListService } from '../../../../core/services/events-list.service';
+
 declare const L: any;
 
+type EventParentType = 'location' | 'place' | 'destination';
+
 interface ClassItem {
-  label: string;
+  tag: RegionalEventTagDto;
   checked: boolean;
 }
-
-const CX = 110, CY = 110, R = 80;
 
 @Component({
   selector: 'app-new-event',
   standalone: true,
-  imports: [CommonModule, DecimalPipe, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
   templateUrl: './add-event.component.html',
   styleUrl: './add-event.component.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
     .rte-field { position: relative; }
     .rte-ph {
@@ -35,50 +58,252 @@ const CX = 110, CY = 110, R = 80;
       user-select: none;
       line-height: 1.5rem;
     }
-  `]
+  `],
 })
-export class NewEventComponent implements AfterViewInit, OnDestroy {
+export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
+  private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
+  private static readonly initialVisibleClassificationTags = 5;
+  private static readonly expandedVisibleClassificationTags = 10;
+
+  @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
+  @ViewChild('miniMapContainer') miniMapContainer!: ElementRef<HTMLDivElement>;
+
+  assignedRegions: RegionalAssignedRegion[] = [];
+  activeRegionId: number | null = null;
+  regionLoading = false;
+  parentsLoading = false;
+  eventTypesLoading = false;
+  tagsLoading = false;
+  tagSearchLoading = false;
+  isSaving = false;
+  errorMessage: string | null = null;
+  feedbackMessage: string | null = null;
+
+  eventTitle = '';
+  eventTypeId: number | null = null;
+  summary = '';
+  venueType: EventParentType = 'location';
+  selectedDestinationId: number | null = null;
+  selectedLocationId: number | null = null;
+  selectedPlaceId: number | null = null;
+  customVenueName = '';
+
+  allDay = false;
+  recurring = false;
+  startDate = this.todayIso();
+  endDate = this.todayIso();
+  startTime = '09:00';
+  endTime = '17:00';
+
+  freeEvent = true;
+  ticketPrice = '';
+  externalTicketLink = '';
+  organizerName = '';
+  contactEmail = '';
+  attendanceLimit = '';
+  ageRestriction = '';
+
+  isBold = false;
+  isItalic = false;
+  isUnderline = false;
+  editorIsEmpty = true;
+
+  coverImageUrl: string | null = null;
+  coverImageName = '';
+  galleryImages: { url: string; name: string }[] = [];
+
+  destinations: RegionalEventParentDestinationDto[] = [];
+  locations: RegionalEventParentLocationDto[] = [];
+  places: RegionalEventParentPlaceDto[] = [];
+  eventTypes: RegionalEventTypeDto[] = [];
+  eventTags: RegionalEventTagDto[] = [];
+  classItems: ClassItem[] = [];
+  selectedTagIds = new Set<number>();
+  additionalTagResults: RegionalEventTagDto[] = [];
+  tagInput = '';
+  classificationExpanded = false;
+
+  private miniMap: any = null;
+  private miniMarker: any = null;
+  private subscriptions: Subscription[] = [];
+  private parentSubscription: Subscription | null = null;
+  private tagSearchSubscription: Subscription | null = null;
+  private createSubscription: Subscription | null = null;
+  private tagSearchHandle: ReturnType<typeof setTimeout> | null = null;
+  private readonly knownTags = new Map<number, RegionalEventTagDto>();
 
   constructor(
-    private zone: NgZone,
-    private cdr: ChangeDetectorRef,
-    private router: Router,
-    private mapPlacesService: MapPlacesService,
-    private lightboxService: LightboxService,
-    private eventsListSvc: EventsListService
+    private readonly zone: NgZone,
+    private readonly cdr: ChangeDetectorRef,
+    private readonly router: Router,
+    private readonly route: ActivatedRoute,
+    private readonly dashboardService: DashboardService,
+    private readonly auth: AuthService,
+    private readonly lightboxService: LightboxService,
+    private readonly eventsService: EventsListService,
   ) {}
 
-  @ViewChild('editorRef')         editorRef!:            ElementRef<HTMLDivElement>;
-  @ViewChild('miniMapContainer')  miniMapContainer!:     ElementRef<HTMLDivElement>;
-  @ViewChild('modalMapContainer') modalMapContainerRef!: ElementRef<HTMLDivElement>;
+  ngOnInit(): void {
+    this.loadAssignedRegions();
+    this.loadEventTypes();
+    this.loadEventTags();
+  }
 
-  // Basic fields
-  eventTitle    = '';
-  eventCategory = '';
-  summary       = '';
-  regionDisplayName = '';
-  venueType     = 'location';
-  allDay     = false;
-  freeEvent  = false;
-  recurring  = false;
-  startDate  = this.todayIso();
-  endDate    = this.todayIso();
-  startTime  = '09:00';
-  endTime    = '17:00';
+  ngAfterViewInit(): void {
+    setTimeout(() => this.initMiniMap(), 0);
+  }
 
-  // Event details
-  customVenueName  = '';
-  organizerName    = '';
-  contactEmail     = '';
-  attendanceLimit  = '';
-  ageRestriction   = '';
-  internalRefId    = '';
+  ngOnDestroy(): void {
+    this.subscriptions.forEach(subscription => subscription.unsubscribe());
+    this.parentSubscription?.unsubscribe();
+    this.tagSearchSubscription?.unsubscribe();
+    this.createSubscription?.unsubscribe();
+    if (this.tagSearchHandle) clearTimeout(this.tagSearchHandle);
+    this.lightboxService.close();
+    if (this.miniMap) {
+      this.miniMap.remove();
+      this.miniMap = null;
+    }
+  }
 
-  // Rich text editor
-  isBold        = false;
-  isItalic      = false;
-  isUnderline   = false;
-  editorIsEmpty = true;
+  get currentUserName(): string {
+    return this.auth.fullName || this.auth.getUser()?.email || '';
+  }
+
+  get createdDateDisplay(): string {
+    return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  get activeRegion(): RegionalAssignedRegion | null {
+    return this.assignedRegions.find(region => region.id === this.activeRegionId) ?? null;
+  }
+
+  get regionDisplayName(): string {
+    return this.activeRegion?.displayName ?? '';
+  }
+
+  get selectedParentDestinationName(): string {
+    return this.parentDestination?.displayName ?? this.parentDestination?.name ?? '';
+  }
+
+  get parentDestination(): RegionalEventParentDestinationDto | null {
+    if (this.venueType === 'destination') {
+      return this.destinations.find(destination => destination.id === this.selectedDestinationId) ?? null;
+    }
+
+    const destinationId = this.venueType === 'place'
+      ? this.selectedPlace?.destinationId
+      : this.selectedLocation?.destinationId;
+
+    if (!destinationId) return null;
+
+    return this.destinations.find(destination => destination.id === destinationId)
+      ?? {
+        id: destinationId,
+        name: this.venueType === 'place'
+          ? this.selectedPlace?.destinationName ?? ''
+          : this.selectedLocation?.destinationName ?? '',
+        displayName: this.venueType === 'place'
+          ? this.selectedPlace?.destinationName ?? ''
+          : this.selectedLocation?.destinationName ?? '',
+        status: '',
+        latitude: null,
+        longitude: null,
+      };
+  }
+
+  get selectedLocation(): RegionalEventParentLocationDto | null {
+    return this.locations.find(location => location.id === this.selectedLocationId) ?? null;
+  }
+
+  get selectedPlace(): RegionalEventParentPlaceDto | null {
+    return this.places.find(place => place.id === this.selectedPlaceId) ?? null;
+  }
+
+  get selectedDestination(): RegionalEventParentDestinationDto | null {
+    return this.destinations.find(destination => destination.id === this.selectedDestinationId) ?? null;
+  }
+
+  get selectedParentName(): string {
+    if (this.venueType === 'place') return this.selectedPlace?.displayName ?? this.selectedPlace?.name ?? '';
+    if (this.venueType === 'destination') return this.selectedDestination?.displayName ?? this.selectedDestination?.name ?? '';
+    return this.selectedLocation?.displayName ?? this.selectedLocation?.name ?? '';
+  }
+
+  get selectedParentLatitude(): number | null {
+    const parent = this.selectedParentGeo;
+    return typeof parent?.latitude === 'number' ? parent.latitude : null;
+  }
+
+  get selectedParentLongitude(): number | null {
+    const parent = this.selectedParentGeo;
+    return typeof parent?.longitude === 'number' ? parent.longitude : null;
+  }
+
+  get visibleClassItems(): ClassItem[] {
+    const limit = this.classificationExpanded
+      ? NewEventComponent.expandedVisibleClassificationTags
+      : NewEventComponent.initialVisibleClassificationTags;
+    return this.classItems.slice(0, limit);
+  }
+
+  get canToggleClassification(): boolean {
+    return this.classItems.length > NewEventComponent.initialVisibleClassificationTags;
+  }
+
+  get selectedTags(): RegionalEventTagDto[] {
+    return [...this.selectedTagIds]
+      .map(tagId => this.knownTags.get(tagId))
+      .filter((tag): tag is RegionalEventTagDto => Boolean(tag));
+  }
+
+  get canPublish(): boolean {
+    return !this.isSaving &&
+      Boolean(this.activeRegionId) &&
+      Boolean(this.eventTitle.trim()) &&
+      Boolean(this.summary.trim()) &&
+      Boolean(this.eventTypeId) &&
+      Boolean(this.parentDestination) &&
+      this.hasSelectedParent();
+  }
+
+  private get selectedParentGeo(): { latitude?: number | null; longitude?: number | null } | null {
+    if (this.venueType === 'place') return this.selectedPlace;
+    if (this.venueType === 'destination') return this.selectedDestination;
+    return this.selectedLocation;
+  }
+
+  onRegionSelected(regionId: number): void {
+    if (regionId === this.activeRegionId) return;
+    this.activeRegionId = regionId;
+    sessionStorage.setItem(NewEventComponent.activeRegionStorageKey, String(regionId));
+    this.resetParentSelection();
+    this.loadParentOptions();
+    this.cdr.markForCheck();
+  }
+
+  onVenueTypeChange(): void {
+    this.resetParentSelection();
+    this.loadParentOptions();
+  }
+
+  onParentSelectionChanged(): void {
+    if (this.venueType === 'place') {
+      const place = this.selectedPlace;
+      this.selectedLocationId = place?.locationId ?? null;
+      this.selectedDestinationId = place?.destinationId ?? null;
+    } else if (this.venueType === 'location') {
+      const location = this.selectedLocation;
+      this.selectedDestinationId = location?.destinationId ?? null;
+      this.selectedPlaceId = null;
+    } else {
+      this.selectedLocationId = null;
+      this.selectedPlaceId = null;
+    }
+
+    this.updateMiniMapFromSelection();
+    this.cdr.markForCheck();
+  }
 
   execFormat(command: 'bold' | 'italic' | 'underline'): void {
     document.execCommand(command, false, undefined);
@@ -86,15 +311,476 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     this.syncToolbarState();
   }
 
-  onEditorChange(): void { this.syncToolbarState(); this.syncEmptyState(); }
-  onEditorFocus():  void { this.syncToolbarState(); this.syncEmptyState(); }
-  onEditorBlur():   void {
+  onEditorChange(): void {
+    this.syncToolbarState();
+    this.syncEmptyState();
+  }
+
+  onEditorFocus(): void {
+    this.syncToolbarState();
+    this.syncEmptyState();
+  }
+
+  onEditorBlur(): void {
     this.syncToolbarState();
     const el = this.editorRef?.nativeElement;
     if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
       el.innerHTML = '';
     }
     this.syncEmptyState();
+  }
+
+  onCoverImageSelected(event: Event): void {
+    const input = event.target instanceof HTMLInputElement ? event.target : null;
+    const file = input?.files?.[0];
+    if (!file || !this.validateImageFile(file)) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.zone.run(() => {
+        this.coverImageUrl = reader.result as string;
+        this.coverImageName = file.name;
+        this.cdr.markForCheck();
+      });
+    };
+    reader.readAsDataURL(file);
+    if (input) input.value = '';
+  }
+
+  removeCoverImage(): void {
+    this.coverImageUrl = null;
+    this.coverImageName = '';
+    this.cdr.markForCheck();
+  }
+
+  onGalleryImagesSelected(event: Event): void {
+    const input = event.target instanceof HTMLInputElement ? event.target : null;
+    const files = Array.from(input?.files ?? []).filter(file => this.validateImageFile(file));
+    for (const file of files) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.zone.run(() => {
+          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name }];
+          this.cdr.markForCheck();
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+    if (input) input.value = '';
+  }
+
+  removeGalleryImage(index: number): void {
+    this.galleryImages = this.galleryImages.filter((_, currentIndex) => currentIndex !== index);
+    this.cdr.markForCheck();
+  }
+
+  openLightbox(images: { url: string; name: string }[], index: number): void {
+    this.lightboxService.open(images, index);
+  }
+
+  onClassItemChange(item: ClassItem): void {
+    if (item.checked) {
+      this.selectedTagIds.add(item.tag.id);
+    } else {
+      this.selectedTagIds.delete(item.tag.id);
+    }
+  }
+
+  removeSelectedTag(tagId: number): void {
+    this.selectedTagIds.delete(tagId);
+    this.classItems = this.classItems.map(item =>
+      item.tag.id === tagId ? { ...item, checked: false } : item);
+    this.cdr.markForCheck();
+  }
+
+  toggleAdditionalTag(tag: RegionalEventTagDto): void {
+    this.knownTags.set(tag.id, tag);
+    if (this.selectedTagIds.has(tag.id)) {
+      this.selectedTagIds.delete(tag.id);
+    } else {
+      this.selectedTagIds.add(tag.id);
+    }
+    this.classItems = this.classItems.map(item =>
+      item.tag.id === tag.id ? { ...item, checked: this.selectedTagIds.has(tag.id) } : item);
+    this.cdr.markForCheck();
+  }
+
+  onTagSearchInput(): void {
+    if (this.tagSearchHandle) clearTimeout(this.tagSearchHandle);
+    const query = this.tagInput.trim();
+    if (query.length < 2) {
+      this.additionalTagResults = [];
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.tagSearchHandle = setTimeout(() => this.searchTags(query), 250);
+  }
+
+  toggleClassificationExpanded(): void {
+    this.classificationExpanded = !this.classificationExpanded;
+  }
+
+  publish(): void {
+    const payload = this.buildPayload();
+    if (!payload) {
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.isSaving = true;
+    this.errorMessage = null;
+    this.feedbackMessage = null;
+    this.createSubscription?.unsubscribe();
+    this.createSubscription = this.eventsService.createEvent(payload)
+      .pipe(finalize(() => {
+        this.isSaving = false;
+        this.cdr.markForCheck();
+      }))
+      .subscribe({
+        next: created => {
+          this.feedbackMessage = 'Event published.';
+          this.router.navigate(['/events'], { queryParams: { regionId: created.regionId } });
+        },
+        error: error => {
+          this.errorMessage = this.extractErrorMessage(error, 'Event could not be published.');
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private loadAssignedRegions(): void {
+    this.regionLoading = true;
+    const subscription = this.dashboardService.getAssignedRegions()
+      .pipe(finalize(() => {
+        this.regionLoading = false;
+        this.cdr.markForCheck();
+      }))
+      .subscribe({
+        next: regions => {
+          this.assignedRegions = Array.isArray(regions) ? regions : [];
+          this.activeRegionId = this.resolveInitialRegionId(this.assignedRegions);
+          if (this.activeRegionId) {
+            sessionStorage.setItem(NewEventComponent.activeRegionStorageKey, String(this.activeRegionId));
+            this.loadParentOptions();
+          } else {
+            this.errorMessage = 'No assigned region is available for this account.';
+          }
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.assignedRegions = [];
+          this.activeRegionId = null;
+          this.errorMessage = this.extractErrorMessage(error, 'Assigned regions could not be loaded.');
+          this.cdr.markForCheck();
+        },
+      });
+    this.subscriptions.push(subscription);
+  }
+
+  private loadEventTypes(): void {
+    this.eventTypesLoading = true;
+    const subscription = this.eventsService.getEventTypes()
+      .pipe(finalize(() => {
+        this.eventTypesLoading = false;
+        this.cdr.markForCheck();
+      }))
+      .subscribe({
+        next: eventTypes => {
+          this.eventTypes = Array.isArray(eventTypes) ? eventTypes : [];
+          this.eventTypeId = this.eventTypes[0]?.id ?? null;
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.eventTypes = [];
+          this.errorMessage = this.extractErrorMessage(error, 'Event categories could not be loaded.');
+          this.cdr.markForCheck();
+        },
+      });
+    this.subscriptions.push(subscription);
+  }
+
+  private loadEventTags(): void {
+    this.tagsLoading = true;
+    const subscription = this.eventsService.getEventTags()
+      .pipe(finalize(() => {
+        this.tagsLoading = false;
+        this.cdr.markForCheck();
+      }))
+      .subscribe({
+        next: tags => {
+          this.eventTags = Array.isArray(tags) ? tags : [];
+          this.eventTags.forEach(tag => this.knownTags.set(tag.id, tag));
+          this.classItems = this.eventTags.map(tag => ({
+            tag,
+            checked: this.selectedTagIds.has(tag.id),
+          }));
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.eventTags = [];
+          this.classItems = [];
+          this.errorMessage = this.extractErrorMessage(error, 'Event tags could not be loaded.');
+          this.cdr.markForCheck();
+        },
+      });
+    this.subscriptions.push(subscription);
+  }
+
+  private loadParentOptions(): void {
+    if (!this.activeRegionId) return;
+
+    this.parentsLoading = true;
+    this.parentSubscription?.unsubscribe();
+
+    const request = this.venueType === 'place'
+      ? this.eventsService.getParentPlaces(this.activeRegionId)
+      : this.venueType === 'destination'
+        ? this.eventsService.getParentDestinations(this.activeRegionId)
+        : this.eventsService.getParentLocations(this.activeRegionId);
+
+    this.parentSubscription = request
+      .pipe(finalize(() => {
+        this.parentsLoading = false;
+        this.cdr.markForCheck();
+      }))
+      .subscribe({
+        next: results => {
+          if (this.venueType === 'place') {
+            this.places = Array.isArray(results) ? results as RegionalEventParentPlaceDto[] : [];
+          } else if (this.venueType === 'destination') {
+            this.destinations = Array.isArray(results) ? results as RegionalEventParentDestinationDto[] : [];
+          } else {
+            this.locations = Array.isArray(results) ? results as RegionalEventParentLocationDto[] : [];
+          }
+
+          this.loadDestinationsForDerivation();
+          this.updateMiniMapFromSelection();
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.errorMessage = this.extractErrorMessage(error, 'Parent options could not be loaded.');
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private loadDestinationsForDerivation(): void {
+    if (!this.activeRegionId) return;
+    const subscription = this.eventsService.getParentDestinations(this.activeRegionId)
+      .subscribe({
+        next: destinations => {
+          this.destinations = Array.isArray(destinations) ? destinations : [];
+          this.cdr.markForCheck();
+        },
+      });
+    this.subscriptions.push(subscription);
+  }
+
+  private searchTags(query: string): void {
+    this.tagSearchLoading = true;
+    this.tagSearchSubscription?.unsubscribe();
+    this.tagSearchSubscription = this.eventsService.getEventTags(query)
+      .pipe(finalize(() => {
+        this.tagSearchLoading = false;
+        this.cdr.markForCheck();
+      }))
+      .subscribe({
+        next: tags => {
+          this.additionalTagResults = (Array.isArray(tags) ? tags : [])
+            .filter(tag => !this.eventTags.some(existing => existing.id === tag.id));
+          this.additionalTagResults.forEach(tag => this.knownTags.set(tag.id, tag));
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.additionalTagResults = [];
+          this.errorMessage = this.extractErrorMessage(error, 'Additional tags could not be searched.');
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private buildPayload(): RegionalEventCreateRequest | null {
+    this.errorMessage = null;
+
+    if (!this.activeRegionId) {
+      this.errorMessage = 'Select an assigned region before publishing.';
+      return null;
+    }
+
+    const name = this.eventTitle.trim();
+    if (!name) {
+      this.errorMessage = 'Event title is required.';
+      return null;
+    }
+
+    const summary = this.summary.trim();
+    if (!summary) {
+      this.errorMessage = 'Short excerpt/summary is required.';
+      return null;
+    }
+
+    if (summary.length > 160) {
+      this.errorMessage = 'Short excerpt/summary must be 160 characters or fewer.';
+      return null;
+    }
+
+    if (!this.eventTypeId) {
+      this.errorMessage = 'Event category/type is required.';
+      return null;
+    }
+
+    if (!this.hasSelectedParent() || !this.parentDestination) {
+      this.errorMessage = 'Select a valid event parent in the active region.';
+      return null;
+    }
+
+    const startsAt = this.combineDateTime(this.startDate, this.allDay ? '00:00' : this.startTime);
+    const endsAt = this.combineDateTime(this.endDate, this.allDay ? '00:00' : this.endTime);
+    if (!startsAt || !endsAt) {
+      this.errorMessage = 'Start and end date/time are required.';
+      return null;
+    }
+
+    if (!this.allDay && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+      this.errorMessage = 'End time must be after start time.';
+      return null;
+    }
+
+    if (this.allDay && new Date(this.endDate).getTime() < new Date(this.startDate).getTime()) {
+      this.errorMessage = 'End date must be after start date.';
+      return null;
+    }
+
+    if (!this.freeEvent && this.ticketPrice.trim()) {
+      const price = Number(this.ticketPrice.trim().replace(/[$,]/g, ''));
+      if (Number.isFinite(price) && price < 0) {
+        this.errorMessage = 'Ticket price must be non-negative.';
+        return null;
+      }
+    }
+
+    const externalTicketLink = this.externalTicketLink.trim();
+    if (externalTicketLink && !this.isSafeHttpUrl(externalTicketLink)) {
+      this.errorMessage = 'External ticket link must be a valid http or https URL.';
+      return null;
+    }
+
+    const contactEmail = this.contactEmail.trim();
+    if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+      this.errorMessage = 'Contact email is invalid.';
+      return null;
+    }
+
+    const attendanceLimit = this.attendanceLimit.trim()
+      ? Number(this.attendanceLimit.trim())
+      : null;
+    if (attendanceLimit !== null && (!Number.isInteger(attendanceLimit) || attendanceLimit <= 0)) {
+      this.errorMessage = 'Attendance limit must be a positive whole number.';
+      return null;
+    }
+
+    return {
+      regionId: this.activeRegionId,
+      parentEntityType: this.toBackendParentType(this.venueType),
+      destinationId: this.parentDestination.id,
+      locationId: this.venueType === 'location'
+        ? this.selectedLocationId
+        : this.venueType === 'place'
+          ? this.selectedPlace?.locationId ?? null
+          : null,
+      placeId: this.venueType === 'place' ? this.selectedPlaceId : null,
+      eventTypeId: this.eventTypeId,
+      name,
+      summary,
+      description: this.editorRef?.nativeElement?.innerHTML?.trim() || null,
+      status: 'Published',
+      venueName: this.customVenueName.trim() || null,
+      isAllDay: this.allDay,
+      startsAt,
+      endsAt,
+      isRecurring: this.recurring,
+      isFree: this.freeEvent,
+      ticketPrice: this.freeEvent ? null : this.ticketPrice.trim() || null,
+      externalTicketLink: externalTicketLink || null,
+      organizerName: this.organizerName.trim() || null,
+      contactEmail: contactEmail || null,
+      attendanceLimit,
+      ageRestriction: this.ageRestriction.trim() || null,
+      tagIds: [...this.selectedTagIds],
+    };
+  }
+
+  private resolveInitialRegionId(regions: RegionalAssignedRegion[]): number | null {
+    if (regions.length === 0) return null;
+
+    const queryRegion = Number(this.route.snapshot.queryParamMap.get('regionId'));
+    if (regions.some(region => region.id === queryRegion)) return queryRegion;
+
+    const state = history.state as { regionId?: number; activeRegionId?: number } | null;
+    const stateRegion = Number(state?.regionId ?? state?.activeRegionId);
+    if (regions.some(region => region.id === stateRegion)) return stateRegion;
+
+    const storedRegion = Number(sessionStorage.getItem(NewEventComponent.activeRegionStorageKey));
+    if (regions.some(region => region.id === storedRegion)) return storedRegion;
+
+    return regions[0].id;
+  }
+
+  private resetParentSelection(): void {
+    this.selectedDestinationId = null;
+    this.selectedLocationId = null;
+    this.selectedPlaceId = null;
+    this.updateMiniMapFromSelection();
+  }
+
+  private hasSelectedParent(): boolean {
+    if (this.venueType === 'place') return Boolean(this.selectedPlaceId);
+    if (this.venueType === 'destination') return Boolean(this.selectedDestinationId);
+    return Boolean(this.selectedLocationId);
+  }
+
+  private toBackendParentType(parentType: EventParentType): 'Destination' | 'Location' | 'Place' {
+    if (parentType === 'place') return 'Place';
+    if (parentType === 'destination') return 'Destination';
+    return 'Location';
+  }
+
+  private combineDateTime(date: string, time: string): string | null {
+    if (!date || !time) return null;
+    const value = new Date(`${date}T${time}:00`);
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+
+  private todayIso(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
+
+  private isSafeHttpUrl(value: string): boolean {
+    try {
+      const url = new URL(value);
+      return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password;
+    } catch {
+      return false;
+    }
+  }
+
+  private validateImageFile(file: File): boolean {
+    const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
+    if (!allowedTypes.has(file.type)) {
+      this.errorMessage = 'Images must be PNG, JPG, or WEBP.';
+      this.cdr.markForCheck();
+      return false;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      this.errorMessage = 'Images must be 8 MB or smaller.';
+      this.cdr.markForCheck();
+      return false;
+    }
+
+    return true;
   }
 
   private syncEmptyState(): void {
@@ -105,839 +791,53 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   }
 
   private syncToolbarState(): void {
-    this.isBold      = document.queryCommandState('bold');
-    this.isItalic    = document.queryCommandState('italic');
+    this.isBold = document.queryCommandState('bold');
+    this.isItalic = document.queryCommandState('italic');
     this.isUnderline = document.queryCommandState('underline');
   }
 
-  // Cover image
-  coverImageUrl : string | null = null;
-  coverImageName: string        = '';
-
-  onCoverImageSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file  = input.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.zone.run(() => {
-        this.coverImageUrl  = reader.result as string;
-        this.coverImageName = file.name;
-        this.cdr.detectChanges();
-      });
-    };
-    reader.readAsDataURL(file);
-    input.value = '';
-  }
-
-  removeCoverImage(): void {
-    this.coverImageUrl  = null;
-    this.coverImageName = '';
-  }
-
-  // Gallery
-  galleryImages: { url: string; name: string }[] = [];
-
-  onGalleryImagesSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const files = Array.from(input.files ?? []);
-    for (const file of files) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        this.zone.run(() => {
-          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name }];
-          this.cdr.detectChanges();
-        });
-      };
-      reader.readAsDataURL(file);
-    }
-    input.value = '';
-  }
-
-  removeGalleryImage(index: number): void {
-    this.galleryImages.splice(index, 1);
-  }
-
-  openLightbox(images: { url: string; name: string }[], index: number): void {
-    this.lightboxService.open(images, index);
-  }
-
-  // Date/time pickers
-  activePicker: string | null = null;
-  calendarYear  = new Date().getFullYear();
-  calendarMonth = new Date().getMonth();
-
-  readonly monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  readonly weekDays = ['Su','Mo','Tu','We','Th','Fr','Sa'];
-
-  get calendarDays(): number[] {
-    const firstDay = new Date(this.calendarYear, this.calendarMonth, 1).getDay();
-    const daysInMonth = new Date(this.calendarYear, this.calendarMonth + 1, 0).getDate();
-    const cells: number[] = [];
-    for (let i = 0; i < firstDay; i++) cells.push(0);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-    return cells;
-  }
-
-  prevMonth(): void {
-    if (this.calendarMonth === 0) { this.calendarMonth = 11; this.calendarYear--; }
-    else { this.calendarMonth--; }
-  }
-
-  nextMonth(): void {
-    if (this.calendarMonth === 11) { this.calendarMonth = 0; this.calendarYear++; }
-    else { this.calendarMonth++; }
-  }
-
-  selectDate(day: number, field: 'startDate' | 'endDate'): void {
-    if (!day) return;
-    const m = String(this.calendarMonth + 1).padStart(2, '0');
-    const d = String(day).padStart(2, '0');
-    if (field === 'startDate') this.startDate = `${this.calendarYear}-${m}-${d}`;
-    else                       this.endDate   = `${this.calendarYear}-${m}-${d}`;
-    this.activePicker = null;
-  }
-
-  isSelectedDate(day: number, isoDate: string): boolean {
-    if (!day || !isoDate) return false;
-    const [y, mo, d] = isoDate.split('-').map(Number);
-    return y === this.calendarYear && mo === this.calendarMonth + 1 && d === day;
-  }
-
-  isToday(day: number): boolean {
-    if (!day) return false;
-    const now = new Date();
-    return now.getFullYear() === this.calendarYear && now.getMonth() === this.calendarMonth && now.getDate() === day;
-  }
-
-  formatDisplayDate(iso: string): string {
-    if (!iso) return '';
-    const [y, m, d] = iso.split('-').map(Number);
-    return `${this.monthNames[m - 1].slice(0, 3)} ${d}, ${y}`;
-  }
-
-  private todayIso(): string {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-  }
-
-  get startDateDisplay(): string { return this.isoToDisplay(this.startDate); }
-  get endDateDisplay():   string { return this.isoToDisplay(this.endDate); }
-
-  private isoToDisplay(iso: string): string {
-    if (!iso) return '';
-    const [y, m, d] = iso.split('-');
-    return `${d}.${m}.${y}`;
-  }
-
-  private displayToIso(display: string): string | null {
-    const parts = display.replace(/[\/\-\s]/g, '.').split('.');
-    if (parts.length !== 3) return null;
-    const [d, m, y] = parts.map(p => p.padStart(2, '0'));
-    if (!d || !m || !y || y.length < 4) return null;
-    const day = parseInt(d), month = parseInt(m), year = parseInt(y);
-    if (isNaN(day) || isNaN(month) || isNaN(year) || month < 1 || month > 12 || day < 1 || day > 31) return null;
-    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-  }
-
-  onDateTextInput(event: Event, _field: 'startDate' | 'endDate'): void {
-    const input = event.target as HTMLInputElement;
-    input.value = input.value.replace(/[^\d\.\/]/g, '');
-  }
-
-  onDateTextBlur(event: Event, field: 'startDate' | 'endDate'): void {
-    const input = event.target as HTMLInputElement;
-    const iso = this.displayToIso(input.value);
-    if (iso) {
-      if (field === 'startDate') this.startDate = iso;
-      else                       this.endDate   = iso;
-      input.value = this.isoToDisplay(iso);
-    } else if (input.value.trim() !== '') {
-      input.value = field === 'startDate' ? this.startDateDisplay : this.endDateDisplay;
-    }
-  }
-
-  // Clock
-  clockMode: 'hour' | 'minute' = 'hour';
-  selectedHour   = 12;
-  selectedMinute = 0;
-  selectedAmPm: 'AM' | 'PM' = 'AM';
-
-  readonly clockCX = CX;
-  readonly clockCY = CY;
-  readonly clockR  = R;
-
-  get clockHourMarkers() {
-    return Array.from({ length: 12 }, (_, i) => {
-      const h = i + 1;
-      const angle = (h / 12) * Math.PI * 2 - Math.PI / 2;
-      return { value: h, x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle), selected: h === this.selectedHour };
-    });
-  }
-
-  get clockMinuteMarkers() {
-    return Array.from({ length: 12 }, (_, i) => {
-      const m = i * 5;
-      const angle = (m / 60) * Math.PI * 2 - Math.PI / 2;
-      return { value: m, x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle), selected: m === this.selectedMinute };
-    });
-  }
-
-  get clockHandEnd(): { x: number; y: number } {
-    const angle = this.clockMode === 'hour'
-      ? (this.selectedHour / 12) * Math.PI * 2 - Math.PI / 2
-      : (this.selectedMinute / 60) * Math.PI * 2 - Math.PI / 2;
-    return { x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle) };
-  }
-
-  setClockMode(m: 'hour' | 'minute'): void { this.clockMode = m; }
-  setClockAmPm(ap: 'AM' | 'PM'): void { this.selectedAmPm = ap; }
-
-  onClockInteraction(event: MouseEvent | TouchEvent, svgEl: Element): void {
-    event.preventDefault();
-    event.stopPropagation();
-    const rect    = svgEl.getBoundingClientRect();
-    const clientX = event instanceof TouchEvent ? event.touches[0].clientX : event.clientX;
-    const clientY = event instanceof TouchEvent ? event.touches[0].clientY : event.clientY;
-    const svgX    = (clientX - rect.left) / rect.width  * 220;
-    const svgY    = (clientY - rect.top)  / rect.height * 220;
-    const angle   = Math.atan2(svgY - CY, svgX - CX);
-    if (this.clockMode === 'hour') {
-      let h = Math.round((angle + Math.PI / 2) / (Math.PI * 2) * 12);
-      if (h <= 0) h += 12;
-      if (h > 12) h -= 12;
-      this.selectedHour = h;
-    } else {
-      let m = Math.round((angle + Math.PI / 2) / (Math.PI * 2) * 12) * 5;
-      if (m < 0)   m += 60;
-      if (m >= 60) m -= 60;
-      this.selectedMinute = m;
-    }
-    this.cdr.detectChanges();
-  }
-
-  private _clockDragging = false;
-  private _clockSvgEl: Element | null = null;
-
-  onClockMouseDown(event: MouseEvent, svgEl: Element): void {
-    this._clockDragging = true;
-    this._clockSvgEl = svgEl;
-    this.onClockInteraction(event, svgEl);
-  }
-
-  isClockHourNear(h: number): boolean {
-    const diff = Math.abs(h - this.selectedHour);
-    return diff === 1 || diff === 11;
-  }
-
-  isClockMinuteNear(m: number): boolean {
-    const diff = Math.abs(m - this.selectedMinute);
-    return diff === 5 || diff === 55;
-  }
-
-  @HostListener('document:mousemove', ['$event'])
-  onDocumentMouseMove(event: MouseEvent): void {
-    if (this._clockDragging && this._clockSvgEl) this.onClockInteraction(event, this._clockSvgEl);
-  }
-
-  @HostListener('document:mouseup')
-  onDocumentMouseUp(): void { this._clockDragging = false; this._clockSvgEl = null; }
-
-  confirmTime(field: 'startTime' | 'endTime'): void {
-    let h = this.selectedHour;
-    if (this.selectedAmPm === 'AM' && h === 12) h = 0;
-    if (this.selectedAmPm === 'PM' && h !== 12) h += 12;
-    const timeStr = `${String(h).padStart(2,'0')}:${String(this.selectedMinute).padStart(2,'0')}`;
-    if (field === 'startTime') this.startTime = timeStr;
-    else                       this.endTime   = timeStr;
-    this.activePicker = null;
-  }
-
-  formatDisplayTime(time24: string): string {
-    if (!time24) return '';
-    const [hh, mm] = time24.split(':').map(Number);
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-    let h = hh % 12;
-    if (h === 0) h = 12;
-    return `${h}:${String(mm).padStart(2,'0')} ${ampm}`;
-  }
-
-  togglePicker(name: string, event: MouseEvent): void {
-    event.stopPropagation();
-    if (this.activePicker === name) { this.activePicker = null; return; }
-    this.activePicker = name;
-    if (name === 'startDate' || name === 'endDate') {
-      const iso = name === 'startDate' ? this.startDate : this.endDate;
-      if (iso) { const [y, m] = iso.split('-').map(Number); this.calendarYear = y; this.calendarMonth = m - 1; }
-      else { const now = new Date(); this.calendarYear = now.getFullYear(); this.calendarMonth = now.getMonth(); }
-    }
-    if (name === 'startTime' || name === 'endTime') {
-      this._loadClockState(name === 'startTime' ? this.startTime : this.endTime);
-      this.clockMode = 'hour';
-    }
-  }
-
-  private _loadClockState(time24: string): void {
-    if (!time24) { this.selectedHour = 12; this.selectedMinute = 0; this.selectedAmPm = 'AM'; return; }
-    let [hh, mm] = time24.split(':').map(Number);
-    this.selectedAmPm   = hh >= 12 ? 'PM' : 'AM';
-    hh = hh % 12;
-    this.selectedHour   = hh === 0 ? 12 : hh;
-    this.selectedMinute = Math.floor(mm / 5) * 5;
-  }
-
-  @HostListener('document:click')
-  onDocumentClick(): void {
-    if (this._clockDragging) return;
-    if (this.activePicker) { this.activePicker = null; this.cdr.detectChanges(); }
-    if (this.venueDropdownOpen) { this.venueDropdownOpen = false; this.cdr.detectChanges(); }
-  }
-
-  // Venue search
-  venueSearchQuery     = '';
-  venueDropdownOpen    = false;
-  isSearchingVenue     = false;
-  filteredVenueResults: MapPlace[] = [];
-  selectedVenue: MapPlace | null   = null;
-  selectedVenueAreaKm2: number | null = null;
-
-  pinLat: string = '';
-  pinLng: string = '';
-  streetAddress: string = '';
-  pinConfirmed = false;
-  mapModalOpen = false;
-
-  private miniMap      : any = null;
-  private modalMap     : any = null;
-  private miniMarker   : any = null;
-  private miniZoneLayer: any = null;
-  private modalZoneLayer: any = null;
-  private modalMarker  : any = null;
-  private _venueSearchDebounce: any = null;
-
-  navigateToAddVenue(): void {
-    this.venueDropdownOpen = false;
-    const returnState = { returnTo: '/events/new', venueType: this.venueType };
-    if (this.venueType === 'place') this.router.navigate(['/places/new'], { state: returnState });
-    else if (this.venueType === 'destination') this.router.navigate(['/destinations/new'], { state: returnState });
-    else this.router.navigate(['/locations/new'], { state: returnState });
-  }
-
-  private getVenueSource(): MapPlace[] {
-    if (this.venueType === 'place') return this.mapPlacesService.getPlaces();
-    if (this.venueType === 'destination') return this.mapPlacesService.getDestinations();
-    return this.mapPlacesService.getLocations();
-  }
-
-  onVenueTypeChange(): void {
-    this.venueSearchQuery = '';
-    this.filteredVenueResults = [];
-    this.venueDropdownOpen = false;
-    this.selectedVenue = null;
-    this.selectedVenueAreaKm2 = null;
-    this.clearGeoFields();
-    this.clearMiniMapLayers();
-    if (this.miniMap) this.miniMap.setView([44.0, 20.9], 8);
-  }
-
-  onVenueSearch(): void {
-    if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
-    const q = this.venueSearchQuery.trim().toLowerCase();
-    this.venueDropdownOpen = true;
-    const source = this.getVenueSource();
-    if (q.length < 1) {
-      this.filteredVenueResults = source;
-      return;
-    }
-    this.isSearchingVenue = true;
-    this._venueSearchDebounce = setTimeout(() => {
-      this.filteredVenueResults = source.filter(
-        item => item.name.toLowerCase().includes(q) || (item.address ?? '').toLowerCase().includes(q)
-      );
-      this.isSearchingVenue = false;
-      this.cdr.detectChanges();
-    }, 200);
-  }
-
-  onVenueSearchFocus(): void {
-    const q = this.venueSearchQuery.trim().toLowerCase();
-    const source = this.getVenueSource();
-    this.filteredVenueResults = q.length === 0
-      ? source
-      : source.filter(item => item.name.toLowerCase().includes(q) || (item.address ?? '').toLowerCase().includes(q));
-    this.venueDropdownOpen = true;
-  }
-
-  selectVenue(item: MapPlace): void {
-    this.selectedVenue     = item;
-    this.venueSearchQuery  = item.name;
-    this.venueDropdownOpen = false;
-    this.pinConfirmed      = true;
-
-    if (this.venueType === 'place') {
-      this.pinLat        = item.lat.toFixed(6);
-      this.pinLng        = item.lng.toFixed(6);
-      this.streetAddress = item.address ?? '';
-      this.updateMiniMapPin(item.lat, item.lng);
-    } else {
-      // location or destination — zone-based
-      this.pinLat = '';
-      this.pinLng = '';
-      this.streetAddress = '';
-      if (item.zone) {
-        this.updateMiniMapZone(item.zone);
-        this.selectedVenueAreaKm2 = this.shoelaceAreaKm2(item.zone);
-      } else if (item.lat && item.lng) {
-        this.updateMiniMapPin(item.lat, item.lng);
-      }
-    }
-  }
-
-  clearVenue(): void {
-    this.selectedVenue    = null;
-    this.venueSearchQuery = '';
-    this.selectedVenueAreaKm2 = null;
-    this.clearGeoFields();
-    this.clearMiniMapLayers();
-    if (this.miniMap) this.miniMap.setView([44.0, 20.9], 8);
-    this.pinConfirmed = false;
-  }
-
-  private clearGeoFields(): void {
-    this.pinLat = '';
-    this.pinLng = '';
-    this.streetAddress = '';
-  }
-
-  private clearMiniMapLayers(): void {
-    if (this.miniMarker    && this.miniMap) { this.miniMap.removeLayer(this.miniMarker);    this.miniMarker    = null; }
-    if (this.miniZoneLayer && this.miniMap) { this.miniMap.removeLayer(this.miniZoneLayer); this.miniZoneLayer = null; }
-  }
-
-  private makePinIcon(): any {
-    return L.divIcon({
-      html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
-               <path d="M12 0C5.373 0 0 5.373 0 12c0 8 12 20 12 20S24 20 24 12C24 5.373 18.627 0 12 0z" fill="#2563eb" stroke="white" stroke-width="1.5"/>
-               <circle cx="12" cy="12" r="4" fill="white"/>
-             </svg>`,
-      iconSize: [24, 32], iconAnchor: [12, 32], className: '',
-    });
-  }
-
   private initMiniMap(): void {
-    if (this.miniMap) return;
+    if (this.miniMap || typeof L === 'undefined') return;
     const el = this.miniMapContainer?.nativeElement;
     if (!el) return;
+
     this.miniMap = L.map(el, {
-      zoomControl: false, dragging: false, scrollWheelZoom: false,
-      doubleClickZoom: false, touchZoom: false, attributionControl: false,
-    }).setView([44.0, 20.9], 8);
+      zoomControl: false,
+      dragging: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      touchZoom: false,
+      attributionControl: false,
+    }).setView([44.0, 20.9], 7);
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.miniMap);
+    this.updateMiniMapFromSelection();
   }
 
-  private updateMiniMapPin(lat: number, lng: number): void {
-    if (!this.miniMap) this.initMiniMap();
-    if (!this.miniMap) return;
-    this.clearMiniMapLayers();
-    this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.miniMap);
-    this.miniMap.setView([lat, lng], 14);
-  }
+  private updateMiniMapFromSelection(): void {
+    if (!this.miniMap || typeof L === 'undefined') return;
 
-  private updateMiniMapZone(zone: [number, number][]): void {
-    if (!this.miniMap) this.initMiniMap();
-    if (!this.miniMap) return;
-    this.clearMiniMapLayers();
-    this.miniZoneLayer = L.polygon(zone, {
-      color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
-    }).addTo(this.miniMap);
-    try { this.miniMap.fitBounds(this.miniZoneLayer.getBounds(), { padding: [10, 10] }); } catch {}
-  }
-
-  private initModalMap(el: HTMLDivElement): void {
-    if (this.modalMap) return;
-    let center: [number, number] = [44.0, 20.9];
-    let zoom = 9;
-    if (this.selectedVenue) {
-      if (this.venueType === 'place') {
-        const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
-        if (!isNaN(lat) && !isNaN(lng)) { center = [lat, lng]; zoom = 15; }
-      } else if (this.selectedVenue.zone?.length) {
-        const lats = this.selectedVenue.zone.map(p => p[0]);
-        const lngs = this.selectedVenue.zone.map(p => p[1]);
-        center = [(Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2];
-        zoom = 13;
-      }
-    }
-    this.modalMap = L.map(el, { zoomControl: true, attributionControl: false }).setView(center, zoom);
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.modalMap);
-    setTimeout(() => this.modalMap?.invalidateSize(), 200);
-    if (this.selectedVenue) {
-      if (this.venueType === 'place') {
-        const lat = parseFloat(this.pinLat), lng = parseFloat(this.pinLng);
-        if (!isNaN(lat) && !isNaN(lng)) {
-          this.modalMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false }).addTo(this.modalMap);
-        }
-      } else if (this.selectedVenue.zone) {
-        this.modalZoneLayer = L.polygon(this.selectedVenue.zone, {
-          color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
-        }).addTo(this.modalMap);
-        try { this.modalMap.fitBounds(this.modalZoneLayer.getBounds(), { padding: [30, 30] }); } catch {}
-      }
-    }
-  }
-
-  private destroyModalMap(): void {
-    if (this.modalMap) {
-      this.modalMap.remove();
-      this.modalMap = null;
-      this.modalMarker = null;
-      this.modalZoneLayer = null;
-    }
-  }
-
-  openMapModal(): void {
-    if (!this.selectedVenue) return;
-    this.mapModalOpen = true;
-    setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
-  }
-
-  closeMapModal(): void {
-    this.mapModalOpen = false;
-    this.destroyModalMap();
-  }
-
-  private shoelaceAreaKm2(zone: [number, number][]): number {
-    const Rm = 6_371_000;
-    let area = 0;
-    const n = zone.length;
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      const lat1 = (zone[i][0] * Math.PI) / 180;
-      const lat2 = (zone[j][0] * Math.PI) / 180;
-      const lng1 = (zone[i][1] * Math.PI) / 180;
-      const lng2 = (zone[j][1] * Math.PI) / 180;
-      area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
-    }
-    return Math.abs((area * Rm * Rm) / 2) / 1_000_000;
-  }
-
-  // Classification & Tags
-  classItems: ClassItem[] = [
-    { label: 'Music',           checked: false },
-    { label: 'Outdoor',         checked: false },
-    { label: 'Culture',         checked: false },
-    { label: 'Family Friendly', checked: false },
-  ];
-
-  tags    : string[] = [];
-  tagInput: string   = '';
-
-  addTag(event: Event): void {
-    event.preventDefault();
-    const value = this.tagInput.trim();
-    if (!value || this.tags.includes(value)) { this.tagInput = ''; return; }
-    this.tags = [...this.tags, value];
-    this.tagInput = '';
-  }
-
-  removeTag(tag: string): void {
-    this.tags = this.tags.filter(t => t !== tag);
-  }
-
-  // Lifecycle
-
-  isEditMode = false;
-  private _pendingDescription = '';
-
-  ngAfterViewInit(): void {
-    setTimeout(() => {
-      this.initMiniMap();
-      this._loadFromRouterState();
-
-      if (this._pendingDescription && this.editorRef?.nativeElement) {
-        this.editorRef.nativeElement.innerHTML = this._pendingDescription;
-        this.syncEmptyState();
-      }
-    }, 0);
-  }
-
-  private _loadFromRouterState(): void {
-    const state = history.state as any;
-    if (!state) return;
-
-    if (typeof state.regionDisplayName === 'string') {
-      this.regionDisplayName = state.regionDisplayName;
+    if (this.miniMarker) {
+      this.miniMap.removeLayer(this.miniMarker);
+      this.miniMarker = null;
     }
 
-    if (state.place?.id && (state.editMode || state.returnTo?.includes('events/detail'))) {
-      this.isEditMode = true;
-      const p = state.place;
-      if (!this.regionDisplayName && typeof p.region === 'string') {
-        this.regionDisplayName = p.region;
-      }
-      this.eventTitle          = p.name        ?? '';
-      this.eventCategory       = p.category   ?? '';
-      this.summary             = p.summary    ?? '';
-      this._pendingDescription = p.description ?? '';
-      this.startDate = this._parseDisplayDateToIso(p.startDate) ?? this.startDate;
-      this.endDate   = this._parseDisplayDateToIso(p.endDate)   ?? this.endDate;
-      if (p.startTime) this.startTime = p.startTime;
-      if (p.endTime)   this.endTime   = p.endTime;
-      this.allDay    = p.allDay    ?? false;
-      this.freeEvent = p.freeEvent ?? false;
-      this.recurring = p.recurring ?? false;
-
-      if (p.coverImageUrl) {
-        this.coverImageUrl  = p.coverImageUrl;
-        this.coverImageName = p.coverImageName ?? 'cover';
-      }
-
-      if (Array.isArray(p.galleryImages)) {
-        this.galleryImages = [...p.galleryImages];
-      }
-
-      // Classification / Tags
-      if (Array.isArray(p.classification)) {
-        this.classItems = this.classItems.map(c => ({
-          ...c, checked: (p.classification as string[]).includes(c.label),
-        }));
-      }
-      this.tags = Array.isArray(p.tags) ? [...p.tags] : [];
-
-      // restore event-details fields
-      this.customVenueName  = p.venueName    ?? '';
-      this.organizerName    = p.organizerName   ?? '';
-      this.contactEmail     = p.contactEmail    ?? '';
-      this.attendanceLimit  = p.attendanceLimit ?? '';
-      this.ageRestriction   = p.ageRestriction  ?? '';
-      this.internalRefId    = p.internalRefId   ?? '';
-
-      if (p.venueName || p.lat) {
-        let found: MapPlace | undefined;
-
-        if (p.lat != null && p.lng != null) {
-          found = this.mapPlacesService.getAll().find(v =>
-            Math.abs(v.lat - p.lat) < 0.001 && Math.abs(v.lng - p.lng) < 0.001
-          );
-        }
-
-        if (!found && p.venueName) {
-          found = this.mapPlacesService.getAll().find(v => v.name === p.venueName);
-        }
-
-        if (!found && p.lat != null && p.lng != null) {
-          const temp: MapPlace = {
-            id:          p.id ?? Date.now().toString(),
-            name:        p.venueName ?? 'Venue',
-            type:        'Place',
-            category:    p.category ?? 'Place',
-            description: '',
-            status:      'Active',
-            eventsToday: 0,
-            lat:         p.lat,
-            lng:         p.lng,
-            address:     p.address,
-            zone:        p.zone,
-          };
-          this.mapPlacesService.addPlace(temp);
-          found = temp;
-        }
-
-        if (found) {
-          if (p.venueType) {
-            this.venueType = p.venueType;
-          } else {
-            this.venueType = found.type === 'Place' ? 'place' : found.type === 'Destination' ? 'destination' : 'location';
-          }
-          this.selectVenue(found);
-        }
-      }
-
-      this.cdr.detectChanges();
+    const latitude = this.selectedParentLatitude;
+    const longitude = this.selectedParentLongitude;
+    if (latitude === null || longitude === null) {
+      this.miniMap.setView([44.0, 20.9], 7);
       return;
     }
 
-    if (state.place) {
-      const p = state.place;
-      const type = (p.type ?? '').toLowerCase();
-
-      if (type === 'place') {
-        this.venueType = 'place';
-        const found = this.mapPlacesService.findById(p.id) ?? (p as MapPlace);
-        this.selectVenue(found);
-      } else if (type === 'destination') {
-        this.venueType = 'destination';
-
-        let found: MapPlace | undefined = this.mapPlacesService.findById(p.id) ??
-          this.mapPlacesService.getDestinations().find(d => d.name === p.name);
-
-        if (!found && p.lat != null) {
-          const tempPlace: MapPlace = {
-            id:          p.id   ?? Date.now().toString(),
-            name:        p.name ?? 'Unknown Destination',
-            type:        'Destination',
-            category:    p.category ?? 'Destination',
-            description: p.description ?? '',
-            status:      'Active',
-            eventsToday: 0,
-            lat:         p.lat,
-            lng:         p.lng,
-            zone:        p.zone,
-            address:     p.address,
-          };
-          this.mapPlacesService.addPlace(tempPlace);
-          found = tempPlace;
-        }
-
-        if (found) this.selectVenue(found);
-      } else {
-        // Location
-        this.venueType = 'location';
-
-        let found: MapPlace | undefined =
-          this.mapPlacesService.findById(p.id) ??
-          this.mapPlacesService.getLocations().find(l =>
-            l.name === p.name ||
-            (p.lat != null && Math.abs(l.lat - p.lat) < 0.001 && Math.abs(l.lng - p.lng) < 0.001)
-          );
-
-        if (!found && p.lat != null) {
-          const tempPlace: MapPlace = {
-            id:          p.id   ?? Date.now().toString(),
-            name:        p.name ?? 'Unknown Location',
-            type:        'Location',
-            category:    p.category ?? 'Location',
-            description: p.description ?? '',
-            status:      'Active',
-            eventsToday: 0,
-            lat:         p.lat,
-            lng:         p.lng,
-            zone:        p.zone,
-            address:     p.address,
-          };
-          this.mapPlacesService.addPlace(tempPlace);
-          found = tempPlace;
-        }
-
-        if (found) this.selectVenue(found);
-      }
-
-      this.cdr.detectChanges();
-    }
+    this.miniMarker = L.marker([latitude, longitude], { draggable: false }).addTo(this.miniMap);
+    this.miniMap.setView([latitude, longitude], this.venueType === 'destination' ? 10 : 13);
   }
 
-  private _parseDisplayDateToIso(display: string | undefined): string | null {
-    if (!display) return null;
-    try {
-      const d = new Date(display);
-      if (isNaN(d.getTime())) return null;
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    } catch { return null; }
-  }
-
-  ngOnDestroy(): void {
-    this.destroyModalMap();
-    this.lightboxService.close();
-    if (this.miniMap) { this.miniMap.remove(); this.miniMap = null; }
-    if (this._venueSearchDebounce) clearTimeout(this._venueSearchDebounce);
-  }
-  isSaving = false;
-
-  publish(): void {
-    if (!this.selectedVenue) {
-      alert('Please select a location or place for this event.');
-      return;
-    }
-    if (!this.eventTitle.trim()) {
-      alert('Please enter an event title.');
-      return;
+  private extractErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse) {
+      const message = typeof error.error?.message === 'string' ? error.error.message : null;
+      return message || fallback;
     }
 
-    this.isSaving = true;
-    const returnTo = history.state?.returnTo as string | undefined;
-
-    const lat = this.pinLat ? parseFloat(this.pinLat) : this.selectedVenue?.lat;
-    const lng = this.pinLng ? parseFloat(this.pinLng) : this.selectedVenue?.lng;
-
-    const startDisp = this.startDate
-      ? new Date(this.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      : '';
-    const endDisp = this.endDate
-      ? new Date(this.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      : '';
-    const dateRange = startDisp === endDisp ? startDisp : `${startDisp}–${endDisp}`;
-
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML ?? '';
-    const descriptionText = this.editorRef?.nativeElement?.innerText  ?? '';
-    const classification  = this.classItems.filter(c => c.checked).map(c => c.label);
-
-    setTimeout(() => {
-      this.isSaving = false;
-
-      const zone = this.selectedVenue?.zone ?? undefined;
-      const sharedFields = {
-        name:            this.eventTitle,
-        category:        this.eventCategory || 'Event',
-        summary:         this.summary || descriptionText.slice(0, 160),
-        lat,
-        lng,
-        zone,
-        venueType:       this.venueType,
-        address:         this.streetAddress || this.selectedVenue?.address,
-        venueName:       this.customVenueName || this.selectedVenue?.name,
-        startDate:       startDisp,
-        endDate:         endDisp,
-        startTime:       this.startTime,
-        endTime:         this.endTime,
-        allDay:          this.allDay,
-        freeEvent:       this.freeEvent,
-        recurring:       this.recurring,
-        dateRange,
-        description:     descriptionHtml,
-        classification:  classification.length ? classification : undefined,
-        tags:            this.tags.length ? this.tags : undefined,
-        coverImageUrl:   this.coverImageUrl ?? undefined,
-        coverImageName:  this.coverImageName || undefined,
-        galleryImages:   this.galleryImages.length ? [...this.galleryImages] : undefined,
-        organizerName:   this.organizerName || undefined,
-        contactEmail:    this.contactEmail || undefined,
-        attendanceLimit: this.attendanceLimit || undefined,
-        ageRestriction:  this.ageRestriction || undefined,
-        internalRefId:   this.internalRefId || undefined,
-      };
-
-      if (this.isEditMode && history.state?.place?.id) {
-        this.eventsListSvc.updateItem(history.state.place.id, {
-          ...sharedFields,
-          status: 'Published',
-          ...(this.coverImageUrl ? { imageBg: `url(${this.coverImageUrl}) center/cover` } : {}),
-        });
-      } else {
-        const newEventId = Date.now().toString();
-        this.eventsListSvc.addItem({
-          ...sharedFields,
-          id:          newEventId,
-          region:      this.regionDisplayName,
-          status:      'Published',
-          lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          imageBg:     this.coverImageUrl
-                         ? `url(${this.coverImageUrl}) center/cover`
-                         : 'linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%)',
-        });
-
-        if (returnTo) {
-          this.router.navigate([returnTo], { state: { newEvent: { id: newEventId, name: this.eventTitle } } });
-        } else {
-          this.router.navigate(['/events']);
-        }
-        return;
-      }
-
-      if (returnTo) {
-        this.router.navigate([returnTo]);
-      } else {
-        this.router.navigate(['/events']);
-      }
-    }, 800);
+    return fallback;
   }
 }
