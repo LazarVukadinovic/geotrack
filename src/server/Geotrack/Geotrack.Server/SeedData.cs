@@ -49,7 +49,10 @@ public static class SeedData
         {
             await EnsureRolesAsync(db);
             await EnsureDemoUsersAsync(db);
+            await EnsureSeedTagTypesAsync(db);
             await EnsureSeedTagsAsync(db);
+            await EnsureSeedPlaceTypesAsync(db);
+            await EnsureSeedStayTypesAsync(db);
             await EnsureDefaultModerationTermsAsync(db);
             return;
         }
@@ -195,15 +198,13 @@ public static class SeedData
         AddEntityImage(db, EntityImageTargetType.Location, U("1500530855697-b586d89ba3ee"), true, 0, now, locationId: gruz.Id);
 
         // Place types
-        var ptBeach = new PlaceType { Name = "Beach", Description = "Beaches and coastal areas", CreatedAt = now };
-        var ptRestaurant = new PlaceType { Name = "Restaurant", Description = "Dining establishments", CreatedAt = now };
-        var ptCafe = new PlaceType { Name = "Cafe", Description = "Cafes and coffee shops", CreatedAt = now };
-        var ptLandmark = new PlaceType { Name = "Landmark", Description = "Landmarks and monuments", CreatedAt = now };
-        var ptNature = new PlaceType { Name = "Nature", Description = "Nature spots", CreatedAt = now };
-        var ptStay = new PlaceType { Name = "Stay", Description = "Hotels, apartments, villas and other accommodation", CreatedAt = now };
-
-        db.PlaceTypes.AddRange(ptBeach, ptRestaurant, ptCafe, ptLandmark, ptNature, ptStay);
-        await db.SaveChangesAsync();
+        await EnsureSeedPlaceTypesAsync(db);
+        var ptBeach = await db.PlaceTypes.SingleAsync(type => type.Name == "Beach");
+        var ptRestaurant = await db.PlaceTypes.SingleAsync(type => type.Name == "Restaurant");
+        var ptCafe = await db.PlaceTypes.SingleAsync(type => type.Name == "Cafe");
+        var ptLandmark = await db.PlaceTypes.SingleAsync(type => type.Name == "Landmark");
+        var ptNature = await db.PlaceTypes.SingleAsync(type => type.Name == "Nature");
+        var ptStay = await db.PlaceTypes.SingleAsync(type => type.Name == "Stay");
 
         // Restaurant types
         var rtFineDining = new RestaurantType
@@ -234,32 +235,10 @@ public static class SeedData
         await db.SaveChangesAsync();
 
         // Stay types
-        var hotelStayType = new StayType
-        {
-            Name = "Hotel",
-            Slug = "hotel",
-            Description = "Hotel accommodation",
-            CreatedAt = now
-        };
-
-        var apartmentStayType = new StayType
-        {
-            Name = "Apartment",
-            Slug = "apartment",
-            Description = "Private apartment accommodation",
-            CreatedAt = now
-        };
-
-        var villaStayType = new StayType
-        {
-            Name = "Villa",
-            Slug = "villa",
-            Description = "Private villa accommodation",
-            CreatedAt = now
-        };
-
-        db.StayTypes.AddRange(hotelStayType, apartmentStayType, villaStayType);
-        await db.SaveChangesAsync();
+        await EnsureSeedStayTypesAsync(db);
+        var hotelStayType = await db.StayTypes.SingleAsync(type => type.Slug == "hotel");
+        var apartmentStayType = await db.StayTypes.SingleAsync(type => type.Slug == "apartment");
+        var villaStayType = await db.StayTypes.SingleAsync(type => type.Slug == "villa");
 
         // Stay amenities
         var stayAmenities = new List<StayAmenity>
@@ -302,10 +281,11 @@ public static class SeedData
         db.BookingPartners.AddRange(bpBooking, bpAirbnb, bpExpedia);
         await db.SaveChangesAsync();
 
+        await EnsureSeedTagTypesAsync(db);
+
         // Tags
-        var tags = BuildSeedTags(now);
-        db.Tags.AddRange(tags);
-        await db.SaveChangesAsync();
+        await EnsureSeedTagsAsync(db);
+        var tags = await db.Tags.ToListAsync();
 
         Tag T(string slug) => tags.First(t => t.Slug == slug);
 
@@ -589,11 +569,14 @@ public static class SeedData
         {
             Name = "Dubrovnik Summer Festival",
             EventTypeId = etFestival.Id,
+            DestinationId = oldTown.DestinationId,
             LocationId = oldTown.Id,
+            Summary = "A cultural summer festival with performances across historic Old Town venues.",
             Description = "A cultural summer festival with performances across historic venues in the Old Town.",
             StartDate = now.AddDays(5),
             EndDate = now.AddDays(47),
             TicketPrice = "EUR 25 - EUR 100",
+            IsFree = false,
             Duration = "42 days",
             HostedBy = "Dubrovnik Summer Festival Foundation",
             VenueDescription = "Multiple venues across Old Town.",
@@ -606,11 +589,14 @@ public static class SeedData
         {
             Name = "Old Town Food Market",
             EventTypeId = etMarket.Id,
+            DestinationId = oldTown.DestinationId,
             LocationId = oldTown.Id,
+            Summary = "Open-air food market with local produce, olive oils, cheeses and wines.",
             Description = "Open-air food market with local products, olive oils, cheeses and wines.",
             StartDate = now.AddDays(2),
             EndDate = now.AddDays(2).AddHours(8),
             TicketPrice = "Free entry",
+            IsFree = true,
             Duration = "8 hours",
             HostedBy = "Dubrovnik City Market Association",
             CreatedAt = now
@@ -620,11 +606,14 @@ public static class SeedData
         {
             Name = "Sea Kayaking Adventure",
             EventTypeId = etOutdoor.Id,
+            DestinationId = oldTown.DestinationId,
             LocationId = oldTown.Id,
+            Summary = "Guided sea kayaking along the Dubrovnik coastline.",
             Description = "Guided sea kayaking tour along the Dubrovnik coastline.",
             StartDate = now.AddDays(4),
             EndDate = now.AddDays(4).AddHours(4),
             TicketPrice = "EUR 35",
+            IsFree = false,
             Duration = "4 hours",
             HostedBy = "Adriatic Kayak Tours",
             CreatedAt = now
@@ -988,23 +977,229 @@ public static class SeedData
 
     private static async Task EnsureSeedTagsAsync(AppDbContext db)
     {
-        var existingSlugs = await db.Tags
-            .Select(x => x.Slug)
-            .ToListAsync();
+        var now = DateTime.UtcNow;
+        var existingTags = await db.Tags.ToListAsync();
+        var existingBySlug = existingTags.ToDictionary(x => x.Slug, StringComparer.OrdinalIgnoreCase);
+        var changed = false;
 
-        var existingSlugSet = existingSlugs.ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var missingTags = BuildSeedTags(DateTime.UtcNow)
-            .Where(x => !existingSlugSet.Contains(x.Slug))
-            .ToList();
-
-        if (missingTags.Count == 0)
+        foreach (var definition in BuildSeedTagDefinitions())
         {
-            return;
+            if (!existingBySlug.TryGetValue(definition.Slug, out var tag))
+            {
+                db.Tags.Add(new Tag
+                {
+                    Name = definition.Name,
+                    Slug = definition.Slug,
+                    ForDestination = definition.ForDestination,
+                    ForLocation = definition.ForLocation,
+                    ForPlace = definition.ForPlace,
+                    ForEvent = definition.ForEvent,
+                    Description = definition.Description,
+                    ImageUrl = definition.ImageUrl,
+                    CreatedAt = now
+                });
+                changed = true;
+                continue;
+            }
+
+            var nextForDestination = tag.ForDestination || definition.ForDestination;
+            var nextForLocation = tag.ForLocation || definition.ForLocation;
+            var nextForPlace = tag.ForPlace || definition.ForPlace;
+            var nextForEvent = tag.ForEvent || definition.ForEvent;
+
+            if (tag.ForDestination == nextForDestination &&
+                tag.ForLocation == nextForLocation &&
+                tag.ForPlace == nextForPlace &&
+                tag.ForEvent == nextForEvent)
+            {
+                continue;
+            }
+
+            tag.ForDestination = nextForDestination;
+            tag.ForLocation = nextForLocation;
+            tag.ForPlace = nextForPlace;
+            tag.ForEvent = nextForEvent;
+            tag.UpdatedAt = now;
+            changed = true;
         }
 
-        db.Tags.AddRange(missingTags);
-        await db.SaveChangesAsync();
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task EnsureSeedTagTypesAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+        var defaults = new[]
+        {
+            new TagType
+            {
+                Name = "Destination",
+                Slug = "destination",
+                Description = "Tags that can classify destinations.",
+                ForDestination = true,
+                CreatedAt = now
+            },
+            new TagType
+            {
+                Name = "Location",
+                Slug = "location",
+                Description = "Tags that can classify locations.",
+                ForLocation = true,
+                CreatedAt = now
+            },
+            new TagType
+            {
+                Name = "Place",
+                Slug = "place",
+                Description = "Tags that can classify places.",
+                ForPlace = true,
+                CreatedAt = now
+            },
+            new TagType
+            {
+                Name = "Event",
+                Slug = "event",
+                Description = "Tags that can classify events.",
+                ForEvent = true,
+                CreatedAt = now
+            }
+        };
+
+        var existingTypes = await db.TagTypes.ToListAsync();
+        var existingBySlug = existingTypes.ToDictionary(x => x.Slug, StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+
+        foreach (var seed in defaults)
+        {
+            if (!existingBySlug.TryGetValue(seed.Slug, out var tagType))
+            {
+                db.TagTypes.Add(seed);
+                changed = true;
+                continue;
+            }
+
+            var updated = false;
+            if (!tagType.ForDestination && seed.ForDestination)
+            {
+                tagType.ForDestination = true;
+                updated = true;
+            }
+            if (!tagType.ForLocation && seed.ForLocation)
+            {
+                tagType.ForLocation = true;
+                updated = true;
+            }
+            if (!tagType.ForPlace && seed.ForPlace)
+            {
+                tagType.ForPlace = true;
+                updated = true;
+            }
+            if (!tagType.ForEvent && seed.ForEvent)
+            {
+                tagType.ForEvent = true;
+                updated = true;
+            }
+
+            if (!updated)
+            {
+                continue;
+            }
+
+            tagType.UpdatedAt = now;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task EnsureSeedPlaceTypesAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+        var defaults = new (string Name, string Description)[]
+        {
+            ("Beach", "Beaches and coastal areas"),
+            ("Restaurant", "Dining establishments"),
+            ("Cafe", "Cafes and coffee shops"),
+            ("Landmark", "Landmarks and monuments"),
+            ("Nature", "Nature spots"),
+            ("Stay", "Hotels, apartments, villas and other accommodation"),
+            ("Museum", "Museums and galleries"),
+            ("Park", "Parks, gardens and green spaces")
+        };
+
+        var existing = await db.PlaceTypes.ToListAsync();
+        var existingNames = existing
+            .Select(type => type.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+
+        foreach (var (name, description) in defaults)
+        {
+            if (existingNames.Contains(name))
+            {
+                continue;
+            }
+
+            db.PlaceTypes.Add(new PlaceType
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = now
+            });
+            existingNames.Add(name);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task EnsureSeedStayTypesAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+        var defaults = new (string Name, string Slug, string Description)[]
+        {
+            ("Hotel", "hotel", "Hotel accommodation"),
+            ("Apartment", "apartment", "Private apartment accommodation"),
+            ("Villa", "villa", "Private villa accommodation")
+        };
+
+        var existing = await db.StayTypes.ToListAsync();
+        var existingSlugs = existing
+            .Select(type => type.Slug)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+
+        foreach (var (name, slug, description) in defaults)
+        {
+            if (existingSlugs.Contains(slug))
+            {
+                continue;
+            }
+
+            db.StayTypes.Add(new StayType
+            {
+                Name = name,
+                Slug = slug,
+                Description = description,
+                CreatedAt = now
+            });
+            existingSlugs.Add(slug);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
     }
 
     private static List<Tag> BuildSeedTags(DateTime createdAt)
@@ -1030,21 +1225,62 @@ public static class SeedData
         return new List<SeedTagDefinition>
         {
             new("Food & Drink", "food-drink", ForPlace: true, ForEvent: true, ImageUrl: U("1414235077428-338989a2e8c0")),
-            new("History", "history", ForDestination: true, ForPlace: true, ImageUrl: SeedMedia("dubrovnik-old-town")),
+            new("Restaurant", "restaurant", ForPlace: true),
+            new("Cafe", "cafe", ForPlace: true),
+            new("Accommodation", "accommodation", ForPlace: true),
+            new("Nature & Outdoors", "nature-outdoors", ForDestination: true, ForLocation: true, ForPlace: true, ForEvent: true),
+            new("Culture & Heritage", "culture-heritage", ForDestination: true, ForLocation: true, ForPlace: true, ForEvent: true),
+            new("Urban & City", "urban-city", ForDestination: true, ForLocation: true, ForPlace: true),
+            new("Urban Center", "urban-center", ForLocation: true, ForPlace: true),
+            new("Mountain & Forest", "mountain-forest", ForDestination: true, ForLocation: true, ForPlace: true),
+            new("National Park Access", "national-park-access", ForDestination: true, ForLocation: true, ForPlace: true),
+            new("Adventure & Sport", "adventure-sport", ForDestination: true, ForLocation: true, ForPlace: true, ForEvent: true),
+            new("Family Friendly", "family-friendly", ForDestination: true, ForLocation: true, ForPlace: true, ForEvent: true),
+            new("Accessibility Friendly", "accessibility-friendly", ForDestination: true, ForLocation: true, ForPlace: true),
+            new("Historic", "historic", ForDestination: true, ForLocation: true, ForPlace: true),
+            new("Coastal", "coastal", ForDestination: true, ForLocation: true, ForPlace: true),
+            new("Food & Wine", "food-wine", ForDestination: true, ForLocation: true, ForPlace: true, ForEvent: true),
+            new("Museums", "museums", ForDestination: true, ForLocation: true, ForPlace: true),
+            new("Wellness", "wellness", ForDestination: true, ForLocation: true, ForPlace: true),
+            new("History", "history", ForDestination: true, ForPlace: true, ForEvent: true, ImageUrl: SeedMedia("dubrovnik-old-town")),
             new("Beaches", "beaches", ForDestination: true, ForPlace: true, ImageUrl: U("1507525428034-b723cf961d3e")),
-            new("Nature", "nature", ForDestination: true, ForPlace: true, ImageUrl: U("1441974231531-c6227db76b6e")),
+            new("Nature", "nature", ForDestination: true, ForLocation: true, ForPlace: true, ImageUrl: U("1441974231531-c6227db76b6e")),
             new("Culture", "culture", ForDestination: true, ForPlace: true, ForEvent: true),
-            new("Outdoor", "outdoor", ForPlace: true, ForEvent: true),
+            new("Outdoor", "outdoor", ForLocation: true, ForPlace: true, ForEvent: true),
             new("Adventure", "adventure", ForPlace: true, ForEvent: true),
+            new("Music", "music", ForEvent: true),
             new("Festivals", "festivals", ForEvent: true),
+            new("Festival", "festival", ForEvent: true),
+            new("Concert", "concert", ForEvent: true),
+            new("Sports", "sports", ForEvent: true),
+            new("Exhibition", "exhibition", ForEvent: true),
             new("Food & Market", "food-market", ForEvent: true),
+            new("Nightlife", "nightlife", ForEvent: true),
+            new("Workshop", "workshop", ForEvent: true),
+            new("Community", "community", ForEvent: true),
+            new("Art", "art", ForEvent: true),
+            new("Seasonal", "seasonal", ForEvent: true),
+            new("Free Entry", "free-entry", ForEvent: true),
+            new("Ticketed", "ticketed", ForEvent: true),
             new("Fine Dining", "fine-dining", ForPlace: true),
-            new("Landmarks", "landmarks", ForPlace: true),
-            new("Islands", "islands", ForPlace: true),
-            new("Scenic Views", "scenic-views", ForPlace: true),
+            new("Landmarks", "landmarks", ForLocation: true, ForPlace: true),
+            new("Islands", "islands", ForDestination: true, ForPlace: true),
+            new("Scenic Views", "scenic-views", ForDestination: true, ForLocation: true, ForPlace: true),
+            new("Park", "park", ForLocation: true, ForPlace: true),
+            new("Museum", "museum", ForLocation: true, ForPlace: true),
+            new("Cultural Site", "cultural-site", ForLocation: true, ForPlace: true),
+            new("Urban Area", "urban-area", ForLocation: true, ForPlace: true),
+            new("Old Town", "old-town", ForLocation: true, ForPlace: true),
+            new("Waterfront", "waterfront", ForLocation: true, ForPlace: true),
+            new("Walking Area", "walking-area", ForLocation: true, ForPlace: true),
+            new("Religious Heritage", "religious-heritage", ForLocation: true, ForPlace: true),
+            new("Landmark", "landmark", ForLocation: true, ForPlace: true),
             new("Luxury", "luxury", ForPlace: true),
             new("Budget", "budget", ForPlace: true),
+            new("Budget-Friendly", "budget-friendly", ForPlace: true),
             new("Boutique", "boutique", ForPlace: true),
+            new("Romantic", "romantic", ForPlace: true),
+            new("Pet Friendly", "pet-friendly", ForPlace: true),
             new("Spa", "spa", ForPlace: true),
             new("Pool", "pool", ForPlace: true),
             new("Breakfast", "breakfast", ForPlace: true),

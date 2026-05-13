@@ -9,6 +9,7 @@ using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
+using Geometry = NetTopologySuite.Geometries.Geometry;
 using Point = NetTopologySuite.Geometries.Point;
 
 namespace Geotrack.Infrastructure;
@@ -260,7 +261,24 @@ public class AppDbContext : DbContext
                 .HasMaxLength(200);
 
             entity.Property(x => x.Description)
-                .HasMaxLength(2000);
+                .HasMaxLength(8000);
+
+            entity.Property(x => x.Summary)
+                .HasMaxLength(160);
+
+            entity.Property(x => x.InternalReferenceId)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.Status)
+                .IsRequired()
+                .HasMaxLength(32)
+                .HasDefaultValue("Published");
+
+            entity.Property(x => x.BoundaryNote)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.BoundaryShapeType)
+                .HasMaxLength(32);
 
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
@@ -277,11 +295,22 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.DestinationTypeId);
             entity.HasIndex(x => x.RegionId);
+            entity.HasIndex(x => x.CreatedByUserId);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.InternalReferenceId)
+                .IsUnique()
+                .HasFilter("\"InternalReferenceId\" IS NOT NULL");
 
             entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
                 .HasColumnType("geography (point)");
 
             entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
+
+            entity.Property<Geometry?>("BoundaryGeometry")
+                .HasColumnType("geography (polygon)");
+
+            entity.HasIndex("BoundaryGeometry")
                 .HasMethod("GIST");
         });
     }
@@ -298,6 +327,26 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.Description)
+                .HasMaxLength(8000);
+
+            entity.Property(x => x.Summary)
+                .HasMaxLength(160);
+
+            entity.Property(x => x.InternalReferenceId)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.Status)
+                .IsRequired()
+                .HasMaxLength(32)
+                .HasDefaultValue("Published");
+
+            entity.Property(x => x.BoundaryNote)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.BoundaryShapeType)
+                .HasMaxLength(32);
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -313,11 +362,22 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.DestinationId);
             entity.HasIndex(x => x.LocationTypeId);
+            entity.HasIndex(x => x.CreatedByUserId);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.InternalReferenceId)
+                .IsUnique()
+                .HasFilter("\"InternalReferenceId\" IS NOT NULL");
 
             entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
                 .HasColumnType("geography (point)");
 
             entity.HasIndex(SpatialPointFactory.CoordinatesPropertyName)
+                .HasMethod("GIST");
+
+            entity.Property<Geometry?>("BoundaryGeometry")
+                .HasColumnType("geography (polygon)");
+
+            entity.HasIndex("BoundaryGeometry")
                 .HasMethod("GIST");
         });
     }
@@ -337,11 +397,25 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Subtitle)
                 .HasMaxLength(500);
 
+            entity.Property(x => x.InternalReferenceId)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.Status)
+                .IsRequired()
+                .HasMaxLength(32)
+                .HasDefaultValue("Published");
+
             entity.Property(x => x.Address)
                 .HasMaxLength(500);
 
             entity.Property(x => x.OpeningHours)
                 .HasMaxLength(200);
+
+            entity.Property(x => x.OperatingHoursEnabled)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.OperatingHoursJson)
+                .HasColumnType("jsonb");
 
             entity.Property(x => x.Description)
                 .HasMaxLength(2000);
@@ -352,6 +426,26 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Number)
                 .HasMaxLength(50);
 
+            entity.Property(x => x.Website)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.AdmissionPriceRange)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.BookingExternalLink)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.BestTimeToVisit)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.VisitorTips)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.AccessNotes)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.AccessibilityNotes)
+                .HasMaxLength(1000);
 
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
@@ -368,6 +462,11 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.PlaceTypeId);
             entity.HasIndex(x => x.LocationId);
+            entity.HasIndex(x => x.CreatedByUserId);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.InternalReferenceId)
+                .IsUnique()
+                .HasFilter("\"InternalReferenceId\" IS NOT NULL");
 
             entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
                 .HasColumnType("geography (point)");
@@ -519,17 +618,43 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.Summary)
+                .HasMaxLength(160);
+
+            entity.Property(x => x.InternalReferenceId)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.Status)
+                .IsRequired()
+                .HasMaxLength(40);
+
             entity.Property(x => x.Description)
-                .HasMaxLength(2000);
+                .HasMaxLength(8000);
+
+            entity.Property(x => x.ParentEntityType)
+                .IsRequired()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.VenueName)
+                .HasMaxLength(200);
 
             entity.Property(x => x.TicketPrice)
                 .HasMaxLength(100);
+
+            entity.Property(x => x.ExternalTicketLink)
+                .HasMaxLength(500);
 
             entity.Property(x => x.Duration)
                 .HasMaxLength(100);
 
             entity.Property(x => x.HostedBy)
                 .HasMaxLength(200);
+
+            entity.Property(x => x.ContactEmail)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.AgeRestriction)
+                .HasMaxLength(100);
 
             entity.Property(x => x.VenueDescription)
                 .HasMaxLength(2000);
@@ -548,6 +673,11 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.EventTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.Destination)
+                .WithMany(x => x.Events)
+                .HasForeignKey(x => x.DestinationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasOne(x => x.Location)
                 .WithMany(x => x.Events)
                 .HasForeignKey(x => x.LocationId)
@@ -559,8 +689,14 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(x => x.EventTypeId);
+            entity.HasIndex(x => x.DestinationId);
             entity.HasIndex(x => x.LocationId);
             entity.HasIndex(x => x.PlaceId);
+            entity.HasIndex(x => x.Status);
+
+            entity.HasIndex(x => x.InternalReferenceId)
+                .IsUnique()
+                .HasFilter("\"InternalReferenceId\" IS NOT NULL");
 
             entity.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName)
                 .HasColumnType("geography (point)");
@@ -767,8 +903,21 @@ public class AppDbContext : DbContext
             entity.Property(x => x.DisplayName)
                 .HasMaxLength(100);
 
+            entity.Property(x => x.ShortBio)
+                .HasMaxLength(300);
+
             entity.Property(x => x.Location)
                 .HasMaxLength(200);
+
+            entity.Property(x => x.InterfaceLanguage)
+                .IsRequired()
+                .HasMaxLength(10)
+                .HasDefaultValue("en-US");
+
+            entity.Property(x => x.Timezone)
+                .IsRequired()
+                .HasMaxLength(100)
+                .HasDefaultValue("UTC");
 
             entity.Property(x => x.NeedsInterestsOnboarding)
                 .HasDefaultValue(false);
@@ -787,6 +936,12 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.EmailNotificationsEnabled)
                 .HasDefaultValue(false);
+
+            entity.Property(x => x.EmailRequestsEnabled)
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.EmailNewReviewEnabled)
+                .HasDefaultValue(true);
 
             entity.Property(x => x.AnalyticsEnabled)
                 .HasDefaultValue(true);
@@ -1864,6 +2019,11 @@ public class AppDbContext : DbContext
             return SpatialPointFactory.Create(entity.Location.Latitude, entity.Location.Longitude);
         }
 
+        if (entity.Destination is not null)
+        {
+            return SpatialPointFactory.Create(entity.Destination.Latitude, entity.Destination.Longitude);
+        }
+
         if (entity.PlaceId.HasValue)
         {
             var localPlace = Places.Local.FirstOrDefault(place => place.Id == entity.PlaceId.Value);
@@ -1873,10 +2033,19 @@ public class AppDbContext : DbContext
             }
         }
 
-        var localLocation = Locations.Local.FirstOrDefault(location => location.Id == entity.LocationId);
-        if (localLocation is not null)
+        if (entity.LocationId.HasValue)
         {
-            return SpatialPointFactory.Create(localLocation.Latitude, localLocation.Longitude);
+            var localLocation = Locations.Local.FirstOrDefault(location => location.Id == entity.LocationId.Value);
+            if (localLocation is not null)
+            {
+                return SpatialPointFactory.Create(localLocation.Latitude, localLocation.Longitude);
+            }
+        }
+
+        var localDestination = Destinations.Local.FirstOrDefault(destination => destination.Id == entity.DestinationId);
+        if (localDestination is not null)
+        {
+            return SpatialPointFactory.Create(localDestination.Latitude, localDestination.Longitude);
         }
 
         return null;

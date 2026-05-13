@@ -14,6 +14,9 @@ public class Location
 {
     public int Id { get; set; } // PRIMARY KEY
     public string Name { get; set; } = string.Empty;
+    public string? Summary { get; set; }
+    public string? InternalReferenceId { get; set; }
+    public string Status { get; set; } = "Published";
 
     public int DestinationId { get; set; } // FOREIGN KEY
     public Destination Destination { get; set; } = null!; // NAVIGATIONAL
@@ -29,6 +32,11 @@ public class Location
 
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public int? CreatedByUserId { get; set; }
+    public DateTime? PublishedAt { get; set; }
+    public string? BoundaryNote { get; set; }
+    public string? BoundaryShapeType { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
