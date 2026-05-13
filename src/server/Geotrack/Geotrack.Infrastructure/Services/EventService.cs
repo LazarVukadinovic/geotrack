@@ -223,6 +223,8 @@ public class EventService : IEventService
             .Include(e => e.Location)
             .Include(e => e.Place)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
+                .ThenInclude(tag => tag.TagType)
+                    .ThenInclude(tagType => tagType!.PlaceTypes)
             .FirstOrDefaultAsync(e => e.Id == id);
 
         if (evt == null) return null;
@@ -294,6 +296,8 @@ public class EventService : IEventService
             .Include(e => e.Images)
             .Include(e => e.EventReviews)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
+                .ThenInclude(tag => tag.TagType)
+                    .ThenInclude(tagType => tagType!.PlaceTypes)
             .FirstOrDefaultAsync(e => e.Id == eventId)
             ?? throw new KeyNotFoundException("Event not found");
 
@@ -347,6 +351,8 @@ public class EventService : IEventService
         var evt = await _db.Events
             .Include(e => e.Images)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
+                .ThenInclude(tag => tag.TagType)
+                    .ThenInclude(tagType => tagType!.PlaceTypes)
             .FirstOrDefaultAsync(e => e.Id == eventId)
             ?? throw new KeyNotFoundException("Event not found");
 

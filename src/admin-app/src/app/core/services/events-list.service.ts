@@ -72,6 +72,13 @@ export interface EventListItem {
   allDay?: boolean;
   freeEvent?: boolean;
   recurring?: boolean;
+  analyticsViews?: number;
+  analyticsVisitors?: number;
+  analyticsSaves?: number;
+  analyticsActions?: number;
+  analyticsReviewAvg?: number;
+  analyticsReviewCount?: number;
+  analyticsTrend?: 'up' | 'stable' | 'down';
 }
 
 export interface EventsPage {

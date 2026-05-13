@@ -15,6 +15,4 @@ public class Stay
 
     public ICollection<StayStayAmenity> StayAmenities { get; set; } = new List<StayStayAmenity>();
 
-    public DateTime CreatedAt { get; set; }
-    public DateTime? UpdatedAt { get; set; }
 }

@@ -62,6 +62,8 @@ export class AppShellComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.locationService.tryBackgroundGpsRefresh({ force: true });
+
     this.router.events
       .pipe(
         filter((e): e is NavigationStart | NavigationEnd =>

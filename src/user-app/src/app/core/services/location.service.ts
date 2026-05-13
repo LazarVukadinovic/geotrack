@@ -14,8 +14,17 @@ const LOCATION_KEY = 'geotrack_location';
 const ENTRY_COMPLETE_KEY = 'geotrack_location_entry_complete';
 const LOCATION_SESSION_SCHEMA_VERSION = 2;
 const OBSOLETE_APPROXIMATE_DISCLOSURE_KEY = 'geotrack_approximate_location_disclosure_v1';
+const GEOCODE_COORDINATE_MATCH_METRES = 25;
 
 type LocationSource = ResolvedLocation['source'];
+
+const LOCATION_SOURCE_PRIORITY: Record<LocationSource, number> = {
+  unknown: 0,
+  default: 1,
+  approximate: 2,
+  manual: 3,
+  gps: 4,
+};
 
 interface StoredLocationPayload {
   schemaVersion: number;
@@ -36,11 +45,13 @@ export class LocationService implements OnDestroy {
   private lastMapWatchLat = 0;
   private lastMapWatchLng = 0;
   private lastMapWatchUpdateTime = 0;
+  private gpsDeniedThisSession = false;
 
   /* ── Public reactive state ─────────────────────────────────────────── */
 
   private readonly _location = signal<ResolvedLocation | null>(null);
   private readonly _approximateLocation = signal<ResolvedLocation | null>(null);
+  private readonly _preciseUnavailable = signal(false);
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
   private readonly _hasCompletedLocationEntry = signal(this.readEntryCompleteFromStorage());
@@ -48,7 +59,7 @@ export class LocationService implements OnDestroy {
   readonly location = computed(() => this._location());
   readonly routingOrigin = computed(() => {
     const loc = this._location();
-    if (this.isRoutingOrigin(loc)) return loc;
+    if (this.isActiveRoutingOrigin(loc)) return loc;
 
     const approximate = this._approximateLocation();
     return this.isRoutingOrigin(approximate) ? approximate : null;
@@ -97,11 +108,7 @@ export class LocationService implements OnDestroy {
     // carries coordinates.
     const cached = this.restoreFromStorage();
     if (cached) {
-      this._location.set(cached);
-      if (cached.source === 'approximate' && this.hasUsableCoordinates(cached.latitude, cached.longitude)) {
-        this._approximateLocation.set(cached);
-      }
-      this._loading.set(false);
+      this.applyLocationCandidate(cached, { force: true, persist: false });
       this.lastGeocodedLat = cached.latitude;
       this.lastGeocodedLng = cached.longitude;
       this.lastGeocodeTime = Date.now();
@@ -132,8 +139,10 @@ export class LocationService implements OnDestroy {
     this.lastMapWatchLat = 0;
     this.lastMapWatchLng = 0;
     this.lastMapWatchUpdateTime = 0;
+    this.gpsDeniedThisSession = false;
     this._location.set(null);
     this._approximateLocation.set(null);
+    this._preciseUnavailable.set(false);
     this._loading.set(false);
     this._error.set(null);
     this._hasCompletedLocationEntry.set(false);
@@ -154,13 +163,14 @@ export class LocationService implements OnDestroy {
    * browser permission is already granted. Approximate fallback is never started
    * from this background path.
    */
-  tryBackgroundGpsRefresh(): void {
+  tryBackgroundGpsRefresh(options: { force?: boolean } = {}): void {
     const current = this._location();
-    if (current?.source === 'gps' && this.isCacheFresh(current)) {
+    if (!options.force && current?.source === 'gps' && this.isCacheFresh(current) && !this._preciseUnavailable()) {
       return;
     }
 
     void this.getGeolocationPermissionState().then((permission) => {
+      this.syncPermissionState(permission);
       if (permission === 'granted') {
         void this.fetchExactLocation({ enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 });
         return;
@@ -172,14 +182,24 @@ export class LocationService implements OnDestroy {
 
   async resolveLocationForProductFlow(): Promise<ResolvedLocation | null> {
     const current = this._location();
-    if (current && (current.source === 'manual' || this.isCacheFresh(current))) {
+    if (current?.source === 'manual') {
       return current;
     }
 
     const permission = await this.getGeolocationPermissionState();
-    if (permission !== 'denied') {
+    this.syncPermissionState(permission);
+
+    if (permission !== 'denied' && !this.gpsDeniedThisSession) {
       const exact = await this.fetchExactLocation({ enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 });
       if (exact) return exact;
+    }
+
+    const refreshedCurrent = this._location();
+    if (refreshedCurrent?.source === 'gps' && this.isCacheFresh(refreshedCurrent) && !this._preciseUnavailable()) {
+      return refreshedCurrent;
+    }
+    if (refreshedCurrent && refreshedCurrent.source !== 'gps' && this.isCacheFresh(refreshedCurrent)) {
+      return refreshedCurrent;
     }
 
     return this.ensureIpFallback();
@@ -209,7 +229,7 @@ export class LocationService implements OnDestroy {
             const current = this._location();
             const canReuseCurrentLabel = current?.source === 'gps'
               && this.haversineMetres(current.latitude, current.longitude, latitude, longitude) < MIN_DISTANCE_METRES;
-            this._location.set({
+            const loc: ResolvedLocation = {
               latitude,
               longitude,
               city: canReuseCurrentLabel ? current.city : '',
@@ -218,9 +238,8 @@ export class LocationService implements OnDestroy {
               displayLabel: canReuseCurrentLabel ? current.displayLabel : 'Explore',
               source: 'gps',
               cachedAt: Date.now(),
-            });
-            this._loading.set(false);
-            this.saveToStorage(this._location()!);
+            };
+            this.applyLocationCandidate(loc, { persist: true });
 
             this.reverseGeocode(latitude, longitude, 'gps').finally(() => {
               resolve({ latitude, longitude });
@@ -229,7 +248,10 @@ export class LocationService implements OnDestroy {
           });
         },
         (err) => {
-          this.zone.run(() => reject(err));
+          this.zone.run(() => {
+            this.markPreciseUnavailable(err?.code === 1);
+            reject(err);
+          });
         },
         { enableHighAccuracy: false, timeout: 10_000 },
       );
@@ -259,10 +281,7 @@ export class LocationService implements OnDestroy {
       cachedAt: Date.now(),
     };
 
-    this._location.set(loc);
-    this._loading.set(false);
-    this._error.set(null);
-    this.saveToStorage(loc);
+    this.applyLocationCandidate(loc, { persist: true });
     void this.reverseGeocode(latitude, longitude, 'gps');
   }
 
@@ -275,11 +294,12 @@ export class LocationService implements OnDestroy {
    */
   async resolveRoutingOrigin(): Promise<ResolvedLocation | null> {
     const current = this._location();
-    if (current?.source === 'gps' && this.isRoutingOrigin(current) && this.isCacheFresh(current)) {
+    if (current?.source === 'gps' && this.isRoutingOrigin(current) && this.isCacheFresh(current) && !this._preciseUnavailable()) {
       return current;
     }
 
     const geolocationPermission = await this.getGeolocationPermissionState();
+    this.syncPermissionState(geolocationPermission);
     if (geolocationPermission === 'granted') {
       const exact = await this.fetchExactLocation({ enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 });
       if (exact) return exact;
@@ -313,16 +333,19 @@ export class LocationService implements OnDestroy {
    */
   ensureIpFallback(): Promise<ResolvedLocation | null> {
     const current = this._location();
-    if (current && (current.source === 'manual' || this.isCacheFresh(current))) {
+    if (current?.source === 'manual') {
+      return Promise.resolve(current);
+    }
+    if (current?.source === 'gps' && this.isCacheFresh(current) && !this._preciseUnavailable()) {
+      return Promise.resolve(current);
+    }
+    if (current && current.source !== 'gps' && this.isCacheFresh(current)) {
       return Promise.resolve(current);
     }
 
     const approximate = this._approximateLocation();
     if (this.isRoutingOrigin(approximate) && this.isCacheFresh(approximate)) {
-      if (!current || current.source === 'approximate') {
-        this._location.set(approximate);
-        this._loading.set(false);
-      }
+      this.applyLocationCandidate(approximate, { persist: true });
       return Promise.resolve(approximate);
     }
 
@@ -344,10 +367,7 @@ export class LocationService implements OnDestroy {
       source: 'manual',
       cachedAt: Date.now(),
     };
-    this._location.set(loc);
-    this._loading.set(false);
-    this._error.set(null);
-    this.saveToStorage(loc);
+    this.applyLocationCandidate(loc, { force: true, persist: true });
 
     // Reverse-geocode in background to fill in region/country
     this.reverseGeocode(lat, lng, 'manual');
@@ -355,6 +375,7 @@ export class LocationService implements OnDestroy {
 
   async refreshExactLocationForMap(): Promise<ResolvedLocation | null> {
     const permission = await this.getGeolocationPermissionState();
+    this.syncPermissionState(permission);
     if (permission && permission !== 'granted') return null;
 
     return this.fetchExactLocation({
@@ -479,14 +500,21 @@ export class LocationService implements OnDestroy {
             source,
             cachedAt: Date.now(),
           };
-          this._location.set(loc);
-          this._loading.set(false);
-          this._error.set(null);
-          this.saveToStorage(loc);
-          resolve(loc);
+          if (!this.isCurrentLocationForGeocode(lat, lng, source)) {
+            resolve(this._location());
+            return;
+          }
+
+          const applied = this.applyLocationCandidate(loc, { persist: true });
+          resolve(applied ? loc : this._location());
         },
         error: () => {
           let loc = this._location();
+          if (!this.isCurrentLocationForGeocode(lat, lng, source)) {
+            this._loading.set(false);
+            resolve(loc);
+            return;
+          }
           if (!loc) {
             loc = {
               latitude: lat,
@@ -498,7 +526,7 @@ export class LocationService implements OnDestroy {
               source,
               cachedAt: Date.now(),
             };
-            this._location.set(loc);
+            this.applyLocationCandidate(loc, { persist: true });
           }
           this._loading.set(false);
           resolve(loc);
@@ -518,6 +546,7 @@ export class LocationService implements OnDestroy {
 
   private fetchExactLocation(options: PositionOptions): Promise<ResolvedLocation | null> {
     if (typeof navigator === 'undefined' || typeof navigator.geolocation?.getCurrentPosition !== 'function') {
+      this.markPreciseUnavailable();
       return Promise.resolve(null);
     }
 
@@ -529,7 +558,12 @@ export class LocationService implements OnDestroy {
             resolve(this.applyGpsCoordinates(latitude, longitude));
           });
         },
-        () => resolve(null),
+        (err) => {
+          this.zone.run(() => {
+            this.markPreciseUnavailable(err?.code === 1);
+            resolve(null);
+          });
+        },
         options,
       );
     });
@@ -553,10 +587,7 @@ export class LocationService implements OnDestroy {
       cachedAt: Date.now(),
     };
 
-    this._location.set(loc);
-    this._loading.set(false);
-    this._error.set(null);
-    this.saveToStorage(loc);
+    this.applyLocationCandidate(loc, { persist: true });
 
     if (this.shouldReverseGeocode(latitude, longitude)) {
       void this.reverseGeocode(latitude, longitude, 'gps');
@@ -679,7 +710,7 @@ export class LocationService implements OnDestroy {
 
   private async fetchApproximateLocationForRouting(): Promise<ResolvedLocation | null> {
     const current = this._location();
-    if (this.isRoutingOrigin(current) && this.isCacheFresh(current)) {
+    if (this.isActiveRoutingOrigin(current) && this.isCacheFresh(current)) {
       return current;
     }
 
@@ -705,13 +736,8 @@ export class LocationService implements OnDestroy {
             }
 
             this._approximateLocation.set(loc);
-            const active = this._location();
-            if (!active || active.source === 'approximate' || !this.isCacheFresh(active)) {
-              this._location.set(loc);
-              this._loading.set(false);
-              this._error.set(null);
-              this.saveToStorage(loc);
-            }
+            this.applyLocationCandidate(loc, { persist: true });
+            this._loading.set(false);
             resolve(loc);
           },
           error: () => {
@@ -753,6 +779,82 @@ export class LocationService implements OnDestroy {
 
     const cachedAt = typeof loc.cachedAt === 'number' ? loc.cachedAt : Date.now();
     return Date.now() - cachedAt < LOCATION_CACHE_TTL_MS;
+  }
+
+  private applyLocationCandidate(
+    loc: ResolvedLocation,
+    options: { force?: boolean; persist?: boolean } = {},
+  ): boolean {
+    if (!this.hasUsableCoordinates(loc.latitude, loc.longitude)) return false;
+
+    const current = this._location();
+    if (!options.force && !this.canReplaceActiveLocation(current, loc)) {
+      if (loc.source === 'approximate') {
+        this._approximateLocation.set(loc);
+      }
+      this._loading.set(false);
+      return false;
+    }
+
+    this._location.set(loc);
+    if (loc.source === 'approximate') {
+      this._approximateLocation.set(loc);
+    }
+    if (loc.source === 'gps') {
+      this._preciseUnavailable.set(false);
+      this.gpsDeniedThisSession = false;
+    }
+
+    this._loading.set(false);
+    this._error.set(null);
+    if (options.persist) {
+      this.saveToStorage(loc);
+    }
+    return true;
+  }
+
+  private canReplaceActiveLocation(current: ResolvedLocation | null, next: ResolvedLocation): boolean {
+    if (!current) return true;
+    if (!this.hasUsableCoordinates(current.latitude, current.longitude)) return true;
+    if (!this.isCacheFresh(current)) return true;
+
+    const currentPriority = LOCATION_SOURCE_PRIORITY[current.source];
+    const nextPriority = LOCATION_SOURCE_PRIORITY[next.source];
+    if (nextPriority > currentPriority) return true;
+    if (nextPriority < currentPriority) {
+      return current.source === 'gps' && this._preciseUnavailable();
+    }
+
+    return true;
+  }
+
+  private isActiveRoutingOrigin(loc: ResolvedLocation | null): loc is ResolvedLocation {
+    return this.isRoutingOrigin(loc) && !(loc.source === 'gps' && this._preciseUnavailable());
+  }
+
+  private isCurrentLocationForGeocode(lat: number, lng: number, source: 'gps' | 'approximate' | 'manual'): boolean {
+    const current = this._location();
+    return current?.source === source &&
+      this.hasUsableCoordinates(current.latitude, current.longitude) &&
+      this.haversineMetres(current.latitude, current.longitude, lat, lng) < GEOCODE_COORDINATE_MATCH_METRES;
+  }
+
+  private syncPermissionState(permission: PermissionState | null): void {
+    if (permission === 'granted') {
+      this.gpsDeniedThisSession = false;
+      return;
+    }
+
+    if (permission === 'denied') {
+      this.markPreciseUnavailable(true);
+    }
+  }
+
+  private markPreciseUnavailable(denied = false): void {
+    this._preciseUnavailable.set(true);
+    if (denied) {
+      this.gpsDeniedThisSession = true;
+    }
   }
 
   private hasUsableCoordinates(latitude: unknown, longitude: unknown): boolean {

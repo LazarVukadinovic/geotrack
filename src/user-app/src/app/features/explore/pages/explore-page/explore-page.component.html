@@ -35,61 +35,26 @@
       />
     }
 
-    @if (isLoggedIn()) {
-      @if (showCuratedForYou()) {
-        <app-curated-for-you
-          [items]="curatedItems()"
-          [loading]="curatedLoading()"
-          (bookmarkToggled)="toggleCuratedSaved($event)"
-          (cardActivated)="onCuratedCard($event)"
-          (sectionMore)="onCuratedMore()"
-        />
-      }
-    } @else {
+    @if (!isLoggedIn()) {
       <app-promo-card [promo]="promo()" (cta)="onPromoCta()" />
     }
 
-    <app-landmarks-slider
-      [items]="landmarkCategories()"
-      (tileActivated)="onLandmarkTile($event)"
-      (sectionMore)="onLandmarksMore()"
-    />
+    @if (!loading() && loaded() && sections().length === 0 && !loadError()) {
+      <app-empty-state
+        title="No Explore sections yet"
+        message="Try another location or add more approved places, events and tags."
+      />
+    }
 
-    <app-top-stays-slider
-      [items]="topStays()"
-      [showFavoriteButton]="isLoggedIn()"
-      (bookmarkToggled)="toggleStaySaved($event)"
-      (cardActivated)="onStayCard($event)"
-      (sectionMore)="onStaysMore()"
-    />
-
-    <app-events-slider
-      [items]="eventsThisWeek()"
-      (eventActivated)="onEvent($event)"
-      (sectionMore)="onEventsMore()"
-    />
-
-    <app-local-favorites-list
-      [items]="filteredLocalFavorites()"
-      [showFavoriteButton]="isLoggedIn()"
-      (bookmarkToggled)="toggleLocalSaved($event)"
-      (cardActivated)="onLocalCard($event)"
-      (sectionMore)="onLocalMore()"
-    />
-
-    <app-must-see-slider
-      [items]="mustSeeAttractions()"
-      (cardActivated)="onAttractionCard($event)"
-      (sectionMore)="onAttractionsMore()"
-    />
-
-    <app-popular-nearby-slider
-      [items]="popularNearby()"
-      [showFavoriteButton]="isLoggedIn()"
-      (bookmarkToggled)="toggleNearbySaved($event)"
-      (cardActivated)="onNearbyCard($event)"
-      (sectionMore)="onNatureMore()"
-    />
+    @for (section of sections(); track section.key) {
+      <app-explore-section
+        [section]="section"
+        [showFavoriteButton]="isLoggedIn()"
+        (save)="onSectionSave($event)"
+        (itemActivated)="onSectionItem($event)"
+        (sectionMore)="onSectionMore($event)"
+      />
+    }
   </div>
 
   @if (searchOverlayOpen()) {

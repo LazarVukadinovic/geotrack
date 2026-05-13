@@ -79,8 +79,7 @@
       @for (item of nationalMainNav; track item.path) {
         <a
           [routerLink]="item.path"
-          routerLinkActive="sidebar-link-active"
-          [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
+          [class.sidebar-link-active]="isActive(item.path, item.exact)"
           class="sidebar-link flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 text-xs font-medium mb-0.5 no-underline transition-colors hover:text-white hover:bg-white/10"
         >
           <svg
@@ -127,7 +126,7 @@
       @for (item of nationalAnalyticsNav; track item.path) {
         <a
           [routerLink]="item.path"
-          routerLinkActive="sidebar-link-active"
+          [class.sidebar-link-active]="isActive(item.path)"
           class="sidebar-link flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 text-xs font-medium mb-0.5 no-underline transition-colors hover:text-white hover:bg-white/10"
         >
           <svg
@@ -144,14 +143,14 @@
                 <line x1="12" y1="20" x2="12" y2="4" />
                 <line x1="6" y1="20" x2="6" y2="14" />
                 <line x1="2" y1="20" x2="22" y2="20" />
-              }
-              @case ('globe') {
-                <circle cx="12" cy="12" r="10" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <path
-                  d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"
-                />
-              }
+               }
+               @case ('globe') {
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path
+                    d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"
+                  />
+               }
             }
           </svg>
           <span>{{ item.label }}</span>
@@ -166,8 +165,7 @@
       @for (item of mainNav; track item.path) {
         <a
           [routerLink]="item.path"
-          routerLinkActive="sidebar-link-active"
-          [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
+          [class.sidebar-link-active]="isActive(item.path, item.exact)"
           class="sidebar-link flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 text-xs font-medium mb-0.5 no-underline transition-colors hover:text-white hover:bg-white/10"
         >
           <svg
@@ -219,7 +217,7 @@
       @for (item of contentNav; track item.path) {
         <a
           [routerLink]="item.path"
-          routerLinkActive="sidebar-link-active"
+          [class.sidebar-link-active]="isActive(item.path)"
           class="sidebar-link flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 text-xs font-medium mb-0.5 no-underline transition-colors hover:text-white hover:bg-white/10"
         >
           <svg
@@ -262,7 +260,7 @@
       @for (item of analyticsNav; track item.path) {
         <a
           [routerLink]="item.path"
-          routerLinkActive="sidebar-link-active"
+          [class.sidebar-link-active]="isActive(item.path)"
           class="sidebar-link flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 text-xs font-medium mb-0.5 no-underline transition-colors hover:text-white hover:bg-white/10"
         >
           <svg
@@ -288,7 +286,7 @@
   <div class="px-3 pt-2 border-t border-white/10 mt-3">
     <a
       routerLink="/settings"
-      routerLinkActive="sidebar-link-active"
+      [class.sidebar-link-active]="isActive('/settings', true)"
       class="sidebar-link flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 text-xs font-medium mb-0.5 no-underline transition-colors"
     >
       <svg

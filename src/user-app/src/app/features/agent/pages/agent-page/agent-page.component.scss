@@ -1,32 +1,9 @@
-// Chat sealed-viewport layout.
-//
-// Why calc(100dvh - var(--shell-bottom-pad)) and NOT bare 100dvh:
-//
-//   Global styles.scss applies `* { box-sizing: border-box }`.
-//   .app-shell__viewport has `height: 100dvh; padding-bottom: P` (border-box).
-//   With border-box, padding is INSIDE the declared height, so the
-//   CONTENT AREA available to children = 100dvh - P.
-//   clientHeight of the viewport = 100dvh.
-//
-//   If :host is 100dvh, it overflows the content area by P pixels:
-//     scrollHeight = 100dvh + P  >  clientHeight = 100dvh
-//   → the outer viewport scrolls by P pixels, dragging the whole page
-//     (header, messages, input) with it.
-//
-//   If :host is calc(100dvh - P), it fits the content area exactly:
-//     scrollHeight = (100dvh - P) + P = 100dvh  ==  clientHeight
-//   → no outer scroll; only .agent__messages scrolls internally.
-//
-//   The fallback MUST come first so the preferred 100dvh value wins
-//   (CSS cascade: last valid declaration wins).
 :host {
   display: block;
-  height: calc(100vh - var(--shell-bottom-pad));   // fallback
-  height: calc(100dvh - var(--shell-bottom-pad));  // preferred — overrides above
+  height: calc(100vh - var(--shell-bottom-pad));
+  height: calc(100dvh - var(--shell-bottom-pad));
   overflow: hidden;
 }
-
-// ─── Layout shell ─────────────────────────────────────────────────────────────
 
 .agent {
   display: flex;
@@ -35,65 +12,294 @@
   background: var(--color-page-bg);
 }
 
-// ─── Header ───────────────────────────────────────────────────────────────────
-
 .agent__header {
-  flex-shrink: 0;
-  background: var(--color-primary-navy);
-  padding: calc(env(safe-area-inset-top, 0px) + 20px) var(--page-gutter) 28px;
-  border-radius: 0 0 24px 24px;
-  position: relative;
   z-index: 2;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: calc(env(safe-area-inset-top, 0px) + 18px) var(--page-gutter) 20px;
+  border-radius: 0 0 24px 24px;
+  background: var(--color-primary-navy);
+}
 
-  &-title {
-    color: #ffffff;
-    font-size: var(--text-xl);
-    font-weight: 700;
-    margin: 0;
-    letter-spacing: -0.01em;
+.agent__header-copy {
+  min-width: 0;
+}
+
+.agent__header-title {
+  margin: 0;
+  color: #ffffff;
+  font-size: var(--text-xl);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.agent__header-meta {
+  max-width: min(58vw, 520px);
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent__settings-button,
+.agent__settings-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.agent__settings-button {
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+
+  svg {
+    width: 22px;
+    height: 22px;
   }
 }
 
-// ─── Messages area ────────────────────────────────────────────────────────────
+.agent__settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.agent__settings-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 9001;
+  box-sizing: border-box;
+  max-height: 90vh;
+  max-height: 90dvh;
+  overflow-y: auto;
+  padding: 10px var(--page-gutter) calc(env(safe-area-inset-bottom, 0px) + 22px);
+  border-radius: 24px 24px 0 0;
+  outline: none;
+  background: var(--color-page-bg);
+  box-shadow: 0 -12px 38px rgba(0, 0, 0, 0.22);
+  -webkit-overflow-scrolling: touch;
+}
+
+.agent__settings-handle {
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 18px;
+  border-radius: 2px;
+  background: #d1d5db;
+}
+
+.agent__settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.agent__settings-title-group {
+  min-width: 0;
+}
+
+.agent__settings-title {
+  margin: 0 0 4px;
+  color: var(--color-primary-navy);
+  font-size: var(--text-xl);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.agent__settings-subtitle,
+.agent__settings-note,
+.agent__settings-safe-note,
+.agent__connector p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.agent__settings-close {
+  width: 38px;
+  height: 38px;
+  background: #edeef2;
+  color: var(--color-primary-navy);
+
+  svg {
+    width: 17px;
+    height: 17px;
+  }
+}
+
+.agent__settings-form,
+.agent__settings-grid,
+.agent__key-panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.agent__field,
+.agent__key-entry {
+  display: grid;
+  gap: 6px;
+
+  span {
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 800;
+  }
+}
+
+.agent__field select,
+.agent__key-input {
+  width: 100%;
+  min-height: 46px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--color-primary-navy);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+
+.agent__field select {
+  padding: 0 12px;
+}
+
+.agent__key-input {
+  padding: 0 13px;
+}
+
+.agent__field select:focus,
+.agent__key-input:focus,
+.agent__mode-btn:focus-visible,
+.agent__mini-btn:focus-visible,
+.agent__settings-button:focus-visible,
+.agent__settings-close:focus-visible,
+.agent__send-btn:focus-visible {
+  outline: 2px solid #e8570a;
+  outline-offset: 2px;
+}
+
+.agent__field select:disabled {
+  opacity: 0.62;
+}
+
+.agent__mode-row,
+.agent__settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.agent__mode-btn,
+.agent__mini-btn {
+  min-height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--color-primary-navy);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.agent__mode-btn {
+  padding: 0 var(--space-3);
+}
+
+.agent__mode-btn--active,
+.agent__mini-btn {
+  border-color: var(--color-primary-navy);
+  background: var(--color-primary-navy);
+  color: #ffffff;
+}
+
+.agent__mini-btn {
+  flex: 1 1 108px;
+  padding: 0 var(--space-4);
+}
+
+.agent__mini-btn--quiet {
+  background: #ffffff;
+  color: var(--color-primary-navy);
+}
+
+.agent__mode-btn:disabled,
+.agent__mini-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.agent__key-status {
+  margin: 0;
+  color: var(--color-primary-navy);
+  font-size: var(--text-sm);
+  font-weight: 750;
+}
+
+.agent__settings-safe-note {
+  padding: var(--space-3);
+  border: 1px solid rgba(13, 148, 136, 0.22);
+  border-radius: 8px;
+  background: rgba(13, 148, 136, 0.08);
+  color: #0f766e;
+}
+
+.agent__connector {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.agent__connector summary {
+  cursor: pointer;
+  color: var(--color-primary-navy);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.agent__connector p {
+  margin-top: var(--space-2);
+}
 
 .agent__messages {
   flex: 1;
-  // min-height: 0 prevents flex item from expanding beyond its allocation
-  // (default min-height: auto would let it grow, making .agent overflow :host).
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
   overflow-x: hidden;
   padding: var(--space-4) var(--page-gutter) 0;
-  // DO NOT use scroll-behavior: smooth here — on iOS Safari, CSS smooth scroll
-  // conflicts with programmatic scrollTop assignments. When smooth-scroll is
-  // animating and a second scrollTop write arrives, iOS ignores the second
-  // write, leaving new messages off-screen. Smoothness is handled in JS via
-  // scrollTo({ behavior }) when appropriate.
-
-  // iOS Safari — enables momentum (inertia) scrolling and ensures touch events
-  // inside this container are processed as scroll events, not passed to a parent.
+  scrollbar-width: none;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
 
-  // Prevent scroll chaining: when the user reaches the top/bottom of the
-  // message list, iOS would normally propagate the remaining momentum to the
-  // outer .app-shell__viewport. contain stops that propagation entirely,
-  // preventing the header and input bar from drifting on real iPhone.
-  overscroll-behavior-y: contain;
-
-  // Tell iOS that vertical pan gestures belong to this element. Without this
-  // hint, iOS's touch routing heuristic might send the gesture to a parent.
-  touch-action: pan-y;
-
-  // Hide scrollbar but keep scroll functionality
-  scrollbar-width: none;
-  &::-webkit-scrollbar { display: none; }
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .agent__messages-spacer {
   height: var(--space-4);
 }
-
-// ─── Date divider ─────────────────────────────────────────────────────────────
 
 .agent__date-divider {
   display: flex;
@@ -108,23 +314,32 @@
     height: 1px;
     background: var(--color-border);
   }
-
-  &-label {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    color: var(--color-muted);
-    letter-spacing: 0.08em;
-  }
 }
 
-// ─── Message rows ─────────────────────────────────────────────────────────────
+.agent__date-divider-label {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
 
 .agent__bubble-row {
   display: flex;
   margin-bottom: var(--space-3);
 
-  &--user {
-    justify-content: flex-end;
+  app-agent-message-bubble {
+    display: block;
+    width: 100%;
+    max-width: 82%;
+  }
+}
+
+.agent__bubble-row--user {
+  justify-content: flex-end;
+
+  app-agent-message-bubble {
+    max-width: 92%;
+    margin-left: auto;
   }
 }
 
@@ -132,27 +347,23 @@
   margin-bottom: var(--space-3);
 }
 
-// ─── Cards section ────────────────────────────────────────────────────────────
-
 .agent__cards-section {
-  margin-bottom: var(--space-4);
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 .agent__cards-title {
-  font-size: var(--text-md);
-  font-weight: 700;
-  color: var(--color-primary-navy);
+  grid-column: 1 / -1;
+  align-self: flex-start;
   margin: 0;
   padding-bottom: 8px;
   border-bottom: 2px solid #e8570a;
-  align-self: flex-start;
+  color: var(--color-primary-navy);
+  font-size: var(--text-md);
+  font-weight: 800;
   animation: bubble-in 0.28s ease-out both;
 }
-
-// ─── Typing indicator ─────────────────────────────────────────────────────────
 
 .agent__typing {
   display: flex;
@@ -162,14 +373,14 @@
 }
 
 .agent__typing-avatar {
-  flex-shrink: 0;
+  flex: 0 0 32px;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
-  background: var(--color-primary-navy);
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 50%;
+  background: var(--color-primary-navy);
   color: #ffffff;
 
   svg {
@@ -182,9 +393,9 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  background: #ffffff;
-  border-radius: 4px 18px 18px 18px;
   padding: 14px 16px;
+  border-radius: 4px 18px 18px 18px;
+  background: #ffffff;
   box-shadow: var(--shadow-subtle);
 }
 
@@ -195,65 +406,43 @@
   background: var(--color-muted);
   animation: typing-dot 1.3s infinite ease-in-out;
 
-  &:nth-child(2) { animation-delay: 0.2s; }
-  &:nth-child(3) { animation-delay: 0.4s; }
-}
+  &:nth-child(2) {
+    animation-delay: 0.2s;
+  }
 
-// ─── Input area ───────────────────────────────────────────────────────────────
+  &:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+}
 
 .agent__input-area {
   flex-shrink: 0;
-  // :host height is calc(100dvh - shell-bottom-pad), so the flex column's
-  // bottom edge already sits directly above the fixed bottom nav.
-  // No extra padding-bottom needed here.
   padding: var(--space-3) var(--page-gutter);
-  background: var(--color-page-bg);
   border-top: 1px solid var(--color-border);
+  background: var(--color-page-bg);
 }
 
 .agent__input-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  background: #ffffff;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--color-border);
   padding: 6px 6px 6px 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: #ffffff;
   box-shadow: var(--shadow-subtle);
-}
-
-.agent__mic-btn {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--color-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: not-allowed;
-  opacity: 0.55;
-  // manipulation = allow tap + pan-x + pan-y + pinch-zoom; eliminates iOS
-  // 300 ms tap delay and prevents scroll-gesture swallowing for this button.
-  touch-action: manipulation;
-
-  svg {
-    width: 18px;
-    height: 18px;
-  }
 }
 
 .agent__input {
   flex: 1;
-  border: none;
-  outline: none;
+  min-width: 0;
+  border: 0;
+  outline: 0;
   background: transparent;
-  font-size: 1rem; // 1rem prevents iOS Safari auto-zoom on focus
-  font-family: var(--font-sans);
   color: var(--color-primary-navy);
   caret-color: #e8570a;
+  font: inherit;
+  font-size: 1rem;
 
   &::placeholder {
     color: var(--color-muted);
@@ -261,19 +450,17 @@
 }
 
 .agent__send-btn {
-  flex-shrink: 0;
+  flex: 0 0 38px;
   width: 38px;
   height: 38px;
-  border-radius: 50%;
-  border: none;
-  background: var(--color-primary-navy);
-  color: rgba(255, 255, 255, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-primary-navy);
+  color: rgba(255, 255, 255, 0.4);
   cursor: pointer;
-  // manipulation: eliminates iOS 300 ms click delay and prevents the
-  // touchstart from being interpreted as a scroll-start gesture.
   touch-action: manipulation;
   transition: color 0.18s ease, transform 0.15s ease;
 
@@ -281,23 +468,22 @@
     width: 18px;
     height: 18px;
   }
-
-  &--active {
-    color: #ffffff;
-
-    &:active {
-      transform: scale(0.9);
-    }
-  }
 }
 
-// ─── Animations ───────────────────────────────────────────────────────────────
+.agent__send-btn--active {
+  color: #ffffff;
+
+  &:active {
+    transform: scale(0.9);
+  }
+}
 
 @keyframes bubble-in {
   from {
     opacity: 0;
     transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -309,6 +495,7 @@
     opacity: 0.3;
     transform: translateY(0);
   }
+
   30% {
     opacity: 1;
     transform: translateY(-4px);
@@ -316,11 +503,6 @@
 }
 
 @media (min-width: 1024px) {
-  .agent {
-    padding: 0;
-    background: var(--color-page-bg);
-  }
-
   .agent__header {
     padding: var(--space-6) var(--space-8);
     border-radius: 0;
@@ -330,10 +512,34 @@
     font-size: 1.75rem;
   }
 
+  .agent__header-meta {
+    max-width: 640px;
+  }
+
+  .agent__settings-backdrop {
+    left: var(--desktop-sidebar-width);
+  }
+
+  .agent__settings-sheet {
+    top: 50%;
+    right: var(--space-6);
+    bottom: auto;
+    left: calc(var(--desktop-sidebar-width) + var(--space-6));
+    width: min(520px, calc(100vw - var(--desktop-sidebar-width) - (var(--space-6) * 2)));
+    max-height: calc(100dvh - (var(--space-6) * 2));
+    margin-inline: auto;
+    padding: var(--space-5);
+    transform: translateY(-50%);
+    border-radius: 24px;
+    box-shadow: 0 24px 60px rgba(26, 43, 76, 0.24);
+  }
+
+  .agent__settings-handle {
+    display: none;
+  }
+
   .agent__messages {
     padding: var(--space-6) var(--space-8) 0;
-    background: var(--color-page-bg);
-    border-inline: 0;
   }
 
   .agent__bubble-row,
@@ -342,20 +548,22 @@
     max-width: 640px;
   }
 
+  .agent__cards-section {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+
   .agent__bubble-row--user {
     max-width: none;
 
     app-agent-message-bubble {
-      max-width: 640px;
+      max-width: 720px;
       margin-left: auto;
     }
   }
 
   .agent__input-area {
     padding: var(--space-4) var(--space-8) var(--space-6);
-    background: #ffffff;
-    border: 0;
     border-top: 1px solid var(--color-border);
-    border-radius: 0;
+    background: #ffffff;
   }
 }

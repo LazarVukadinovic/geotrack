@@ -97,7 +97,6 @@ public class RegionalPlaceService : IRegionalPlaceService
                 CreatedAt = place.CreatedAt,
                 UpdatedAt = place.UpdatedAt,
                 PublishedAt = place.PublishedAt,
-                StayUpdatedAt = place.Stay != null ? place.Stay.UpdatedAt : null,
                 Latitude = place.Latitude,
                 Longitude = place.Longitude,
                 ImageUrl = place.Images
@@ -172,7 +171,6 @@ public class RegionalPlaceService : IRegionalPlaceService
                 CreatedAt = place.CreatedAt,
                 UpdatedAt = place.UpdatedAt,
                 PublishedAt = place.PublishedAt,
-                StayUpdatedAt = place.Stay != null ? place.Stay.UpdatedAt : null,
                 Latitude = place.Latitude,
                 Longitude = place.Longitude,
                 ImageUrl = place.Images
@@ -279,8 +277,7 @@ public class RegionalPlaceService : IRegionalPlaceService
         {
             place.Stay = new Stay
             {
-                StayTypeId = stayTypeId.Value,
-                CreatedAt = now
+                StayTypeId = stayTypeId.Value
             };
         }
 
@@ -335,7 +332,6 @@ public class RegionalPlaceService : IRegionalPlaceService
                 throw new InvalidOperationException("Stay type is invalid.");
 
             place.Stay.StayTypeId = request.StayTypeId.Value;
-            place.Stay.UpdatedAt = DateTime.UtcNow;
         }
 
         ApplyUpdate(place, request);
@@ -973,7 +969,7 @@ public class RegionalPlaceService : IRegionalPlaceService
             Tags = row.Tags,
             CreatedAt = row.CreatedAt,
             PublishedAt = row.PublishedAt,
-            LastUpdatedAt = row.UpdatedAt ?? row.StayUpdatedAt ?? row.CreatedAt,
+            LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
             DetailRoute = "/places/detail/" + row.Id,
             EditRoute = ExistingEditRoute
@@ -1143,7 +1139,6 @@ public class RegionalPlaceService : IRegionalPlaceService
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public DateTime? PublishedAt { get; set; }
-        public DateTime? StayUpdatedAt { get; set; }
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public string? ImageUrl { get; set; }

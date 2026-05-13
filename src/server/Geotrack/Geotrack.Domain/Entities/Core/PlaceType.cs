@@ -1,19 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Geotrack.Domain.Entities.Tags;
 
 namespace Geotrack.Domain.Entities.Core;
 
 public class PlaceType
 {
-    public int Id { get; set; } // PRIMARY KEY
+    public int Id { get; set; }
+
     public string Name { get; set; } = string.Empty;
-
-    public ICollection<Place> Places { get; set; } = new List<Place>(); // NAVIGATIONAL
-
     public string Description { get; set; } = string.Empty;
+
+    public ICollection<Place> Places { get; set; } = new List<Place>();
+
+    public ICollection<TagTypePlaceType> TagTypes { get; set; } = new List<TagTypePlaceType>();
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

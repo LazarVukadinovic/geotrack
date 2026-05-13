@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectionStrategy, ChangeDetectorRef, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule }  from '@angular/forms';
 import { Router }       from '@angular/router';
@@ -7,6 +7,7 @@ import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { RegionsService, RegionListItem, RegionSortField, RegionSortDir } from '../../../../core/services/national/regions.service';
+import { AuthService } from '../../../../core/services/auth.service';
 
 const PAGE_SIZE_INITIAL = 5;
 const PAGE_SIZE_STEP    = 5;
@@ -18,21 +19,25 @@ const PAGE_SIZE_STEP    = 5;
   templateUrl: './regions.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AllRegionsComponent implements OnInit, OnDestroy {
+export class AllRegionsComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private router: Router,
     private svc: RegionsService,
     private cdr: ChangeDetectorRef,
+    private auth: AuthService,
   ) {}
+
+  @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
+  private _pendingScrollTop = 0;
 
   @HostListener('document:click')
   onDocumentClick(): void {
     if (this.sortOpen) { this.sortOpen = false; this.cdr.markForCheck(); }
   }
 
-  userName = '';
-  userRole = '';
+  get userName(): string { return this.auth.fullName; }
+  get userRole(): string { return this.auth.getUser()?.role ?? ''; }
 
   items:        RegionListItem[] = [];
   totalItems    = 0;
@@ -61,9 +66,8 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   }
 
   applySortOption(opt: { label: string; field: RegionSortField; dir: RegionSortDir }): void {
-    this.sortField    = opt.field;
-    this.sortDir      = opt.dir;
-    this.displayCount = PAGE_SIZE_INITIAL;
+    this.sortField = opt.field;
+    this.sortDir   = opt.dir;
     this.loadItems();
   }
 
@@ -71,6 +75,16 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   private destroy$      = new Subject<void>();
 
   ngOnInit(): void {
+    const saved = this.svc.getListState();
+    if (saved) {
+      this.searchQuery         = saved.searchQuery;
+      this.sortField           = saved.sortField as RegionSortField;
+      this.sortDir             = saved.sortDir   as RegionSortDir;
+      this.displayCount        = saved.displayCount;
+      this._pendingScrollTop   = saved.scrollTop;
+      this.svc.clearListState();
+    }
+
     this.searchSubject.pipe(
       debounceTime(300),
       distinctUntilChanged(),
@@ -79,15 +93,20 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
       this.displayCount = PAGE_SIZE_INITIAL;
       this.loadItems();
     });
-    const cached = this.svc.lastPage$.getValue();
-    if (cached) {
-      this.items      = cached.items;
-      this.totalItems = cached.total;
-      this.isLoading  = false;
-      this.cdr.markForCheck();
-    }
 
     this.loadItems();
+  }
+
+  ngAfterViewInit(): void {
+    if (this._pendingScrollTop > 0) {
+      const st = this._pendingScrollTop;
+      this._pendingScrollTop = 0;
+      setTimeout(() => {
+        if (this.scrollContainer?.nativeElement) {
+          this.scrollContainer.nativeElement.scrollTop = st;
+        }
+      }, 150);
+    }
   }
 
   ngOnDestroy(): void {
@@ -130,13 +149,25 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
 
   navigateToAdd(): void { this.router.navigate(['/regions/new']); }
 
+  private saveListState(): void {
+    this.svc.saveListState({
+      searchQuery:  this.searchQuery,
+      sortField:    this.sortField,
+      sortDir:      this.sortDir,
+      displayCount: this.displayCount,
+      scrollTop:    this.scrollContainer?.nativeElement?.scrollTop ?? 0,
+    });
+  }
+
   editRegion(item: RegionListItem, event?: MouseEvent): void {
     event?.stopPropagation();
+    this.saveListState();
     this.router.navigate(['/regions', item.id], {
       state: { region: item, editMode: true },
     });
   }
   viewRegion(item: RegionListItem): void {
+    this.saveListState();
     this.router.navigate(['/regions', item.id], {
       state: { region: item, editMode: false },
     });

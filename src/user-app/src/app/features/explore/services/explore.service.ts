@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
@@ -16,22 +16,54 @@ import type {
   ExploreLandmarkCategory,
   ExploreNearbyItem,
   ExplorePromoCard,
+  ExploreSection,
+  ExploreSectionItem,
   ExploreStay,
   NearbyStatus,
 } from '../models/explore-extras.model';
 
 interface ExploreApiResponse {
   selectedDestination?: { id: number; name: string; latitude: number; longitude: number };
-  eventsThisWeek: { id: number; title: string; subtitle?: string; dateLabel?: string; image?: string }[];
-  topStays: { id: number; title: string; image?: string; rating?: number; reviewCount?: string; distance?: string; pricePerNight: number; isSaved: boolean }[];
-  popularNearby: { id: number; title: string; categoryLabel?: string; image?: string; rating?: number; reviewCount?: string; distance?: string; isSaved: boolean }[];
-  mustSeeAttractions: { id: number; title: string; type?: string; image?: string }[];
-  landmarkCategories: { id: number; title: string; image?: string; categoryKey?: string }[];
-  curatedForYou: { id: number; title: string; subtitle?: string; categoryLabel?: string; image?: string; isSaved: boolean }[];
-  localFavorites: { id: number; title: string; subtitle?: string; description?: string; category?: string; type?: string; location?: string; image?: string; rating?: number; reviewCount?: string; isSaved: boolean; openingHours?: string; isRecommended: boolean }[];
+  sections?: ApiExploreSection[];
+
+  // Legacy payload support while backend/frontend are being switched together.
+  eventsThisWeek?: { id: number; title: string; subtitle?: string; dateLabel?: string; image?: string }[];
+  topStays?: { id: number; title: string; image?: string; rating?: number; reviewCount?: string; distance?: string; pricePerNight?: number; isSaved: boolean }[];
+  curatedForYou?: { id: number; title: string; subtitle?: string; categoryLabel?: string; image?: string; isSaved: boolean }[];
+  dynamicSections?: ApiExploreSection[];
 }
 
-/** Minimum distance in km to consider a location "meaningfully different" for reloading. */
+interface ApiExploreSection {
+  tagTypeId?: number;
+  key: string;
+  title: string;
+  subtitle?: string;
+  layout?: string;
+  cardType?: string;
+  moreRoute?: string;
+  priority?: number;
+  items: ApiExploreSectionItem[];
+}
+
+interface ApiExploreSectionItem {
+  id: number;
+  entityType?: string;
+  detailRoute?: string;
+  title: string;
+  subtitle?: string;
+  description?: string;
+  categoryLabel?: string;
+  image?: string;
+  rating?: number;
+  reviewCount?: string;
+  distance?: string;
+  dateLabel?: string;
+  openingHours?: string;
+  pricePerNight?: number;
+  isSaved?: boolean;
+  tags?: { tagId: number; name: string; slug: string }[];
+}
+
 const RELOAD_THRESHOLD_KM = 5;
 
 const DEFAULT_NEARBY_STATUS: NearbyStatus = {
@@ -45,9 +77,7 @@ const AUTH_PROMO_CARD: ExplorePromoCard = {
   ctaLabel: 'Sign In',
 };
 
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable({ providedIn: 'root' })
 export class ExploreService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
@@ -58,20 +88,13 @@ export class ExploreService {
   private readonly saveToCollection = inject(SaveToCollectionService);
   private readonly tagService = inject(TagService);
 
-  private readonly _curatedForYou = signal<ExploreCuratedItem[]>([]);
-  private readonly _localFavorites = signal<ExploreItem[]>([]);
+  private readonly _sections = signal<ExploreSection[]>([]);
   private readonly _nearbyStatus = signal<NearbyStatus>({ ...DEFAULT_NEARBY_STATUS });
   private readonly _promo = signal<ExplorePromoCard>({ ...AUTH_PROMO_CARD });
-  private readonly _eventsThisWeek = signal<ExploreEvent[]>([]);
-  private readonly _popularNearby = signal<ExploreNearbyItem[]>([]);
-  private readonly _topStays = signal<ExploreStay[]>([]);
-  private readonly _mustSeeAttractions = signal<ExploreAttraction[]>([]);
-  private readonly _landmarkCategories = signal<ExploreLandmarkCategory[]>([]);
   private readonly _loaded = signal(false);
   private readonly _loading = signal(false);
   private readonly _loadError = signal<string | null>(null);
 
-  /** Coordinates used for the last successful load. */
   private loadedLat = 0;
   private loadedLng = 0;
   private loadedSource: 'gps' | 'approximate' | 'manual' | 'destination' | 'default' | 'unknown' | null = null;
@@ -95,25 +118,68 @@ export class ExploreService {
     ].join(':');
   });
 
-  /** Reactive lists for templates that prefer signals. */
-  readonly curatedForYou = computed(() => this.withSavedState(this._curatedForYou(), 'place'));
-  readonly localFavorites = computed(() => this.withSavedState(this._localFavorites(), 'place'));
+  readonly sections = computed(() =>
+    this._sections().map(section => ({
+      ...section,
+      items: section.items.map(item => this.resolveSavedState(item)),
+    })),
+  );
+
   readonly nearbyStatus = computed(() => this._nearbyStatus());
   readonly promo = computed(() => this._promo());
-  readonly eventsThisWeek = computed(() => this._eventsThisWeek());
-  readonly popularNearby = computed(() => this.withSavedState(this._popularNearby(), 'place'));
-  readonly topStays = computed(() => this.withSavedState(this._topStays(), 'place'));
-  readonly mustSeeAttractions = computed(() => this._mustSeeAttractions());
-  readonly landmarkCategories = computed(() => this._landmarkCategories());
   readonly loaded = computed(() => this._loaded());
   readonly loading = computed(() => this._loading());
   readonly loadError = computed(() => this._loadError());
+
+  // Compatibility signals while other old components/tests are still around.
+  readonly curatedForYou = computed<ExploreCuratedItem[]>(() =>
+    this.itemsForSection('curated-for-you').map(item => ({
+      id: item.id,
+      title: item.title,
+      subtitle: item.subtitle ?? '',
+      categoryLabel: item.categoryLabel ?? '',
+      image: item.image,
+      isSaved: item.isSaved,
+    })),
+  );
+
+  readonly topStays = computed<ExploreStay[]>(() =>
+    this._sections().flatMap(section => section.items)
+      .filter(item => item.entityType === 'stay')
+      .map(item => ({
+        id: item.id,
+        title: item.title,
+        image: item.image,
+        rating: item.rating,
+        reviewCount: item.reviewCount,
+        distance: item.distance ?? '',
+        pricePerNight: item.pricePerNight ?? 0,
+        isSaved: this.resolveSavedState(item).isSaved,
+      })),
+  );
+
+  readonly eventsThisWeek = computed<ExploreEvent[]>(() =>
+    this._sections().flatMap(section => section.items)
+      .filter(item => item.entityType === 'event')
+      .map(item => ({
+        id: item.id,
+        title: item.title,
+        subtitle: item.subtitle ?? '',
+        dateLabel: item.dateLabel ?? '',
+        image: item.image,
+      })),
+  );
+
+  readonly localFavorites = computed<ExploreItem[]>(() => []);
+  readonly popularNearby = computed<ExploreNearbyItem[]>(() => []);
+  readonly mustSeeAttractions = computed<ExploreAttraction[]>(() => []);
+  readonly landmarkCategories = computed<ExploreLandmarkCategory[]>(() => []);
 
   constructor() {
     effect(() => {
       const curationContextKey = this.curationContextKey();
       if (curationContextKey !== this.loadedCurationContextKey) {
-        this._curatedForYou.set([]);
+        this.removeUserSpecificSections();
       }
     });
 
@@ -121,18 +187,22 @@ export class ExploreService {
       const curationContextKey = this.curationContextKey();
       if (!curationContextKey) return;
       if (this.destinationSvc.mode() !== 'destination') return;
+
       const destinationId = this.destinationSvc.id();
       if (destinationId == null) return;
+
       const requestKey = this.buildDestinationRequestKey(destinationId, curationContextKey);
       if (this.loadingRequestKey === requestKey) return;
       if (this._loaded() && this.loadedRequestKey === requestKey) return;
+
       this.loadDestinationFromApi(destinationId, undefined, curationContextKey, requestKey);
     });
-    // React to location changes — reload explore data when city meaningfully changes
+
     effect(() => {
       const curationContextKey = this.curationContextKey();
       if (!curationContextKey) return;
       if (this.destinationSvc.mode() === 'destination') return;
+
       const loc = this.locationSvc.location();
       if (!loc) return;
 
@@ -140,10 +210,8 @@ export class ExploreService {
       const sourceChanged = this.loadedSource !== loc.source;
       const curationChanged = this.loadedCurationContextKey !== curationContextKey;
       const requestKey = this.buildLocationRequestKey(loc.latitude, loc.longitude, loc.source, curationContextKey);
+
       if (this.loadingRequestKey === requestKey) return;
-      // First load (0,0 → real) always triggers. After that we still reload when
-      // the source changes, so a fresh GPS fix can replace an approximate load
-      // even if both coordinates are within the same city.
       if (
         this._loaded() &&
         !curationChanged &&
@@ -158,11 +226,6 @@ export class ExploreService {
     });
   }
 
-  /**
-   * Explicitly load explore data for given coordinates.
-   * Returns a Promise that resolves when the load finishes.
-   * Used by the landing page for preloading before navigation.
-   */
   loadForLocation(lat: number, lng: number): Promise<void> {
     const curationContextKey = this.curationContextKey();
     if (!curationContextKey) return Promise.resolve();
@@ -175,8 +238,9 @@ export class ExploreService {
       dist < RELOAD_THRESHOLD_KM &&
       this.loadedSource === source
     ) {
-      return Promise.resolve(); // already loaded for a nearby location
+      return Promise.resolve();
     }
+
     return new Promise((resolve) => {
       this.loadFromApi(lat, lng, resolve, source, curationContextKey);
     });
@@ -184,6 +248,7 @@ export class ExploreService {
 
   loadForDestination(destinationId: number): Promise<void> {
     if (destinationId <= 0) return Promise.resolve();
+
     const curationContextKey = this.curationContextKey();
     if (!curationContextKey) return Promise.resolve();
 
@@ -202,11 +267,10 @@ export class ExploreService {
     const loc = this.locationSvc.location();
     if (!loc) {
       void this.locationSvc.ensureIpFallback().then((resolved) => {
-        if (resolved) {
-          const curationContextKey = this.curationContextKey();
-          if (curationContextKey) {
-            this.loadFromApi(resolved.latitude, resolved.longitude, undefined, resolved.source, curationContextKey);
-          }
+        if (!resolved) return;
+        const curationContextKey = this.curationContextKey();
+        if (curationContextKey) {
+          this.loadFromApi(resolved.latitude, resolved.longitude, undefined, resolved.source, curationContextKey);
         }
       });
       return;
@@ -216,6 +280,52 @@ export class ExploreService {
     if (!curationContextKey) return;
 
     this.loadFromApi(loc.latitude, loc.longitude, undefined, loc.source, curationContextKey);
+  }
+
+  toggleSaved(item: ExploreSectionItem, sectionKey = 'section'): void {
+    const numericId = parseInt(item.id, 10);
+    if (isNaN(numericId)) return;
+    if (item.entityType === 'event') return;
+
+    const saveEntityType = item.entityType === 'stay' ? 'place' : item.entityType;
+    if (saveEntityType !== 'place') return;
+
+    this.saveToCollection.open({
+      entityType: 'place',
+      entityId: numericId,
+      title: item.title,
+      imageUrl: item.image,
+      surface: `explore_${sectionKey}`,
+      analyticsEntityType: item.entityType === 'stay' ? 'hotel' : 'place',
+    });
+  }
+
+  getSections$(): Observable<ExploreSection[]> {
+    return of(this.sections()).pipe(delay(0));
+  }
+
+  getLocalFavorites$(): Observable<ExploreItem[]> {
+    return of(this.localFavorites()).pipe(delay(0));
+  }
+
+  getEventsThisWeek$(): Observable<ExploreEvent[]> {
+    return of(this.eventsThisWeek()).pipe(delay(0));
+  }
+
+  getPopularNearby$(): Observable<ExploreNearbyItem[]> {
+    return of(this.popularNearby()).pipe(delay(0));
+  }
+
+  getTopStays$(): Observable<ExploreStay[]> {
+    return of(this.topStays()).pipe(delay(0));
+  }
+
+  getMustSeeAttractions$(): Observable<ExploreAttraction[]> {
+    return of(this.mustSeeAttractions()).pipe(delay(0));
+  }
+
+  getLandmarkCategories$(): Observable<ExploreLandmarkCategory[]> {
+    return of(this.landmarkCategories()).pipe(delay(0));
   }
 
   private loadFromApi(
@@ -242,7 +352,11 @@ export class ExploreService {
     this._loadError.set(null);
     this._loading.set(true);
 
-    this.http.get<ExploreApiResponse>(`/api/explore?latitude=${lat}&longitude=${lng}`).subscribe({
+    const params = new HttpParams()
+      .set('latitude', String(lat))
+      .set('longitude', String(lng));
+
+    this.http.get<ExploreApiResponse>('/api/explore', { params }).subscribe({
       next: (res) => {
         if (this.isStaleRequest(requestId, effectiveRequestKey)) {
           onComplete?.();
@@ -268,13 +382,7 @@ export class ExploreService {
           return;
         }
 
-        this._eventsThisWeek.set([]);
-        this._topStays.set([]);
-        this._popularNearby.set([]);
-        this._mustSeeAttractions.set([]);
-        this._landmarkCategories.set([]);
-        this._curatedForYou.set([]);
-        this._localFavorites.set([]);
+        this.clearFeed();
         this.loadedLat = lat;
         this.loadedLng = lng;
         this.loadedSource = source ?? this.locationSvc.location()?.source ?? null;
@@ -312,7 +420,9 @@ export class ExploreService {
     this._loadError.set(null);
     this._loading.set(true);
 
-    this.http.get<ExploreApiResponse>(`/api/explore?destinationId=${destinationId}`).subscribe({
+    const params = new HttpParams().set('destinationId', String(destinationId));
+
+    this.http.get<ExploreApiResponse>('/api/explore', { params }).subscribe({
       next: (res) => {
         if (this.isStaleRequest(requestId, effectiveRequestKey)) {
           onComplete?.();
@@ -338,13 +448,7 @@ export class ExploreService {
           return;
         }
 
-        this._eventsThisWeek.set([]);
-        this._topStays.set([]);
-        this._popularNearby.set([]);
-        this._mustSeeAttractions.set([]);
-        this._landmarkCategories.set([]);
-        this._curatedForYou.set([]);
-        this._localFavorites.set([]);
+        this.clearFeed();
         this.loadedSource = 'destination';
         this.loadedDestinationId = destinationId;
         this.loadedCurationContextKey = curationContextKey;
@@ -359,68 +463,8 @@ export class ExploreService {
   }
 
   private applyResponse(res: ExploreApiResponse): void {
-    this._eventsThisWeek.set(res.eventsThisWeek.map(e => ({
-      id: String(e.id),
-      title: e.title,
-      subtitle: e.subtitle ?? '',
-      dateLabel: e.dateLabel ?? '',
-      image: e.image ?? '',
-    })));
-    this._topStays.set(res.topStays.map(s => ({
-      id: String(s.id),
-      title: s.title,
-      image: s.image ?? '',
-      rating: s.rating,
-      reviewCount: s.reviewCount,
-      distance: s.distance ?? '',
-      pricePerNight: s.pricePerNight,
-      isSaved: s.isSaved,
-    })));
-    this._popularNearby.set(res.popularNearby.map(p => ({
-      id: String(p.id),
-      title: p.title,
-      categoryLabel: p.categoryLabel ?? '',
-      image: p.image ?? '',
-      rating: p.rating,
-      reviewCount: p.reviewCount,
-      distance: p.distance ?? '',
-      isSaved: p.isSaved,
-    })));
-    this._mustSeeAttractions.set(res.mustSeeAttractions.map(a => ({
-      id: String(a.id),
-      title: a.title,
-      type: a.type ?? '',
-      image: a.image ?? '',
-    })));
-    this._landmarkCategories.set(res.landmarkCategories.map(c => ({
-      id: String(c.id),
-      title: c.title,
-      image: c.image ?? '',
-      categoryKey: c.categoryKey ?? '',
-    })));
-    this._curatedForYou.set(res.curatedForYou.map(c => ({
-      id: String(c.id),
-      title: c.title,
-      subtitle: c.subtitle ?? '',
-      categoryLabel: c.categoryLabel ?? '',
-      image: c.image ?? '',
-      isSaved: c.isSaved,
-    })));
-    this._localFavorites.set(res.localFavorites.map(f => ({
-      id: String(f.id),
-      title: f.title,
-      subtitle: f.subtitle ?? '',
-      description: f.description ?? '',
-      category: (f.category ?? 'attraction') as ExploreItem['category'],
-      type: f.type ?? '',
-      location: f.location ?? '',
-      image: f.image ?? '',
-      rating: f.rating,
-      reviewCount: f.reviewCount,
-      isSaved: f.isSaved,
-      openingHours: f.openingHours,
-      isRecommended: f.isRecommended,
-    })));
+    this._sections.set(this.normalizeSections(res));
+
     if (res.selectedDestination) {
       this._nearbyStatus.set({
         label: 'Near',
@@ -433,6 +477,174 @@ export class ExploreService {
         longitude: res.selectedDestination.longitude,
       });
     }
+  }
+
+  private normalizeSections(res: ExploreApiResponse): ExploreSection[] {
+    if (res.sections?.length) {
+      return res.sections
+        .map(section => this.mapApiSection(section))
+        .filter(section => section.items.length > 0)
+        .sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title));
+    }
+
+    return this.mapLegacyResponseToSections(res);
+  }
+
+  private mapApiSection(section: ApiExploreSection): ExploreSection {
+    return {
+      tagTypeId: section.tagTypeId,
+      key: section.key,
+      title: section.title,
+      subtitle: section.subtitle,
+      layout: section.layout ?? 'horizontal-cards',
+      cardType: section.cardType ?? 'place-card',
+      moreRoute: section.moreRoute,
+      priority: section.priority ?? 100,
+      items: (section.items ?? []).map(item => this.mapApiItem(item, section.cardType)),
+    };
+  }
+
+  private mapApiItem(item: ApiExploreSectionItem, sectionCardType?: string): ExploreSectionItem {
+    const fallbackEntityType = sectionCardType === 'event-card'
+      ? 'event'
+      : sectionCardType === 'stay-card'
+        ? 'stay'
+        : 'place';
+    const entityType = item.entityType ?? fallbackEntityType;
+
+    return {
+      id: String(item.id),
+      entityType,
+      detailRoute: item.detailRoute || this.defaultDetailRoute(entityType, item.id),
+      title: item.title,
+      subtitle: item.subtitle,
+      description: item.description,
+      categoryLabel: item.categoryLabel,
+      image: item.image ?? '',
+      rating: item.rating,
+      reviewCount: item.reviewCount,
+      distance: item.distance,
+      dateLabel: item.dateLabel,
+      openingHours: item.openingHours,
+      pricePerNight: item.pricePerNight,
+      isSaved: item.isSaved ?? false,
+      tags: (item.tags ?? []).map(tag => ({
+        tagId: String(tag.tagId),
+        name: tag.name,
+        slug: tag.slug,
+      })),
+    };
+  }
+
+  private mapLegacyResponseToSections(res: ExploreApiResponse): ExploreSection[] {
+    const sections: ExploreSection[] = [];
+
+    if (res.curatedForYou?.length) {
+      sections.push({
+        key: 'curated-for-you',
+        title: 'Curated for You',
+        subtitle: 'Based on your interests and recent activity nearby',
+        layout: 'horizontal-cards',
+        cardType: 'place-card',
+        moreRoute: '/recommendations',
+        priority: 10,
+        items: res.curatedForYou.map(item => this.mapApiItem({
+          id: item.id,
+          entityType: 'place',
+          detailRoute: `/places/${item.id}`,
+          title: item.title,
+          subtitle: item.subtitle,
+          categoryLabel: item.categoryLabel,
+          image: item.image,
+          isSaved: item.isSaved,
+        })),
+      });
+    }
+
+    if (res.topStays?.length) {
+      sections.push({
+        key: 'top-stays',
+        title: 'Top Stays',
+        subtitle: 'Highly rated accommodation nearby',
+        layout: 'horizontal-cards',
+        cardType: 'stay-card',
+        moreRoute: '/hotels',
+        priority: 20,
+        items: res.topStays.map(item => this.mapApiItem({
+          id: item.id,
+          entityType: 'stay',
+          detailRoute: `/stays/${item.id}`,
+          title: item.title,
+          image: item.image,
+          rating: item.rating,
+          reviewCount: item.reviewCount,
+          distance: item.distance,
+          pricePerNight: item.pricePerNight,
+          isSaved: item.isSaved,
+        }, 'stay-card')),
+      });
+    }
+
+    if (res.eventsThisWeek?.length) {
+      sections.push({
+        key: 'events',
+        title: 'Events',
+        subtitle: "What's happening around town",
+        layout: 'horizontal-cards',
+        cardType: 'event-card',
+        moreRoute: '/events',
+        priority: 30,
+        items: res.eventsThisWeek.map(item => this.mapApiItem({
+          id: item.id,
+          entityType: 'event',
+          detailRoute: `/events/${item.id}`,
+          title: item.title,
+          subtitle: item.subtitle,
+          dateLabel: item.dateLabel,
+          image: item.image,
+        }, 'event-card')),
+      });
+    }
+
+    for (const section of res.dynamicSections ?? []) {
+      sections.push(this.mapApiSection({
+        ...section,
+        priority: section.priority ?? 100 + sections.length,
+      }));
+    }
+
+    return sections
+      .filter(section => section.items.length > 0)
+      .sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title));
+  }
+
+  private resolveSavedState(item: ExploreSectionItem): ExploreSectionItem {
+    if (item.entityType !== 'place' && item.entityType !== 'stay') {
+      return item;
+    }
+
+    const favoriteType: FavoriteEntityType = 'place';
+    const isSaved = this.favoriteState.resolve(favoriteType, item.id, item.isSaved);
+    return item.isSaved === isSaved ? item : { ...item, isSaved };
+  }
+
+  private itemsForSection(key: string): ExploreSectionItem[] {
+    return this.sections().find(section => section.key === key)?.items ?? [];
+  }
+
+  private removeUserSpecificSections(): void {
+    this._sections.update(sections => sections.filter(section => section.key !== 'curated-for-you'));
+  }
+
+  private clearFeed(): void {
+    this._sections.set([]);
+  }
+
+  private defaultDetailRoute(entityType: string, id: number): string {
+    if (entityType === 'event') return `/events/${id}`;
+    if (entityType === 'stay') return `/stays/${id}`;
+    if (entityType === 'destination') return `/explore?destinationId=${id}`;
+    return `/places/${id}`;
   }
 
   private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -452,13 +664,7 @@ export class ExploreService {
     source: 'gps' | 'approximate' | 'manual' | 'default' | 'unknown' | null | undefined,
     curationContextKey: string,
   ): string {
-    return [
-      'location',
-      latitude.toFixed(4),
-      longitude.toFixed(4),
-      source ?? 'unknown',
-      curationContextKey,
-    ].join(':');
+    return ['location', latitude.toFixed(4), longitude.toFixed(4), source ?? 'unknown', curationContextKey].join(':');
   }
 
   private buildDestinationRequestKey(destinationId: number, curationContextKey: string): string {
@@ -467,73 +673,5 @@ export class ExploreService {
 
   private isStaleRequest(requestId: number, requestKey: string): boolean {
     return requestId !== this.requestVersion || this.loadingRequestKey !== requestKey;
-  }
-
-  /** Signal-backed streams kept for existing components that consume observables. */
-  getLocalFavorites$(): Observable<ExploreItem[]> {
-    return of(this.localFavorites()).pipe(delay(0));
-  }
-
-  getEventsThisWeek$(): Observable<ExploreEvent[]> {
-    return of(this._eventsThisWeek()).pipe(delay(0));
-  }
-
-  getPopularNearby$(): Observable<ExploreNearbyItem[]> {
-    return of(this.popularNearby()).pipe(delay(0));
-  }
-
-  getTopStays$(): Observable<ExploreStay[]> {
-    return of(this.topStays()).pipe(delay(0));
-  }
-
-  getMustSeeAttractions$(): Observable<ExploreAttraction[]> {
-    return of(this._mustSeeAttractions()).pipe(delay(0));
-  }
-
-  getLandmarkCategories$(): Observable<ExploreLandmarkCategory[]> {
-    return of(this._landmarkCategories()).pipe(delay(0));
-  }
-
-  toggleSaved(id: string, list: 'curatedForYou' | 'localFavorites' | 'popularNearby' | 'topStays'): void {
-    const numId = parseInt(id, 10);
-    if (isNaN(numId)) return;
-
-    const item = this.itemForList(list, id);
-    if (!item) return;
-
-    this.saveToCollection.open({
-      entityType: 'place',
-      entityId: numId,
-      title: item.title,
-      imageUrl: item.image,
-      surface: `explore_${list}`,
-      analyticsEntityType: list === 'topStays' ? 'hotel' : 'place',
-    });
-  }
-
-  private itemForList(
-    list: 'curatedForYou' | 'localFavorites' | 'popularNearby' | 'topStays',
-    id: string,
-  ): { title: string; image?: string } | undefined {
-    if (list === 'curatedForYou') {
-      return this.curatedForYou().find((item) => item.id === id);
-    }
-    if (list === 'localFavorites') {
-      return this.localFavorites().find((item) => item.id === id);
-    }
-    if (list === 'popularNearby') {
-      return this.popularNearby().find((item) => item.id === id);
-    }
-    return this.topStays().find((item) => item.id === id);
-  }
-
-  private withSavedState<T extends { id: string; isSaved: boolean }>(
-    items: T[],
-    entityType: FavoriteEntityType,
-  ): T[] {
-    return items.map((item) => {
-      const isSaved = this.favoriteState.resolve(entityType, item.id, item.isSaved);
-      return item.isSaved === isSaved ? item : { ...item, isSaved };
-    });
   }
 }

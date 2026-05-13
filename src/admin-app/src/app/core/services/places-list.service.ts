@@ -63,6 +63,13 @@ export interface PlaceListItem {
   website?: string;
   admissionPrice?: string;
   bookingLink?: string;
+  analyticsViews?: number;
+  analyticsVisitors?: number;
+  analyticsSaves?: number;
+  analyticsActions?: number;
+  analyticsReviewAvg?: number;
+  analyticsReviewCount?: number;
+  analyticsTrend?: 'up' | 'stable' | 'down';
 }
 
 export interface PlacesPage {

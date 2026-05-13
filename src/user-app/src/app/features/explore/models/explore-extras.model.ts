@@ -9,6 +9,51 @@ export interface ExplorePromoCard {
   ctaLabel: string;
 }
 
+export type ExploreSectionLayout = 'horizontal-cards' | 'grid' | 'compact-list' | string;
+export type ExploreSectionCardType = 'place-card' | 'stay-card' | 'event-card' | string;
+export type ExploreEntityType = 'place' | 'stay' | 'event' | 'destination' | 'location' | string;
+
+export interface ExploreSectionTag {
+  tagId: string;
+  name: string;
+  slug: string;
+}
+
+export interface ExploreSectionItem {
+  id: string;
+  entityType: ExploreEntityType;
+  detailRoute: string;
+
+  title: string;
+  subtitle?: string;
+  description?: string;
+  categoryLabel?: string;
+  image: string;
+
+  rating?: number;
+  reviewCount?: string;
+  distance?: string;
+  dateLabel?: string;
+  openingHours?: string;
+  pricePerNight?: number;
+
+  isSaved: boolean;
+  tags: ExploreSectionTag[];
+}
+
+export interface ExploreSection {
+  tagTypeId?: number;
+  key: string;
+  title: string;
+  subtitle?: string;
+  layout: ExploreSectionLayout;
+  cardType: ExploreSectionCardType;
+  moreRoute?: string;
+  priority: number;
+  items: ExploreSectionItem[];
+}
+
+// Compatibility types kept for pages/services that still import them.
 export interface ExploreEvent {
   id: string;
   title: string;

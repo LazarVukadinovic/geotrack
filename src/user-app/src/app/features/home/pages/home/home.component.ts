@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, { Map } from 'maplibre-gl';
@@ -22,67 +22,99 @@ export class Home implements OnInit, OnDestroy {
   private readonly analytics = inject(AnalyticsService);
   private readonly exploreSvc = inject(ExploreService);
 
-  private bgMap!: Map;
+  private bgMap?: Map;
   private searchTimeout?: ReturnType<typeof setTimeout>;
+  private resizeObserver?: ResizeObserver;
+  private animationFrameId: number | null = null;
+  private isDestroyed = false;
 
   searchQuery = '';
   searchResults: MapSearchResult[] = [];
   isLocating = false;
 
   ngOnInit(): void {
-    // Returning users who already completed location entry → skip to Explore
+    // Returning users who already completed location entry → skip to Explore.
     if (this.locationSvc.hasCompletedLocationEntry()) {
-      this.router.navigate(['/explore'], { replaceUrl: true });
+      void this.router.navigate(['/explore'], { replaceUrl: true });
       return;
     }
+
     this.initBgMap();
   }
 
-  ngOnDestroy(): void { this.bgMap?.remove(); }
+  ngOnDestroy(): void {
+    this.isDestroyed = true;
+
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+    }
+
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+
+    this.resizeObserver?.disconnect();
+    this.bgMap?.remove();
+  }
 
   private initBgMap(): void {
+    const container = document.getElementById('bg-map');
+    if (!container) return;
+
     this.bgMap = new maplibregl.Map({
-      container: 'bg-map',
+      container,
       style: MAP_STYLE_URL,
       center: [14.0, 20.0],
       zoom: 1.8,
-      pitch: 30,
+      pitch: 0,
       bearing: 0,
       interactive: false,
       attributionControl: false,
+      fadeDuration: 0,
+      trackResize: true,
     });
 
-    this.bgMap.on('load', () => {
-      const logo = document.querySelector('.maplibregl-ctrl-logo') as HTMLElement;
-      const attrib = document.querySelector('.maplibregl-ctrl-attrib') as HTMLElement;
-      if (logo) logo.style.display = 'none';
-      if (attrib) attrib.style.display = 'none';
+    this.resizeObserver = new ResizeObserver(() => {
+      this.bgMap?.resize();
+    });
+    this.resizeObserver.observe(container);
 
-      this.bgMap.getStyle().layers?.forEach(layer => {
-        if (layer.type === 'symbol') {
-          this.bgMap.setLayoutProperty(layer.id, 'visibility', 'none');
-        }
-      });
+    this.bgMap.on('load', () => {
+      this.bgMap?.resize();
+
+      // Force a second resize after the shell/layout has finished painting.
+      requestAnimationFrame(() => this.bgMap?.resize());
+
       this.startCinematicLoop();
     });
   }
 
   private startCinematicLoop(): void {
     let lng = 14.0;
+
     const animate = () => {
-      lng += 0.10;
+      if (this.isDestroyed || !this.bgMap) return;
+
+      lng += 0.025;
       if (lng > 180) lng = -180;
+
       this.bgMap.setCenter([lng, 20.0]);
-      requestAnimationFrame(animate);
+      this.animationFrameId = requestAnimationFrame(animate);
     };
-    animate();
+
+    this.animationFrameId = requestAnimationFrame(animate);
   }
 
-  /* ── Search / manual destination ───────────────────────────────────── */
+  /* Search / manual destination */
 
   onSearch(value: string): void {
     clearTimeout(this.searchTimeout);
-    if (value.trim().length < 2) { this.searchResults = []; return; }
+
+    if (value.trim().length < 2) {
+      this.searchResults = [];
+      return;
+    }
+
     this.searchTimeout = setTimeout(() => this.geocode(value), 150);
   }
 
@@ -108,7 +140,9 @@ export class Home implements OnInit, OnDestroy {
       candidate.name === result.name &&
       candidate.latitude === result.latitude &&
       candidate.longitude === result.longitude);
+
     this.searchResults = [];
+
     const name = result.name;
     const lat = result.latitude;
     const lon = result.longitude;
@@ -116,7 +150,6 @@ export class Home implements OnInit, OnDestroy {
     this.searchQuery = name;
     this.isLocating = true;
 
-    // Set manual destination in LocationService.
     this.locationSvc.setManualDestination(lat, lon, name);
     this.analytics.track('search_performed', {
       metadata: {
@@ -127,11 +160,10 @@ export class Home implements OnInit, OnDestroy {
       },
     });
 
-    // Preload explore data, then navigate
     this.exploreSvc.loadForLocation(lat, lon).then(() => {
       this.isLocating = false;
       this.locationSvc.markLocationEntryComplete();
-      this.router.navigate(['/explore'], { replaceUrl: true });
+      void this.router.navigate(['/explore'], { replaceUrl: true });
     });
   }
 
@@ -148,30 +180,25 @@ export class Home implements OnInit, OnDestroy {
     return result.subtitle ?? '';
   }
 
-  /* ── Use my current location ───────────────────────────────────────── */
+  /* Use my current location */
 
   /**
    * GPS flow:
-   * 1. Triggers browser permission popup via LocationService.requestGps()
-   * 2. On success: preloads Explore data with real coords, marks entry complete, navigates
-   * 3. On denial: uses approximate location automatically, marks entry complete, navigates
+   * 1. Triggers browser permission popup via LocationService.requestGps().
+   * 2. On success: preloads Explore data with real coords, marks entry complete, navigates.
+   * 3. On denial: uses approximate location automatically, marks entry complete, navigates.
    */
   async requestLocation(): Promise<void> {
     this.isLocating = true;
 
     try {
-      // Request GPS — triggers browser permission popup
       const coords = await this.locationSvc.requestGps();
-
-      // Preload explore data with real GPS coordinates BEFORE navigating
       await this.exploreSvc.loadForLocation(coords.latitude, coords.longitude);
 
       this.isLocating = false;
       this.locationSvc.markLocationEntryComplete();
-      this.router.navigate(['/explore'], { replaceUrl: true });
-
+      void this.router.navigate(['/explore'], { replaceUrl: true });
     } catch {
-      // GPS denied or failed → use backend approximate fallback automatically.
       const approximateLoc = await this.locationSvc.ensureIpFallback();
 
       this.isLocating = false;
@@ -181,7 +208,7 @@ export class Home implements OnInit, OnDestroy {
         await this.exploreSvc.loadForLocation(approximateLoc.latitude, approximateLoc.longitude);
       }
 
-      this.router.navigate(['/explore'], { replaceUrl: true });
+      void this.router.navigate(['/explore'], { replaceUrl: true });
     }
   }
 }

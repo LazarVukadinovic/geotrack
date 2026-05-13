@@ -636,8 +636,7 @@ public sealed class RegionalPlacesTests
         db.Stays.Add(new Stay
         {
             PlaceId = places[5].Id,
-            StayTypeId = stayType.Id,
-            CreatedAt = now
+            StayTypeId = stayType.Id
         });
 
         db.Events.Add(new Event

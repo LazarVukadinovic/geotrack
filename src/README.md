@@ -1,95 +1,46 @@
 # GeoTrack
 
-GeoTrack je mobile-first Angular aplikacija za otkrivanje destinacija, mesta, smeštaja i događaja, sa pratećim .NET 8 backend-om koji pokriva autentikaciju, geo-prostorni sadržaj, recenzije, korisničke doprinose, mapne pretrage i analitiku.
+GeoTrack je web aplikacija za istraživanje destinacija, mesta, smeštaja i događaja. Korisnička aplikacija je Angular frontend koji pokriva Explore, Map, listing stranice, detalje mesta/smeštaja/događaja, pretragu, profil, omiljene stavke, kolekcije, interesovanja, preporuke i korisničke doprinose.
 
-## Pregled projekta
+Bekend je ASP.NET Core API koji čuva katalog, korisnike, recenzije, kolekcije, doprinose, notifikacije, analitiku, mapne pretrage i AI/MCP integracije. Frontend ne koristi direktne pozive ka eksternim mapnim i AI provider servisima za glavne tokove: ti pozivi idu kroz bekend.
 
-Glavna aplikacija — `user-app` — je Angular 21 aplikacija optimizovana za telefon. Pruža:
+Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom. Angular prikazuje provider/model/key opcije koje dobije od bekenda, a chat se izvršava preko servera. GeoTrack MCP je zaseban remote HTTP JSON-RPC tool endpoint za spoljne AI alate koji podržavaju MCP.
 
-- otkrivanje destinacija po lokaciji (Explore hub),
-- listinge i detalje za smeštaje, događaje, kulturna mesta, prirodu, restorane i lokalne lokacije,
-- omiljene stavke, kolekcije i recenzije,
-- korisničke doprinose za nova mesta, uz opcione podatke za smeštaj (sa odobravanjem od strane regionalnih moderatora),
-- mapu sa pretragom, reverse geocoding-om, pešačkim rutama i markerima koji se traže po viewport-u,
-- onboarding eksplicitnih interesa i pasivno učenje implicitnih interesa kroz analitiku,
-- Ask Agent ekran (chat surface; backend trenutno daje stub odgovore).
+## Tehnologije
 
-Backend — `server/Geotrack` — je .NET 8 clean-architecture rešenje sa PostgreSQL + PostGIS bazom, JWT bearer autentikacijom i HttpOnly refresh kolačićem, full-time analytics worker-om i moderacijom doprinosa.
+**Frontend**
 
-## Trenutno stanje na ovoj grani
+- Angular 21.x
+- TypeScript 5.9
+- SCSS, uz Tailwind v4 gde je već uveden
+- MapLibre GL za mapu i map picker tokove
+- RxJS
 
-Branch `feature/frontend-integracije` predstavlja prelazak `user-app`-a sa mock podataka na pravi backend. Veliki deo ekrana koji su ranije čitali iz `data/*.ts` fajlova sada prolazi kroz HTTP servise i pravi `/api/*` endpoint-e iz `server/Geotrack`-a.
+**Bekend**
 
-Konkretno, na ovoj grani su povezani:
+- .NET 8 / ASP.NET Core Web API
+- EF Core 8
+- PostgreSQL preko Npgsql
+- PostGIS i NetTopologySuite za prostorne upite
+- ASP.NET Core Data Protection za šifrovanje sačuvanih korisničkih AI ključeva
+- JWT bearer autentikacija i HttpOnly refresh cookie
+- Gemini AI provider adapter; OpenAI i Claude postoje kao trenutno nedostupni scaffolding provideri
+- Remote HTTP JSON-RPC MCP endpoint na `/api/mcp`
 
-- ceo auth flow (registracija, prijava, refresh, odjava, onboarding interesa),
-- profil, podešavanja, promena lozinke, support zahtevi,
-- Explore hub i sve listing stranice,
-- detail stranice (mesto, smeštaj, događaj),
-- omiljene stavke i pune kolekcije,
-- recenzije iz detail stranica,
-- pun CRUD korisničkih doprinosa (sa upload-om slike),
-- mapa sa svih pet `/api/map/*` poziva,
-- analytics pipeline od klijenta do worker-a koji puni implicitne interese.
+## Struktura projekta
 
-Delimično ili planirano: Ask Agent (keyword-stub bez pravog LLM providera), admin analitika (servis postoji, kontroler ne) i `admin-app` UI. Detalji u sekciji "Šta je delimično ili planirano".
+- `user-app` - Angular korisnički frontend.
+- `admin-app` - Angular admin površina u repozitorijumu; nije primarni fokus ovog README-a.
+- `server/Geotrack` - .NET solution.
+  - `Geotrack.Domain` - entiteti i enum-i.
+  - `Geotrack.Application` - DTO-ovi, interfejsi servisa i opcije.
+  - `Geotrack.Infrastructure` - EF Core `AppDbContext`, repozitorijumi, servisi, migracije i Agent/MCP alatni sloj.
+  - `Geotrack.Server` - API kontroleri, DI/startup, middleware i statički `/media` fajlovi.
+  - `Geotrack.IntegrationTests` - integracioni testovi.
 
-## Funkcionalnosti povezane sa backendom
+## Pokretanje frontend-a
 
-Tabela ispod pokriva ono što je stvarno priključeno na ovoj grani.
-
-| Funkcionalnost | Frontend | Backend endpoint(i) | Status |
-|---|---|---|---|
-| Registracija / prijava / refresh / odjava | `auth.service.ts`, `login-page`, `register-page` | `POST /api/auth/{register,login,refresh,logout}` + HttpOnly cookie `geotrack_refresh` | Pun |
-| Cold-start hidracija sesije | `app.config.ts` (app initializer) | `POST /api/auth/refresh` + `GET /api/user/me` pre prve rute | Pun |
-| Onboarding interesa | `register/interests`, `interestsOnboardingGuard`, `tag.service.ts` | `GET /api/tags?forUser=true`, `GET/PUT /api/user/me/interests`, `DELETE /api/user/me/interests/inferred/{tagId}` | Pun |
-| Profil i izmena | `user.service.ts`, `edit-profile` | `GET /api/user/me`, `PUT /api/user/me`, `PUT /api/user/me/avatar` (multipart) | Pun |
-| Podešavanja | `user-settings.service.ts` | `GET/PUT /api/user/me/notifications`, `PUT /api/user/me/password`, `GET/POST /api/user/me/support-requests` | Pun |
-| Lokacija | `location.service.ts` | GPS → reverse geocode preko `/api/map/reverse` → IP fallback `GET /api/locations/approximate` | Pun |
-| Destinacija (sesija) | `destination.service.ts` | Vrednost dolazi iz `GET /api/explore`, čuva se u sessionStorage | Pun |
-| Explore hub | `explore.service.ts` | `GET /api/explore?latitude=&longitude=` (jedna ruta vraća sve sekcije) | Pun |
-| Hotels listing | `hotels-listing.service.ts` | `GET /api/places/hotels?destinationId=…` | Pun |
-| Events listing | `events-listing.service.ts` | `GET /api/events?destinationId=…` | Pun |
-| Culture & History / Food & Music / Nature | feature servisi | `GET /api/places?tags=…&destinationId=…` | Pun |
-| Local Places (grid + kategorija) | `local-places.service.ts`, `local-places-category.service.ts` | `GET /api/explore/categories`, `GET /api/places?category=…&destinationId=…` | Pun |
-| Detail stranice | `place-detail.service.ts`, `hotel-detail.service.ts`, `event-detail.service.ts` | `GET /api/places/:id`, `GET /api/places/hotels/:id`, `GET /api/events/:id` (iskreni loading/error/not-found, `images[]` galerije uz kompatibilni `heroImage`, bez mock fallback-a) | Pun |
-| Recenzije | `place-detail-page`, `hotel-detail-page`, `reviews-page` | `POST /api/places/:id/reviews`; pune liste preko `/api/reviews/{places,events}/:id?skip=&take=` sa `nextSkip`/`hasMore` paginacijom (validacija na backend-u: 1–5 ★, ≤ 1000 znakova, jedan korisnik jedna recenzija po entitetu) | Pun |
-| Omiljeno | `favorite-state.service.ts` | `POST /api/favorites/toggle` (polimorfno: `place`/`event`), `GET /api/favorites` | Pun |
-| Kolekcije | `features/profile/services/collections.ts` | Pun CRUD na `/api/user/me/collections` i `/items` | Pun |
-| Doprinosi (mesta) | `contributions.service.ts`, `submit-contribution`, `my-contributions`, `contribution-detail` | `GET/POST/PUT/DELETE /api/contributions`, `POST /api/contributions/places` (multipart FormData sa cover slikom), `PUT /api/contributions/places/:id`; `/stays` je legacy alias | Pun |
-| Mapa | `map-api.service.ts`, `MapPageComponent` (maplibre-gl) | `GET /api/map/{search,reverse,route,markers,entities}` (svi pozivi ka Nominatim-u i OSRM-u idu kroz backend; markeri se traže po viewport bounds + zoom + kategorijama) | Pun |
-| Analitika | `analytics.service.ts` (eager init) | `POST /api/analytics/events` (batch envelope ≤ 50 događaja, dedup u skliznom prozoru); backend pipeline: `IAnalyticsProcessingQueue` → `AnalyticsEventProcessingWorker` → `UserInterestSignalUpdater` koji puni `UserInterestSignal` (implicitni interesi) | Pun |
-| Recommendations | `recommendations.service.ts`, `recommendations-page` | `GET /api/explore/recommendations?skip=&take=&tagId=…` (samo za prijavljene korisnike, Load More, filteri po interesima) | Pun |
-| Ask Agent | `agent.service.ts`, `agent-page` | `POST /api/agent/message` — wire postoji, ali backend trenutno odgovara keyword-stub-om | Delimičan |
-
-## Pokretanje projekta
-
-### Preduslovi
-
-- Node.js sa `npm`
-- .NET 8 SDK
-- PostgreSQL 12+ sa **PostGIS** ekstenzijom (pri startu, server pokušava `CREATE EXTENSION IF NOT EXISTS postgis` i pada ako PostGIS nije dostupan)
-
-### Backend
-
-```bash
-cd server/Geotrack/Geotrack.Server
-dotnet user-secrets init
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=geotrack;Username=postgres;Password=<lozinka>"
-dotnet user-secrets set "Jwt:Key" "<random-string-od-bar-32-karaktera>"
-
-cd ..
-dotnet run --project Geotrack.Server
-```
-
-Podrazumevane vrednosti za `Jwt:Issuer` i `Jwt:Audience` (koje nisu tajne) su već u `appsettings.json`. U Development modu server pri startu automatski pokreće EF migracije i `SeedData.InitializeAsync()`. Backend slušao na `http://localhost:5003`.
-
-Demo nalog posle seed-a:
-
-- email: `marko.p@example.com`
-- lozinka: `password123`
-
-### Frontend
+Komande se pokreću iz ovog `src` foldera:
 
 ```bash
 cd user-app
@@ -97,56 +48,166 @@ npm install
 npm run start
 ```
 
-`proxy.conf.json` prosleđuje `/api/*` i `/media/*` zahteve na `http://localhost:5003`, tako da Angular kod radi sa relativnim putanjama bez ikakve promene u izvornom kodu.
+Angular dev server je podrazumevano na `http://localhost:4200/`. `user-app/proxy.conf.json` prosleđuje `/api` i `/media` ka `http://localhost:5003`, pa lokalni frontend očekuje da bekend radi na tom portu. U Windows PowerShell-u možete koristiti `npm.cmd` umesto `npm` ako je potrebno.
 
-### Provera (build i testovi)
-
-Frontend:
+Build frontend-a:
 
 ```bash
 cd user-app
 npm run build
-npm test -- --watch=false
 ```
 
-Backend:
+## Pokretanje bekenda
+
+Preduslovi:
+
+- .NET 8 SDK
+- PostgreSQL baza
+- instaliran PostGIS za PostgreSQL server
+
+Osnovno podešavanje lokalnih tajni:
 
 ```bash
-cd server/Geotrack
-dotnet build Geotrack.sln
-dotnet test Geotrack.IntegrationTests/Geotrack.IntegrationTests.csproj
+dotnet user-secrets init --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=geotrack;Username=<korisnik>;Password=<lozinka>" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Jwt:Key" "<random-string-od-najmanje-32-karaktera>" --project server/Geotrack/Geotrack.Server
 ```
 
-Backend integracioni testovi prave privremenu PostgreSQL bazu na osnovu konfigurisane lokalne konekcije, primene migracije, izvrše seed, izvrše scenarije (auth + favorites + collections, analitika, podešavanja, doprinosi, ratings) i obrišu bazu po završetku.
+`Jwt:Issuer` i `Jwt:Audience` imaju netajne podrazumevane vrednosti u `appsettings.json`.
 
-## Tehnologije
+Restore, build i pokretanje:
 
-- **Frontend:** Angular 21.2 (standalone, signals-first, novi control flow `@if/@for/@switch`), Tailwind v4 (samo auth stranice), SCSS + BEM + design tokens (sve ostale stranice), `maplibre-gl` 5.x, Vitest + jsdom. Angular service worker/offline PWA keširanje trenutno nije konfigurisano.
-- **Backend:** .NET 8 / C#, EF Core 8 + Npgsql, NetTopologySuite (PostGIS), ASP.NET Core Web API, JWT Bearer + rotirajući HttpOnly refresh cookie, rate-limit politike (`auth` 10/min, `analytics` 60/min, `agent` 20/min), security header-i (CSP, HSTS, X-Frame-Options DENY, COOP same-origin), xUnit + `WebApplicationFactory`.
-- **Baza:** PostgreSQL 12+ sa PostGIS — `geography(point)` kolone i GIST indeksi za prostorne upite na destinacijama, lokacijama, mestima i događajima.
+```bash
+dotnet restore server/Geotrack/Geotrack.sln
+dotnet build server/Geotrack/Geotrack.sln
+dotnet run --project server/Geotrack/Geotrack.Server
+```
 
-## Bitne arhitektonske napomene
+Bekend u razvojnom profilu sluša na `http://localhost:5003`. U Development modu pri startu proverava PostGIS, automatski primenjuje EF migracije i pokreće seed podataka.
 
-- **Refresh token** je HttpOnly cookie `geotrack_refresh` (path `/api/auth`, SameSite=Lax, Secure na ne-localhost). Nikada nije u JSON body-ju i nije čitljiv iz JS-a. Tokeni su hash-ovani u bazi i rotiraju se na svaki refresh.
-- **Auth interceptor** zakači `Authorization: Bearer` samo na same-origin `/api/*` URL-ove. Ovo je namerno — raniji bug je curio bearer ka eksternim servisima.
-- **Analitika je backend-first.** Server uvek puni `UserId` iz JWT-a; klijent ga ne podiže. Whitelist događaja (`AnalyticsEventTypes`) i entiteta (`AnalyticsEntityTypes`) je ugovor — mora se sinhronizovati i u `analytics.types.ts` na frontu, jer eventi van whitelist-a server tiho odbacuje.
-- **Mapa** je viewport-driven. Markeri se traže za trenutne `bbox + zoom + categories`, nikada "učitaj sve odjednom". Sve eksterne pozive (Nominatim, OSRM) izvršava backend; browser nema direktnu vezu ka tim servisima (zbog rate limits-a i security header-a).
-- **Doprinosi (mesta)** se šalju kao `multipart/form-data` (JSON `Payload` + `CoverImage` do 8 MB) preko kanonskih `/api/contributions/places` ruta. Opcioni stay/accommodation podaci ostaju validni za smeštaje. Odobravanje doprinosa mora da očuva kontakt email, cenu po noći i URL-ove booking partnera prilikom kreiranja ili izmene `Place` zapisa; stariji audit dokumenti mogu pominjati stare nazive migracija koji više nisu fajlovi u trenutnoj migracionoj istoriji.
-- **Detail stranice** koriste sealed-viewport layout (`height: 100dvh; overflow: hidden`) i ne skroluju kroz `app-shell` — imaju sopstveni scroll container sa progresivnim fade-in top-bar-om.
-- **Auth stranice** (`login-page`, `register-page`, `interests-page`) namerno koriste starije Angular obrasce (constructor injection, `[(ngModel)]`, `.css` umesto `.scss`). Nije tehnički dug — preneto iz tuđeg rada i ne treba ga "popravljati" osim ako to nije eksplicitan zahtev.
+Demo korisnik iz seed podataka:
 
-## Šta je delimično ili planirano
+- email: `marko.p@example.com`
+- lozinka: `password123`
 
-- **Ask Agent** — `POST /api/agent/message` postoji i frontend ga zaista poziva, ali backend trenutno generiše odgovore kroz keyword-matching stub. Provider/LLM apstrakcija, persistencija razgovora i tool registry nisu implementirani.
-- **Admin analitika** — `IAnalyticsReadService` postoji u backend-u (top entiteti, top destinacije, outbound clicks, search trends), ali nijedan kontroler ga još ne izlaže i ne postoji admin UI koji bi ga koristio.
-- **`admin-app`** — Angular skela bez ruta. Backend već ima primitive (`[Authorize(Roles="Admin")]` endpoint-i, `PlaceContribution` queue za odobravanje), ali UI još ne postoji.
-- **Settings statičke stranice** (`privacy-settings`, `help-center`, `terms-and-privacy`) — informativne, bez backend-a.
-- **Reset lozinke / brisanje naloga / privacy export** — još nisu implementirani.
-- **Object storage** — slike (avatari, doprinosi) se trenutno čuvaju lokalno u `/media/uploads/...` i serviraju kao statički fajlovi sa per-folder cache pravilima.
+Ako migracije želite da primenite ručno preko `dotnet-ef`, iz `src` foldera koristite:
 
-## Sledeći logični koraci
+```bash
+dotnet ef database update --project server/Geotrack/Geotrack.Infrastructure --startup-project server/Geotrack/Geotrack.Server
+```
 
-1. Backend kontroler iznad `IAnalyticsReadService` + minimalan admin dashboard.
-2. Ask Agent v2 — provider apstrakcija, persistencija razgovora, tool/MCP registry.
-3. Build-out `admin-app`-a (moderacija doprinosa, role/region admin, analitika).
-4. Reset lozinke i flow brisanja naloga.
+## Konfiguracija baze
+
+GeoTrack koristi PostgreSQL sa PostGIS ekstenzijom. `AppDbContext` registruje `postgis`, koristi `UseNetTopologySuite()` i ima `geography(point)` kolone i GIST indekse za destinacije, lokacije, mesta i događaje.
+
+Connection string se podešava kroz user-secrets, environment variable ili lokalni `appsettings.*.json`. Ne stavljajte lozinke u git. Design-time `AppDbContextFactory` može da pročita `ConnectionStrings__DefaultConnection` iz environment-a ili user-secrets vrednost iz `Geotrack.Server` projekta.
+
+U Development modu server pokušava:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS postgis;
+```
+
+Ako korisnik baze nema dozvolu za to, ekstenziju napravite ručno nad bazom pre pokretanja aplikacije.
+
+## Ask Agent
+
+Ask Agent je backend-driven AI funkcionalnost. Angular ne zove Gemini, OpenAI, Claude niti druge model providere direktno. Frontend učitava opcije preko:
+
+- `GET /api/agent/providers`
+
+Glavni chat ide preko:
+
+- `POST /api/agent/chat`
+
+Legacy endpoint `POST /api/agent/message` još postoji zbog kompatibilnosti, ali novi tok koristi `/api/agent/chat`.
+
+Provider i model liste dolaze sa bekenda. Gemini je trenutno implementirani provider adapter. OpenAI i Claude postoje u konfiguraciji kao nedostupni scaffolding provideri dok se ne dodaju realni adapteri i server-side konfiguracija.
+
+Korisnik može da koristi:
+
+- `project-demo` key, ako je Gemini API key podešen na bekendu;
+- sačuvani korisnički API key;
+- privremeni session key koji se šalje samo za jedan zahtev.
+
+API key se ne čuva u browser storage-u. Sačuvani korisnički ključ čuva se server-side u `UserAiProviderKeys` i šifruje se preko ASP.NET Core Data Protection. Frontend dobija samo bezbedne metapodatke, kao što su provider id i poslednja 4 karaktera ključa.
+
+## Testiranje Ask Agent-a pomoću Gemini API key-ja
+
+Za lokalno testiranje možete napraviti Gemini API key u Google AI Studio-u. Nemojte ga stavljati u Angular, source kod, `environment` fajlove frontenda ili commit-ovane konfiguracije.
+
+Project/demo podešavanje preko user-secrets:
+
+```bash
+dotnet user-secrets set "Agent:AllowProjectDemoProvider" "true" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Agent:Providers:gemini:ApiKey" "<gemini-api-key>" --project server/Geotrack/Geotrack.Server
+```
+
+Ista podešavanja kao environment variable imena:
+
+```text
+Agent__AllowProjectDemoProvider=true
+Agent__Providers__gemini__ApiKey=<gemini-api-key>
+```
+
+`project-demo` režim se prikazuje samo kada je dozvoljen i kada bekend ima stvaran Gemini API key. Alternativno, prijavljen korisnik može u Ask Agent podešavanjima da unese Gemini key kao sačuvani key ili privremeni session key.
+
+Free quota i uslovi korišćenja zavise od Google AI Studio/Gemini pravila. Za produkciju moraju da se kontrolišu kvote, rate-limit-i, monitoring i trajno čuvanje Data Protection ključeva.
+
+## MCP konektor
+
+GeoTrack MCP je remote HTTP JSON-RPC endpoint:
+
+- `GET /api/mcp` vraća bezbedan status.
+- `POST /api/mcp` obrađuje MCP JSON-RPC zahteve.
+
+Ovo je tool server, ne chatbot. Spoljni MCP hostovi kao Codex, Claude ili ChatGPT-compatible klijenti odlučuju kada pozivaju GeoTrack alate. Trenutni MCP alati su public, read-only i ograničeni; ne izlažu privatne korisničke podatke, write operacije, admin operacije, moderation operacije, SQL, fajlove, tokene ili provider API ključeve.
+
+Trenutni allowlist:
+
+- `geotrack_search_places`
+- `geotrack_get_place_details`
+- `geotrack_search_stays`
+- `geotrack_get_stay_details`
+- `geotrack_search_events`
+- `geotrack_get_event_details`
+- `geotrack_get_map_filters`
+
+Lokalno povezivanje u Codex aplikaciji:
+
+- prvo pokrenite bekend;
+- koristite bekend port, ne Angular port, osim ako ste posebno proverili proxy;
+- MCP URL: `http://localhost:5003/api/mcp`
+- Transport: `Streamable HTTP`
+- Bearer token: prazno za trenutni public read-only MVP
+- Headers: prazno
+
+Primeri zahteva koje možete dati Codex-u:
+
+```text
+Use GeoTrack MCP to search places in Dubrovnik.
+Call geotrack_search_places with location Dubrovnik and query places.
+Call geotrack_search_stays with location Dubrovnik and query hotels.
+```
+
+Za javni ChatGPT/Claude connector potreban je javni HTTPS URL, ne `localhost`. Private MCP tools nisu implementirani dok se ne završi auth dizajn i review.
+
+## Bezbednosne napomene
+
+- Ne commitovati API ključeve, lozinke, connection string lozinke ili provider tokene.
+- Provider API key ne sme da ide u frontend kod ili browser storage.
+- Sačuvani korisnički AI key čuva se samo server-side i šifruje se Data Protection mehanizmom.
+- Privremeni session key koristi se samo za zahtev koji ga šalje.
+- Precizna GPS lokacija ne sme da se čuva u `localStorage`; trenutni kod koristi `sessionStorage` za `geotrack_location` i briše staru `localStorage` kopiju.
+- MCP trenutno ne izlaže write, admin, moderation ili private user tools.
+- Bekend endpoint-i treba da zadrže postojeću validaciju i rate-limit politike.
+
+## Poznata ograničenja i budući rad
+
+- MCP private user tools nisu dostupni dok se ne uradi auth dizajn i security review.
+- OpenAI i Claude provider adapteri nisu aktivni; trenutno su nedostupni scaffolding provideri.
+- Produkcioni deployment treba da podesi trajno čuvanje Data Protection ključeva pre oslanjanja na sačuvane korisničke AI ključeve.
+- Javni MCP connector zahteva HTTPS deployment.
+- Notification center postoji, ali `/settings/notifications` trenutno preusmerava nazad na `/settings`.
+- `admin-app` postoji u repozitorijumu, ali nije opisan kao kompletan produkcioni admin proizvod u ovom README-u.
+- Angular build ima stroge bundle/style budget-e u `user-app/angular.json`; veće SCSS izmene mogu da izazovu budget upozorenja.

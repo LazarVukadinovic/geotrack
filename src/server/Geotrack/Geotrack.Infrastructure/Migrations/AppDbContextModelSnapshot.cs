@@ -845,6 +845,9 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("RestaurantPlaceId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ReviewCount")
                         .HasColumnType("integer");
 
@@ -887,6 +890,8 @@ namespace Geotrack.Infrastructure.Migrations
                     b.HasIndex("PlaceTypeId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("RestaurantPlaceId");
 
                     b.ToTable("Places", (string)null);
                 });
@@ -989,6 +994,16 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("Regions", (string)null);
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Core.Restaurant", b =>
+                {
+                    b.Property<int>("PlaceId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("PlaceId");
+
+                    b.ToTable("Restaurants", (string)null);
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Core.RestaurantType", b =>
                 {
                     b.Property<int>("Id")
@@ -1042,17 +1057,11 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<decimal?>("PricePerNight")
                         .HasColumnType("decimal(10,2)");
 
                     b.Property<int>("StayTypeId")
                         .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("PlaceId");
 
@@ -1598,13 +1607,16 @@ namespace Geotrack.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("CanGenerateExploreSection")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<bool>("ForDestination")
                         .HasColumnType("boolean");
@@ -1619,33 +1631,31 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("ImageUrl")
-                        .HasColumnType("text");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<int?>("PlaceTypeId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Slug")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int?>("TagTypeId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
-                        .IsUnique();
-
-                    b.HasIndex("PlaceTypeId");
-
                     b.HasIndex("Slug")
                         .IsUnique();
+
+                    b.HasIndex("TagTypeId");
 
                     b.ToTable("Tags", (string)null);
                 });
@@ -1685,16 +1695,13 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Property<string>("Slug")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
 
                     b.HasIndex("Slug")
                         .IsUnique();
@@ -1702,29 +1709,38 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("TagTypes", (string)null);
                 });
 
-            modelBuilder.Entity("Geotrack.Domain.Entities.UserTag", b =>
+            modelBuilder.Entity("Geotrack.Domain.Entities.Tags.TagTypePlaceType", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<int>("TagTypeId")
                         .HasColumnType("integer");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<int>("PlaceTypeId")
+                        .HasColumnType("integer");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.HasKey("TagTypeId", "PlaceTypeId");
+
+                    b.HasIndex("PlaceTypeId");
+
+                    b.ToTable("TagTypePlaceTypes", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.UserTag", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
 
                     b.Property<int>("TagId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("UserId")
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Id")
                         .HasColumnType("integer");
 
-                    b.HasKey("Id");
+                    b.HasKey("UserId", "TagId");
 
                     b.HasIndex("TagId");
-
-                    b.HasIndex("UserId", "TagId")
-                        .IsUnique();
 
                     b.ToTable("UserTags", (string)null);
                 });
@@ -2227,6 +2243,69 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("TerritoryManagerTerritories", (string)null);
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserAiProviderKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("EncryptedApiKey")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("FailedUseCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("KeyLast4")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Provider");
+
+                    b.HasIndex("UserId", "Provider", "IsActive")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = true");
+
+                    b.ToTable("UserAiProviderKeys", (string)null);
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.User", b =>
                 {
                     b.Property<int>("Id")
@@ -2620,9 +2699,15 @@ namespace Geotrack.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Geotrack.Domain.Entities.Core.Restaurant", "Restaurant")
+                        .WithMany()
+                        .HasForeignKey("RestaurantPlaceId");
+
                     b.Navigation("Location");
 
                     b.Navigation("PlaceType");
+
+                    b.Navigation("Restaurant");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Core.PlaceAmenity", b =>
@@ -2672,6 +2757,17 @@ namespace Geotrack.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Territory");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Core.Restaurant", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Core.Place", "Place")
+                        .WithOne()
+                        .HasForeignKey("Geotrack.Domain.Entities.Core.Restaurant", "PlaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Place");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Core.Stay", b =>
@@ -2915,10 +3011,31 @@ namespace Geotrack.Infrastructure.Migrations
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Tags.Tag", b =>
                 {
-                    b.HasOne("Geotrack.Domain.Entities.Core.PlaceType", null)
-                        .WithMany()
-                        .HasForeignKey("PlaceTypeId")
+                    b.HasOne("Geotrack.Domain.Entities.Tags.TagType", "TagType")
+                        .WithMany("Tags")
+                        .HasForeignKey("TagTypeId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("TagType");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Tags.TagTypePlaceType", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Core.PlaceType", "PlaceType")
+                        .WithMany("TagTypes")
+                        .HasForeignKey("PlaceTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Geotrack.Domain.Entities.Tags.TagType", "TagType")
+                        .WithMany("PlaceTypes")
+                        .HasForeignKey("TagTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PlaceType");
+
+                    b.Navigation("TagType");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.UserTag", b =>
@@ -3069,6 +3186,17 @@ namespace Geotrack.Infrastructure.Migrations
                 {
                     b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
                         .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserAiProviderKey", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
+                        .WithMany("AiProviderKeys")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -3269,6 +3397,8 @@ namespace Geotrack.Infrastructure.Migrations
             modelBuilder.Entity("Geotrack.Domain.Entities.Core.PlaceType", b =>
                 {
                     b.Navigation("Places");
+
+                    b.Navigation("TagTypes");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Core.Region", b =>
@@ -3317,6 +3447,13 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("UserTags");
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Tags.TagType", b =>
+                {
+                    b.Navigation("PlaceTypes");
+
+                    b.Navigation("Tags");
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.Collection", b =>
                 {
                     b.Navigation("CollectionItems");
@@ -3339,6 +3476,8 @@ namespace Geotrack.Infrastructure.Migrations
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.User", b =>
                 {
+                    b.Navigation("AiProviderKeys");
+
                     b.Navigation("Collections");
 
                     b.Navigation("Notifications");

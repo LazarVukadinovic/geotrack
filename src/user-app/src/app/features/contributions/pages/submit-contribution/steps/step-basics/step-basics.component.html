@@ -109,6 +109,67 @@
             </button>
           </div>
         </div>
+
+        <div class="step-basics__field">
+          <label class="ml-1 text-sm font-bold text-slate-700 mb-1 block">
+            Proof of Ownership
+            <span class="text-red-500 ml-0.5">*</span>
+          </label>
+          <p class="ml-1 text-xs text-slate-400 mb-2">Upload a PDF document proving your ownership or management of this property.</p>
+
+          <!-- Has file (new selection or existing) -->
+          @if (form.ownershipProofFile || form.ownershipProofDocumentUrl) {
+            <div class="bg-white border rounded-2xl overflow-hidden transition-colors"
+              [class.border-[#e8722a]]="form.ownershipProofFile"
+              [class.border-slate-200]="!form.ownershipProofFile">
+
+              <!-- File info row -->
+              <div class="flex items-center gap-3 px-4 py-3.5">
+                <svg class="w-4 h-4 flex-none"
+                  [class.text-[#e8722a]]="form.ownershipProofFile"
+                  [class.text-slate-400]="!form.ownershipProofFile"
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <span class="flex-1 text-sm text-slate-700 truncate">{{ ownershipProofFileName() }}</span>
+                <svg *ngIf="form.ownershipProofFile" class="w-4 h-4 text-green-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+              </div>
+
+              <!-- Change button row -->
+              <label class="flex items-center gap-2 px-4 py-2.5 border-t border-slate-100 cursor-pointer bg-slate-50 active:bg-slate-100 transition-colors">
+                <svg class="w-3.5 h-3.5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                </svg>
+                <span class="text-xs font-semibold text-slate-600">Change document</span>
+                <input type="file" accept="application/pdf" class="hidden" (change)="onOwnershipProofSelected($event)"/>
+              </label>
+            </div>
+          }
+
+          <!-- No file yet -->
+          @if (!form.ownershipProofFile && !form.ownershipProofDocumentUrl) {
+            <label class="step-basics__input-shell bg-white border border-slate-200 rounded-2xl flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors"
+              [class.border-red-400]="submitAttempted() && !ownershipProofError()">
+              <svg class="w-4 h-4 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              <span class="flex-1 text-sm text-slate-300">Upload PDF document</span>
+              <svg class="w-4 h-4 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              <input type="file" accept="application/pdf" class="hidden" (change)="onOwnershipProofSelected($event)"/>
+            </label>
+          }
+
+          <p *ngIf="ownershipProofError()" class="mt-1.5 ml-1 text-xs font-semibold text-red-500">
+            {{ ownershipProofError() }}
+          </p>
+          <p *ngIf="submitAttempted() && !form.ownershipProofFile && !form.ownershipProofDocumentUrl && !ownershipProofError()" class="mt-1.5 ml-1 text-xs font-semibold text-red-500">
+            Proof of ownership document is required.
+          </p>
+        </div>
       }
     </section>
 

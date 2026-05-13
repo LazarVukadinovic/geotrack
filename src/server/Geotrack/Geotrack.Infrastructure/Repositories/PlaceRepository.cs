@@ -23,6 +23,8 @@ public class PlaceRepository : Repository<Place>, IPlaceRepository
             .Include(p => p.PlaceReviews)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
+                    .ThenInclude(tag => tag.TagType)
+                        .ThenInclude(tagType => tagType!.PlaceTypes)
             .FirstOrDefaultAsync(p => p.Id == placeId);
     }
 

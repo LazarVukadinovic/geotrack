@@ -139,6 +139,8 @@ public class PlaceService : IPlaceService
             .Include(p => p.Images)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
+                    .ThenInclude(tag => tag.TagType)
+                        .ThenInclude(tagType => tagType!.PlaceTypes)
             .FirstOrDefaultAsync(p => p.Id == id && p.Status == PublishedStatus);
 
         if (place is null)
@@ -252,6 +254,8 @@ public class PlaceService : IPlaceService
                     .ThenInclude(ssa => ssa.StayAmenity)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
+                    .ThenInclude(tag => tag.TagType)
+                        .ThenInclude(tagType => tagType!.PlaceTypes)
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(pb => pb.BookingPartner)
             .FirstOrDefaultAsync(p => p.Id == id && p.Status == PublishedStatus && p.Stay != null);
