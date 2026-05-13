@@ -20,6 +20,9 @@ export interface BasicsData {
   country: string;
   imageUrl: string;
   coverImageFile?: File | null;
+  ownershipProofFile?: File | null;
+  ownershipProofDocumentUrl?: string | null;
+  ownershipProofOriginalFileName?: string | null;
   lat: number | null;
   lng: number | null;
   imgBgPosition: string;
@@ -41,6 +44,8 @@ export class StepBasicsComponent implements OnDestroy {
   placeTypes = ['Landmark', 'Restaurant', 'Cafe', 'Nature', 'Beach', 'Stay'];
   stayTypes = ['Hotel', 'Villa', 'Apartment', 'Resort', 'Cabin', 'Glamping', 'Hostel'];
   previewUrl = signal('');
+  ownershipProofFileName = signal('');
+  ownershipProofError = signal('');
   showMapPicker = signal(false);
   pickerLat = signal<number | null>(null);
   pickerLng = signal<number | null>(null);
@@ -53,10 +58,27 @@ export class StepBasicsComponent implements OnDestroy {
 
   form: BasicsData = {
     name: '', placeType: 'Landmark', stayType: 'Hotel', address: '', city: '',
-    region: '', country: '', imageUrl: '', coverImageFile: null, lat: null, lng: null,
-    imgBgPosition: '50% 50%',
-    imgBgSize: 'cover'
+    region: '', country: '', imageUrl: '', coverImageFile: null, ownershipProofFile: null,
+    ownershipProofDocumentUrl: null, ownershipProofOriginalFileName: null,
+    lat: null, lng: null, imgBgPosition: '50% 50%', imgBgSize: 'cover'
   };
+
+  onOwnershipProofSelected(e: Event): void {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    (e.target as HTMLInputElement).value = '';
+    if (!file) return;
+    this.ownershipProofError.set('');
+    if (file.type !== 'application/pdf') {
+      this.ownershipProofError.set('Only PDF documents are accepted.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      this.ownershipProofError.set('Document must be 20 MB or smaller.');
+      return;
+    }
+    this.form.ownershipProofFile = file;
+    this.ownershipProofFileName.set(file.name);
+  }
 
   onImageSelected(e: Event): void {
     const file = (e.target as HTMLInputElement).files?.[0];
@@ -232,10 +254,13 @@ export class StepBasicsComponent implements OnDestroy {
   }
 
   isValid(): boolean {
-    return !!this.form.name.trim() &&
+    const baseValid = !!this.form.name.trim() &&
       !!this.form.city.trim() &&
       !!this.form.country.trim() &&
       this.hasConfirmedLocation();
+    if (!baseValid) return false;
+    if (this.isAccommodationSelected() && !this.form.ownershipProofFile && !this.form.ownershipProofDocumentUrl) return false;
+    return true;
   }
 
   hasConfirmedLocation(): boolean {
@@ -284,6 +309,14 @@ export class StepBasicsComponent implements OnDestroy {
         Object.assign(this.form, d);
         if (d.imageUrl) this.previewUrl.set(d.imageUrl);
         this.form.coverImageFile = d.coverImageFile ?? null;
+        this.form.ownershipProofFile = d.ownershipProofFile ?? null;
+        this.form.ownershipProofDocumentUrl = d.ownershipProofDocumentUrl ?? null;
+        this.form.ownershipProofOriginalFileName = d.ownershipProofOriginalFileName ?? null;
+        if (d.ownershipProofFile) {
+          this.ownershipProofFileName.set(d.ownershipProofFile.name);
+        } else if (d.ownershipProofOriginalFileName) {
+          this.ownershipProofFileName.set(d.ownershipProofOriginalFileName);
+        }
         if (this.hasUsableCoordinates(d.lat, d.lng)) {
           this.pickerLat.set(d.lat);
           this.pickerLng.set(d.lng);
