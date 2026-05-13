@@ -100,6 +100,15 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     return [...new Set(values.filter(Boolean))];
   }
 
+  get ownershipProofHref(): string | null {
+    const url = this.request?.ownershipProofDocumentUrl?.trim();
+    if (!url || !url.startsWith('/media/')) {
+      return null;
+    }
+
+    return url;
+  }
+
   goBack(): void {
     this.router.navigate(['/requests'], {
       queryParams: this.activeRegionId ? { regionId: this.activeRegionId } : undefined,

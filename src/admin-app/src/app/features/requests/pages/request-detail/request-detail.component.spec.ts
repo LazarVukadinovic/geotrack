@@ -82,6 +82,29 @@ describe('RequestDetailComponent', () => {
     expect(component.request?.source).toBe('Contribution');
   });
 
+  it('renders ownership proof metadata for contribution details', () => {
+    setRoute({ source: 'contribution', id: '12' }, { regionId: '7' });
+
+    fixture.detectChanges();
+    flushRegions();
+    flushDetail('contribution', 12, 7, contributionDetail({
+      hasOwnershipProofDocument: true,
+      ownershipProofDocumentUrl: '/media/uploads/contributions/proof.pdf',
+      ownershipProofOriginalFileName: 'proof.pdf',
+      ownershipProofContentType: 'application/pdf',
+      ownershipProofUploadedAt: '2026-05-12T10:05:00Z',
+    }));
+    fixture.detectChanges();
+
+    const text = normalizedText();
+    const link = fixture.nativeElement.querySelector('a[href="/media/uploads/contributions/proof.pdf"]') as HTMLAnchorElement | null;
+
+    expect(text).toContain('Proof of Ownership');
+    expect(text).toContain('proof.pdf');
+    expect(link?.target).toBe('_blank');
+    expect(link?.rel).toContain('noopener');
+  });
+
   it('reads review-report route params and calls the review-report detail API', () => {
     component.ngOnInit();
     flushRegions();
@@ -261,7 +284,7 @@ describe('RequestDetailComponent', () => {
     };
   }
 
-  function contributionDetail(): ReviewRequestDetail {
+  function contributionDetail(overrides: Partial<ReviewRequestDetail> = {}): ReviewRequestDetail {
     return {
       requestKey: 'contribution:12',
       requestId: 12,
@@ -285,6 +308,7 @@ describe('RequestDetailComponent', () => {
       amenities: [],
       stayAmenities: [],
       bookingPartners: [],
+      ...overrides,
     };
   }
 });

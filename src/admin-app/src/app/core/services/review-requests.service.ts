@@ -193,6 +193,11 @@ export class ReviewRequestsService {
       stayAmenities: Array.isArray(detail.stayAmenities) ? detail.stayAmenities : [],
       bookingPartners: Array.isArray(detail.bookingPartners) ? detail.bookingPartners : [],
       images: Array.isArray(detail.images) ? detail.images : [],
+      hasOwnershipProofDocument: Boolean(detail.hasOwnershipProofDocument || detail.ownershipProofDocumentUrl),
+      ownershipProofDocumentUrl: detail.ownershipProofDocumentUrl ?? null,
+      ownershipProofOriginalFileName: detail.ownershipProofOriginalFileName ?? null,
+      ownershipProofContentType: detail.ownershipProofContentType ?? null,
+      ownershipProofUploadedAt: detail.ownershipProofUploadedAt ?? null,
     };
   }
 

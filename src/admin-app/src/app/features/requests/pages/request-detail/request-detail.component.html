@@ -129,6 +129,24 @@
                   <span>Email</span>
                   <strong>{{ request.contactEmail || 'Not specified' }}</strong>
                 </div>
+                <div class="detail-field md:col-span-2">
+                  <span>Proof of Ownership</span>
+                  <strong>
+                    <ng-container *ngIf="ownershipProofHref as proofHref; else proofMetadata">
+                      <a
+                        [href]="proofHref"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-blue-700 hover:text-blue-800 underline underline-offset-2"
+                      >
+                        {{ request.ownershipProofOriginalFileName || 'View proof document' }}
+                      </a>
+                    </ng-container>
+                    <ng-template #proofMetadata>
+                      {{ request.hasOwnershipProofDocument ? (request.ownershipProofOriginalFileName || 'Proof document uploaded') : 'Not provided' }}
+                    </ng-template>
+                  </strong>
+                </div>
               </div>
 
               <div *ngIf="request.tags?.length" class="mt-5">

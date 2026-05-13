@@ -75,6 +75,9 @@ describe('ReviewRequestsService', () => {
     service.getDetail(10, 'Contribution', 12).subscribe(detail => {
       expect(detail.source).toBe('Contribution');
       expect(detail.requestKey).toBe('contribution:12');
+      expect(detail.hasOwnershipProofDocument).toBe(true);
+      expect(detail.ownershipProofDocumentUrl).toBe('/media/uploads/contributions/proof.pdf');
+      expect(detail.ownershipProofOriginalFileName).toBe('proof.pdf');
     });
 
     const contributionRequest = http.expectOne(
@@ -83,7 +86,14 @@ describe('ReviewRequestsService', () => {
         req.params.get('regionId') === '10',
     );
     expect(contributionRequest.request.method).toBe('GET');
-    contributionRequest.flush({ ...contributionItem(), description: 'Contribution detail' });
+    contributionRequest.flush({
+      ...contributionItem(),
+      description: 'Contribution detail',
+      ownershipProofDocumentUrl: '/media/uploads/contributions/proof.pdf',
+      ownershipProofOriginalFileName: 'proof.pdf',
+      ownershipProofContentType: 'application/pdf',
+      ownershipProofUploadedAt: '2026-05-12T10:05:00Z',
+    });
   });
 
   it('rejects invalid detail sources instead of silently calling a contribution route', () => {

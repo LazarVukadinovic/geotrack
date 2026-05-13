@@ -95,6 +95,11 @@ export interface ReviewRequestDetail extends ReviewRequest {
   stayAmenities?: string[];
   bookingPartners?: BookingPartner[];
   images?: PlaceContributionImage[];
+  hasOwnershipProofDocument?: boolean;
+  ownershipProofDocumentUrl?: string | null;
+  ownershipProofOriginalFileName?: string | null;
+  ownershipProofContentType?: string | null;
+  ownershipProofUploadedAt?: string | null;
   reviewComment?: string | null;
   reviewRating?: number | null;
   reviewCreatedAt?: string | null;
