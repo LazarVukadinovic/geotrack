@@ -6,7 +6,10 @@ import { User, UserRole } from '../models/user.model';
 interface AdminAuthUserResponse {
   id: number;
   email: string;
+  firstName?: string;
+  lastName?: string;
   displayName: string;
+  avatarUrl?: string | null;
   roles: string[];
   canAccessRegionalAdmin: boolean;
 }
@@ -145,11 +148,13 @@ export class AuthService {
     const role = this.resolveAdminRole(response.roles);
     const displayName = response.displayName?.trim() || response.email;
     const nameParts = displayName.split(/\s+/).filter(Boolean);
+    const firstName = response.firstName?.trim() || nameParts[0] || displayName;
+    const lastName = response.lastName?.trim() || nameParts.slice(1).join(' ');
 
     return {
       id: String(response.id),
-      firstName: nameParts[0] ?? displayName,
-      lastName: nameParts.slice(1).join(' '),
+      firstName,
+      lastName,
       email: response.email,
       role,
       region: '',
@@ -159,6 +164,7 @@ export class AuthService {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
       notifyRequests: true,
       notifyNewReview: true,
+      avatarUrl: response.avatarUrl ?? undefined,
     };
   }
 

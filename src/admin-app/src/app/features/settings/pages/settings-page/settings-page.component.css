@@ -17,6 +17,10 @@
   background: #e5e7eb;
   flex-shrink: 0;
 }
+.toggle-track:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
 .toggle-track.on {
   background: #1565d8;
 }
@@ -64,4 +68,8 @@ input:disabled, textarea:disabled {
 }
 .toast-success {
   animation: fadeInUp 0.25s ease both;
+}
+
+.assignment-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
