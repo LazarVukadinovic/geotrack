@@ -26,7 +26,9 @@ public class RegionalDashboardStatsDto
 
 public class RegionalRequestQueuePreviewItemDto
 {
+    public string RequestKey { get; set; } = string.Empty;
     public int RequestId { get; set; }
+    public string Source { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string SubmittedByDisplayName { get; set; } = string.Empty;
     public string EntityType { get; set; } = "Place";
