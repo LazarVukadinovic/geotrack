@@ -49,6 +49,8 @@ describe('ContributionsService', () => {
     expect(payload['stayType']).toBeUndefined();
     expect(payload['amenities']).toEqual(['wifi']);
     expect(payload['bookingPartners']).toEqual([]);
+    expect(((req.request.body as FormData).get('ownershipProofDocument') as File).name)
+      .toBe('ownership-proof.pdf');
 
     req.flush({ contribution: makeApiContribution({ entityType: 'Place', placeType: 'Cafe', stayType: null }) });
 
@@ -74,8 +76,53 @@ describe('ContributionsService', () => {
     expect(payload['bookingPartners']).toEqual([
       { id: 'booking', url: 'https://booking.example/villa' },
     ]);
+    expect(((req.request.body as FormData).get('ownershipProofDocument') as File).name)
+      .toBe('ownership-proof.pdf');
 
     req.flush({ contribution: makeApiContribution({ entityType: 'Place', placeType: 'Stay', stayType: 'Villa' }) });
+    httpMock.expectOne('/api/contributions').flush({ contributions: [] });
+  });
+
+  it('includes ownership proof for Restaurant contributions without stay-only fields', () => {
+    const draft = makePlaceDraft();
+    draft.basics = {
+      ...draft.basics!,
+      placeType: 'Restaurant',
+      ownershipProofFile: makePdfFile('restaurant-proof.pdf'),
+    };
+
+    service.createPlace(draft).subscribe();
+
+    const req = httpMock.expectOne('/api/contributions/places');
+    const body = req.request.body as FormData;
+    const payload = JSON.parse(body.get('payload') as string) as Record<string, unknown>;
+
+    expect(payload['placeType']).toBe('Restaurant');
+    expect(payload['stayType']).toBeUndefined();
+    expect((body.get('ownershipProofDocument') as File).name).toBe('restaurant-proof.pdf');
+
+    req.flush({ contribution: makeApiContribution({ entityType: 'Place', placeType: 'Restaurant', stayType: null }) });
+    httpMock.expectOne('/api/contributions').flush({ contributions: [] });
+  });
+
+  it('does not append stale ownership proof for unrelated place types', () => {
+    const draft = makePlaceDraft();
+    draft.basics = {
+      ...draft.basics!,
+      placeType: 'Landmark',
+      ownershipProofFile: null,
+    };
+
+    service.createPlace(draft).subscribe();
+
+    const req = httpMock.expectOne('/api/contributions/places');
+    const body = req.request.body as FormData;
+    const payload = JSON.parse(body.get('payload') as string) as Record<string, unknown>;
+
+    expect(payload['placeType']).toBe('Landmark');
+    expect(body.has('ownershipProofDocument')).toBe(false);
+
+    req.flush({ contribution: makeApiContribution({ entityType: 'Place', placeType: 'Landmark', stayType: null }) });
     httpMock.expectOne('/api/contributions').flush({ contributions: [] });
   });
 
@@ -162,6 +209,7 @@ function makePlaceDraft(): ContributionDraftData {
       country: 'Croatia',
       imageUrl: '',
       coverImageFile: null,
+      ownershipProofFile: makePdfFile(),
       lat: 42.6413,
       lng: 18.1089,
       imgBgPosition: '50% 50%',
@@ -191,6 +239,10 @@ function makeStayDraft(): ContributionDraftData {
       bookingPartners: [{ id: 'booking', url: 'https://booking.example/villa' }],
     },
   };
+}
+
+function makePdfFile(name = 'ownership-proof.pdf'): File {
+  return new File(['%PDF-1.4\n% test proof\n'], name, { type: 'application/pdf' });
 }
 
 function makeApiContribution(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {

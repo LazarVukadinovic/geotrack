@@ -233,6 +233,7 @@ export class ContributionsService {
     const features = normalizeFeatures(draft.features);
     const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
+    const requiresOwnershipProof = requiresOwnershipProofPlaceType(basics.placeType);
 
     const payload: UpsertPlaceContributionPayload = {
       type: 'CreatePlace',
@@ -263,7 +264,7 @@ export class ContributionsService {
       formData.append('coverImage', basics.coverImageFile);
     }
 
-    if (isAccommodation && basics.ownershipProofFile) {
+    if (requiresOwnershipProof && basics.ownershipProofFile) {
       formData.append('ownershipProofDocument', basics.ownershipProofFile);
     }
 
@@ -340,6 +341,17 @@ function normalizeContributionEntityType(entityType: string | null | undefined):
 
 function isAccommodationPlaceType(placeType: string | null | undefined): boolean {
   return (placeType ?? '').trim().toLowerCase() === 'stay';
+}
+
+function requiresOwnershipProofPlaceType(placeType: string | null | undefined): boolean {
+  switch ((placeType ?? '').trim().toLowerCase()) {
+    case 'stay':
+    case 'restaurant':
+    case 'cafe':
+      return true;
+    default:
+      return false;
+  }
 }
 
 function mapDetail(item: ApiContributionDetail): ContributionDetail {
