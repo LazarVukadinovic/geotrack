@@ -47,6 +47,8 @@ export interface ContributionDetail extends ContributionListItem {
   bookingPartners: ContributionBookingPartner[];
   reviewNote?: string | null;
   reviewedAt?: string | null;
+  ownershipProofDocumentUrl?: string | null;
+  ownershipProofOriginalFileName?: string | null;
 }
 
 export interface ContributionBookingPartner {
@@ -101,6 +103,8 @@ interface ApiContributionDetail extends ApiContributionListItem {
   bookingPartners?: ContributionBookingPartner[] | null;
   reviewNote?: string | null;
   reviewedAt?: string | null;
+  ownershipProofDocumentUrl?: string | null;
+  ownershipProofOriginalFileName?: string | null;
 }
 
 interface UpsertPlaceContributionPayload {
@@ -156,8 +160,8 @@ export class ContributionsService {
   }
 
   getDetail(id: number): Observable<ContributionDetail> {
-    return this.http.get<ApiContributionDetail>(`/api/contributions/${id}`).pipe(
-      map(mapDetail),
+    return this.http.get<ContributionResponse>(`/api/contributions/${id}`).pipe(
+      map(res => mapDetail(res.contribution)),
     );
   }
 
@@ -202,6 +206,9 @@ export class ContributionsService {
         country: detail.country,
         imageUrl: detail.coverImageUrl,
         coverImageFile: null,
+        ownershipProofFile: null,
+        ownershipProofDocumentUrl: detail.ownershipProofDocumentUrl ?? null,
+        ownershipProofOriginalFileName: detail.ownershipProofOriginalFileName ?? null,
         lat: detail.latitude,
         lng: detail.longitude,
         imgBgPosition: detail.imagePosition || '50% 50%',
@@ -254,6 +261,10 @@ export class ContributionsService {
 
     if (basics.coverImageFile) {
       formData.append('coverImage', basics.coverImageFile);
+    }
+
+    if (isAccommodation && basics.ownershipProofFile) {
+      formData.append('ownershipProofDocument', basics.ownershipProofFile);
     }
 
     return formData;
@@ -350,6 +361,8 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     bookingPartners: item.bookingPartners ?? [],
     reviewNote: item.reviewNote ?? null,
     reviewedAt: item.reviewedAt ?? null,
+    ownershipProofDocumentUrl: item.ownershipProofDocumentUrl ?? null,
+    ownershipProofOriginalFileName: item.ownershipProofOriginalFileName ?? null,
   };
 }
 
