@@ -340,13 +340,16 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
+var developmentCorsOrigins = GetDevelopmentCorsOrigins(builder.Configuration);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontendDev", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(developmentCorsOrigins)
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -357,14 +360,28 @@ await PostgisStartup.EnsureReadyAsync(app.Services, app.Environment.IsDevelopmen
 var shouldSeedDatabase =
     app.Environment.IsDevelopment()
     || app.Configuration.GetValue<bool>("SeedData:Enabled");
+var shouldSeedDemoRegionalManager =
+    DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 
-if (shouldSeedDatabase)
+if (shouldSeedDatabase || shouldSeedDemoRegionalManager)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
     await db.Database.MigrateAsync();
-    await SeedData.InitializeAsync(db);
+
+    if (shouldSeedDatabase)
+    {
+        await SeedData.InitializeAsync(db);
+    }
+
+    if (shouldSeedDemoRegionalManager)
+    {
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(nameof(DemoRegionalManagerSeeder));
+        await DemoRegionalManagerSeeder.EnsureAsync(db, app.Configuration, logger);
+    }
 }
 
 if (!app.Environment.IsDevelopment())
@@ -392,8 +409,9 @@ if (forwardedHeadersEnabled)
     app.UseForwardedHeaders();
 }
 
-// Na PMF serveru radi obican HTTP port, zato ne forsiramo HTTPS redirect u Production.
-if (app.Environment.IsDevelopment())
+// Local dev and PMF deployment run over plain HTTP. Enable this explicitly
+// only for hosts where the ASP.NET app terminates HTTPS itself.
+if (app.Configuration.GetValue<bool>("HttpsRedirection:Enabled"))
 {
     app.UseHttpsRedirection();
 }
@@ -413,6 +431,13 @@ app.Use(async (context, next) =>
     await next();
 });
 
+var webRoot = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (Directory.Exists(webRoot))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
+
 var mediaRoot = Path.Combine(app.Environment.ContentRootPath, "media");
 
 Directory.CreateDirectory(Path.Combine(mediaRoot, "seed"));
@@ -422,9 +447,6 @@ Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "contributions"));
 var mediaContentTypes = new FileExtensionContentTypeProvider();
 mediaContentTypes.Mappings[".svg"] = "image/svg+xml";
 mediaContentTypes.Mappings[".webp"] = "image/webp";
-
-app.UseDefaultFiles();
-app.UseStaticFiles();
 
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -466,25 +488,49 @@ app.UseRateLimiter();
 
 app.MapControllers();
 
-app.MapGet("/admin", () => Results.Redirect("/admin/"));
-
-app.MapGet("/admin/", async context =>
+var adminIndexPath = Path.Combine(webRoot, "admin", "index.html");
+if (File.Exists(adminIndexPath))
 {
-    var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+    app.MapGet("/admin", () => Results.Redirect("/admin/"));
 
-    var adminIndexPath = Path.Combine(
-        env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot"),
-        "admin",
-        "index.html");
+    app.MapGet("/admin/", async context =>
+    {
+        context.Response.ContentType = "text/html";
+        await context.Response.SendFileAsync(adminIndexPath);
+    });
 
-    context.Response.ContentType = "text/html";
-    await context.Response.SendFileAsync(adminIndexPath);
-});
+    app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
+}
 
-app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
-app.MapFallbackToFile("index.html");
+if (File.Exists(Path.Combine(webRoot, "index.html")))
+{
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
+
+static string[] GetDevelopmentCorsOrigins(IConfiguration configuration)
+{
+    var configuredOrigins = configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>() ?? Array.Empty<string>();
+
+    var origins = configuredOrigins
+        .Select(origin => origin.Trim())
+        .Where(origin => !string.IsNullOrWhiteSpace(origin))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    return origins.Length > 0
+        ? origins
+        : new[]
+        {
+            "http://localhost:4200",
+            "http://127.0.0.1:4200",
+            "http://localhost:4300",
+            "http://127.0.0.1:4300"
+        };
+}
 
 static bool ConfigureForwardedHeaders(WebApplicationBuilder builder)
 {
