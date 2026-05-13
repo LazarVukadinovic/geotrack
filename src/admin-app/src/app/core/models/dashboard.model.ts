@@ -22,6 +22,8 @@ export interface RegionalAssignedRegion {
   statusLabel?: string | null;
 }
 
+export type RegionalDashboardRegion = RegionalAssignedRegion;
+
 export interface RegionalDashboardStats {
   pendingRequests: number;
   totalDestinations: number;
@@ -32,21 +34,23 @@ export interface RegionalDashboardStats {
   eventsAddedLastMonth: number;
 }
 
-export interface RegionalRequestQueuePreviewItem {
+export interface RegionalRequestPreview {
+  requestKey?: string;
   requestId: number;
+  source?: string;
   title: string;
   submittedByDisplayName: string;
-  entityType: 'Place';
+  entityType: string;
   contributionType: string;
   submittedAt: string;
   status: string;
   thumbnailImageUrl?: string | null;
-  detailRoute: string;
+  detailRoute?: string | null;
 }
 
-export interface RegionalDashboardActivityItem {
+export interface RegionalActivityItem {
   id: string;
-  entityType: 'place' | 'destination' | 'location' | 'event' | 'request';
+  entityType: string;
   entityId?: number | null;
   action: string;
   description: string;
@@ -57,15 +61,20 @@ export interface RegionalDashboardActivityItem {
   detailRoute?: string | null;
 }
 
-export interface RegionalDashboard {
-  activeRegion: RegionalAssignedRegion;
+export type RegionalRequestQueuePreviewItem = RegionalRequestPreview;
+export type RegionalDashboardActivityItem = RegionalActivityItem;
+
+export interface RegionalDashboardResponse {
+  activeRegion: RegionalDashboardRegion;
   stats: RegionalDashboardStats;
-  requestQueuePreview: RegionalRequestQueuePreviewItem[];
-  recentActivity: RegionalDashboardActivityItem[];
+  requestQueuePreview: RegionalRequestPreview[];
+  recentActivity: RegionalActivityItem[];
 }
 
+export type RegionalDashboard = RegionalDashboardResponse;
+
 export interface RegionalDashboardActivityResponse {
-  items: RegionalDashboardActivityItem[];
+  items: RegionalActivityItem[];
   skip: number;
   take: number;
   hasMore: boolean;

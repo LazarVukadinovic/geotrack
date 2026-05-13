@@ -4,7 +4,7 @@ import {
   DashboardStat,
   QuickAction,
   RegionalAssignedRegion,
-  RegionalDashboard,
+  RegionalDashboardResponse,
   RegionalDashboardActivityResponse,
   RegionalDashboardStats,
 } from '../models/dashboard.model';
@@ -18,25 +18,42 @@ export class DashboardService {
   }
 
   getDashboard(regionId: number) {
-    const params = new HttpParams().set('regionId', regionId);
-    return this.http.get<RegionalDashboard>('/api/admin/regional/dashboard', { params });
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http.get<RegionalDashboardResponse>('/api/admin/regional/dashboard', { params });
   }
 
   getActivity(regionId: number, skip = 0, take = 20) {
     const params = new HttpParams()
-      .set('regionId', regionId)
-      .set('skip', skip)
-      .set('take', take);
+      .set('regionId', String(regionId))
+      .set('skip', String(skip))
+      .set('take', String(take));
 
-    return this.http.get<RegionalDashboardActivityResponse>('/api/admin/regional/activity', { params });
+    return this.http.get<RegionalDashboardActivityResponse>('/api/admin/regional/activity', {
+      params,
+    });
   }
 
   getQuickActions(): QuickAction[] {
     return [
-      { label: 'Create New Destination', desc: 'Define a new geographical area...', icon: 'flag', route: '/destinations/new' },
-      { label: 'Add New Location', desc: 'Add a specific POI...', icon: 'pin', route: '/locations/new' },
+      {
+        label: 'Create New Destination',
+        desc: 'Define a new geographical area...',
+        icon: 'flag',
+        route: '/destinations/new',
+      },
+      {
+        label: 'Add New Location',
+        desc: 'Add a specific POI...',
+        icon: 'pin',
+        route: '/locations/new',
+      },
       { label: 'Add New Place', desc: 'Add a specific POI...', icon: 'home', route: '/places/new' },
-      { label: 'Schedule Event', desc: 'Publish a time-bound activity...', icon: 'calendar', route: '/events/new' },
+      {
+        label: 'Schedule Event',
+        desc: 'Publish a time-bound activity...',
+        icon: 'calendar',
+        route: '/events/new',
+      },
     ];
   }
 

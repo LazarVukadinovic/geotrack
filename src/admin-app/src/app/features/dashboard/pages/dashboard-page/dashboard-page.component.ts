@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
+import { finalize } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
@@ -10,7 +11,7 @@ import {
   DashboardStat,
   QuickAction,
   RegionalAssignedRegion,
-  RegionalDashboard,
+  RegionalDashboardResponse,
   RegionalDashboardActivityItem,
   RegionalRequestQueuePreviewItem,
 } from '../../../../core/models/dashboard.model';
@@ -27,7 +28,7 @@ export class DashboardComponent implements OnInit {
 
   assignedRegions: RegionalAssignedRegion[] = [];
   activeRegionId: number | null = null;
-  dashboard: RegionalDashboard | null = null;
+  dashboard: RegionalDashboardResponse | null = null;
   regionLoading = false;
   dashboardLoading = false;
   errorMessage: string | null = null;
@@ -37,6 +38,7 @@ export class DashboardComponent implements OnInit {
     private readonly router: Router,
     private readonly auth: AuthService,
     private readonly dashboardService: DashboardService,
+    private readonly cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -52,9 +54,11 @@ export class DashboardComponent implements OnInit {
   }
 
   get activeRegion(): RegionalAssignedRegion | null {
-    return this.dashboard?.activeRegion
-      ?? this.assignedRegions.find(region => region.id === this.activeRegionId)
-      ?? null;
+    return (
+      this.dashboard?.activeRegion ??
+      this.assignedRegions.find((region) => region.id === this.activeRegionId) ??
+      null
+    );
   }
 
   get regionDisplayName(): string {
@@ -68,7 +72,12 @@ export class DashboardComponent implements OnInit {
   }
 
   get hasNoAssignedRegions(): boolean {
-    return !this.regionLoading && this.assignedRegions.length === 0 && !this.errorMessage;
+    return (
+      !this.regionLoading &&
+      this.assignedRegions.length === 0 &&
+      !this.activeRegion &&
+      !this.errorMessage
+    );
   }
 
   get pendingRequestsCount(): number | null {
@@ -95,29 +104,41 @@ export class DashboardComponent implements OnInit {
     this.regionLoading = true;
     this.errorMessage = null;
     this.authRequired = false;
+    this.notifyStateChanged();
 
-    this.dashboardService.getAssignedRegions().subscribe({
-      next: regions => {
-        this.regionLoading = false;
-        this.assignedRegions = regions;
+    this.dashboardService
+      .getAssignedRegions()
+      .pipe(
+        finalize(() => {
+          this.regionLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: (regions) => {
+          this.assignedRegions = regions ?? [];
 
-        if (regions.length === 0) {
-          this.activeRegionId = null;
+          if (this.assignedRegions.length === 0) {
+            this.activeRegionId = null;
+            this.dashboard = null;
+            this.dashboardLoading = false;
+            this.clearPersistedRegion();
+            return;
+          }
+
+          const persistedRegionId = this.readPersistedRegionId();
+          const selectedRegion =
+            this.assignedRegions.find((region) => region.id === persistedRegionId) ??
+            this.assignedRegions[0];
+          this.setActiveRegion(selectedRegion.id, false);
+          this.loadDashboard(selectedRegion.id);
+        },
+        error: (error) => {
           this.dashboard = null;
-          this.clearPersistedRegion();
-          return;
-        }
-
-        const persistedRegionId = this.readPersistedRegionId();
-        const selectedRegion = regions.find(region => region.id === persistedRegionId) ?? regions[0];
-        this.setActiveRegion(selectedRegion.id, false);
-        this.loadDashboard(selectedRegion.id);
-      },
-      error: error => {
-        this.regionLoading = false;
-        this.handleLoadError(error);
-      },
-    });
+          this.dashboardLoading = false;
+          this.handleLoadError(error);
+        },
+      });
   }
 
   onRegionSelected(regionId: number): void {
@@ -165,7 +186,13 @@ export class DashboardComponent implements OnInit {
   }
 
   navigateToRequest(item: RegionalRequestQueuePreviewItem): void {
-    this.navigate(item.detailRoute || `/request/detail/${item.requestId}`);
+    if (item.detailRoute) {
+      this.navigate(item.detailRoute);
+      return;
+    }
+
+    const routeSource = item.source === 'ReviewReport' ? 'review-report' : 'contribution';
+    this.navigate(`/request/detail/${routeSource}/${item.requestId}`);
   }
 
   navigateToActivityHistory(): void {
@@ -210,7 +237,11 @@ export class DashboardComponent implements OnInit {
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
 
-    return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return new Date(value).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   }
 
   private setActiveRegion(regionId: number, reload: boolean): void {
@@ -224,27 +255,38 @@ export class DashboardComponent implements OnInit {
 
   private loadDashboard(regionId: number): void {
     this.dashboardLoading = true;
+    this.dashboard = null;
     this.errorMessage = null;
     this.authRequired = false;
+    this.notifyStateChanged();
 
-    this.dashboardService.getDashboard(regionId).subscribe({
-      next: dashboard => {
-        this.dashboard = dashboard;
-        this.dashboardLoading = false;
-      },
-      error: error => {
-        this.dashboard = null;
-        this.dashboardLoading = false;
-        this.handleLoadError(error);
-      },
-    });
+    this.dashboardService
+      .getDashboard(regionId)
+      .pipe(
+        finalize(() => {
+          this.dashboardLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: (dashboard) => {
+          this.dashboard = this.normalizeDashboard(dashboard);
+          this.setActiveRegion(this.dashboard.activeRegion.id, false);
+          this.upsertAssignedRegion(this.dashboard.activeRegion);
+        },
+        error: (error) => {
+          this.dashboard = null;
+          this.handleLoadError(error);
+        },
+      });
   }
 
   private handleLoadError(error: unknown): void {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 401) {
         this.authRequired = true;
-        this.errorMessage = 'Sign in with an authenticated Regional Manager account to view the dashboard.';
+        this.errorMessage =
+          'Sign in with an authenticated Regional Manager account to view the dashboard.';
         return;
       }
 
@@ -254,7 +296,31 @@ export class DashboardComponent implements OnInit {
       }
     }
 
-    this.errorMessage = 'Dashboard data could not be loaded. Please try again.';
+    this.errorMessage = 'Unable to load regional dashboard.';
+  }
+
+  private normalizeDashboard(dashboard: RegionalDashboardResponse): RegionalDashboardResponse {
+    return {
+      ...dashboard,
+      requestQueuePreview: dashboard.requestQueuePreview ?? [],
+      recentActivity: dashboard.recentActivity ?? [],
+    };
+  }
+
+  private upsertAssignedRegion(region: RegionalAssignedRegion): void {
+    const existingIndex = this.assignedRegions.findIndex((item) => item.id === region.id);
+    if (existingIndex >= 0) {
+      this.assignedRegions = this.assignedRegions.map((item) =>
+        item.id === region.id ? region : item,
+      );
+      return;
+    }
+
+    this.assignedRegions = [region, ...this.assignedRegions];
+  }
+
+  private notifyStateChanged(): void {
+    this.cdr.markForCheck();
   }
 
   private withActiveRegion(route: string): string {
@@ -304,6 +370,6 @@ export class DashboardComponent implements OnInit {
   }
 
   private hashString(value: string): number {
-    return value.split('').reduce((hash, char) => ((hash << 5) - hash) + char.charCodeAt(0), 0);
+    return value.split('').reduce((hash, char) => (hash << 5) - hash + char.charCodeAt(0), 0);
   }
 }
