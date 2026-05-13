@@ -1,5 +1,6 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,17 +13,21 @@ public class RegionalDashboardService : IRegionalDashboardService
     private const int ActivityMaxTake = 50;
 
     private readonly AppDbContext _db;
+    private readonly IRegionalRequestQueueService _requestQueue;
 
-    public RegionalDashboardService(AppDbContext db)
+    public RegionalDashboardService(AppDbContext db, IRegionalRequestQueueService requestQueue)
     {
         _db = db;
+        _requestQueue = requestQueue;
     }
 
     public async Task<List<RegionalAssignedRegionDto>> GetAssignedRegionsAsync(int userId)
     {
+        await EnsureRegionalManagerRoleAsync(userId);
+
         return await _db.RegionalManagerRegions
             .AsNoTracking()
-            .Where(assignment => assignment.UserId == userId)
+            .Where(assignment => assignment.UserId == userId && assignment.IsActive)
             .OrderBy(assignment => assignment.Region.Name)
             .ThenBy(assignment => assignment.RegionId)
             .Select(assignment => new RegionalAssignedRegionDto
@@ -44,11 +49,19 @@ public class RegionalDashboardService : IRegionalDashboardService
         // Dashboard monthly deltas use a rolling 30-day UTC window.
         var lastMonthCutoff = DateTime.UtcNow.AddDays(-30);
 
-        var pendingQuery = PendingContributionsForRegion(regionId);
+        var queuePreview = await _requestQueue.GetQueueAsync(
+            userId,
+            regionId,
+            type: "all",
+            status: "pending",
+            search: null,
+            sort: "newest",
+            skip: 0,
+            take: DashboardQueuePreviewTake);
 
         var stats = new RegionalDashboardStatsDto
         {
-            PendingRequests = await pendingQuery.CountAsync(),
+            PendingRequests = queuePreview.PendingCount,
             TotalDestinations = await _db.Destinations
                 .AsNoTracking()
                 .CountAsync(destination => destination.RegionId == regionId),
@@ -73,7 +86,20 @@ public class RegionalDashboardService : IRegionalDashboardService
         {
             ActiveRegion = activeRegion,
             Stats = stats,
-            RequestQueuePreview = await GetRequestQueuePreviewAsync(regionId, DashboardQueuePreviewTake),
+            RequestQueuePreview = queuePreview.Items.Select(item => new RegionalRequestQueuePreviewItemDto
+            {
+                RequestKey = item.RequestKey,
+                RequestId = item.RequestId,
+                Source = item.Source,
+                Title = item.Title,
+                SubmittedByDisplayName = item.SubmittedByDisplayName,
+                EntityType = item.EntityType,
+                ContributionType = item.ContributionType ?? string.Empty,
+                SubmittedAt = item.SubmittedAt,
+                Status = item.Status,
+                ThumbnailImageUrl = item.ThumbnailImageUrl,
+                DetailRoute = item.DetailRoute ?? string.Empty
+            }).ToList(),
             RecentActivity = await BuildActivityAsync(regionId, 0, DashboardRecentActivityTake)
         };
     }
@@ -98,9 +124,11 @@ public class RegionalDashboardService : IRegionalDashboardService
 
     private async Task<RegionalDashboardRegionDto> GetAssignedRegionAsync(int userId, int regionId)
     {
+        await EnsureRegionalManagerRoleAsync(userId);
+
         var region = await _db.RegionalManagerRegions
             .AsNoTracking()
-            .Where(assignment => assignment.UserId == userId && assignment.RegionId == regionId)
+            .Where(assignment => assignment.UserId == userId && assignment.RegionId == regionId && assignment.IsActive)
             .Select(assignment => new RegionalDashboardRegionDto
             {
                 Id = assignment.RegionId,
@@ -115,61 +143,16 @@ public class RegionalDashboardService : IRegionalDashboardService
         return region ?? throw new UnauthorizedAccessException("Region is not assigned to the current regional manager.");
     }
 
-    private IQueryable<PlaceContribution> PendingContributionsForRegion(int regionId)
+    private async Task EnsureRegionalManagerRoleAsync(int userId)
     {
-        return _db.PlaceContributions
+        var roles = await _db.UserRoles
             .AsNoTracking()
-            .Where(contribution =>
-                contribution.Status == PlaceContributionStatus.PendingReview &&
-                contribution.LocationId.HasValue &&
-                contribution.Location != null &&
-                contribution.Location.Destination.RegionId == regionId &&
-                (contribution.Type != PlaceContributionType.UpdatePlace ||
-                 (contribution.PlaceId.HasValue &&
-                  contribution.Place != null &&
-                  contribution.Place.Location.Destination.RegionId == regionId &&
-                  contribution.Place.Location.Destination.RegionId == contribution.Location.Destination.RegionId)));
-    }
-
-    private async Task<List<RegionalRequestQueuePreviewItemDto>> GetRequestQueuePreviewAsync(int regionId, int take)
-    {
-        var rows = await PendingContributionsForRegion(regionId)
-            .OrderByDescending(contribution => contribution.SubmittedAt)
-            .ThenByDescending(contribution => contribution.Id)
-            .Take(take)
-            .Select(contribution => new
-            {
-                contribution.Id,
-                contribution.Name,
-                contribution.Type,
-                contribution.Status,
-                contribution.SubmittedAt,
-                UserDisplayName = contribution.User.DisplayName,
-                contribution.User.FirstName,
-                contribution.User.LastName,
-                contribution.User.Username,
-                ThumbnailImageUrl = contribution.Images
-                    .OrderByDescending(image => image.IsMain)
-                    .ThenBy(image => image.SortOrder)
-                    .ThenBy(image => image.Id)
-                    .Select(image => image.Url)
-                    .FirstOrDefault()
-            })
+            .Where(userRole => userRole.UserId == userId)
+            .Select(userRole => userRole.Role.Name)
             .ToListAsync();
 
-        return rows.Select(row => new RegionalRequestQueuePreviewItemDto
-            {
-                RequestId = row.Id,
-                Title = row.Name,
-                SubmittedByDisplayName = BuildDisplayName(row.UserDisplayName, row.FirstName, row.LastName, row.Username),
-                EntityType = "Place",
-                ContributionType = row.Type.ToString(),
-                SubmittedAt = row.SubmittedAt,
-                Status = row.Status.ToString(),
-                ThumbnailImageUrl = row.ThumbnailImageUrl,
-                DetailRoute = $"/request/detail/{row.Id}"
-            })
-            .ToList();
+        if (!roles.Any(role => RoleNames.Normalize(role) == RoleNames.RegionalManager))
+            throw new UnauthorizedAccessException("Regional manager role is required.");
     }
 
     private async Task<List<RegionalDashboardActivityItemDto>> BuildActivityAsync(int regionId, int skip, int take)
