@@ -1,389 +1,281 @@
-<ng-container *ngIf="isLoading">
-  <div class="flex items-center justify-center h-screen text-gray-400 text-sm">
-    Loading...
-  </div>
-</ng-container>
-
-<ng-container *ngIf="!isLoading && notFound">
-  <div class="flex items-center justify-center h-screen text-red-400 text-sm">
-    Request not found.
-  </div>
-</ng-container>
-
-<ng-container *ngIf="!isLoading && request">
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
-
-  <app-sidebar [region]="region" />
+  <app-sidebar
+    [regions]="assignedRegions"
+    [region]="regionDisplayName"
+    [activeRegionId]="activeRegionId"
+    [regionLoading]="regionLoading"
+    (regionChange)="onRegionSelected($event)"
+  />
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-
-    <app-topbar [userName]="userName" [userRole]="userRole" title="Review Request" />
+    <app-topbar
+      [userName]="userName"
+      [userRole]="userRole"
+      title="Review Request"
+      [showBack]="true"
+      backRoute="/requests"
+    />
 
     <div class="flex-1 overflow-y-auto px-8 py-6">
+      <button
+        type="button"
+        (click)="goBack()"
+        class="inline-flex items-center gap-1.5 mb-5 text-sm font-medium text-gray-500 hover:text-blue-700 bg-transparent border-none cursor-pointer p-0"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+        Back to Requests
+      </button>
 
-      <!-- Breadcrumb -->
-      <div class="flex items-center gap-2 mb-5 text-sm text-gray-500">
-        <button (click)="goBack()"
-          class="flex items-center gap-1.5 hover:text-blue-700 transition-colors cursor-pointer border-none bg-transparent p-0 font-medium">
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-          Back to Requests
-        </button>
-        <span class="text-gray-300">•</span>
-        <span class="text-gray-400">ID: {{ request.reqId }}</span>
+      <div *ngIf="isLoading" class="bg-white rounded-xl border border-gray-100 p-8 text-sm text-gray-500">
+        Loading request details...
       </div>
 
-      <div class="flex gap-6 items-start">
+      <div *ngIf="!isLoading && notFound" class="bg-white rounded-xl border border-red-100 p-8">
+        <p class="text-sm font-semibold text-red-600">Request not found.</p>
+        <p class="text-sm text-gray-500 mt-1">It may be outside the active region or no longer available.</p>
+      </div>
 
-        <!-- LEFT -->
-        <div class="flex-1 min-w-0 flex flex-col gap-5">
+      <div *ngIf="!isLoading && errorMessage" class="bg-white rounded-xl border border-red-100 p-4 mb-5">
+        <p class="text-sm font-semibold text-red-600">{{ authRequired ? 'Authentication required' : 'Unable to load request' }}</p>
+        <p class="text-sm text-gray-500 mt-1">{{ errorMessage }}</p>
+      </div>
 
-          <!-- Hero card -->
-          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden"
-               style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
-
-            <!-- Cover image -->
-            <div class="relative h-64 overflow-hidden"
-                 [style.background]="request.imageUrl
-                   ? 'url(' + request.imageUrl + ') center/cover no-repeat'
-                   : request.imageBg">
-              <div class="absolute bottom-4 left-5">
-                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold text-white"
-                      style="background: rgba(0,0,0,0.45); backdrop-filter: blur(6px);">
-                  <svg *ngIf="request.type === 'Place'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-                  </svg>
-                  <svg *ngIf="request.type === 'Location'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                  </svg>
-                  <svg *ngIf="request.type === 'Event'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2"/>
-                    <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                  </svg>
-                  {{ request.stayType || request.type }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Title + location -->
-            <div class="px-6 py-5 border-b border-gray-100">
-              <h2 class="text-2xl font-bold text-gray-900 mb-1.5">{{ request.title }}</h2>
-              <div class="flex items-center gap-1.5 text-sm text-gray-500">
-                <svg class="w-3.5 h-3.5 text-blue-600 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                </svg>
-                <span>
-                  {{ request.city }}
-                  <ng-container *ngIf="request.city && request.country">, </ng-container>
-                  {{ request.country }}
-                </span>
-              </div>
-            </div>
-
-            <!-- About + tags -->
-            <div *ngIf="request.description" class="px-6 py-5">
-              <h3 class="text-sm font-semibold text-gray-700 mb-2">About this stay</h3>
-              <p class="text-sm text-gray-600 leading-relaxed mb-4">{{ request.description }}</p>
-              <div *ngIf="request.tags?.length" class="flex flex-wrap gap-2">
-                <span *ngFor="let tag of request.tags"
-                  class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-white text-gray-600 border border-gray-200">
-                  <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
-                    <line x1="7" y1="7" x2="7.01" y2="7"/>
-                  </svg>
-                  {{ tag }}
-                </span>
-              </div>
-            </div>
-
+      <ng-container *ngIf="!isLoading && request">
+        <div class="mb-5">
+          <div class="flex items-center gap-2 flex-wrap mb-2">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" [ngClass]="typeBadgeClass(request.entityType)">
+              {{ request.entityType }}
+            </span>
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" [ngClass]="statusBadgeClass(request.status)">
+              {{ request.status }}
+            </span>
+            <span class="text-xs text-gray-400">ID: {{ request.displayRequestId }}</span>
           </div>
+          <h1 class="text-2xl font-bold text-gray-900">{{ request.title }}</h1>
+          <p class="text-sm text-gray-500 mt-1">{{ request.regionDisplayName }}</p>
+        </div>
 
-          <!-- Essential Information card -->
-          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden"
-               style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
-
-            <div class="px-6 py-4 border-b border-gray-100">
-              <h3 class="text-sm font-bold text-gray-800">Essential Information</h3>
-            </div>
-
-            <!-- Available Amenities -->
-            <div *ngIf="request.amenities?.length" class="px-6 py-5 border-b border-gray-100">
-              <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Available Amenities</h4>
-              <div class="grid grid-cols-2 gap-2">
-                <div *ngFor="let id of request.amenities"
-                  class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
-                  <ng-container *ngIf="id === 'pool'">
-                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12c1.5 0 1.5-1.5 3-1.5S8.5 12 10 12s1.5-1.5 3-1.5S14.5 12 16 12s1.5-1.5 3-1.5S20.5 12 22 12M3 17c1.5 0 1.5-1.5 3-1.5S8.5 17 10 17s1.5-1.5 3-1.5S14.5 17 16 17s1.5-1.5 3-1.5S20.5 17 22 17M7 8V4m5 4V4m5 4V4"/>
+        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
+          <div class="flex flex-col gap-5 min-w-0">
+            <section class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="h-64 bg-gray-100 overflow-hidden flex items-center justify-center">
+                <img
+                  *ngIf="primaryImageUrl; else noImage"
+                  [src]="primaryImageUrl"
+                  [alt]="request.title"
+                  class="w-full h-full object-cover"
+                />
+                <ng-template #noImage>
+                  <div class="flex flex-col items-center gap-2 text-gray-300">
+                    <svg class="w-12 h-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                      <circle cx="8.5" cy="10" r="1.5" />
+                      <path d="M21 16l-5-5-4 4-2-2-5 5" />
                     </svg>
-                  </ng-container>
-                  <ng-container *ngIf="id === 'wifi'">
-                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
-                    </svg>
-                  </ng-container>
-                  <ng-container *ngIf="id === 'breakfast'">
-                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9V6.5M12 9V6.5M16 9V6.5"/>
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 11h12v5a4 4 0 01-4 4H10a4 4 0 01-4-4v-5z"/>
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18 13h1a2 2 0 010 4h-1"/>
-                    </svg>
-                  </ng-container>
-                  <ng-container *ngIf="id === 'parking'">
-                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7v10m0-10h4a3 3 0 010 6H8m0-6"/>
-                      <rect x="3" y="3" width="18" height="18" rx="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>
-                    </svg>
-                  </ng-container>
-                  <ng-container *ngIf="id === 'spa'">
-                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3c0 0-4 4-4 8s4 8 4 8m0-16c0 0 4 4 4 8s-4 8-4 8m0-13c0 0-6 2-6 6M12 3c0 0 6 2 6 6"/>
-                    </svg>
-                  </ng-container>
-                  <ng-container *ngIf="id === 'gym'">
-                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <line x1="7" y1="12" x2="17" y2="12" stroke-width="3.5" stroke-linecap="round"/>
-                      <line x1="5" y1="10" x2="5" y2="14" stroke-width="3.5" stroke-linecap="round"/>
-                      <line x1="3.5" y1="9.5" x2="3.5" y2="14.5" stroke-width="3" stroke-linecap="round"/>
-                      <line x1="19" y1="10" x2="19" y2="14" stroke-width="3.5" stroke-linecap="round"/>
-                      <line x1="20.5" y1="9.5" x2="20.5" y2="14.5" stroke-width="3" stroke-linecap="round"/>
-                    </svg>
-                  </ng-container>
-                  <ng-container *ngIf="id === 'dining'">
-                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 2v7c0 1.1.9 2 2 2h1v11h2V11h1a2 2 0 002-2V2h-2v5H7V2H5v5H4V2H3zM19 2v20h-2V13h-1.5C14.67 13 14 12.33 14 11.5V6c0-2.21 1.79-4 4-4h1z"/>
-                    </svg>
-                  </ng-container>
-                  <ng-container *ngIf="id === 'ac'">
-                    <svg class="w-4 h-4 text-blue-600 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1010 16H2m15.73-8.27A2 2 0 1019 12H2"/>
-                    </svg>
-                  </ng-container>
-                  <span class="text-xs font-medium text-gray-700">{{ getAmenityLabel(id) }}</span>
-                </div>
+                    <span class="text-sm">No image provided</span>
+                  </div>
+                </ng-template>
               </div>
-            </div>
 
-            <!-- Contact Information -->
-            <div *ngIf="request.phone || request.website" class="px-6 py-5 border-b border-gray-100">
-              <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Contact Information</h4>
-              <div class="grid grid-cols-2 gap-3">
-                <div *ngIf="request.phone" class="flex items-start gap-2.5">
-                  <svg class="w-4 h-4 text-gray-400 mt-0.5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-                  </svg>
-                  <div>
-                    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Contact Phone</p>
-                    <p class="text-sm text-gray-800">{{ request.phone }}</p>
-                  </div>
-                </div>
-                <div *ngIf="request.website" class="flex items-start gap-2.5">
-                  <svg class="w-4 h-4 text-gray-400 mt-0.5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064"/>
-                  </svg>
-                  <div>
-                    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Website</p>
-                    <p class="text-sm text-gray-800">{{ request.website }}</p>
-                  </div>
-                </div>
+              <div class="p-6">
+                <h2 class="text-sm font-bold text-gray-800 mb-2">Summary</h2>
+                <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
+                  {{ request.description || request.previewText || 'No description was provided.' }}
+                </p>
               </div>
-            </div>
+            </section>
 
-            <!-- Booking Partners -->
-            <div *ngIf="request.bookingPartners?.length" class="px-6 py-5">
-              <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Booking Partners</h4>
-              <div class="flex flex-wrap gap-2">
-                <ng-container *ngFor="let partner of request.bookingPartners">
-                  <a *ngIf="partner.url; else noLink"
-                    [href]="partner.url" target="_blank"
-                    class="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
-                    <span class="text-xs font-semibold text-blue-700">{{ getPartnerLabel(partner.id) }}</span>
-                    <svg class="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-                    </svg>
-                  </a>
-                  <ng-template #noLink>
-                    <div class="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg">
-                      <span class="text-xs font-semibold text-gray-600">{{ getPartnerLabel(partner.id) }}</span>
-                    </div>
-                  </ng-template>
-                </ng-container>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Location card -->
-          <div *ngIf="request.address || request.lat" class="bg-white rounded-xl border border-gray-200 overflow-hidden"
-               style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
-            <div class="flex gap-0">
-
-              <!-- Left: address + coords -->
-              <div class="flex-1 px-6 py-5">
-                <h3 class="text-sm font-bold text-gray-800 mb-4">Location</h3>
-                <div class="flex flex-col gap-3">
-                  <div *ngIf="request.address" class="flex items-start gap-2.5">
-                    <svg class="w-4 h-4 text-blue-600 flex-none mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                    </svg>
-                    <div>
-                      <p class="text-sm text-gray-700">{{ request.address }}</p>
-                      <p *ngIf="request.city" class="text-xs text-gray-400 mt-0.5">{{ request.city }}</p>
-                    </div>
-                  </div>
-                  <div *ngIf="request.lat && request.lng" class="flex items-center gap-2.5">
-                    <span class="text-xs font-mono text-gray-500">
-                      {{ request.lat | number:'1.4-4' }}, {{ request.lng | number:'1.4-4' }}
-                    </span>
-                  </div>
-                  <button
-                    *ngIf="request.lat && request.lng"
-                    (click)="openMapModal()"
-                    class="mt-1 flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 cursor-pointer border-none bg-transparent p-0 transition-colors w-fit">
-                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-                    </svg>
-                    Expand map
-                  </button>
+            <section *ngIf="request.source === 'Contribution'" class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <h2 class="text-sm font-bold text-gray-800 mb-4">Contribution Details</h2>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="detail-field">
+                  <span>Contribution Type</span>
+                  <strong>{{ request.contributionType || 'Contribution' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Place Type</span>
+                  <strong>{{ request.placeType || request.stayType || 'Not specified' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Destination</span>
+                  <strong>{{ request.destinationName || 'Not specified' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Location</span>
+                  <strong>{{ request.locationName || 'Not specified' }}</strong>
+                </div>
+                <div class="detail-field md:col-span-2">
+                  <span>Address</span>
+                  <strong>{{ request.address || 'Not specified' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Coordinates</span>
+                  <strong *ngIf="request.latitude !== null && request.latitude !== undefined && request.longitude !== null && request.longitude !== undefined; else noCoords">
+                    {{ request.latitude | number:'1.5-5' }}, {{ request.longitude | number:'1.5-5' }}
+                  </strong>
+                  <ng-template #noCoords><strong>Not specified</strong></ng-template>
+                </div>
+                <div class="detail-field">
+                  <span>Website</span>
+                  <strong>{{ request.website || 'Not specified' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Phone</span>
+                  <strong>{{ request.phoneNumber || 'Not specified' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Email</span>
+                  <strong>{{ request.contactEmail || 'Not specified' }}</strong>
                 </div>
               </div>
 
-              <!-- Right: Leaflet mini map -->
-              <div class="w-64 flex-shrink-0 relative overflow-hidden rounded-r-xl" style="min-height: 180px;">
-                <div #miniMapContainer
-                     class="absolute inset-0 w-full h-full cursor-pointer"
-                     (click)="openMapModal()"
-                     title="Click to expand map">
-                </div>
-                <div class="absolute bottom-2 right-2 pointer-events-none" style="z-index: 500;">
-                  <span class="text-[10px] text-gray-500 bg-white/80 px-1.5 py-0.5 rounded backdrop-blur-sm">
-                    Click to expand
+              <div *ngIf="request.tags?.length" class="mt-5">
+                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Tags</h3>
+                <div class="flex flex-wrap gap-2">
+                  <span *ngFor="let tag of request.tags" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-50 text-gray-600 border border-gray-200">
+                    {{ tag }}
                   </span>
                 </div>
               </div>
 
-            </div>
+              <div *ngIf="allAmenities.length" class="mt-5">
+                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Amenities</h3>
+                <div class="flex flex-wrap gap-2">
+                  <span *ngFor="let amenity of allAmenities" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                    {{ amenity }}
+                  </span>
+                </div>
+              </div>
+
+              <div *ngIf="request.bookingPartners?.length" class="mt-5">
+                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Booking Partners</h3>
+                <div class="flex flex-col gap-2">
+                  <div *ngFor="let partner of request.bookingPartners" class="text-sm text-gray-600">
+                    <span class="font-semibold text-gray-800">{{ partner.id }}</span>
+                    <span *ngIf="partner.url" class="text-gray-400"> - {{ partner.url }}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section *ngIf="request.source === 'ReviewReport'" class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <h2 class="text-sm font-bold text-gray-800 mb-4">Reported Review</h2>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                <div class="detail-field">
+                  <span>Target</span>
+                  <strong>{{ request.targetEntityName || 'Review target' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Review Author</span>
+                  <strong>{{ request.reviewAuthorDisplayName || 'User' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Rating</span>
+                  <strong>{{ request.reviewRating !== null && request.reviewRating !== undefined ? request.reviewRating + '/5' : 'Not rated' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Review Date</span>
+                  <strong>{{ request.reviewCreatedAt ? (request.reviewCreatedAt | date:'mediumDate') : 'Not specified' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Report Reason</span>
+                  <strong>{{ request.reportReason || 'Not specified' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Decision</span>
+                  <strong>{{ request.decision || request.status }}</strong>
+                </div>
+              </div>
+
+              <div class="border border-gray-100 rounded-xl p-4 bg-gray-50">
+                <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Review Text</p>
+                <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                  {{ request.reviewComment || 'No review text is available.' }}
+                </p>
+              </div>
+
+              <div *ngIf="request.reportNote" class="border border-gray-100 rounded-xl p-4 bg-white mt-4">
+                <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Reporter Note</p>
+                <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ request.reportNote }}</p>
+              </div>
+            </section>
           </div>
 
+          <aside class="flex flex-col gap-4">
+            <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Review Decision</h2>
+
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Moderator Note</label>
+              <textarea
+                [(ngModel)]="reviewerNotes"
+                rows="4"
+                [disabled]="request.status !== 'Pending' || processing"
+                class="w-full border border-gray-200 rounded-lg p-3 text-sm outline-none resize-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
+                placeholder="Optional internal note"
+              ></textarea>
+
+              <label class="block text-xs font-semibold text-gray-500 mb-1 mt-3">Reject Reason</label>
+              <input
+                [(ngModel)]="rejectReason"
+                [disabled]="request.status !== 'Pending' || processing"
+                type="text"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
+                placeholder="Optional reason shown safely to the user"
+              />
+
+              <div class="flex gap-2 mt-4">
+                <button
+                  type="button"
+                  (click)="approveRequest()"
+                  [disabled]="!canModerate"
+                  class="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-blue-700 hover:bg-blue-800 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed border-none cursor-pointer"
+                >
+                  {{ processing ? 'Working...' : 'Approve' }}
+                </button>
+                <button
+                  type="button"
+                  (click)="rejectRequest()"
+                  [disabled]="!canModerate"
+                  class="flex-1 py-2.5 rounded-lg text-sm font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 disabled:text-gray-300 disabled:border-gray-100 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  Reject
+                </button>
+              </div>
+
+              <p *ngIf="request.status !== 'Pending'" class="text-xs text-gray-400 mt-3">
+                This request has already been reviewed.
+              </p>
+            </section>
+
+            <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Submitted By</h2>
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center text-sm font-bold text-gray-600">
+                  {{ request.submittedByInitials || 'U' }}
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-gray-800 truncate">{{ request.submittedByDisplayName || 'User' }}</p>
+                  <p class="text-xs text-gray-400">{{ request.submittedAt | date:'medium' }}</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Region Scope</h2>
+              <div class="detail-field">
+                <span>Active Region</span>
+                <strong>{{ request.regionDisplayName }}</strong>
+              </div>
+              <div class="detail-field mt-3">
+                <span>Backend Source</span>
+                <strong>{{ request.source }}</strong>
+              </div>
+            </section>
+          </aside>
         </div>
-
-        <!-- RIGHT panel -->
-        <div class="w-72 flex-shrink-0 flex flex-col gap-4">
-
-          <!-- Review Decision -->
-          <div class="bg-white rounded-xl border border-gray-200 p-5"
-               style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
-            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Review Decision</h3>
-            <div class="mb-4">
-              <label class="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mb-2">
-                <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                </svg>
-                Reviewer Notes
-              </label>
-              <textarea [(ngModel)]="reviewerNotes" rows="4"
-                placeholder="Add comments, required changes, or internal notes before making a decision..."
-                class="w-full border border-gray-200 rounded-lg p-3 text-sm text-gray-700 placeholder-gray-400 outline-none resize-none focus:border-blue-400 transition-colors leading-relaxed">
-              </textarea>
-            </div>
-            <div class="flex gap-2">
-              <button (click)="approveRequest()"
-                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold text-white bg-blue-700 hover:bg-blue-800 transition-colors cursor-pointer border-none">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-                Approve
-              </button>
-              <button (click)="rejectRequest()"
-                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 transition-colors cursor-pointer">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-                Reject
-              </button>
-            </div>
-          </div>
-
-          <!-- Submitted By -->
-          <div class="bg-white rounded-xl border border-gray-200 p-5"
-               style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
-            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Submitted By</h3>
-            <div class="flex items-center gap-3 mb-4">
-              <div class="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold text-gray-600 border border-gray-200"
-                   [style.background]="request.authorBg">
-                {{ request.authorInitials }}
-              </div>
-              <div>
-                <p class="text-sm font-semibold text-gray-800">{{ request.author }}</p>
-                <p class="text-xs text-gray-400">Local Guide</p>
-              </div>
-            </div>
-            <div class="flex flex-col gap-2.5">
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-400">Email</span>
-                <span class="text-xs font-medium text-gray-700">{{ request.authorEmail || 'N/A' }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-400">Date</span>
-                <span class="text-xs font-medium text-gray-700">{{ request.date }} • 14:30</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Region Assignment -->
-          <div class="bg-white rounded-xl border border-gray-200 p-5"
-               style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
-            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Region Assignment</h3>
-            <div class="mb-3">
-              <p class="text-[11px] text-gray-400 mb-1">Target Region</p>
-              <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-                <svg class="w-3.5 h-3.5 text-gray-400 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-                  <path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/>
-                </svg>
-                <span class="text-sm font-medium text-gray-700">{{ region }}</span>
-              </div>
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-xs text-gray-400">Internal ID</span>
-              <span class="text-xs font-mono font-medium text-gray-500">{{ request.internalId || 'REG-SC-000' }}</span>
-            </div>
-          </div>
-
-        </div>
-      </div>
+      </ng-container>
     </div>
   </div>
 </div>
-
-<!-- MAP MODAL  -->
-<div class="fixed inset-0 flex items-center justify-center"
-     style="background: rgba(0,0,0,0.55); z-index: 10000;"
-     [style.display]="mapModalOpen ? 'flex' : 'none'"
-     (click)="closeMapModal()">
-  <div class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-       style="width: 760px; max-width: 95vw; max-height: 90vh;"
-       (click)="$event.stopPropagation()">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-      <div>
-        <h4 class="text-sm font-bold text-gray-900">{{ request.title }}</h4>
-        <p class="text-xs text-gray-500 mt-0.5">{{ request.address }}, {{ request.city }}</p>
-      </div>
-      <button type="button" (click)="closeMapModal()"
-              class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">&times;</button>
-    </div>
-    <div #modalMapContainer style="height: 460px; width: 100%;"></div>
-    <div class="flex items-center justify-between px-5 py-3 bg-gray-50 border-t border-gray-100">
-      <span class="text-xs text-gray-500" *ngIf="request.lat && request.lng">
-        📍 <strong>{{ request.lat | number:'1.4-4' }}</strong>, <strong>{{ request.lng | number:'1.4-4' }}</strong>
-      </span>
-      <button type="button" (click)="closeMapModal()"
-              class="text-sm text-gray-600 font-medium px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">
-        Close
-      </button>
-    </div>
-  </div>
-</div>
-
-</ng-container>
