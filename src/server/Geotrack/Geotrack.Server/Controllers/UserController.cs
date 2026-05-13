@@ -69,6 +69,19 @@ public class UserController : ControllerBase
         }
     }
 
+    [HttpDelete("me/avatar")]
+    public async Task<ActionResult<UpdateAvatarResponseDto>> DeleteAvatar()
+    {
+        try
+        {
+            return Ok(await _userService.DeleteAvatarAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpPut("me/password")]
     public async Task<ActionResult<ChangePasswordResponseDto>> ChangePassword([FromBody] ChangePasswordRequestDto request)
     {

@@ -157,6 +157,30 @@ public class UserService : IUserService
         };
     }
 
+    public async Task<UpdateAvatarResponseDto> DeleteAvatarAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        var previousAvatarUrl = user.AvatarUrl;
+
+        user.AvatarUrl = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        if (_userAvatarStorageService.IsManagedAvatarUrl(previousAvatarUrl))
+        {
+            await _userAvatarStorageService.DeleteAsync(previousAvatarUrl!);
+        }
+
+        return new UpdateAvatarResponseDto
+        {
+            AvatarUrl = string.Empty,
+            UpdatedAt = user.UpdatedAt,
+        };
+    }
+
     public async Task<ChangePasswordResponseDto> ChangePasswordAsync(int userId, ChangePasswordRequestDto request)
     {
         ValidatePasswordChangeRequest(request);

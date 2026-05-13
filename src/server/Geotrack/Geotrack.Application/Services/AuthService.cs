@@ -148,7 +148,10 @@ public class AuthService : IAuthService
         {
             Id = user.Id,
             Email = user.Email,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
             DisplayName = BuildDisplayName(user),
+            AvatarUrl = user.AvatarUrl,
             Roles = roles,
             CanAccessRegionalAdmin = true
         };
