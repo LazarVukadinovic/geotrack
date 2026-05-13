@@ -1,15 +1,12 @@
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Application.Options;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure;
 using Geotrack.Infrastructure.Repositories;
 using Geotrack.Infrastructure.Services;
-using Geotrack.Infrastructure.Services.Agent;
 using Geotrack.Server;
 using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.StaticFiles;
@@ -57,10 +54,7 @@ builder.Services.AddControllers()
 
 builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
-builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("Mcp"));
-builder.Services.AddDataProtection()
-    .SetApplicationName("GeoTrack");
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
@@ -121,26 +115,6 @@ builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
 
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
-builder.Services.AddScoped<IApiKeyEncryptionService, ApiKeyEncryptionService>();
-builder.Services.AddScoped<IAiProviderKeyService, AiProviderKeyService>();
-builder.Services.AddScoped<IAgentQueryPlanner, AgentQueryPlanner>();
-builder.Services.AddScoped<IGeoTrackToolService, GeoTrackToolService>();
-builder.Services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
-builder.Services.AddScoped<IAgentProviderRegistry, AgentProviderRegistry>();
-builder.Services.AddHttpClient<GeminiAgentProvider>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("GeoTrack/1.0");
-});
-builder.Services.AddScoped<IAgentProvider>(serviceProvider => serviceProvider.GetRequiredService<GeminiAgentProvider>());
-builder.Services.AddScoped<IAgentProvider>(serviceProvider =>
-    new ConfiguredUnavailableAgentProvider(
-        "openai",
-        serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentOptions>>()));
-builder.Services.AddScoped<IAgentProvider>(serviceProvider =>
-    new ConfiguredUnavailableAgentProvider(
-        "claude",
-        serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentOptions>>()));
 builder.Services.AddScoped<IExploreService, ExploreService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 
@@ -234,7 +208,7 @@ builder.Services.AddRateLimiter(options =>
 
     options.AddPolicy("agent", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: GetUserOrIpRateLimitPartition(httpContext),
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20,
@@ -244,20 +218,6 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true,
             }));
 
-    options.AddPolicy("mcp", httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: GetUserOrIpRateLimitPartition(httpContext),
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 60,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                AutoReplenishment = true,
-            }));
-
-    // Backend-mediated map providers and spatial queries are public, so keep
-    // separate budgets for normal viewport loads and costlier external lookups.
     options.AddPolicy("map", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: GetUserOrIpRateLimitPartition(httpContext),
@@ -442,6 +402,43 @@ app.UseStaticFiles(new StaticFileOptions
     }
 });
 
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+
+    var isAdminSpaRequest =
+        HttpMethods.IsGet(context.Request.Method) &&
+        (
+            path.Equals("/admin", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/admin/", StringComparison.OrdinalIgnoreCase) ||
+            (
+                path.StartsWithSegments("/admin", out var adminRemainingPath) &&
+                !Path.HasExtension(adminRemainingPath.Value)
+            )
+        );
+
+    if (isAdminSpaRequest)
+    {
+        var adminIndexPath = Path.Combine(
+            app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"),
+            "admin",
+            "index.html");
+
+        if (!File.Exists(adminIndexPath))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsync("Admin index.html not found.");
+            return;
+        }
+
+        context.Response.ContentType = "text/html";
+        await context.Response.SendFileAsync(adminIndexPath);
+        return;
+    }
+
+    await next();
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -449,22 +446,6 @@ app.UseRateLimiter();
 
 app.MapControllers();
 
-app.MapGet("/admin", () => Results.Redirect("/admin/"));
-
-app.MapGet("/admin/", async context =>
-{
-    var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-
-    var adminIndexPath = Path.Combine(
-        env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot"),
-        "admin",
-        "index.html");
-
-    context.Response.ContentType = "text/html";
-    await context.Response.SendFileAsync(adminIndexPath);
-});
-
-app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
 app.MapFallbackToFile("index.html");
 
 app.Run();
