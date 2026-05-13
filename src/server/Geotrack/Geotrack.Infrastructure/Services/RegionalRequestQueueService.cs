@@ -553,7 +553,12 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
                     ImagePosition = image.ImagePosition,
                     ImageSize = image.ImageSize
                 })
-                .ToList()
+                .ToList(),
+            HasOwnershipProofDocument = !string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl),
+            OwnershipProofDocumentUrl = contribution.OwnershipProofDocumentUrl,
+            OwnershipProofOriginalFileName = contribution.OwnershipProofOriginalFileName,
+            OwnershipProofContentType = contribution.OwnershipProofContentType,
+            OwnershipProofUploadedAt = contribution.OwnershipProofUploadedAt
         };
     }
 

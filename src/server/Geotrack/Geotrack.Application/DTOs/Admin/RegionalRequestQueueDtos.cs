@@ -66,6 +66,11 @@ public class RegionalRequestQueueDetailDto : RegionalRequestQueueItemDto
     public List<string> StayAmenities { get; set; } = new();
     public List<ContributionBookingPartnerDto> BookingPartners { get; set; } = new();
     public List<PlaceContributionImageDto> Images { get; set; } = new();
+    public bool HasOwnershipProofDocument { get; set; }
+    public string? OwnershipProofDocumentUrl { get; set; }
+    public string? OwnershipProofOriginalFileName { get; set; }
+    public string? OwnershipProofContentType { get; set; }
+    public DateTime? OwnershipProofUploadedAt { get; set; }
     public string? ReviewComment { get; set; }
     public double? ReviewRating { get; set; }
     public DateTime? ReviewCreatedAt { get; set; }

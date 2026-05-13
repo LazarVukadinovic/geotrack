@@ -103,6 +103,10 @@ public sealed class RegionalRequestQueueTests
         Assert.Equal("Queue Assigned Destination", contribution.DestinationName);
         Assert.Equal("Queue Assigned Location", contribution.LocationName);
         Assert.Equal("Queue contribution body.", contribution.Description);
+        Assert.True(contribution.HasOwnershipProofDocument);
+        Assert.Equal("queue-proof.pdf", contribution.OwnershipProofOriginalFileName);
+        Assert.Equal("application/pdf", contribution.OwnershipProofContentType);
+        Assert.StartsWith("/media/uploads/contributions/", contribution.OwnershipProofDocumentUrl);
 
         var report = await client.GetFromJsonAsync<RegionalRequestQueueDetailDto>(
             $"/api/admin/regional/requests/review-report/{fixture.PendingReportToApproveId}?regionId={fixture.AssignedRegionId}");
@@ -647,6 +651,10 @@ public sealed class RegionalRequestQueueTests
             TagsJson = "[]",
             AmenitiesJson = "[]",
             BookingPartnersJson = "[]",
+            OwnershipProofDocumentUrl = "/media/uploads/contributions/queue-proof.pdf",
+            OwnershipProofOriginalFileName = "queue-proof.pdf",
+            OwnershipProofContentType = "application/pdf",
+            OwnershipProofUploadedAt = submittedAt,
             SubmittedAt = submittedAt,
             CreatedAt = submittedAt
         };
