@@ -20,8 +20,6 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrWhiteSpace(connectionString))
 {
@@ -50,7 +48,8 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-        options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+        options.JsonSerializerOptions.DefaultIgnoreCondition =
+            System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     });
 
 builder.Services.AddMemoryCache();
@@ -123,6 +122,7 @@ builder.Services.AddScoped<IPlaceContributionService, PlaceContributionService>(
 builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionRepository>();
 
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
+builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
 
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>(client =>
 {
@@ -145,7 +145,6 @@ builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IFavoriteRepository, FavoriteRepository>();
 builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 builder.Services.AddScoped<ITagRepository, TagRepository>();
-builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
 
 var forwardedHeadersEnabled = ConfigureForwardedHeaders(builder);
 
@@ -191,7 +190,8 @@ builder.Services.AddRateLimiter(options =>
 
         ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         await ctx.HttpContext.Response.WriteAsJsonAsync(
-            new { message = "Too many requests. Please try again later." }, token);
+            new { message = "Too many requests. Please try again later." },
+            token);
     };
 
     options.AddPolicy("auth", httpContext =>
@@ -335,7 +335,7 @@ if (forwardedHeadersEnabled)
     app.UseForwardedHeaders();
 }
 
-// Ne forsiramo HTTPS redirect na studentskom serveru jer aplikacija radi preko obicnog HTTP porta.
+// Na PMF serveru radi obican HTTP port, zato ne forsiramo HTTPS redirect u Production.
 if (app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
@@ -357,6 +357,7 @@ app.Use(async (context, next) =>
 });
 
 var mediaRoot = Path.Combine(app.Environment.ContentRootPath, "media");
+
 Directory.CreateDirectory(Path.Combine(mediaRoot, "seed"));
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "avatars"));
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "contributions"));
@@ -409,6 +410,20 @@ app.UseRateLimiter();
 app.MapControllers();
 
 app.MapGet("/admin", () => Results.Redirect("/admin/"));
+
+app.MapGet("/admin/", async context =>
+{
+    var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+
+    var adminIndexPath = Path.Combine(
+        env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot"),
+        "admin",
+        "index.html");
+
+    context.Response.ContentType = "text/html";
+    await context.Response.SendFileAsync(adminIndexPath);
+});
+
 app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
 app.MapFallbackToFile("index.html");
 
@@ -459,6 +474,7 @@ static bool ConfigureForwardedHeaders(WebApplicationBuilder builder)
 static string GetUserOrIpRateLimitPartition(HttpContext httpContext)
 {
     var userId = httpContext.User.FindFirst("userId")?.Value;
+
     if (!string.IsNullOrWhiteSpace(userId))
     {
         return $"user:{userId}";
@@ -472,6 +488,7 @@ static bool TryParseNetwork(string value, out Microsoft.AspNetCore.HttpOverrides
     network = default!;
 
     var parts = value.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
     if (parts.Length != 2 ||
         !IPAddress.TryParse(parts[0], out var address) ||
         !int.TryParse(parts[1], out var prefixLength))
