@@ -30,16 +30,103 @@ public sealed class RegionalDashboardTests
     }
 
     [Fact]
+    public async Task Regional_manager_with_role_but_no_assignments_gets_empty_region_list()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await GrantRegionalManagerRoleAsync(app, "elena@example.com");
+
+        using var client = await LoginAsync(app, "elena@example.com", "password123");
+        var regions = await client.GetFromJsonAsync<List<RegionalAssignedRegionDto>>("/api/admin/regional/regions");
+
+        Assert.NotNull(regions);
+        Assert.Empty(regions!);
+    }
+
+    [Fact]
+    public async Task Regional_manager_region_assignment_uses_users_id_fk()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var assignmentEntity = db.Model.FindEntityType(typeof(RegionalManagerRegion));
+        Assert.NotNull(assignmentEntity);
+
+        var userIdFk = Assert.Single(
+            assignmentEntity!.GetForeignKeys(),
+            foreignKey =>
+                foreignKey.PrincipalEntityType.ClrType == typeof(User) &&
+                foreignKey.Properties.Any(property => property.Name == nameof(RegionalManagerRegion.UserId)));
+
+        Assert.Equal(DeleteBehavior.Cascade, userIdFk.DeleteBehavior);
+    }
+
+    [Fact]
+    public async Task Regional_manager_role_name_normalization_allows_spaced_role_name()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var user = await db.Users.SingleAsync(existing => existing.Email == "elena@example.com");
+            var territory = await db.Territories.OrderBy(existing => existing.Id).FirstAsync();
+            var region = new Region
+            {
+                Name = $"Dashboard Normalized Role {Guid.NewGuid():N}",
+                TerritoryId = territory.Id,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            var spacedRole = new Role
+            {
+                Name = "Regional Manager",
+                Description = "Spaced regional manager role name used to verify normalization.",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            db.Regions.Add(region);
+            db.Roles.Add(spacedRole);
+            await db.SaveChangesAsync();
+
+            db.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = spacedRole.Id
+            });
+            db.RegionalManagerRegions.Add(new RegionalManagerRegion
+            {
+                UserId = user.Id,
+                RegionId = region.Id,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var client = await LoginAsync(app, "elena@example.com", "password123");
+        var regions = await client.GetFromJsonAsync<List<RegionalAssignedRegionDto>>("/api/admin/regional/regions");
+
+        Assert.NotNull(regions);
+        Assert.Contains(regions!, region => region.Name.StartsWith("Dashboard Normalized Role", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Regional_dashboard_rejects_anonymous_non_regional_and_unassigned_region_requests()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateDashboardFixtureAsync(app);
 
         using var anonymousClient = app.CreateClient();
+        var anonymousRegionsResponse = await anonymousClient.GetAsync("/api/admin/regional/regions");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousRegionsResponse.StatusCode);
+
         var anonymousResponse = await anonymousClient.GetAsync($"/api/admin/regional/dashboard?regionId={fixture.AssignedRegionId}");
         Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
 
         using var registeredUserClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var nonRegionalRegionsResponse = await registeredUserClient.GetAsync("/api/admin/regional/regions");
+        Assert.Equal(HttpStatusCode.Forbidden, nonRegionalRegionsResponse.StatusCode);
+
         var nonRegionalResponse = await registeredUserClient.GetAsync($"/api/admin/regional/dashboard?regionId={fixture.AssignedRegionId}");
         Assert.Equal(HttpStatusCode.Forbidden, nonRegionalResponse.StatusCode);
 
@@ -72,7 +159,7 @@ public sealed class RegionalDashboardTests
         Assert.Equal(4, dashboard.RequestQueuePreview.Count);
         Assert.All(dashboard.RequestQueuePreview, item =>
         {
-            Assert.Equal("PendingReview", item.Status);
+            Assert.Equal("Pending", item.Status);
             Assert.StartsWith("Scoped Pending", item.Title);
             Assert.DoesNotContain("Out Pending", item.Title);
         });
@@ -103,6 +190,22 @@ public sealed class RegionalDashboardTests
         Assert.Equal(0, dashboard.Stats.TotalEvents);
         Assert.Empty(dashboard.RequestQueuePreview);
         Assert.Empty(dashboard.RecentActivity);
+    }
+
+    [Fact]
+    public async Task Inactive_regional_assignment_is_ignored()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var regionId = await CreateInactiveAssignedRegionAsync(app);
+
+        using var client = await LoginAsync(app, "elena@example.com", "password123");
+        var regions = await client.GetFromJsonAsync<List<RegionalAssignedRegionDto>>("/api/admin/regional/regions");
+
+        Assert.NotNull(regions);
+        Assert.DoesNotContain(regions!, region => region.Id == regionId);
+
+        var dashboardResponse = await client.GetAsync($"/api/admin/regional/dashboard?regionId={regionId}");
+        Assert.Equal(HttpStatusCode.Forbidden, dashboardResponse.StatusCode);
     }
 
     private static async Task<HttpClient> LoginAsync(GeotrackApiFactory app, string email, string password)
@@ -402,6 +505,35 @@ public sealed class RegionalDashboardTests
         return region.Id;
     }
 
+    private static async Task<int> CreateInactiveAssignedRegionAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var territory = await db.Territories.OrderBy(existing => existing.Id).FirstAsync();
+        var reviewer = await db.Users.SingleAsync(user => user.Email == "elena@example.com");
+        var region = new Region
+        {
+            Name = $"Dashboard Inactive {Guid.NewGuid():N}",
+            TerritoryId = territory.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.Regions.Add(region);
+        await db.SaveChangesAsync();
+
+        await GrantRegionalManagerCoverageAsync(db, reviewer, region.Id);
+
+        var assignment = await db.RegionalManagerRegions.SingleAsync(existing =>
+            existing.UserId == reviewer.Id &&
+            existing.RegionId == region.Id);
+        assignment.IsActive = false;
+        assignment.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        return region.Id;
+    }
+
     private static async Task GrantRegionalManagerCoverageAsync(AppDbContext db, User reviewer, int regionId)
     {
         var regionalManagerRole = await db.Roles.SingleAsync(role => role.Name == "RegionalManager");
@@ -419,16 +551,6 @@ public sealed class RegionalDashboardTests
             });
         }
 
-        var hasRegionalManager = await db.RegionalManagers.AnyAsync(manager => manager.UserId == reviewer.Id);
-        if (!hasRegionalManager)
-        {
-            db.RegionalManagers.Add(new RegionalManager
-            {
-                UserId = reviewer.Id
-            });
-            await db.SaveChangesAsync();
-        }
-
         var hasAssignment = await db.RegionalManagerRegions.AnyAsync(assignment =>
             assignment.UserId == reviewer.Id &&
             assignment.RegionId == regionId);
@@ -439,9 +561,29 @@ public sealed class RegionalDashboardTests
             {
                 UserId = reviewer.Id,
                 RegionId = regionId,
+                IsActive = true,
                 CreatedAt = DateTime.UtcNow
             });
         }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task GrantRegionalManagerRoleAsync(GeotrackApiFactory app, string email)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync(existing => existing.Email == email);
+        var role = await db.Roles.SingleAsync(existing => existing.Name == "RegionalManager");
+
+        if (await db.UserRoles.AnyAsync(existing => existing.UserId == user.Id && existing.RoleId == role.Id))
+            return;
+
+        db.UserRoles.Add(new UserRole
+        {
+            UserId = user.Id,
+            RoleId = role.Id
+        });
 
         await db.SaveChangesAsync();
     }
