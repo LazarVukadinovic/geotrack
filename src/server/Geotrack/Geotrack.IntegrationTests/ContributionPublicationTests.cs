@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.DTOs.Notifications;
@@ -283,6 +284,159 @@ public sealed class ContributionPublicationTests
         Assert.Equal("Cafe", listItem.PlaceType);
     }
 
+    [Theory]
+    [InlineData("Stay")]
+    [InlineData("Restaurant")]
+    [InlineData("Cafe")]
+    public async Task Create_requires_ownership_proof_for_proof_required_place_types(string placeType)
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreatePayloadForPlaceType($"Missing Proof {placeType}", placeType);
+
+        var response = await PostContributionAsync(
+            client,
+            payload,
+            ownershipProof: OwnershipProofUpload.Missing);
+
+        await AssertErrorAsync(
+            response,
+            HttpStatusCode.BadRequest,
+            "Ownership proof document is required.");
+    }
+
+    [Theory]
+    [InlineData("Landmark")]
+    [InlineData("Nature")]
+    [InlineData("Beach")]
+    public async Task Create_does_not_require_ownership_proof_for_non_business_place_types(string placeType)
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreatePayloadForPlaceType($"No Proof {placeType}", placeType);
+
+        var response = await PostContributionAsync(
+            client,
+            payload,
+            ownershipProof: OwnershipProofUpload.Missing);
+
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        Assert.Equal("PendingReview", created!.Contribution.Status);
+        Assert.Equal(placeType, created.Contribution.PlaceType);
+        Assert.False(created.Contribution.HasOwnershipProofDocument);
+    }
+
+    [Theory]
+    [InlineData("Restaurant", OwnershipProofUpload.InvalidText, "Ownership proof document must be a PDF file.")]
+    [InlineData("Cafe", OwnershipProofUpload.OversizedPdf, "Ownership proof document must be 10 MB or smaller.")]
+    public async Task Create_rejects_invalid_ownership_proof_documents(
+        string placeType,
+        OwnershipProofUpload ownershipProof,
+        string expectedMessage)
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreatePayloadForPlaceType($"Invalid Proof {placeType}", placeType);
+
+        var response = await PostContributionAsync(
+            client,
+            payload,
+            ownershipProof: ownershipProof);
+
+        await AssertErrorAsync(response, HttpStatusCode.BadRequest, expectedMessage);
+    }
+
+    [Theory]
+    [InlineData("Stay")]
+    [InlineData("Restaurant")]
+    [InlineData("Cafe")]
+    public async Task Create_saves_valid_proof_required_place_contributions_as_pending(string placeType)
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreatePayloadForPlaceType($"Valid Proof {placeType}", placeType);
+
+        var response = await PostContributionAsync(client, payload);
+
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        Assert.Equal("PendingReview", created!.Contribution.Status);
+        Assert.Equal(placeType, created.Contribution.PlaceType);
+        Assert.True(created.Contribution.HasOwnershipProofDocument);
+        Assert.Equal("ownership-proof.pdf", created.Contribution.OwnershipProofOriginalFileName);
+        Assert.Equal("application/pdf", created.Contribution.OwnershipProofContentType);
+        Assert.StartsWith("/media/uploads/contributions/", created.Contribution.OwnershipProofDocumentUrl);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var saved = await db.PlaceContributions
+            .Include(item => item.Location)
+                .ThenInclude(location => location!.Destination)
+                    .ThenInclude(destination => destination.Region)
+            .SingleAsync(item => item.Id == created.Contribution.Id);
+
+        Assert.Equal(PlaceContributionStatus.PendingReview, saved.Status);
+        Assert.False(string.IsNullOrWhiteSpace(saved.OwnershipProofDocumentUrl));
+        Assert.Equal("Dalmatia", saved.Location!.Destination.Region.Name);
+    }
+
+    [Fact]
+    public async Task Submitted_place_contribution_appears_in_regional_requests_queue_for_assigned_region_only()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreatePayloadForPlaceType("Queue Visible Restaurant", "Restaurant");
+        payload["city"] = "Unmatched submitted city";
+        payload["region"] = "Untrusted submitted region";
+
+        var createResponse = await PostContributionAsync(contributorClient, payload);
+        createResponse.EnsureSuccessStatusCode();
+        var created = await createResponse.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        var createdId = created!.Contribution.Id;
+
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+
+        using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
+        var dalmatiaRegionId = await GetRegionIdAsync(app, "Dalmatia");
+        var queue = await reviewerClient.GetFromJsonAsync<RegionalRequestQueueResponseDto>(
+            $"/api/admin/regional/requests?regionId={dalmatiaRegionId}&type=place&status=pending");
+
+        Assert.NotNull(queue);
+        Assert.Contains(queue!.Items, item =>
+            item.RequestKey == $"contribution:{createdId}" &&
+            item.EntityType == "Place" &&
+            item.Status == "Pending");
+        Assert.True(queue.CountsByType.Places >= 1);
+
+        var detail = await reviewerClient.GetFromJsonAsync<RegionalRequestQueueDetailDto>(
+            $"/api/admin/regional/requests/contribution/{createdId}?regionId={dalmatiaRegionId}");
+        Assert.NotNull(detail);
+        Assert.True(detail!.HasOwnershipProofDocument);
+        Assert.Equal("ownership-proof.pdf", detail.OwnershipProofOriginalFileName);
+        Assert.Equal("application/pdf", detail.OwnershipProofContentType);
+        Assert.StartsWith("/media/uploads/contributions/", detail.OwnershipProofDocumentUrl);
+
+        var unassignedRegionId = await CreateUnassignedRegionAsync(app);
+        var wrongRegionResponse = await reviewerClient.GetAsync(
+            $"/api/admin/regional/requests?regionId={unassignedRegionId}&type=place&status=pending");
+        Assert.Equal(HttpStatusCode.Forbidden, wrongRegionResponse.StatusCode);
+
+        using var outOfRegionManager = await RegisterRegionalManagerAndLoginAsync(app, "out-region-manager", unassignedRegionId);
+        var outOfRegionQueue = await outOfRegionManager.GetFromJsonAsync<RegionalRequestQueueResponseDto>(
+            $"/api/admin/regional/requests?regionId={unassignedRegionId}&type=place&status=pending");
+        Assert.NotNull(outOfRegionQueue);
+        Assert.DoesNotContain(outOfRegionQueue!.Items, item => item.RequestKey == $"contribution:{createdId}");
+
+        var outOfRegionDetail = await outOfRegionManager.GetAsync(
+            $"/api/admin/regional/requests/contribution/{createdId}?regionId={unassignedRegionId}");
+        Assert.Equal(HttpStatusCode.NotFound, outOfRegionDetail.StatusCode);
+    }
+
     [Fact]
     public async Task Legacy_stays_route_remains_a_compatibility_alias_for_place_contributions()
     {
@@ -465,6 +619,69 @@ public sealed class ContributionPublicationTests
         return await LoginAsync(app, email, "Password123!");
     }
 
+    private static async Task<HttpClient> RegisterRegionalManagerAndLoginAsync(
+        GeotrackApiFactory app,
+        string prefix,
+        int regionId)
+    {
+        var email = $"{prefix}-{Guid.NewGuid():N}@example.com";
+
+        using var registrationClient = app.CreateClient();
+        var registerResponse = await registrationClient.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterRequestDto
+            {
+                FullName = "Out Region Manager",
+                Email = email,
+                Password = "Password123!",
+            });
+        registerResponse.EnsureSuccessStatusCode();
+
+        await GrantRoleAsync(app, email, "RegionalManager");
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync(item => item.Email == email);
+
+        db.RegionalManagerRegions.Add(new RegionalManagerRegion
+        {
+            UserId = user.Id,
+            RegionId = regionId,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        return await LoginAsync(app, email, "Password123!");
+    }
+
+    private static async Task<int> GetRegionIdAsync(GeotrackApiFactory app, string regionName)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.Regions
+            .Where(region => region.Name == regionName)
+            .Select(region => region.Id)
+            .SingleAsync();
+    }
+
+    private static async Task<int> CreateUnassignedRegionAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var territory = await db.Territories.OrderBy(item => item.Id).FirstAsync();
+        var region = new Region
+        {
+            Name = $"Contribution Queue Out {Guid.NewGuid():N}",
+            TerritoryId = territory.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.Regions.Add(region);
+        await db.SaveChangesAsync();
+        return region.Id;
+    }
+
     private static Dictionary<string, object?> CreateValidContributionPayload(string name)
     {
         return new Dictionary<string, object?>
@@ -511,6 +728,17 @@ public sealed class ContributionPublicationTests
             ["amenities"] = new[] { "wifi" },
             ["bookingPartners"] = Array.Empty<object>()
         };
+    }
+
+    private static Dictionary<string, object?> CreatePayloadForPlaceType(string name, string placeType)
+    {
+        if (string.Equals(placeType, "Stay", StringComparison.OrdinalIgnoreCase))
+            return CreateValidContributionPayload(name);
+
+        var payload = CreateGenericPlaceContributionPayload(name);
+        payload["placeType"] = placeType;
+        payload["stayType"] = null;
+        return payload;
     }
 
     private static async Task<PlaceContributionResponseDto> CreatePlaceContributionAsync(HttpClient client)
@@ -596,22 +824,60 @@ public sealed class ContributionPublicationTests
     private static async Task<HttpResponseMessage> PostContributionAsync(
         HttpClient client,
         object payload,
-        string endpoint = "/api/contributions")
+        string endpoint = "/api/contributions",
+        OwnershipProofUpload ownershipProof = OwnershipProofUpload.ValidPdf)
     {
         using var formData = new MultipartFormDataContent();
         formData.Add(
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             "payload");
-        AddOwnershipProofDocument(formData);
+        AddOwnershipProofDocument(formData, ownershipProof);
 
         return await client.PostAsync(endpoint, formData);
     }
 
-    private static void AddOwnershipProofDocument(MultipartFormDataContent formData)
+    private static void AddOwnershipProofDocument(
+        MultipartFormDataContent formData,
+        OwnershipProofUpload ownershipProof = OwnershipProofUpload.ValidPdf)
     {
-        var ownershipProofContent = new ByteArrayContent(Encoding.UTF8.GetBytes("%PDF-1.4\n% GeoTrack ownership proof test document\n"));
-        ownershipProofContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
-        formData.Add(ownershipProofContent, "ownershipProofDocument", "ownership-proof.pdf");
+        if (ownershipProof == OwnershipProofUpload.Missing)
+            return;
+
+        ByteArrayContent ownershipProofContent;
+        string fileName;
+        string contentType;
+
+        if (ownershipProof == OwnershipProofUpload.InvalidText)
+        {
+            ownershipProofContent = new ByteArrayContent(Encoding.UTF8.GetBytes("not a pdf"));
+            fileName = "ownership-proof.txt";
+            contentType = "text/plain";
+        }
+        else if (ownershipProof == OwnershipProofUpload.OversizedPdf)
+        {
+            var bytes = new byte[(10 * 1024 * 1024) + 1];
+            "%PDF-"u8.CopyTo(bytes);
+            ownershipProofContent = new ByteArrayContent(bytes);
+            fileName = "ownership-proof.pdf";
+            contentType = "application/pdf";
+        }
+        else
+        {
+            ownershipProofContent = new ByteArrayContent(Encoding.UTF8.GetBytes("%PDF-1.4\n% GeoTrack ownership proof test document\n"));
+            fileName = "ownership-proof.pdf";
+            contentType = "application/pdf";
+        }
+
+        ownershipProofContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        formData.Add(ownershipProofContent, "ownershipProofDocument", fileName);
+    }
+
+    public enum OwnershipProofUpload
+    {
+        ValidPdf,
+        Missing,
+        InvalidText,
+        OversizedPdf
     }
 
     private static async Task AssertForbiddenAsync(HttpResponseMessage response)
