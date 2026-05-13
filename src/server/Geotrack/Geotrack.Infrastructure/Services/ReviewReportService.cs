@@ -241,8 +241,7 @@ public class ReviewReportService : IReviewReportService
         var review = await _db.EventReviews
             .Include(item => item.User)
             .Include(item => item.Event)
-                .ThenInclude(evt => evt.Location)
-                .ThenInclude(location => location.Destination)
+                .ThenInclude(evt => evt.Destination)
                 .ThenInclude(destination => destination.Region)
             .FirstOrDefaultAsync(item => item.Id == reviewId)
             ?? throw new KeyNotFoundException("Review not found.");
@@ -263,8 +262,8 @@ public class ReviewReportService : IReviewReportService
             ReviewAuthorName = GetAuthorName(review.User),
             EntityId = review.EventId,
             EntityName = review.Event.Name,
-            RegionId = review.Event.Location.Destination.RegionId,
-            RegionName = review.Event.Location.Destination.Region.Name,
+            RegionId = review.Event.Destination.RegionId,
+            RegionName = review.Event.Destination.Region.Name,
             ReviewRating = review.Rating,
             ReviewCommentSnapshot = review.Comment,
             ReviewCreatedAt = review.CreatedAt,
