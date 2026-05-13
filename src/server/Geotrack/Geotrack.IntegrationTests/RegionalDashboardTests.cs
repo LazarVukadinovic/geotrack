@@ -369,6 +369,7 @@ public sealed class RegionalDashboardTests
             {
                 Name = "Scoped Old Event",
                 EventTypeId = eventType.Id,
+                DestinationId = oldDestination.Id,
                 LocationId = oldLocation.Id,
                 Description = "Older dashboard event.",
                 StartDate = oldDate.AddDays(1),
@@ -379,6 +380,7 @@ public sealed class RegionalDashboardTests
             {
                 Name = "Scoped Recent Event",
                 EventTypeId = eventType.Id,
+                DestinationId = recentDestination.Id,
                 LocationId = recentLocation.Id,
                 Description = "Recent dashboard event.",
                 StartDate = recentDate.AddDays(1),
@@ -389,6 +391,7 @@ public sealed class RegionalDashboardTests
             {
                 Name = "Out Event",
                 EventTypeId = eventType.Id,
+                DestinationId = outDestination.Id,
                 LocationId = outLocation.Id,
                 Description = "Unassigned event.",
                 StartDate = recentDate.AddDays(1),

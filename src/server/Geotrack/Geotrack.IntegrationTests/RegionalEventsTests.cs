@@ -5,6 +5,7 @@ using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure;
 using Geotrack.IntegrationTests.Infrastructure;
@@ -167,6 +168,200 @@ public sealed class RegionalEventsTests
         AssertDateClose(updatedEnd, updated.EndsAt);
     }
 
+    [Fact]
+    public async Task Create_event_enforces_auth_region_parent_scope_and_persists_real_data()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateEventsFixtureAsync(app);
+        var validRequest = BuildValidCreateRequest(fixture);
+
+        using var anonymous = app.CreateClient();
+        var anonymousResponse = await anonymous.PostAsJsonAsync("/api/admin/regional/events", validRequest);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+
+        using var regularUser = await LoginAsync(app, "marko.p@example.com", "password123");
+        var nonRegionalResponse = await regularUser.PostAsJsonAsync("/api/admin/regional/events", validRequest);
+        Assert.Equal(HttpStatusCode.Forbidden, nonRegionalResponse.StatusCode);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var unassignedRegionResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/events",
+            validRequest with { RegionId = fixture.UnassignedRegionId });
+        Assert.Equal(HttpStatusCode.Forbidden, unassignedRegionResponse.StatusCode);
+
+        var outOfRegionParentResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/events",
+            validRequest with
+            {
+                LocationId = fixture.UnassignedLocationId,
+                DestinationId = fixture.UnassignedDestinationId
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, outOfRegionParentResponse.StatusCode);
+
+        var tamperedReferenceResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/events",
+            validRequest with { InternalReferenceId = "EVT-CLIENT-001" });
+        Assert.Equal(HttpStatusCode.BadRequest, tamperedReferenceResponse.StatusCode);
+
+        var createResponse = await manager.PostAsJsonAsync("/api/admin/regional/events", validRequest);
+        createResponse.EnsureSuccessStatusCode();
+
+        var created = await createResponse.Content.ReadFromJsonAsync<RegionalEventDetailDto>();
+        Assert.NotNull(created);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        Assert.Equal(fixture.AssignedRegionId, created!.RegionId);
+        Assert.Equal(fixture.AssignedDestinationId, created.DestinationId);
+        Assert.Equal(fixture.AssignedLocationId, created.LocationId);
+        Assert.Null(created.PlaceId);
+        Assert.Equal("Location", created.ParentEntityType);
+        Assert.Equal("Backend Integrated Event", created.Name);
+        Assert.Equal("A real event created through the regional admin API.", created.Summary);
+        Assert.StartsWith("EVT-", created.InternalReferenceId);
+        Assert.True(created.IsFree);
+        Assert.Null(created.TicketPrice);
+        Assert.True(created.IsRecurring);
+        Assert.Single(created.Tags, tag => tag.Id == fixture.EventTagId);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var stored = await db.Events
+            .Include(item => item.EventTags)
+            .SingleAsync(item => item.Id == created.Id);
+
+        Assert.Equal($"EVT-{created.Id:D6}", stored.InternalReferenceId);
+        Assert.Equal(fixture.ManagerUserId, stored.CreatedByUserId);
+        Assert.Equal(fixture.AssignedDestinationId, stored.DestinationId);
+        Assert.Equal(fixture.AssignedLocationId, stored.LocationId);
+        Assert.Null(stored.PlaceId);
+        Assert.Contains(stored.EventTags, eventTag => eventTag.TagId == fixture.EventTagId);
+
+        var page = await GetEventsAsync(manager, fixture.AssignedRegionId, search: "Backend Integrated Event");
+        Assert.Single(page.Items);
+        Assert.Equal(created.Id, page.Items[0].Id);
+    }
+
+    [Fact]
+    public async Task Create_event_derives_parent_destination_for_place_and_destination_parents()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateEventsFixtureAsync(app);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var placeResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/events",
+            BuildValidCreateRequest(fixture) with
+            {
+                ParentEntityType = "Place",
+                Name = "Place Parent Event",
+                DestinationId = null,
+                LocationId = null,
+                PlaceId = fixture.PlaceId
+            });
+        placeResponse.EnsureSuccessStatusCode();
+        var placeCreated = await placeResponse.Content.ReadFromJsonAsync<RegionalEventDetailDto>();
+        Assert.NotNull(placeCreated);
+        Assert.Equal("Place", placeCreated!.ParentEntityType);
+        Assert.Equal(fixture.AssignedDestinationId, placeCreated.DestinationId);
+        Assert.Equal(fixture.AssignedLocationId, placeCreated.LocationId);
+        Assert.Equal(fixture.PlaceId, placeCreated.PlaceId);
+
+        var destinationResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/events",
+            BuildValidCreateRequest(fixture) with
+            {
+                ParentEntityType = "Destination",
+                Name = "Destination Parent Event",
+                DestinationId = fixture.AssignedDestinationId,
+                LocationId = null,
+                PlaceId = null,
+                IsAllDay = true,
+                StartsAt = DateTime.UtcNow.Date.AddDays(3),
+                EndsAt = DateTime.UtcNow.Date.AddDays(3)
+            });
+        destinationResponse.EnsureSuccessStatusCode();
+        var destinationCreated = await destinationResponse.Content.ReadFromJsonAsync<RegionalEventDetailDto>();
+        Assert.NotNull(destinationCreated);
+        Assert.Equal("Destination", destinationCreated!.ParentEntityType);
+        Assert.Equal(fixture.AssignedDestinationId, destinationCreated.DestinationId);
+        Assert.Null(destinationCreated.LocationId);
+        Assert.Null(destinationCreated.PlaceId);
+        Assert.True(destinationCreated.IsAllDay);
+    }
+
+    [Fact]
+    public async Task Create_event_validates_type_tags_schedule_ticket_and_contact_fields()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateEventsFixtureAsync(app);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var valid = BuildValidCreateRequest(fixture);
+
+        await AssertBadRequestAsync(manager, valid with { EventTypeId = -1 }, "Event category/type is required.");
+        await AssertBadRequestAsync(manager, valid with { TagIds = [fixture.NonEventTagId] }, "not compatible with events");
+        await AssertBadRequestAsync(manager, valid with { Summary = new string('x', 161) }, "Summary is too long.");
+        await AssertBadRequestAsync(manager, valid with { EndsAt = valid.StartsAt!.Value.AddMinutes(-1) }, "end time");
+        await AssertBadRequestAsync(manager, valid with { ExternalTicketLink = "javascript:alert(1)" }, "External ticket link is invalid.");
+        await AssertBadRequestAsync(manager, valid with { ContactEmail = "not-an-email" }, "Contact email is invalid.");
+        await AssertBadRequestAsync(manager, valid with { AttendanceLimit = 0 }, "Attendance limit");
+        await AssertBadRequestAsync(manager, valid with { IsFree = false, TicketPrice = "-1" }, "Ticket price");
+
+        var allDayResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/events",
+            valid with
+            {
+                Name = "All Day Validation Event",
+                IsAllDay = true,
+                StartsAt = DateTime.UtcNow.Date.AddDays(10),
+                EndsAt = DateTime.UtcNow.Date.AddDays(10)
+            });
+        allDayResponse.EnsureSuccessStatusCode();
+        var allDay = await allDayResponse.Content.ReadFromJsonAsync<RegionalEventDetailDto>();
+        Assert.NotNull(allDay);
+        Assert.True(allDay!.IsAllDay);
+    }
+
+    [Fact]
+    public async Task Event_selectors_types_and_tags_are_backend_scoped()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateEventsFixtureAsync(app);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var destinations = await manager.GetFromJsonAsync<List<RegionalEventParentDestinationDto>>(
+            $"/api/admin/regional/event-parent-destinations?regionId={fixture.AssignedRegionId}");
+        Assert.NotNull(destinations);
+        Assert.Contains(destinations!, item => item.Id == fixture.AssignedDestinationId);
+        Assert.DoesNotContain(destinations!, item => item.Id == fixture.UnassignedDestinationId);
+
+        var locations = await manager.GetFromJsonAsync<List<RegionalEventParentLocationDto>>(
+            $"/api/admin/regional/event-parent-locations?regionId={fixture.AssignedRegionId}");
+        Assert.NotNull(locations);
+        Assert.Contains(locations!, item => item.Id == fixture.AssignedLocationId && item.DestinationId == fixture.AssignedDestinationId);
+        Assert.DoesNotContain(locations!, item => item.Id == fixture.UnassignedLocationId);
+
+        var places = await manager.GetFromJsonAsync<List<RegionalEventParentPlaceDto>>(
+            $"/api/admin/regional/event-parent-places?regionId={fixture.AssignedRegionId}");
+        Assert.NotNull(places);
+        Assert.Contains(places!, item =>
+            item.Id == fixture.PlaceId &&
+            item.LocationId == fixture.AssignedLocationId &&
+            item.DestinationId == fixture.AssignedDestinationId);
+
+        var tags = await manager.GetFromJsonAsync<List<RegionalEventTagDto>>(
+            $"/api/admin/regional/event-tags?search={Uri.EscapeDataString(fixture.EventTagName)}");
+        Assert.NotNull(tags);
+        Assert.Single(tags!, item => item.Id == fixture.EventTagId);
+        Assert.DoesNotContain(tags!, item => item.Id == fixture.NonEventTagId);
+
+        var types = await manager.GetFromJsonAsync<List<RegionalEventTypeDto>>("/api/admin/regional/event-types");
+        Assert.NotNull(types);
+        Assert.Contains(types!, item => item.Id == fixture.BaseEventTypeId);
+    }
+
     private static async Task<RegionalEventListResponseDto> GetEventsAsync(
         HttpClient client,
         int regionId,
@@ -223,6 +418,47 @@ public sealed class RegionalEventsTests
             $"Expected {expected:o}, got {actual.Value:o}.");
     }
 
+    private static RegionalEventCreateRequestDto BuildValidCreateRequest(EventsFixture fixture)
+    {
+        var startsAt = DateTime.UtcNow.AddDays(7).AddHours(2);
+        return new RegionalEventCreateRequestDto
+        {
+            RegionId = fixture.AssignedRegionId,
+            ParentEntityType = "Location",
+            DestinationId = fixture.AssignedDestinationId,
+            LocationId = fixture.AssignedLocationId,
+            EventTypeId = fixture.BaseEventTypeId,
+            Name = "Backend Integrated Event",
+            Summary = "A real event created through the regional admin API.",
+            Description = "This event is persisted by the backend create endpoint.",
+            Status = "Published",
+            VenueName = "Regional venue hall",
+            IsAllDay = false,
+            StartsAt = startsAt,
+            EndsAt = startsAt.AddHours(3),
+            IsRecurring = true,
+            IsFree = true,
+            TicketPrice = "99",
+            ExternalTicketLink = "https://tickets.example.com/regional-event",
+            OrganizerName = "Regional Events Office",
+            ContactEmail = "events@example.com",
+            AttendanceLimit = 250,
+            AgeRestriction = "All ages",
+            TagIds = [fixture.EventTagId]
+        };
+    }
+
+    private static async Task AssertBadRequestAsync(
+        HttpClient client,
+        RegionalEventCreateRequestDto request,
+        string expectedMessagePart)
+    {
+        var response = await client.PostAsJsonAsync("/api/admin/regional/events", request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.Contains(expectedMessagePart, body?["message"], StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<EventsFixture> CreateEventsFixtureAsync(GeotrackApiFactory app)
     {
         await using var scope = app.Services.CreateAsyncScope();
@@ -249,6 +485,23 @@ public sealed class RegionalEventsTests
             CreatedAt = now
         };
         db.EventTypes.AddRange(baseEventType, searchEventType);
+        await db.SaveChangesAsync();
+
+        var eventTag = new Tag
+        {
+            Name = $"Regional Event Compatible Tag {Guid.NewGuid():N}",
+            Slug = $"regional-event-compatible-{Guid.NewGuid():N}",
+            ForEvent = true,
+            CreatedAt = now
+        };
+        var nonEventTag = new Tag
+        {
+            Name = $"Regional Non Event Tag {Guid.NewGuid():N}",
+            Slug = $"regional-non-event-{Guid.NewGuid():N}",
+            ForPlace = true,
+            CreatedAt = now
+        };
+        db.Tags.AddRange(eventTag, nonEventTag);
         await db.SaveChangesAsync();
 
         var assignedRegion = new Region
@@ -331,6 +584,7 @@ public sealed class RegionalEventsTests
             {
                 Name = $"Regional Event {index:D2}",
                 EventTypeId = index == 7 ? searchEventType.Id : baseEventType.Id,
+                DestinationId = assignedDestination.Id,
                 LocationId = assignedLocation.Id,
                 PlaceId = index == 7 ? place.Id : null,
                 Description = index == 7
@@ -348,6 +602,7 @@ public sealed class RegionalEventsTests
         {
             Name = "Unassigned Regional Event",
             EventTypeId = baseEventType.Id,
+            DestinationId = unassignedDestination.Id,
             LocationId = unassignedLocation.Id,
             Description = "This event must never appear in assigned-region results.",
             StartDate = now.AddDays(1),
@@ -373,6 +628,16 @@ public sealed class RegionalEventsTests
         return new EventsFixture(
             assignedRegion.Id,
             unassignedRegion.Id,
+            manager.Id,
+            assignedDestination.Id,
+            unassignedDestination.Id,
+            assignedLocation.Id,
+            unassignedLocation.Id,
+            place.Id,
+            baseEventType.Id,
+            eventTag.Id,
+            eventTag.Name,
+            nonEventTag.Id,
             events[7].Id,
             events[28].Id,
             events[29].Id,
@@ -413,6 +678,16 @@ public sealed class RegionalEventsTests
     private sealed record EventsFixture(
         int AssignedRegionId,
         int UnassignedRegionId,
+        int ManagerUserId,
+        int AssignedDestinationId,
+        int UnassignedDestinationId,
+        int AssignedLocationId,
+        int UnassignedLocationId,
+        int PlaceId,
+        int BaseEventTypeId,
+        int EventTagId,
+        string EventTagName,
+        int NonEventTagId,
         int SearchEventId,
         int BareEventId,
         int EventWithContentId,

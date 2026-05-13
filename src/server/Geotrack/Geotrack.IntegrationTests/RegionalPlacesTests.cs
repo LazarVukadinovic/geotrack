@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure;
 using Geotrack.IntegrationTests.Infrastructure;
@@ -15,6 +16,260 @@ namespace Geotrack.IntegrationTests;
 
 public sealed class RegionalPlacesTests
 {
+    [Fact]
+    public async Task Regional_manager_creates_place_in_assigned_region_with_tags_reference_point_and_hours()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreatePlacesFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var placeTags = await db.Tags
+            .Where(tag => tag.ForPlace)
+            .OrderBy(tag => tag.Id)
+            .Take(2)
+            .ToListAsync();
+        Assert.Equal(2, placeTags.Count);
+        var placeTypeId = await db.PlaceTypes
+            .OrderBy(type => type.Id)
+            .Select(type => type.Id)
+            .FirstAsync();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var response = await manager.PostAsJsonAsync(
+            "/api/admin/regional/places",
+            BuildCreateRequest(
+                fixture.AssignedRegionId,
+                fixture.AssignedLocationId,
+                placeTypeId,
+                placeTags.Select(tag => tag.Id).ToArray()));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<RegionalPlaceDetailDto>();
+        Assert.NotNull(created);
+        Assert.Equal(fixture.AssignedRegionId, created!.RegionId);
+        Assert.Equal(fixture.AssignedLocationId, created.LocationId);
+        Assert.Equal(fixture.AssignedDestinationId, created.DestinationId);
+        Assert.Equal("Published", created.Status);
+        Assert.Equal("New Regional Place", created.Name);
+        Assert.Equal("Short place summary.", created.Summary);
+        Assert.StartsWith("PLC-", created.InternalReferenceId);
+        Assert.Equal(placeTypeId, created.PlaceTypeId);
+        Assert.Equal(placeTags.Select(tag => tag.Id).OrderBy(id => id), created.Tags.Select(tag => tag.Id).OrderBy(id => id));
+        Assert.True(created.OperatingHoursEnabled);
+        Assert.Equal(2, created.OperatingHours.Count);
+        Assert.NotNull(created.PublishedAt);
+
+        var stored = await db.Places
+            .Include(place => place.PlaceTags)
+            .SingleAsync(place => place.Id == created.Id);
+
+        Assert.Equal(fixture.AssignedLocationId, stored.LocationId);
+        Assert.Equal(fixture.ManagerUserId, stored.CreatedByUserId);
+        Assert.Equal(created.InternalReferenceId, stored.InternalReferenceId);
+        Assert.Equal("Museum lane 1", stored.Address);
+        Assert.Equal("https://example.com/place", stored.Website);
+        Assert.Equal("+1 555 000 1111", stored.Number);
+        Assert.Equal("EUR 10 - EUR 20", stored.AdmissionPriceRange);
+        Assert.Equal("https://example.com/book", stored.BookingExternalLink);
+        Assert.Equal("Spring mornings", stored.BestTimeToVisit);
+        Assert.Equal("Book ahead.", stored.VisitorTips);
+        Assert.Equal("North entrance.", stored.AccessNotes);
+        Assert.Equal("Step-free route available.", stored.AccessibilityNotes);
+        Assert.Equal(2, stored.PlaceTags.Count);
+
+        var coordinates = db.Entry(stored)
+            .Property<NetTopologySuite.Geometries.Point?>("Coordinates")
+            .CurrentValue;
+        Assert.NotNull(coordinates);
+        Assert.Equal(4326, coordinates!.SRID);
+        Assert.Equal(stored.Longitude, coordinates.X);
+        Assert.Equal(stored.Latitude, coordinates.Y);
+
+        var list = await GetPlacesAsync(manager, fixture.AssignedRegionId, search: created.InternalReferenceId);
+        Assert.Contains(list.Items, item => item.Id == created.Id);
+    }
+
+    [Fact]
+    public async Task Create_place_requires_regional_manager_assigned_region_and_in_region_parent_location()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreatePlacesFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var placeTypeId = await db.PlaceTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+
+        using var anonymous = app.CreateClient();
+        var anonymousResponse = await anonymous.PostAsJsonAsync(
+            "/api/admin/regional/places",
+            BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+
+        using var regularUser = await LoginAsync(app, "marko.p@example.com", "password123");
+        var regularUserResponse = await regularUser.PostAsJsonAsync(
+            "/api/admin/regional/places",
+            BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId));
+        Assert.Equal(HttpStatusCode.Forbidden, regularUserResponse.StatusCode);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var unassignedRegionResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/places",
+            BuildCreateRequest(fixture.UnassignedRegionId, fixture.UnassignedLocationId, placeTypeId));
+        Assert.Equal(HttpStatusCode.Forbidden, unassignedRegionResponse.StatusCode);
+
+        var outOfRegionLocationResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/places",
+            BuildCreateRequest(fixture.AssignedRegionId, fixture.UnassignedLocationId, placeTypeId));
+        Assert.Equal(HttpStatusCode.BadRequest, outOfRegionLocationResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_place_validates_reference_required_fields_type_tags_coordinates_urls_and_hours()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreatePlacesFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var placeTypeId = await db.PlaceTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+        var nonPlaceTag = new Tag
+        {
+            Name = $"Not Place {Guid.NewGuid():N}",
+            Slug = $"not-place-{Guid.NewGuid():N}",
+            ForDestination = true,
+            ForPlace = false,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Tags.Add(nonPlaceTag);
+        await db.SaveChangesAsync();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var tamperedReference = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId);
+        tamperedReference.InternalReferenceId = "CLIENT-123";
+        var tamperedResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", tamperedReference);
+        Assert.Equal(HttpStatusCode.BadRequest, tamperedResponse.StatusCode);
+
+        var missingParent = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId);
+        missingParent.LocationId = 0;
+        var missingParentResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", missingParent);
+        Assert.Equal(HttpStatusCode.BadRequest, missingParentResponse.StatusCode);
+
+        var missingName = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId);
+        missingName.Name = "";
+        var missingNameResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", missingName);
+        Assert.Equal(HttpStatusCode.BadRequest, missingNameResponse.StatusCode);
+
+        var longSummary = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId);
+        longSummary.Summary = new string('x', 161);
+        var longSummaryResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", longSummary);
+        Assert.Equal(HttpStatusCode.BadRequest, longSummaryResponse.StatusCode);
+
+        var missingType = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId);
+        missingType.PlaceTypeId = null;
+        var missingTypeResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", missingType);
+        Assert.Equal(HttpStatusCode.BadRequest, missingTypeResponse.StatusCode);
+
+        var invalidTag = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId, [nonPlaceTag.Id]);
+        var invalidTagResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", invalidTag);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidTagResponse.StatusCode);
+
+        var invalidCoordinates = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId);
+        invalidCoordinates.Latitude = 95;
+        var invalidCoordinatesResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", invalidCoordinates);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidCoordinatesResponse.StatusCode);
+
+        var invalidUrl = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId);
+        invalidUrl.Website = "javascript:alert(1)";
+        var invalidUrlResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", invalidUrl);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidUrlResponse.StatusCode);
+
+        var invalidHours = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId);
+        invalidHours.OperatingHours[0].OpenTime = "18:00";
+        invalidHours.OperatingHours[0].CloseTime = "09:00";
+        var invalidHoursResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", invalidHours);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidHoursResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Place_selector_tag_and_type_endpoints_are_backend_scoped()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreatePlacesFixtureAsync(app);
+
+        using var anonymous = app.CreateClient();
+        var anonymousParents = await anonymous.GetAsync(
+            $"/api/admin/regional/place-parent-locations?regionId={fixture.AssignedRegionId}");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousParents.StatusCode);
+
+        using var regularUser = await LoginAsync(app, "marko.p@example.com", "password123");
+        var regularTags = await regularUser.GetAsync("/api/admin/regional/place-tags");
+        Assert.Equal(HttpStatusCode.Forbidden, regularTags.StatusCode);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var parents = await manager.GetFromJsonAsync<List<RegionalPlaceParentLocationDto>>(
+            $"/api/admin/regional/place-parent-locations?regionId={fixture.AssignedRegionId}");
+        Assert.NotNull(parents);
+        Assert.Contains(parents!, item => item.Id == fixture.AssignedLocationId && item.DestinationId == fixture.AssignedDestinationId);
+        Assert.DoesNotContain(parents!, item => item.Id == fixture.UnassignedLocationId);
+
+        var tags = await manager.GetFromJsonAsync<List<RegionalPlaceTagDto>>(
+            "/api/admin/regional/place-tags");
+        Assert.NotNull(tags);
+        Assert.NotEmpty(tags!);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var returnedTagIds = tags!.Select(tag => tag.Id).ToList();
+        var returnedTagRows = await db.Tags
+            .Where(tag => returnedTagIds.Contains(tag.Id))
+            .Select(tag => new { tag.Id, tag.ForPlace })
+            .ToListAsync();
+        Assert.Equal(returnedTagIds.Count, returnedTagRows.Count);
+        Assert.All(returnedTagRows, tag => Assert.True(tag.ForPlace));
+
+        var searchableTag = tags.First();
+        var searchResponse = await manager.GetFromJsonAsync<List<RegionalPlaceTagDto>>(
+            "/api/admin/regional/place-tags?search=" + Uri.EscapeDataString(searchableTag.Name));
+        Assert.NotNull(searchResponse);
+        Assert.Contains(searchResponse!, tag => tag.Id == searchableTag.Id);
+
+        var types = await manager.GetFromJsonAsync<List<RegionalPlaceTypeDto>>(
+            "/api/admin/regional/place-types");
+        Assert.NotNull(types);
+        Assert.NotEmpty(types!);
+    }
+
+    [Fact]
+    public async Task Generated_place_internal_reference_ids_are_unique()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreatePlacesFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var placeTypeId = await db.PlaceTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var firstResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/places",
+            BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId, name: "Unique Place One"));
+        firstResponse.EnsureSuccessStatusCode();
+
+        var secondResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/places",
+            BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId, name: "Unique Place Two"));
+        secondResponse.EnsureSuccessStatusCode();
+
+        var first = await firstResponse.Content.ReadFromJsonAsync<RegionalPlaceDetailDto>();
+        var second = await secondResponse.Content.ReadFromJsonAsync<RegionalPlaceDetailDto>();
+        Assert.NotNull(first?.InternalReferenceId);
+        Assert.NotNull(second?.InternalReferenceId);
+        Assert.NotEqual(first!.InternalReferenceId, second!.InternalReferenceId);
+    }
+
     [Fact]
     public async Task Regional_manager_lists_only_assigned_region_places_with_default_25_item_page()
     {
@@ -185,6 +440,43 @@ public sealed class RegionalPlacesTests
         return page!;
     }
 
+    private static RegionalPlaceCreateRequestDto BuildCreateRequest(
+        int regionId,
+        int locationId,
+        int placeTypeId,
+        int[]? tagIds = null,
+        string name = "New Regional Place")
+    {
+        return new RegionalPlaceCreateRequestDto
+        {
+            RegionId = regionId,
+            LocationId = locationId,
+            PlaceTypeId = placeTypeId,
+            Name = name,
+            Summary = "Short place summary.",
+            Description = "Longer place description.",
+            Status = "Published",
+            Latitude = 42.1234,
+            Longitude = 18.5678,
+            StreetAddress = "Museum lane 1",
+            BestTimeToVisit = "Spring mornings",
+            VisitorTips = "Book ahead.",
+            AccessNotes = "North entrance.",
+            AccessibilityNotes = "Step-free route available.",
+            Website = "https://example.com/place",
+            ContactPhone = "+1 555 000 1111",
+            AdmissionPriceRange = "EUR 10 - EUR 20",
+            BookingExternalLink = "https://example.com/book",
+            OperatingHoursEnabled = true,
+            OperatingHours =
+            [
+                new() { DayOfWeek = "Monday", IsOpen = true, OpenTime = "09:00", CloseTime = "17:00" },
+                new() { DayOfWeek = "Tuesday", IsOpen = false }
+            ],
+            TagIds = tagIds?.ToList() ?? []
+        };
+    }
+
     private static async Task<HttpClient> LoginAsync(GeotrackApiFactory app, string email, string password)
     {
         var client = app.CreateClient();
@@ -352,6 +644,7 @@ public sealed class RegionalPlacesTests
         {
             Name = "Place Related Event",
             EventTypeId = eventType.Id,
+            DestinationId = assignedDestination.Id,
             LocationId = assignedLocation.Id,
             PlaceId = places[29].Id,
             Description = "Related content that protects the place from deletion.",
@@ -364,6 +657,10 @@ public sealed class RegionalPlacesTests
         return new PlacesFixture(
             assignedRegion.Id,
             unassignedRegion.Id,
+            manager.Id,
+            assignedDestination.Id,
+            assignedLocation.Id,
+            unassignedLocation.Id,
             places[7].Id,
             places[28].Id,
             places[29].Id,
@@ -403,6 +700,10 @@ public sealed class RegionalPlacesTests
     private sealed record PlacesFixture(
         int AssignedRegionId,
         int UnassignedRegionId,
+        int ManagerUserId,
+        int AssignedDestinationId,
+        int AssignedLocationId,
+        int UnassignedLocationId,
         int SearchPlaceId,
         int BarePlaceId,
         int PlaceWithContentId,

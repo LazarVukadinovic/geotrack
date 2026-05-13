@@ -10,11 +10,213 @@ using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Geometry = NetTopologySuite.Geometries.Geometry;
 
 namespace Geotrack.IntegrationTests;
 
 public sealed class RegionalDestinationsTests
 {
+    [Fact]
+    public async Task Regional_manager_creates_destination_in_assigned_region_with_tags_reference_and_boundary()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateDestinationsFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var destinationTags = await db.Tags
+            .Where(tag => tag.ForDestination)
+            .OrderBy(tag => tag.Id)
+            .Take(2)
+            .ToListAsync();
+        Assert.Equal(2, destinationTags.Count);
+        var defaultTypeId = await db.DestinationTypes
+            .OrderBy(type => type.Name == "City" ? 0 : 1)
+            .ThenBy(type => type.Id)
+            .Select(type => type.Id)
+            .FirstAsync();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var response = await manager.PostAsJsonAsync(
+            "/api/admin/regional/destinations",
+            BuildCreateRequest(fixture.AssignedRegionId, destinationTags.Select(tag => tag.Id).ToArray()));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<RegionalDestinationDetailDto>();
+        Assert.NotNull(created);
+        Assert.Equal(fixture.AssignedRegionId, created!.RegionId);
+        Assert.Equal("Published", created.Status);
+        Assert.Equal("New Regional Destination", created.Name);
+        Assert.Equal("Short destination summary.", created.Summary);
+        Assert.StartsWith("DEST-", created.InternalReferenceId);
+        Assert.Equal(defaultTypeId, created.DestinationTypeId);
+        Assert.Equal(destinationTags.Select(tag => tag.Id).OrderBy(id => id), created.Tags.Select(tag => tag.Id).OrderBy(id => id));
+        Assert.NotNull(created.PublishedAt);
+
+        var stored = await db.Destinations
+            .Include(destination => destination.DestinationTags)
+            .SingleAsync(destination => destination.Id == created.Id);
+
+        Assert.Equal(fixture.AssignedRegionId, stored.RegionId);
+        Assert.Equal(fixture.ManagerUserId, stored.CreatedByUserId);
+        Assert.Equal(created.InternalReferenceId, stored.InternalReferenceId);
+        Assert.Equal("North boundary note.", stored.BoundaryNote);
+        Assert.Equal("Polygon", stored.BoundaryShapeType);
+        Assert.Equal(2, stored.DestinationTags.Count);
+
+        var boundary = db.Entry(stored)
+            .Property<Geometry?>("BoundaryGeometry")
+            .CurrentValue;
+        Assert.NotNull(boundary);
+        Assert.Equal(4326, boundary!.SRID);
+        Assert.False(boundary.IsEmpty);
+
+        var list = await GetDestinationsAsync(manager, fixture.AssignedRegionId, search: created.InternalReferenceId);
+        Assert.Contains(list.Items, item => item.Id == created.Id);
+    }
+
+    [Fact]
+    public async Task Create_destination_requires_regional_manager_and_assigned_region()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateDestinationsFixtureAsync(app);
+
+        using var anonymous = app.CreateClient();
+        var anonymousResponse = await anonymous.PostAsJsonAsync(
+            "/api/admin/regional/destinations",
+            BuildCreateRequest(fixture.AssignedRegionId));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+
+        using var regularUser = await LoginAsync(app, "marko.p@example.com", "password123");
+        var regularUserResponse = await regularUser.PostAsJsonAsync(
+            "/api/admin/regional/destinations",
+            BuildCreateRequest(fixture.AssignedRegionId));
+        Assert.Equal(HttpStatusCode.Forbidden, regularUserResponse.StatusCode);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var unassignedRegionResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/destinations",
+            BuildCreateRequest(fixture.UnassignedRegionId));
+        Assert.Equal(HttpStatusCode.Forbidden, unassignedRegionResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_destination_validates_reference_required_fields_summary_tags_and_geometry()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateDestinationsFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var nonDestinationTag = await db.Tags.FirstAsync(tag => !tag.ForDestination);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var tamperedReference = BuildCreateRequest(fixture.AssignedRegionId);
+        tamperedReference.InternalReferenceId = "CLIENT-123";
+        var tamperedResponse = await manager.PostAsJsonAsync("/api/admin/regional/destinations", tamperedReference);
+        Assert.Equal(HttpStatusCode.BadRequest, tamperedResponse.StatusCode);
+
+        var missingName = BuildCreateRequest(fixture.AssignedRegionId);
+        missingName.Name = "";
+        var missingNameResponse = await manager.PostAsJsonAsync("/api/admin/regional/destinations", missingName);
+        Assert.Equal(HttpStatusCode.BadRequest, missingNameResponse.StatusCode);
+
+        var longSummary = BuildCreateRequest(fixture.AssignedRegionId);
+        longSummary.Summary = new string('x', 161);
+        var longSummaryResponse = await manager.PostAsJsonAsync("/api/admin/regional/destinations", longSummary);
+        Assert.Equal(HttpStatusCode.BadRequest, longSummaryResponse.StatusCode);
+
+        var invalidTag = BuildCreateRequest(fixture.AssignedRegionId, [nonDestinationTag.Id]);
+        var invalidTagResponse = await manager.PostAsJsonAsync("/api/admin/regional/destinations", invalidTag);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidTagResponse.StatusCode);
+
+        var invalidGeometry = BuildCreateRequest(fixture.AssignedRegionId);
+        invalidGeometry.Boundary = new RegionalDestinationBoundaryDto
+        {
+            ShapeType = "Polygon",
+            Coordinates =
+            [
+                new() { Latitude = 95, Longitude = 19 },
+                new() { Latitude = 43, Longitude = 19.2 },
+                new() { Latitude = 43.2, Longitude = 19.1 }
+            ]
+        };
+        var invalidGeometryResponse = await manager.PostAsJsonAsync("/api/admin/regional/destinations", invalidGeometry);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidGeometryResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Destination_tag_endpoint_returns_only_destination_compatible_tags_and_supports_search()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        _ = await CreateDestinationsFixtureAsync(app);
+
+        using var anonymous = app.CreateClient();
+        var anonymousResponse = await anonymous.GetAsync("/api/admin/regional/destination-tags");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+
+        using var regularUser = await LoginAsync(app, "marko.p@example.com", "password123");
+        var regularUserResponse = await regularUser.GetAsync("/api/admin/regional/destination-tags");
+        Assert.Equal(HttpStatusCode.Forbidden, regularUserResponse.StatusCode);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var allTags = await manager.GetFromJsonAsync<List<RegionalDestinationTagDto>>(
+            "/api/admin/regional/destination-tags");
+        Assert.NotNull(allTags);
+        Assert.NotEmpty(allTags!);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var returnedIds = allTags.Select(tag => tag.Id).ToList();
+        var returnedTagRows = await db.Tags
+            .Where(tag => returnedIds.Contains(tag.Id))
+            .Select(tag => new { tag.Id, tag.ForDestination })
+            .ToListAsync();
+        Assert.Equal(returnedIds.Count, returnedTagRows.Count);
+        Assert.All(returnedTagRows, tag => Assert.True(tag.ForDestination));
+
+        var nonDestinationTag = await db.Tags.FirstAsync(tag => !tag.ForDestination);
+        Assert.DoesNotContain(allTags, tag => tag.Id == nonDestinationTag.Id);
+
+        var searchableTag = allTags.First();
+        var searchResponse = await manager.GetFromJsonAsync<List<RegionalDestinationTagDto>>(
+            "/api/admin/regional/destination-tags?search=" + Uri.EscapeDataString(searchableTag.Name));
+        Assert.NotNull(searchResponse);
+        Assert.Contains(searchResponse!, tag => tag.Id == searchableTag.Id);
+
+        var searchIds = searchResponse!.Select(tag => tag.Id).ToList();
+        var searchedTagRows = await db.Tags
+            .Where(tag => searchIds.Contains(tag.Id))
+            .Select(tag => new { tag.Id, tag.ForDestination })
+            .ToListAsync();
+        Assert.All(searchedTagRows, tag => Assert.True(tag.ForDestination));
+    }
+
+    [Fact]
+    public async Task Generated_internal_reference_ids_are_unique()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateDestinationsFixtureAsync(app);
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var firstResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/destinations",
+            BuildCreateRequest(fixture.AssignedRegionId, name: "Unique Destination One"));
+        firstResponse.EnsureSuccessStatusCode();
+
+        var secondResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/destinations",
+            BuildCreateRequest(fixture.AssignedRegionId, name: "Unique Destination Two"));
+        secondResponse.EnsureSuccessStatusCode();
+
+        var first = await firstResponse.Content.ReadFromJsonAsync<RegionalDestinationDetailDto>();
+        var second = await secondResponse.Content.ReadFromJsonAsync<RegionalDestinationDetailDto>();
+        Assert.NotNull(first?.InternalReferenceId);
+        Assert.NotNull(second?.InternalReferenceId);
+        Assert.NotEqual(first!.InternalReferenceId, second!.InternalReferenceId);
+    }
+
     [Fact]
     public async Task Regional_manager_lists_only_assigned_region_destinations_with_default_25_item_page()
     {
@@ -188,6 +390,34 @@ public sealed class RegionalDestinationsTests
         return client;
     }
 
+    private static RegionalDestinationCreateRequestDto BuildCreateRequest(
+        int regionId,
+        int[]? tagIds = null,
+        string name = "New Regional Destination")
+    {
+        return new RegionalDestinationCreateRequestDto
+        {
+            RegionId = regionId,
+            Name = name,
+            Summary = "Short destination summary.",
+            Description = "Full destination description.",
+            Status = "Published",
+            BoundaryNote = "North boundary note.",
+            Boundary = new RegionalDestinationBoundaryDto
+            {
+                ShapeType = "Polygon",
+                Coordinates =
+                [
+                    new() { Latitude = 43.0, Longitude = 19.0 },
+                    new() { Latitude = 43.0, Longitude = 19.2 },
+                    new() { Latitude = 43.2, Longitude = 19.2 },
+                    new() { Latitude = 43.2, Longitude = 19.0 }
+                ]
+            },
+            TagIds = tagIds?.ToList() ?? []
+        };
+    }
+
     private static async Task<DestinationsFixture> CreateDestinationsFixtureAsync(GeotrackApiFactory app)
     {
         await using var scope = app.Services.CreateAsyncScope();
@@ -260,6 +490,7 @@ public sealed class RegionalDestinationsTests
         return new DestinationsFixture(
             assignedRegion.Id,
             unassignedRegion.Id,
+            manager.Id,
             destinations[7].Id,
             destinations[28].Id,
             destinations[29].Id,
@@ -296,6 +527,7 @@ public sealed class RegionalDestinationsTests
     private sealed record DestinationsFixture(
         int AssignedRegionId,
         int UnassignedRegionId,
+        int ManagerUserId,
         int SearchDestinationId,
         int BareDestinationId,
         int DestinationWithContentId,

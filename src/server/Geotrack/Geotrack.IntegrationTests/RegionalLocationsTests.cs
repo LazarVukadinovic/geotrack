@@ -10,11 +10,205 @@ using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Geometry = NetTopologySuite.Geometries.Geometry;
 
 namespace Geotrack.IntegrationTests;
 
 public sealed class RegionalLocationsTests
 {
+    [Fact]
+    public async Task Regional_manager_creates_location_in_assigned_region_with_tags_reference_and_boundary()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateLocationsFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var locationTags = await db.Tags
+            .Where(tag => tag.ForLocation)
+            .OrderBy(tag => tag.Id)
+            .Take(2)
+            .ToListAsync();
+        Assert.Equal(2, locationTags.Count);
+        var locationTypeId = await db.LocationTypes
+            .OrderBy(type => type.Id)
+            .Select(type => type.Id)
+            .FirstAsync();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var response = await manager.PostAsJsonAsync(
+            "/api/admin/regional/locations",
+            BuildCreateRequest(
+                fixture.AssignedRegionId,
+                fixture.AssignedDestinationId,
+                locationTypeId,
+                locationTags.Select(tag => tag.Id).ToArray()));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<RegionalLocationDetailDto>();
+        Assert.NotNull(created);
+        Assert.Equal(fixture.AssignedRegionId, created!.RegionId);
+        Assert.Equal(fixture.AssignedDestinationId, created.DestinationId);
+        Assert.Equal("Published", created.Status);
+        Assert.Equal("New Regional Location", created.Name);
+        Assert.Equal("Short location summary.", created.Summary);
+        Assert.StartsWith("LOC-", created.InternalReferenceId);
+        Assert.Equal(locationTypeId, created.LocationTypeId);
+        Assert.Equal(locationTags.Select(tag => tag.Id).OrderBy(id => id), created.Tags.Select(tag => tag.Id).OrderBy(id => id));
+        Assert.NotNull(created.PublishedAt);
+
+        var stored = await db.Locations
+            .Include(location => location.LocationTags)
+            .SingleAsync(location => location.Id == created.Id);
+
+        Assert.Equal(fixture.AssignedDestinationId, stored.DestinationId);
+        Assert.Equal(fixture.ManagerUserId, stored.CreatedByUserId);
+        Assert.Equal(created.InternalReferenceId, stored.InternalReferenceId);
+        Assert.Equal("North edge boundary note.", stored.BoundaryNote);
+        Assert.Equal("Polygon", stored.BoundaryShapeType);
+        Assert.Equal(2, stored.LocationTags.Count);
+
+        var boundary = db.Entry(stored)
+            .Property<Geometry?>("BoundaryGeometry")
+            .CurrentValue;
+        Assert.NotNull(boundary);
+        Assert.Equal(4326, boundary!.SRID);
+        Assert.False(boundary.IsEmpty);
+
+        var list = await GetLocationsAsync(manager, fixture.AssignedRegionId, search: created.InternalReferenceId);
+        Assert.Contains(list.Items, item => item.Id == created.Id);
+    }
+
+    [Fact]
+    public async Task Create_location_requires_regional_manager_assigned_region_and_in_region_parent_destination()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateLocationsFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var locationTypeId = await db.LocationTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+
+        using var anonymous = app.CreateClient();
+        var anonymousResponse = await anonymous.PostAsJsonAsync(
+            "/api/admin/regional/locations",
+            BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+
+        using var regularUser = await LoginAsync(app, "marko.p@example.com", "password123");
+        var regularUserResponse = await regularUser.PostAsJsonAsync(
+            "/api/admin/regional/locations",
+            BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId));
+        Assert.Equal(HttpStatusCode.Forbidden, regularUserResponse.StatusCode);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var unassignedRegionResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/locations",
+            BuildCreateRequest(fixture.UnassignedRegionId, fixture.UnassignedDestinationId, locationTypeId));
+        Assert.Equal(HttpStatusCode.Forbidden, unassignedRegionResponse.StatusCode);
+
+        var outOfRegionDestinationResponse = await manager.PostAsJsonAsync(
+            "/api/admin/regional/locations",
+            BuildCreateRequest(fixture.AssignedRegionId, fixture.UnassignedDestinationId, locationTypeId));
+        Assert.Equal(HttpStatusCode.BadRequest, outOfRegionDestinationResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_location_validates_reference_required_fields_summary_tags_and_geometry()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateLocationsFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var locationTypeId = await db.LocationTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+        var nonLocationTag = await db.Tags.FirstAsync(tag => !tag.ForLocation);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var tamperedReference = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
+        tamperedReference.InternalReferenceId = "CLIENT-123";
+        var tamperedResponse = await manager.PostAsJsonAsync("/api/admin/regional/locations", tamperedReference);
+        Assert.Equal(HttpStatusCode.BadRequest, tamperedResponse.StatusCode);
+
+        var missingParent = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
+        missingParent.DestinationId = 0;
+        var missingParentResponse = await manager.PostAsJsonAsync("/api/admin/regional/locations", missingParent);
+        Assert.Equal(HttpStatusCode.BadRequest, missingParentResponse.StatusCode);
+
+        var missingName = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
+        missingName.Name = "";
+        var missingNameResponse = await manager.PostAsJsonAsync("/api/admin/regional/locations", missingName);
+        Assert.Equal(HttpStatusCode.BadRequest, missingNameResponse.StatusCode);
+
+        var longSummary = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
+        longSummary.Summary = new string('x', 161);
+        var longSummaryResponse = await manager.PostAsJsonAsync("/api/admin/regional/locations", longSummary);
+        Assert.Equal(HttpStatusCode.BadRequest, longSummaryResponse.StatusCode);
+
+        var invalidTag = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId, [nonLocationTag.Id]);
+        var invalidTagResponse = await manager.PostAsJsonAsync("/api/admin/regional/locations", invalidTag);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidTagResponse.StatusCode);
+
+        var invalidGeometry = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
+        invalidGeometry.Boundary = new RegionalLocationBoundaryDto
+        {
+            ShapeType = "Polygon",
+            Coordinates =
+            [
+                new() { Latitude = 95, Longitude = 19 },
+                new() { Latitude = 43, Longitude = 19.2 },
+                new() { Latitude = 43.2, Longitude = 19.1 }
+            ]
+        };
+        var invalidGeometryResponse = await manager.PostAsJsonAsync("/api/admin/regional/locations", invalidGeometry);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidGeometryResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Location_selector_tag_and_type_endpoints_are_backend_scoped()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateLocationsFixtureAsync(app);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var parents = await manager.GetFromJsonAsync<List<RegionalLocationParentDestinationDto>>(
+            $"/api/admin/regional/location-parent-destinations?regionId={fixture.AssignedRegionId}");
+        Assert.NotNull(parents);
+        Assert.Contains(parents!, item => item.Id == fixture.AssignedDestinationId);
+        Assert.DoesNotContain(parents!, item => item.Id == fixture.UnassignedDestinationId);
+
+        var tags = await manager.GetFromJsonAsync<List<RegionalLocationTagDto>>(
+            "/api/admin/regional/location-tags");
+        Assert.NotNull(tags);
+        Assert.NotEmpty(tags!);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var returnedTagIds = tags!.Select(tag => tag.Id).ToList();
+        var returnedTagRows = await db.Tags
+            .Where(tag => returnedTagIds.Contains(tag.Id))
+            .Select(tag => new { tag.Id, tag.ForLocation })
+            .ToListAsync();
+        Assert.Equal(returnedTagIds.Count, returnedTagRows.Count);
+        Assert.All(returnedTagRows, tag => Assert.True(tag.ForLocation));
+
+        var nonLocationTag = await db.Tags.FirstAsync(tag => !tag.ForLocation);
+        Assert.DoesNotContain(tags, tag => tag.Id == nonLocationTag.Id);
+
+        var searchableTag = tags.First();
+        var searchResponse = await manager.GetFromJsonAsync<List<RegionalLocationTagDto>>(
+            "/api/admin/regional/location-tags?search=" + Uri.EscapeDataString(searchableTag.Name));
+        Assert.NotNull(searchResponse);
+        Assert.Contains(searchResponse!, tag => tag.Id == searchableTag.Id);
+
+        var types = await manager.GetFromJsonAsync<List<RegionalLocationTypeDto>>(
+            "/api/admin/regional/location-types");
+        Assert.NotNull(types);
+        Assert.NotEmpty(types!);
+    }
+
     [Fact]
     public async Task Regional_manager_lists_only_assigned_region_locations_with_default_25_item_page()
     {
@@ -190,6 +384,38 @@ public sealed class RegionalLocationsTests
         return client;
     }
 
+    private static RegionalLocationCreateRequestDto BuildCreateRequest(
+        int regionId,
+        int destinationId,
+        int locationTypeId,
+        int[]? tagIds = null,
+        string name = "New Regional Location")
+    {
+        return new RegionalLocationCreateRequestDto
+        {
+            RegionId = regionId,
+            DestinationId = destinationId,
+            LocationTypeId = locationTypeId,
+            Name = name,
+            Summary = "Short location summary.",
+            Description = "Full location description.",
+            Status = "Published",
+            BoundaryNote = "North edge boundary note.",
+            Boundary = new RegionalLocationBoundaryDto
+            {
+                ShapeType = "Polygon",
+                Coordinates =
+                [
+                    new() { Latitude = 43.0, Longitude = 19.0 },
+                    new() { Latitude = 43.0, Longitude = 19.2 },
+                    new() { Latitude = 43.2, Longitude = 19.2 },
+                    new() { Latitude = 43.2, Longitude = 19.0 }
+                ]
+            },
+            TagIds = tagIds?.ToList() ?? []
+        };
+    }
+
     private static async Task<LocationsFixture> CreateLocationsFixtureAsync(GeotrackApiFactory app)
     {
         await using var scope = app.Services.CreateAsyncScope();
@@ -290,6 +516,9 @@ public sealed class RegionalLocationsTests
         return new LocationsFixture(
             assignedRegion.Id,
             unassignedRegion.Id,
+            manager.Id,
+            assignedDestinations[0].Id,
+            unassignedDestination.Id,
             locations[7].Id,
             locations[28].Id,
             locations[29].Id,
@@ -326,6 +555,9 @@ public sealed class RegionalLocationsTests
     private sealed record LocationsFixture(
         int AssignedRegionId,
         int UnassignedRegionId,
+        int ManagerUserId,
+        int AssignedDestinationId,
+        int UnassignedDestinationId,
         int SearchLocationId,
         int BareLocationId,
         int LocationWithContentId,

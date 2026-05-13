@@ -226,6 +226,7 @@ public sealed class ReviewPaginationAndSpatialValidationTests
             Name = $"Paged review event {suffix}",
             Description = "Event used by review pagination tests.",
             EventTypeId = eventType.Id,
+            DestinationId = location.DestinationId,
             LocationId = location.Id,
             StartDate = now.AddDays(1),
             EndDate = now.AddDays(1).AddHours(2),
