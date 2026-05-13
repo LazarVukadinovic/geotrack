@@ -104,9 +104,10 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
     {
         var normalizedQuery = query.ToLower();
         return await _context.Events
+            .Include(e => e.Destination)
             .Include(e => e.Location)
             .Include(e => e.Place)
-            .Where(e => e.Location.DestinationId == destinationId && e.Name.ToLower().Contains(normalizedQuery))
+            .Where(e => e.DestinationId == destinationId && e.Name.ToLower().Contains(normalizedQuery))
             .ToListAsync();
     }
 }

@@ -15,6 +15,10 @@ public interface IRegionalDestinationService
 
     Task<RegionalDestinationDetailDto> GetDestinationAsync(int userId, int regionId, int destinationId);
 
+    Task<RegionalDestinationDetailDto> CreateDestinationAsync(
+        int userId,
+        RegionalDestinationCreateRequestDto request);
+
     Task<RegionalDestinationDetailDto> UpdateDestinationAsync(
         int userId,
         int regionId,
@@ -22,4 +26,6 @@ public interface IRegionalDestinationService
         RegionalDestinationUpdateRequestDto request);
 
     Task DeleteDestinationAsync(int userId, int regionId, int destinationId);
+
+    Task<List<RegionalDestinationTagDto>> GetDestinationTagsAsync(int userId, string? search);
 }

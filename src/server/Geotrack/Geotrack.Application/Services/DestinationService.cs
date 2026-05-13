@@ -355,9 +355,9 @@ public class DestinationService : IDestinationService
                 Type = "event",
                 Name = e.Name,
                 Description = e.Description,
-                Latitude = e.Place?.Latitude ?? e.Location.Latitude,
-                Longitude = e.Place?.Longitude ?? e.Location.Longitude,
-                ParentName = e.Place?.Name ?? e.Location.Name
+                Latitude = e.Place?.Latitude ?? e.Location?.Latitude ?? e.Destination.Latitude,
+                Longitude = e.Place?.Longitude ?? e.Location?.Longitude ?? e.Destination.Longitude,
+                ParentName = e.Place?.Name ?? e.Location?.Name ?? e.Destination.Name
             }));
         }
 
