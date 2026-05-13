@@ -77,6 +77,9 @@ public class AppDbContext : DbContext
     public DbSet<AnonymousSession> AnonymousSessions => Set<AnonymousSession>();
     public DbSet<UserInterestSignal> UserInterestSignals => Set<UserInterestSignal>();
 
+    public DbSet<TagTypePlaceType> TagTypePlaceTypes => Set<TagTypePlaceType>();
+    public DbSet<Restaurant> Restaurants => Set<Restaurant>();
+
     public DbSet<EntityImage> EntityImages => Set<EntityImage>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
@@ -121,7 +124,6 @@ public class AppDbContext : DbContext
         ConfigureDestinations(modelBuilder);
         ConfigureLocations(modelBuilder);
         ConfigurePlaces(modelBuilder);
-        ConfigureStays(modelBuilder);
         ConfigureEvents(modelBuilder);
 
         ConfigureLookupTables(modelBuilder);
@@ -461,10 +463,19 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.BookingPartnerId);
         });
-    }
 
-    private static void ConfigureStays(ModelBuilder modelBuilder)
-    {
+        modelBuilder.Entity<Restaurant>(entity =>
+        {
+            entity.ToTable("Restaurants");
+
+            entity.HasKey(x => x.PlaceId);
+
+            entity.HasOne(x => x.Place)
+                .WithOne()
+                .HasForeignKey<Restaurant>(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<Stay>(entity =>
         {
             entity.ToTable("Stays");
@@ -480,9 +491,6 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.CheckOutTime)
                 .HasMaxLength(20);
-
-            entity.Property(x => x.CreatedAt)
-                .IsRequired();
 
             entity.HasOne(x => x.Place)
                 .WithOne(x => x.Stay)
@@ -951,37 +959,6 @@ public class AppDbContext : DbContext
 
     private static void ConfigureTags(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Tag>(entity =>
-        {
-            entity.ToTable("Tags");
-
-            entity.HasKey(x => x.Id);
-
-            entity.Property(x => x.Name)
-                .IsRequired()
-                .HasMaxLength(100);
-
-            entity.Property(x => x.Slug)
-                .IsRequired()
-                .HasMaxLength(100);
-
-            entity.Property(x => x.Description)
-                .HasMaxLength(1000);
-
-            entity.HasOne<PlaceType>()
-                .WithMany()
-                .HasForeignKey(x => x.PlaceTypeId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(x => x.Name)
-                .IsUnique();
-
-            entity.HasIndex(x => x.Slug)
-                .IsUnique();
-
-            entity.HasIndex(x => x.PlaceTypeId);
-        });
-
         modelBuilder.Entity<TagType>(entity =>
         {
             entity.ToTable("TagTypes");
@@ -994,20 +971,77 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.Slug)
                 .IsRequired()
-                .HasMaxLength(100);
+                .HasMaxLength(120);
+
+            entity.HasIndex(x => x.Slug)
+                .IsUnique();
 
             entity.Property(x => x.Description)
                 .HasMaxLength(500);
 
-            // Tag currently has no TagTypeId property, so this prevents EF Core
-            // from silently creating a shadow FK column on Tags.
-            entity.Ignore(x => x.Tags);
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
 
-            entity.HasIndex(x => x.Name)
-                .IsUnique();
+            entity.HasMany(x => x.Tags)
+                .WithOne(x => x.TagType)
+                .HasForeignKey(x => x.TagTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(x => x.PlaceTypes)
+                .WithOne(x => x.TagType)
+                .HasForeignKey(x => x.TagTypeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.ToTable("Tags");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Slug)
+                .IsRequired()
+                .HasMaxLength(120);
 
             entity.HasIndex(x => x.Slug)
                 .IsUnique();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.ImageUrl)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.TagType)
+                .WithMany(x => x.Tags)
+                .HasForeignKey(x => x.TagTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TagTypePlaceType>(entity =>
+        {
+            entity.ToTable("TagTypePlaceTypes");
+
+            entity.HasKey(x => new { x.TagTypeId, x.PlaceTypeId });
+
+            entity.HasOne(x => x.TagType)
+                .WithMany(x => x.PlaceTypes)
+                .HasForeignKey(x => x.TagTypeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.PlaceType)
+                .WithMany(x => x.TagTypes)
+                .HasForeignKey(x => x.PlaceTypeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.PlaceTypeId);
         });
 
         modelBuilder.Entity<DestinationTag>(entity =>
@@ -1025,8 +1059,6 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.DestinationTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => x.TagId);
         });
 
         modelBuilder.Entity<LocationTag>(entity =>
@@ -1044,8 +1076,6 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.LocationTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => x.TagId);
         });
 
         modelBuilder.Entity<PlaceTag>(entity =>
@@ -1063,8 +1093,6 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.PlaceTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => x.TagId);
         });
 
         modelBuilder.Entity<EventTag>(entity =>
@@ -1082,18 +1110,13 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.EventTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => x.TagId);
         });
 
         modelBuilder.Entity<UserTag>(entity =>
         {
             entity.ToTable("UserTags");
 
-            entity.HasKey(x => x.Id);
-
-            entity.Property(x => x.CreatedAt)
-                .IsRequired();
+            entity.HasKey(x => new { x.UserId, x.TagId });
 
             entity.HasOne(x => x.User)
                 .WithMany(x => x.UserTags)
@@ -1104,9 +1127,6 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.UserTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(x => new { x.UserId, x.TagId })
-                .IsUnique();
         });
     }
 

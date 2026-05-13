@@ -9,18 +9,18 @@ public class TagService : ITagService
 {
     private static readonly string[] UserInterestSlugs =
     {
-        "food-drink",
+        "seafood",
         "history",
-        "beaches",
+        "swimming",
         "nature",
-        "museums",
-        "local-events",
-        "nightlife",
-        "festivals",
-        "adventure",
-        "scenic-walks",
+        "art",
+        "local-event",
+        "live-music-event",
+        "cultural-festival",
+        "kayaking",
+        "walking-route",
         "culture",
-        "shopping",
+        "boat-tour",
     };
 
     private readonly ITagRepository _tagRepository;

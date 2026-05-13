@@ -606,11 +606,21 @@ public class UserService : IUserService
             Name = tag.Name,
             Slug = tag.Slug,
             Description = tag.Description,
+
             ForDestination = tag.ForDestination,
             ForLocation = tag.ForLocation,
             ForPlace = tag.ForPlace,
             ForEvent = tag.ForEvent,
-            PlaceTypeId = tag.PlaceTypeId,
+
+            TagTypeId = tag.TagTypeId,
+            TagTypeName = tag.TagType?.Name,
+            TagTypeSlug = tag.TagType?.Slug,
+
+            AllowedPlaceTypeIds = tag.TagType?.PlaceTypes
+                .Select(x => x.PlaceTypeId)
+                .Distinct()
+                .ToList() ?? new List<int>(),
+
             CreatedAt = tag.CreatedAt,
             UpdatedAt = tag.UpdatedAt
         };
@@ -618,19 +628,31 @@ public class UserService : IUserService
 
     private static InferredInterestItemDto MapSignalToInferredInterestItemDto(UserInterestSignal signal)
     {
+        var tag = signal.Tag;
+
         return new InferredInterestItemDto
         {
-            TagId = signal.Tag.Id,
-            Name = signal.Tag.Name,
-            Slug = signal.Tag.Slug,
-            Description = signal.Tag.Description,
-            ForDestination = signal.Tag.ForDestination,
-            ForLocation = signal.Tag.ForLocation,
-            ForPlace = signal.Tag.ForPlace,
-            ForEvent = signal.Tag.ForEvent,
-            PlaceTypeId = signal.Tag.PlaceTypeId,
-            CreatedAt = signal.Tag.CreatedAt,
-            UpdatedAt = signal.Tag.UpdatedAt,
+            TagId = tag.Id,
+            Name = tag.Name,
+            Slug = tag.Slug,
+            Description = tag.Description,
+
+            ForDestination = tag.ForDestination,
+            ForLocation = tag.ForLocation,
+            ForPlace = tag.ForPlace,
+            ForEvent = tag.ForEvent,
+
+            TagTypeId = tag.TagTypeId,
+            TagTypeName = tag.TagType?.Name,
+            TagTypeSlug = tag.TagType?.Slug,
+
+            AllowedPlaceTypeIds = tag.TagType?.PlaceTypes
+                .Select(x => x.PlaceTypeId)
+                .Distinct()
+                .ToList() ?? new List<int>(),
+
+            CreatedAt = tag.CreatedAt,
+            UpdatedAt = tag.UpdatedAt,
             Score = signal.Score,
             LastInteractionAt = signal.LastInteractionAt,
             LastReason = signal.LastReason
@@ -1122,4 +1144,3 @@ public class UserService : IUserService
         return normalized;
     }
 }
-

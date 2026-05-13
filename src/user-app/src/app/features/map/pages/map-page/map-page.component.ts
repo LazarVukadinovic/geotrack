@@ -25,7 +25,7 @@ import type { AnalyticsEntityType } from '../../../../core/services/analytics.ty
 import type { ResolvedLocation } from '../../../../core/models/location.model';
 import { MapFilterOption, MapFilterStateService } from '../../services/map-filter-state.service';
 
-const MAP_STYLE_URL = '/map-style.json';
+const MAP_STYLE_URL = '/map-style.json?v=no-poi-v4';
 
 const DESTINATION_ZOOM_THRESHOLD = 10;
 const VIEWPORT_DEBOUNCE_MS = 250;
@@ -542,6 +542,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     this.map.on('load', () => {
       this.map.resize();
+      this.hideExternalPoiLayers();
       this.map.on('styleimagemissing', (event: MapStyleImageMissingEvent) => {
         this.map.addImage(event.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
       });
@@ -560,6 +561,134 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     });
 
     this.map.on('click', (event: MapMouseEvent) => this.onMapClick(event));
+  }
+
+
+  private hideExternalPoiLayers(): void {
+    const layers = this.map.getStyle().layers ?? [];
+
+    const blockedPoiClasses = [
+      'food',
+      'shop',
+      'tourism',
+      'lodging',
+      'accommodation',
+      'commercial',
+      'entertainment',
+      'leisure',
+    ];
+
+    const blockedPoiSubclasses = [
+      'restaurant',
+      'cafe',
+      'bar',
+      'pub',
+      'fast_food',
+      'biergarten',
+      'food_court',
+      'hotel',
+      'hostel',
+      'motel',
+      'guest_house',
+      'apartment',
+      'chalet',
+      'camp_site',
+      'caravan_site',
+      'museum',
+      'attraction',
+      'viewpoint',
+      'art_gallery',
+      'gallery',
+      'theme_park',
+      'zoo',
+      'aquarium',
+      'cinema',
+      'theatre',
+      'nightclub',
+      'casino',
+      'supermarket',
+      'marketplace',
+      'mall',
+      'bakery',
+      'clothes',
+      'jewelry',
+      'gift',
+      'convenience',
+    ];
+
+    const keepLabelKeywords = [
+      'road',
+      'street',
+      'highway',
+      'transportation_name',
+      'place_city',
+      'place_town',
+      'place_village',
+      'place_hamlet',
+      'settlement',
+      'country',
+      'state',
+      'province',
+      'boundary',
+      'water',
+      'waterway',
+      'marine',
+    ];
+
+    const poiLayerKeywords = [
+      'poi',
+      'amenity',
+      'shop',
+      'tourism',
+      'food',
+      'restaurant',
+      'cafe',
+      'bar',
+      'hotel',
+      'museum',
+      'attraction',
+      'leisure',
+      'commercial',
+    ];
+
+    for (const layer of layers) {
+      if (layer.type !== 'symbol') continue;
+
+      const layerLike = layer as {
+        id: string;
+        layout?: Record<string, unknown>;
+        ['source-layer']?: string;
+      };
+
+      const id = layerLike.id.toLowerCase();
+      const sourceLayer = String(layerLike['source-layer'] ?? '').toLowerCase();
+      const searchableName = `${id} ${sourceLayer}`;
+
+      const isImportantBaseLabel = keepLabelKeywords.some(keyword => searchableName.includes(keyword));
+      if (isImportantBaseLabel) continue;
+
+      const looksLikePoiLayer = poiLayerKeywords.some(keyword => searchableName.includes(keyword));
+      if (!looksLikePoiLayer) continue;
+
+      try {
+        const oldFilter = this.map.getFilter(layerLike.id) as unknown[] | undefined;
+        const filteredPoiExpression: unknown[] = [
+          'all',
+          ...(oldFilter ? [oldFilter] : []),
+          ['!', ['in', ['get', 'class'], ['literal', blockedPoiClasses]]],
+          ['!', ['in', ['get', 'subclass'], ['literal', blockedPoiSubclasses]]],
+          ['!', ['in', ['get', 'type'], ['literal', blockedPoiSubclasses]]],
+        ];
+
+        this.map.setFilter(layerLike.id, filteredPoiExpression as any);
+      } catch {
+        try {
+          this.map.setLayoutProperty(layerLike.id, 'visibility', 'none');
+        } catch {
+          // Ignore style layers that cannot be modified by MapLibre at runtime.
+        }
+      }
+    }
   }
 
   private onMapClick(event: MapMouseEvent): void {

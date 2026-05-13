@@ -20,11 +20,17 @@ public class LocationRepository : Repository<Location>, ILocationRepository
             .Include(l => l.Places)
                 .ThenInclude(p => p.PlaceTags)
                     .ThenInclude(pt => pt.Tag)
+                        .ThenInclude(tag => tag.TagType)
+                            .ThenInclude(tagType => tagType!.PlaceTypes)
             .Include(l => l.Events)
                 .ThenInclude(e => e.EventTags)
                     .ThenInclude(et => et.Tag)
+                        .ThenInclude(tag => tag.TagType)
+                            .ThenInclude(tagType => tagType!.PlaceTypes)
             .Include(l => l.LocationTags)
                 .ThenInclude(lt => lt.Tag)
+                    .ThenInclude(tag => tag.TagType)
+                        .ThenInclude(tagType => tagType!.PlaceTypes)
             .FirstOrDefaultAsync(l => l.Id == locationId);
     }
 

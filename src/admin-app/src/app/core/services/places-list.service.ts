@@ -32,6 +32,13 @@ export interface PlaceListItem {
   contactPhone?: string;
   admissionPrice?: string;
   bookingLink?: string;
+  analyticsViews?: number;
+  analyticsVisitors?: number;
+  analyticsSaves?: number;
+  analyticsActions?: number;
+  analyticsReviewAvg?: number;
+  analyticsReviewCount?: number;
+  analyticsTrend?: 'up' | 'stable' | 'down';
 }
 
 export type PlaceSortField = 'name' | 'lastUpdated' | 'status';
@@ -63,6 +70,7 @@ export class PlacesListService {
       imageBg: 'url(https://images.unsplash.com/photo-1554907984-15263bfd63bd?w=120&q=60) center/cover',
       category: 'Museum', lat: 44.0126, lng: 20.9131, address: 'Vuka Karadžića 1, 34000 Kragujevac',
       description: 'The National Museum of Kragujevac holds over 35,000 artefacts spanning prehistoric, Roman, medieval and modern Serbian history. The permanent collection includes the Zastava automobile archive and a significant numismatic collection.',
+      analyticsViews: 38400, analyticsVisitors: 27200, analyticsSaves: 6100, analyticsActions: 9300, analyticsReviewAvg: 4.5, analyticsReviewCount: 890, analyticsTrend: 'up',
     },
     {
       id: 'p2', name: 'Crkva Svetog Đorđa – Oplenac',
@@ -71,6 +79,7 @@ export class PlacesListService {
       imageBg: 'url(https://images.unsplash.com/photo-1529420705456-b94baeebe4b5?w=120&q=60) center/cover',
       category: 'Landmark', lat: 44.2561, lng: 20.6934, address: 'Oplenac bb, 34310 Topola',
       description: 'The Church of Saint George on Oplenac Hill was commissioned by King Petar I Karađorđević in 1912. Its white marble exterior and interior mosaics — composed of 40 million tesserae — reproduce frescoes from over 60 medieval Serbian monasteries, making it one of the finest examples of Byzantine revival architecture.',
+      analyticsViews: 62100, analyticsVisitors: 48900, analyticsSaves: 14200, analyticsActions: 18700, analyticsReviewAvg: 4.9, analyticsReviewCount: 2140, analyticsTrend: 'up',
     },
     {
       id: 'p3', name: 'Hotel Šumarice',
@@ -79,6 +88,7 @@ export class PlacesListService {
       imageBg: 'url(https://images.unsplash.com/photo-1566073771259-6a8506099945?w=120&q=60) center/cover',
       category: 'Accommodation', lat: 44.0189, lng: 20.8912, address: 'Marka Oreškovića 1, 34000 Kragujevac',
       description: 'Hotel Šumarice is a four-star property set within the memorial park forest, offering conference facilities, a spa, and direct access to the park\'s walking trails.',
+      analyticsViews: 21300, analyticsVisitors: 14800, analyticsSaves: 3900, analyticsActions: 6200, analyticsReviewAvg: 4.2, analyticsReviewCount: 540, analyticsTrend: 'stable',
     },
     {
       id: 'p4', name: 'Risovača Cave',
@@ -87,6 +97,7 @@ export class PlacesListService {
       imageBg: 'url(https://images.unsplash.com/photo-1504893524553-b855bce32c67?w=120&q=60) center/cover',
       category: 'Attraction', lat: 44.3056, lng: 20.5528, address: 'Risovača bb, 34300 Aranđelovac',
       description: 'Risovača Cave near Aranđelovac is one of the most significant archaeological sites in Serbia. Excavations revealed tools and animal bones from Paleolithic inhabitants, and the cave\'s illuminated galleries stretch for over 400 metres.',
+      analyticsViews: 44700, analyticsVisitors: 33500, analyticsSaves: 9800, analyticsActions: 13100, analyticsReviewAvg: 4.6, analyticsReviewCount: 1050, analyticsTrend: 'up',
     },
     {
       id: 'p5', name: 'Knjazevsko-Srpski Teatar',
@@ -95,6 +106,7 @@ export class PlacesListService {
       imageBg: 'url(https://images.unsplash.com/photo-1503095396549-807759245b35?w=120&q=60) center/cover',
       category: 'Culture', lat: 44.0106, lng: 20.9103, address: 'Danićeva 3, 34000 Kragujevac',
       description: 'The Principality of Serbia Theatre was founded in 1835 by Prince Miloš Obrenović, making it one of the oldest theatres in the Balkans. The current building preserves the neoclassical façade from the late 19th-century reconstruction.',
+      analyticsViews: 28900, analyticsVisitors: 19600, analyticsSaves: 5200, analyticsActions: 7800, analyticsReviewAvg: 4.4, analyticsReviewCount: 720, analyticsTrend: 'stable',
     },
     {
       id: 'p6', name: 'Zastava Museum',
@@ -103,6 +115,7 @@ export class PlacesListService {
       imageBg: 'linear-gradient(135deg,#ef4444 0%,#b91c1c 100%)',
       category: 'Museum', lat: 44.0238, lng: 20.9285, address: 'Trg Topolivca 4, 34000 Kragujevac',
       description: 'The Zastava Museum traces the evolution of Yugoslavia\'s most iconic car brand, from the 1955 Fiat licence agreement to the final production models. Exhibits include restored Zastava 750 (Fića) vehicles and original factory machinery.',
+      analyticsViews: 33100, analyticsVisitors: 24400, analyticsSaves: 7300, analyticsActions: 10200, analyticsReviewAvg: 4.3, analyticsReviewCount: 810, analyticsTrend: 'up',
     },
     {
       id: 'p7', name: 'Oplenac Winery',
@@ -111,6 +124,7 @@ export class PlacesListService {
       imageBg: 'url(https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=120&q=60) center/cover',
       category: 'Winery', lat: 44.2548, lng: 20.6912, address: 'Vinska 5, 34310 Topola',
       description: 'The Oplenac Royal Winery was established in 1903 on the royal estate of King Petar I. Today it produces certified PDO Oplenac wines from indigenous Smederevka and Tamjanika grape varieties across 100 hectares of certified vineyards.',
+      analyticsViews: 51800, analyticsVisitors: 39200, analyticsSaves: 11400, analyticsActions: 15600, analyticsReviewAvg: 4.8, analyticsReviewCount: 1680, analyticsTrend: 'up',
     },
     {
       id: 'p8', name: 'Sumadija Sajam',
@@ -119,6 +133,7 @@ export class PlacesListService {
       imageBg: 'linear-gradient(135deg,#0891b2 0%,#0e7490 100%)',
       category: 'Venue', lat: 44.0248, lng: 20.9305, address: 'Save Kovačevića bb, 34000 Kragujevac',
       description: 'Šumadija Sajam is the largest exposition and fairground in central Serbia, hosting the annual Agricultural Fair, technology expos, and large-scale concerts. The site covers 15 hectares with 12 pavilions.',
+      analyticsViews: 17600, analyticsVisitors: 11900, analyticsSaves: 2800, analyticsActions: 4500, analyticsReviewAvg: 3.9, analyticsReviewCount: 380, analyticsTrend: 'down',
     },
     {
       id: 'p9', name: 'Stadion Čika Dača',
@@ -127,6 +142,7 @@ export class PlacesListService {
       imageBg: 'linear-gradient(135deg,#15803d 0%,#166534 100%)',
       category: 'Sports', lat: 44.0212, lng: 20.8991, address: 'Kralja Milana 4, 34000 Kragujevac',
       description: 'Čika Dača Stadium has been the home ground of FK Radnički since 1923. With a capacity of 20,000, it is one of the largest football stadiums in Serbia outside Belgrade.',
+      analyticsViews: 25400, analyticsVisitors: 17800, analyticsSaves: 4100, analyticsActions: 6900, analyticsReviewAvg: 4.1, analyticsReviewCount: 620, analyticsTrend: 'stable',
     },
     {
       id: 'p10', name: 'Hala Jezero',
@@ -135,6 +151,7 @@ export class PlacesListService {
       imageBg: 'linear-gradient(135deg,#7c3aed 0%,#6d28d9 100%)',
       category: 'Venue', lat: 44.0139, lng: 20.9241, address: 'Grada Sirena 15, 34000 Kragujevac',
       description: 'Hala Jezero (Lake Arena) is a 5,000-seat multi-purpose hall used for basketball, volleyball, handball, and large indoor events. It hosts KK Radnički home games and regional cultural events.',
+      analyticsViews: 19800, analyticsVisitors: 13600, analyticsSaves: 3300, analyticsActions: 5400, analyticsReviewAvg: 4.0, analyticsReviewCount: 450, analyticsTrend: 'stable',
     },
     {
       id: 'p11', name: 'Vikend Kamp Gruža',
@@ -143,6 +160,7 @@ export class PlacesListService {
       imageBg: 'linear-gradient(135deg,#0ea5e9 0%,#0369a1 100%)',
       category: 'Accommodation', lat: 43.9558, lng: 20.6874, address: 'Obala Gruže bb, 34208 Knić',
       description: 'The Gruža Weekend Camp offers 40 bungalows, a campsite for tents and caravans, a boat rental service, and six fishing piers on the reservoir. Open from April to October.',
+      analyticsViews: 14200, analyticsVisitors: 9800, analyticsSaves: 2400, analyticsActions: 3800, analyticsReviewAvg: 4.2, analyticsReviewCount: 310, analyticsTrend: 'down',
     },
     {
       id: 'p12', name: 'Restoran Tri Šešira',
@@ -151,6 +169,7 @@ export class PlacesListService {
       imageBg: 'linear-gradient(135deg,#a16207 0%,#92400e 100%)',
       category: 'Restaurant', lat: 44.0115, lng: 20.9148, address: 'Kneza Mihaila 12, 34000 Kragujevac',
       description: 'Tri Šešira (Three Hats) has served traditional Šumadija cuisine for over 40 years. Signature dishes include pljeskavica, šopska salata, and slow-roasted lamb, paired with Oplenac wines from the restaurant\'s cellar.',
+      analyticsViews: 29500, analyticsVisitors: 21000, analyticsSaves: 5800, analyticsActions: 8700, analyticsReviewAvg: 4.6, analyticsReviewCount: 960, analyticsTrend: 'up',
     },
     {
       id: 'p13', name: 'Kalenić Monastery',
@@ -159,6 +178,7 @@ export class PlacesListService {
       imageBg: 'linear-gradient(135deg,#92400e 0%,#78350f 100%)',
       category: 'Landmark', lat: 43.8743, lng: 20.9156, address: 'Manastir Kalenić bb, 34220 Rekovac',
       description: 'Built around 1413 by the Serbian nobleman Bogdan and his wife Milica, Kalenić Monastery is renowned for its exquisite stone carvings on the church portal and narthex. The surviving frescoes, dating from the same period, are among the most refined examples of Byzantine-Slavic painting.',
+      analyticsViews: 36700, analyticsVisitors: 26400, analyticsSaves: 8100, analyticsActions: 11200, analyticsReviewAvg: 4.7, analyticsReviewCount: 1130, analyticsTrend: 'up',
     },
     {
       id: 'p14', name: 'Aranđelovac Marble Sculpture Park',
@@ -167,6 +187,7 @@ export class PlacesListService {
       imageBg: 'url(https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=120&q=60) center/cover',
       category: 'Attraction', lat: 44.3019, lng: 20.5604, address: 'Park Bukovička Banja, 34300 Aranđelovac',
       description: 'The Bukovička Banja park displays over 200 marble sculptures created by artists from more than 40 countries who participated in the Mermer i Zvuci (Marble and Sounds) symposium since 1963. The collection continues to grow with each annual festival.',
+      analyticsViews: 41200, analyticsVisitors: 30800, analyticsSaves: 9200, analyticsActions: 12400, analyticsReviewAvg: 4.5, analyticsReviewCount: 980, analyticsTrend: 'up',
     },
     {
       id: 'p15', name: 'Stragari Fortress Ruins',
@@ -175,6 +196,7 @@ export class PlacesListService {
       imageBg: 'linear-gradient(135deg,#fb923c 0%,#f97316 100%)',
       category: 'Archaeological Site', lat: 44.0534, lng: 20.7823, address: 'Stragari bb, 34000 Kragujevac',
       description: 'Stragari Fortress sits on a hilltop at 380 m and was one of the key defensive points of medieval Serbian rulers. Ongoing excavations since 2015 have uncovered Byzantine ceramics, a watch tower foundation, and a medieval church nave.',
+      analyticsViews: 8900, analyticsVisitors: 5600, analyticsSaves: 1200, analyticsActions: 2100, analyticsReviewAvg: 3.8, analyticsReviewCount: 190, analyticsTrend: 'down',
     },
   ];
 

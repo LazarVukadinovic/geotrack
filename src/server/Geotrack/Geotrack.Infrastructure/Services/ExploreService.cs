@@ -23,6 +23,9 @@ public class ExploreService : IExploreService
     private const int LocalCategoryMaxTake = 50;
     private const int ExploreSectionItemLimit = 6;
     private const int LandmarkCategoryPreviewLimit = 8;
+    private const int DynamicExploreSectionLimit = 6;
+    private const int DynamicSectionCandidateLimit = 250;
+    private const int DynamicSectionItemLimit = 6;
 
     private static readonly string[] FoodMusicTagSlugs =
     [
@@ -38,6 +41,12 @@ public class ExploreService : IExploreService
         "restaurant",
         "bar",
         "cafe"
+    ];
+
+    private static readonly string[] WhereToEatTagTypeSlugs =
+    [
+        "cuisine",
+        "dining-style"
     ];
 
     private static readonly string[] CultureHistoryTagSlugs =
@@ -182,93 +191,97 @@ public class ExploreService : IExploreService
             .Take(ExploreSectionItemLimit)
             .ToListAsync();
 
-        var nearbyNature = await _db.Places
-            .AsNoTracking()
-            .Where(p =>
-                p.Stay == null &&
-                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
-                (NatureTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
-                 p.PlaceTags.Any(pt => NatureTagSlugs.Contains(pt.Tag.Slug.ToLower()))))
-            .Select(p => new
-            {
-                p.Id,
-                p.Name,
-                DestinationId = p.Location.DestinationId,
-                PlaceTypeName = p.PlaceType.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
-                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
-                ReviewCount = p.PlaceReviews.Count(),
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
-            })
-            .OrderBy(p => p.DestinationId == resolvedDestination.Id ? 0 : 1)
-            .ThenBy(p => p.DistanceMeters)
-            .ThenByDescending(p => p.AverageRating ?? 0)
-            .Take(ExploreSectionItemLimit)
-            .ToListAsync();
+        var whereToEatSection = await BuildWhereToEatSectionAsync(
+            resolvedDestination.Id,
+            userPoint,
+            placeFavoriteIds);
 
-        var cultureHistory = await _db.Places
-            .AsNoTracking()
-            .Where(p =>
-                p.Stay == null &&
-                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
-                (CultureHistoryTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
-                 p.PlaceTags.Any(pt => CultureHistoryTagSlugs.Contains(pt.Tag.Slug.ToLower()))))
-            .Select(p => new
-            {
-                p.Id,
-                p.Name,
-                DestinationId = p.Location.DestinationId,
-                PlaceTypeName = p.PlaceType.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
-                ReviewCount = p.PlaceReviews.Count(),
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
-            })
-            .OrderBy(p => p.DestinationId == resolvedDestination.Id ? 0 : 1)
-            .ThenBy(p => p.DistanceMeters)
-            .ThenByDescending(p => p.ReviewCount)
-            .Take(ExploreSectionItemLimit)
-            .ToListAsync();
+        var dynamicSections = await BuildDynamicPlaceSectionsAsync(
+            resolvedDestination.Id,
+            userPoint,
+            curationSignals,
+            placeFavoriteIds);
 
-        var foodMusic = await _db.Places
-            .AsNoTracking()
-            .Where(p =>
-                p.Stay == null &&
-                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
-                (FoodMusicTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
-                 p.PlaceTags.Any(pt => FoodMusicTagSlugs.Contains(pt.Tag.Slug.ToLower()))))
-            .Select(p => new
-            {
-                p.Id,
-                p.Name,
-                DestinationId = p.Location.DestinationId,
-                p.Subtitle,
-                p.Description,
-                Category = p.PlaceType.Name,
-                LocationName = p.Location.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
-                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
-                ReviewCount = p.PlaceReviews.Count(),
-                p.OpeningHours,
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
-            })
-            .OrderBy(p => p.DestinationId == resolvedDestination.Id ? 0 : 1)
-            .ThenBy(p => p.DistanceMeters)
-            .ThenByDescending(p => p.AverageRating ?? 0)
-            .Take(ExploreSectionItemLimit)
-            .ToListAsync();
-
-        var duplicatePlaceIds = nearbyNature
-            .Select(p => p.Id)
-            .Concat(cultureHistory.Select(p => p.Id))
-            .Concat(foodMusic.Select(p => p.Id))
+        var duplicatePlaceIds = dynamicSections
+            .SelectMany(section => section.Items)
+            .Select(item => item.Id)
+            .Concat(whereToEatSection.Items.Select(item => item.Id))
             .ToHashSet();
+
         var curatedPlaces = await BuildCuratedPlacesAsync(
             resolvedDestination.Id,
             userPoint,
             curationSignals,
             duplicatePlaceIds);
 
-        var landmarkCategories = await BuildLandmarkCategoriesAsync(userPoint, resolvedDestination.Id);
+        var sections = new List<ExploreFeedSectionDto>();
+
+        var curatedSection = BuildCuratedForYouSection(curatedPlaces, placeFavoriteIds);
+        if (curatedSection.Items.Count > 0)
+        {
+            sections.Add(curatedSection);
+        }
+
+        var staysSection = new ExploreFeedSectionDto
+        {
+            Key = "top-stays",
+            Title = "Top Stays",
+            Subtitle = "Highly rated accommodation nearby",
+            Layout = "horizontal-cards",
+            CardType = "stay-card",
+            MoreRoute = "/hotels",
+            Priority = 20,
+            Items = topStays.Select(s => new ExploreFeedSectionItemDto
+            {
+                Id = s.Id,
+                EntityType = "stay",
+                DetailRoute = $"/stays/{s.Id}",
+                Title = DisplayTextSafety.CleanRequired(s.Name, "Stay"),
+                Image = s.Image,
+                Rating = s.AverageRating.HasValue ? Math.Round(s.AverageRating.Value, 1) : null,
+                ReviewCount = FormatReviewCountLabel(s.ReviewCount),
+                Distance = SpatialDistanceFormatter.Format(s.DistanceMeters),
+                PricePerNight = s.PricePerNight,
+                IsSaved = placeFavoriteIds.Contains(s.Id)
+            }).ToList()
+        };
+        if (staysSection.Items.Count > 0)
+        {
+            sections.Add(staysSection);
+        }
+
+        if (whereToEatSection.Items.Count > 0)
+        {
+            sections.Add(whereToEatSection);
+        }
+
+        var eventsSection = new ExploreFeedSectionDto
+        {
+            Key = "events",
+            Title = "Events",
+            Subtitle = "What's happening around town",
+            Layout = "horizontal-cards",
+            CardType = "event-card",
+            MoreRoute = "/events",
+            Priority = 40,
+            Items = events.Select(e => new ExploreFeedSectionItemDto
+            {
+                Id = e.Id,
+                EntityType = "event",
+                DetailRoute = $"/events/{e.Id}",
+                Title = DisplayTextSafety.CleanRequired(e.Name, "Event"),
+                Subtitle = DisplayTextSafety.CleanOptional(e.EventTypeName),
+                DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
+                Image = e.Image,
+                Distance = SpatialDistanceFormatter.Format(e.DistanceMeters)
+            }).ToList()
+        };
+        if (eventsSection.Items.Count > 0)
+        {
+            sections.Add(eventsSection);
+        }
+
+        sections.AddRange(dynamicSections);
 
         return new ExplorePageDto
         {
@@ -280,69 +293,11 @@ public class ExploreService : IExploreService
                 Latitude = resolvedDestination.Latitude,
                 Longitude = resolvedDestination.Longitude
             },
-            EventsThisWeek = events.Select(e => new ExploreEventDto
-            {
-                Id = e.Id,
-                Title = DisplayTextSafety.CleanRequired(e.Name, "Event"),
-                Subtitle = DisplayTextSafety.CleanOptional(e.EventTypeName),
-                DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
-                Image = e.Image
-            }).ToList(),
-            TopStays = topStays.Select(s => new ExploreStayDto
-            {
-                Id = s.Id,
-                Title = DisplayTextSafety.CleanRequired(s.Name, "Stay"),
-                Image = s.Image,
-                Rating = s.AverageRating.HasValue ? Math.Round(s.AverageRating.Value, 1) : null,
-                ReviewCount = FormatReviewCountLabel(s.ReviewCount),
-                Distance = SpatialDistanceFormatter.Format(s.DistanceMeters),
-                PricePerNight = s.PricePerNight ?? 0,
-                IsSaved = placeFavoriteIds.Contains(s.Id)
-            }).ToList(),
-            PopularNearby = nearbyNature.Select(p => new ExploreNearbyItemDto
-            {
-                Id = p.Id,
-                Title = DisplayTextSafety.CleanRequired(p.Name, "Nature spot"),
-                CategoryLabel = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
-                Image = p.Image,
-                Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
-                ReviewCount = FormatReviewCountLabel(p.ReviewCount),
-                Distance = SpatialDistanceFormatter.Format(p.DistanceMeters),
-                IsSaved = placeFavoriteIds.Contains(p.Id)
-            }).ToList(),
-            MustSeeAttractions = cultureHistory.Select(p => new ExploreAttractionDto
-            {
-                Id = p.Id,
-                Title = DisplayTextSafety.CleanRequired(p.Name, "Attraction"),
-                Type = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
-                Image = p.Image
-            }).ToList(),
-            LandmarkCategories = landmarkCategories,
-            CuratedForYou = curatedPlaces.Select(p => new ExploreCuratedItemDto
-            {
-                Id = p.Id,
-                Title = p.Title,
-                Subtitle = p.Reason,
-                CategoryLabel = p.CategoryLabel,
-                Image = p.Image,
-                IsSaved = placeFavoriteIds.Contains(p.Id)
-            }).ToList(),
-            LocalFavorites = foodMusic.Select(p => new ExploreLocalFavoriteDto
-            {
-                Id = p.Id,
-                Title = DisplayTextSafety.CleanRequired(p.Name, "Local place"),
-                Subtitle = DisplayTextSafety.CleanOptional(p.Subtitle),
-                Description = TrimDescription(p.Description, 100),
-                Category = DisplayTextSafety.CleanRequired(p.Category, "Local").ToLowerInvariant(),
-                Type = DisplayTextSafety.CleanRequired(p.Category, "Local"),
-                Location = DisplayTextSafety.CleanOptional(p.LocationName),
-                Image = p.Image,
-                Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
-                ReviewCount = FormatReviewCountLabel(p.ReviewCount),
-                IsSaved = placeFavoriteIds.Contains(p.Id),
-                OpeningHours = p.OpeningHours,
-                IsRecommended = true
-            }).ToList()
+            Sections = sections
+                .Where(section => section.Items.Count > 0)
+                .OrderBy(section => section.Priority)
+                .ThenBy(section => section.Title)
+                .ToList()
         };
     }
 
@@ -540,6 +495,400 @@ public class ExploreService : IExploreService
                 HasMore = hasMore
             }
         };
+    }
+
+
+    private static ExploreFeedSectionDto BuildCuratedForYouSection(
+        IReadOnlyCollection<RankedCuratedPlace> curatedPlaces,
+        ISet<int> placeFavoriteIds)
+    {
+        return new ExploreFeedSectionDto
+        {
+            Key = "curated-for-you",
+            Title = "Curated for You",
+            Subtitle = "Based on your interests and recent activity nearby",
+            Layout = "horizontal-cards",
+            CardType = "place-card",
+            MoreRoute = "/recommendations",
+            Priority = 10,
+            Items = curatedPlaces.Select(p => new ExploreFeedSectionItemDto
+            {
+                Id = p.Id,
+                EntityType = "place",
+                DetailRoute = $"/places/{p.Id}",
+                Title = p.Title,
+                Subtitle = p.Reason,
+                Description = TrimDescription(p.Description, 130),
+                CategoryLabel = p.CategoryLabel,
+                Image = p.Image,
+                Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
+                ReviewCount = FormatReviewCountLabel(p.ReviewCount),
+                Distance = SpatialDistanceFormatter.Format(p.DistanceMeters),
+                OpeningHours = p.OpeningHours,
+                IsSaved = placeFavoriteIds.Contains(p.Id),
+                Tags = p.MatchedTags.Select(tag => new ExploreFeedSectionTagDto
+                {
+                    TagId = tag.TagId,
+                    Name = tag.Name,
+                    Slug = ToCategoryKey(tag.Name)
+                }).ToList()
+            }).ToList()
+        };
+    }
+
+
+    private async Task<ExploreFeedSectionDto> BuildWhereToEatSectionAsync(
+        int destinationId,
+        Point userPoint,
+        ISet<int> placeFavoriteIds)
+    {
+        var items = await _db.Places
+            .AsNoTracking()
+            .Where(p =>
+                p.Stay == null &&
+                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
+                (
+                    FoodMusicTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
+                    p.PlaceTags.Any(pt =>
+                        pt.Tag.ForPlace &&
+                        (
+                            FoodMusicTagSlugs.Contains(pt.Tag.Slug) ||
+                            pt.Tag.TagType != null &&
+                            WhereToEatTagTypeSlugs.Contains(pt.Tag.TagType.Slug)
+                        ))
+                ))
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Subtitle,
+                p.Description,
+                PlaceTypeName = p.PlaceType.Name,
+                DestinationId = p.Location.DestinationId,
+                p.OpeningHours,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
+                ReviewCount = p.PlaceReviews.Count(),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
+                Tags = p.PlaceTags
+                    .Where(pt => pt.Tag.ForPlace)
+                    .Select(pt => new ExploreFeedSectionTagDto
+                    {
+                        TagId = pt.TagId,
+                        Name = pt.Tag.Name,
+                        Slug = pt.Tag.Slug
+                    })
+                    .ToList()
+            })
+            .OrderBy(p => p.DestinationId == destinationId ? 0 : 1)
+            .ThenBy(p => p.DistanceMeters)
+            .ThenByDescending(p => p.AverageRating ?? 0)
+            .ThenByDescending(p => p.ReviewCount)
+            .Take(ExploreSectionItemLimit)
+            .ToListAsync();
+
+        return new ExploreFeedSectionDto
+        {
+            Key = "where-to-eat",
+            Title = "Where to eat",
+            Subtitle = "Restaurants, cafes and local food nearby",
+            Layout = "horizontal-cards",
+            CardType = "place-card",
+            MoreRoute = "/food-and-music",
+            Priority = 30,
+            Items = items.Select(p => new ExploreFeedSectionItemDto
+            {
+                Id = p.Id,
+                EntityType = "place",
+                DetailRoute = $"/places/{p.Id}",
+                Title = DisplayTextSafety.CleanRequired(p.Name, "Place"),
+                Subtitle = DisplayTextSafety.CleanOptional(p.Subtitle),
+                Description = TrimDescription(p.Description, 130),
+                CategoryLabel = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
+                Image = p.Image,
+                Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
+                ReviewCount = FormatReviewCountLabel(p.ReviewCount),
+                Distance = SpatialDistanceFormatter.Format(p.DistanceMeters),
+                OpeningHours = p.OpeningHours,
+                IsSaved = placeFavoriteIds.Contains(p.Id),
+                Tags = p.Tags
+            }).ToList()
+        };
+    }
+
+    private async Task<List<ExploreFeedSectionDto>> BuildDynamicPlaceSectionsAsync(
+        int destinationId,
+        Point userPoint,
+        IReadOnlyCollection<CuratedInterestSignal> curationSignals,
+        ISet<int> placeFavoriteIds)
+    {
+        var signalByTagId = curationSignals
+            .GroupBy(signal => signal.TagId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(signal => signal.Weight).First());
+
+        var candidates = await _db.Places
+            .AsNoTracking()
+            .Where(p =>
+                p.Stay == null &&
+                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
+                p.PlaceTags.Any(pt =>
+                    pt.Tag.ForPlace &&
+                    pt.Tag.CanGenerateExploreSection))
+            .Select(p => new DynamicSectionCandidate
+            {
+                Id = p.Id,
+                Title = p.Name,
+                Subtitle = p.Subtitle,
+                Description = p.Description,
+                Location = p.Location.Name,
+                DestinationId = p.Location.DestinationId,
+                PlaceTypeId = p.PlaceTypeId,
+                PlaceTypeName = p.PlaceType.Name,
+                OpeningHours = p.OpeningHours,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
+                ReviewCount = p.PlaceReviews.Count(),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
+                MatchedTags = p.PlaceTags
+                    .Where(pt => pt.Tag.ForPlace)
+                    .Select(pt => new DynamicSectionTagMatch
+                    {
+                        TagId = pt.TagId,
+                        Name = pt.Tag.Name,
+                        Slug = pt.Tag.Slug,
+                        TagTypeId = pt.Tag.TagTypeId,
+                        TagTypeName = pt.Tag.TagType != null ? pt.Tag.TagType.Name : null,
+                        TagTypeSlug = pt.Tag.TagType != null ? pt.Tag.TagType.Slug : null,
+                        CanGenerateExploreSection = pt.Tag.CanGenerateExploreSection
+                    })
+                    .ToList()
+            })
+            .OrderBy(p => p.DestinationId == destinationId ? 0 : 1)
+            .ThenBy(p => p.DistanceMeters)
+            .ThenByDescending(p => p.AverageRating ?? 0)
+            .ThenByDescending(p => p.ReviewCount)
+            .Take(DynamicSectionCandidateLimit)
+            .ToListAsync();
+
+        var sectionAccumulators = new Dictionary<string, DynamicSectionAccumulator>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in candidates)
+        {
+            var identities = BuildSectionIdentities(candidate);
+
+            foreach (var identity in identities)
+            {
+                if (!sectionAccumulators.TryGetValue(identity.Key, out var section))
+                {
+                    section = new DynamicSectionAccumulator
+                    {
+                        TagTypeId = identity.TagTypeId,
+                        Key = identity.Key,
+                        Title = identity.Title
+                    };
+                    sectionAccumulators[identity.Key] = section;
+                }
+
+                var relevantTags = candidate.MatchedTags
+                    .Where(tag => MatchesSectionIdentity(tag, identity))
+                    .ToList();
+
+                if (relevantTags.Count == 0)
+                {
+                    relevantTags = candidate.MatchedTags;
+                }
+
+                var itemScore = ScoreDynamicSectionItem(
+                    candidate,
+                    relevantTags,
+                    signalByTagId,
+                    destinationId);
+
+                section.Score += itemScore;
+
+                if (!section.Items.Any(item => item.Id == candidate.Id))
+                {
+                    section.Items.Add(new ScoredDynamicSectionItem
+                    {
+                        Score = itemScore,
+                        Id = candidate.Id,
+                        EntityType = "place",
+                        DetailRoute = $"/places/{candidate.Id}",
+                        Title = DisplayTextSafety.CleanRequired(candidate.Title, "Place"),
+                        Subtitle = DisplayTextSafety.CleanOptional(candidate.Subtitle),
+                        Description = TrimDescription(candidate.Description, 130),
+                        CategoryLabel = DisplayTextSafety.CleanLabelOrHumanizedKey(
+                            relevantTags.FirstOrDefault()?.Name,
+                            candidate.PlaceTypeName,
+                            "Place"),
+                        Image = candidate.Image,
+                        Rating = candidate.AverageRating.HasValue ? Math.Round(candidate.AverageRating.Value, 1) : null,
+                        ReviewCount = FormatReviewCountLabel(candidate.ReviewCount),
+                        Distance = SpatialDistanceFormatter.Format(candidate.DistanceMeters),
+                        OpeningHours = candidate.OpeningHours,
+                        IsSaved = placeFavoriteIds.Contains(candidate.Id),
+                        DistanceMeters = candidate.DistanceMeters,
+                        ReviewCountRaw = candidate.ReviewCount,
+                        Tags = relevantTags
+                            .Select(tag => new ExploreFeedSectionTagDto
+                            {
+                                TagId = tag.TagId,
+                                Name = DisplayTextSafety.CleanRequired(tag.Name, "Tag"),
+                                Slug = tag.Slug
+                            })
+                            .DistinctBy(tag => tag.TagId)
+                            .ToList()
+                    });
+                }
+            }
+        }
+
+        return sectionAccumulators.Values
+            .Where(section => section.Items.Count > 0)
+            .OrderByDescending(section => section.Score)
+            .ThenByDescending(section => section.Items.Count)
+            .ThenBy(section => section.Title)
+            .Take(DynamicExploreSectionLimit)
+            .Select((section, index) => new ExploreFeedSectionDto
+            {
+                TagTypeId = section.TagTypeId,
+                Key = section.Key,
+                Title = DisplayTextSafety.CleanRequired(section.Title, "Explore"),
+                Subtitle = BuildDynamicSectionSubtitle(section),
+                Layout = "horizontal-cards",
+                CardType = "place-card",
+                Priority = 100 + index,
+                Items = section.Items
+                    .OrderByDescending(item => item.Score)
+                    .ThenBy(item => item.DistanceMeters)
+                    .ThenByDescending(item => item.Rating ?? 0)
+                    .ThenByDescending(item => item.ReviewCountRaw)
+                    .ThenBy(item => item.Title)
+                    .Take(DynamicSectionItemLimit)
+                    .Select(item => new ExploreFeedSectionItemDto
+                    {
+                        Id = item.Id,
+                        EntityType = item.EntityType,
+                        DetailRoute = item.DetailRoute,
+                        Title = item.Title,
+                        Subtitle = item.Subtitle,
+                        Description = item.Description,
+                        CategoryLabel = null,
+                        Image = item.Image,
+                        Rating = item.Rating,
+                        ReviewCount = item.ReviewCount,
+                        Distance = item.Distance,
+                        OpeningHours = item.OpeningHours,
+                        IsSaved = item.IsSaved,
+                        Tags = item.Tags
+                    })
+                    .ToList()
+            })
+            .ToList();
+    }
+
+    private static List<DynamicSectionIdentity> BuildSectionIdentities(DynamicSectionCandidate candidate)
+    {
+        return candidate.MatchedTags
+            .Where(IsDynamicExploreSectionTag)
+            .Select(tag =>
+            {
+                var title = DisplayTextSafety.CleanRequired(tag.Name, "Explore");
+                var key = ToCategoryKey(!string.IsNullOrWhiteSpace(tag.Slug) ? tag.Slug : title);
+
+                return new DynamicSectionIdentity
+                {
+                    TagId = tag.TagId,
+                    TagTypeId = tag.TagTypeId,
+                    Key = key,
+                    Title = title
+                };
+            })
+            .Where(identity => !string.IsNullOrWhiteSpace(identity.Key))
+            .DistinctBy(identity => identity.Key)
+            .ToList();
+    }
+
+    private static bool IsDynamicExploreSectionTag(DynamicSectionTagMatch tag)
+    {
+        return tag.CanGenerateExploreSection &&
+               (!string.IsNullOrWhiteSpace(tag.Name) || !string.IsNullOrWhiteSpace(tag.Slug));
+    }
+
+    private static bool MatchesSectionIdentity(DynamicSectionTagMatch tag, DynamicSectionIdentity identity)
+    {
+        return tag.TagId == identity.TagId;
+    }
+
+    private static double ScoreDynamicSectionItem(
+        DynamicSectionCandidate candidate,
+        IReadOnlyCollection<DynamicSectionTagMatch> matchedTags,
+        IReadOnlyDictionary<int, CuratedInterestSignal> signalByTagId,
+        int currentDestinationId)
+    {
+        var score = 0.0;
+
+        if (candidate.DestinationId == currentDestinationId)
+        {
+            score += 40;
+        }
+
+        foreach (var tag in matchedTags)
+        {
+            if (signalByTagId.TryGetValue(tag.TagId, out var signal))
+            {
+                score += signal.Weight;
+            }
+        }
+
+        if (candidate.AverageRating.HasValue)
+        {
+            score += Math.Clamp(candidate.AverageRating.Value, 0, 5) * 5;
+        }
+
+        score += Math.Min(candidate.ReviewCount, 50) * 0.35;
+
+        if (candidate.DistanceMeters < 2_000)
+        {
+            score += 18;
+        }
+        else if (candidate.DistanceMeters < 10_000)
+        {
+            score += 10;
+        }
+        else if (candidate.DistanceMeters < 30_000)
+        {
+            score += 4;
+        }
+
+        return score;
+    }
+
+    private static string? BuildDynamicSectionSubtitle(DynamicSectionAccumulator section)
+    {
+        var count = section.Items.Count;
+        if (count == 0)
+        {
+            return null;
+        }
+
+        return count == 1
+            ? "1 matching place nearby"
+            : $"{count} matching places nearby";
     }
 
     private async Task<List<ExploreLandmarkCategoryDto>> BuildLandmarkCategoriesAsync(Point userPoint, int destinationId)
@@ -954,6 +1303,75 @@ public class ExploreService : IExploreService
         return trimmed.Length > maxLength
             ? trimmed[..maxLength] + "..."
             : trimmed;
+    }
+
+
+    private sealed class DynamicSectionCandidate
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Subtitle { get; set; }
+        public string? Description { get; set; }
+        public string? Location { get; set; }
+        public string? Image { get; set; }
+        public int DestinationId { get; set; }
+        public int PlaceTypeId { get; set; }
+        public string PlaceTypeName { get; set; } = string.Empty;
+        public string? OpeningHours { get; set; }
+        public double DistanceMeters { get; set; }
+        public double? AverageRating { get; set; }
+        public int ReviewCount { get; set; }
+        public List<DynamicSectionTagMatch> MatchedTags { get; set; } = new();
+    }
+
+    private sealed class DynamicSectionTagMatch
+    {
+        public int TagId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Slug { get; set; } = string.Empty;
+        public int? TagTypeId { get; set; }
+        public string? TagTypeName { get; set; }
+        public string? TagTypeSlug { get; set; }
+        public bool CanGenerateExploreSection { get; set; }
+    }
+
+    private sealed class DynamicSectionIdentity
+    {
+        public int TagId { get; set; }
+        public int? TagTypeId { get; set; }
+        public string Key { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+    }
+
+    private sealed class DynamicSectionAccumulator
+    {
+        public int? TagTypeId { get; set; }
+        public string Key { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public double Score { get; set; }
+        public List<ScoredDynamicSectionItem> Items { get; set; } = new();
+    }
+
+    private sealed class ScoredDynamicSectionItem
+    {
+        public double Score { get; set; }
+        public double DistanceMeters { get; set; }
+        public int ReviewCountRaw { get; set; }
+
+        public int Id { get; set; }
+        public string EntityType { get; set; } = "place";
+        public string DetailRoute { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string? Subtitle { get; set; }
+        public string? Description { get; set; }
+        public string? CategoryLabel { get; set; }
+        public string? Image { get; set; }
+        public double? Rating { get; set; }
+        public string? ReviewCount { get; set; }
+        public string? Distance { get; set; }
+        public string? OpeningHours { get; set; }
+        public bool IsSaved { get; set; }
+        public List<ExploreFeedSectionTagDto> Tags { get; set; } = new();
     }
 
     private sealed class ResolvedDestinationCandidate

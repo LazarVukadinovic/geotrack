@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, of, BehaviorSubject } from 'rxjs';
-import { delay, tap } from 'rxjs/operators';
+import { tap } from 'rxjs/operators';
 import { PlatformUser, PlatformUserRole, PlatformUserStatus } from '../../models/platform-user.model';
 
 export interface UsersPage {
@@ -8,9 +8,14 @@ export interface UsersPage {
   total: number;
 }
 
+export type UserSortField = 'role' | 'status' | 'name';
+export type UserSortDir  = 'asc'  | 'desc';
+
 export interface UsersPageRequest {
-  pageSize: number;
-  search: string;
+  pageSize:   number;
+  search:     string;
+  sortField?: UserSortField;
+  sortDir?:   UserSortDir;
 }
 
 const MOCK_USERS: PlatformUser[] = [
@@ -148,12 +153,29 @@ export class UsersService {
       );
     }
 
-    const total = filtered.length;
-    const items = filtered.slice(0, req.pageSize);
+    if (req.sortField === 'name') {
+      filtered.sort((a, b) => {
+        const an = `${a.firstName} ${a.lastName}`;
+        const bn = `${b.firstName} ${b.lastName}`;
+        return req.sortDir === 'asc' ? an.localeCompare(bn) : bn.localeCompare(an);
+      });
+    } else if (req.sortField === 'role') {
+      const ord = (r: string) => r === 'Viewer' ? 0 : 1;
+      filtered.sort((a, b) => req.sortDir === 'asc'
+        ? ord(a.role) - ord(b.role)
+        : ord(b.role) - ord(a.role));
+    } else if (req.sortField === 'status') {
+      const ord = (s: string) => s === 'Active' ? 0 : 1;
+      filtered.sort((a, b) => req.sortDir === 'asc'
+        ? ord(a.status) - ord(b.status)
+        : ord(b.status) - ord(a.status));
+    }
+
+    const total  = filtered.length;
+    const items  = filtered.slice(0, req.pageSize);
     const result = { items, total };
 
     return of(result).pipe(
-      delay(300),
       tap(page => this.lastPage$.next(page)),
     );
   }
@@ -164,9 +186,9 @@ export class UsersService {
 
   updateUser$(id: string, patch: Partial<PlatformUser>): Observable<PlatformUser | null> {
     const idx = MOCK_USERS.findIndex(u => u.id === id);
-    if (idx === -1) return of(null).pipe(delay(300));
+    if (idx === -1) return of(null);
     Object.assign(MOCK_USERS[idx], patch);
-    return of({ ...MOCK_USERS[idx] }).pipe(delay(300));
+    return of({ ...MOCK_USERS[idx] });
   }
 
   promoteToManager$(id: string): Observable<PlatformUser | null> {
@@ -174,23 +196,23 @@ export class UsersService {
   }
 
   removeManagerRole$(id: string): Observable<PlatformUser | null> {
-    return this.updateUser$(id, { role: 'Viewer', status: 'Inactive' });
+    return this.updateUser$(id, { role: 'Viewer', status: 'Inactive', assignedRegions: [] });
   }
 
   addRegion$(id: string, region: string): Observable<PlatformUser | null> {
     const user = MOCK_USERS.find(u => u.id === id);
-    if (!user) return of(null).pipe(delay(300));
+    if (!user) return of(null);
     if (!user.assignedRegions.includes(region)) {
       user.assignedRegions = [...user.assignedRegions, region];
     }
-    return of({ ...user }).pipe(delay(300));
+    return of({ ...user });
   }
 
   removeRegion$(id: string, region: string): Observable<PlatformUser | null> {
     const user = MOCK_USERS.find(u => u.id === id);
-    if (!user) return of(null).pipe(delay(300));
+    if (!user) return of(null);
     user.assignedRegions = user.assignedRegions.filter(r => r !== region);
-    return of({ ...user }).pipe(delay(300));
+    return of({ ...user });
   }
 
   createUser$(data: Omit<PlatformUser, 'id' | 'avatarInitials' | 'avatarColor' | 'lastLogin' | 'createdAt'>): Observable<PlatformUser> {
@@ -205,7 +227,7 @@ export class UsersService {
       createdAt: new Date().toISOString().split('T')[0],
     };
     MOCK_USERS.push(newUser);
-    return of(newUser).pipe(delay(400));
+    return of(newUser);
   }
 
   formatLastLogin(iso: string): string {

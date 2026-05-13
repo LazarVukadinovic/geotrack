@@ -100,7 +100,9 @@ public class AgentCatalogGroundingTests
         var stayResponse = await orchestrator.ChatAsync(ChatRequest("all hotels in Dubrovnik"), userId: 1);
         var eventResponse = await orchestrator.ChatAsync(ChatRequest("events in Dubrovnik"), userId: 1);
 
-        var placeCard = Assert.Single(placeResponse.Cards, card => card.EntityType == "place");
+        var placeCard = placeResponse.Cards.FirstOrDefault(card =>
+            card.EntityType == "place" &&
+            !string.IsNullOrWhiteSpace(card.ImageUrl));
         var stayCard = stayResponse.Cards.FirstOrDefault(card =>
             card.EntityType == "stay" &&
             !string.IsNullOrWhiteSpace(card.ImageUrl));
@@ -108,10 +110,11 @@ public class AgentCatalogGroundingTests
             card.EntityType == "event" &&
             !string.IsNullOrWhiteSpace(card.ImageUrl));
 
+        Assert.NotNull(placeCard);
         Assert.NotNull(stayCard);
         Assert.NotNull(eventCard);
 
-        var placeDetail = await client.GetFromJsonAsync<PlaceDetailDto>($"/api/places/{placeCard.Id}");
+        var placeDetail = await client.GetFromJsonAsync<PlaceDetailDto>($"/api/places/{placeCard!.Id}");
         var stayDetail = await client.GetFromJsonAsync<HotelDetailDto>($"/api/places/hotels/{stayCard!.Id}");
         var eventDetail = await client.GetFromJsonAsync<EventDetailDto>($"/api/events/{eventCard!.Id}");
 

@@ -144,14 +144,9 @@ const DETAIL_OVERRIDES: Record<string, Partial<RegionDetail>> = {
       'Šumadija is a geographical region in the central part of Serbia. The area is heavily forested, hence its name. It is known for its rich history, rolling hills, and agricultural output.',
     team: [
       {
-        id: 'u1', name: 'Jovan Đorđević', email: 'jovan.d@example.com',
-        initials: 'JD', avatarColor: '#3b82f6',
-        role: 'Regional Admin', status: 'Active', assignedDate: '12 Jan 2024',
-      },
-      {
-        id: 'u2', name: 'Milica Petrović', email: 'milica.p@example.com',
-        initials: 'MP', avatarColor: '#8b5cf6',
-        role: 'Regional Admin', status: 'Active', assignedDate: '04 Feb 2024',
+        id: 'USR-001', name: 'Sarah Jenkins', email: 'sarah.j@geotrack.com',
+        initials: 'SJ', avatarColor: '#3b82f6',
+        role: 'Regional Manager', status: 'Active', assignedDate: '01 Sep 2023',
       },
     ],
     createdBy: 'System Admin',
@@ -166,14 +161,19 @@ const DETAIL_OVERRIDES: Record<string, Partial<RegionDetail>> = {
   'REG-002': {
     fullName: 'Banat, Srbija',
     internalRefId: 'REG-SRB-002',
-    shortSummary: 'Desert ecosystems, canyons, and arid plateaus.',
+    shortSummary: 'Geographical and historical region in northeastern Serbia.',
     fullDescription:
       'Banat is a geographical and historical region in Central Europe. The Serbian part of Banat is located in the northeastern part of Serbia, comprising flat fertile plains along the Tisa and Danube rivers.',
     team: [
       {
-        id: 'u3', name: 'Stefan Nikolić', email: 'stefan.n@example.com',
-        initials: 'SN', avatarColor: '#10b981',
-        role: 'Regional Admin', status: 'Active', assignedDate: '01 Mar 2024',
+        id: 'USR-013', name: 'Bojana Lazić', email: 'b.lazic@geotrack.com',
+        initials: 'BL', avatarColor: '#f43f5e',
+        role: 'Regional Manager', status: 'Active', assignedDate: '01 Oct 2023',
+      },
+      {
+        id: 'USR-002', name: 'Michael Roberts', email: 'm.roberts@geotrack.com',
+        initials: 'MR', avatarColor: '#8b5cf6',
+        role: 'Viewer', status: 'Active', assignedDate: '15 Oct 2023',
       },
     ],
     createdBy: 'System Admin',
@@ -193,14 +193,9 @@ const DETAIL_OVERRIDES: Record<string, Partial<RegionDetail>> = {
       'Pomoravlje is a district in central Serbia. It takes its name from the Great Morava river. The area is known for its rich cultural heritage, including medieval monasteries and fortresses.',
     team: [
       {
-        id: 'u4', name: 'Ana Jovanović', email: 'ana.j@example.com',
-        initials: 'AJ', avatarColor: '#f59e0b',
-        role: 'Regional Admin', status: 'Active', assignedDate: '20 Jan 2024',
-      },
-      {
-        id: 'u5', name: 'Marko Stanković', email: 'marko.s@example.com',
-        initials: 'MS', avatarColor: '#ef4444',
-        role: 'Regional Editor', status: 'Active', assignedDate: '10 Feb 2024',
+        id: 'USR-004', name: 'Nikola Petrović', email: 'n.petrovic@geotrack.com',
+        initials: 'NP', avatarColor: '#f59e0b',
+        role: 'Regional Manager', status: 'Active', assignedDate: '12 Aug 2023',
       },
     ],
     createdBy: 'System Admin',
@@ -211,6 +206,175 @@ const DETAIL_OVERRIDES: Record<string, Partial<RegionDetail>> = {
     processingLabel: 'Fast Processing',
     pendingRequests: 7,
     avgProcessingTime: 1.8,
+  },
+  'REG-004': {
+    fullName: 'Raška, Srbija',
+    internalRefId: 'REG-SRB-004',
+    shortSummary: 'Wetlands, coastal shores, and southern marine sanctuaries.',
+    fullDescription:
+      'Raška is a district in southwestern Serbia. The region is known for its medieval monasteries, including Studenica and Žiča, as well as its natural beauty and rural landscapes.',
+    team: [
+      {
+        id: 'USR-005', name: 'Ana Kovačević', email: 'a.kovacevic@geotrack.com',
+        initials: 'AK', avatarColor: '#ef4444',
+        role: 'Regional Manager', status: 'Active', assignedDate: '30 Jul 2023',
+      },
+      {
+        id: 'USR-015', name: 'Luka Popović', email: 'l.popovic@geotrack.com',
+        initials: 'LP', avatarColor: '#22c55e',
+        role: 'Viewer', status: 'Active', assignedDate: '28 Feb 2024',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: '10 Oct 2023',
+    lastUpdated: '10 Jan 2024',
+    activityScore: 81,
+    activityLabel: 'Active',
+    processingLabel: 'Normal',
+    pendingRequests: 5,
+    avgProcessingTime: 2.8,
+  },
+  'REG-005': {
+    fullName: 'Bačka, Srbija',
+    internalRefId: 'REG-SRB-005',
+    shortSummary: 'Extensive agricultural regions, prairies, and major river systems.',
+    fullDescription:
+      'Bačka is a geographical region divided between Serbia and Hungary. The Serbian part lies within Vojvodina and is characterized by flat, fertile plains along the Danube and Tisa rivers.',
+    team: [
+      {
+        id: 'USR-013', name: 'Bojana Lazić', email: 'b.lazic@geotrack.com',
+        initials: 'BL', avatarColor: '#f43f5e',
+        role: 'Regional Manager', status: 'Active', assignedDate: '01 Oct 2023',
+      },
+      {
+        id: 'USR-003', name: 'Emily Chen', email: 'echen@geotrack.com',
+        initials: 'EC', avatarColor: '#10b981',
+        role: 'Viewer', status: 'Inactive', assignedDate: '20 Nov 2023',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: '01 Nov 2023',
+    lastUpdated: '05 Mar 2024',
+    activityScore: 74,
+    activityLabel: 'Active',
+    processingLabel: 'Normal',
+    pendingRequests: 3,
+    avgProcessingTime: 3.5,
+  },
+  'REG-006': {
+    fullName: 'Mačva, Srbija',
+    internalRefId: 'REG-SRB-006',
+    shortSummary: 'Ancient mountain ranges, dense eastern forests, and trails.',
+    fullDescription:
+      'Mačva is a region in western Serbia, bordered by the Sava and Drina rivers. It is known for fertile agricultural land and the historic town of Šabac.',
+    team: [
+      {
+        id: 'USR-009', name: 'Dragana Nikolić', email: 'd.nikolic@geotrack.com',
+        initials: 'DN', avatarColor: '#ec4899',
+        role: 'Regional Manager', status: 'Active', assignedDate: '10 Dec 2023',
+      },
+      {
+        id: 'USR-003', name: 'Emily Chen', email: 'echen@geotrack.com',
+        initials: 'EC', avatarColor: '#10b981',
+        role: 'Viewer', status: 'Inactive', assignedDate: '20 Nov 2023',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: '15 Nov 2023',
+    lastUpdated: '01 Apr 2024',
+    activityScore: 68,
+    activityLabel: 'Active',
+    processingLabel: 'Normal',
+    pendingRequests: 2,
+    avgProcessingTime: 3.2,
+  },
+  'REG-007': {
+    fullName: 'Podunavlje, Srbija',
+    internalRefId: 'REG-SRB-007',
+    shortSummary: 'River valleys with medieval fortresses and scenic gorges.',
+    fullDescription:
+      'Podunavlje is a district in central Serbia along the Danube river. The region features scenic river landscapes, medieval fortresses, and the famous Đerdap gorge.',
+    team: [
+      {
+        id: 'USR-006', name: 'Stefan Đorđević', email: 's.djordjevic@geotrack.com',
+        initials: 'SĐ', avatarColor: '#06b6d4',
+        role: 'Regional Manager', status: 'Active', assignedDate: '18 Jun 2023',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: '20 Oct 2023',
+    lastUpdated: '15 Feb 2024',
+    activityScore: 55,
+    activityLabel: 'Moderate',
+    processingLabel: 'Normal',
+    pendingRequests: 1,
+    avgProcessingTime: 4.0,
+  },
+  'REG-008': {
+    fullName: 'Timočka Krajina, Srbija',
+    internalRefId: 'REG-SRB-008',
+    shortSummary: 'Remote wilderness with rich mining heritage and cave systems.',
+    fullDescription:
+      'Timočka Krajina is a region in eastern Serbia along the Timok river. Known for its wild landscapes, rich mining history, and the spectacular Rajac and Zlot cave systems.',
+    team: [
+      {
+        id: 'USR-010', name: 'Ivan Vasić', email: 'i.vasic@geotrack.com',
+        initials: 'IV', avatarColor: '#14b8a6',
+        role: 'Viewer', status: 'Active', assignedDate: '20 Mar 2024',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: '01 Dec 2023',
+    lastUpdated: '25 Mar 2024',
+    activityScore: 42,
+    activityLabel: 'Low Activity',
+    processingLabel: 'Slow',
+    pendingRequests: 0,
+    avgProcessingTime: 5.5,
+  },
+  'REG-009': {
+    fullName: 'Zlatiborski okrug, Srbija',
+    internalRefId: 'REG-SRB-009',
+    shortSummary: 'Alpine meadows, ski resorts, and traditional ethno-villages.',
+    fullDescription:
+      'Zlatibor district is located in southwestern Serbia and includes the famous Zlatibor mountain resort, Tara National Park, and traditional ethno-villages that attract tourists year-round.',
+    team: [
+      {
+        id: 'USR-009', name: 'Dragana Nikolić', email: 'd.nikolic@geotrack.com',
+        initials: 'DN', avatarColor: '#ec4899',
+        role: 'Regional Manager', status: 'Active', assignedDate: '10 Dec 2023',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: '08 Nov 2023',
+    lastUpdated: '12 Mar 2024',
+    activityScore: 76,
+    activityLabel: 'Active',
+    processingLabel: 'Normal',
+    pendingRequests: 4,
+    avgProcessingTime: 2.9,
+  },
+  'REG-010': {
+    fullName: 'Nišavski okrug, Srbija',
+    internalRefId: 'REG-SRB-010',
+    shortSummary: 'Urban cultural hub with ancient Roman sites and fortress.',
+    fullDescription:
+      'Nišava district is centered around Niš, the third-largest city in Serbia. The region is rich in Roman history, featuring the famous Niš Fortress, Skull Tower, and the birthplace of Constantine the Great.',
+    team: [
+      {
+        id: 'USR-012', name: 'Petar Jovanović', email: 'p.jovanovic@geotrack.com',
+        initials: 'PJ', avatarColor: '#0ea5e9',
+        role: 'Viewer', status: 'Inactive', assignedDate: '15 Jan 2024',
+      },
+    ],
+    createdBy: 'System Admin',
+    createdDate: '10 Dec 2023',
+    lastUpdated: '20 Jan 2024',
+    activityScore: 38,
+    activityLabel: 'Low Activity',
+    processingLabel: 'Slow',
+    pendingRequests: 0,
+    avgProcessingTime: 6.0,
   },
 };
 
@@ -292,4 +456,9 @@ export class RegionsService {
     DETAIL_OVERRIDES[id] = { ...(DETAIL_OVERRIDES[id] ?? {}), team };
     return of(undefined).pipe(delay(300));
   }
+
+  private _listState: { searchQuery: string; sortField: string; sortDir: string; displayCount: number; scrollTop: number } | null = null;
+  saveListState(s: { searchQuery: string; sortField: string; sortDir: string; displayCount: number; scrollTop: number }): void { this._listState = s; }
+  getListState() { return this._listState; }
+  clearListState(): void { this._listState = null; }
 }

@@ -446,7 +446,7 @@ public sealed class AuthFavoritesCollectionsTests
         var onboardingTags = await client.GetFromJsonAsync<List<TagDto>>("/api/tags?forUser=true");
         Assert.NotNull(onboardingTags);
         Assert.NotEmpty(onboardingTags);
-        Assert.Contains(onboardingTags, tag => tag.Slug == "food-drink");
+        Assert.Contains(onboardingTags, tag => tag.Slug == "seafood");
         Assert.DoesNotContain(onboardingTags, tag => tag.Slug == "budget");
 
         var updateInterestsResponse = await client.PutAsJsonAsync(

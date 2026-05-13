@@ -42,6 +42,8 @@ namespace Geotrack.Infrastructure.Repositories
             return await _context.Users
                 .Include(u => u.UserTags)
                     .ThenInclude(ut => ut.Tag)
+                        .ThenInclude(tag => tag.TagType)
+                            .ThenInclude(tagType => tagType!.PlaceTypes)
                 .FirstOrDefaultAsync(u => u.Id == userId);
         }
 
@@ -50,6 +52,8 @@ namespace Geotrack.Infrastructure.Repositories
             return await _context.Users
                 .Include(u => u.UserTags)
                     .ThenInclude(ut => ut.Tag)
+                        .ThenInclude(tag => tag.TagType)
+                            .ThenInclude(tagType => tagType!.PlaceTypes)
                 .Include(u => u.Collections)
                     .ThenInclude(c => c.CollectionItems)
                 .FirstOrDefaultAsync(u => u.Id == userId);
@@ -121,7 +125,10 @@ namespace Geotrack.Infrastructure.Repositories
             var ids = tagIds.Distinct().ToList();
 
             return await _context.Tags
-                .Where(t => ids.Contains(t.Id))
+                .AsNoTracking()
+                .Include(tag => tag.TagType)
+                    .ThenInclude(tagType => tagType!.PlaceTypes)
+                .Where(tag => ids.Contains(tag.Id))
                 .ToListAsync();
         }
 
@@ -221,6 +228,8 @@ namespace Geotrack.Infrastructure.Repositories
 
             return await _context.UserInterestSignals
                 .Include(signal => signal.Tag)
+                    .ThenInclude(tag => tag.TagType)
+                        .ThenInclude(tagType => tagType!.PlaceTypes)
                 .Where(signal =>
                     signal.UserId == userId &&
                     signal.Source == "inferred" &&
@@ -236,6 +245,8 @@ namespace Geotrack.Infrastructure.Repositories
         {
             return await _context.UserInterestSignals
                 .Include(signal => signal.Tag)
+                    .ThenInclude(tag => tag.TagType)
+                        .ThenInclude(tagType => tagType!.PlaceTypes)
                 .FirstOrDefaultAsync(signal =>
                     signal.UserId == userId &&
                     signal.TagId == tagId &&
@@ -260,7 +271,11 @@ namespace Geotrack.Infrastructure.Repositories
 
         public async Task<User?> GetByIdWithRegionsAsync(int userId)
         {
-            return await _context.Users.Include(u => u.RegionalManager).ThenInclude(ro => ro.RegionalManagerRegions).ThenInclude(ror => ror.Region).FirstOrDefaultAsync(u => u.Id == userId);
+            return await _context.Users
+                .Include(u => u.RegionalManager!)
+                .ThenInclude(rm => rm.RegionalManagerRegions)
+                .ThenInclude(ror => ror.Region)
+                .FirstOrDefaultAsync(u => u.Id == userId);
         }
 
         public async Task<User?> GetByIdWithRolesAndRegionsAsync(int userId)
@@ -268,8 +283,8 @@ namespace Geotrack.Infrastructure.Repositories
             return await _context.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
-                .Include(u => u.RegionalManager)
-                    .ThenInclude(ro => ro.RegionalManagerRegions)
+                .Include(u => u.RegionalManager!)
+                    .ThenInclude(rm => rm.RegionalManagerRegions)
                 .FirstOrDefaultAsync(u => u.Id == userId);
         }
 
@@ -306,4 +321,3 @@ namespace Geotrack.Infrastructure.Repositories
         }
     }
 }
-

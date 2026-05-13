@@ -26,7 +26,7 @@ public class DestinationController : ControllerBase
         _logger = logger;
     }
 
-    [Obsolete("Use GET /api/explore?latitude={latitude}&longitude={longitude}. This compatibility endpoint is bounded by the shared Explore service.")]
+    [Obsolete("Use GET /api/explore?latitude={latitude}&longitude={longitude}. This compatibility endpoint is backed by the generic Explore feed.")]
     [HttpPost("explore-by-location")]
     public async Task<IActionResult> ExploreByLocation([FromBody] ExploreByLocationRequestDto request)
     {
@@ -160,108 +160,32 @@ public class DestinationController : ControllerBase
 
     private static ExploreByLocationResponseDto MapLegacyExploreResponse(ExplorePageDto page)
     {
-        var sections = new List<ExploreSectionDto>();
-
-        AddSection(
-            sections,
-            "events-this-week",
-            "Events This Week",
-            page.EventsThisWeek.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "event",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Subtitle ?? string.Empty
-            }));
-
-        AddSection(
-            sections,
-            "top-stays",
-            "Top Stays",
-            page.TopStays.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Distance ?? string.Empty,
-                AverageRating = item.Rating ?? 0
-            }));
-
-        AddSection(
-            sections,
-            "popular-nearby",
-            "Popular Nearby",
-            page.PopularNearby.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.CategoryLabel ?? string.Empty,
-                AverageRating = item.Rating ?? 0
-            }));
-
-        AddSection(
-            sections,
-            "must-see-attractions",
-            "Must-See Attractions",
-            page.MustSeeAttractions.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Type ?? string.Empty
-            }));
-
-        AddSection(
-            sections,
-            "local-favorites",
-            "Local Favorites",
-            page.LocalFavorites.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Description ?? item.Type ?? string.Empty,
-                AverageRating = item.Rating ?? 0
-            }));
-
-        AddSection(
-            sections,
-            "curated-for-you",
-            "Curated For You",
-            page.CuratedForYou.Select(item => new ExplorePreviewItemDto
-            {
-                EntityType = "place",
-                EntityId = item.Id,
-                Name = item.Title,
-                Description = item.Subtitle ?? item.CategoryLabel ?? string.Empty
-            }));
-
         return new ExploreByLocationResponseDto
         {
             SelectedDestination = page.SelectedDestination,
-            Sections = sections
+            Sections = page.Sections
+                .Where(section => section.Items.Count > 0)
+                .Select(section => new ExploreSectionDto
+                {
+                    Key = section.Key,
+                    Title = section.Title,
+                    Items = section.Items.Select(item => new ExplorePreviewItemDto
+                    {
+                        EntityType = item.EntityType,
+                        EntityId = item.Id,
+                        Name = item.Title,
+                        Description = item.Description
+                            ?? item.Subtitle
+                            ?? item.CategoryLabel
+                            ?? item.DateLabel
+                            ?? item.Distance
+                            ?? string.Empty,
+                        AverageRating = item.Rating ?? 0,
+                        IsSaved = item.IsSaved
+                    }).ToList()
+                })
+                .ToList()
         };
-    }
-
-    private static void AddSection(
-        List<ExploreSectionDto> sections,
-        string key,
-        string title,
-        IEnumerable<ExplorePreviewItemDto> items)
-    {
-        var pageItems = items.ToList();
-        if (pageItems.Count == 0)
-        {
-            return;
-        }
-
-        sections.Add(new ExploreSectionDto
-        {
-            Key = key,
-            Title = title,
-            Items = pageItems
-        });
     }
 
     private ActionResult? ValidatePaging(int skip, int take)
