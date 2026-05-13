@@ -76,10 +76,10 @@ public class RegionalDashboardService : IRegionalDashboardService
                 .CountAsync(place => place.Location.Destination.RegionId == regionId && place.CreatedAt >= lastMonthCutoff),
             TotalEvents = await _db.Events
                 .AsNoTracking()
-                .CountAsync(evt => evt.Location.Destination.RegionId == regionId),
+                .CountAsync(evt => evt.Destination.RegionId == regionId),
             EventsAddedLastMonth = await _db.Events
                 .AsNoTracking()
-                .CountAsync(evt => evt.Location.Destination.RegionId == regionId && evt.CreatedAt >= lastMonthCutoff)
+                .CountAsync(evt => evt.Destination.RegionId == regionId && evt.CreatedAt >= lastMonthCutoff)
         };
 
         return new RegionalDashboardDto
@@ -292,7 +292,7 @@ public class RegionalDashboardService : IRegionalDashboardService
     {
         return await _db.Events
             .AsNoTracking()
-            .Where(evt => evt.Location.Destination.RegionId == regionId)
+            .Where(evt => evt.Destination.RegionId == regionId)
             .OrderByDescending(evt => evt.CreatedAt)
             .ThenByDescending(evt => evt.Id)
             .Take(take)

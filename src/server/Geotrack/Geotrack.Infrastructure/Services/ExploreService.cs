@@ -147,7 +147,7 @@ public class ExploreService : IExploreService
             {
                 e.Id,
                 e.Name,
-                DestinationId = e.Location.DestinationId,
+                DestinationId = e.DestinationId,
                 EventTypeName = e.EventType.Name,
                 e.StartDate,
                 e.EndDate,
@@ -812,11 +812,11 @@ public class ExploreService : IExploreService
             .Where(e => EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(e => new ResolvedDestinationCandidate
             {
-                Id = e.Location.Destination.Id,
-                Name = e.Location.Destination.Name,
-                Description = e.Location.Destination.Description,
-                Latitude = e.Location.Destination.Latitude,
-                Longitude = e.Location.Destination.Longitude,
+                Id = e.Destination.Id,
+                Name = e.Destination.Name,
+                Description = e.Destination.Description,
+                Latitude = e.Destination.Latitude,
+                Longitude = e.Destination.Longitude,
                 DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
                 Priority = 1
             })

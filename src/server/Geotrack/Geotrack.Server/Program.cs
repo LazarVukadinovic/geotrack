@@ -111,12 +111,14 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IPlaceContributionService, PlaceContributionService>();
 builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionRepository>();
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
+builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
 builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
 builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
 builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();
 builder.Services.AddScoped<IRegionalPlaceService, RegionalPlaceService>();
 builder.Services.AddScoped<IRegionalEventService, RegionalEventService>();
+builder.Services.AddScoped<IRegionalMapService, RegionalMapService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(5);
