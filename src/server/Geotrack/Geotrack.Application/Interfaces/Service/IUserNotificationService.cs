@@ -1,4 +1,5 @@
 using Geotrack.Application.DTOs.Notifications;
+using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 
 namespace Geotrack.Application.Interfaces.Service;
@@ -10,4 +11,6 @@ public interface IUserNotificationService
     Task MarkReadAsync(int userId, int notificationId);
     Task MarkAllReadAsync(int userId);
     void AddContributionDecisionNotification(PlaceContribution contribution);
+    void AddReviewReportReporterDecisionNotification(ReviewReport report);
+    void AddReportedReviewRemovedNotification(ReviewReport report);
 }

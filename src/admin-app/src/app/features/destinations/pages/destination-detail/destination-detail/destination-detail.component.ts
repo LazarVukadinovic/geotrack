@@ -36,8 +36,8 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
   notFound   = false;
 
   region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  userName = '';
+  userRole = '';
 
   mapModalOpen  = false;
   deleteTarget: DestinationListItem | null = null;

@@ -1,9 +1,9 @@
-import { Component, Input, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, Router, NavigationEnd } from '@angular/router';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter } from 'rxjs/operators';
-import { ReviewRequestsService } from '../../../core/services/review-requests.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { RegionalAssignedRegion } from '../../../core/models/dashboard.model';
 
 export interface SidebarNavItem {
   label: string;
@@ -22,10 +22,14 @@ export interface SidebarNavItem {
 })
 export class SidebarComponent {
   @Input() region = '';
+  @Input() regions: RegionalAssignedRegion[] = [];
+  @Input() activeRegionId: number | null = null;
+  @Input() pendingRequestsCount: number | null = null;
+  @Input() regionLoading = false;
+  @Output() regionChange = new EventEmitter<number>();
 
-  private readonly auth            = inject(AuthService);
-  private readonly requestsService = inject(ReviewRequestsService);
-  private readonly router          = inject(Router);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
 
   private readonly currentUrl = signal(this.router.url);
 
@@ -46,7 +50,16 @@ export class SidebarComponent {
   }
 
   get pickerValue(): string {
-    return this.region || this.auth.getUser()?.region || '';
+    return this.resolvedRegionLabel() ?? 'No assigned regions';
+  }
+
+  get pickerDisplayValue(): string {
+    const label = this.resolvedRegionLabel();
+    return this.regionLoading && !label ? 'Loading...' : (label ?? 'No assigned regions');
+  }
+
+  get canSelectRegion(): boolean {
+    return this.regions.length > 1;
   }
 
   get isNational(): boolean {
@@ -55,9 +68,9 @@ export class SidebarComponent {
 
   get nationalMainNav(): SidebarNavItem[] {
     return [
-      { label: 'National Overview',   path: '/national-dashboard',  icon: 'dashboard', exact: true },
-      { label: 'Regional Management', path: '/regions',             icon: 'map'                    },
-      { label: 'User Administration', path: '/user-administration', icon: 'users'                  },
+      { label: 'National Overview', path: '/national-dashboard', icon: 'dashboard', exact: true },
+      { label: 'Regional Management', path: '/regions', icon: 'map' },
+      { label: 'User Administration', path: '/user-administration', icon: 'users' },
     ];
   }
 
@@ -69,18 +82,22 @@ export class SidebarComponent {
 
   get mainNav(): SidebarNavItem[] {
     return [
-      { label: 'Dashboard',      path: '/dashboard', icon: 'dashboard', exact: true },
-      { label: 'Requests Queue', path: '/requests',  icon: 'inbox',
-        badge: this.requestsService.pendingCount || undefined },
-      { label: 'Map',            path: '/map',       icon: 'map' },
+      { label: 'Dashboard', path: '/dashboard', icon: 'dashboard', exact: true },
+      {
+        label: 'Requests Queue',
+        path: '/requests',
+        icon: 'inbox',
+        badge: this.pendingRequestsCount || undefined,
+      },
+      { label: 'Map', path: '/map', icon: 'map' },
     ];
   }
 
   contentNav: SidebarNavItem[] = [
-    { label: 'Destinations', path: '/destinations', icon: 'flag'     },
-    { label: 'Locations',    path: '/locations',    icon: 'pin'      },
-    { label: 'Places',       path: '/places',       icon: 'home'     },
-    { label: 'Events',       path: '/events',       icon: 'calendar' },
+    { label: 'Destinations', path: '/destinations', icon: 'flag' },
+    { label: 'Locations', path: '/locations', icon: 'pin' },
+    { label: 'Places', path: '/places', icon: 'home' },
+    { label: 'Events', path: '/events', icon: 'calendar' },
   ];
 
   analyticsNav: SidebarNavItem[] = [
@@ -90,5 +107,19 @@ export class SidebarComponent {
   signOut(): void {
     this.auth.logout();
     this.router.navigate(['/login']);
+  }
+
+  onRegionSelectChange(event: Event): void {
+    const select = event.target instanceof HTMLSelectElement ? event.target : null;
+    const regionId = Number(select?.value);
+    if (Number.isFinite(regionId) && regionId > 0) {
+      this.regionChange.emit(regionId);
+    }
+  }
+
+  private resolvedRegionLabel(): string | null {
+    const activeRegion = this.regions.find((region) => region.id === this.activeRegionId);
+    const value = this.region || activeRegion?.displayName || this.auth.getUser()?.region || '';
+    return value.trim() || null;
   }
 }

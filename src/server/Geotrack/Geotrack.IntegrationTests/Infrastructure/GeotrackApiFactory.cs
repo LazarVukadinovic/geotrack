@@ -12,11 +12,19 @@ namespace Geotrack.IntegrationTests.Infrastructure;
 internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyncDisposable
 {
     private readonly string _databaseName = $"geotrack_batch11_{Guid.NewGuid():N}";
+    private readonly string _environmentName;
 
     private string? _baseConnectionString;
     private string? _testConnectionString;
+    private string? _previousConnectionStringEnvironmentValue;
+    private string? _previousJwtKeyEnvironmentValue;
     private string TestDataProtectionKeyDirectory =>
         Path.Combine(AppContext.BaseDirectory, ".dataprotection-keys", _databaseName);
+
+    private GeotrackApiFactory(string environmentName)
+    {
+        _environmentName = environmentName;
+    }
 
     static GeotrackApiFactory()
     {
@@ -25,9 +33,9 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
 #pragma warning restore CS0618
     }
 
-    public static async Task<GeotrackApiFactory> CreateAsync()
+    public static async Task<GeotrackApiFactory> CreateAsync(string environmentName = "Development")
     {
-        var factory = new GeotrackApiFactory();
+        var factory = new GeotrackApiFactory(environmentName);
         await factory.InitializeAsync();
         return factory;
     }
@@ -42,6 +50,8 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
         _baseConnectionString = config.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException(
                 "ConnectionStrings:DefaultConnection is required in user-secrets or the environment to run integration tests.");
+
+        ConfigureEarlyProductionEnvironment(config);
 
         _testConnectionString = new NpgsqlConnectionStringBuilder(_baseConnectionString)
         {
@@ -60,7 +70,7 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
 
     protected override IHost CreateHost(IHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder.UseEnvironment(_environmentName);
         builder.ConfigureAppConfiguration((_, config) =>
         {
             config.AddInMemoryCollection(
@@ -112,6 +122,41 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
         await using var drop = connection.CreateCommand();
         drop.CommandText = $"DROP DATABASE IF EXISTS \"{_databaseName}\"";
         await drop.ExecuteNonQueryAsync();
+
+        RestoreEarlyProductionEnvironment();
+    }
+
+    private void ConfigureEarlyProductionEnvironment(IConfiguration config)
+    {
+        if (_environmentName != Environments.Production)
+        {
+            return;
+        }
+
+        var jwtKey = config["Jwt:Key"]
+            ?? throw new InvalidOperationException(
+                "Jwt:Key is required in user-secrets or the environment to run production-mode integration tests.");
+
+        _previousConnectionStringEnvironmentValue =
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        _previousJwtKeyEnvironmentValue =
+            Environment.GetEnvironmentVariable("Jwt__Key");
+
+        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", _baseConnectionString);
+        Environment.SetEnvironmentVariable("Jwt__Key", jwtKey);
+    }
+
+    private void RestoreEarlyProductionEnvironment()
+    {
+        if (_environmentName != Environments.Production)
+        {
+            return;
+        }
+
+        Environment.SetEnvironmentVariable(
+            "ConnectionStrings__DefaultConnection",
+            _previousConnectionStringEnvironmentValue);
+        Environment.SetEnvironmentVariable("Jwt__Key", _previousJwtKeyEnvironmentValue);
     }
 
     private string BuildAdminConnectionString()

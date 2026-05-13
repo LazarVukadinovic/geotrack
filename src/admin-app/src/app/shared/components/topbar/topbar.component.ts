@@ -1,6 +1,7 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   selector: 'app-topbar',
@@ -10,12 +11,30 @@ import { Router } from '@angular/router';
 })
 export class TopbarComponent {
   @Input() title = '';
-  @Input() userName = 'Sarah Jenkins';
-  @Input() userRole = 'Regional Manager';
+  @Input() userName = '';
+  @Input() userRole = '';
   @Input() showBack = false;
   @Input() backRoute: string | null = null;
+  failedAvatarUrl = '';
 
-  constructor(private router: Router) {}
+  constructor(private router: Router, private readonly auth: AuthService) {}
+
+  get displayUserName(): string {
+    return this.auth.fullName || this.userName;
+  }
+
+  get displayUserRole(): string {
+    return this.auth.getUser()?.role || this.userRole;
+  }
+
+  get displayAvatarUrl(): string {
+    const avatarUrl = this.auth.getUser()?.avatarUrl ?? '';
+    return avatarUrl && avatarUrl !== this.failedAvatarUrl ? avatarUrl : '';
+  }
+
+  onAvatarError(): void {
+    this.failedAvatarUrl = this.displayAvatarUrl;
+  }
 
   goBack(): void {
     if (this.backRoute) {

@@ -2,6 +2,7 @@
 using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
@@ -18,9 +19,17 @@ public class PlaceContributionService : IPlaceContributionService
     private const int MaxBookingPartnerUrlLength = 500;
     private const int MaxImageUrlLength = 1000;
     private const int MaxBookingPartnerIdLength = 80;
+    private const double MaxContributionLocationMatchDistanceKm = 50d;
+    private const double MaxContributionDestinationMatchDistanceKm = 75d;
     private const string ManagedContributionMediaPrefix = "/media/uploads/contributions/";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly HashSet<string> OwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "stay",
+        "restaurant",
+        "cafe"
+    };
     private static readonly Regex ManagedContributionMediaFileNameRegex = new(
         @"^[a-z0-9][a-z0-9._-]{0,199}\.(png|jpe?g|gif|webp)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -104,7 +113,8 @@ public class PlaceContributionService : IPlaceContributionService
         Place? targetPlace = null;
         ContributionReferenceResolution? references = null;
 
-        if (type is PlaceContributionType.CreatePlace or PlaceContributionType.ClaimOwnership &&
+        var requiresOwnershipProof = await RequiresOwnershipProofAsync(type, request);
+        if (requiresOwnershipProof &&
             ownershipProofBytes is null or { Length: 0 })
         {
             throw new InvalidOperationException("Ownership proof document is required.");
@@ -256,7 +266,8 @@ public class PlaceContributionService : IPlaceContributionService
         Place? targetPlace = null;
         ContributionReferenceResolution? references = null;
 
-        if (type is PlaceContributionType.CreatePlace or PlaceContributionType.ClaimOwnership &&
+        var requiresOwnershipProof = await RequiresOwnershipProofAsync(type, request);
+        if (requiresOwnershipProof &&
             string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl) &&
             ownershipProofBytes is null or { Length: 0 })
         {
@@ -314,6 +325,14 @@ public class PlaceContributionService : IPlaceContributionService
             contribution.OwnershipProofOriginalFileName = NormalizeFileName(ownershipProofOriginalFileName);
             contribution.OwnershipProofContentType = NormalizeOptional(ownershipProofContentType);
             contribution.OwnershipProofUploadedAt = now;
+        }
+        else if (!requiresOwnershipProof && !string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl))
+        {
+            await _mediaStorage.DeleteAsync(contribution.OwnershipProofDocumentUrl);
+            contribution.OwnershipProofDocumentUrl = null;
+            contribution.OwnershipProofOriginalFileName = null;
+            contribution.OwnershipProofContentType = null;
+            contribution.OwnershipProofUploadedAt = null;
         }
 
         contribution.Type = type;
@@ -570,7 +589,7 @@ public class PlaceContributionService : IPlaceContributionService
             .AsNoTracking()
             .Where(u => u.Id == reviewerUserId)
             .Select(u => u.UserRoles.Any(ur =>
-                ur.Role.Name == "Admin" ||
+                ur.Role.Name == RoleNames.Admin ||
                 ur.Role.Name == "SuperAdmin"))
             .SingleOrDefaultAsync();
     }
@@ -579,7 +598,7 @@ public class PlaceContributionService : IPlaceContributionService
     {
         return await _db.RegionalManagerRegions
             .AsNoTracking()
-            .Where(r => r.UserId == reviewerUserId)
+            .Where(r => r.UserId == reviewerUserId && r.IsActive)
             .Select(r => r.RegionId)
             .ToListAsync();
     }
@@ -610,6 +629,43 @@ public class PlaceContributionService : IPlaceContributionService
             .FirstOrDefaultAsync();
 
         return regionId ?? throw new KeyNotFoundException("Target place not found.");
+    }
+
+    private async Task<bool> RequiresOwnershipProofAsync(
+        PlaceContributionType contributionType,
+        UpsertPlaceContributionDto request)
+    {
+        if (contributionType == PlaceContributionType.ClaimOwnership)
+            return true;
+
+        if (request.StayTypeId.HasValue || !string.IsNullOrWhiteSpace(request.StayType))
+            return true;
+
+        var placeTypeName = await ResolveRequestedPlaceTypeNameAsync(request);
+        return IsOwnershipProofRequiredPlaceType(placeTypeName);
+    }
+
+    private async Task<string?> ResolveRequestedPlaceTypeNameAsync(UpsertPlaceContributionDto request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.PlaceType))
+            return request.PlaceType;
+
+        if (!request.PlaceTypeId.HasValue)
+            return null;
+
+        var placeTypeName = await _db.PlaceTypes
+            .AsNoTracking()
+            .Where(placeType => placeType.Id == request.PlaceTypeId.Value)
+            .Select(placeType => placeType.Name)
+            .SingleOrDefaultAsync();
+
+        return placeTypeName ?? throw new KeyNotFoundException("Place type not found.");
+    }
+
+    private static bool IsOwnershipProofRequiredPlaceType(string? placeTypeName)
+    {
+        var normalized = NormalizeOptional(placeTypeName);
+        return normalized is not null && OwnershipProofRequiredPlaceTypes.Contains(normalized);
     }
 
     private async Task<bool> UserCanManagePlaceAsync(int userId, int placeId)
@@ -826,113 +882,79 @@ public class PlaceContributionService : IPlaceContributionService
 
     private async Task<int?> ResolveLegacyLocationIdAsync(UpsertPlaceContributionDto request)
     {
-        var city = NormalizeOptional(request.City, 200);
-        var regionName = NormalizeOptional(request.Region, 200);
-        var countryName = NormalizeOptional(request.Country, 200);
-
-        if (city is null && regionName is null && countryName is null)
+        if (!HasUsableCoordinates(request.Latitude, request.Longitude))
             return null;
 
-        if (city is not null)
-        {
-            var directLocation = await _db.Locations
-                .AsNoTracking()
-                .FirstOrDefaultAsync(location => location.Name.ToLower() == city.ToLowerInvariant());
+        var latitude = request.Latitude!.Value;
+        var longitude = request.Longitude!.Value;
 
-            if (directLocation is not null)
-                return directLocation.Id;
+        var nearestLocationId = await ResolveNearestKnownLocationIdAsync(latitude, longitude);
+        if (nearestLocationId.HasValue)
+            return nearestLocationId.Value;
 
-            var matchingDestination = await _db.Destinations
-                .Include(destination => destination.Locations)
-                .Include(destination => destination.Region)
-                    .ThenInclude(region => region.Territory)
-                .FirstOrDefaultAsync(destination => destination.Name.ToLower() == city.ToLowerInvariant());
-
-            if (matchingDestination is not null)
-            {
-                var existing = SelectBestLocation(matchingDestination.Locations, request.Latitude, request.Longitude);
-                if (existing is not null)
-                    return existing.Id;
-            }
-        }
-
-        var territory = countryName is not null
-            ? await _db.Territories.FirstOrDefaultAsync(existingTerritory => existingTerritory.Name.ToLower() == countryName.ToLowerInvariant())
-            : await _db.Territories.OrderBy(existingTerritory => existingTerritory.Id).FirstOrDefaultAsync();
-
-        if (territory is null)
-        {
-            territory = new Territory
-            {
-                Name = countryName ?? "Unknown",
-                CreatedAt = DateTime.UtcNow
-            };
-            await _db.Territories.AddAsync(territory);
-            await _db.SaveChangesAsync();
-        }
-
-        var resolvedRegionName = regionName ?? territory.Name;
-        var region = await _db.Regions
-            .FirstOrDefaultAsync(existingRegion =>
-                existingRegion.TerritoryId == territory.Id &&
-                existingRegion.Name.ToLower() == resolvedRegionName.ToLowerInvariant());
-
-        if (region is null)
-        {
-            region = new Region
-            {
-                Name = resolvedRegionName,
-                TerritoryId = territory.Id,
-                CreatedAt = DateTime.UtcNow
-            };
-            await _db.Regions.AddAsync(region);
-            await _db.SaveChangesAsync();
-        }
-
-        var destinationName = city ?? region.Name;
-        var destination = await _db.Destinations
-            .Include(existingDestination => existingDestination.Locations)
-            .FirstOrDefaultAsync(existingDestination =>
-                existingDestination.RegionId == region.Id &&
-                existingDestination.Name.ToLower() == destinationName.ToLowerInvariant());
-
-        if (destination is null)
-        {
-            var destinationType = await ResolveDestinationTypeAsync();
-            destination = new Destination
-            {
-                Name = destinationName,
-                DestinationTypeId = destinationType.Id,
-                RegionId = region.Id,
-                Description = string.Empty,
-                Latitude = request.Latitude ?? 0,
-                Longitude = request.Longitude ?? 0,
-                CreatedAt = DateTime.UtcNow
-            };
-            await _db.Destinations.AddAsync(destination);
-            await _db.SaveChangesAsync();
-        }
-        else
-        {
-            var existing = SelectBestLocation(destination.Locations, request.Latitude, request.Longitude);
-            if (existing is not null)
-                return existing.Id;
-        }
+        var nearestDestination = await ResolveNearestKnownDestinationAsync(latitude, longitude);
+        if (nearestDestination is null)
+            return null;
 
         var locationType = await ResolveLocationTypeAsync();
+        var locationName = NormalizeOptional(request.City, 200) ?? nearestDestination.Name;
         var location = new Location
         {
-            Name = destinationName,
-            DestinationId = destination.Id,
+            Name = locationName,
+            DestinationId = nearestDestination.Id,
             LocationTypeId = locationType.Id,
-            Latitude = request.Latitude ?? destination.Latitude,
-            Longitude = request.Longitude ?? destination.Longitude,
+            Latitude = latitude,
+            Longitude = longitude,
             CreatedAt = DateTime.UtcNow
         };
 
         await _db.Locations.AddAsync(location);
         await _db.SaveChangesAsync();
         return location.Id;
+    }
+
+    private async Task<int?> ResolveNearestKnownLocationIdAsync(double latitude, double longitude)
+    {
+        var locations = await _db.Locations
+            .AsNoTracking()
+            .Select(location => new CoordinateCandidate(location.Id, location.Latitude, location.Longitude))
+            .ToListAsync();
+
+        return locations
+            .Select(location => new
+            {
+                location.Id,
+                DistanceKm = HaversineKilometers(latitude, longitude, location.Latitude, location.Longitude)
+            })
+            .Where(location => location.DistanceKm <= MaxContributionLocationMatchDistanceKm)
+            .OrderBy(location => location.DistanceKm)
+            .ThenBy(location => location.Id)
+            .Select(location => (int?)location.Id)
+            .FirstOrDefault();
+    }
+
+    private async Task<DestinationCandidate?> ResolveNearestKnownDestinationAsync(double latitude, double longitude)
+    {
+        var destinations = await _db.Destinations
+            .AsNoTracking()
+            .Select(destination => new DestinationCandidate(
+                destination.Id,
+                destination.Name,
+                destination.Latitude,
+                destination.Longitude))
+            .ToListAsync();
+
+        return destinations
+            .Select(destination => new
+            {
+                Destination = destination,
+                DistanceKm = HaversineKilometers(latitude, longitude, destination.Latitude, destination.Longitude)
+            })
+            .Where(destination => destination.DistanceKm <= MaxContributionDestinationMatchDistanceKm)
+            .OrderBy(destination => destination.DistanceKm)
+            .ThenBy(destination => destination.Destination.Id)
+            .Select(destination => destination.Destination)
+            .FirstOrDefault();
     }
 
     private async Task<DestinationType> ResolveDestinationTypeAsync()
@@ -1830,6 +1852,27 @@ public class PlaceContributionService : IPlaceContributionService
     private static bool IsFinite(double value) =>
         !double.IsNaN(value) && !double.IsInfinity(value);
 
+    private static double HaversineKilometers(
+        double latitude1,
+        double longitude1,
+        double latitude2,
+        double longitude2)
+    {
+        const double earthRadiusKm = 6371.0088d;
+        var dLat = DegreesToRadians(latitude2 - latitude1);
+        var dLon = DegreesToRadians(longitude2 - longitude1);
+        var lat1 = DegreesToRadians(latitude1);
+        var lat2 = DegreesToRadians(latitude2);
+
+        var a =
+            Math.Pow(Math.Sin(dLat / 2d), 2d) +
+            Math.Cos(lat1) * Math.Cos(lat2) * Math.Pow(Math.Sin(dLon / 2d), 2d);
+
+        return 2d * earthRadiusKm * Math.Asin(Math.Min(1d, Math.Sqrt(a)));
+    }
+
+    private static double DegreesToRadians(double value) => value * Math.PI / 180d;
+
     private static List<string> NormalizeStayAmenityValues(IEnumerable<string> values)
     {
         return values
@@ -1938,6 +1981,10 @@ public class PlaceContributionService : IPlaceContributionService
             .Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
 
     private sealed record ResolvedBookingPartner(int BookingPartnerId, string? Url);
+
+    private sealed record CoordinateCandidate(int Id, double Latitude, double Longitude);
+
+    private sealed record DestinationCandidate(int Id, string Name, double Latitude, double Longitude);
 
     private sealed record ContributionReferenceResolution(
         int? PlaceTypeId,

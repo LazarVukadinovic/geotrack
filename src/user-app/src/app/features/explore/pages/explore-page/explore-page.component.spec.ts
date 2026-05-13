@@ -1,72 +1,31 @@
-import { ApplicationRef, computed, signal, type Signal, type WritableSignal } from '@angular/core';
+import { ApplicationRef, computed, signal, type WritableSignal } from '@angular/core';
 import { Location } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
-import { of, Subject } from 'rxjs';
 import { vi } from 'vitest';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
-import { TagService, type UserInterestsResponse } from '../../../../core/services/tag.service';
-import { UserService } from '../../../../core/services/user.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { AppNotificationsService } from '../../../../core/services/app-notifications.service';
 import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { ExploreService } from '../../services/explore.service';
+import type { ExploreSection } from '../../models/explore-extras.model';
 import { ExplorePageComponent } from './explore-page.component';
 
-describe('ExplorePageComponent curated section', () => {
+describe('ExplorePageComponent dynamic sections', () => {
   let fixture: ComponentFixture<ExplorePageComponent>;
   let host: HTMLElement;
   let loggedIn: WritableSignal<boolean>;
-  let userProfile: WritableSignal<{ id: number; needsInterestsOnboarding: boolean } | null>;
-  let interestRevision: WritableSignal<number>;
   let exploreLoading: WritableSignal<boolean>;
   let exploreLoaded: WritableSignal<boolean>;
-  let curatedItems: WritableSignal<Array<{
-    id: string;
-    title: string;
-    subtitle: string;
-    categoryLabel: string;
-    image: string;
-    isSaved: boolean;
-  }>>;
-  let interestsResponse: UserInterestsResponse | Subject<UserInterestsResponse>;
-  let tagService: { loadUserInterests: ReturnType<typeof vi.fn>; interestRevision: Signal<number> };
-
-  const emptyInterests: UserInterestsResponse = {
-    tags: [],
-    explicitTags: [],
-    inferredTags: [],
-  };
-
-  const selectedInterests: UserInterestsResponse = {
-    tags: [{ tagId: 1, name: 'Nature', slug: 'nature' }],
-    explicitTags: [{ tagId: 1, name: 'Nature', slug: 'nature' }],
-    inferredTags: [],
-  };
+  let sections: WritableSignal<ExploreSection[]>;
 
   beforeEach(async () => {
     loggedIn = signal(true);
-    userProfile = signal({
-      id: 7,
-      needsInterestsOnboarding: false,
-    });
-    interestRevision = signal(0);
     exploreLoading = signal(false);
     exploreLoaded = signal(true);
-    curatedItems = signal([]);
-    interestsResponse = emptyInterests;
-
-    tagService = {
-      interestRevision: computed(() => interestRevision()),
-      loadUserInterests: vi.fn(() => {
-        if (interestsResponse instanceof Subject) {
-          return interestsResponse.asObservable();
-        }
-        return of(interestsResponse);
-      }),
-    };
+    sections = signal([]);
 
     await TestBed.configureTestingModule({
       imports: [ExplorePageComponent],
@@ -76,13 +35,9 @@ describe('ExplorePageComponent curated section', () => {
           useValue: { isLoggedIn: computed(() => loggedIn()) },
         },
         {
-          provide: UserService,
-          useValue: { profile: computed(() => userProfile()) },
-        },
-        { provide: TagService, useValue: tagService },
-        {
           provide: ExploreService,
           useValue: {
+            sections: computed(() => sections()),
             loadError: computed(() => null),
             loading: computed(() => exploreLoading()),
             loaded: computed(() => exploreLoaded()),
@@ -91,13 +46,6 @@ describe('ExplorePageComponent curated section', () => {
               message: 'Sign in to save places.',
               ctaLabel: 'Sign In',
             })),
-            curatedForYou: computed(() => curatedItems()),
-            eventsThisWeek: computed(() => []),
-            popularNearby: computed(() => []),
-            topStays: computed(() => []),
-            mustSeeAttractions: computed(() => []),
-            landmarkCategories: computed(() => []),
-            localFavorites: computed(() => []),
             useCurrentLocation: vi.fn(),
             toggleSaved: vi.fn(),
           },
@@ -138,7 +86,7 @@ describe('ExplorePageComponent curated section', () => {
             },
           },
         },
-        { provide: Router, useValue: { url: '/explore', navigate: vi.fn() } },
+        { provide: Router, useValue: { url: '/explore', navigate: vi.fn(), navigateByUrl: vi.fn() } },
         { provide: Location, useValue: { back: vi.fn() } },
         {
           provide: ExploreScrollStateService,
@@ -159,73 +107,34 @@ describe('ExplorePageComponent curated section', () => {
     TestBed.resetTestingModule();
   });
 
-  it('does not render Curated for You when the user has no explicit or inferred interests', async () => {
-    interestsResponse = emptyInterests;
+  it('renders the empty state when the dynamic Explore feed has no sections', async () => {
     createComponent();
 
     await settle();
 
-    expect(host.querySelector('app-curated-for-you')).toBeNull();
-    expect(host.textContent).not.toContain('Curated for You');
-    expect(host.textContent).not.toContain('Nothing personalized nearby yet');
+    expect(host.querySelector('app-explore-section')).toBeNull();
+    expect(host.textContent).toContain('No Explore sections yet');
   });
 
-  it('renders Curated for You for selected interests', async () => {
-    interestsResponse = selectedInterests;
-    curatedItems.set([{
-      id: '42',
-      title: 'Kalemegdan',
-      subtitle: 'Matches your saved interest: Nature',
-      categoryLabel: 'Nature',
-      image: '/media/kalemegdan.jpg',
-      isSaved: false,
-    }]);
+  it('renders dynamic sections supplied by the Explore service', async () => {
+    sections.set([makeSection()]);
     createComponent();
 
     await settle();
 
-    expect(host.querySelector('app-curated-for-you')).not.toBeNull();
+    expect(host.querySelector('app-explore-section')).not.toBeNull();
     expect(host.textContent).toContain('Curated for You');
     expect(host.textContent).toContain('Kalemegdan');
   });
 
-  it('keeps the curated section in loading state before recommendations settle', async () => {
-    interestsResponse = selectedInterests;
+  it('keeps the empty state hidden while sections are still loading', async () => {
     exploreLoaded.set(false);
     exploreLoading.set(true);
     createComponent();
 
     await settle();
 
-    expect(host.querySelector('app-curated-for-you')).not.toBeNull();
-    expect(host.textContent).toContain('Curated for You');
-    expect(host.textContent).not.toContain('Nothing personalized nearby yet');
-    expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
-  });
-
-  it('shows the existing empty state when interests exist but no recommendations match', async () => {
-    interestsResponse = selectedInterests;
-    curatedItems.set([]);
-    exploreLoaded.set(true);
-    exploreLoading.set(false);
-    createComponent();
-
-    await settle();
-
-    expect(host.querySelector('app-curated-for-you')).not.toBeNull();
-    expect(host.textContent).toContain('Nothing personalized nearby yet');
-  });
-
-  it('does not show the no-results empty state while interests are still loading', async () => {
-    interestsResponse = new Subject<UserInterestsResponse>();
-    createComponent();
-
-    fixture.detectChanges();
-    TestBed.inject(ApplicationRef).tick();
-    fixture.detectChanges();
-
-    expect(host.querySelector('app-curated-for-you')).toBeNull();
-    expect(host.textContent).not.toContain('Nothing personalized nearby yet');
+    expect(host.textContent).not.toContain('No Explore sections yet');
   });
 
   function createComponent(): void {
@@ -241,3 +150,26 @@ describe('ExplorePageComponent curated section', () => {
     fixture.detectChanges();
   }
 });
+
+function makeSection(): ExploreSection {
+  return {
+    key: 'curated-for-you',
+    title: 'Curated for You',
+    subtitle: 'Based on your tags',
+    layout: 'horizontal-cards',
+    cardType: 'place-card',
+    moreRoute: '/recommendations',
+    priority: 10,
+    items: [{
+      id: '42',
+      entityType: 'place',
+      detailRoute: '/places/42',
+      title: 'Kalemegdan',
+      subtitle: 'Matches your saved interest: Nature',
+      categoryLabel: 'Nature',
+      image: '/media/kalemegdan.jpg',
+      isSaved: false,
+      tags: [{ tagId: '1', name: 'Nature', slug: 'nature' }],
+    }],
+  };
+}

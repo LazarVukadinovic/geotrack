@@ -31,19 +31,24 @@ public class User
     // Profile fields
     public string? AvatarUrl { get; set; }
     public string? DisplayName { get; set; }
+    public string? ShortBio { get; set; }
     public string? Location { get; set; }
+    public string InterfaceLanguage { get; set; } = "en-US";
+    public string Timezone { get; set; } = "UTC";
     public bool NeedsInterestsOnboarding { get; set; }
     public bool GeneralNotificationsEnabled { get; set; } = true;
     public bool TravelRecommendationsEnabled { get; set; } = true;
     public bool NearbyEventsEnabled { get; set; } = true;
     public bool CollectionUpdatesEnabled { get; set; } = true;
     public bool EmailNotificationsEnabled { get; set; }
+    public bool EmailRequestsEnabled { get; set; } = true;
+    public bool EmailNewReviewEnabled { get; set; } = true;
     public bool AnalyticsEnabled { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    public RegionalManager? RegionalManager { get; set; }
+    public ICollection<RegionalManagerRegion> RegionalManagerRegions { get; set; } = new List<RegionalManagerRegion>();
 
     public ICollection<UserPlace> UserPlaces { get; set; } = new List<UserPlace>();
     public ICollection<PlaceContribution> PlaceContributions { get; set; } = new List<PlaceContribution>();

@@ -30,7 +30,7 @@ Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom.
 ## Struktura projekta
 
 - `user-app` - Angular korisnički frontend.
-- `admin-app` - Angular admin površina u repozitorijumu; nije primarni fokus ovog README-a.
+- `admin-app` - Angular Regional Manager/admin površina.
 - `server/Geotrack` - .NET solution.
   - `Geotrack.Domain` - entiteti i enum-i.
   - `Geotrack.Application` - DTO-ovi, interfejsi servisa i opcije.
@@ -48,7 +48,17 @@ npm install
 npm run start
 ```
 
-Angular dev server je podrazumevano na `http://localhost:4200/`. `user-app/proxy.conf.json` prosleđuje `/api` i `/media` ka `http://localhost:5003`, pa lokalni frontend očekuje da backend-a radi na tom portu. U Windows PowerShell-u možete koristiti `npm.cmd` umesto `npm` ako je potrebno.
+Angular dev server za korisničku aplikaciju je podrazumevano na `http://localhost:4200/`. `user-app/proxy.conf.json` prosleđuje `/api` i `/media` ka `http://localhost:5003`, pa lokalni frontend očekuje da backend radi na tom portu. U Windows PowerShell-u možete koristiti `npm.cmd` umesto `npm` ako je potrebno.
+
+Admin aplikacija koristi isti backend i lokalno se obično pokreće na `http://localhost:4300/`:
+
+```bash
+cd admin-app
+npm install
+npm run start -- --port 4300
+```
+
+`admin-app/proxy.conf.json` takođe prosleđuje `/api` i `/media` ka `http://localhost:5003`. Backend Development CORS politika dozvoljava lokalne origin-e za korisničku aplikaciju na portu `4200` i admin aplikaciju na portu `4300`.
 
 Build frontend-a:
 
@@ -85,10 +95,11 @@ dotnet run --project server/Geotrack/Geotrack.Server
 
 Backend u razvojnom profilu sluša na `http://localhost:5003`. U Development modu pri startu proverava PostGIS, automatski primenjuje EF migracije i pokreće seed podataka.
 
-Demo korisnik iz seed podataka:
+Demo regional manager korisnik iz seed podataka:
 
-- email: `marko.p@example.com`
-- lozinka: `password123`
+- regional manager
+- email: `pera@gmail.com`
+- lozinka: `Proba123!`
 
 Ako migracije želite da primenite ručno preko `dotnet-ef`, iz `src` foldera koristite:
 
@@ -176,8 +187,7 @@ Trenutni allowlist:
 Lokalno povezivanje u Codex aplikaciji:
 
 - prvo pokrenite backend;
-- koristite - prvo pokrenite backend;
- port, ne Angular port, osim ako ste posebno proverili proxy;
+- koristite backend port, ne Angular port, osim ako ste posebno proverili proxy;
 - MCP URL: `http://localhost:5003/api/mcp`
 - Transport: `Streamable HTTP`
 - Bearer token: prazno za trenutni public read-only MVP
@@ -210,5 +220,5 @@ Za javni ChatGPT/Claude connector potreban je javni HTTPS URL, ne `localhost`. P
 - Produkcioni deployment treba da podesi trajno čuvanje Data Protection ključeva pre oslanjanja na sačuvane korisničke AI ključeve.
 - Javni MCP connector zahteva HTTPS deployment.
 - Notification center postoji, ali `/settings/notifications` trenutno preusmerava nazad na `/settings`.
-- `admin-app` postoji u repozitorijumu, ali nije opisan kao kompletan produkcioni admin proizvod u ovom README-u.
+- `admin-app` ima lokalni Regional Manager tok; produkcioni packaging/deployment treba posebno proveriti.
 - Angular build ima stroge bundle/style budget-e u `user-app/angular.json`; veće SCSS izmene mogu da izazovu budget upozorenja.

@@ -15,6 +15,7 @@ namespace Geotrack.Infrastructure.Services;
 public class PlaceService : IPlaceService
 {
     private const int ListingMaxTake = 50;
+    private const string PublishedStatus = "Published";
 
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
@@ -68,6 +69,7 @@ public class PlaceService : IPlaceService
 
         var query = _db.Places
             .AsNoTracking()
+            .Where(p => p.Status == PublishedStatus)
             .Where(p => p.Location.DestinationId == destination.Id);
 
         var hasTypeFilter = !string.IsNullOrWhiteSpace(type) && !IsAllFilter(type);
@@ -139,7 +141,7 @@ public class PlaceService : IPlaceService
                 .ThenInclude(pt => pt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
-            .FirstOrDefaultAsync(p => p.Id == id);
+            .FirstOrDefaultAsync(p => p.Id == id && p.Status == PublishedStatus);
 
         if (place is null)
         {
@@ -155,6 +157,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.Images)
             .Where(p =>
                 p.Id != id &&
+                p.Status == PublishedStatus &&
                 p.Stay == null &&
                 p.PlaceTypeId == place.PlaceTypeId &&
                 p.Location.DestinationId == place.Location.DestinationId)
@@ -255,7 +258,7 @@ public class PlaceService : IPlaceService
                         .ThenInclude(tagType => tagType!.PlaceTypes)
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(pb => pb.BookingPartner)
-            .FirstOrDefaultAsync(p => p.Id == id && p.Stay != null);
+            .FirstOrDefaultAsync(p => p.Id == id && p.Status == PublishedStatus && p.Stay != null);
 
         if (place is null)
         {
@@ -271,6 +274,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.Images)
             .Where(p =>
                 p.Id != id &&
+                p.Status == PublishedStatus &&
                 p.Stay != null &&
                 p.Location.DestinationId == place.Location.DestinationId)
             .Take(5)
@@ -406,6 +410,7 @@ public class PlaceService : IPlaceService
         var query = _db.Places
             .AsNoTracking()
             .Where(p =>
+                p.Status == PublishedStatus &&
                 p.Stay != null &&
                 p.Location.DestinationId == destination.Id);
 
@@ -440,7 +445,7 @@ public class PlaceService : IPlaceService
         var place = await _db.Places
             .Include(p => p.PlaceReviews)
             .Include(p => p.Events)
-            .FirstOrDefaultAsync(p => p.Id == placeId)
+            .FirstOrDefaultAsync(p => p.Id == placeId && p.Status == PublishedStatus)
             ?? throw new KeyNotFoundException("Place not found");
 
         var reviews = place.PlaceReviews.ToList();
@@ -481,7 +486,7 @@ public class PlaceService : IPlaceService
                 {
                     Id = e.Id,
                     Name = e.Name,
-                    LocationId = e.LocationId,
+                    LocationId = e.LocationId ?? place.LocationId,
                     PlaceId = e.PlaceId ?? 0,
                     Description = e.Description,
                     StartDate = e.StartDate,
@@ -495,7 +500,7 @@ public class PlaceService : IPlaceService
 
     public async Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId)
     {
-        var exists = await _db.Places.AnyAsync(p => p.Id == placeId);
+        var exists = await _db.Places.AnyAsync(p => p.Id == placeId && p.Status == PublishedStatus);
         if (!exists)
         {
             throw new KeyNotFoundException("Place not found");
@@ -514,7 +519,7 @@ public class PlaceService : IPlaceService
                 {
                     Id = e.Id,
                     Name = e.Name,
-                    LocationId = e.LocationId,
+                    LocationId = e.LocationId ?? 0,
                     PlaceId = e.PlaceId ?? 0,
                     Description = e.Description,
                     StartDate = e.StartDate,
@@ -531,7 +536,7 @@ public class PlaceService : IPlaceService
         int skip = 0,
         int take = ReviewPaging.DefaultTake)
     {
-        var exists = await _db.Places.AnyAsync(p => p.Id == placeId);
+        var exists = await _db.Places.AnyAsync(p => p.Id == placeId && p.Status == PublishedStatus);
         if (!exists)
         {
             throw new KeyNotFoundException("Place not found");
@@ -590,7 +595,7 @@ public class PlaceService : IPlaceService
 
         await _contentModeration.EnsureAllowedReviewTextAsync(request.Comment);
 
-        var exists = await _db.Places.AnyAsync(p => p.Id == placeId);
+        var exists = await _db.Places.AnyAsync(p => p.Id == placeId && p.Status == PublishedStatus);
         if (!exists)
         {
             throw new KeyNotFoundException("Place not found");

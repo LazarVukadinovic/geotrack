@@ -19,6 +19,7 @@ public class MapService : IMapService
     private const string NominatimBaseUrl = "https://nominatim.openstreetmap.org";
     private const string OsrmBaseUrl = "https://router.project-osrm.org/route/v1/foot";
     private const double DestinationZoomThreshold = 10d;
+    private const string PublishedStatus = "Published";
     private static readonly TimeSpan SearchCacheDuration = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ReverseGeocodeCacheDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan RouteCacheDuration = TimeSpan.FromMinutes(5);
@@ -185,6 +186,7 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Places
                 .AsNoTracking()
+                .Where(place => place.Status == PublishedStatus)
                 .Where(place => place.Name.ToLower().Contains(loweredQuery))
                 .OrderBy(place => place.Name)
                 .Take(10)
@@ -215,10 +217,26 @@ public class MapService : IMapService
                     Type = "event",
                     Name = @event.Name,
                     Description = @event.Description,
-                    Subtitle = @event.Place != null ? @event.Place.Name : @event.Location.Name,
-                    Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
-                    Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
-                    ParentName = @event.Place != null ? @event.Place.Name : @event.Location.Name,
+                    Subtitle = @event.VenueName ?? (@event.Place != null
+                        ? @event.Place.Name
+                        : @event.Location != null
+                            ? @event.Location.Name
+                            : @event.Destination.Name),
+                    Latitude = @event.Place != null
+                        ? @event.Place.Latitude
+                        : @event.Location != null
+                            ? @event.Location.Latitude
+                            : @event.Destination.Latitude,
+                    Longitude = @event.Place != null
+                        ? @event.Place.Longitude
+                        : @event.Location != null
+                            ? @event.Location.Longitude
+                            : @event.Destination.Longitude,
+                    ParentName = @event.Place != null
+                        ? @event.Place.Name
+                        : @event.Location != null
+                            ? @event.Location.Name
+                            : @event.Destination.Name,
                 })
                 .ToListAsync(cancellationToken));
         }
@@ -410,6 +428,7 @@ public class MapService : IMapService
         {
             var places = await _db.Places
                 .AsNoTracking()
+                .Where(place => place.Status == PublishedStatus)
                 .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Select(place => new PlaceMarkerProjection
                 {
@@ -463,7 +482,11 @@ public class MapService : IMapService
                 {
                     Id = @event.Id,
                     Title = @event.Name,
-                    Subtitle = @event.Location.Name,
+                    Subtitle = @event.VenueName ?? (@event.Place != null
+                        ? @event.Place.Name
+                        : @event.Location != null
+                            ? @event.Location.Name
+                            : @event.Destination.Name),
                     CategoryLabel = @event.EventType.Name,
                     ImageUrl = @event.Images
                         .OrderByDescending(image => image.IsMain)
@@ -472,8 +495,16 @@ public class MapService : IMapService
                         .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
-                    Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
-                    Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
+                    Latitude = @event.Place != null
+                        ? @event.Place.Latitude
+                        : @event.Location != null
+                            ? @event.Location.Latitude
+                            : @event.Destination.Latitude,
+                    Longitude = @event.Place != null
+                        ? @event.Place.Longitude
+                        : @event.Location != null
+                            ? @event.Location.Longitude
+                            : @event.Destination.Longitude,
                     DistanceMeters = EF.Property<Point>(@event, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
                 })
                 .Where(@event => @event.DistanceMeters <= radiusMeters)
@@ -597,6 +628,7 @@ public class MapService : IMapService
         {
             var places = await _db.Places
                 .AsNoTracking()
+                .Where(place => place.Status == PublishedStatus)
                 .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Where(place => EF.Property<Point>(place, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
                 .Select(place => new PlaceMarkerProjection
@@ -651,7 +683,11 @@ public class MapService : IMapService
                 {
                     Id = @event.Id,
                     Title = @event.Name,
-                    Subtitle = @event.Location.Name,
+                    Subtitle = @event.VenueName ?? (@event.Place != null
+                        ? @event.Place.Name
+                        : @event.Location != null
+                            ? @event.Location.Name
+                            : @event.Destination.Name),
                     CategoryLabel = @event.EventType.Name,
                     ImageUrl = @event.Images
                         .OrderByDescending(image => image.IsMain)
@@ -660,8 +696,16 @@ public class MapService : IMapService
                         .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
-                    Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
-                    Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
+                    Latitude = @event.Place != null
+                        ? @event.Place.Latitude
+                        : @event.Location != null
+                            ? @event.Location.Latitude
+                            : @event.Destination.Latitude,
+                    Longitude = @event.Place != null
+                        ? @event.Place.Longitude
+                        : @event.Location != null
+                            ? @event.Location.Longitude
+                            : @event.Destination.Longitude,
                     DistanceMeters = null,
                 })
                 .OrderBy(@event => @event.Title)

@@ -31,8 +31,8 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   private emailDropdownTimer: ReturnType<typeof setTimeout> | null = null;
   private nameDropdownTimer:  ReturnType<typeof setTimeout> | null = null;
 
-  userName = 'Sarah Jenkins';
-  userRole = 'National Manager';
+  userName = '';
+  userRole = '';
   isViewMode = true;
 
   region: RegionDetail | null = null;

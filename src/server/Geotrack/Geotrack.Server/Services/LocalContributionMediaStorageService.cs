@@ -55,7 +55,7 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
             throw new InvalidOperationException("Ownership proof document must be 10 MB or smaller.");
 
         var detectedFile = DetectOwnershipProofFile(fileBytes, originalFileName, contentType)
-            ?? throw new InvalidOperationException("Ownership proof document must be a PDF, JPG, PNG, or WEBP file.");
+            ?? throw new InvalidOperationException("Ownership proof document must be a PDF file.");
 
         Directory.CreateDirectory(_mediaDirectory);
 
@@ -133,31 +133,6 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
             normalizedContentType == "application/pdf")
         {
             return new DetectedUploadFile(".pdf");
-        }
-
-        var detectedImage = DetectImageType(fileBytes);
-        if (detectedImage is null)
-            return null;
-
-        if (detectedImage.Extension == ".jpg" &&
-            extension is ".jpg" or ".jpeg" &&
-            normalizedContentType == "image/jpeg")
-        {
-            return new DetectedUploadFile(".jpg");
-        }
-
-        if (detectedImage.Extension == ".png" &&
-            extension == ".png" &&
-            normalizedContentType == "image/png")
-        {
-            return new DetectedUploadFile(".png");
-        }
-
-        if (detectedImage.Extension == ".webp" &&
-            extension == ".webp" &&
-            normalizedContentType == "image/webp")
-        {
-            return new DetectedUploadFile(".webp");
         }
 
         return null;

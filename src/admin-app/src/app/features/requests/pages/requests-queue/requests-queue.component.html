@@ -1,33 +1,52 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
+  <app-sidebar
+    [regions]="assignedRegions"
+    [region]="regionDisplayName"
+    [activeRegionId]="activeRegionId"
+    [pendingRequestsCount]="queue?.pendingCount ?? null"
+    [regionLoading]="regionLoading"
+    (regionChange)="onRegionSelected($event)"
+  />
 
-  <!-- Sidebar -->
-  <app-sidebar [region]="region" />
-
-  <!-- Main -->
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <app-topbar [userName]="userName" [userRole]="userRole" title="Review Queue" [showBack]="true" backRoute="/dashboard" />
 
-    <!-- Topbar -->
-    <app-topbar [userName]="userName" [userRole]="userRole" title="Review Queue" [showBack]="true" backRoute="/dashboard"/>
-  
-    <!-- Scrollable content -->
     <div class="flex-1 overflow-y-auto px-8 py-6">
-
-      <!-- Page heading -->
       <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Review Requests Queue</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Manage and process incoming content submissions from regional contributors.</p>
+        <p class="text-sm text-gray-500 mt-0.5">
+          Manage and process incoming content submissions and reported reviews for the active region.
+        </p>
       </div>
 
-      <!-- Filter tabs -->
-      <div class="flex gap-2 mb-5">
+      <div *ngIf="regionLoading && !activeRegionId" class="bg-white rounded-xl border border-gray-100 p-6 text-sm text-gray-500 mb-6">
+        Loading assigned regions...
+      </div>
+
+      <div *ngIf="assignedRegions.length === 0 && !regionLoading && !errorMessage" class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+        <p class="text-sm font-semibold text-gray-800">No assigned regions.</p>
+        <p class="text-sm text-gray-500 mt-1">This Regional Manager account does not currently have any assigned regions.</p>
+      </div>
+
+      <div *ngIf="errorMessage" class="bg-white rounded-xl border border-red-100 p-4 mb-5">
+        <p class="text-sm font-semibold text-red-600">{{ authRequired ? 'Authentication required' : 'Request queue unavailable' }}</p>
+        <p class="text-sm text-gray-500 mt-1">{{ errorMessage }}</p>
+      </div>
+
+      <div *ngIf="feedbackMessage" class="bg-blue-50 rounded-xl border border-blue-100 p-3 mb-5">
+        <p class="text-sm font-semibold text-blue-700">{{ feedbackMessage }}</p>
+      </div>
+
+      <div class="flex gap-2 mb-5 flex-wrap">
         <button
           *ngFor="let tab of tabs"
-          (click)="activeTab = tab.key"
+          type="button"
+          (click)="selectTab(tab.key)"
           class="px-4 py-2 rounded-full text-sm font-semibold transition-all"
           [ngClass]="activeTab === tab.key
             ? 'bg-blue-700 text-white shadow-sm'
-            : tab.key === 'Approved' ? 'bg-white text-blue-600 border border-blue-200 hover:border-blue-400'
-            : tab.key === 'Rejected' ? 'bg-white text-red-500 border border-red-200 hover:border-red-400'
+            : tab.key === 'approved' ? 'bg-white text-blue-600 border border-blue-200 hover:border-blue-400'
+            : tab.key === 'rejected' ? 'bg-white text-red-500 border border-red-200 hover:border-red-400'
             : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-300 hover:text-blue-700'"
         >
           {{ tab.label }}
@@ -39,244 +58,239 @@
         </button>
       </div>
 
-      <!-- Table card -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden"
-           style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
-
-        <!-- Toolbar -->
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden" style="box-shadow: 0 1px 6px rgba(0,0,0,0.06);">
         <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
           <input
             type="checkbox"
             class="w-4 h-4 accent-blue-700 cursor-pointer"
             [checked]="allSelected"
+            [disabled]="pendingVisibleRequests.length === 0 || controlsBusy"
             (change)="toggleSelectAll($event)"
           />
           <span class="text-sm text-gray-600 font-medium">Select All</span>
 
           <button
-            [disabled]="selectedIds.size === 0"
+            [disabled]="selectedPendingCount === 0 || controlsBusy"
             (click)="approveSelected()"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all"
-            [ngClass]="selectedIds.size > 0
+            [ngClass]="selectedPendingCount > 0 && !controlsBusy
               ? 'bg-blue-700 text-white hover:bg-blue-800 cursor-pointer'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed'"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline points="20 6 9 17 4 12"/>
+              <polyline points="20 6 9 17 4 12" />
             </svg>
             Approve Selected
           </button>
 
           <button
-            [disabled]="selectedIds.size === 0"
-            (click)="rejectSelected()"
+            [disabled]="selectedPendingCount === 0 || controlsBusy"
+            (click)="openRejectSelected()"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all"
-            [ngClass]="selectedIds.size > 0
+            [ngClass]="selectedPendingCount > 0 && !controlsBusy
               ? 'bg-white text-gray-600 border border-gray-200 hover:border-red-300 hover:text-red-600 cursor-pointer'
               : 'bg-white text-gray-300 border border-gray-100 cursor-not-allowed'"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
             Reject
           </button>
 
-          <!-- Search -->
-          <div class="ml-auto flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 w-52">
+          <div class="ml-auto flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 w-64">
             <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
               type="text"
               placeholder="Search requests..."
               [(ngModel)]="searchQuery"
+              (ngModelChange)="onSearchChange()"
               class="bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 w-full"
             />
           </div>
 
-          <!-- Sort -->
           <div class="relative">
             <button
+              type="button"
               (click)="sortOpen = !sortOpen; $event.stopPropagation()"
               class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 cursor-pointer transition-colors"
             >
               <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
               </svg>
-              Sort: {{ currentSort }}
+              Sort: {{ currentSortLabel }}
               <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"/>
+                <polyline points="6 9 12 15 18 9" />
               </svg>
             </button>
-            <div
-              *ngIf="sortOpen"
-              class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-40 py-1 overflow-hidden"
-            >
+            <div *ngIf="sortOpen" class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-40 py-1 overflow-hidden">
               <button
                 *ngFor="let opt of sortOptions"
-                (click)="currentSort = opt; sortOpen = false"
+                type="button"
+                (click)="setSort(opt.value)"
                 class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer border-none bg-transparent"
-                [ngClass]="currentSort === opt ? 'font-semibold text-blue-700 bg-blue-50' : ''"
-              >{{ opt }}</button>
+                [ngClass]="currentSort === opt.value ? 'font-semibold text-blue-700 bg-blue-50' : ''"
+              >{{ opt.label }}</button>
             </div>
           </div>
         </div>
 
-        <!-- Rows -->
-        <div class="divide-y divide-gray-50">
+        <div *ngIf="waitingForRegion || loadingQueue" class="px-4 py-10 text-sm text-gray-500">
+          {{ waitingForRegion ? 'Loading assigned regions...' : 'Loading request queue...' }}
+        </div>
+
+        <div class="divide-y divide-gray-50" *ngIf="!waitingForRegion && !loadingQueue">
           <div
-            *ngFor="let req of filteredRequests"
+            *ngFor="let req of requests"
             class="flex items-center gap-4 px-4 py-3.5 hover:bg-gray-50/60 transition-colors group"
           >
-            <!-- Checkbox -->
             <input
               type="checkbox"
               class="w-4 h-4 accent-blue-700 cursor-pointer flex-shrink-0"
-              [checked]="selectedIds.has(req.id)"
-              (change)="toggleSelect(req.id, $event)"
+              [checked]="selectedIds.has(req.requestKey)"
+              [disabled]="req.status !== 'Pending' || isProcessing(req)"
+              (change)="toggleSelect(req, $event)"
             />
 
-            <!-- Thumbnail -->
-            <div
-              class="w-14 h-14 rounded-lg flex-shrink-0 bg-cover bg-center"
-              [style.background]="req.imageBg"
-              style="min-width: 56px;"
-            ></div>
+            <div class="w-14 h-14 rounded-lg flex-shrink-0 bg-gray-100 border border-gray-100 overflow-hidden flex items-center justify-center" style="min-width: 56px;">
+              <img *ngIf="hasThumbnail(req)" [src]="req.thumbnailImageUrl ?? ''" [alt]="req.title" class="w-full h-full object-cover" (error)="onThumbnailError(req)" />
+              <svg *ngIf="!hasThumbnail(req)" class="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <circle cx="8.5" cy="10" r="1.5" />
+                <path d="M21 16l-5-5-4 4-2-2-5 5" />
+              </svg>
+            </div>
 
-            <!-- Title + meta -->
             <div class="flex-1 min-w-0">
               <p class="text-sm font-semibold text-gray-900 mb-0.5 truncate">{{ req.title }}</p>
               <div class="flex items-center gap-2 flex-wrap">
-                <!-- Type badge -->
-                <span
-                  class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                  [ngClass]="typeBadgeClass(req.type)"
-                >
-                  <!-- Place icon (house) -->
-                  <svg *ngIf="req.type === 'Place'" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-                  </svg>
-                  <!-- Location icon (pin) -->
-                  <!-- <svg *ngIf="req.type === 'Location'" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                  </svg> -->
-                  <!-- Event icon -->
-                  <!-- <svg *ngIf="req.type === 'Event'" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2"/>
-                    <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                  </svg> -->
-                  {{ req.type }}
+                <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full" [ngClass]="typeBadgeClass(req.entityType)">
+                  {{ req.entityType }}
                 </span>
-
-                <span class="text-xs text-gray-400">{{ req.region }}</span>
-                <span class="text-gray-300 text-xs">·</span>
-                <span class="text-xs text-gray-400">ID: {{ req.reqId }}</span>
+                <span class="text-xs text-gray-400">{{ req.regionDisplayName }}</span>
+                <span class="text-gray-300 text-xs">&middot;</span>
+                <span class="text-xs text-gray-400">ID: {{ req.displayRequestId }}</span>
               </div>
             </div>
 
-            <!-- Author -->
-            <div class="flex items-center gap-2.5 w-44 flex-shrink-0">
-              <div
-                class="w-7 h-7 rounded-full flex-shrink-0 border border-gray-200 flex items-center justify-center"
-                [style.background]="req.authorBg"
-              >
-                <span
-                  *ngIf="!req.authorImg"
-                  class="text-[10px] font-bold text-gray-600"
-                >{{ req.authorInitials }}</span>
+            <div class="flex items-center gap-2.5 w-48 flex-shrink-0">
+              <div class="w-7 h-7 rounded-full flex-shrink-0 border border-gray-200 bg-gray-50 flex items-center justify-center">
+                <span class="text-[10px] font-bold text-gray-600">{{ req.submittedByInitials || 'U' }}</span>
               </div>
               <div class="min-w-0">
-                <p class="text-sm font-medium text-gray-800 truncate">{{ req.author }}</p>
-                <p class="text-xs text-gray-400">{{ req.date }}</p>
+                <p class="text-sm font-medium text-gray-800 truncate">{{ req.submittedByDisplayName || 'User' }}</p>
+                <p class="text-xs text-gray-400">{{ req.submittedAt | date:'mediumDate' }}</p>
               </div>
             </div>
 
-            <!-- Status -->
-            <div class="w-20 flex-shrink-0">
-              <span class="inline-flex items-center gap-1 text-xs font-medium text-gray-500">
-                <svg class="w-3 h-3 text-amber-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            <div class="w-24 flex-shrink-0">
+              <span class="inline-flex items-center gap-1 text-xs font-medium" [ngClass]="statusClass(req.status)">
+                <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
                 </svg>
                 {{ req.status }}
               </span>
             </div>
 
-            <!-- Actions -->
             <div class="flex items-center gap-2 flex-shrink-0">
               <button
+                type="button"
                 (click)="previewRequest(req)"
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-white border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors"
               >
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
                 </svg>
                 Preview
               </button>
               <button
+                type="button"
+                [disabled]="req.status !== 'Pending' || isProcessing(req)"
                 (click)="approveRequest(req)"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 cursor-pointer transition-colors border-none"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed cursor-pointer transition-colors border-none"
               >
-                Approve
+                {{ isProcessing(req) ? 'Working...' : 'Approve' }}
               </button>
               <button
-                (click)="rejectRequest(req)"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 cursor-pointer transition-colors"
+                type="button"
+                [disabled]="req.status !== 'Pending' || isProcessing(req)"
+                (click)="openRejectRequest(req)"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 disabled:text-gray-300 disabled:border-gray-100 disabled:cursor-not-allowed cursor-pointer transition-colors"
               >
                 Reject
               </button>
             </div>
           </div>
 
-          <!-- Empty state -->
-          <div *ngIf="filteredRequests.length === 0" class="flex flex-col items-center justify-center py-16 text-gray-400">
+          <div *ngIf="requests.length === 0" class="flex flex-col items-center justify-center py-16 text-gray-400">
             <svg class="w-12 h-12 mb-3 text-gray-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M22 12h-6l-2 3H10l-2-3H2"/>
-              <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
+              <path d="M22 12h-6l-2 3H10l-2-3H2" />
+              <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />
             </svg>
-            <p class="text-sm font-medium">No requests found</p>
-            <p class="text-xs mt-1">Try adjusting your search or filters</p>
+            <p class="text-sm font-medium">{{ emptyMessage }}</p>
           </div>
         </div>
 
-        <!-- Pagination footer -->
         <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/40">
           <p class="text-sm text-gray-500">
-            Showing <span class="font-semibold text-gray-700">{{ filteredRequests.length }}</span>
+            Showing <span class="font-semibold text-gray-700">{{ showingStart }}</span>
+            - <span class="font-semibold text-gray-700">{{ showingEnd }}</span>
             of <span class="font-semibold text-gray-700">{{ totalForCurrentView }}</span> requests
           </p>
           <div class="flex items-center gap-2">
-            <button class="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer transition-colors">
+            <button
+              type="button"
+              [disabled]="!canGoPrevious"
+              (click)="previousPage()"
+              class="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+            >
               Previous
             </button>
-            <button class="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer transition-colors">
+            <button
+              type="button"
+              [disabled]="!canGoNext"
+              (click)="nextPage()"
+              class="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+            >
               Next
             </button>
           </div>
         </div>
       </div>
-
     </div>
   </div>
 </div>
 
-<!-- Context menu (dropdown) -->
 <div
-  *ngIf="contextMenu"
-  class="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-36 overflow-hidden"
-  [style.top.px]="contextMenu.y"
-  [style.left.px]="contextMenu.x"
-  (mouseleave)="contextMenu = null"
+  *ngIf="rejectModal"
+  class="fixed inset-0 flex items-center justify-center bg-black/40 z-50"
+  (click)="cancelReject()"
 >
-  <button (click)="previewRequest(contextMenu.req); contextMenu = null"
-          class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer border-none bg-transparent">
-    Preview
-  </button>
-  <button (click)="approveRequest(contextMenu.req); contextMenu = null"
-          class="w-full text-left px-3 py-2 text-sm text-blue-700 font-medium hover:bg-blue-50 cursor-pointer border-none bg-transparent">
-    Approve
-  </button>
-  <button (click)="rejectRequest(contextMenu.req); contextMenu = null"
-          class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer border-none bg-transparent">
-    Reject
-  </button>
+  <div class="bg-white rounded-xl shadow-xl w-[420px] max-w-[92vw] p-5" (click)="$event.stopPropagation()">
+    <h2 class="text-base font-bold text-gray-900 mb-1">Reject request</h2>
+    <p class="text-sm text-gray-500 mb-4">Add a clear reason for the affected user.</p>
+    <label class="block text-xs font-semibold text-gray-500 mb-1">Reason</label>
+    <input
+      [(ngModel)]="rejectReason"
+      type="text"
+      class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 mb-3"
+      placeholder="Missing information, not relevant, duplicate..."
+    />
+    <label class="block text-xs font-semibold text-gray-500 mb-1">Moderator note</label>
+    <textarea
+      [(ngModel)]="rejectNote"
+      rows="4"
+      class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none resize-none focus:border-blue-400"
+      placeholder="Optional extra context"
+    ></textarea>
+    <div class="flex justify-end gap-2 mt-4">
+      <button type="button" (click)="cancelReject()" class="px-3 py-2 rounded-lg text-sm text-gray-600 border border-gray-200 bg-white hover:bg-gray-50">
+        Cancel
+      </button>
+      <button type="button" (click)="confirmReject()" class="px-3 py-2 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700">
+        Reject
+      </button>
+    </div>
+  </div>
 </div>

@@ -9,6 +9,8 @@ import { BackgroundImageFallbackDirective } from '../../../../../../shared/direc
 const MAP_STYLE_URL = '/map-style.json';
 const DEFAULT_PICKER_LAT = 44.82;
 const DEFAULT_PICKER_LNG = 20.46;
+const MAX_OWNERSHIP_PROOF_BYTES = 10 * 1024 * 1024;
+const OWNERSHIP_PROOF_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe']);
 
 export interface BasicsData {
   name: string;
@@ -63,20 +65,34 @@ export class StepBasicsComponent implements OnDestroy {
     lat: null, lng: null, imgBgPosition: '50% 50%', imgBgSize: 'cover'
   };
 
+  selectPlaceType(type: string): void {
+    this.form.placeType = type;
+    this.ownershipProofError.set('');
+
+    if (!this.requiresOwnershipProof()) {
+      this.form.ownershipProofFile = null;
+      this.form.ownershipProofDocumentUrl = null;
+      this.form.ownershipProofOriginalFileName = null;
+      this.ownershipProofFileName.set('');
+    }
+  }
+
   onOwnershipProofSelected(e: Event): void {
     const file = (e.target as HTMLInputElement).files?.[0];
     (e.target as HTMLInputElement).value = '';
     if (!file) return;
     this.ownershipProofError.set('');
-    if (file.type !== 'application/pdf') {
+    if (!isPdfFile(file)) {
       this.ownershipProofError.set('Only PDF documents are accepted.');
       return;
     }
-    if (file.size > 20 * 1024 * 1024) {
-      this.ownershipProofError.set('Document must be 20 MB or smaller.');
+    if (file.size > MAX_OWNERSHIP_PROOF_BYTES) {
+      this.ownershipProofError.set('Document must be 10 MB or smaller.');
       return;
     }
     this.form.ownershipProofFile = file;
+    this.form.ownershipProofDocumentUrl = null;
+    this.form.ownershipProofOriginalFileName = null;
     this.ownershipProofFileName.set(file.name);
   }
 
@@ -259,7 +275,7 @@ export class StepBasicsComponent implements OnDestroy {
       !!this.form.country.trim() &&
       this.hasConfirmedLocation();
     if (!baseValid) return false;
-    if (this.isAccommodationSelected() && !this.form.ownershipProofFile && !this.form.ownershipProofDocumentUrl) return false;
+    if (this.requiresOwnershipProof() && !this.form.ownershipProofFile && !this.form.ownershipProofDocumentUrl) return false;
     return true;
   }
 
@@ -269,6 +285,16 @@ export class StepBasicsComponent implements OnDestroy {
 
   isAccommodationSelected(): boolean {
     return this.form.placeType === 'Stay';
+  }
+
+  requiresOwnershipProof(): boolean {
+    return OWNERSHIP_PROOF_PLACE_TYPES.has(normalizePlaceType(this.form.placeType));
+  }
+
+  ownershipProofHelpText(): string {
+    return this.isAccommodationSelected()
+      ? 'Upload a PDF document proving your ownership or management of this property.'
+      : 'Upload a PDF document proving your ownership or management of this business.';
   }
 
   showLocationError(): boolean {
@@ -316,6 +342,8 @@ export class StepBasicsComponent implements OnDestroy {
           this.ownershipProofFileName.set(d.ownershipProofFile.name);
         } else if (d.ownershipProofOriginalFileName) {
           this.ownershipProofFileName.set(d.ownershipProofOriginalFileName);
+        } else {
+          this.ownershipProofFileName.set('');
         }
         if (this.hasUsableCoordinates(d.lat, d.lng)) {
           this.pickerLat.set(d.lat);
@@ -422,4 +450,12 @@ export class StepBasicsComponent implements OnDestroy {
       el.removeEventListener('touchend', this.boundTouchEnd);
     }
   }
+}
+
+function normalizePlaceType(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase();
+}
+
+function isPdfFile(file: File): boolean {
+  return file.type === 'application/pdf' || file.name.trim().toLowerCase().endsWith('.pdf');
 }

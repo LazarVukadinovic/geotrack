@@ -35,9 +35,9 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   isLoading  = true;
   notFound   = false;
 
-  region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  region   = '';
+  userName = '';
+  userRole = '';
 
   mapModalOpen  = false;
   deleteTarget: EventListItem | null = null;
@@ -58,6 +58,7 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
       const fromService = this.svc.findById(id);
       if (fromService) {
         this.item      = { ...fromService };
+        this.region    = this.item.region;
         this.isLoading = false;
         return;
       }
@@ -65,6 +66,7 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (navState?.id) {
       this.item      = { ...navState };
+      this.region    = this.item.region;
       this.isLoading = false;
       return;
     }

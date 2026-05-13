@@ -1,12 +1,16 @@
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Options;
+using Geotrack.Application.Security;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure;
 using Geotrack.Infrastructure.Repositories;
 using Geotrack.Infrastructure.Services;
+using Geotrack.Infrastructure.Services.Agent;
 using Geotrack.Server;
 using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.StaticFiles;
@@ -15,6 +19,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
 using System.Net;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 
@@ -54,6 +59,10 @@ builder.Services.AddControllers()
 
 builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
+builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("Mcp"));
+builder.Services.AddDataProtection()
+    .SetApplicationName("GeoTrack");
 
 builder.Services.AddSwaggerGen(c =>
 {
@@ -115,6 +124,26 @@ builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
 
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
+builder.Services.AddScoped<IApiKeyEncryptionService, ApiKeyEncryptionService>();
+builder.Services.AddScoped<IAiProviderKeyService, AiProviderKeyService>();
+builder.Services.AddScoped<IAgentQueryPlanner, AgentQueryPlanner>();
+builder.Services.AddScoped<IGeoTrackToolService, GeoTrackToolService>();
+builder.Services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
+builder.Services.AddScoped<IAgentProviderRegistry, AgentProviderRegistry>();
+builder.Services.AddHttpClient<GeminiAgentProvider>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("GeoTrack/1.0");
+});
+builder.Services.AddScoped<IAgentProvider>(serviceProvider => serviceProvider.GetRequiredService<GeminiAgentProvider>());
+builder.Services.AddScoped<IAgentProvider>(serviceProvider =>
+    new ConfiguredUnavailableAgentProvider(
+        "openai",
+        serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentOptions>>()));
+builder.Services.AddScoped<IAgentProvider>(serviceProvider =>
+    new ConfiguredUnavailableAgentProvider(
+        "claude",
+        serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentOptions>>()));
 builder.Services.AddScoped<IExploreService, ExploreService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 
@@ -123,7 +152,14 @@ builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionReposi
 
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
-
+builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
+builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
+builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
+builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
+builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();
+builder.Services.AddScoped<IRegionalPlaceService, RegionalPlaceService>();
+builder.Services.AddScoped<IRegionalEventService, RegionalEventService>();
+builder.Services.AddScoped<IRegionalMapService, RegionalMapService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(5);
@@ -173,9 +209,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            NameClaimType = ClaimTypes.NameIdentifier,
+            RoleClaimType = ClaimTypes.Role
         };
     });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireRegionalManager", policy =>
+        policy.RequireRole(RoleNames.RegionalManager));
+});
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -208,7 +252,7 @@ builder.Services.AddRateLimiter(options =>
 
     options.AddPolicy("agent", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            partitionKey: GetUserOrIpRateLimitPartition(httpContext),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20,
@@ -218,6 +262,20 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true,
             }));
 
+    options.AddPolicy("mcp", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserOrIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    // Backend-mediated map providers and spatial queries are public, so keep
+    // separate budgets for normal viewport loads and costlier external lookups.
     options.AddPolicy("map", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: GetUserOrIpRateLimitPartition(httpContext),
@@ -283,13 +341,16 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
+var developmentCorsOrigins = GetDevelopmentCorsOrigins(builder.Configuration);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontendDev", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(developmentCorsOrigins)
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -300,14 +361,28 @@ await PostgisStartup.EnsureReadyAsync(app.Services, app.Environment.IsDevelopmen
 var shouldSeedDatabase =
     app.Environment.IsDevelopment()
     || app.Configuration.GetValue<bool>("SeedData:Enabled");
+var shouldSeedDemoRegionalManager =
+    DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 
-if (shouldSeedDatabase)
+if (shouldSeedDatabase || shouldSeedDemoRegionalManager)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
     await db.Database.MigrateAsync();
-    await SeedData.InitializeAsync(db);
+
+    if (shouldSeedDatabase)
+    {
+        await SeedData.InitializeAsync(db);
+    }
+
+    if (shouldSeedDemoRegionalManager)
+    {
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(nameof(DemoRegionalManagerSeeder));
+        await DemoRegionalManagerSeeder.EnsureAsync(db, app.Configuration, logger);
+    }
 }
 
 if (!app.Environment.IsDevelopment())
@@ -335,8 +410,9 @@ if (forwardedHeadersEnabled)
     app.UseForwardedHeaders();
 }
 
-// Na PMF serveru radi obican HTTP port, zato ne forsiramo HTTPS redirect u Production.
-if (app.Environment.IsDevelopment())
+// Local dev and PMF deployment run over plain HTTP. Enable this explicitly
+// only for hosts where the ASP.NET app terminates HTTPS itself.
+if (app.Configuration.GetValue<bool>("HttpsRedirection:Enabled"))
 {
     app.UseHttpsRedirection();
 }
@@ -356,6 +432,13 @@ app.Use(async (context, next) =>
     await next();
 });
 
+var webRoot = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (Directory.Exists(webRoot))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
+
 var mediaRoot = Path.Combine(app.Environment.ContentRootPath, "media");
 
 Directory.CreateDirectory(Path.Combine(mediaRoot, "seed"));
@@ -365,9 +448,6 @@ Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "contributions"));
 var mediaContentTypes = new FileExtensionContentTypeProvider();
 mediaContentTypes.Mappings[".svg"] = "image/svg+xml";
 mediaContentTypes.Mappings[".webp"] = "image/webp";
-
-app.UseDefaultFiles();
-app.UseStaticFiles();
 
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -446,9 +526,35 @@ app.UseRateLimiter();
 
 app.MapControllers();
 
-app.MapFallbackToFile("index.html");
+if (File.Exists(Path.Combine(webRoot, "index.html")))
+{
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
+
+static string[] GetDevelopmentCorsOrigins(IConfiguration configuration)
+{
+    var configuredOrigins = configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>() ?? Array.Empty<string>();
+
+    var origins = configuredOrigins
+        .Select(origin => origin.Trim())
+        .Where(origin => !string.IsNullOrWhiteSpace(origin))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    return origins.Length > 0
+        ? origins
+        : new[]
+        {
+            "http://localhost:4200",
+            "http://127.0.0.1:4200",
+            "http://localhost:4300",
+            "http://127.0.0.1:4300"
+        };
+}
 
 static bool ConfigureForwardedHeaders(WebApplicationBuilder builder)
 {

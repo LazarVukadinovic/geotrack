@@ -160,8 +160,8 @@ export class ContributionsService {
   }
 
   getDetail(id: number): Observable<ContributionDetail> {
-    return this.http.get<ContributionResponse>(`/api/contributions/${id}`).pipe(
-      map(res => mapDetail(res.contribution)),
+    return this.http.get<ContributionResponse | ApiContributionDetail>(`/api/contributions/${id}`).pipe(
+      map(res => mapDetail(unwrapContributionResponse(res))),
     );
   }
 
@@ -233,6 +233,7 @@ export class ContributionsService {
     const features = normalizeFeatures(draft.features);
     const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
+    const requiresOwnershipProof = requiresOwnershipProofPlaceType(basics.placeType);
 
     const payload: UpsertPlaceContributionPayload = {
       type: 'CreatePlace',
@@ -263,7 +264,7 @@ export class ContributionsService {
       formData.append('coverImage', basics.coverImageFile);
     }
 
-    if (isAccommodation && basics.ownershipProofFile) {
+    if (requiresOwnershipProof && basics.ownershipProofFile) {
       formData.append('ownershipProofDocument', basics.ownershipProofFile);
     }
 
@@ -328,6 +329,10 @@ function mapListItem(item: ApiContributionListItem): ContributionListItem {
   };
 }
 
+function unwrapContributionResponse(response: ContributionResponse | ApiContributionDetail): ApiContributionDetail {
+  return 'contribution' in response ? response.contribution : response;
+}
+
 function normalizeContributionEntityType(entityType: string | null | undefined): ContributionEntityType {
   // Older contribution responses used "Stay" for this user-submitted entity.
   // The current PlaceContribution contract treats the contribution entity as a Place.
@@ -336,6 +341,17 @@ function normalizeContributionEntityType(entityType: string | null | undefined):
 
 function isAccommodationPlaceType(placeType: string | null | undefined): boolean {
   return (placeType ?? '').trim().toLowerCase() === 'stay';
+}
+
+function requiresOwnershipProofPlaceType(placeType: string | null | undefined): boolean {
+  switch ((placeType ?? '').trim().toLowerCase()) {
+    case 'stay':
+    case 'restaurant':
+    case 'cafe':
+      return true;
+    default:
+      return false;
+  }
 }
 
 function mapDetail(item: ApiContributionDetail): ContributionDetail {

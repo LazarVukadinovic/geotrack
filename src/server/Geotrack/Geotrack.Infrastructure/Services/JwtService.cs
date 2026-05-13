@@ -1,4 +1,5 @@
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -30,10 +31,13 @@ public class JwtService : IJwtService
 
         var claims = new List<Claim>
         {
+            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim("userId", userId.ToString())
         };
 
         claims.AddRange(roles
+            .Select(RoleNames.Normalize)
             .Where(role => !string.IsNullOrWhiteSpace(role))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(role => new Claim(ClaimTypes.Role, role)));

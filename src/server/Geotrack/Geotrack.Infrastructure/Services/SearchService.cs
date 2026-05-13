@@ -15,6 +15,7 @@ public class SearchService : ISearchService
     private const int MaxTake = 12;
     private const int MetadataOptionLimit = 10;
     private const string LanguageEnglish = "en";
+    private const string PublishedStatus = "Published";
 
     private static readonly Regex SeparatorPattern = new(@"[^a-z0-9]+", RegexOptions.Compiled);
     private static readonly Regex WhitespacePattern = new(@"\s+", RegexOptions.Compiled);
@@ -286,14 +287,18 @@ public class SearchService : ISearchService
                 Id = $"place-type:{type.Id}",
                 Label = type.Name,
                 Domain = SearchDomains.Places,
-                Count = type.Places.Count(place => place.Stay == null)
+                Count = type.Places.Count(place => place.Status == PublishedStatus && place.Stay == null)
             })
             .ToListAsync(cancellationToken);
 
         var stayOptions = await _db.Tags
             .AsNoTracking()
-            .Where(tag => tag.ForPlace && tag.PlaceTags.Any(placeTag => placeTag.Place.Stay != null))
-            .OrderByDescending(tag => tag.PlaceTags.Count(placeTag => placeTag.Place.Stay != null))
+            .Where(tag => tag.ForPlace && tag.PlaceTags.Any(placeTag =>
+                placeTag.Place.Status == PublishedStatus &&
+                placeTag.Place.Stay != null))
+            .OrderByDescending(tag => tag.PlaceTags.Count(placeTag =>
+                placeTag.Place.Status == PublishedStatus &&
+                placeTag.Place.Stay != null))
             .ThenBy(tag => tag.Name)
             .Take(MetadataOptionLimit)
             .Select(tag => new SearchFilterOptionDto
@@ -301,15 +306,19 @@ public class SearchService : ISearchService
                 Id = $"tag:{tag.Slug}",
                 Label = tag.Name,
                 Domain = SearchDomains.Stays,
-                Count = tag.PlaceTags.Count(placeTag => placeTag.Place.Stay != null)
+                Count = tag.PlaceTags.Count(placeTag =>
+                    placeTag.Place.Status == PublishedStatus &&
+                    placeTag.Place.Stay != null)
             })
             .ToListAsync(cancellationToken);
 
         var activityOptions = await _db.Tags
             .AsNoTracking()
             .Where(tag => (tag.ForPlace || tag.ForEvent) &&
-                (tag.PlaceTags.Any() || tag.EventTags.Any()))
-            .OrderByDescending(tag => tag.PlaceTags.Count() + tag.EventTags.Count())
+                (tag.PlaceTags.Any(placeTag => placeTag.Place.Status == PublishedStatus) || tag.EventTags.Any()))
+            .OrderByDescending(tag =>
+                tag.PlaceTags.Count(placeTag => placeTag.Place.Status == PublishedStatus) +
+                tag.EventTags.Count())
             .ThenBy(tag => tag.Name)
             .Take(MetadataOptionLimit)
             .Select(tag => new SearchFilterOptionDto
@@ -317,7 +326,7 @@ public class SearchService : ISearchService
                 Id = $"tag:{tag.Slug}",
                 Label = tag.Name,
                 Domain = SearchDomains.Activities,
-                Count = tag.PlaceTags.Count() + tag.EventTags.Count()
+                Count = tag.PlaceTags.Count(placeTag => placeTag.Place.Status == PublishedStatus) + tag.EventTags.Count()
             })
             .ToListAsync(cancellationToken);
 
@@ -430,6 +439,7 @@ public class SearchService : ISearchService
 
         var query = _db.Places
             .AsNoTracking()
+            .Where(place => place.Status == PublishedStatus)
             .Where(place => includeStays ? place.Stay != null : place.Stay == null)
             .Where(place =>
                 hasDomainCandidateIntent ||
@@ -583,14 +593,16 @@ public class SearchService : ISearchService
             .AsNoTracking()
             .Where(@event =>
                 hasEventDomainIntent ||
-                (destinationId.HasValue && @event.Location.DestinationId == destinationId.Value) ||
+                (destinationId.HasValue && @event.DestinationId == destinationId.Value) ||
                 tagIds.Count > 0 && @event.EventTags.Any(eventTag => tagIds.Contains(eventTag.TagId)) ||
                 eventTypeIds.Count > 0 && eventTypeIds.Contains(@event.EventTypeId) ||
                 EF.Functions.ILike(@event.Name, pattern) ||
+                (@event.Summary != null && EF.Functions.ILike(@event.Summary, pattern)) ||
                 EF.Functions.ILike(@event.Description, pattern) ||
                 EF.Functions.ILike(@event.EventType.Name, pattern) ||
-                EF.Functions.ILike(@event.Location.Name, pattern) ||
-                EF.Functions.ILike(@event.Location.Destination.Name, pattern) ||
+                (@event.VenueName != null && EF.Functions.ILike(@event.VenueName, pattern)) ||
+                (@event.Location != null && EF.Functions.ILike(@event.Location.Name, pattern)) ||
+                EF.Functions.ILike(@event.Destination.Name, pattern) ||
                 (@event.HostedBy != null && EF.Functions.ILike(@event.HostedBy, pattern)) ||
                 @event.EventTags.Any(eventTag =>
                     EF.Functions.ILike(eventTag.Tag.Name, pattern) ||
@@ -606,11 +618,23 @@ public class SearchService : ISearchService
                     Name = @event.Name,
                     Description = @event.Description,
                     EventTypeName = @event.EventType.Name,
-                    LocationName = @event.Location.Name,
-                    DestinationId = @event.Location.DestinationId,
-                    DestinationName = @event.Location.Destination.Name,
-                    Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
-                    Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
+                    LocationName = @event.VenueName ?? (@event.Place != null
+                        ? @event.Place.Name
+                        : @event.Location != null
+                            ? @event.Location.Name
+                            : @event.Destination.Name),
+                    DestinationId = @event.DestinationId,
+                    DestinationName = @event.Destination.Name,
+                    Latitude = @event.Place != null
+                        ? @event.Place.Latitude
+                        : @event.Location != null
+                            ? @event.Location.Latitude
+                            : @event.Destination.Latitude,
+                    Longitude = @event.Place != null
+                        ? @event.Place.Longitude
+                        : @event.Location != null
+                            ? @event.Location.Longitude
+                            : @event.Destination.Longitude,
                     StartDate = @event.StartDate,
                     EndDate = @event.EndDate,
                     Tags = @event.EventTags
@@ -635,11 +659,23 @@ public class SearchService : ISearchService
                     Name = @event.Name,
                     Description = @event.Description,
                     EventTypeName = @event.EventType.Name,
-                    LocationName = @event.Location.Name,
-                    DestinationId = @event.Location.DestinationId,
-                    DestinationName = @event.Location.Destination.Name,
-                    Latitude = @event.Place != null ? @event.Place.Latitude : @event.Location.Latitude,
-                    Longitude = @event.Place != null ? @event.Place.Longitude : @event.Location.Longitude,
+                    LocationName = @event.VenueName ?? (@event.Place != null
+                        ? @event.Place.Name
+                        : @event.Location != null
+                            ? @event.Location.Name
+                            : @event.Destination.Name),
+                    DestinationId = @event.DestinationId,
+                    DestinationName = @event.Destination.Name,
+                    Latitude = @event.Place != null
+                        ? @event.Place.Latitude
+                        : @event.Location != null
+                            ? @event.Location.Latitude
+                            : @event.Destination.Latitude,
+                    Longitude = @event.Place != null
+                        ? @event.Place.Longitude
+                        : @event.Location != null
+                            ? @event.Location.Longitude
+                            : @event.Destination.Longitude,
                     StartDate = @event.StartDate,
                     EndDate = @event.EndDate,
                     DistanceMeters = EF.Property<Point>(@event, SpatialPointFactory.CoordinatesPropertyName).Distance(activePoint),

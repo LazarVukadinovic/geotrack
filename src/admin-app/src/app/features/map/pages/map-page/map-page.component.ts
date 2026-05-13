@@ -1,438 +1,902 @@
-import { Component, OnInit, OnDestroy, NgZone, ChangeDetectorRef } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  NgZone,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
+import { finalize, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
-import { MapPlace } from '../../../../core/models/map-place.model';
-import { MapPlacesService } from '../../../../core/services/map-places.service';
-import { PlacesListService } from '../../../../core/services/places-list.service';
-import { LocationsListService } from '../../../../core/services/locations-list.service';
-import { DestinationsListService } from '../../../../core/services/destinations-list.service';
+import { AuthService } from '../../../../core/services/auth.service';
+import { DashboardService } from '../../../../core/services/dashboard.service';
+import { AdminMapService } from '../../../../core/services/admin-map.service';
+import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
+import {
+  AdminMapMarker,
+  AdminMapResponse,
+  AdminMapSearchResult,
+  AdminMapZone,
+} from '../../../../core/models/admin-map.model';
+
 declare const L: any;
 
+interface DroppedPin {
+  latitude: number;
+  longitude: number;
+}
+
+interface PopupPosition {
+  x: number;
+  y: number;
+}
+
+interface PopupEntity {
+  id?: number | null;
+  entityType: AdminMapMarker['entityType'];
+  title: string;
+  subtitle?: string | null;
+  categoryLabel?: string | null;
+  latitude: number;
+  longitude: number;
+  imageUrl?: string | null;
+  status?: string | null;
+  detailRoute?: string | null;
+  editRoute?: string | null;
+}
 
 @Component({
   selector: 'app-map-page',
   standalone: true,
   imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
   templateUrl: './map-page.component.html',
+  styleUrl: './map-page.component.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MapPageComponent implements OnInit, OnDestroy {
-  constructor(
-    private zone: NgZone,
-    private cdr: ChangeDetectorRef,
-    private router: Router,
-    private mapPlacesService: MapPlacesService,
-    private placesListSvc: PlacesListService,
-    private locationsListSvc: LocationsListService,
-    private destinationsListSvc: DestinationsListService,
-  ) {}
+export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
+  private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
+  private static readonly defaultRegionTypes = ['destination', 'location', 'place'];
+  private static readonly searchDebounceMs = 250;
 
-  region   = 'Šumadija, Srbija';
-  userName = 'Sarah Jenkins';
-  userRole = 'Regional Manager';
+  @ViewChild('mapContainer') mapContainer?: ElementRef<HTMLDivElement>;
 
+  assignedRegions: RegionalAssignedRegion[] = [];
+  activeRegionId: number | null = null;
+  regionLoading = false;
+  mapLoading = false;
+  searchLoading = false;
+  errorMessage: string | null = null;
+  authRequired = false;
   searchQuery = '';
-  searchResults: MapPlace[] = [];
+  searchResults: AdminMapSearchResult[] = [];
   searchDropdownOpen = false;
 
+  mapData: AdminMapResponse | null = null;
+  selectedEntity: PopupEntity | null = null;
+  selectedZone: AdminMapZone | null = null;
+  popupPosition: PopupPosition | null = null;
+  droppedPin: DroppedPin | null = null;
+  droppedPinPosition: PopupPosition | null = null;
+
   private map: any = null;
-  private markers: any[] = [];
-  private zonePolygons: any[] = [];
-  private zoneLabels: any[] = [];
+  private regionZoneGroup: any = null;
+  private zoneGroup: any = null;
+  private markerGroup: any = null;
+  private droppedPinGroup: any = null;
+  private droppedPinMarker: any = null;
+  private assignedRegionsSubscription: Subscription | null = null;
+  private mapSubscription: Subscription | null = null;
+  private searchSubscription: Subscription | null = null;
+  private searchHandle: ReturnType<typeof setTimeout> | null = null;
+  private mapRequestSequence = 0;
+  private pendingRender = false;
 
-  selectedPlace: MapPlace | null = null;
-  popupPosition: { x: number; y: number } | null = null;
-
-  droppedPin: { lat: number; lng: number; address: string } | null = null;
-  droppedPinMarker: any = null;
-  droppedPinPosition: { x: number; y: number } | null = null;
-
-  
-  private dynamicPlaces: MapPlace[] = [];
-  newEventNotification: { id: string; name: string } | null = null;
+  constructor(
+    private readonly zone: NgZone,
+    private readonly cdr: ChangeDetectorRef,
+    private readonly route: ActivatedRoute,
+    private readonly router: Router,
+    private readonly auth: AuthService,
+    private readonly dashboardService: DashboardService,
+    private readonly adminMapService: AdminMapService,
+  ) {}
 
   ngOnInit(): void {
-    const state = history.state as { newPlace?: MapPlace; newEvent?: { id: string; name: string } };
-    if (state?.newPlace) {
-      this.dynamicPlaces = [state.newPlace];
-    }
-    if (state?.newEvent) {
-      this.newEventNotification = state.newEvent;
-    }
-    setTimeout(() => this.initMap(), 100);
+    this.loadAssignedRegions();
+  }
+
+  ngAfterViewInit(): void {
+    this.initMap();
   }
 
   ngOnDestroy(): void {
-    if (this.map) { this.map.remove(); this.map = null; }
+    this.mapRequestSequence++;
+    this.assignedRegionsSubscription?.unsubscribe();
+    this.mapSubscription?.unsubscribe();
+    this.searchSubscription?.unsubscribe();
+
+    if (this.searchHandle) {
+      clearTimeout(this.searchHandle);
+    }
+
+    if (this.map) {
+      this.map.remove();
+      this.map = null;
+    }
   }
 
-  // Search
+  get userName(): string {
+    return this.auth.fullName;
+  }
 
-  onSearchInput(): void {
-    const q = this.searchQuery.trim().toLowerCase();
-    if (q.length < 1) {
-      this.searchResults = [];
-      this.searchDropdownOpen = false;
+  get userRole(): string {
+    return this.auth.getUser()?.role ?? '';
+  }
+
+  get activeRegion(): RegionalAssignedRegion | null {
+    return this.assignedRegions.find(region => region.id === this.activeRegionId) ?? null;
+  }
+
+  get regionDisplayName(): string {
+    return this.activeRegion?.displayName ?? '';
+  }
+
+  get waitingForRegion(): boolean {
+    return this.regionLoading && !this.activeRegionId;
+  }
+
+  get emptyMessage(): string {
+    if (!this.activeRegionId) return 'No active assigned region.';
+    return this.mapData?.emptyStateMessage ?? 'No mapped entities found in this assigned region.';
+  }
+
+  get hasMapContent(): boolean {
+    return Boolean(this.mapData && (this.mapData.markers.length > 0 || this.mapData.zones.length > 0));
+  }
+
+  loadAssignedRegions(): void {
+    this.regionLoading = true;
+    this.errorMessage = null;
+    this.authRequired = false;
+    this.notifyStateChanged();
+
+    this.assignedRegionsSubscription?.unsubscribe();
+    this.assignedRegionsSubscription = this.dashboardService
+      .getAssignedRegions()
+      .pipe(
+        finalize(() => {
+          this.regionLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: regions => {
+          this.assignedRegions = regions ?? [];
+
+          if (this.assignedRegions.length === 0) {
+            this.activeRegionId = null;
+            this.mapData = null;
+            this.clearPersistedRegion();
+            this.clearMapLayers();
+            return;
+          }
+
+          const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
+          const persistedRegionId = this.readPersistedRegionId();
+          const selectedRegion =
+            this.assignedRegions.find(region => region.id === queryRegionId) ??
+            this.assignedRegions.find(region => region.id === persistedRegionId) ??
+            this.assignedRegions[0];
+
+          this.setActiveRegion(selectedRegion.id, false);
+          this.loadMapData(selectedRegion.id);
+        },
+        error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
+      });
+  }
+
+  onRegionSelected(regionId: number): void {
+    if (!this.assignedRegions.some(region => region.id === regionId) || regionId === this.activeRegionId) {
       return;
     }
-    this.searchResults = this.mapPlacesService.getAll().filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      p.type.toLowerCase().includes(q)
-    );
-    this.searchDropdownOpen = true;
+
+    this.setActiveRegion(regionId, true);
+    this.clearDroppedPin();
+    this.clearSelections();
+    this.searchQuery = '';
+    this.searchResults = [];
+    this.searchDropdownOpen = false;
+    this.loadMapData(regionId);
+  }
+
+  onSearchInput(): void {
+    if (this.searchHandle) {
+      clearTimeout(this.searchHandle);
+    }
+
+    const query = this.searchQuery.trim();
+    if (query.length < 2 || this.parseCoordinates(query)) {
+      this.searchResults = [];
+      this.searchDropdownOpen = false;
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.searchHandle = setTimeout(() => this.runSearch(false), MapPageComponent.searchDebounceMs);
   }
 
   onSearchFocus(): void {
-    if (this.searchQuery.trim().length > 0) {
+    if (this.searchResults.length > 0) {
       this.searchDropdownOpen = true;
+      this.notifyStateChanged();
     }
   }
 
   closeSearchDropdown(): void {
-    setTimeout(() => { this.searchDropdownOpen = false; }, 150);
-  }
-
-  selectSearchResult(place: MapPlace): void {
-    this.searchDropdownOpen = false;
-    this.searchQuery = place.name;
-
-    if (!this.map) return;
-
-    // Fly to place
-    this.map.flyTo([place.lat, place.lng], 15, { duration: 1 });
-
-    // Show popup after fly
     setTimeout(() => {
-      this.zone.run(() => {
-        this.selectedPlace = place;
-        this.droppedPin = null;
-        this.droppedPinPosition = null;
-        const point = this.map.latLngToContainerPoint([place.lat, place.lng]);
-        const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
-        this.popupPosition = {
-          x: point.x + mapEl.left,
-          y: point.y + mapEl.top - 36,
-        };
-        this.cdr.detectChanges();
-      });
-    }, 1100);
+      this.searchDropdownOpen = false;
+      this.notifyStateChanged();
+    }, 150);
   }
 
   doSearch(): void {
-    const q = this.searchQuery.trim().toLowerCase();
-    if (!q) return;
-    const found = this.mapPlacesService.getAll().find(p => p.name.toLowerCase().includes(q));
-    if (found) this.selectSearchResult(found);
+    const query = this.searchQuery.trim();
+    if (!query || !this.activeRegionId) return;
+
+    const coordinates = this.parseCoordinates(query);
+    if (coordinates) {
+      this.setDroppedPin(coordinates.latitude, coordinates.longitude, true);
+      return;
+    }
+
+    if (this.searchResults.length > 0) {
+      this.selectSearchResult(this.searchResults[0]);
+      return;
+    }
+
+    this.runSearch(true);
   }
 
-  typeIcon(type: string): string {
-    if (type === 'Location')    return '🔵';
-    if (type === 'Destination') return '🟣';
-    return '📍';
+  selectSearchResult(result: AdminMapSearchResult): void {
+    if (!this.hasValidCoordinates(result.latitude, result.longitude)) return;
+
+    this.searchQuery = result.title;
+    this.searchDropdownOpen = false;
+    this.centerMap(result.latitude, result.longitude, 15);
+    this.activateEntity(this.searchResultToPopupEntity(result));
   }
 
-  // Icons & Colors
+  cancelDroppedPin(): void {
+    this.clearDroppedPin();
+    this.notifyStateChanged();
+  }
 
-  private makePinIcon(color: string = '#2563eb'): any {
-    return L.divIcon({
-      html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
-               <path d="M12 0C5.373 0 0 5.373 0 12c0 8 12 20 12 20S24 20 24 12C24 5.373 18.627 0 12 0z"
-                     fill="${color}" stroke="white" stroke-width="1.5"/>
-               <circle cx="12" cy="12" r="4" fill="white"/>
-             </svg>`,
-      iconSize: [24, 32], iconAnchor: [12, 32], className: '',
+  navigateToNewPlaceWithPin(): void {
+    if (!this.droppedPin || !this.hasValidCoordinates(this.droppedPin.latitude, this.droppedPin.longitude)) {
+      return;
+    }
+
+    const queryParams: Record<string, string | number> = {
+      latitude: this.droppedPin.latitude.toFixed(6),
+      longitude: this.droppedPin.longitude.toFixed(6),
+      source: 'map',
+    };
+
+    if (this.activeRegionId) {
+      queryParams['regionId'] = this.activeRegionId;
+    }
+
+    this.router.navigate(['/places/new'], {
+      queryParams,
+      state: {
+        regionId: this.activeRegionId,
+        droppedPin: {
+          latitude: this.droppedPin.latitude,
+          longitude: this.droppedPin.longitude,
+        },
+        returnTo: '/map',
+      },
     });
   }
 
-  private makeDroppedPinIcon(): any {
-    return L.divIcon({
-      html: `<svg width="28" height="36" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
-               <path d="M12 0C5.373 0 0 5.373 0 12c0 8 12 20 12 20S24 20 24 12C24 5.373 18.627 0 12 0z"
-                     fill="#f97316" stroke="white" stroke-width="1.5"/>
-               <circle cx="12" cy="12" r="4" fill="white"/>
-             </svg>`,
-      iconSize: [28, 36], iconAnchor: [14, 36], className: '',
+  navigateToNewDestination(): void {
+    if (!this.activeRegionId) return;
+    this.router.navigate(['/destinations/new'], {
+      queryParams: { regionId: this.activeRegionId },
+      state: { regionId: this.activeRegionId, returnTo: '/map' },
     });
   }
 
-  private pinColor(type: string): string {
-    if (type === 'Location')    return '#0891b2';
+  navigateToNewLocation(): void {
+    if (!this.activeRegionId) return;
+    this.router.navigate(['/locations/new'], {
+      queryParams: { regionId: this.activeRegionId },
+      state: { regionId: this.activeRegionId, returnTo: '/map' },
+    });
+  }
+
+  closePopup(): void {
+    this.clearSelections();
+    this.notifyStateChanged();
+  }
+
+  onSelectedEntityImageError(): void {
+    if (!this.selectedEntity) return;
+
+    this.selectedEntity = {
+      ...this.selectedEntity,
+      imageUrl: null,
+    };
+    this.notifyStateChanged();
+  }
+
+  openSelectedDetail(): void {
+    const route = this.selectedEntity?.detailRoute ?? this.selectedZone?.detailRoute;
+    if (route) {
+      this.router.navigate([route]);
+    }
+  }
+
+  editSelected(): void {
+    const route = this.selectedEntity?.editRoute ?? this.selectedZone?.editRoute;
+    if (route) {
+      this.router.navigate([route], {
+        queryParams: this.activeRegionId ? { regionId: this.activeRegionId } : undefined,
+        state: { regionId: this.activeRegionId, returnTo: '/map' },
+      });
+    }
+  }
+
+  entityTypeColor(type: string): string {
+    if (type === 'Location') return 'bg-cyan-100 text-cyan-700 border-cyan-300';
+    if (type === 'Destination') return 'bg-purple-100 text-purple-700 border-purple-300';
+    if (type === 'Region') return 'bg-emerald-100 text-emerald-700 border-emerald-300';
+    return 'bg-blue-100 text-blue-700 border-blue-300';
+  }
+
+  entityTypeDot(type: string): string {
+    if (type === 'Location') return '#0891b2';
     if (type === 'Destination') return '#7c3aed';
+    if (type === 'Region') return '#16a34a';
     return '#2563eb';
   }
 
-  private zoneColor(type: string): { color: string; fill: string } {
-    if (type === 'Location')    return { color: '#0891b2', fill: '#06b6d4' };
-    if (type === 'Destination') return { color: '#7c3aed', fill: '#a855f7' };
-    return { color: '#2563eb', fill: '#3b82f6' };
-  }
+  private loadMapData(regionId: number): void {
+    const requestId = ++this.mapRequestSequence;
+    this.mapLoading = true;
+    this.errorMessage = null;
+    this.notifyStateChanged();
 
-  private shrinkZone(zone: [number, number][], factor: number): [number, number][] {
-    const centLat = zone.reduce((s, p) => s + p[0], 0) / zone.length;
-    const centLng = zone.reduce((s, p) => s + p[1], 0) / zone.length;
-    return zone.map(([lat, lng]) => [
-      centLat + (lat - centLat) * factor,
-      centLng + (lng - centLng) * factor,
-    ] as [number, number]);
+    this.mapSubscription?.unsubscribe();
+    this.mapSubscription = this.adminMapService
+      .getMap(regionId, MapPageComponent.defaultRegionTypes)
+      .pipe(
+        finalize(() => {
+          if (requestId === this.mapRequestSequence) {
+            this.mapLoading = false;
+            this.notifyStateChanged();
+          }
+        }),
+      )
+      .subscribe({
+        next: response => {
+          if (requestId !== this.mapRequestSequence) return;
+          this.mapData = response;
+          this.renderMapData();
+        },
+        error: error => {
+          if (requestId !== this.mapRequestSequence) return;
+          this.mapData = null;
+          this.clearMapLayers();
+          this.handleLoadError(error, 'Unable to load map data for the active region.');
+        },
+      });
   }
-
-  // Map Init
 
   private initMap(): void {
-    const el = document.getElementById('main-map');
-    if (!el || this.map) return;
+    const element = this.mapContainer?.nativeElement;
+    if (!element || this.map || typeof L === 'undefined') {
+      return;
+    }
 
-    this.map = L.map(el, {
+    this.map = L.map(element, {
       zoomControl: false,
       attributionControl: false,
-    }).setView([44.013, 20.910], 13);
+    });
+    this.map.fitWorld({ animate: false });
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.map);
 
+    this.createMapPanes();
+    this.regionZoneGroup = L.layerGroup().addTo(this.map);
+    this.zoneGroup = L.layerGroup().addTo(this.map);
+    this.markerGroup = L.layerGroup().addTo(this.map);
+    this.droppedPinGroup = L.layerGroup().addTo(this.map);
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
 
-    this.mapPlacesService.getAll().forEach(place => {
-      if (!place.zone) return;
-      const { color, fill } = this.zoneColor(place.type);
-      const coords = place.type === 'Location' ? this.shrinkZone(place.zone, 0.82) : place.zone;
-
-      const polygon = L.polygon(coords, {
-        color,
-        fillColor: fill,
-        fillOpacity: 0.15,
-        weight: 2,
-        dashArray: '6 4',
-        opacity: 0.8,
-      }).addTo(this.map);
-
-      polygon.on('click', (e: any) => {
-        L.DomEvent.stopPropagation(e);
-        this.zone.run(() => {
-          this.selectedPlace = place;
-          this.droppedPin = null;
-          this.droppedPinPosition = null;
-          const point = this.map.latLngToContainerPoint([place.lat, place.lng]);
-          const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
-          this.popupPosition = {
-            x: point.x + mapEl.left,
-            y: point.y + mapEl.top - 36,
-          };
-          this.cdr.detectChanges();
-        });
-      });
-
-      // Zone label
-      const bounds = polygon.getBounds();
-      const center = bounds.getCenter();
-      const label = L.divIcon({
-        html: `<div style="
-        background: rgba(255,255,255,0.92);
-        color: #1e3a5f;
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        padding: 2px 8px;
-        border-radius: 20px;
-        border: 1px solid ${color};
-        white-space: nowrap;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-        pointer-events: none;
-      ">${place.name}</div>`,
-        className: '',
-        iconAnchor: [0, 0],
-      });
-
-      const labelMarker = L.marker(center, { icon: label, interactive: false }).addTo(this.map);
-      this.zoneLabels.push(labelMarker);
-      this.zonePolygons.push(polygon);
+    this.map.on('click', (event: { latlng?: { lat: number; lng: number } }) => {
+      if (!event.latlng) return;
+      this.zone.run(() => this.setDroppedPin(event.latlng!.lat, event.latlng!.lng, false));
     });
 
-    this.mapPlacesService.getAll().forEach(place => {
-      const marker = L.marker([place.lat, place.lng], {
-        icon: this.makePinIcon(this.pinColor(place.type)),
-      }).addTo(this.map);
-
-      marker.on('click', (e: any) => {
-        L.DomEvent.stopPropagation(e);
-        this.zone.run(() => {
-          this.selectedPlace = place;
-          this.droppedPin = null;
-          this.droppedPinPosition = null;
-          const point = this.map.latLngToContainerPoint([place.lat, place.lng]);
-          const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
-          this.popupPosition = {
-            x: point.x + mapEl.left,
-            y: point.y + mapEl.top - 36,
-          };
-          this.cdr.detectChanges();
-        });
-      });
-
-      this.markers.push(marker);
-    });
-
-    this.map.on('click', (e: any) => {
+    this.map.on('moveend zoomend', () => {
       this.zone.run(() => {
-        this.selectedPlace = null;
-        this.popupPosition = null;
-
-        const lat = e.latlng.lat;
-        const lng = e.latlng.lng;
-
-        if (this.droppedPinMarker) this.map.removeLayer(this.droppedPinMarker);
-        this.droppedPinMarker = L.marker([lat, lng], {
-          icon: this.makeDroppedPinIcon(),
-        }).addTo(this.map);
-
-        this.droppedPin = { lat, lng, address: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° W` };
-
-        const point = this.map.latLngToContainerPoint([lat, lng]);
-        const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
-        this.droppedPinPosition = {
-          x: point.x + mapEl.left,
-          y: point.y + mapEl.top - 36,
-        };
-
-        this.cdr.detectChanges();
+        this.refreshPopupPositions();
+        this.notifyStateChanged();
       });
     });
-    
 
-    if (this.dynamicPlaces.length > 0) {
-      const p = this.dynamicPlaces[0];
-      setTimeout(() => {
-        this.map.flyTo([p.lat, p.lng], 15, { duration: 1 });
-        setTimeout(() => {
-          this.zone.run(() => {
-            this.selectedPlace = p;
-            const point = this.map.latLngToContainerPoint([p.lat, p.lng]);
-            const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
-            this.popupPosition = {
-              x: point.x + mapEl.left,
-              y: point.y + mapEl.top - 36,
-            };
-            this.cdr.detectChanges();
-          });
-        }, 1100);
-      }, 300);
+    if (this.pendingRender || this.mapData) {
+      this.renderMapData();
     }
   }
-  private _addPlaceToMap(place: MapPlace): void {
-    if (place.zone) {
-      const { color, fill } = this.zoneColor(place.type);
-      const coords = place.type === 'Location' ? this.shrinkZone(place.zone, 0.82) : place.zone;
-      const polygon = L.polygon(coords, {
-        color, fillColor: fill, fillOpacity: 0.15, weight: 2, dashArray: '6 4', opacity: 0.8,
-      }).addTo(this.map);
 
-      polygon.on('click', (e: any) => {
-        L.DomEvent.stopPropagation(e);
-        this.zone.run(() => {
-          this.selectedPlace = place;
-          this.droppedPin = null;
-          this.droppedPinPosition = null;
-          const point = this.map.latLngToContainerPoint([place.lat, place.lng]);
-          const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
-          this.popupPosition = { x: point.x + mapEl.left, y: point.y + mapEl.top - 36 };
-          this.cdr.detectChanges();
-        });
-      });
+  private createMapPanes(): void {
+    this.createPane('admin-region-zone-pane', 350);
+    this.createPane('admin-zone-pane', 370);
+    this.createPane('admin-marker-pane', 620);
+    this.createPane('admin-dropped-pin-pane', 680);
+  }
 
-      const bounds = polygon.getBounds();
-      const center = bounds.getCenter();
-      const { color: c } = this.zoneColor(place.type);
-      const label = L.divIcon({
-        html: `<div style="background:rgba(255,255,255,0.92);color:#1e3a5f;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid ${c};white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.12);pointer-events:none;">${place.name}</div>`,
-        className: '', iconAnchor: [0, 0],
-      });
-      L.marker(center, { icon: label, interactive: false }).addTo(this.map);
-      this.zonePolygons.push(polygon);
+  private createPane(name: string, zIndex: number): void {
+    if (!this.map.getPane(name)) {
+      this.map.createPane(name);
     }
 
-    const marker = L.marker([place.lat, place.lng], {
-      icon: this.makePinIcon(this.pinColor(place.type)),
-    }).addTo(this.map);
+    const pane = this.map.getPane(name) as HTMLElement | null;
+    if (pane) {
+      pane.style.zIndex = String(zIndex);
+    }
+  }
 
-    marker.on('click', (e: any) => {
-      L.DomEvent.stopPropagation(e);
+  private renderMapData(): void {
+    if (!this.map) {
+      this.pendingRender = true;
+      return;
+    }
+
+    this.pendingRender = false;
+    this.clearMapLayers();
+
+    const data = this.mapData;
+    if (!data) return;
+
+    const zones = [...data.zones].sort((a, b) => this.zoneOrder(a) - this.zoneOrder(b));
+    zones.forEach(zone => this.addZone(zone));
+    data.markers.forEach(marker => this.addMarker(marker));
+    this.applyViewport(data);
+    this.notifyStateChanged();
+  }
+
+  private clearMapLayers(): void {
+    this.regionZoneGroup?.clearLayers();
+    this.zoneGroup?.clearLayers();
+    this.markerGroup?.clearLayers();
+    this.clearDroppedPin();
+    this.clearSelections();
+  }
+
+  private addZone(zone: AdminMapZone): void {
+    if (!zone.geometryGeoJson || !this.isSupportedGeometry(zone.geometryGeoJson.type)) {
+      return;
+    }
+
+    const layer = L.geoJSON(zone.geometryGeoJson, {
+      pane: zone.entityType === 'Region' ? 'admin-region-zone-pane' : 'admin-zone-pane',
+      style: () => this.zoneStyle(zone.entityType),
+    });
+
+    layer.on('click', (event: { latlng?: { lat: number; lng: number }; originalEvent?: Event }) => {
+      if (event.originalEvent) {
+        L.DomEvent.stopPropagation(event.originalEvent);
+      }
+
       this.zone.run(() => {
-        this.selectedPlace = place;
+        this.selectedZone = zone;
+        this.selectedEntity = null;
         this.droppedPin = null;
-        this.droppedPinPosition = null;
-        const point = this.map.latLngToContainerPoint([place.lat, place.lng]);
-        const mapEl = document.getElementById('main-map')!.getBoundingClientRect();
-        this.popupPosition = { x: point.x + mapEl.left, y: point.y + mapEl.top - 36 };
-        this.cdr.detectChanges();
+        this.clearDroppedPinMarker();
+        const latitude = event.latlng?.lat ?? zone.centerLatitude ?? null;
+        const longitude = event.latlng?.lng ?? zone.centerLongitude ?? null;
+        this.popupPosition = latitude !== null && longitude !== null
+          ? this.toPopupPosition(latitude, longitude, 28)
+          : null;
+        this.notifyStateChanged();
       });
     });
 
-    this.markers.push(marker);
-    this.mapPlacesService.addPlace(place);
-  }
-  // Popup / Navigation
+    layer.on('mouseover', () => this.setMapCursor('pointer'));
+    layer.on('mouseout', () => this.setMapCursor(''));
 
-  closePopup(): void {
-    this.selectedPlace = null;
+    if (zone.entityType === 'Region') {
+      layer.addTo(this.regionZoneGroup);
+    } else {
+      layer.addTo(this.zoneGroup);
+    }
+  }
+
+  private addMarker(marker: AdminMapMarker): void {
+    if (!this.hasValidCoordinates(marker.latitude, marker.longitude)) {
+      return;
+    }
+
+    const layer = L.marker([marker.latitude, marker.longitude], {
+      icon: this.makeEntityIcon(marker),
+      pane: 'admin-marker-pane',
+      riseOnHover: true,
+    }).addTo(this.markerGroup);
+
+    layer.on('click', (event: { originalEvent?: Event }) => {
+      if (event.originalEvent) {
+        L.DomEvent.stopPropagation(event.originalEvent);
+      }
+      this.zone.run(() => this.activateEntity(marker));
+    });
+  }
+
+  private makeEntityIcon(marker: AdminMapMarker): any {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `gt-admin-marker gt-admin-marker--${marker.entityType.toLowerCase()}`;
+    button.setAttribute('aria-label', marker.title);
+    button.title = marker.title;
+
+    const fallback = document.createElement('span');
+    fallback.className = 'gt-admin-marker__fallback';
+    fallback.textContent = this.markerFallbackText(marker);
+
+    if (marker.imageUrl) {
+      const image = document.createElement('img');
+      image.alt = '';
+      image.draggable = false;
+      image.src = marker.imageUrl;
+      image.addEventListener('error', () => {
+        image.remove();
+        fallback.style.display = 'flex';
+      });
+      button.appendChild(image);
+      fallback.style.display = 'none';
+    }
+
+    button.appendChild(fallback);
+
+    const size = marker.entityType === 'Place' ? 42 : 34;
+    return L.divIcon({
+      html: button,
+      className: '',
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
+  }
+
+  private makeDroppedPinIcon(): any {
+    const element = document.createElement('div');
+    element.className = 'gt-admin-dropped-pin';
+    element.innerHTML = `<svg width="28" height="36" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 8 12 20 12 20S24 20 24 12C24 5.373 18.627 0 12 0z" fill="#f97316" stroke="white" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="4" fill="white"/>
+    </svg>`;
+
+    return L.divIcon({
+      html: element,
+      className: '',
+      iconSize: [28, 36],
+      iconAnchor: [14, 36],
+    });
+  }
+
+  private activateEntity(entity: PopupEntity): void {
+    this.selectedEntity = entity;
+    this.selectedZone = null;
+    this.droppedPin = null;
+    this.clearDroppedPinMarker();
+    this.popupPosition = this.toPopupPosition(entity.latitude, entity.longitude, 28);
+    this.notifyStateChanged();
+  }
+
+  private setDroppedPin(latitude: number, longitude: number, center: boolean): void {
+    if (!this.hasValidCoordinates(latitude, longitude) || !this.map) {
+      return;
+    }
+
+    this.clearSelections();
+    this.clearDroppedPinMarker();
+    this.droppedPin = { latitude, longitude };
+
+    this.droppedPinMarker = L.marker([latitude, longitude], {
+      icon: this.makeDroppedPinIcon(),
+      pane: 'admin-dropped-pin-pane',
+      zIndexOffset: 1000,
+    }).addTo(this.droppedPinGroup);
+
+    this.droppedPinPosition = this.toPopupPosition(latitude, longitude, 32);
+
+    if (center) {
+      this.centerMap(latitude, longitude, 15);
+    }
+
+    this.notifyStateChanged();
+  }
+
+  private clearDroppedPin(): void {
+    this.droppedPin = null;
+    this.droppedPinPosition = null;
+    this.clearDroppedPinMarker();
+  }
+
+  private clearDroppedPinMarker(): void {
+    if (this.droppedPinMarker && this.map) {
+      this.map.removeLayer(this.droppedPinMarker);
+    }
+
+    this.droppedPinMarker = null;
+    this.droppedPinGroup?.clearLayers();
+  }
+
+  private clearSelections(): void {
+    this.selectedEntity = null;
+    this.selectedZone = null;
     this.popupPosition = null;
   }
 
-  cancelDroppedPin(): void {
-    this.droppedPin = null;
-    this.droppedPinPosition = null;
-    if (this.droppedPinMarker) {
-      this.map.removeLayer(this.droppedPinMarker);
-      this.droppedPinMarker = null;
+  private applyViewport(data: AdminMapResponse): void {
+    const viewport = data.viewport;
+    if (!this.map || viewport.isEmpty) {
+      return;
     }
-  }
 
-  navigate(path: string): void {
-    this.router.navigate([path]);
-  }
-
-  typeColor(type: string): string {
-    if (type === 'Location')    return 'bg-cyan-100 text-cyan-700 border-cyan-300';
-    if (type === 'Destination') return 'bg-purple-100 text-purple-700 border-purple-300';
-    return 'bg-blue-100 text-blue-700 border-blue-300';
-  }
-
-  editPlace(place: MapPlace): void {
-    if (place.type === 'Location') {
-      const full = this.locationsListSvc.findById(place.id) ?? place;
-      this.router.navigate(['/locations/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
-    } else if (place.type === 'Destination') {
-      const full = this.destinationsListSvc.findById(place.id) ?? place;
-      this.router.navigate(['/destinations/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
-    } else {
-      const full = this.placesListSvc.findById(place.id) ?? place;
-      this.router.navigate(['/places/new'], { state: { place: full, editMode: true, returnTo: '/map' } });
-    }
-    this.closePopup();
-  }
-
-  dismissEventNotification(): void {
-    this.newEventNotification = null;
-  }
-
-  navigateToNewEvent(): void {
-    this.router.navigate(['/events/new'], { state: { place: this.selectedPlace, returnTo: '/map', } });
-    this.closePopup();
-  }
-  navigateToNewPlaceWithPin(): void {
-    if (!this.droppedPin) return;
-    this.router.navigate(['/places/new'], {
-      state: {
-        droppedPin: {
-          lat: this.droppedPin.lat,
-          lng: this.droppedPin.lng,
+    if (viewport.bounds) {
+      this.map.fitBounds(
+        [
+          [viewport.bounds.south, viewport.bounds.west],
+          [viewport.bounds.north, viewport.bounds.east],
+        ],
+        {
+          padding: [60, 60],
+          maxZoom: 14,
+          animate: false,
         },
-        returnTo: '/map',
+      );
+      return;
+    }
+
+    if (
+      viewport.centerLatitude !== null &&
+      viewport.centerLatitude !== undefined &&
+      viewport.centerLongitude !== null &&
+      viewport.centerLongitude !== undefined
+    ) {
+      this.map.setView(
+        [viewport.centerLatitude, viewport.centerLongitude],
+        viewport.zoom ?? 12,
+        { animate: false },
+      );
+    }
+  }
+
+  private runSearch(selectFirst: boolean): void {
+    if (!this.activeRegionId) return;
+
+    const query = this.searchQuery.trim();
+    if (query.length < 2) return;
+
+    this.searchLoading = true;
+    this.notifyStateChanged();
+
+    this.searchSubscription?.unsubscribe();
+    this.searchSubscription = this.adminMapService
+      .search(this.activeRegionId, query)
+      .pipe(
+        finalize(() => {
+          this.searchLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: response => {
+          this.searchResults = response.items ?? [];
+          this.searchDropdownOpen = !selectFirst && this.searchResults.length > 0;
+          if (selectFirst && this.searchResults.length > 0) {
+            this.selectSearchResult(this.searchResults[0]);
+          }
+        },
+        error: error => this.handleLoadError(error, 'Unable to search map entities.'),
+      });
+  }
+
+  private refreshPopupPositions(): void {
+    if (this.selectedEntity) {
+      this.popupPosition = this.toPopupPosition(this.selectedEntity.latitude, this.selectedEntity.longitude, 28);
+    } else if (this.selectedZone?.centerLatitude != null && this.selectedZone.centerLongitude != null) {
+      this.popupPosition = this.toPopupPosition(this.selectedZone.centerLatitude, this.selectedZone.centerLongitude, 28);
+    }
+
+    if (this.droppedPin) {
+      this.droppedPinPosition = this.toPopupPosition(this.droppedPin.latitude, this.droppedPin.longitude, 32);
+    }
+  }
+
+  private toPopupPosition(latitude: number, longitude: number, yOffset: number): PopupPosition | null {
+    if (!this.map || !this.hasValidCoordinates(latitude, longitude)) {
+      return null;
+    }
+
+    const point = this.map.latLngToContainerPoint([latitude, longitude]);
+    const mapEl = this.mapContainer?.nativeElement.getBoundingClientRect();
+    if (!mapEl) return null;
+
+    return {
+      x: point.x + mapEl.left,
+      y: point.y + mapEl.top - yOffset,
+    };
+  }
+
+  private centerMap(latitude: number, longitude: number, zoom: number): void {
+    if (!this.map) return;
+    this.map.setView([latitude, longitude], zoom, { animate: true });
+  }
+
+  private zoneStyle(type: AdminMapZone['entityType']): Record<string, string | number> {
+    if (type === 'Region') {
+      return {
+        color: '#16a34a',
+        fillColor: '#22c55e',
+        fillOpacity: 0.08,
+        weight: 3,
+        opacity: 0.95,
+      };
+    }
+
+    if (type === 'Destination') {
+      return {
+        color: '#7c3aed',
+        fillColor: '#a855f7',
+        fillOpacity: 0.08,
+        weight: 2,
+        dashArray: '8 5',
+        opacity: 0.75,
+      };
+    }
+
+    return {
+      color: '#0891b2',
+      fillColor: '#06b6d4',
+      fillOpacity: 0.12,
+      weight: 2,
+      dashArray: '5 4',
+      opacity: 0.8,
+    };
+  }
+
+  private zoneOrder(zone: AdminMapZone): number {
+    if (zone.entityType === 'Region') return 0;
+    if (zone.entityType === 'Destination') return 1;
+    return 2;
+  }
+
+  private markerFallbackText(marker: AdminMapMarker): string {
+    if (marker.entityType === 'Destination') return 'D';
+    if (marker.entityType === 'Location') return 'L';
+    return marker.title.trim().charAt(0).toUpperCase() || 'P';
+  }
+
+  private searchResultToPopupEntity(result: AdminMapSearchResult): PopupEntity {
+    return {
+      id: result.id,
+      entityType: result.entityType,
+      title: result.title,
+      subtitle: result.subtitle,
+      categoryLabel: result.categoryLabel,
+      latitude: result.latitude,
+      longitude: result.longitude,
+      imageUrl: result.imageUrl,
+      detailRoute: result.detailRoute,
+      editRoute: result.entityType === 'Destination'
+        ? '/destinations/new'
+        : result.entityType === 'Location'
+          ? '/locations/new'
+          : '/places/new',
+    };
+  }
+
+  private parseCoordinates(value: string): DroppedPin | null {
+    const match = value.trim().match(/^(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)$/);
+    if (!match) return null;
+
+    const latitude = Number(match[1]);
+    const longitude = Number(match[2]);
+    return this.hasValidCoordinates(latitude, longitude) ? { latitude, longitude } : null;
+  }
+
+  private hasValidCoordinates(latitude: number, longitude: number): boolean {
+    return Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      !(latitude === 0 && longitude === 0);
+  }
+
+  private isSupportedGeometry(type: string): boolean {
+    return type === 'Polygon' || type === 'MultiPolygon';
+  }
+
+  private setActiveRegion(regionId: number, updateUrl: boolean): void {
+    this.activeRegionId = regionId;
+    this.persistRegion(regionId);
+
+    if (updateUrl) {
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { regionId },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+    }
+  }
+
+  private readPersistedRegionId(): number | null {
+    try {
+      const value = sessionStorage.getItem(MapPageComponent.activeRegionStorageKey);
+      const parsed = value ? Number(value) : NaN;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private persistRegion(regionId: number): void {
+    try {
+      sessionStorage.setItem(MapPageComponent.activeRegionStorageKey, String(regionId));
+    } catch {
+      // Session persistence is a convenience only.
+    }
+  }
+
+  private clearPersistedRegion(): void {
+    try {
+      sessionStorage.removeItem(MapPageComponent.activeRegionStorageKey);
+    } catch {
+      // Session persistence is a convenience only.
+    }
+  }
+
+  private handleLoadError(error: unknown, fallback: string): void {
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 401) {
+        this.authRequired = true;
+        this.errorMessage = 'Sign in with an authenticated Regional Manager account to view the map.';
+      } else if (error.status === 403) {
+        this.errorMessage = 'You do not have access to this assigned region.';
+      } else {
+        this.errorMessage = error.error?.message ?? fallback;
       }
-    });
-    this.cancelDroppedPin();
+    } else {
+      this.errorMessage = fallback;
+    }
+
+    this.notifyStateChanged();
+  }
+
+  private setMapCursor(cursor: string): void {
+    const container = this.map?.getContainer?.() as HTMLElement | undefined;
+    if (container) {
+      container.style.cursor = cursor;
+    }
+  }
+
+  private notifyStateChanged(): void {
+    this.cdr.markForCheck();
   }
 }

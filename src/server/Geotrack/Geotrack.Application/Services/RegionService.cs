@@ -43,10 +43,11 @@ namespace Geotrack.Application.Services
                 Id = region.Id,
                 Name = region.Name,
                 Managers = region.RegionalManagerRegions
+                    .Where(ror => ror.IsActive)
                     .Select(ror => new UserItemDto
                     {
-                        Id = ror.RegionalManager.User.Id,
-                        Email = ror.RegionalManager.User.Email
+                        Id = ror.User.Id,
+                        Email = ror.User.Email
                     })
                     .ToList()
             };

@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { TopbarComponent } from './topbar.component';
 
@@ -9,6 +10,7 @@ describe('TopbarComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [TopbarComponent],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(TopbarComponent);

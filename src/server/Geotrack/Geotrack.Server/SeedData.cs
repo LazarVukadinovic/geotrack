@@ -73,6 +73,157 @@ public static class SeedData
 
         var now = DateTime.UtcNow;
 
+        async Task<DestinationType> EnsureDestinationTypeAsync(string name, string description)
+        {
+            var destinationType = await db.DestinationTypes.FirstOrDefaultAsync(x => x.Name == name);
+            if (destinationType is not null)
+            {
+                return destinationType;
+            }
+
+            destinationType = new DestinationType
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.DestinationTypes.Add(destinationType);
+            await db.SaveChangesAsync();
+            return destinationType;
+        }
+
+        async Task<LocationType> EnsureLocationTypeAsync(string name, string description)
+        {
+            var locationType = await db.LocationTypes.FirstOrDefaultAsync(x => x.Name == name);
+            if (locationType is not null)
+            {
+                return locationType;
+            }
+
+            locationType = new LocationType
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.LocationTypes.Add(locationType);
+            await db.SaveChangesAsync();
+            return locationType;
+        }
+
+        async Task<PlaceType> EnsurePlaceTypeAsync(string name, string description)
+        {
+            var placeType = await db.PlaceTypes.FirstOrDefaultAsync(x => x.Name == name);
+            if (placeType is not null)
+            {
+                return placeType;
+            }
+
+            placeType = new PlaceType
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.PlaceTypes.Add(placeType);
+            await db.SaveChangesAsync();
+            return placeType;
+        }
+
+        async Task<StayType> EnsureStayTypeAsync(string name, string slug, string description)
+        {
+            var stayType = await db.StayTypes.FirstOrDefaultAsync(x => x.Slug == slug);
+            if (stayType is not null)
+            {
+                return stayType;
+            }
+
+            stayType = new StayType
+            {
+                Name = name,
+                Slug = slug,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.StayTypes.Add(stayType);
+            await db.SaveChangesAsync();
+            return stayType;
+        }
+
+        async Task<EventType> EnsureEventTypeAsync(string name, string description)
+        {
+            var eventType = await db.EventTypes.FirstOrDefaultAsync(x => x.Name == name);
+            if (eventType is not null)
+            {
+                return eventType;
+            }
+
+            eventType = new EventType
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.EventTypes.Add(eventType);
+            await db.SaveChangesAsync();
+            return eventType;
+        }
+
+        async Task<StayAmenity> EnsureStayAmenityAsync(string name, string slug, string iconKey, string description)
+        {
+            var amenity = await db.StayAmenities.FirstOrDefaultAsync(x => x.Slug == slug);
+            if (amenity is not null)
+            {
+                return amenity;
+            }
+
+            amenity = new StayAmenity
+            {
+                Name = name,
+                Slug = slug,
+                IconKey = iconKey,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.StayAmenities.Add(amenity);
+            await db.SaveChangesAsync();
+            return amenity;
+        }
+
+        async Task<Amenity> EnsureAmenityAsync(string name, string icon)
+        {
+            var amenity = await db.Amenities.FirstOrDefaultAsync(x => x.Name == name);
+            if (amenity is not null)
+            {
+                return amenity;
+            }
+
+            amenity = new Amenity { Name = name, Icon = icon };
+            db.Amenities.Add(amenity);
+            await db.SaveChangesAsync();
+            return amenity;
+        }
+
+        async Task<BookingPartner> EnsureBookingPartnerAsync(string name, string variant)
+        {
+            var partner = await db.BookingPartners.FirstOrDefaultAsync(x => x.Name == name);
+            if (partner is not null)
+            {
+                return partner;
+            }
+
+            partner = new BookingPartner { Name = name, Variant = variant };
+            db.BookingPartners.Add(partner);
+            await db.SaveChangesAsync();
+            return partner;
+        }
+
         var croatia = new Territory
         {
             Name = "Croatia",
@@ -92,15 +243,7 @@ public static class SeedData
         db.Regions.Add(dalmatia);
         await db.SaveChangesAsync();
 
-        var cityType = new DestinationType
-        {
-            Name = "City",
-            Description = "Urban destination",
-            CreatedAt = now
-        };
-
-        db.DestinationTypes.Add(cityType);
-        await db.SaveChangesAsync();
+        var cityType = await EnsureDestinationTypeAsync("City", "Urban destination");
 
         var dubrovnik = new Destination
         {
@@ -116,29 +259,9 @@ public static class SeedData
         db.Destinations.Add(dubrovnik);
         await db.SaveChangesAsync();
 
-        var neighborhoodType = new LocationType
-        {
-            Name = "Neighborhood",
-            Description = "City neighborhood",
-            CreatedAt = now
-        };
-
-        var districtType = new LocationType
-        {
-            Name = "District",
-            Description = "City district",
-            CreatedAt = now
-        };
-
-        var harborType = new LocationType
-        {
-            Name = "Harbor Area",
-            Description = "Harbor or port-side location",
-            CreatedAt = now
-        };
-
-        db.LocationTypes.AddRange(neighborhoodType, districtType, harborType);
-        await db.SaveChangesAsync();
+        var neighborhoodType = await EnsureLocationTypeAsync("Neighborhood", "City neighborhood");
+        var districtType = await EnsureLocationTypeAsync("District", "City district");
+        var harborType = await EnsureLocationTypeAsync("Harbor Area", "Harbor or port-side location");
 
         var oldTown = new Location
         {
@@ -183,91 +306,53 @@ public static class SeedData
         db.Locations.AddRange(oldTown, ploce, lapad, gruz);
         await db.SaveChangesAsync();
 
-        var ptBeach = new PlaceType { Name = "Beach", Description = "Beaches and coastal swimming areas", CreatedAt = now };
-        var ptRestaurant = new PlaceType { Name = "Restaurant", Description = "Dining establishments", CreatedAt = now };
-        var ptCafe = new PlaceType { Name = "Cafe", Description = "Cafes and coffee shops", CreatedAt = now };
-        var ptLandmark = new PlaceType { Name = "Landmark", Description = "Landmarks, monuments and historical places", CreatedAt = now };
-        var ptNature = new PlaceType { Name = "Nature", Description = "Nature spots and island escapes", CreatedAt = now };
-        var ptStay = new PlaceType { Name = "Stay", Description = "Hotels, apartments, villas and other accommodation", CreatedAt = now };
-        var ptActivity = new PlaceType { Name = "Activity", Description = "Activity providers, tours and outdoor experiences", CreatedAt = now };
-        var ptBar = new PlaceType { Name = "Bar", Description = "Bars, wine bars and nightlife venues", CreatedAt = now };
-        var ptMuseum = new PlaceType { Name = "Museum", Description = "Museums and cultural institutions", CreatedAt = now };
-        var ptGallery = new PlaceType { Name = "Gallery", Description = "Art galleries and exhibition spaces", CreatedAt = now };
-
-        db.PlaceTypes.AddRange(ptBeach, ptRestaurant, ptCafe, ptLandmark, ptNature, ptStay, ptActivity, ptBar, ptMuseum, ptGallery);
-        await db.SaveChangesAsync();
+        var ptBeach = await EnsurePlaceTypeAsync("Beach", "Beaches and coastal swimming areas");
+        var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments");
+        var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops");
+        var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
+        var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
+        var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation");
+        var ptActivity = await EnsurePlaceTypeAsync("Activity", "Activity providers, tours and outdoor experiences");
+        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
+        var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
+        var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
 
         var tagLookup = await EnsureSmartTagTaxonomyAsync(db);
 
-        var hotelStayType = new StayType
-        {
-            Name = "Hotel",
-            Slug = "hotel",
-            Description = "Hotel accommodation",
-            CreatedAt = now
-        };
-
-        var apartmentStayType = new StayType
-        {
-            Name = "Apartment",
-            Slug = "apartment",
-            Description = "Private apartment accommodation",
-            CreatedAt = now
-        };
-
-        var villaStayType = new StayType
-        {
-            Name = "Villa",
-            Slug = "villa",
-            Description = "Private villa accommodation",
-            CreatedAt = now
-        };
-
-        db.StayTypes.AddRange(hotelStayType, apartmentStayType, villaStayType);
-        await db.SaveChangesAsync();
+        var hotelStayType = await EnsureStayTypeAsync("Hotel", "hotel", "Hotel accommodation");
+        var apartmentStayType = await EnsureStayTypeAsync("Apartment", "apartment", "Private apartment accommodation");
+        var villaStayType = await EnsureStayTypeAsync("Villa", "villa", "Private villa accommodation");
 
         var stayAmenities = new List<StayAmenity>
         {
-            new() { Name = "Free WiFi", Slug = "free-wifi", IconKey = "wifi", Description = "Wireless internet access", CreatedAt = now },
-            new() { Name = "Swimming Pool", Slug = "swimming-pool", IconKey = "pool", Description = "Pool available for guests", CreatedAt = now },
-            new() { Name = "Breakfast Included", Slug = "breakfast-included", IconKey = "breakfast", Description = "Breakfast included in the stay", CreatedAt = now },
-            new() { Name = "Parking", Slug = "parking", IconKey = "parking", Description = "Parking available", CreatedAt = now },
-            new() { Name = "Spa", Slug = "spa", IconKey = "spa", Description = "Spa and wellness facilities", CreatedAt = now },
-            new() { Name = "Air Conditioning", Slug = "air-conditioning", IconKey = "ac", Description = "Air-conditioned rooms", CreatedAt = now }
+            await EnsureStayAmenityAsync("Free WiFi", "free-wifi", "wifi", "Wireless internet access"),
+            await EnsureStayAmenityAsync("Swimming Pool", "swimming-pool", "pool", "Pool available for guests"),
+            await EnsureStayAmenityAsync("Breakfast Included", "breakfast-included", "breakfast", "Breakfast included in the stay"),
+            await EnsureStayAmenityAsync("Parking", "parking", "parking", "Parking available"),
+            await EnsureStayAmenityAsync("Spa", "spa", "spa", "Spa and wellness facilities"),
+            await EnsureStayAmenityAsync("Air Conditioning", "air-conditioning", "ac", "Air-conditioned rooms")
         };
-
-        db.StayAmenities.AddRange(stayAmenities);
-        await db.SaveChangesAsync();
 
         StayAmenity SA(string slug) => stayAmenities.First(x => x.Slug == slug);
 
         var amenities = new List<Amenity>
         {
-            new() { Name = "Free WiFi", Icon = "wifi" },
-            new() { Name = "Outdoor Seating", Icon = "outdoor" },
-            new() { Name = "Sea View", Icon = "sea" },
-            new() { Name = "Family Friendly", Icon = "family" }
+            await EnsureAmenityAsync("Free WiFi", "wifi"),
+            await EnsureAmenityAsync("Outdoor Seating", "outdoor"),
+            await EnsureAmenityAsync("Sea View", "sea"),
+            await EnsureAmenityAsync("Family Friendly", "family")
         };
-
-        db.Amenities.AddRange(amenities);
-        await db.SaveChangesAsync();
 
         Amenity A(string icon) => amenities.First(x => x.Icon == icon);
 
-        var bpBooking = new BookingPartner { Name = "Booking.com", Variant = "dark" };
-        var bpAirbnb = new BookingPartner { Name = "Airbnb", Variant = "brand" };
-        var bpExpedia = new BookingPartner { Name = "Expedia", Variant = "muted" };
+        var bpBooking = await EnsureBookingPartnerAsync("Booking.com", "dark");
+        var bpAirbnb = await EnsureBookingPartnerAsync("Airbnb", "brand");
+        var bpExpedia = await EnsureBookingPartnerAsync("Expedia", "muted");
 
-        db.BookingPartners.AddRange(bpBooking, bpAirbnb, bpExpedia);
-        await db.SaveChangesAsync();
-
-        var etFestival = new EventType { Name = "Festival", Description = "Music and cultural festivals", CreatedAt = now };
-        var etMarket = new EventType { Name = "Market", Description = "Food and craft markets", CreatedAt = now };
-        var etOutdoor = new EventType { Name = "Outdoor", Description = "Outdoor activities", CreatedAt = now };
-        var etMusic = new EventType { Name = "Music", Description = "Music and live performance events", CreatedAt = now };
-
-        db.EventTypes.AddRange(etFestival, etMarket, etOutdoor, etMusic);
-        await db.SaveChangesAsync();
+        var etFestival = await EnsureEventTypeAsync("Festival", "Music and cultural festivals");
+        var etMarket = await EnsureEventTypeAsync("Market", "Food and craft markets");
+        var etOutdoor = await EnsureEventTypeAsync("Outdoor", "Outdoor activities");
+        var etMusic = await EnsureEventTypeAsync("Music", "Music and live performance events");
 
         await EnsureRolesAsync(db);
 
@@ -617,7 +702,9 @@ public static class SeedData
         {
             Name = "Dubrovnik Summer Festival",
             EventTypeId = etFestival.Id,
+            DestinationId = oldTown.DestinationId,
             LocationId = oldTown.Id,
+            Summary = "A cultural summer festival with performances across historic Old Town venues.",
             Description = "Cultural summer festival with theatre, music and performances across historic venues.",
             StartDate = now.AddDays(5),
             EndDate = now.AddDays(47),
@@ -634,7 +721,9 @@ public static class SeedData
         {
             Name = "Old Town Food Market",
             EventTypeId = etMarket.Id,
+            DestinationId = oldTown.DestinationId,
             LocationId = oldTown.Id,
+            Summary = "Open-air food market with local produce, olive oils, cheeses and wines.",
             Description = "Open-air food market with local products, olive oils, cheeses and seafood snacks.",
             StartDate = now.AddDays(2),
             EndDate = now.AddDays(2).AddHours(8),
@@ -648,8 +737,10 @@ public static class SeedData
         {
             Name = "Sea Kayaking Adventure",
             EventTypeId = etOutdoor.Id,
+            DestinationId = ploce.DestinationId,
             LocationId = ploce.Id,
             PlaceId = banjeBeach.Id,
+            Summary = "Guided sea kayaking along the Dubrovnik coastline.",
             Description = "Guided sea kayaking tour along the Dubrovnik coastline.",
             StartDate = now.AddDays(4),
             EndDate = now.AddDays(4).AddHours(4),
@@ -663,7 +754,9 @@ public static class SeedData
         {
             Name = "Lapad Jazz Evening",
             EventTypeId = etMusic.Id,
+            DestinationId = lapad.DestinationId,
             LocationId = lapad.Id,
+            Summary = "Relaxed live jazz evening near the promenade.",
             Description = "Relaxed live jazz evening near the promenade.",
             StartDate = now.AddDays(8),
             EndDate = now.AddDays(8).AddHours(3),
@@ -1467,6 +1560,7 @@ public static class SeedData
             {
                 Name = name,
                 EventTypeId = eventType.Id,
+                DestinationId = location.DestinationId,
                 LocationId = location.Id,
                 PlaceId = place?.Id,
                 Description = description,

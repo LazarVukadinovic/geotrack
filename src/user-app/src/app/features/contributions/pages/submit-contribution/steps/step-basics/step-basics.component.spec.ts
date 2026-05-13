@@ -44,4 +44,56 @@ describe('StepBasicsComponent', () => {
     expect(component.isValid()).toBe(true);
     expect(component.hasConfirmedLocation()).toBe(true);
   });
+
+  for (const placeType of ['Stay', 'Restaurant', 'Cafe']) {
+    it(`requires proof upload for ${placeType}`, () => {
+      component.form.placeType = placeType;
+
+      expect(component.requiresOwnershipProof()).toBe(true);
+    });
+  }
+
+  for (const placeType of ['Landmark', 'Nature', 'Beach']) {
+    it(`does not require proof upload for ${placeType}`, () => {
+      component.form.placeType = placeType;
+
+      expect(component.requiresOwnershipProof()).toBe(false);
+    });
+  }
+
+  for (const placeType of ['Stay', 'Restaurant', 'Cafe']) {
+    it(`blocks continue without proof for ${placeType}`, () => {
+      fillValidLocation();
+      component.form.placeType = placeType;
+
+      expect(component.isValid()).toBe(false);
+    });
+  }
+
+  it('allows valid Restaurant proof and clears it when switching to an unrelated type', () => {
+    fillValidLocation();
+    component.selectPlaceType('Restaurant');
+    component.form.ownershipProofFile = makePdfFile();
+
+    expect(component.isValid()).toBe(true);
+
+    component.selectPlaceType('Landmark');
+
+    expect(component.requiresOwnershipProof()).toBe(false);
+    expect(component.form.ownershipProofFile).toBeNull();
+    expect(component.isValid()).toBe(true);
+  });
+
+  function fillValidLocation(): void {
+    component.form.name = 'Validation Place';
+    component.form.city = 'Dubrovnik';
+    component.form.country = 'Croatia';
+    component.form.lat = 42.6507;
+    component.form.lng = 18.0944;
+  }
+
+  function makePdfFile(): File {
+    return new File(['%PDF-1.4\n% proof\n'], 'ownership-proof.pdf', { type: 'application/pdf' });
+  }
+
 });

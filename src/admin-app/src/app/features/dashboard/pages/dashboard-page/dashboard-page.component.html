@@ -1,187 +1,400 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
+  <app-sidebar
+    [regions]="assignedRegions"
+    [region]="regionDisplayName"
+    [activeRegionId]="activeRegionId"
+    [pendingRequestsCount]="pendingRequestsCount"
+    [regionLoading]="regionLoading"
+    (regionChange)="onRegionSelected($event)"
+  />
 
-  <!-- ════════════════ SIDEBAR ════════════════ -->
-  <app-sidebar [region]="region" />
-
-  <!-- ════════════════ MAIN ════════════════ -->
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-
-    <!-- Topbar -->
     <app-topbar [userName]="userName" [userRole]="userRole" title="Regional Overview" />
 
-    <!-- Scrollable content -->
     <div class="flex-1 overflow-y-auto px-8 py-6">
-
-      <!-- Page heading -->
       <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Regional Overview</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Manage content and operations for the Šumadija region.</p>
+        <p class="text-sm text-gray-500 mt-0.5">{{ pageDescription }}</p>
       </div>
 
-      <!-- ── Stats grid ── -->
-      <div class="grid gap-4 mb-6" style="grid-template-columns: 220px repeat(4, 1fr);">
+      <div
+        *ngIf="(regionLoading || dashboardLoading) && !dashboard"
+        class="bg-white rounded-xl border border-gray-100 p-6 text-sm text-gray-500 mb-6"
+      >
+        Loading regional dashboard...
+      </div>
 
-        <!-- Assigned region card -->
-        <div class="rounded-xl p-4 flex items-start justify-between border-0"
-             style="background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);">
-          <div>
-            <span class="block text-[10px] font-bold tracking-widest text-white/60 mb-1">ASSIGNED REGION</span>
-            <p class="font-bold text-white text-base mb-2">{{ region }}</p>
-            <span class="text-[10px] text-white/90 font-medium rounded-md px-2 py-0.5" style="background:rgba(255,255,255,0.2);">
-              Active Operational Zone
-            </span>
+      <div *ngIf="errorMessage" class="bg-white rounded-xl border border-red-100 p-6 mb-6">
+        <p class="text-sm font-semibold text-red-600">
+          {{ authRequired ? 'Authentication required' : 'Dashboard unavailable' }}
+        </p>
+        <p class="text-sm text-gray-500 mt-1">{{ errorMessage }}</p>
+      </div>
+
+      <div *ngIf="hasNoAssignedRegions" class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+        <p class="text-sm font-semibold text-gray-800">No assigned regions.</p>
+        <p class="text-sm text-gray-500 mt-1">
+          This Regional Manager account does not currently have any assigned regions.
+        </p>
+      </div>
+
+      <ng-container *ngIf="dashboard && !dashboardLoading">
+        <div class="grid gap-4 mb-6 stats-grid">
+          <div
+            class="rounded-xl p-4 flex items-start justify-between border-0 assigned-region-card"
+          >
+            <div>
+              <span class="block text-[10px] font-bold tracking-widest text-white/60 mb-1"
+                >ASSIGNED REGION</span
+              >
+              <p class="font-bold text-white text-base mb-2">
+                {{ dashboard.activeRegion.displayName }}
+              </p>
+              <span
+                *ngIf="dashboard.activeRegion.statusLabel"
+                class="text-[10px] text-white/90 font-medium rounded-md px-2 py-0.5"
+                style="background: rgba(255, 255, 255, 0.2)"
+              >
+                {{ dashboard.activeRegion.statusLabel }}
+              </span>
+            </div>
+            <svg
+              class="w-10 h-10 text-blue-200 flex-shrink-0"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
+            </svg>
           </div>
-          <svg class="w-10 h-10 text-blue-200 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
-          </svg>
-        </div>
 
-        <!-- Metric cards -->
-        <ng-container *ngFor="let s of stats">
-          <div class="bg-white rounded-xl p-4 border flex items-center justify-between"
-               [ngClass]="s.highlight ? 'border-blue-200 bg-blue-50' : 'border-gray-100'"
-               style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+          <button
+            *ngFor="let s of stats"
+            type="button"
+            (click)="navigateStat(s)"
+            class="bg-white rounded-xl p-4 border flex items-center justify-between text-left cursor-pointer transition-all hover:-translate-y-px hover:border-blue-300 hover:shadow-md"
+            [ngClass]="s.highlight ? 'border-blue-200 bg-blue-50' : 'border-gray-100'"
+            style="box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04)"
+          >
             <div class="flex flex-col">
-              <span class="text-[10px] font-bold tracking-widest text-gray-400 mb-1">{{ s.label }}</span>
+              <span class="text-[10px] font-bold tracking-widest text-gray-400 mb-1">{{
+                s.label
+              }}</span>
               <p class="text-2xl font-bold text-gray-900">{{ s.value }}</p>
               <span class="flex items-center gap-0.5 text-xs text-gray-500 mt-0.5">
-                <svg *ngIf="s.sub.includes('month')" class="w-3 h-3 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="18 15 12 9 6 15"/>
+                <svg
+                  *ngIf="s.sub.includes('last 30')"
+                  class="w-3 h-3 text-emerald-500"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polyline points="18 15 12 9 6 15" />
                 </svg>
                 {{ s.sub }}
               </span>
             </div>
             <div class="p-2 rounded-lg bg-gray-50 flex-shrink-0">
-              <svg *ngIf="s.icon==='inbox'" class="w-[22px] h-[22px] text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M22 12h-6l-2 3H10l-2-3H2"/>
-                <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
+              <svg
+                *ngIf="s.icon === 'inbox'"
+                class="w-[22px] h-[22px] text-gray-400"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M22 12h-6l-2 3H10l-2-3H2" />
+                <path
+                  d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"
+                />
               </svg>
-              <svg *ngIf="s.icon==='map'" class="w-[22px] h-[22px] text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+              <svg
+                *ngIf="s.icon === 'map'"
+                class="w-[22px] h-[22px] text-gray-400"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                <line x1="4" y1="22" x2="4" y2="15" />
               </svg>
-              <svg *ngIf="s.icon==='pin'" class="w-[22px] h-[22px] text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+              <svg
+                *ngIf="s.icon === 'pin'"
+                class="w-[22px] h-[22px] text-gray-400"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
               </svg>
-              <svg *ngIf="s.icon==='calendar'" class="w-[22px] h-[22px] text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <rect x="3" y="4" width="18" height="18" rx="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              <svg
+                *ngIf="s.icon === 'calendar'"
+                class="w-[22px] h-[22px] text-gray-400"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
             </div>
-          </div>
-        </ng-container>
-      </div>
-
-      <!-- ── Quick Actions ── -->
-      <div class="mb-6">
-        <h2 class="text-base font-semibold text-gray-900 mb-3">Quick Actions</h2>
-        <div class="grid grid-cols-4 gap-4">
-          <button
-            *ngFor="let a of quickActions"
-            (click)="navigate(a.route)"
-            class="bg-white rounded-xl p-4 border border-gray-100 text-left cursor-pointer transition-all hover:-translate-y-px hover:border-blue-300 hover:shadow-md"
-            style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);"
-          >
-            <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center mb-3">
-              <!-- destination: flag -->
-              <svg *ngIf="a.icon==='flag'" class="w-5 h-5 text-blue-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-              <!-- location/place: pin -->
-              <svg *ngIf="a.icon==='pin'" class="w-5 h-5 text-blue-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
-              <!-- place: home -->
-              <svg *ngIf="a.icon==='home'" class="w-5 h-5 text-blue-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-              <!-- event: calendar -->
-              <svg *ngIf="a.icon==='calendar'" class="w-5 h-5 text-blue-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            </div>
-            <p class="text-sm font-semibold text-gray-800 mb-1">{{ a.label }}</p>
-            <p class="text-xs text-gray-500 leading-snug">{{ a.desc }}</p>
           </button>
         </div>
-      </div>
 
-      <!-- ── Two columns: ── -->
-      <div class="grid gap-4" style="grid-template-columns: 1fr 320px;">
-
-        <!-- Recent Activity -->
-        <div>
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-base font-semibold text-gray-900">Recent Activity</h2>
-            <a href="#" class="text-blue-600 text-xs font-medium hover:text-blue-800 no-underline">View all history →</a>
-          </div>
-          <div class="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50"
-               style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
-            <div *ngFor="let act of activities" class="flex items-start gap-3 px-4 py-3">
-              <div
-                class="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-gray-700 flex-shrink-0 mt-0.5"
-                [style.background]="act.avatarColor"
-              >{{ act.initials }}</div>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm text-gray-800 leading-snug font-medium">{{ act.description }}</p>
-                <div class="flex items-center gap-1.5 text-xs text-gray-400 mt-1">
-                  <!-- type icon -->
-                  <svg *ngIf="act.type==='place'" class="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                  <svg *ngIf="act.type==='destination'" class="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/></svg>
-                  <svg *ngIf="act.type==='event'" class="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                  <svg *ngIf="act.type==='request'" class="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3H10l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
-                  <span class="capitalize">{{ act.type }}</span>
-                  <span>·</span>
-                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  <span>{{ act.timeAgo }}</span>
-                </div>
+        <div class="mb-6">
+          <h2 class="text-base font-semibold text-gray-900 mb-3">Quick Actions</h2>
+          <div class="grid grid-cols-4 gap-4">
+            <button
+              *ngFor="let a of quickActions"
+              type="button"
+              (click)="navigate(a.route)"
+              class="bg-white rounded-xl p-4 border border-gray-100 text-left cursor-pointer transition-all hover:-translate-y-px hover:border-blue-300 hover:shadow-md"
+              style="box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04)"
+            >
+              <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center mb-3">
+                <svg
+                  *ngIf="a.icon === 'flag'"
+                  class="w-5 h-5 text-blue-700"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                  <line x1="4" y1="22" x2="4" y2="15" />
+                </svg>
+                <svg
+                  *ngIf="a.icon === 'pin'"
+                  class="w-5 h-5 text-blue-700"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="12" cy="10" r="3" />
+                  <path
+                    d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                  />
+                </svg>
+                <svg
+                  *ngIf="a.icon === 'home'"
+                  class="w-5 h-5 text-blue-700"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+                <svg
+                  *ngIf="a.icon === 'calendar'"
+                  class="w-5 h-5 text-blue-700"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
               </div>
-              <span
-                *ngIf="act.status"
-                class="flex-shrink-0 rounded-full text-[10px] font-semibold px-2.5 py-0.5 self-start mt-0.5"
-                [ngClass]="{
-                  'bg-amber-50 text-amber-600 ring-1 ring-amber-200':   act.status === 'PENDING',
-                  'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200': act.status === 'PUBLISHED',
-                  'bg-sky-50 text-sky-600 ring-1 ring-sky-200':         act.status === 'APPROVED'
-                }"
-              >{{ act.status }}</span>
-            </div>
+              <p class="text-sm font-semibold text-gray-800 mb-1">{{ a.label }}</p>
+              <p class="text-xs text-gray-500 leading-snug">{{ a.desc }}</p>
+            </button>
           </div>
         </div>
 
-        <!-- Requests Queue -->
-        <div>
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-base font-semibold text-gray-900">Requests Queue</h2>
-            <a (click)="navigateToQueue()" class="text-blue-600 text-xs font-medium hover:text-blue-800 no-underline">Go to queue →</a>
-          </div>
-
-          <!-- Queue card -->
-          <div class="bg-white rounded-xl border border-gray-100 mb-3"
-               style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
-            <div class="flex items-center justify-between px-3 py-2.5 border-b border-gray-50">
-              <span class="text-xs text-gray-500">Prioritized for review</span>
-              <span class="text-xs font-bold text-red-600 bg-red-50 rounded-full px-2 py-0.5">{{ requestsService.pendingCount }} Total</span>
+        <div class="grid gap-4 dashboard-columns">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-base font-semibold text-gray-900">Recent Activity</h2>
+              <button
+                type="button"
+                (click)="navigateToActivityHistory()"
+                class="text-blue-600 text-xs font-medium hover:text-blue-800 bg-transparent border-0 p-0 cursor-pointer"
+              >
+                View all history &rarr;
+              </button>
             </div>
-            <!-- Queue items -->
-            <div class="divide-y divide-gray-50">
-              <div *ngFor="let q of queue" class="flex items-center gap-3 px-3 py-3">
-                <!-- Placeholder image box -->
-                <div class="w-10 h-10 rounded-lg flex-shrink-0" [style.background]="q.imageBg"></div>
+            <div
+              class="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50"
+              style="box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04)"
+            >
+              <div *ngIf="activities.length === 0" class="px-4 py-6 text-sm text-gray-500">
+                No recent activity.
+              </div>
+              <div *ngFor="let act of activities" class="flex items-start gap-3 px-4 py-3">
+                <div
+                  class="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 mt-0.5"
+                  [style.background]="activityAvatarColor(act)"
+                >
+                  {{ activityInitials(act) }}
+                </div>
                 <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-1.5 mb-0.5">
-                    <span class="text-sm font-semibold text-gray-800 truncate">{{ q.title }}</span>
-                  </div>
-                  <p class="text-xs text-gray-500 truncate">By {{ q.author }}</p>
-                  <div class="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-                    <span class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-400"></span>
-                    <span class="text-gray-400">{{ q.type }}</span>
-                    <span class="text-gray-300 mx-0.5">·</span>
-                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    {{ q.date }}
+                  <p class="text-sm text-gray-800 leading-snug font-medium">
+                    {{ act.description }}
+                  </p>
+                  <div class="flex items-center gap-1.5 text-xs text-gray-400 mt-1">
+                    <svg
+                      *ngIf="typeIcon(act.entityType) === 'pin'"
+                      class="w-3 h-3 flex-shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                      <polyline points="9 22 9 12 15 12 15 22" />
+                    </svg>
+                    <svg
+                      *ngIf="typeIcon(act.entityType) === 'map'"
+                      class="w-3 h-3 flex-shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
+                    </svg>
+                    <svg
+                      *ngIf="typeIcon(act.entityType) === 'calendar'"
+                      class="w-3 h-3 flex-shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <rect x="3" y="4" width="18" height="18" rx="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    <svg
+                      *ngIf="typeIcon(act.entityType) === 'inbox'"
+                      class="w-3 h-3 flex-shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M22 12h-6l-2 3H10l-2-3H2" />
+                      <path
+                        d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"
+                      />
+                    </svg>
+                    <span class="capitalize">{{ act.entityType }}</span>
+                    <span>&middot;</span>
+                    <svg
+                      class="w-3 h-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span>{{ timeAgo(act.occurredAt) }}</span>
                   </div>
                 </div>
+                <span
+                  *ngIf="act.status"
+                  class="activity-status flex-shrink-0 rounded-full text-[10px] font-semibold px-2.5 py-0.5 self-start mt-0.5"
+                  [ngClass]="statusClass(act.status)"
+                  >{{ act.status }}</span
+                >
               </div>
             </div>
           </div>
 
-          <button (click)="navigateToQueue()" class="w-full rounded-lg border border-gray-200 text-sm text-blue-600 font-medium py-2.5 bg-white hover:bg-blue-50 transition-colors cursor-pointer">
-            Review All Requests →
-          </button>
-        </div>
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-base font-semibold text-gray-900">Requests Queue</h2>
+              <button
+                type="button"
+                (click)="navigateToQueue()"
+                class="text-blue-600 text-xs font-medium hover:text-blue-800 bg-transparent border-0 p-0 cursor-pointer"
+              >
+                Go to queue &rarr;
+              </button>
+            </div>
 
-      </div>
+            <div
+              class="bg-white rounded-xl border border-gray-100 mb-3"
+              style="box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04)"
+            >
+              <div class="flex items-center justify-between px-3 py-2.5 border-b border-gray-50">
+                <span class="text-xs text-gray-500">Prioritized for review</span>
+                <span class="text-xs font-bold text-red-600 bg-red-50 rounded-full px-2 py-0.5"
+                  >{{ dashboard.stats.pendingRequests }} Total</span
+                >
+              </div>
+              <div class="divide-y divide-gray-50">
+                <div *ngIf="queue.length === 0" class="px-3 py-6 text-sm text-gray-500">
+                  No pending requests.
+                </div>
+                <button
+                  *ngFor="let q of queue"
+                  type="button"
+                  (click)="navigateToRequest(q)"
+                  class="w-full flex items-center gap-3 px-3 py-3 text-left bg-white border-0 cursor-pointer hover:bg-gray-50"
+                >
+                  <div
+                    class="w-10 h-10 rounded-lg flex-shrink-0"
+                    [style.background]="queueImageStyle(q)"
+                  ></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span class="text-sm font-semibold text-gray-800 truncate">{{
+                        q.title
+                      }}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 truncate">
+                      By {{ q.submittedByDisplayName || 'User' }}
+                    </p>
+                    <div class="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                      <span
+                        class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-400"
+                      ></span>
+                      <span class="text-gray-400">{{ q.entityType }}</span>
+                      <span class="text-gray-300 mx-0.5">&middot;</span>
+                      <svg
+                        class="w-3 h-3"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      {{ timeAgo(q.submittedAt) }}
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <button
+              (click)="navigateToQueue()"
+              class="w-full rounded-lg border border-gray-200 text-sm text-blue-600 font-medium py-2.5 bg-white hover:bg-blue-50 transition-colors cursor-pointer"
+            >
+              Review All Requests &rarr;
+            </button>
+          </div>
+        </div>
+      </ng-container>
     </div>
   </div>
 </div>

@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Security;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Analytics;
@@ -152,6 +153,30 @@ public class UserService : IUserService
         return new UpdateAvatarResponseDto
         {
             AvatarUrl = user.AvatarUrl ?? string.Empty,
+            UpdatedAt = user.UpdatedAt,
+        };
+    }
+
+    public async Task<UpdateAvatarResponseDto> DeleteAvatarAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        var previousAvatarUrl = user.AvatarUrl;
+
+        user.AvatarUrl = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        if (_userAvatarStorageService.IsManagedAvatarUrl(previousAvatarUrl))
+        {
+            await _userAvatarStorageService.DeleteAsync(previousAvatarUrl!);
+        }
+
+        return new UpdateAvatarResponseDto
+        {
+            AvatarUrl = string.Empty,
             UpdatedAt = user.UpdatedAt,
         };
     }
@@ -881,12 +906,12 @@ public class UserService : IUserService
             throw new KeyNotFoundException($"User with id '{userId}' was not found.");
 
         bool alreadyHasRole = user.UserRoles
-            .Any(ur => ur.Role.Name == "RegionalManager");
+            .Any(ur => RoleNames.Normalize(ur.Role.Name) == RoleNames.RegionalManager);
 
         if (alreadyHasRole)
             throw new InvalidOperationException("User already has the RegionalManager role.");
 
-        var role = await _userRepository.GetRoleByNameAsync("RegionalManager")
+        var role = await _userRepository.GetRoleByNameAsync(RoleNames.RegionalManager)
             ?? throw new InvalidOperationException("RegionalManager role does not exist.");
 
         user.UserRoles.Add(new UserRole
@@ -913,7 +938,7 @@ public class UserService : IUserService
             throw new KeyNotFoundException($"User with id '{userId}' was not found.");
 
         var userRole = user.UserRoles
-            .FirstOrDefault(ur => ur.Role.Name == "RegionalManager");
+            .FirstOrDefault(ur => RoleNames.Normalize(ur.Role.Name) == RoleNames.RegionalManager);
 
         if (userRole == null)
             throw new InvalidOperationException("User does not have the RegionalManager role.");
@@ -926,7 +951,7 @@ public class UserService : IUserService
         {
             UserId = userId,
             Roles = user.UserRoles
-                .Where(ur => ur.Role.Name != "RegionalManager")
+                .Where(ur => RoleNames.Normalize(ur.Role.Name) != RoleNames.RegionalManager)
                 .Select(ur => ur.Role.Name)
                 .ToList()
         };
@@ -939,14 +964,14 @@ public class UserService : IUserService
         if (user == null)
             throw new KeyNotFoundException($"User with id '{userId}' was not found.");
 
-        var regions = user.RegionalManager?
-            .RegionalManagerRegions
+        var regions = user.RegionalManagerRegions
+            .Where(ror => ror.IsActive)
             .Select(ror => new RegionItemDto
             {
                 Id = ror.Region.Id,
                 Name = ror.Region.Name
             })
-            .ToList() ?? new List<RegionItemDto>();
+            .ToList();
 
         return new GetUserRegionsResponseDto
         {
@@ -964,7 +989,7 @@ public class UserService : IUserService
             throw new KeyNotFoundException($"User with id '{userId}' was not found.");
 
         bool isRegionalManager = user.UserRoles
-            .Any(ur => ur.Role.Name == "RegionalManager");
+            .Any(ur => RoleNames.Normalize(ur.Role.Name) == RoleNames.RegionalManager);
 
         if (!isRegionalManager)
             throw new InvalidOperationException("User does not have the RegionalManager role.");
@@ -975,34 +1000,31 @@ public class UserService : IUserService
                 throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
         }
 
-        if (user.RegionalManager == null)
+        var requestedRegionIds = regionIds.ToHashSet();
+        var existingAssignments = user.RegionalManagerRegions.ToList();
+        var now = DateTime.UtcNow;
+
+        foreach (var existingAssignment in existingAssignments.Where(assignment => !requestedRegionIds.Contains(assignment.RegionId)))
         {
-            user.RegionalManager = new RegionalManager
+            await _userRepository.DeleteUserRegionAsync(existingAssignment);
+        }
+
+        foreach (var existingAssignment in existingAssignments.Where(assignment => requestedRegionIds.Contains(assignment.RegionId)))
+        {
+            existingAssignment.IsActive = true;
+            existingAssignment.UpdatedAt = now;
+        }
+
+        var existingRegionIds = existingAssignments.Select(assignment => assignment.RegionId).ToHashSet();
+        foreach (var regionId in regionIds.Where(regionId => !existingRegionIds.Contains(regionId)))
+        {
+            await _userRepository.AddUserRegionAsync(new RegionalManagerRegion
             {
                 UserId = userId,
-                RegionalManagerRegions = regionIds.Select(regionId => new RegionalManagerRegion
-                {
-                    UserId = userId,
-                    RegionId = regionId,
-                    CreatedAt = DateTime.UtcNow
-                }).ToList()
-            };
-
-            await _userRepository.AddRegionalManagerAsync(user.RegionalManager);
-        }
-        else
-        {
-            user.RegionalManager.RegionalManagerRegions.Clear();
-
-            foreach (var regionId in regionIds)
-            {
-                user.RegionalManager.RegionalManagerRegions.Add(new RegionalManagerRegion
-                {
-                    UserId = userId,
-                    RegionId = regionId,
-                    CreatedAt = DateTime.UtcNow
-                });
-            }
+                RegionId = regionId,
+                IsActive = true,
+                CreatedAt = now
+            });
         }
 
         await _userRepository.SaveChangesAsync();
@@ -1022,7 +1044,7 @@ public class UserService : IUserService
             throw new KeyNotFoundException($"User with id '{userId}' was not found.");
 
         bool isRegionalManager = user.UserRoles
-            .Any(ur => ur.Role.Name == "RegionalManager");
+            .Any(ur => RoleNames.Normalize(ur.Role.Name) == RoleNames.RegionalManager);
 
         if (!isRegionalManager)
             throw new InvalidOperationException("User does not have the RegionalManager role.");
@@ -1037,33 +1059,13 @@ public class UserService : IUserService
         if (alreadyAssigned)
             throw new InvalidOperationException("Region is already assigned to this user.");
 
-        if (user.RegionalManager == null)
+        await _userRepository.AddUserRegionAsync(new RegionalManagerRegion
         {
-            var regionalOrganization = new RegionalManager
-            {
-                UserId = userId,
-                RegionalManagerRegions = new List<RegionalManagerRegion>
-                {
-                    new RegionalManagerRegion
-                    {
-                        UserId = userId,
-                        RegionId = regionId,
-                        CreatedAt = DateTime.UtcNow
-                    }
-                }
-            };
-
-            await _userRepository.AddRegionalManagerAsync(regionalOrganization);
-        }
-        else
-        {
-            await _userRepository.AddUserRegionAsync(new RegionalManagerRegion
-            {
-                UserId = userId,
-                RegionId = regionId,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
+            UserId = userId,
+            RegionId = regionId,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
 
         await _userRepository.SaveChangesAsync();
 

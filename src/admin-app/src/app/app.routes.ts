@@ -109,6 +109,18 @@ export const routes: Routes = [
           import('./features/requests/pages/requests-queue/requests-queue.component').then(m => m.ReviewQueueComponent),
       },
       {
+        path: 'activity-history',
+        canActivate: [regionalManagerGuard],
+        loadComponent: () =>
+          import('./features/dashboard/pages/activity-history/activity-history.component').then(m => m.ActivityHistoryComponent),
+      },
+      {
+        path: 'request/detail/:source/:id',
+        canActivate: [regionalManagerGuard],
+        loadComponent: () =>
+          import('./features/requests/pages/request-detail/request-detail.component').then(m => m.RequestDetailComponent),
+      },
+      {
         path: 'request/detail/:id',
         canActivate: [regionalManagerGuard],
         loadComponent: () =>

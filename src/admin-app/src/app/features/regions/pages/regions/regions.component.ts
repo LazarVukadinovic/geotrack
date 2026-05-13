@@ -37,7 +37,7 @@ export class AllRegionsComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get userName(): string { return this.auth.fullName; }
-  get userRole():  string { return this.auth.getUser()?.role ?? ''; }
+  get userRole(): string { return this.auth.getUser()?.role ?? ''; }
 
   items:        RegionListItem[] = [];
   totalItems    = 0;

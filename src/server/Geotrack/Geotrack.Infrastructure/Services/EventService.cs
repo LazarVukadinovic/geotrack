@@ -93,7 +93,11 @@ public class EventService : IEventService
                     Title = e.Name,
                     Subtitle = e.EventType.Name,
                     Description = e.Description,
-                    Location = e.Location.Name,
+                    Location = e.VenueName ?? (e.Place != null
+                        ? e.Place.Name
+                        : e.Location != null
+                            ? e.Location.Name
+                            : e.Destination.Name),
                     Image = e.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
@@ -103,7 +107,7 @@ public class EventService : IEventService
                         .FirstOrDefault(),
                     StartDate = e.StartDate,
                     EndDate = e.EndDate,
-                    DestinationPriority = e.Location.DestinationId == destination.Id ? 0 : 1,
+                    DestinationPriority = e.DestinationId == destination.Id ? 0 : 1,
                     Tags = e.EventTags.OrderBy(et => et.Tag.Name).Select(et => et.Tag.Name).ToList()
                 })
                 .OrderBy(e => e.DestinationPriority)
@@ -121,7 +125,11 @@ public class EventService : IEventService
                     Title = e.Name,
                     Subtitle = e.EventType.Name,
                     Description = e.Description,
-                    Location = e.Location.Name,
+                    Location = e.VenueName ?? (e.Place != null
+                        ? e.Place.Name
+                        : e.Location != null
+                            ? e.Location.Name
+                            : e.Destination.Name),
                     Image = e.Images
                         .OrderByDescending(image => image.IsMain)
                         .ThenBy(image => image.SortOrder)
@@ -132,7 +140,7 @@ public class EventService : IEventService
                     StartDate = e.StartDate,
                     EndDate = e.EndDate,
                     Tags = e.EventTags.OrderBy(et => et.Tag.Name).Select(et => et.Tag.Name).ToList(),
-                    DestinationPriority = e.Location.DestinationId == destination.Id ? 0 : 1,
+                    DestinationPriority = e.DestinationId == destination.Id ? 0 : 1,
                     DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
                 })
                 .OrderBy(e => e.DestinationPriority)
@@ -211,6 +219,7 @@ public class EventService : IEventService
             .AsNoTracking()
             .Include(e => e.EventType)
             .Include(e => e.Images)
+            .Include(e => e.Destination)
             .Include(e => e.Location)
             .Include(e => e.Place)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
@@ -226,7 +235,7 @@ public class EventService : IEventService
             .AsNoTracking()
             .Include(e => e.EventType)
             .Include(e => e.Images)
-            .Where(e => e.Id != id && e.Location.DestinationId == evt.Location.DestinationId)
+            .Where(e => e.Id != id && e.DestinationId == evt.DestinationId)
             .Take(5)
             .ToListAsync();
 
@@ -240,7 +249,7 @@ public class EventService : IEventService
         {
             Id = evt.Id,
             Title = evt.Name,
-            Location = evt.Location?.Name,
+            Location = evt.VenueName ?? evt.Place?.Name ?? evt.Location?.Name ?? evt.Destination.Name,
             Latitude = eventLatitude,
             Longitude = eventLongitude,
             HeroImage = images.FirstOrDefault()?.Url,
@@ -255,9 +264,9 @@ public class EventService : IEventService
             Info = new EventDetailInfoDto
             {
                 Date = evt.StartDate.ToString("d MMMM yyyy"),
-                TimeRange = $"{evt.StartDate:HH:mm} - {evt.EndDate:HH:mm}",
-                Venue = evt.Place?.Name ?? evt.Location?.Name ?? "TBA",
-                Ticket = evt.TicketPrice ?? "Free",
+                TimeRange = evt.IsAllDay ? "All day" : $"{evt.StartDate:HH:mm} - {evt.EndDate:HH:mm}",
+                Venue = evt.VenueName ?? evt.Place?.Name ?? evt.Location?.Name ?? evt.Destination.Name,
+                Ticket = evt.IsFree ? "Free" : evt.TicketPrice ?? "Ticket info TBA",
                 Duration = evt.Duration ?? FormatDuration(evt.StartDate, evt.EndDate),
                 HostedBy = evt.HostedBy ?? "Local Organizers"
             },
@@ -526,6 +535,11 @@ public class EventService : IEventService
         if (HasUsableCoordinates(evt.Location?.Latitude, evt.Location?.Longitude))
         {
             return (evt.Location!.Latitude, evt.Location.Longitude);
+        }
+
+        if (HasUsableCoordinates(evt.Destination?.Latitude, evt.Destination?.Longitude))
+        {
+            return (evt.Destination!.Latitude, evt.Destination.Longitude);
         }
 
         return (null, null);
