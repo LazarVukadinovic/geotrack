@@ -1877,16 +1877,6 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("RefreshTokens", (string)null);
                 });
 
-            modelBuilder.Entity("Geotrack.Domain.Entities.Users.RegionalManager", b =>
-                {
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("UserId");
-
-                    b.ToTable("RegionalManagers", (string)null);
-                });
-
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.RegionalManagerRegion", b =>
                 {
                     b.Property<int>("UserId")
@@ -1897,6 +1887,11 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2829,17 +2824,6 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Geotrack.Domain.Entities.Users.RegionalManager", b =>
-                {
-                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
-                        .WithOne("RegionalManager")
-                        .HasForeignKey("Geotrack.Domain.Entities.Users.RegionalManager", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.RegionalManagerRegion", b =>
                 {
                     b.HasOne("Geotrack.Domain.Entities.Core.Region", "Region")
@@ -2848,7 +2832,7 @@ namespace Geotrack.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Geotrack.Domain.Entities.Users.RegionalManager", "RegionalManager")
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
                         .WithMany("RegionalManagerRegions")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2856,7 +2840,7 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Navigation("Region");
 
-                    b.Navigation("RegionalManager");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.SupportRequest", b =>
@@ -3089,11 +3073,6 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("Images");
                 });
 
-            modelBuilder.Entity("Geotrack.Domain.Entities.Users.RegionalManager", b =>
-                {
-                    b.Navigation("RegionalManagerRegions");
-                });
-
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.Role", b =>
                 {
                     b.Navigation("UserRoles");
@@ -3112,7 +3091,7 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Navigation("PlaceContributions");
 
-                    b.Navigation("RegionalManager");
+                    b.Navigation("RegionalManagerRegions");
 
                     b.Navigation("SupportRequests");
 

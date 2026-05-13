@@ -47,7 +47,6 @@ public interface IUserRepository : IRepository<User>
     Task RemoveUserRoleAsync(UserRole userRole);
     Task<User?> GetByIdWithRegionsAsync(int userId);
     Task<User?> GetByIdWithRolesAndRegionsAsync(int userId);
-    Task AddRegionalManagerAsync(RegionalManager regionalOrganization);
     Task<bool> RegionExistsAsync(int regionId);
     Task<bool> UserRegionExistsAsync(int userId, int regionId);
     Task AddUserRegionAsync(RegionalManagerRegion region);

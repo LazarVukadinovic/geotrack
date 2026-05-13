@@ -260,7 +260,10 @@ namespace Geotrack.Infrastructure.Repositories
 
         public async Task<User?> GetByIdWithRegionsAsync(int userId)
         {
-            return await _context.Users.Include(u => u.RegionalManager).ThenInclude(ro => ro.RegionalManagerRegions).ThenInclude(ror => ror.Region).FirstOrDefaultAsync(u => u.Id == userId);
+            return await _context.Users
+                .Include(u => u.RegionalManagerRegions)
+                    .ThenInclude(ror => ror.Region)
+                .FirstOrDefaultAsync(u => u.Id == userId);
         }
 
         public async Task<User?> GetByIdWithRolesAndRegionsAsync(int userId)
@@ -268,14 +271,8 @@ namespace Geotrack.Infrastructure.Repositories
             return await _context.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
-                .Include(u => u.RegionalManager)
-                    .ThenInclude(ro => ro.RegionalManagerRegions)
+                .Include(u => u.RegionalManagerRegions)
                 .FirstOrDefaultAsync(u => u.Id == userId);
-        }
-
-        public async Task AddRegionalManagerAsync(RegionalManager regionalOrganization)
-        {
-            await _context.RegionalManagers.AddAsync(regionalOrganization);
         }
 
         public async Task<bool> RegionExistsAsync(int regionId)

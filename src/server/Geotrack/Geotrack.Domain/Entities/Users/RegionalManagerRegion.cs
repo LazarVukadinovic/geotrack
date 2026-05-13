@@ -10,10 +10,11 @@ namespace Geotrack.Domain.Entities.Users;
 public class RegionalManagerRegion
 {
     public int UserId { get; set; }
-    public RegionalManager RegionalManager { get; set; } = null!; // NAVIGATIONAL
+    public User User { get; set; } = null!; // NAVIGATIONAL
     public int RegionId { get; set; }
     public Region Region { get; set; } = null!; // NAVIGATIONAL
 
+    public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

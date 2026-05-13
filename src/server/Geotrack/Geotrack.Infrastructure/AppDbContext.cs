@@ -17,7 +17,6 @@ public class AppDbContext : DbContext
 {
     public DbSet<Territory> Territories => Set<Territory>();
     public DbSet<Region> Regions => Set<Region>();
-    public DbSet<RegionalManager> RegionalManagers => Set<RegionalManager>();
     public DbSet<RegionalManagerRegion> RegionalManagerRegions => Set<RegionalManagerRegion>();
     public DbSet<TerritoryManager> TerritoryManagers => Set<TerritoryManager>();
     public DbSet<TerritoryManagerTerritory> TerritoryManagerTerritories => Set<TerritoryManagerTerritory>();
@@ -182,28 +181,20 @@ public class AppDbContext : DbContext
 
     private static void ConfigureRegionalManagers(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<RegionalManager>(entity =>
-        {
-            entity.ToTable("RegionalManagers");
-
-            entity.HasKey(x => x.UserId);
-
-            entity.HasOne(x => x.User)
-                .WithOne(x => x.RegionalManager)
-                .HasForeignKey<RegionalManager>(x => x.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
         modelBuilder.Entity<RegionalManagerRegion>(entity =>
         {
             entity.ToTable("RegionalManagerRegions");
 
             entity.HasKey(x => new { x.UserId, x.RegionId });
 
+            entity.Property(x => x.IsActive)
+                .IsRequired()
+                .HasDefaultValue(true);
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
-            entity.HasOne(x => x.RegionalManager)
+            entity.HasOne(x => x.User)
                 .WithMany(x => x.RegionalManagerRegions)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);

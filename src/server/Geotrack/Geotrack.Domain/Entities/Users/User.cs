@@ -43,7 +43,7 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    public RegionalManager? RegionalManager { get; set; }
+    public ICollection<RegionalManagerRegion> RegionalManagerRegions { get; set; } = new List<RegionalManagerRegion>();
 
     public ICollection<UserPlace> UserPlaces { get; set; } = new List<UserPlace>();
     public ICollection<PlaceContribution> PlaceContributions { get; set; } = new List<PlaceContribution>();
