@@ -3,10 +3,14 @@ import { Injectable } from '@angular/core';
 import { Observable, map, throwError } from 'rxjs';
 import {
   LocationSort,
+  RegionalLocationCreateRequest,
   RegionalLocationDetailDto,
   RegionalLocationListItemDto,
   RegionalLocationListParams,
   RegionalLocationListResponse,
+  RegionalLocationParentDestinationDto,
+  RegionalLocationTagDto,
+  RegionalLocationTypeDto,
 } from '../models/location.model';
 
 export interface LocationListItem {
@@ -26,6 +30,7 @@ export interface LocationListItem {
   destinationName?: string | null;
   locationTypeId?: number | null;
   locationType?: string | null;
+  tagsDto?: RegionalLocationTagDto[];
   createdAt?: string | null;
   lastUpdatedAt?: string | null;
   lat?: number;
@@ -93,6 +98,43 @@ export class LocationsListService {
     return this.http.get<RegionalLocationDetailDto>(`${this.endpoint}/${locationId}`, { params });
   }
 
+  createLocation(payload: RegionalLocationCreateRequest): Observable<RegionalLocationDetailDto> {
+    return this.http.post<RegionalLocationDetailDto>(this.endpoint, payload);
+  }
+
+  getParentDestinations(
+    regionId: number,
+    search?: string | null,
+    take = 50,
+  ): Observable<RegionalLocationParentDestinationDto[]> {
+    let params = new HttpParams()
+      .set('regionId', String(regionId))
+      .set('take', String(take));
+
+    const normalizedSearch = search?.trim();
+    if (normalizedSearch) {
+      params = params.set('search', normalizedSearch);
+    }
+
+    return this.http.get<RegionalLocationParentDestinationDto[]>(
+      '/api/admin/regional/location-parent-destinations',
+      { params },
+    );
+  }
+
+  getLocationTags(): Observable<RegionalLocationTagDto[]> {
+    return this.http.get<RegionalLocationTagDto[]>('/api/admin/regional/location-tags');
+  }
+
+  searchLocationTags(query: string): Observable<RegionalLocationTagDto[]> {
+    const params = new HttpParams().set('search', query);
+    return this.http.get<RegionalLocationTagDto[]>('/api/admin/regional/location-tags', { params });
+  }
+
+  getLocationTypes(): Observable<RegionalLocationTypeDto[]> {
+    return this.http.get<RegionalLocationTypeDto[]>('/api/admin/regional/location-types');
+  }
+
   deleteLocation(regionId: number, locationId: string | number): Observable<void> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.delete<void>(`${this.endpoint}/${locationId}`, { params });
@@ -109,6 +151,7 @@ export class LocationsListService {
       description: dto.description ?? null,
       region: dto.regionDisplayName,
       status: dto.status || 'Published',
+      internalRefId: dto.internalReferenceId ?? undefined,
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
       imageUrl: dto.imageUrl ?? null,
@@ -121,6 +164,8 @@ export class LocationsListService {
       locationTypeId: dto.locationTypeId ?? null,
       locationType: dto.locationType ?? null,
       parentDestination: destinationName ?? undefined,
+      tagsDto: dto.tags ?? [],
+      tags: (dto.tags ?? []).map(tag => tag.name),
       createdAt: dto.createdAt ?? null,
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
       detailRoute: dto.detailRoute ?? `/locations/detail/${dto.id}`,

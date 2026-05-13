@@ -3,10 +3,14 @@ import { Injectable } from '@angular/core';
 import { Observable, map, throwError } from 'rxjs';
 import {
   PlaceSort,
+  RegionalPlaceCreateRequest,
   RegionalPlaceDetailDto,
   RegionalPlaceListItemDto,
   RegionalPlaceListParams,
   RegionalPlaceListResponse,
+  RegionalPlaceParentLocationDto,
+  RegionalPlaceTagDto,
+  RegionalPlaceTypeDto,
 } from '../models/place.model';
 
 export interface PlaceListItem {
@@ -34,6 +38,7 @@ export interface PlaceListItem {
   imageUrl?: string | null;
   detailRoute?: string | null;
   editRoute?: string | null;
+  tagsDto?: RegionalPlaceTagDto[];
   subtitle?: string | null;
   address?: string;
   description?: string | null;
@@ -114,6 +119,43 @@ export class PlacesListService {
     return this.http.get<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, { params });
   }
 
+  createPlace(payload: RegionalPlaceCreateRequest): Observable<RegionalPlaceDetailDto> {
+    return this.http.post<RegionalPlaceDetailDto>(this.endpoint, payload);
+  }
+
+  getParentLocations(
+    regionId: number,
+    search?: string | null,
+    take = 50,
+  ): Observable<RegionalPlaceParentLocationDto[]> {
+    let params = new HttpParams()
+      .set('regionId', String(regionId))
+      .set('take', String(take));
+
+    const normalizedSearch = search?.trim();
+    if (normalizedSearch) {
+      params = params.set('search', normalizedSearch);
+    }
+
+    return this.http.get<RegionalPlaceParentLocationDto[]>(
+      '/api/admin/regional/place-parent-locations',
+      { params },
+    );
+  }
+
+  getPlaceTags(): Observable<RegionalPlaceTagDto[]> {
+    return this.http.get<RegionalPlaceTagDto[]>('/api/admin/regional/place-tags');
+  }
+
+  searchPlaceTags(query: string): Observable<RegionalPlaceTagDto[]> {
+    const params = new HttpParams().set('search', query);
+    return this.http.get<RegionalPlaceTagDto[]>('/api/admin/regional/place-tags', { params });
+  }
+
+  getPlaceTypes(): Observable<RegionalPlaceTypeDto[]> {
+    return this.http.get<RegionalPlaceTypeDto[]>('/api/admin/regional/place-types');
+  }
+
   deletePlace(regionId: number, placeId: string | number): Observable<void> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.delete<void>(`${this.endpoint}/${placeId}`, { params });
@@ -134,6 +176,7 @@ export class PlacesListService {
       description: dto.description ?? null,
       region: dto.regionDisplayName,
       status: dto.status || 'Published',
+      internalRefId: dto.internalReferenceId ?? undefined,
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
       imageBg: dto.imageUrl ? `url("${dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
@@ -150,9 +193,11 @@ export class PlacesListService {
       stayType,
       createdAt: dto.createdAt ?? null,
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
+      tagsDto: dto.tags ?? [],
+      tags: (dto.tags ?? []).map(tag => tag.name),
       imageUrl: dto.imageUrl ?? null,
       detailRoute: dto.detailRoute ?? `/places/detail/${dto.id}`,
-      editRoute: dto.editRoute ?? `/places/edit/${dto.id}`,
+      editRoute: dto.editRoute ?? '/places/new',
       address: dto.address ?? undefined,
     };
 

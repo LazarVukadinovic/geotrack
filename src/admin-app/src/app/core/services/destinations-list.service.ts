@@ -3,10 +3,12 @@ import { Injectable } from '@angular/core';
 import { Observable, map, throwError } from 'rxjs';
 import {
   DestinationSort,
+  RegionalDestinationCreateRequest,
   RegionalDestinationDetailDto,
   RegionalDestinationListItemDto,
   RegionalDestinationListParams,
   RegionalDestinationListResponse,
+  RegionalDestinationTagDto,
 } from '../models/destination.model';
 
 export interface DestinationListItem {
@@ -39,6 +41,7 @@ export interface DestinationListItem {
   coverImageName?: string;
   galleryImages?: { url: string; name: string }[];
   internalRefId?: string;
+  tagsDto?: RegionalDestinationTagDto[];
 }
 
 export interface DestinationsPage {
@@ -90,6 +93,19 @@ export class DestinationsListService {
     return this.http.get<RegionalDestinationDetailDto>(`${this.endpoint}/${destinationId}`, { params });
   }
 
+  createDestination(payload: RegionalDestinationCreateRequest): Observable<RegionalDestinationDetailDto> {
+    return this.http.post<RegionalDestinationDetailDto>(this.endpoint, payload);
+  }
+
+  getDestinationTags(): Observable<RegionalDestinationTagDto[]> {
+    return this.http.get<RegionalDestinationTagDto[]>('/api/admin/regional/destination-tags');
+  }
+
+  searchDestinationTags(query: string): Observable<RegionalDestinationTagDto[]> {
+    const params = new HttpParams().set('search', query);
+    return this.http.get<RegionalDestinationTagDto[]>('/api/admin/regional/destination-tags', { params });
+  }
+
   deleteDestination(regionId: number, destinationId: string | number): Observable<void> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.delete<void>(`${this.endpoint}/${destinationId}`, { params });
@@ -105,6 +121,7 @@ export class DestinationsListService {
       description: dto.description ?? null,
       region: dto.regionDisplayName,
       status: dto.status || 'Published',
+      internalRefId: dto.internalReferenceId ?? undefined,
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
       imageBg: dto.imageUrl ? `url("${dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
@@ -118,6 +135,8 @@ export class DestinationsListService {
       imageUrl: dto.imageUrl ?? null,
       detailRoute: dto.detailRoute ?? `/destinations/detail/${dto.id}`,
       editRoute: dto.editRoute ?? '/destinations/new',
+      tagsDto: dto.tags ?? [],
+      tags: (dto.tags ?? []).map(tag => tag.name),
     };
 
     this.cache.set(id, item);

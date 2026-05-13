@@ -3,10 +3,16 @@ import { Injectable } from '@angular/core';
 import { Observable, map, throwError } from 'rxjs';
 import {
   EventSort,
+  RegionalEventCreateRequest,
   RegionalEventDetailDto,
   RegionalEventListItemDto,
   RegionalEventListParams,
   RegionalEventListResponse,
+  RegionalEventParentDestinationDto,
+  RegionalEventParentLocationDto,
+  RegionalEventParentPlaceDto,
+  RegionalEventTagDto,
+  RegionalEventTypeDto,
 } from '../models/event.model';
 
 export interface EventListItem {
@@ -122,9 +128,57 @@ export class EventsListService {
     return this.http.get<RegionalEventDetailDto>(`${this.endpoint}/${eventId}`, { params });
   }
 
+  createEvent(payload: RegionalEventCreateRequest): Observable<RegionalEventDetailDto> {
+    return this.http.post<RegionalEventDetailDto>(this.endpoint, payload);
+  }
+
   deleteEvent(regionId: number, eventId: string | number): Observable<void> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.delete<void>(`${this.endpoint}/${eventId}`, { params });
+  }
+
+  getParentDestinations(
+    regionId: number,
+    search: string | null = null,
+    take = 50,
+  ): Observable<RegionalEventParentDestinationDto[]> {
+    let params = new HttpParams().set('regionId', String(regionId)).set('take', String(take));
+    const query = search?.trim();
+    if (query) params = params.set('search', query);
+    return this.http.get<RegionalEventParentDestinationDto[]>('/api/admin/regional/event-parent-destinations', { params });
+  }
+
+  getParentLocations(
+    regionId: number,
+    search: string | null = null,
+    take = 50,
+  ): Observable<RegionalEventParentLocationDto[]> {
+    let params = new HttpParams().set('regionId', String(regionId)).set('take', String(take));
+    const query = search?.trim();
+    if (query) params = params.set('search', query);
+    return this.http.get<RegionalEventParentLocationDto[]>('/api/admin/regional/event-parent-locations', { params });
+  }
+
+  getParentPlaces(
+    regionId: number,
+    search: string | null = null,
+    take = 50,
+  ): Observable<RegionalEventParentPlaceDto[]> {
+    let params = new HttpParams().set('regionId', String(regionId)).set('take', String(take));
+    const query = search?.trim();
+    if (query) params = params.set('search', query);
+    return this.http.get<RegionalEventParentPlaceDto[]>('/api/admin/regional/event-parent-places', { params });
+  }
+
+  getEventTags(search: string | null = null): Observable<RegionalEventTagDto[]> {
+    let params = new HttpParams();
+    const query = search?.trim();
+    if (query) params = params.set('search', query);
+    return this.http.get<RegionalEventTagDto[]>('/api/admin/regional/event-tags', { params });
+  }
+
+  getEventTypes(): Observable<RegionalEventTypeDto[]> {
+    return this.http.get<RegionalEventTypeDto[]>('/api/admin/regional/event-types');
   }
 
   toListItem(dto: RegionalEventListItemDto): EventListItem {
@@ -168,8 +222,17 @@ export class EventsListService {
       lat: this.toOptionalNumber(dto.latitude),
       lng: this.toOptionalNumber(dto.longitude),
       address: dto.address ?? undefined,
-      venueName,
+      venueName: dto.venueName ?? venueName,
       ticketPrice: dto.ticketPrice ?? null,
+      freeEvent: dto.isFree ?? false,
+      recurring: dto.isRecurring ?? false,
+      allDay: dto.isAllDay ?? false,
+      contactEmail: dto.contactEmail ?? undefined,
+      attendanceLimit: dto.attendanceLimit != null ? String(dto.attendanceLimit) : undefined,
+      ageRestriction: dto.ageRestriction ?? undefined,
+      internalRefId: dto.internalReferenceId ?? undefined,
+      tags: dto.tags?.map(tag => tag.name) ?? [],
+      classification: dto.tags?.map(tag => tag.name) ?? [],
       duration: dto.duration ?? null,
       organizerName: dto.hostedBy ?? undefined,
       venueDescription: dto.venueDescription ?? null,

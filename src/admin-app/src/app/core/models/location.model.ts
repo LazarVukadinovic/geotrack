@@ -9,12 +9,18 @@ export interface RegionalLocationListItemDto {
   locationType?: string | null;
   locationTypeId?: number | null;
   status: string;
+  internalReferenceId?: string | null;
   regionId: number;
   regionDisplayName: string;
   destinationId?: number | null;
   destinationName?: string | null;
+  createdByUserId?: number | null;
+  boundaryNote?: string | null;
+  boundaryShapeType?: string | null;
+  tags?: RegionalLocationTagDto[];
   lastUpdatedAt?: string | null;
   createdAt?: string | null;
+  publishedAt?: string | null;
   imageUrl?: string | null;
   detailRoute?: string | null;
   editRoute?: string | null;
@@ -39,4 +45,48 @@ export interface RegionalLocationListParams {
   sort?: LocationSort;
   skip?: number;
   take?: number;
+}
+
+export interface RegionalLocationTagDto {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export interface RegionalLocationParentDestinationDto {
+  id: number;
+  name: string;
+  displayName: string;
+  status: string;
+}
+
+export interface RegionalLocationTypeDto {
+  id: number;
+  name: string;
+  description?: string | null;
+}
+
+export interface RegionalLocationCoordinateDto {
+  latitude: number;
+  longitude: number;
+}
+
+export interface RegionalLocationBoundaryDto {
+  shapeType: 'Polygon' | 'Rectangle' | 'Circle';
+  coordinates: RegionalLocationCoordinateDto[];
+}
+
+export interface RegionalLocationCreateRequest {
+  regionId: number;
+  destinationId: number;
+  name: string;
+  summary?: string | null;
+  description?: string | null;
+  status: 'Published' | 'Draft';
+  locationTypeId?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  boundaryNote?: string | null;
+  boundary?: RegionalLocationBoundaryDto | null;
+  tagIds: number[];
 }

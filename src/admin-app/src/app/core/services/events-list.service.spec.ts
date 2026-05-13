@@ -63,6 +63,63 @@ describe('EventsListService', () => {
     request.flush(null);
   });
 
+  it('creates regional events without a client-provided internal reference id', () => {
+    service.createEvent({
+      regionId: 7,
+      parentEntityType: 'Location',
+      destinationId: 3,
+      locationId: 4,
+      eventTypeId: 2,
+      name: 'Backend Event',
+      summary: 'Backend event summary',
+      description: 'Backend event description',
+      status: 'Published',
+      isAllDay: false,
+      startsAt: '2026-05-20T12:00:00.000Z',
+      endsAt: '2026-05-20T14:00:00.000Z',
+      isRecurring: false,
+      isFree: true,
+      tagIds: [11],
+    }).subscribe(response => {
+      expect(response.id).toBe(15);
+    });
+
+    const request = http.expectOne('/api/admin/regional/events');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body.internalReferenceId).toBeUndefined();
+    expect(request.request.body.regionId).toBe(7);
+    expect(request.request.body.locationId).toBe(4);
+    expect(request.request.body.tagIds).toEqual([11]);
+    request.flush(eventDto());
+  });
+
+  it('loads event parents, tags, and types from regional backend endpoints', () => {
+    service.getParentLocations(7).subscribe(response => expect(response[0].destinationId).toBe(3));
+    service.getParentPlaces(7).subscribe(response => expect(response[0].locationId).toBe(4));
+    service.getParentDestinations(7).subscribe(response => expect(response[0].id).toBe(3));
+    service.getEventTags('music').subscribe(response => expect(response[0].slug).toBe('music'));
+    service.getEventTypes().subscribe(response => expect(response[0].name).toBe('Festival'));
+
+    const locationRequest = http.expectOne(req => req.url === '/api/admin/regional/event-parent-locations');
+    expect(locationRequest.request.params.get('regionId')).toBe('7');
+    locationRequest.flush([{ id: 4, name: 'Backend Location', displayName: 'Backend Location', destinationId: 3, destinationName: 'Backend Destination', status: 'Published' }]);
+
+    const placeRequest = http.expectOne(req => req.url === '/api/admin/regional/event-parent-places');
+    expect(placeRequest.request.params.get('regionId')).toBe('7');
+    placeRequest.flush([{ id: 5, name: 'Backend Place', displayName: 'Backend Place', locationId: 4, locationName: 'Backend Location', destinationId: 3, destinationName: 'Backend Destination', status: 'Published' }]);
+
+    const destinationRequest = http.expectOne(req => req.url === '/api/admin/regional/event-parent-destinations');
+    expect(destinationRequest.request.params.get('regionId')).toBe('7');
+    destinationRequest.flush([{ id: 3, name: 'Backend Destination', displayName: 'Backend Destination', status: 'Published' }]);
+
+    const tagsRequest = http.expectOne(req => req.url === '/api/admin/regional/event-tags');
+    expect(tagsRequest.request.params.get('search')).toBe('music');
+    tagsRequest.flush([{ id: 11, name: 'Music', slug: 'music' }]);
+
+    const typesRequest = http.expectOne('/api/admin/regional/event-types');
+    typesRequest.flush([{ id: 2, name: 'Festival' }]);
+  });
+
   it('maps backend DTOs into the legacy list item shape without mock ids', () => {
     const item = service.toListItem(eventDto());
 
