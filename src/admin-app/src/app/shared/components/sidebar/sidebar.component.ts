@@ -27,16 +27,20 @@ export class SidebarComponent {
   @Input() regionLoading = false;
   @Output() regionChange = new EventEmitter<number>();
 
-  private readonly auth            = inject(AuthService);
-  private readonly router          = inject(Router);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
 
   get pickerLabel(): string {
     return this.auth.isNationalManager() ? 'COUNTRY' : 'REGION';
   }
 
   get pickerValue(): string {
-    const activeRegion = this.regions.find(region => region.id === this.activeRegionId);
-    return this.region || activeRegion?.displayName || this.auth.getUser()?.region || 'No assigned regions';
+    return this.resolvedRegionLabel() ?? 'No assigned regions';
+  }
+
+  get pickerDisplayValue(): string {
+    const label = this.resolvedRegionLabel();
+    return this.regionLoading && !label ? 'Loading...' : (label ?? 'No assigned regions');
   }
 
   get canSelectRegion(): boolean {
@@ -49,34 +53,38 @@ export class SidebarComponent {
 
   get nationalMainNav(): SidebarNavItem[] {
     return [
-      { label: 'National Overview',    path: '/national-overview',    icon: 'dashboard',  exact: true },
-      { label: 'Regional Management',  path: '/regional-management',  icon: 'map'                     },
-      { label: 'Content Directory',    path: '/content-directory',    icon: 'folder'                  },
-      { label: 'User Administration',  path: '/user-administration',  icon: 'users'                   },
+      { label: 'National Overview', path: '/national-overview', icon: 'dashboard', exact: true },
+      { label: 'Regional Management', path: '/regional-management', icon: 'map' },
+      { label: 'Content Directory', path: '/content-directory', icon: 'folder' },
+      { label: 'User Administration', path: '/user-administration', icon: 'users' },
     ];
   }
 
   get nationalAnalyticsNav(): SidebarNavItem[] {
     return [
-      { label: 'Analytics & Insights', path: '/analytics',           icon: 'chart' },
-      { label: 'National Analytics',   path: '/national-analytics',  icon: 'globe' },
+      { label: 'Analytics & Insights', path: '/analytics', icon: 'chart' },
+      { label: 'National Analytics', path: '/national-analytics', icon: 'globe' },
     ];
   }
 
   get mainNav(): SidebarNavItem[] {
     return [
-      { label: 'Dashboard',      path: '/dashboard', icon: 'dashboard', exact: true },
-      { label: 'Requests Queue', path: '/requests',  icon: 'inbox',
-        badge: this.pendingRequestsCount || undefined },
-      { label: 'Map',            path: '/map',       icon: 'map' },
+      { label: 'Dashboard', path: '/dashboard', icon: 'dashboard', exact: true },
+      {
+        label: 'Requests Queue',
+        path: '/requests',
+        icon: 'inbox',
+        badge: this.pendingRequestsCount || undefined,
+      },
+      { label: 'Map', path: '/map', icon: 'map' },
     ];
   }
 
   contentNav: SidebarNavItem[] = [
-    { label: 'Destinations', path: '/destinations', icon: 'flag'     },
-    { label: 'Locations',    path: '/locations',    icon: 'pin'      },
-    { label: 'Places',       path: '/places',       icon: 'home'     },
-    { label: 'Events',       path: '/events',       icon: 'calendar' },
+    { label: 'Destinations', path: '/destinations', icon: 'flag' },
+    { label: 'Locations', path: '/locations', icon: 'pin' },
+    { label: 'Places', path: '/places', icon: 'home' },
+    { label: 'Events', path: '/events', icon: 'calendar' },
   ];
 
   analyticsNav: SidebarNavItem[] = [
@@ -88,10 +96,17 @@ export class SidebarComponent {
     this.router.navigate(['/login']);
   }
 
-  onRegionChange(value: string): void {
-    const regionId = Number(value);
+  onRegionSelectChange(event: Event): void {
+    const select = event.target instanceof HTMLSelectElement ? event.target : null;
+    const regionId = Number(select?.value);
     if (Number.isFinite(regionId) && regionId > 0) {
       this.regionChange.emit(regionId);
     }
+  }
+
+  private resolvedRegionLabel(): string | null {
+    const activeRegion = this.regions.find((region) => region.id === this.activeRegionId);
+    const value = this.region || activeRegion?.displayName || this.auth.getUser()?.region || '';
+    return value.trim() || null;
   }
 }
