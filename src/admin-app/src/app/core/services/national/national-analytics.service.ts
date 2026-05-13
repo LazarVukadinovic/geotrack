@@ -123,7 +123,7 @@ export class NationalAnalyticsService {
 
   private readonly MOCK_DELAY_MS = 300;
 
-  // ── Full payload 
+  // ── Full payload
   // TODO: replace with → return this.http.get<NationalAnalyticsData>(`${this.base}/analytics/national`);
   getData$(): Observable<NationalAnalyticsData> {
     return of({

@@ -1,25 +1,199 @@
 <div class="agent">
-
-  <!-- ── Header ─────────────────────────────────────────────────────────── -->
   <header class="agent__header">
-    <h1 class="agent__header-title">Ask Agent</h1>
+    <div class="agent__header-copy">
+      <h1 class="agent__header-title">Ask Agent</h1>
+      <p class="agent__header-meta">{{ headerStatus() }}</p>
+    </div>
+
+    <button
+      #settingsButton
+      type="button"
+      class="agent__settings-button"
+      aria-label="Agent settings"
+      aria-haspopup="dialog"
+      [attr.aria-expanded]="settingsOpen()"
+      [attr.aria-controls]="settingsOpen() ? 'agent-settings-dialog' : null"
+      (click)="openSettings()"
+    >
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/>
+        <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.05.05a2.16 2.16 0 0 1-3.05 3.05l-.05-.05a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.09 1.65V21.5a2.16 2.16 0 0 1-4.32 0v-.08a1.8 1.8 0 0 0-1.09-1.65 1.8 1.8 0 0 0-1.98.36l-.05.05a2.16 2.16 0 0 1-3.05-3.05l.05-.05A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.65-1.09H2.87a2.16 2.16 0 0 1 0-4.32h.08A1.8 1.8 0 0 0 4.6 8.5a1.8 1.8 0 0 0-.36-1.98l-.05-.05a2.16 2.16 0 0 1 3.05-3.05l.05.05a1.8 1.8 0 0 0 1.98.36 1.8 1.8 0 0 0 1.09-1.65V2.1a2.16 2.16 0 0 1 4.32 0v.08a1.8 1.8 0 0 0 1.09 1.65 1.8 1.8 0 0 0 1.98-.36l.05-.05a2.16 2.16 0 0 1 3.05 3.05l-.05.05a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.09h.08a2.16 2.16 0 0 1 0 4.32h-.08A1.8 1.8 0 0 0 19.4 15Z"/>
+      </svg>
+    </button>
   </header>
 
-  <!-- ── Messages ───────────────────────────────────────────────────────── -->
-  <div class="agent__messages" #messagesContainer>
+  @if (settingsOpen()) {
+    <div class="agent__settings-backdrop" aria-hidden="true" (click)="closeSettings()"></div>
 
+    <section
+      #settingsDialog
+      id="agent-settings-dialog"
+      class="agent__settings-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="agent-settings-title"
+      tabindex="-1"
+    >
+      <div class="agent__settings-handle" aria-hidden="true"></div>
+
+      <header class="agent__settings-head">
+        <div class="agent__settings-title-group">
+          <h2 id="agent-settings-title" class="agent__settings-title">Agent settings</h2>
+          <p class="agent__settings-subtitle">Choose the provider, model, and key mode for Ask Agent.</p>
+        </div>
+        <button type="button" class="agent__settings-close" aria-label="Close Agent settings" (click)="closeSettings()">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </header>
+
+      <div class="agent__settings-form" aria-label="Ask Agent settings">
+        @if (agentService.isLoadingProviders()) {
+          <p class="agent__settings-note">Loading AI providers...</p>
+        } @else {
+          <div class="agent__settings-grid">
+            <label class="agent__field">
+              <span>Provider</span>
+              <select [value]="agentService.selectedProviderId() ?? ''" (change)="onProviderChange($event)">
+                @for (provider of agentService.providers(); track provider.id) {
+                  <option [value]="provider.id" [disabled]="!provider.enabled">
+                    {{ provider.displayName }}{{ provider.enabled ? '' : ' (unavailable)' }}
+                  </option>
+                }
+              </select>
+            </label>
+
+            <label class="agent__field">
+              <span>Model</span>
+              <select
+                [value]="agentService.selectedModelId() ?? ''"
+                [disabled]="agentService.selectedModels().length === 0"
+                (change)="onModelChange($event)"
+              >
+                @for (model of agentService.selectedModels(); track model.id) {
+                  <option [value]="model.id">{{ model.displayName }}</option>
+                }
+              </select>
+            </label>
+          </div>
+
+          @if (agentService.selectedProvider(); as provider) {
+            @if (provider.enabled) {
+              <div class="agent__mode-row" role="group" aria-label="API key mode">
+                @for (option of keyModeOptions; track option.value) {
+                  @if (agentService.availableKeyModes().includes(option.value)) {
+                    <button
+                      type="button"
+                      class="agent__mode-btn"
+                      [class.agent__mode-btn--active]="agentService.keyMode() === option.value"
+                      (click)="onKeyModeSelected(option.value)"
+                    >
+                      {{ option.label }}
+                    </button>
+                  }
+                }
+              </div>
+
+              @if (provider.supportsSavedKey) {
+                <div class="agent__key-panel">
+                  <p class="agent__key-status">
+                    {{ provider.hasSavedKey ? 'Saved key ending ' + provider.keyLast4 : 'No saved key configured' }}
+                  </p>
+                  <label class="agent__key-entry">
+                    <span>Save or replace key</span>
+                    <input
+                      class="agent__key-input"
+                      type="password"
+                      placeholder="Paste key to save or replace"
+                      [value]="apiKeyDraft()"
+                      (input)="onApiKeyDraftChange($event)"
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                  </label>
+                  <div class="agent__settings-actions">
+                    <button type="button" class="agent__mini-btn" (click)="onSaveApiKey()" [disabled]="agentService.isSavingKey()">Save</button>
+                    @if (provider.hasSavedKey) {
+                      <button type="button" class="agent__mini-btn agent__mini-btn--quiet" (click)="onDeleteApiKey()" [disabled]="agentService.isSavingKey()">Delete</button>
+                    }
+                    <button
+                      type="button"
+                      class="agent__mini-btn agent__mini-btn--quiet"
+                      (click)="onTestSavedKey()"
+                      [disabled]="agentService.isTestingKey() || (!apiKeyDraft().trim() && !provider.hasSavedKey)"
+                    >
+                      Test key
+                    </button>
+                  </div>
+                </div>
+              }
+
+              @if (agentService.keyMode() === 'session') {
+                <div class="agent__key-panel">
+                  <label class="agent__key-entry">
+                    <span>Temporary key</span>
+                    <input
+                      class="agent__key-input"
+                      type="password"
+                      placeholder="Used once, not saved"
+                      [value]="agentService.sessionApiKey()"
+                      (input)="onSessionKeyChange($event)"
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                  </label>
+                  <div class="agent__settings-actions">
+                    <button type="button" class="agent__mini-btn agent__mini-btn--quiet" (click)="onTestKey()" [disabled]="agentService.isTestingKey()">Test</button>
+                  </div>
+                </div>
+              }
+
+              @if (agentService.keyMode() === 'project-demo') {
+                <p class="agent__settings-note">Project demo access is enabled by backend configuration.</p>
+              }
+            } @else {
+              <p class="agent__settings-note">This provider is not configured on the backend.</p>
+            }
+          } @else {
+            <p class="agent__settings-note">No AI providers are currently available.</p>
+          }
+
+          @if (agentService.statusMessage(); as status) {
+            <p class="agent__settings-note" role="status">{{ status }}</p>
+          }
+        }
+
+        <p class="agent__settings-safe-note">
+          Saved keys are sent only to GeoTrack backend key endpoints. Temporary keys stay in this page state and are sent only with the request that needs them.
+        </p>
+
+        @if (agentService.mcp(); as mcp) {
+          <details class="agent__connector">
+            <summary>Use GeoTrack in external AI apps</summary>
+            <p>
+              @if (mcp.enabled) {
+                If your AI client supports MCP, connect it to {{ mcp.url || '/api/mcp' }}. Availability depends on the client and account.
+              } @else {
+                The MCP connector is disabled on this deployment.
+              }
+            </p>
+          </details>
+        }
+      </div>
+    </section>
+  }
+
+  <div class="agent__messages" #messagesContainer>
     <div class="agent__date-divider">
       <span class="agent__date-divider-label">TODAY</span>
     </div>
 
     @for (msg of agentService.messages(); track msg.id) {
-
-      <!-- Text bubble -->
       <div class="agent__bubble-row" [class.agent__bubble-row--user]="msg.role === 'user'">
         <app-agent-message-bubble [message]="msg" />
       </div>
 
-      <!-- Suggestion pills (shown only before user sends their first message) -->
       @if (msg.suggestionPills?.length && !agentService.hasSentMessage()) {
         <div class="agent__pills-row">
           <app-agent-suggestion-pills
@@ -29,20 +203,18 @@
         </div>
       }
 
-      <!-- Recommendation cards section (for suggestion_cards type messages) -->
-      @if (msg.type === 'suggestion_cards' && msg.cards?.length) {
-        <div class="agent__cards-section">
+      @if (msg.role === 'assistant' && msg.cards?.length) {
+        <div class="agent__cards-section" aria-label="GeoTrack result cards">
           @if (msg.cardsTitle) {
             <h2 class="agent__cards-title">{{ msg.cardsTitle }}</h2>
           }
-          @for (card of msg.cards!; track card.id) {
+          @for (card of msg.cards!; track card.entityType + ':' + card.id) {
             <app-agent-recommendation-card [card]="card" />
           }
         </div>
       }
     }
 
-    <!-- Typing / loading indicator -->
     @if (agentService.isTyping()) {
       <div class="agent__bubble-row">
         <div class="agent__typing">
@@ -62,14 +234,11 @@
       </div>
     }
 
-    <!-- Bottom spacer so last message clears the input bar -->
     <div class="agent__messages-spacer"></div>
   </div>
 
-  <!-- ── Input area ──────────────────────────────────────────────────────── -->
   <div class="agent__input-area">
     <div class="agent__input-row">
-
       <label class="visually-hidden" for="agent-message-input">Ask Agent a question</label>
       <input
         id="agent-message-input"
@@ -96,8 +265,6 @@
           <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2 .01 7z"/>
         </svg>
       </button>
-
     </div>
   </div>
-
 </div>

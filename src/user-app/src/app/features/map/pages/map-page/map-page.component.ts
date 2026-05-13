@@ -1385,6 +1385,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
+    if (loc.source === 'gps') {
+      this.handleLocationSuccess(loc.latitude, loc.longitude);
+      return;
+    }
+
     this.destinationName = loc.displayLabel || 'Approximate Location';
     this.destinationLat = loc.latitude;
     this.destinationLon = loc.longitude;

@@ -1,8 +1,14 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
 .bubble {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  max-width: 82%;
+  width: fit-content;
+  max-width: 100%;
   animation: bubble-in 0.28s ease-out both;
 
   &--assistant {
@@ -12,6 +18,7 @@
   &--user {
     align-self: flex-end;
     flex-direction: row-reverse;
+    margin-left: auto;
   }
 
   &__avatar {
@@ -37,6 +44,7 @@
     border-radius: 18px;
     font-size: var(--text-sm);
     line-height: 1.55;
+    overflow-wrap: anywhere;
 
     .bubble--assistant & {
       background: #ffffff;

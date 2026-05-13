@@ -26,6 +26,33 @@ public class DestinationController : ControllerBase
         _logger = logger;
     }
 
+    [Obsolete("Use GET /api/explore?latitude={latitude}&longitude={longitude}. This compatibility endpoint is backed by the generic Explore feed.")]
+    [HttpPost("explore-by-location")]
+    public async Task<IActionResult> ExploreByLocation([FromBody] ExploreByLocationRequestDto request)
+    {
+        if (!HasValidCoordinates(request.Latitude, request.Longitude))
+        {
+            return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
+        }
+
+        Response.Headers["Deprecation"] = "true";
+        Response.Headers["Link"] = "</api/explore>; rel=\"successor-version\"";
+
+        try
+        {
+            var result = await _exploreService.GetExplorePageAsync(
+                request.Latitude,
+                request.Longitude,
+                TryGetUserId());
+
+            return Ok(MapLegacyExploreResponse(result));
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string? query)
     {
@@ -131,25 +158,34 @@ public class DestinationController : ControllerBase
         return int.TryParse(userIdClaim, out var userId) ? userId : null;
     }
 
- 
-    private static void AddSection(
-        List<ExploreSectionDto> sections,
-        string key,
-        string title,
-        IEnumerable<ExplorePreviewItemDto> items)
+    private static ExploreByLocationResponseDto MapLegacyExploreResponse(ExplorePageDto page)
     {
-        var pageItems = items.ToList();
-        if (pageItems.Count == 0)
+        return new ExploreByLocationResponseDto
         {
-            return;
-        }
-
-        sections.Add(new ExploreSectionDto
-        {
-            Key = key,
-            Title = title,
-            Items = pageItems
-        });
+            SelectedDestination = page.SelectedDestination,
+            Sections = page.Sections
+                .Where(section => section.Items.Count > 0)
+                .Select(section => new ExploreSectionDto
+                {
+                    Key = section.Key,
+                    Title = section.Title,
+                    Items = section.Items.Select(item => new ExplorePreviewItemDto
+                    {
+                        EntityType = item.EntityType,
+                        EntityId = item.Id,
+                        Name = item.Title,
+                        Description = item.Description
+                            ?? item.Subtitle
+                            ?? item.CategoryLabel
+                            ?? item.DateLabel
+                            ?? item.Distance
+                            ?? string.Empty,
+                        AverageRating = item.Rating ?? 0,
+                        IsSaved = item.IsSaved
+                    }).ToList()
+                })
+                .ToList()
+        };
     }
 
     private ActionResult? ValidatePaging(int skip, int take)

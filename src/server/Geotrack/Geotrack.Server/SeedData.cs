@@ -36,6 +36,11 @@ public static class SeedData
         bool CanGenerateExploreSection = false,
         string Description = "");
 
+    private static string Unsplash(string photoId, int width = 900) =>
+        $"https://images.unsplash.com/photo-{photoId}?auto=format&fit=crop&w={width}&q=80";
+
+    private static string SeedMedia(string fileName) => $"/media/seed/{fileName}.svg";
+
     public static async Task InitializeAsync(AppDbContext db)
     {
         await InitializationLock.WaitAsync();
@@ -61,6 +66,7 @@ public static class SeedData
             var tagLookup1 = await EnsureSmartTagTaxonomyAsync(db);
             await EnsureExploreDemoPlaceTagsAsync(db, tagLookup1);
             await EnsureAdditionalExploreDemoDataAsync(db, tagLookup1);
+            await EnsureCoreEntityImagesAsync(db);
             await EnsureDefaultModerationTermsAsync(db);
             return;
         }
@@ -677,6 +683,8 @@ public static class SeedData
 
         await db.SaveChangesAsync();
 
+        await EnsureCoreEntityImagesAsync(db);
+
         db.PlaceReviews.AddRange(
             new PlaceReview
             {
@@ -777,6 +785,169 @@ public static class SeedData
 
         await EnsureAdditionalExploreDemoDataAsync(db, tagLookup);
         await EnsureDefaultModerationTermsAsync(db);
+    }
+
+    private static async Task EnsureCoreEntityImagesAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+        var added = false;
+
+        async Task AddTerritoryImagesIfMissingAsync(string name, params string[] urls)
+        {
+            var territory = await db.Territories.FirstOrDefaultAsync(x => x.Name == name);
+            if (territory is null ||
+                await db.EntityImages.AnyAsync(x => x.TargetType == EntityImageTargetType.Territory && x.TerritoryId == territory.Id))
+            {
+                return;
+            }
+
+            AddImages(urls, (url, index) => new EntityImage
+            {
+                TargetType = EntityImageTargetType.Territory,
+                TerritoryId = territory.Id,
+                Url = url,
+                IsMain = index == 0,
+                SortOrder = index,
+                CreatedAt = now.AddMilliseconds(index)
+            });
+        }
+
+        async Task AddRegionImagesIfMissingAsync(string name, params string[] urls)
+        {
+            var region = await db.Regions.FirstOrDefaultAsync(x => x.Name == name);
+            if (region is null ||
+                await db.EntityImages.AnyAsync(x => x.TargetType == EntityImageTargetType.Region && x.RegionId == region.Id))
+            {
+                return;
+            }
+
+            AddImages(urls, (url, index) => new EntityImage
+            {
+                TargetType = EntityImageTargetType.Region,
+                RegionId = region.Id,
+                Url = url,
+                IsMain = index == 0,
+                SortOrder = index,
+                CreatedAt = now.AddMilliseconds(index)
+            });
+        }
+
+        async Task AddDestinationImagesIfMissingAsync(string name, params string[] urls)
+        {
+            var destination = await db.Destinations.FirstOrDefaultAsync(x => x.Name == name);
+            if (destination is null ||
+                await db.EntityImages.AnyAsync(x => x.TargetType == EntityImageTargetType.Destination && x.DestinationId == destination.Id))
+            {
+                return;
+            }
+
+            AddImages(urls, (url, index) => new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = destination.Id,
+                Url = url,
+                IsMain = index == 0,
+                SortOrder = index,
+                CreatedAt = now.AddMilliseconds(index)
+            });
+        }
+
+        async Task AddLocationImagesIfMissingAsync(string name, params string[] urls)
+        {
+            var location = await db.Locations.FirstOrDefaultAsync(x => x.Name == name);
+            if (location is null ||
+                await db.EntityImages.AnyAsync(x => x.TargetType == EntityImageTargetType.Location && x.LocationId == location.Id))
+            {
+                return;
+            }
+
+            AddImages(urls, (url, index) => new EntityImage
+            {
+                TargetType = EntityImageTargetType.Location,
+                LocationId = location.Id,
+                Url = url,
+                IsMain = index == 0,
+                SortOrder = index,
+                CreatedAt = now.AddMilliseconds(index)
+            });
+        }
+
+        async Task AddPlaceImagesIfMissingAsync(string name, params string[] urls)
+        {
+            var place = await db.Places.FirstOrDefaultAsync(x => x.Name == name);
+            if (place is null ||
+                await db.EntityImages.AnyAsync(x => x.TargetType == EntityImageTargetType.Place && x.PlaceId == place.Id))
+            {
+                return;
+            }
+
+            AddImages(urls, (url, index) => new EntityImage
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = place.Id,
+                Url = url,
+                AltText = place.Name,
+                IsMain = index == 0,
+                SortOrder = index,
+                CreatedAt = now.AddMilliseconds(index)
+            });
+        }
+
+        async Task AddEventImagesIfMissingAsync(string name, params string[] urls)
+        {
+            var eventEntity = await db.Events.FirstOrDefaultAsync(x => x.Name == name);
+            if (eventEntity is null ||
+                await db.EntityImages.AnyAsync(x => x.TargetType == EntityImageTargetType.Event && x.EventId == eventEntity.Id))
+            {
+                return;
+            }
+
+            AddImages(urls, (url, index) => new EntityImage
+            {
+                TargetType = EntityImageTargetType.Event,
+                EventId = eventEntity.Id,
+                Url = url,
+                AltText = eventEntity.Name,
+                IsMain = index == 0,
+                SortOrder = index,
+                CreatedAt = now.AddMilliseconds(index)
+            });
+        }
+
+        void AddImages(IReadOnlyList<string> urls, Func<string, int, EntityImage> createImage)
+        {
+            for (var i = 0; i < urls.Count; i++)
+            {
+                db.EntityImages.Add(createImage(urls[i], i));
+                added = true;
+            }
+        }
+
+        await AddTerritoryImagesIfMissingAsync("Croatia", Unsplash("1500530855697-b586d89ba3ee"));
+        await AddRegionImagesIfMissingAsync("Dalmatia", Unsplash("1507525428034-b723cf961d3e"));
+        await AddDestinationImagesIfMissingAsync("Dubrovnik", Unsplash("1555990793-77610ee3d7c2"), SeedMedia("dubrovnik-old-town"));
+
+        await AddLocationImagesIfMissingAsync("Old Town", SeedMedia("dubrovnik-old-town"));
+        await AddLocationImagesIfMissingAsync("Lapad", Unsplash("1596275281743-e4c30b6e0e27"));
+        await AddLocationImagesIfMissingAsync("Gruz", Unsplash("1500530855697-b586d89ba3ee"));
+
+        await AddPlaceImagesIfMissingAsync("Banje Beach", Unsplash("1507525428034-b723cf961d3e"), Unsplash("1519046904884-53103b34b206"));
+        await AddPlaceImagesIfMissingAsync("Nautika Restaurant", Unsplash("1414235077428-338989a2e8c0"));
+        await AddPlaceImagesIfMissingAsync("Cogito Coffee", Unsplash("1495474472287-4d71bcdd2085"));
+        await AddPlaceImagesIfMissingAsync("Dubrovnik City Walls", SeedMedia("dubrovnik-old-town"));
+        await AddPlaceImagesIfMissingAsync("Lokrum Island", Unsplash("1441974231531-c6227db76b6e"));
+        await AddPlaceImagesIfMissingAsync("Villa Adriatica Luxury Resort", Unsplash("1566073771259-6a6300d8226c"), Unsplash("1564501049412-61c2a3083791"));
+        await AddPlaceImagesIfMissingAsync("Hotel Excelsior", SeedMedia("hotel-excelsior"));
+        await AddPlaceImagesIfMissingAsync("Old Town Stone Apartment", Unsplash("1520250497591-112f2f40a3f4"));
+
+        await AddEventImagesIfMissingAsync("Dubrovnik Summer Festival", SeedMedia("dubrovnik-summer-festival"));
+        await AddEventImagesIfMissingAsync("Old Town Food Market", Unsplash("1555939594-58d7cb561ad1"));
+        await AddEventImagesIfMissingAsync("Sea Kayaking Adventure", Unsplash("1544551763-46a013bb70d5"));
+
+        if (added)
+        {
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task<Dictionary<string, Tag>> EnsureSmartTagTaxonomyAsync(AppDbContext db)
@@ -2349,4 +2520,3 @@ public static class SeedData
     private static string NormalizeKey(string value) =>
         value.Trim().ToLowerInvariant().Replace(" ", "-", StringComparison.Ordinal);
 }
-

@@ -47,5 +47,6 @@ public class User
 
     public ICollection<UserPlace> UserPlaces { get; set; } = new List<UserPlace>();
     public ICollection<PlaceContribution> PlaceContributions { get; set; } = new List<PlaceContribution>();
+    public ICollection<UserAiProviderKey> AiProviderKeys { get; set; } = new List<UserAiProviderKey>();
     public TerritoryManager? TerritoryManager { get; set; }
 }

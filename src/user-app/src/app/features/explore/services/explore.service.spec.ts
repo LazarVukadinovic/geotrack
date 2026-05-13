@@ -21,6 +21,11 @@ describe('ExploreService curation context', () => {
   let interestRevision: WritableSignal<number>;
   let mode: WritableSignal<'location' | 'destination'>;
   let destinationId: WritableSignal<number | null>;
+  let activeLocation: WritableSignal<{
+    latitude: number;
+    longitude: number;
+    source: 'gps' | 'approximate';
+  } | null>;
 
   beforeEach(() => {
     loggedIn = signal(false);
@@ -28,6 +33,11 @@ describe('ExploreService curation context', () => {
     interestRevision = signal(0);
     mode = signal('location');
     destinationId = signal(null);
+    activeLocation = signal({
+      latitude: 44.8125,
+      longitude: 20.4612,
+      source: 'approximate',
+    });
 
     TestBed.configureTestingModule({
       providers: [
@@ -39,11 +49,7 @@ describe('ExploreService curation context', () => {
         {
           provide: LocationService,
           useValue: {
-            location: computed(() => ({
-              latitude: 44.8125,
-              longitude: 20.4612,
-              source: 'approximate',
-            })),
+            location: computed(() => activeLocation()),
             ensureIpFallback: vi.fn(),
           },
         },
@@ -168,6 +174,22 @@ describe('ExploreService curation context', () => {
 
     expect(service.curatedForYou()).toEqual([]);
     http.expectOne('/api/explore?latitude=44.8125&longitude=20.4612')
+      .flush(makeExploreResponse([]));
+  });
+
+  it('reloads consumers when the active prioritized location changes from approximate to GPS', () => {
+    appRef.tick();
+    http.expectOne('/api/explore?latitude=44.8125&longitude=20.4612')
+      .flush(makeExploreResponse([]));
+
+    activeLocation.set({
+      latitude: 44.0128,
+      longitude: 20.9114,
+      source: 'gps',
+    });
+    appRef.tick();
+
+    http.expectOne('/api/explore?latitude=44.0128&longitude=20.9114')
       .flush(makeExploreResponse([]));
   });
 });
