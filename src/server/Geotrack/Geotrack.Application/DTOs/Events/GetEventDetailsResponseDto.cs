@@ -10,7 +10,7 @@ public class GetEventDetailsResponseDto
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public int EventTypeId { get; set; }
-    public int LocationId { get; set; }
+    public int? LocationId { get; set; }
     public int? PlaceId { get; set; }
     public string Description { get; set; } = string.Empty;
     public DateTime StartDate { get; set; }

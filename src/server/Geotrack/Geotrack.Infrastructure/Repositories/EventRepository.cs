@@ -18,6 +18,7 @@ public class EventRepository : Repository<Event>, IEventRepository
     {
         return await _context.Events
             .Include(e => e.EventType)
+            .Include(e => e.Destination)
             .Include(e => e.Location)
             .Include(e => e.Place)
             .Include(e => e.EventReviews)
@@ -64,6 +65,7 @@ public class EventRepository : Repository<Event>, IEventRepository
     {
         var normalizedQuery = query.ToLower();
         return await _context.Events
+            .Include(e => e.Destination)
             .Include(e => e.Location)
             .Include(e => e.Place)
             .Where(e => e.Name.ToLower().Contains(normalizedQuery))
