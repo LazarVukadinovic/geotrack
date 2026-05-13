@@ -87,8 +87,9 @@ Bekend u razvojnom profilu sluša na `http://localhost:5003`. U Development modu
 
 Demo korisnik iz seed podataka:
 
-- email: `marko.p@example.com`
-- lozinka: `password123`
+- regional manager
+- email: `pera@gmail.com`
+- lozinka: `Proba123!`
 
 Ako migracije želite da primenite ručno preko `dotnet-ef`, iz `src` foldera koristite:
 
