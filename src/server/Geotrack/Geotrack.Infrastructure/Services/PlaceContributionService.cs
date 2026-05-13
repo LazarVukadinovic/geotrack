@@ -2,6 +2,7 @@
 using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
@@ -570,7 +571,7 @@ public class PlaceContributionService : IPlaceContributionService
             .AsNoTracking()
             .Where(u => u.Id == reviewerUserId)
             .Select(u => u.UserRoles.Any(ur =>
-                ur.Role.Name == "Admin" ||
+                ur.Role.Name == RoleNames.Admin ||
                 ur.Role.Name == "SuperAdmin"))
             .SingleOrDefaultAsync();
     }
@@ -579,7 +580,7 @@ public class PlaceContributionService : IPlaceContributionService
     {
         return await _db.RegionalManagerRegions
             .AsNoTracking()
-            .Where(r => r.UserId == reviewerUserId)
+            .Where(r => r.UserId == reviewerUserId && r.IsActive)
             .Select(r => r.RegionId)
             .ToListAsync();
     }

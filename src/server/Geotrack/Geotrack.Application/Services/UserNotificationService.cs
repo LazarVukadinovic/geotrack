@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Notifications;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 
 namespace Geotrack.Application.Services;
@@ -10,6 +11,9 @@ public class UserNotificationService : IUserNotificationService
     private const int MaxTake = 50;
     private const string ContributionApprovedType = "contribution_approved";
     private const string ContributionRejectedType = "contribution_rejected";
+    private const string ReviewReportAcceptedType = "review_report_accepted";
+    private const string ReviewReportRejectedType = "review_report_rejected";
+    private const string ReportedReviewRemovedType = "reported_review_removed";
 
     private readonly IUserNotificationRepository _notificationRepository;
 
@@ -95,6 +99,51 @@ public class UserNotificationService : IUserNotificationService
             RelatedEntityId = contribution.Id,
             ActionUrl = $"/contributions/{contribution.Id}",
             CreatedAt = contribution.ReviewedAt ?? DateTime.UtcNow
+        });
+    }
+
+    public void AddReviewReportReporterDecisionNotification(ReviewReport report)
+    {
+        if (report.Status is not (ReviewReportStatus.Actioned or ReviewReportStatus.Dismissed))
+        {
+            return;
+        }
+
+        var accepted = report.Status == ReviewReportStatus.Actioned;
+
+        _notificationRepository.Add(new UserNotification
+        {
+            UserId = report.ReporterUserId,
+            Type = accepted ? ReviewReportAcceptedType : ReviewReportRejectedType,
+            Title = accepted ? "Review report accepted" : "Review report reviewed",
+            Message = accepted
+                ? $"Thanks for helping keep GeoTrack safe. The reported review for \"{report.EntityName}\" was removed."
+                : $"Your report for a review on \"{report.EntityName}\" was reviewed. The review will remain visible.",
+            RelatedEntityType = "review_report",
+            RelatedEntityId = report.Id,
+            ActionUrl = null,
+            CreatedAt = report.ReviewedAt ?? DateTime.UtcNow
+        });
+    }
+
+    public void AddReportedReviewRemovedNotification(ReviewReport report)
+    {
+        if (report.Status != ReviewReportStatus.Actioned ||
+            report.Decision != ReviewReportDecision.RemoveReview)
+        {
+            return;
+        }
+
+        _notificationRepository.Add(new UserNotification
+        {
+            UserId = report.ReviewAuthorUserId,
+            Type = ReportedReviewRemovedType,
+            Title = "Review removed",
+            Message = $"A review you posted for \"{report.EntityName}\" was removed after moderation.",
+            RelatedEntityType = "review",
+            RelatedEntityId = report.ReviewId,
+            ActionUrl = null,
+            CreatedAt = report.ReviewedAt ?? DateTime.UtcNow
         });
     }
 

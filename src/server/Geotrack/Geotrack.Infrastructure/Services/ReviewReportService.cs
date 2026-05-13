@@ -1,5 +1,6 @@
 using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
@@ -9,10 +10,12 @@ namespace Geotrack.Infrastructure.Services;
 public class ReviewReportService : IReviewReportService
 {
     private readonly AppDbContext _db;
+    private readonly IUserNotificationService _notificationService;
 
-    public ReviewReportService(AppDbContext db)
+    public ReviewReportService(AppDbContext db, IUserNotificationService notificationService)
     {
         _db = db;
+        _notificationService = notificationService;
     }
 
     public async Task<ReportReviewResponseDto> ReportReviewAsync(
@@ -89,8 +92,8 @@ public class ReviewReportService : IReviewReportService
 
     public async Task<GetReviewReportsResponseDto> GetReviewQueueAsync(int reviewerUserId, string? status)
     {
-        var reviewer = await EnsureRegionalManagerAsync(reviewerUserId);
-        var assignedRegionIds = GetAssignedRegionIds(reviewer);
+        await EnsureRegionalManagerAsync(reviewerUserId);
+        var assignedRegionIds = await GetAssignedRegionIdsAsync(reviewerUserId);
 
         if (assignedRegionIds.Count == 0)
             return new GetReviewReportsResponseDto();
@@ -131,6 +134,8 @@ public class ReviewReportService : IReviewReportService
         report.ReviewedByUserId = reviewerUserId;
         report.ReviewedAt = DateTime.UtcNow;
         report.DecisionNote = NormalizeDecisionNote(request.Note);
+
+        _notificationService.AddReviewReportReporterDecisionNotification(report);
 
         await _db.SaveChangesAsync();
 
@@ -177,7 +182,11 @@ public class ReviewReportService : IReviewReportService
             pendingReport.ReviewedByUserId = reviewerUserId;
             pendingReport.ReviewedAt = now;
             pendingReport.DecisionNote = NormalizeDecisionNote(request.Note);
+
+            _notificationService.AddReviewReportReporterDecisionNotification(pendingReport);
         }
+
+        _notificationService.AddReportedReviewRemovedNotification(report);
 
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
@@ -309,8 +318,8 @@ public class ReviewReportService : IReviewReportService
 
     private async Task EnsureRegionalManagerCanReviewAsync(int reviewerUserId, ReviewReport report)
     {
-        var reviewer = await EnsureRegionalManagerAsync(reviewerUserId);
-        var assignedRegionIds = GetAssignedRegionIds(reviewer);
+        await EnsureRegionalManagerAsync(reviewerUserId);
+        var assignedRegionIds = await GetAssignedRegionIdsAsync(reviewerUserId);
 
         if (assignedRegionIds.Count == 0)
             throw new UnauthorizedAccessException("Regional manager has no assigned regions.");
@@ -319,20 +328,15 @@ public class ReviewReportService : IReviewReportService
             throw new UnauthorizedAccessException("Regional manager is not assigned to this review's region.");
     }
 
-    private async Task<User> EnsureRegionalManagerAsync(int reviewerUserId)
+    private async Task EnsureRegionalManagerAsync(int reviewerUserId)
     {
         var reviewer = await _db.Users
             .Include(user => user.UserRoles).ThenInclude(userRole => userRole.Role)
-            .Include(user => user.RegionalManager)
-                .ThenInclude(organization => organization!.RegionalManagerRegions)
-                .ThenInclude(link => link.Region)
             .FirstOrDefaultAsync(user => user.Id == reviewerUserId)
             ?? throw new UnauthorizedAccessException("Invalid user token.");
 
-        if (!reviewer.UserRoles.Any(userRole => userRole.Role.Name == "RegionalManager"))
+        if (!reviewer.UserRoles.Any(userRole => RoleNames.Normalize(userRole.Role.Name) == RoleNames.RegionalManager))
             throw new UnauthorizedAccessException("Regional manager role is required.");
-
-        return reviewer;
     }
 
     private async Task<bool> HasDuplicateReportAsync(
@@ -344,11 +348,13 @@ public class ReviewReportService : IReviewReportService
             report.TargetType == targetType &&
             report.ReviewId == reviewId);
 
-    private static List<int> GetAssignedRegionIds(User reviewer) =>
-        reviewer.RegionalManager?.RegionalManagerRegions
+    private async Task<List<int>> GetAssignedRegionIdsAsync(int reviewerUserId) =>
+        await _db.RegionalManagerRegions
+            .AsNoTracking()
+            .Where(link => link.UserId == reviewerUserId && link.IsActive)
             .Select(link => link.RegionId)
             .Distinct()
-            .ToList() ?? new List<int>();
+            .ToListAsync();
 
     private static ReviewReportTargetType ParseTargetType(string value)
     {
