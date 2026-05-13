@@ -56,6 +56,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
   eventTitle    = '';
   eventCategory = '';
   summary       = '';
+  regionDisplayName = '';
   venueType     = 'location';
   allDay     = false;
   freeEvent  = false;
@@ -664,9 +665,16 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
     const state = history.state as any;
     if (!state) return;
 
+    if (typeof state.regionDisplayName === 'string') {
+      this.regionDisplayName = state.regionDisplayName;
+    }
+
     if (state.place?.id && (state.editMode || state.returnTo?.includes('events/detail'))) {
       this.isEditMode = true;
       const p = state.place;
+      if (!this.regionDisplayName && typeof p.region === 'string') {
+        this.regionDisplayName = p.region;
+      }
       this.eventTitle          = p.name        ?? '';
       this.eventCategory       = p.category   ?? '';
       this.summary             = p.summary    ?? '';
@@ -909,7 +917,7 @@ export class NewEventComponent implements AfterViewInit, OnDestroy {
         this.eventsListSvc.addItem({
           ...sharedFields,
           id:          newEventId,
-          region:      'Šumadija, Srbija',
+          region:      this.regionDisplayName,
           status:      'Published',
           lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
           imageBg:     this.coverImageUrl

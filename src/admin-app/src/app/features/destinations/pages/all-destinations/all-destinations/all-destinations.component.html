@@ -1,6 +1,12 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
 
-  <app-sidebar [region]="region" />
+  <app-sidebar
+    [region]="regionDisplayName"
+    [regions]="assignedRegions"
+    [activeRegionId]="activeRegionId"
+    [regionLoading]="regionLoading"
+    (regionChange)="onRegionSelected($event)"
+  />
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
@@ -18,6 +24,16 @@
       </div>
 
       <!-- Toolbar -->
+      <div *ngIf="feedbackMessage"
+           class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        {{ feedbackMessage }}
+      </div>
+
+      <div *ngIf="errorMessage"
+           class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {{ errorMessage }}
+      </div>
+
       <div class="flex items-center gap-3 mb-5">
         <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 w-72 shadow-sm">
           <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none"
@@ -26,8 +42,9 @@
           </svg>
           <input type="text" placeholder="Search destinations by name or summary..."
                  [(ngModel)]="searchQuery" (input)="onSearchChange()"
+                 [disabled]="!activeRegionId || waitingForRegion"
                  class="bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 w-full" />
-          <button *ngIf="searchQuery" (click)="searchQuery = ''; onSearchChange()"
+          <button *ngIf="searchQuery" (click)="clearSearch()"
                   class="text-gray-400 hover:text-gray-600 border-none bg-transparent
                          cursor-pointer p-0 leading-none text-lg flex-shrink-0">
             &times;
@@ -36,9 +53,10 @@
         <!-- Sort dropdown -->
         <div class="relative ml-1">
         <button (click)="sortOpen = !sortOpen; $event.stopPropagation()"
+                [disabled]="!activeRegionId || waitingForRegion"
                 class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200
                         rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300
-                        cursor-pointer transition-colors">
+                        cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
             <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2">
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
@@ -65,9 +83,10 @@
         <div class="flex-1"></div>
 
         <button (click)="navigateToAdd()"
+                [disabled]="!activeRegionId"
                 class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
                        text-white bg-blue-700 hover:bg-blue-800 transition-colors
-                       cursor-pointer border-none shadow-sm">
+                       cursor-pointer border-none shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
@@ -89,7 +108,7 @@
         </div>
 
         <!-- Skeleton -->
-        <ng-container *ngIf="isLoading">
+        <ng-container *ngIf="isLoading || waitingForRegion">
           <div *ngFor="let i of [1,2,3,4,5]"
                class="grid items-center gap-4 px-5 py-3.5 border-b border-gray-50 animate-pulse"
                style="grid-template-columns: 56px 1fr 110px 140px 180px;">
@@ -109,14 +128,21 @@
         </ng-container>
 
         <!-- Rows -->
-        <ng-container *ngIf="!isLoading">
+        <ng-container *ngIf="!isLoading && !waitingForRegion">
           <div *ngFor="let item of items; trackBy: trackById"
                class="grid items-center gap-4 px-5 py-3.5 border-b border-gray-50
                       hover:bg-blue-50/30 transition-colors cursor-pointer"
                style="grid-template-columns: 56px 1fr 110px 140px 180px;"
                (click)="viewDestination(item)">
 
-            <div class="w-14 h-14 rounded-lg flex-shrink-0" [style.background]="item.imageBg"></div>
+            <div class="w-14 h-14 rounded-lg flex-shrink-0 overflow-hidden bg-gray-100"
+                 [style.background]="hasImage(item) ? null : item.imageBg">
+              <img *ngIf="hasImage(item)"
+                   [src]="item.imageUrl!"
+                   [alt]="item.name"
+                   class="w-full h-full object-cover"
+                   (error)="onImageError(item)" />
+            </div>
 
             <div class="min-w-0">
               <div class="flex items-center gap-2 mb-0.5">
@@ -181,9 +207,9 @@
               <circle cx="12" cy="10" r="3"/>
               <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
             </svg>
-            <p class="text-sm font-medium">No destinations found</p>
-            <p class="text-xs mt-1">Try adjusting your search query</p>
-            <button (click)="navigateToAdd()"
+            <p class="text-sm font-medium">{{ emptyMessage }}</p>
+            <p *ngIf="activeRegionId && searchQuery.trim()" class="text-xs mt-1">Try adjusting your search query</p>
+            <button *ngIf="activeRegionId && !searchQuery.trim()" (click)="navigateToAdd()"
                     class="mt-4 flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold
                            text-white bg-blue-700 hover:bg-blue-800 border-none cursor-pointer transition-colors">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -195,7 +221,7 @@
         </ng-container>
 
         <!-- Footer -->
-        <div *ngIf="!isLoading"
+        <div *ngIf="!isLoading && !waitingForRegion"
              class="flex flex-col items-center gap-3 px-5 py-3
                     border-t border-gray-100 bg-gray-50/40">
           <p class="text-sm text-gray-500">
@@ -214,10 +240,10 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
             </svg>
-            <span>{{ isLoadingMore ? 'Loading…' : 'Show More' }}</span>
+            <span>{{ isLoadingMore ? 'Loading...' : 'Show More' }}</span>
             <span *ngIf="!isLoadingMore"
                   class="text-[10px] font-bold bg-blue-100 text-blue-600 rounded-full px-1.5 py-0.5">
-              +{{ totalItems - items.length }}
+              +{{ nextPageCount }}
             </span>
           </button>
           <span *ngIf="!hasMore && items.length > 0"
@@ -253,7 +279,7 @@
           <p class="text-sm text-gray-500 leading-relaxed">
             Are you sure you want to delete
             <strong class="text-gray-800">{{ deleteTarget.name }}</strong>?
-            This action cannot be undone.
+            This action cannot be undone. Destinations with related content are protected.
           </p>
         </div>
       </div>
@@ -275,7 +301,7 @@
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
         </svg>
-        {{ isDeleting ? 'Deleting…' : 'Delete' }}
+        {{ isDeleting ? 'Deleting...' : 'Delete' }}
       </button>
     </div>
   </div>
