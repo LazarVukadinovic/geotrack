@@ -15,6 +15,7 @@ export class TopbarComponent {
   @Input() userRole = '';
   @Input() showBack = false;
   @Input() backRoute: string | null = null;
+  failedAvatarUrl = '';
 
   constructor(private router: Router, private readonly auth: AuthService) {}
 
@@ -24,6 +25,15 @@ export class TopbarComponent {
 
   get displayUserRole(): string {
     return this.auth.getUser()?.role || this.userRole;
+  }
+
+  get displayAvatarUrl(): string {
+    const avatarUrl = this.auth.getUser()?.avatarUrl ?? '';
+    return avatarUrl && avatarUrl !== this.failedAvatarUrl ? avatarUrl : '';
+  }
+
+  onAvatarError(): void {
+    this.failedAvatarUrl = this.displayAvatarUrl;
   }
 
   goBack(): void {

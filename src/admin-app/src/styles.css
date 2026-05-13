@@ -1,3 +1,65 @@
 /* You can add global styles to this file, and also import other style files */
 
 @import 'tailwindcss';
+
+.gt-admin-marker {
+  width: 100%;
+  height: 100%;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.24), 0 0 0 1px rgba(15, 23, 42, 0.08);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 13px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  transform: translateZ(0);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.gt-admin-marker:hover,
+.gt-admin-marker:focus-visible {
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.3), 0 0 0 3px rgba(37, 99, 235, 0.18);
+  outline: none;
+  transform: scale(1.08);
+}
+
+.gt-admin-marker img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gt-admin-marker__fallback {
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+.gt-admin-marker--place {
+  background: #2563eb;
+}
+
+.gt-admin-marker--location {
+  background: #0891b2;
+}
+
+.gt-admin-marker--destination {
+  background: #7c3aed;
+}
+
+.gt-admin-dropped-pin {
+  filter: drop-shadow(0 12px 18px rgba(15, 23, 42, 0.24));
+  height: 36px;
+  pointer-events: none;
+  width: 28px;
+}
+
+.leaflet-container {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}

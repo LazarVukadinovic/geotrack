@@ -27,8 +27,15 @@
         <p class="text-sm font-semibold text-gray-800">{{ displayUserName }}</p>
         <p class="text-xs text-gray-500">{{ displayUserRole }}</p>
       </div>
-      <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 ring-2 ring-white">
-        <svg class="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 ring-2 ring-white overflow-hidden">
+        <img
+          *ngIf="displayAvatarUrl"
+          [src]="displayAvatarUrl"
+          alt=""
+          class="w-full h-full object-cover"
+          (error)="onAvatarError()"
+        />
+        <svg *ngIf="!displayAvatarUrl" class="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <circle cx="12" cy="8" r="4"/>
           <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
         </svg>

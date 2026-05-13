@@ -26,12 +26,12 @@ describe('SidebarComponent', () => {
   });
 
   it('shows an available active region label instead of loading forever', async () => {
-    fixture.componentRef.setInput('region', 'Dalmatia, Croatia');
+    fixture.componentRef.setInput('region', 'Coastal Test Region, Testland');
     fixture.componentRef.setInput('regionLoading', true);
     await fixture.whenStable();
 
     const text = fixture.nativeElement.textContent as string;
-    expect(text).toContain('Dalmatia, Croatia');
+    expect(text).toContain('Coastal Test Region, Testland');
     expect(text).not.toContain('Loading...');
   });
 
