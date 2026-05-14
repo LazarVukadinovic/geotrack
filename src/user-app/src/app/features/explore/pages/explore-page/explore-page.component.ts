@@ -296,6 +296,12 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     void this.router.navigate(['/explore'], { replaceUrl: true });
   }
 
+  protected openDestinationDiscovery(): void {
+    this.searchQuery.set('');
+    this.resetSearchResults();
+    void this.router.navigate(['/destinations']);
+  }
+
   protected openMap(): void {
     this.searchQuery.set('');
     this.resetSearchResults();

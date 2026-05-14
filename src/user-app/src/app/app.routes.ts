@@ -28,12 +28,6 @@ export const routes: Routes = [
         data: { desktopLayout: 'wide' },
       },
       {
-        path: 'explore/:sectionKey',
-        loadComponent: () =>
-          import('./features/explore/pages/explore-section-listing-page/explore-section-listing-page.component').then(m => m.ExploreSectionListingPageComponent),
-        data: { hideBottomNav: true, desktopLayout: 'wide' },
-      },
-      {
         path: 'map',
         loadComponent: () =>
           import('./features/map/pages/map-page/map-page.component').then(m => m.MapPageComponent),
@@ -228,6 +222,13 @@ export const routes: Routes = [
 
       // â”€â”€ Ostale rute â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       {
+        path: 'destinations',
+        loadComponent: () =>
+          import('./features/destinations/pages/destination-discovery-page/destination-discovery-page.component')
+            .then(m => m.DestinationDiscoveryPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
         path: 'hotels',
         loadComponent: () =>
           import('./features/hotels/pages/hotels-listing-page/hotels-listing-page.component').then(m => m.HotelsListingPageComponent),
@@ -296,4 +297,3 @@ export const routes: Routes = [
     ],
   },
 ];
-

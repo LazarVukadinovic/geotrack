@@ -110,6 +110,59 @@ public class ExploreController : ControllerBase
         }
     }
 
+
+    [HttpGet("{sectionKey}")]
+    public async Task<ActionResult> GetExploreSectionPage(
+        [FromRoute] string sectionKey,
+        [FromQuery] int destinationId,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 20)
+    {
+        if (string.IsNullOrWhiteSpace(sectionKey))
+        {
+            return BadRequest(new { error = "sectionKey is required." });
+        }
+
+        if (string.Equals(sectionKey, "search", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { error = "Use /api/explore/search for search." });
+        }
+
+        if (destinationId <= 0)
+        {
+            return BadRequest(new { error = "destinationId must be positive." });
+        }
+
+        if (skip < 0)
+        {
+            return BadRequest(new { error = "skip must be zero or greater." });
+        }
+
+        if (take <= 0)
+        {
+            return BadRequest(new { error = "take must be greater than zero." });
+        }
+
+        var result = await _exploreService.GetExploreSectionPageAsync(
+            sectionKey,
+            destinationId,
+            GetUserId(),
+            skip,
+            take);
+
+        if (result.SelectedDestination is null)
+        {
+            return NotFound(new { error = "Destination not found." });
+        }
+
+        if (!result.IsKnownSection)
+        {
+            return NotFound(new { error = "Explore section not found." });
+        }
+
+        return Ok(result);
+    }
+
     private int? GetUserId()
     {
         var claim = User.FindFirst("userId")?.Value;

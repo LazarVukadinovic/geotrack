@@ -177,21 +177,20 @@ public class ExploreService : IExploreService
         var events = await _db.Events
             .AsNoTracking()
             .Where(e =>
+                e.DestinationId == resolvedDestination.Id &&
                 EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 e.EndDate >= DateTime.UtcNow)
             .Select(e => new
             {
                 e.Id,
                 e.Name,
-                DestinationId = e.DestinationId,
                 EventTypeName = e.EventType.Name,
                 e.StartDate,
                 e.EndDate,
                 Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
             })
-            .OrderBy(e => e.DestinationId == resolvedDestination.Id ? 0 : 1)
-            .ThenBy(e => e.DistanceMeters)
+            .OrderBy(e => e.DistanceMeters)
             .ThenBy(e => e.StartDate)
             .Take(ExploreSectionItemLimit)
             .ToListAsync();
@@ -200,20 +199,19 @@ public class ExploreService : IExploreService
             .AsNoTracking()
             .Where(p =>
                 p.Stay != null &&
+                p.Location.DestinationId == resolvedDestination.Id &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(p => new
             {
                 p.Id,
                 p.Name,
-                DestinationId = p.Location.DestinationId,
                 Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 PricePerNight = p.Stay != null ? p.Stay.PricePerNight : null,
                 DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
             })
-            .OrderBy(p => p.DestinationId == resolvedDestination.Id ? 0 : 1)
-            .ThenBy(p => p.DistanceMeters)
+            .OrderBy(p => p.DistanceMeters)
             .ThenByDescending(p => p.AverageRating ?? 0)
             .Take(ExploreSectionItemLimit)
             .ToListAsync();
@@ -908,6 +906,7 @@ public class ExploreService : IExploreService
             .AsNoTracking()
             .Where(p =>
                 p.Stay == null &&
+                p.Location.DestinationId == destinationId &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (
                     WhereToEatTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
@@ -926,7 +925,6 @@ public class ExploreService : IExploreService
                 p.Subtitle,
                 p.Description,
                 PlaceTypeName = p.PlaceType.Name,
-                DestinationId = p.Location.DestinationId,
                 p.OpeningHours,
                 Image = p.Images
                     .OrderByDescending(image => image.IsMain)
@@ -948,8 +946,7 @@ public class ExploreService : IExploreService
                     })
                     .ToList()
             })
-            .OrderBy(p => p.DestinationId == destinationId ? 0 : 1)
-            .ThenBy(p => p.DistanceMeters)
+            .OrderBy(p => p.DistanceMeters)
             .ThenByDescending(p => p.AverageRating ?? 0)
             .ThenByDescending(p => p.ReviewCount)
             .Take(ExploreSectionItemLimit)
@@ -1000,6 +997,7 @@ public class ExploreService : IExploreService
             .AsNoTracking()
             .Where(p =>
                 p.Stay == null &&
+                p.Location.DestinationId == destinationId &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 p.PlaceTags.Any(pt =>
                     pt.Tag.ForPlace &&
@@ -1039,8 +1037,7 @@ public class ExploreService : IExploreService
                     })
                     .ToList()
             })
-            .OrderBy(p => p.DestinationId == destinationId ? 0 : 1)
-            .ThenBy(p => p.DistanceMeters)
+            .OrderBy(p => p.DistanceMeters)
             .ThenByDescending(p => p.AverageRating ?? 0)
             .ThenByDescending(p => p.ReviewCount)
             .Take(DynamicSectionCandidateLimit)
@@ -1261,6 +1258,7 @@ public class ExploreService : IExploreService
             .AsNoTracking()
             .Where(p =>
                 p.Stay == null &&
+                p.Location.DestinationId == destinationId &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
             .GroupBy(p => new { p.PlaceTypeId, p.PlaceType.Name })
             .Select(g => new
@@ -1271,8 +1269,7 @@ public class ExploreService : IExploreService
                 CurrentDestinationCount = g.Count(p => p.Location.DestinationId == destinationId),
                 MinDistanceMeters = g.Min(p => EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint))
             })
-            .OrderBy(g => g.CurrentDestinationCount > 0 ? 0 : 1)
-            .ThenBy(g => g.MinDistanceMeters)
+            .OrderBy(g => g.MinDistanceMeters)
             .ThenByDescending(g => g.Count)
             .ThenBy(g => g.Name)
             .Take(LandmarkCategoryPreviewLimit)
@@ -1386,6 +1383,7 @@ public class ExploreService : IExploreService
             .AsNoTracking()
             .Where(p =>
                 p.Stay == null &&
+                p.Location.DestinationId == destinationId &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 p.PlaceTags.Any(pt => curationTagIds.Contains(pt.TagId)))
             .Select(p => new CuratedPlaceCandidate
@@ -1412,8 +1410,7 @@ public class ExploreService : IExploreService
                     })
                     .ToList()
             })
-            .OrderBy(p => p.DestinationId == destinationId ? 0 : 1)
-            .ThenByDescending(p => p.ExplicitMatchCount)
+            .OrderByDescending(p => p.ExplicitMatchCount)
             .ThenByDescending(p => p.InferredMatchCount)
             .ThenBy(p => p.DistanceMeters)
             .ThenByDescending(p => p.AverageRating ?? 0)

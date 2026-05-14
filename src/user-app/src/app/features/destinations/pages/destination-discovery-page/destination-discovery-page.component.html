@@ -1,0 +1,186 @@
+<main class="destination-discovery">
+  <header class="destination-discovery__topbar">
+    <button type="button" class="destination-discovery__back" aria-label="Go back" (click)="goBack()">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </button>
+
+    <div>
+      <p class="destination-discovery__eyebrow">Explore destinations</p>
+      <h1>Find another destination</h1>
+      <p>Search by name, tags, place types, or content inside each destination.</p>
+    </div>
+  </header>
+
+  <section class="destination-discovery__search" aria-label="Destination search">
+    <div class="destination-discovery__search-box">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M11 19a8 8 0 1 1 5.3-2l3.35 3.35" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+      </svg>
+      <input
+        type="search"
+        [value]="query()"
+        placeholder="Search beaches, mountains, restaurants, spas..."
+        aria-label="Search destinations"
+        (input)="onQueryInput($any($event.target).value)"
+        (keydown.enter)="submitSearch()"
+      />
+      @if (query().trim()) {
+        <button type="button" class="destination-discovery__clear" aria-label="Clear search" (click)="clearQuery()">
+          ×
+        </button>
+      }
+    </div>
+  </section>
+
+  <section class="destination-discovery__layout">
+    <aside class="destination-discovery__filters" aria-label="Destination filters">
+      <div class="destination-discovery__filters-header">
+        <h2>Filters</h2>
+        @if (hasActiveFilters()) {
+          <button type="button" (click)="clearFilters()">Clear</button>
+        }
+      </div>
+
+      @if (filtersLoading()) {
+        <p class="destination-discovery__filter-state">Loading filters...</p>
+      } @else if (filtersError()) {
+        <p class="destination-discovery__filter-state destination-discovery__filter-state--error">
+          {{ filtersError() }}
+        </p>
+      } @else {
+        @for (group of visibleTagTypeFilters(); track group.id) {
+          <div class="destination-filter-group">
+            <h3>{{ group.label }}</h3>
+            <div class="destination-filter-group__options">
+              @for (option of group.options; track option.id) {
+                <button
+                  type="button"
+                  class="destination-filter-chip"
+                  [class.destination-filter-chip--active]="isTagSelected(option.id)"
+                  (click)="toggleTag(option.id)"
+                >
+                  <span>{{ option.name }}</span>
+                  <small>{{ option.count }}</small>
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        @if (placeTypeFilters().length > 0) {
+          <div class="destination-filter-group">
+            <h3>Place types</h3>
+            <div class="destination-filter-group__options">
+              @for (type of placeTypeFilters(); track type.id) {
+                <button
+                  type="button"
+                  class="destination-filter-chip"
+                  [class.destination-filter-chip--active]="isPlaceTypeSelected(type.id)"
+                  (click)="togglePlaceType(type.id)"
+                >
+                  <span>{{ type.name }}</span>
+                  <small>{{ type.count }}</small>
+                </button>
+              }
+            </div>
+          </div>
+        }
+      }
+    </aside>
+
+    <section class="destination-discovery__results" aria-label="Destination results">
+      <div class="destination-discovery__results-header">
+        <h2>{{ resultSummary() }}</h2>
+        @if (query().trim().length === 1) {
+          <p>Type at least 2 characters to search by text.</p>
+        }
+      </div>
+
+      @if (loading()) {
+        <div class="destination-discovery__skeletons" aria-busy="true">
+          @for (_ of [0, 1, 2]; track $index) {
+            <article class="destination-card destination-card--skeleton" aria-hidden="true">
+              <div class="destination-card__image"></div>
+              <div class="destination-card__body">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </article>
+          }
+        </div>
+      } @else if (loadError()) {
+        <div class="destination-discovery__empty">
+          <h3>Search failed</h3>
+          <p>{{ loadError() }}</p>
+          <button type="button" (click)="submitSearch()">Try again</button>
+        </div>
+      } @else if (items().length === 0) {
+        <div class="destination-discovery__empty">
+          <h3>No matching destinations</h3>
+          <p>Try a broader search term or remove some filters.</p>
+          @if (hasActiveFilters()) {
+            <button type="button" (click)="clearFilters()">Clear search and filters</button>
+          }
+        </div>
+      } @else {
+        <div class="destination-discovery__grid">
+          @for (destination of items(); track destination.id) {
+            <article
+              class="destination-card"
+              role="button"
+              tabindex="0"
+              [attr.aria-label]="'Open ' + destination.name"
+              (click)="openDestination(destination)"
+              (keydown.enter)="openDestination(destination)"
+              (keydown.space)="$event.preventDefault(); openDestination(destination)"
+            >
+              <div class="destination-card__image">
+                <img [src]="destination.imageUrl || imageFallback" [alt]="''" />
+              </div>
+              <div class="destination-card__body">
+                <div class="destination-card__title-row">
+                  <h3>{{ destination.name }}</h3>
+                  <span>Explore</span>
+                </div>
+
+                @if (destination.summary || destination.description) {
+                  <p>{{ destination.summary || destination.description }}</p>
+                }
+
+                @if (destination.matchedBy.length > 0) {
+                  <div class="destination-card__matches">
+                    @for (match of destination.matchedBy.slice(0, 4); track match) {
+                      <span>{{ match }}</span>
+                    }
+                  </div>
+                }
+
+                <div class="destination-card__meta">
+                  @if (destination.matchedPlaceCount > 0) {
+                    <span>{{ destination.matchedPlaceCount }} place matches</span>
+                  }
+                  @if (destination.matchedLocationCount > 0) {
+                    <span>{{ destination.matchedLocationCount }} area matches</span>
+                  }
+                </div>
+              </div>
+            </article>
+          }
+        </div>
+
+        @if (loadingMore()) {
+          <p class="destination-discovery__loading-more">Loading more...</p>
+        }
+
+        @if (hasMore()) {
+          <button type="button" class="destination-discovery__load-more" (click)="loadMore()">
+            Load more destinations
+          </button>
+        }
+      }
+    </section>
+  </section>
+</main>

@@ -23,12 +23,12 @@
           Your current area is <strong>{{ noNearbyLocationLabel() }}</strong>, but GeoTrack does not have a supported destination close enough to show a useful Explore page.
         </p>
         <p class="explore-page__no-nearby-hint">
-          Try changing your location, refreshing your current location, or opening the map to browse what is available.
+          Explore another supported destination or open the map to browse what is available.
         </p>
 
         <div class="explore-page__no-nearby-actions">
-          <button type="button" class="explore-page__no-nearby-primary" (click)="useCurrentLocation()">
-            Refresh current location
+          <button type="button" class="explore-page__no-nearby-primary" (click)="openDestinationDiscovery()">
+            Explore other destinations
           </button>
           <button type="button" class="explore-page__no-nearby-secondary" (click)="openMap()">
             Open map
