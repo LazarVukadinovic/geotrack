@@ -2,6 +2,9 @@ import { Injectable, Injector } from '@angular/core';
 import { HttpErrorResponse, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest } from '@angular/common/http';
 import { Observable, catchError, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { environment } from '../../../environments/environment';
+
+const apiPathPrefix = '/api';
 
 @Injectable()
 export class AuthInterceptor implements HttpInterceptor {
@@ -35,17 +38,56 @@ export class AuthInterceptor implements HttpInterceptor {
   }
 
   private shouldHandle(url: string): boolean {
-    return url.startsWith('/api/');
+    return this.isConfiguredApiRequest(url);
   }
 
   private shouldAttachToken(url: string): boolean {
-    return !url.startsWith('/api/auth/') &&
-      !url.startsWith('/api/admin/auth/login') &&
-      !url.startsWith('/api/admin/auth/refresh') &&
-      !url.startsWith('/api/admin/auth/logout');
+    const path = this.apiPath(url);
+
+    return !path.startsWith('/api/auth/') &&
+      !path.startsWith('/api/admin/auth/login') &&
+      !path.startsWith('/api/admin/auth/refresh') &&
+      !path.startsWith('/api/admin/auth/logout');
   }
 
   private isAuthEndpoint(url: string): boolean {
-    return url.startsWith('/api/admin/auth/') || url.startsWith('/api/auth/');
+    const path = this.apiPath(url);
+    return path.startsWith('/api/admin/auth/') || path.startsWith('/api/auth/');
+  }
+
+  private isConfiguredApiRequest(url: string): boolean {
+    if (this.isRelativeApiPath(url)) {
+      return true;
+    }
+
+    try {
+      const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+      const parsedUrl = new URL(url, origin);
+      const configuredApiUrl = new URL(environment.apiUrl.replace(/\/+$/, ''), origin);
+      const configuredPath = configuredApiUrl.pathname.replace(/\/+$/, '');
+
+      return parsedUrl.origin === configuredApiUrl.origin &&
+        (
+          parsedUrl.pathname === configuredPath ||
+          parsedUrl.pathname.startsWith(`${configuredPath}/`)
+        );
+    } catch {
+      return false;
+    }
+  }
+
+  private apiPath(url: string): string {
+    try {
+      const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+      return new URL(url, origin).pathname;
+    } catch {
+      return url;
+    }
+  }
+
+  private isRelativeApiPath(url: string): boolean {
+    return url === apiPathPrefix ||
+      url.startsWith(`${apiPathPrefix}/`) ||
+      url.startsWith(`${apiPathPrefix}?`);
   }
 }
