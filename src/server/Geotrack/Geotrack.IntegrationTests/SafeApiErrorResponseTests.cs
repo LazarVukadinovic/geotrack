@@ -202,31 +202,29 @@ public sealed class SafeApiErrorResponseTests
 
     private sealed class StubExploreService : IExploreService
     {
-        public Task<ExplorePageDto> GetExplorePageAsync(double latitude, double longitude, int? userId = null) =>
-            Task.FromResult(new ExplorePageDto());
-
-        public Task<ExplorePageDto> GetExplorePageForDestinationAsync(int destinationId, int? userId = null) =>
-            Task.FromResult(new ExplorePageDto());
-
-        public Task<ExploreRecommendationsPageDto> GetRecommendationsAsync(
+        public Task<ExplorePageDto> GetExplorePageAsync(
             double latitude,
             double longitude,
-            int userId,
-            int? tagId = null,
-            int skip = 0,
-            int take = 8) =>
-            Task.FromResult(new ExploreRecommendationsPageDto());
+            int? userId = null) =>
+            Task.FromResult(new ExplorePageDto());
 
-        public Task<DestinationScopedResult<LocalPlacesCategoriesPageDto>> GetLocalPlacesCategoriesAsync(
-            int? destinationId,
-            double? latitude = null,
-            double? longitude = null,
+        public Task<ExplorePageDto> GetExplorePageForDestinationAsync(
+            int destinationId,
+            int? userId = null) =>
+            Task.FromResult(new ExplorePageDto());
+
+        public Task<ExploreSectionPageDto> GetExploreSectionPageAsync(
+            string sectionKey,
+            int destinationId,
+            int? userId = null,
             int skip = 0,
-            int take = 10) =>
-            Task.FromResult(new DestinationScopedResult<LocalPlacesCategoriesPageDto>
+            int take = 20) =>
+            Task.FromResult(new ExploreSectionPageDto
             {
-                Status = DestinationScopedStatus.Success,
-                Data = new LocalPlacesCategoriesPageDto()
+                IsKnownSection = true,
+                SelectedDestination = new ExploreDestinationDto { Id = destinationId },
+                Key = sectionKey,
+                Title = sectionKey
             });
     }
 
@@ -286,3 +284,5 @@ public sealed class SafeApiErrorResponseTests
 
     private sealed record LogEntry(LogLevel Level, Exception? Exception, string Message);
 }
+
+

@@ -1125,6 +1125,19 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Description)
                 .HasMaxLength(500);
 
+            entity.Property(x => x.IsFilterable)
+                .IsRequired()
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.FilterLabel)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.FilterOrder)
+                .IsRequired()
+                .HasDefaultValue(0);
+
+            entity.HasIndex(x => new { x.IsFilterable, x.FilterOrder });
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 

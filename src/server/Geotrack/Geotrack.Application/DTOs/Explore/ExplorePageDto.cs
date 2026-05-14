@@ -63,6 +63,24 @@ public class ExploreFeedSectionTagDto
     public string Slug { get; set; } = string.Empty;
 }
 
+
+public class ExploreSectionPageDto
+{
+    public bool IsKnownSection { get; set; } = true;
+    public ExploreDestinationDto? SelectedDestination { get; set; }
+    public string Key { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Subtitle { get; set; }
+    public string CardType { get; set; } = "place-card";
+    public List<ExploreFeedSectionItemDto> Items { get; set; } = new();
+    public int Skip { get; set; }
+    public int Take { get; set; }
+    public int NextSkip { get; set; }
+    public bool HasMore { get; set; }
+    public int TotalCount { get; set; }
+    public string? EmptyReason { get; set; }
+}
+
 public class ExploreRecommendationsPageDto
 {
     public ExploreDestinationDto? SelectedDestination { get; set; }
@@ -127,3 +145,4 @@ public class ExploreLandmarkCategoryDto
     public string? Image { get; set; }
     public string? CategoryKey { get; set; }
 }
+

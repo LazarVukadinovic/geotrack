@@ -13,6 +13,10 @@ public class TagType
     public bool ForPlace { get; set; }
     public bool ForEvent { get; set; }
 
+    public bool IsFilterable { get; set; }
+    public string? FilterLabel { get; set; }
+    public int FilterOrder { get; set; }
+
     public ICollection<Tag> Tags { get; set; } = new List<Tag>();
 
     public ICollection<TagTypePlaceType> PlaceTypes { get; set; } = new List<TagTypePlaceType>();

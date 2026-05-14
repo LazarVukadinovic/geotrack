@@ -1,0 +1,114 @@
+<main class="explore-listing">
+  <app-page-top-nav [title]="title()" fallbackRoute="/explore" />
+
+  <section class="explore-listing__hero">
+    <p class="explore-listing__eyebrow">Explore section</p>
+    <h1 class="explore-listing__title">{{ title() }}</h1>
+
+    @if (subtitle()) {
+      <p class="explore-listing__subtitle">{{ subtitle() }}</p>
+    }
+
+    @if (totalCount() > 0) {
+      <p class="explore-listing__count">{{ totalCount() }} items</p>
+    }
+  </section>
+
+  @if (loading()) {
+    <div class="explore-listing__status">Loading...</div>
+  } @else if (loadError()) {
+    <app-empty-state
+      title="Could not load this section"
+      [message]="loadError() ?? ''"
+    />
+  } @else if (items().length === 0) {
+    <app-empty-state
+      title="Nothing here yet"
+      [message]="emptyReason()"
+    />
+  } @else {
+    <section class="explore-listing__grid" aria-label="Explore results">
+      @for (item of items(); track itemKey(item)) {
+        <article
+          class="explore-listing__card"
+          role="button"
+          tabindex="0"
+          [attr.aria-label]="item.title"
+          (click)="openItem(item)"
+          (keydown.enter)="openItem(item)"
+          (keydown.space)="$event.preventDefault(); openItem(item)"
+        >
+          <div class="explore-listing__media">
+            <img
+              class="explore-listing__img"
+              [src]="imgSrcById()[itemKey(item)]"
+              [alt]="''"
+              loading="lazy"
+              decoding="async"
+              (error)="onImgError(item)"
+            />
+
+            @if (canSave(item)) {
+              <app-favorite-button
+                class="explore-listing__save"
+                [saved]="item.isSaved"
+                [itemLabel]="item.title"
+                (click)="$event.stopPropagation()"
+                (clicked)="saveItem(item)"
+              />
+            }
+          </div>
+
+          <div class="explore-listing__body">
+            @if (item.categoryLabel) {
+              <p class="explore-listing__category">{{ item.categoryLabel }}</p>
+            }
+
+            <h2 class="explore-listing__card-title">{{ item.title }}</h2>
+
+            @if (item.subtitle) {
+              <p class="explore-listing__description">{{ item.subtitle }}</p>
+            } @else if (item.description) {
+              <p class="explore-listing__description">{{ item.description }}</p>
+            }
+
+            <div class="explore-listing__meta">
+              @if (item.rating != null) {
+                <span>★ {{ item.rating.toFixed(1) }}</span>
+              }
+              @if (item.reviewCount) {
+                <span>{{ item.reviewCount }}</span>
+              }
+              @if (item.distance) {
+                <span>{{ item.distance }}</span>
+              }
+              @if (item.dateLabel) {
+                <span>{{ item.dateLabel }}</span>
+              }
+              @if (item.pricePerNight != null) {
+                <span>€{{ item.pricePerNight }}/night</span>
+              }
+            </div>
+          </div>
+        </article>
+      }
+    </section>
+
+    @if (loadMoreError()) {
+      <p class="explore-listing__load-error">{{ loadMoreError() }}</p>
+    }
+
+    @if (hasMore()) {
+      <div class="explore-listing__load-more-wrap">
+        <button
+          type="button"
+          class="explore-listing__load-more"
+          [disabled]="loadingMore()"
+          (click)="loadMore()"
+        >
+          {{ loadingMore() ? 'Loading...' : 'Load more' }}
+        </button>
+      </div>
+    }
+  }
+</main>

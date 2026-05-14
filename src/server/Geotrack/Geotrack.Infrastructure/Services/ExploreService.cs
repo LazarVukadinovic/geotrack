@@ -1,4 +1,3 @@
-using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
@@ -15,77 +14,31 @@ public class ExploreService : IExploreService
     private const double MaximumInferredInterestWeight = 30.0;
     private const int CuratedCandidateLimit = 60;
     private const int CuratedSectionItemLimit = 6;
-    private const int RecommendationCandidateLimit = 200;
-    private const int RecommendationDefaultTake = 8;
-    private const int RecommendationMaxTake = 20;
-    private const int RecommendationFilterLimit = 10;
-    private const int LocalCategoryDefaultTake = 10;
-    private const int LocalCategoryMaxTake = 50;
     private const int ExploreSectionItemLimit = 6;
     private const int LandmarkCategoryPreviewLimit = 8;
     private const int DynamicExploreSectionLimit = 6;
     private const int DynamicSectionCandidateLimit = 250;
     private const int DynamicSectionItemLimit = 6;
+    private const int SectionPageDefaultTake = 20;
+    private const int SectionPageMaxTake = 50;
+    private const int SectionPageCandidateLimit = 500;
+    private const double NearbyDestinationMaxDistanceMeters = 75_000d;
 
-    private static readonly string[] FoodMusicTagSlugs =
+    private static readonly string[] WhereToEatTagSlugs =
     [
         "food-drink",
-        "nightlife",
-        "live-music",
-        "fine-dining",
-        "beach-bars"
+        "fine-dining"
     ];
 
-    private static readonly string[] FoodMusicTypeNames =
+    private static readonly string[] WhereToEatTypeNames =
     [
         "restaurant",
-        "bar",
         "cafe"
     ];
 
     private static readonly string[] WhereToEatTagTypeSlugs =
     [
-        "cuisine",
-        "dining-style"
-    ];
-
-    private static readonly string[] CultureHistoryTagSlugs =
-    [
-        "culture",
-        "history",
-        "historic-sites",
-        "museums",
-        "galleries",
-        "exhibitions",
-        "landmarks"
-    ];
-
-    private static readonly string[] CultureHistoryTypeNames =
-    [
-        "museum",
-        "landmark",
-        "attraction"
-    ];
-
-    private static readonly string[] NatureTagSlugs =
-    [
-        "nature",
-        "beaches",
-        "islands",
-        "parks",
-        "mountains",
-        "hiking",
-        "scenic-views",
-        "outdoor",
-        "adventure"
-    ];
-
-    private static readonly string[] NatureTypeNames =
-    [
-        "nature",
-        "beach",
-        "activity",
-        "attraction"
+        "cuisine"
     ];
 
     private readonly AppDbContext _db;
@@ -124,6 +77,80 @@ public class ExploreService : IExploreService
             userId,
             destinationId);
     }
+
+    public async Task<ExploreSectionPageDto> GetExploreSectionPageAsync(
+        string sectionKey,
+        int destinationId,
+        int? userId = null,
+        int skip = 0,
+        int take = SectionPageDefaultTake)
+    {
+        var normalizedKey = ToCategoryKey(sectionKey ?? string.Empty);
+        var normalizedSkip = Math.Max(0, skip);
+        var normalizedTake = Math.Clamp(take, 1, SectionPageMaxTake);
+
+        var destination = await ResolveDestinationForSectionPageAsync(destinationId);
+        if (destination is null)
+        {
+            return new ExploreSectionPageDto
+            {
+                Key = normalizedKey,
+                Title = HumanizeSectionKey(normalizedKey),
+                Skip = normalizedSkip,
+                Take = normalizedTake,
+                NextSkip = normalizedSkip
+            };
+        }
+
+        var destinationPoint = SpatialPointFactory.Create(destination.Latitude, destination.Longitude);
+        var placeFavoriteIds = userId.HasValue
+            ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
+            : new HashSet<int>();
+        var eventFavoriteIds = userId.HasValue
+            ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
+            : new HashSet<int>();
+
+        return normalizedKey switch
+        {
+            "curated-for-you" => await BuildCuratedForYouPageAsync(
+                destination,
+                destinationPoint,
+                userId,
+                placeFavoriteIds,
+                normalizedSkip,
+                normalizedTake),
+
+            "top-stays" or "stays" or "hotels" => await BuildTopStaysPageAsync(
+                destination,
+                destinationPoint,
+                placeFavoriteIds,
+                normalizedSkip,
+                normalizedTake),
+
+            "where-to-eat" or "food" or "food-and-music" => await BuildWhereToEatPageAsync(
+                destination,
+                destinationPoint,
+                placeFavoriteIds,
+                normalizedSkip,
+                normalizedTake),
+
+            "events" => await BuildEventsPageAsync(
+                destination,
+                destinationPoint,
+                eventFavoriteIds,
+                normalizedSkip,
+                normalizedTake),
+
+            _ => await BuildDynamicSectionPageAsync(
+                normalizedKey,
+                destination,
+                destinationPoint,
+                placeFavoriteIds,
+                normalizedSkip,
+                normalizedTake)
+        };
+    }
+
 
     private async Task<ExplorePageDto> GetExplorePageCoreAsync(
         double latitude,
@@ -216,7 +243,10 @@ public class ExploreService : IExploreService
 
         var sections = new List<ExploreFeedSectionDto>();
 
-        var curatedSection = BuildCuratedForYouSection(curatedPlaces, placeFavoriteIds);
+        var curatedSection = BuildCuratedForYouSection(
+            resolvedDestination.Id,
+            curatedPlaces,
+            placeFavoriteIds);
         if (curatedSection.Items.Count > 0)
         {
             sections.Add(curatedSection);
@@ -229,7 +259,7 @@ public class ExploreService : IExploreService
             Subtitle = "Highly rated accommodation nearby",
             Layout = "horizontal-cards",
             CardType = "stay-card",
-            MoreRoute = "/hotels",
+            MoreRoute = $"/explore/top-stays?destinationId={resolvedDestination.Id}",
             Priority = 20,
             Items = topStays.Select(s => new ExploreFeedSectionItemDto
             {
@@ -262,7 +292,7 @@ public class ExploreService : IExploreService
             Subtitle = "What's happening around town",
             Layout = "horizontal-cards",
             CardType = "event-card",
-            MoreRoute = "/events",
+            MoreRoute = $"/explore/events?destinationId={resolvedDestination.Id}",
             Priority = 40,
             Items = events.Select(e => new ExploreFeedSectionItemDto
             {
@@ -301,204 +331,536 @@ public class ExploreService : IExploreService
         };
     }
 
-    public async Task<ExploreRecommendationsPageDto> GetRecommendationsAsync(
-        double latitude,
-        double longitude,
-        int userId,
-        int? tagId = null,
-        int skip = 0,
-        int take = RecommendationDefaultTake)
-    {
-        var userPoint = SpatialPointFactory.Create(latitude, longitude);
-        var resolvedDestination = await ResolveDestinationAsync(userPoint);
-        var normalizedSkip = Math.Max(0, skip);
-        var normalizedTake = Math.Clamp(take, 1, RecommendationMaxTake);
+    
 
-        if (resolvedDestination is null)
+
+
+    
+
+
+
+
+    private async Task<ExploreSectionPageDto> BuildCuratedForYouPageAsync(
+        ResolvedDestinationCandidate destination,
+        Point destinationPoint,
+        int? userId,
+        ISet<int> placeFavoriteIds,
+        int skip,
+        int take)
+    {
+        if (!userId.HasValue)
         {
-            return new ExploreRecommendationsPageDto
-            {
-                HasSignals = false,
-                EmptyReason = "We could not resolve a nearby destination for recommendations.",
-                Skip = normalizedSkip,
-                Take = normalizedTake,
-                NextSkip = normalizedSkip
-            };
+            return EmptySectionPage(
+                destination,
+                "curated-for-you",
+                "Curated for You",
+                "Based on your interests and recent activity nearby",
+                "place-card",
+                skip,
+                take,
+                "Sign in and save interests to get personal recommendations.");
         }
 
-        var curationSignals = await LoadCurationSignalsAsync(userId);
+        var curationSignals = await LoadCurationSignalsAsync(userId.Value);
         if (curationSignals.Count == 0)
         {
-            return new ExploreRecommendationsPageDto
+            return EmptySectionPage(
+                destination,
+                "curated-for-you",
+                "Curated for You",
+                "Based on your interests and recent activity nearby",
+                "place-card",
+                skip,
+                take,
+                "Add interests or keep exploring places so GeoTrack can build recommendations for you.");
+        }
+
+        var rankedPlaces = await BuildRankedCuratedPlacesAsync(
+            destination.Id,
+            destinationPoint,
+            curationSignals,
+            duplicatePlaceIds: new HashSet<int>(),
+            candidateLimit: SectionPageCandidateLimit);
+
+        var pageItems = rankedPlaces
+            .Skip(skip)
+            .Take(take)
+            .Select(place => MapRankedCuratedPlace(place, placeFavoriteIds))
+            .ToList();
+
+        return SectionPage(
+            destination,
+            "curated-for-you",
+            "Curated for You",
+            "Based on your interests and recent activity nearby",
+            "place-card",
+            pageItems,
+            rankedPlaces.Count,
+            skip,
+            take);
+    }
+
+    private async Task<ExploreSectionPageDto> BuildTopStaysPageAsync(
+        ResolvedDestinationCandidate destination,
+        Point destinationPoint,
+        ISet<int> placeFavoriteIds,
+        int skip,
+        int take)
+    {
+        var query = _db.Places
+            .AsNoTracking()
+            .Where(p =>
+                p.Stay != null &&
+                p.Location.DestinationId == destination.Id &&
+                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
+            .Select(p => new SectionPlaceProjection
             {
-                SelectedDestination = MapExploreDestination(resolvedDestination),
-                HasSignals = false,
-                EmptyReason = "Add saved interests or keep exploring places so GeoTrack can build recommendations for you.",
-                Skip = normalizedSkip,
-                Take = normalizedTake,
-                NextSkip = normalizedSkip
+                Id = p.Id,
+                Title = p.Name,
+                Subtitle = p.Subtitle,
+                Description = p.Description,
+                CategoryLabel = p.Stay != null && p.Stay.StayType != null ? p.Stay.StayType.Name : p.PlaceType.Name,
+                OpeningHours = p.OpeningHours,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
+                ReviewCount = p.PlaceReviews.Count(),
+                PricePerNight = p.Stay != null ? p.Stay.PricePerNight : null,
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(destinationPoint),
+                Tags = p.PlaceTags
+                    .Where(pt => pt.Tag.ForPlace)
+                    .Select(pt => new ExploreFeedSectionTagDto
+                    {
+                        TagId = pt.TagId,
+                        Name = pt.Tag.Name,
+                        Slug = pt.Tag.Slug
+                    })
+                    .ToList()
+            });
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .OrderBy(p => p.DistanceMeters)
+            .ThenByDescending(p => p.AverageRating ?? 0)
+            .ThenByDescending(p => p.ReviewCount)
+            .ThenBy(p => p.Title)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync();
+
+        return SectionPage(
+            destination,
+            "top-stays",
+            "Top Stays",
+            "Highly rated accommodation nearby",
+            "stay-card",
+            items.Select(item => MapPlaceProjection(item, "stay", "stay-card", placeFavoriteIds)).ToList(),
+            totalCount,
+            skip,
+            take);
+    }
+
+    private async Task<ExploreSectionPageDto> BuildWhereToEatPageAsync(
+        ResolvedDestinationCandidate destination,
+        Point destinationPoint,
+        ISet<int> placeFavoriteIds,
+        int skip,
+        int take)
+    {
+        var query = _db.Places
+            .AsNoTracking()
+            .Where(p =>
+                p.Stay == null &&
+                p.Location.DestinationId == destination.Id &&
+                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
+                (
+                    WhereToEatTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
+                    p.PlaceTags.Any(pt =>
+                        pt.Tag.ForPlace &&
+                        (
+                            WhereToEatTagSlugs.Contains(pt.Tag.Slug) ||
+                            pt.Tag.TagType != null &&
+                            WhereToEatTagTypeSlugs.Contains(pt.Tag.TagType.Slug)
+                        ))
+                ))
+            .Select(p => new SectionPlaceProjection
+            {
+                Id = p.Id,
+                Title = p.Name,
+                Subtitle = p.Subtitle,
+                Description = p.Description,
+                CategoryLabel = p.PlaceType.Name,
+                OpeningHours = p.OpeningHours,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
+                ReviewCount = p.PlaceReviews.Count(),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(destinationPoint),
+                Tags = p.PlaceTags
+                    .Where(pt => pt.Tag.ForPlace)
+                    .Select(pt => new ExploreFeedSectionTagDto
+                    {
+                        TagId = pt.TagId,
+                        Name = pt.Tag.Name,
+                        Slug = pt.Tag.Slug
+                    })
+                    .ToList()
+            });
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderBy(p => p.DistanceMeters)
+            .ThenByDescending(p => p.AverageRating ?? 0)
+            .ThenByDescending(p => p.ReviewCount)
+            .ThenBy(p => p.Title)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync();
+
+        return SectionPage(
+            destination,
+            "where-to-eat",
+            "Where to eat",
+            "Restaurants, cafes and local food nearby",
+            "place-card",
+            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
+            totalCount,
+            skip,
+            take);
+    }
+
+    private async Task<ExploreSectionPageDto> BuildEventsPageAsync(
+        ResolvedDestinationCandidate destination,
+        Point destinationPoint,
+        ISet<int> eventFavoriteIds,
+        int skip,
+        int take)
+    {
+        var query = _db.Events
+            .AsNoTracking()
+            .Where(e =>
+                e.DestinationId == destination.Id &&
+                e.EndDate >= DateTime.UtcNow &&
+                EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
+            .Select(e => new SectionEventProjection
+            {
+                Id = e.Id,
+                Title = e.Name,
+                Subtitle = e.EventType.Name,
+                Description = e.Description,
+                StartDate = e.StartDate,
+                EndDate = e.EndDate,
+                Image = e.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(destinationPoint),
+                Tags = e.EventTags
+                    .Where(et => et.Tag.ForEvent)
+                    .Select(et => new ExploreFeedSectionTagDto
+                    {
+                        TagId = et.TagId,
+                        Name = et.Tag.Name,
+                        Slug = et.Tag.Slug
+                    })
+                    .ToList()
+            });
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .OrderBy(e => e.StartDate)
+            .ThenBy(e => e.DistanceMeters)
+            .ThenBy(e => e.Title)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync();
+
+        return SectionPage(
+            destination,
+            "events",
+            "Events",
+            "What's happening around town",
+            "event-card",
+            items.Select(item => MapEventProjection(item, eventFavoriteIds)).ToList(),
+            totalCount,
+            skip,
+            take);
+    }
+
+    private async Task<ExploreSectionPageDto> BuildDynamicSectionPageAsync(
+        string sectionKey,
+        ResolvedDestinationCandidate destination,
+        Point destinationPoint,
+        ISet<int> placeFavoriteIds,
+        int skip,
+        int take)
+    {
+        var possibleTags = await _db.Tags
+            .AsNoTracking()
+            .Where(t => t.ForPlace && t.CanGenerateExploreSection)
+            .Select(t => new
+            {
+                t.Id,
+                t.Name,
+                t.Slug,
+                t.TagTypeId
+            })
+            .ToListAsync();
+
+        var matchedTags = possibleTags
+            .Where(tag =>
+                string.Equals(ToCategoryKey(tag.Slug), sectionKey, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ToCategoryKey(tag.Name), sectionKey, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (matchedTags.Count == 0)
+        {
+            return new ExploreSectionPageDto
+            {
+                IsKnownSection = false,
+                SelectedDestination = MapExploreDestination(destination),
+                Key = sectionKey,
+                Title = HumanizeSectionKey(sectionKey),
+                Skip = skip,
+                Take = take,
+                NextSkip = skip
             };
         }
 
-        var favoriteIds = await _favoriteService.GetFavoriteIdsAsync(userId, "place");
-        var rankedPlaces = await BuildRankedCuratedPlacesAsync(
-            resolvedDestination.Id,
-            userPoint,
-            curationSignals,
-            duplicatePlaceIds: new HashSet<int>(),
-            candidateLimit: RecommendationCandidateLimit);
+        var tagIds = matchedTags.Select(tag => tag.Id).ToList();
+        var title = DisplayTextSafety.CleanRequired(matchedTags.First().Name, HumanizeSectionKey(sectionKey));
 
-        var filters = rankedPlaces
-            .SelectMany(place => place.MatchedTags)
-            .GroupBy(tag => new { tag.TagId, tag.Name })
-            .Select(group => new ExploreRecommendationFilterDto
-            {
-                TagId = group.Key.TagId,
-                Label = group.Key.Name,
-                Count = group.Select(tag => tag.TagId).Count()
-            })
-            .OrderByDescending(filter => filter.Count)
-            .ThenBy(filter => filter.Label)
-            .Take(RecommendationFilterLimit)
-            .ToList();
-
-        var filteredPlaces = tagId.HasValue
-            ? rankedPlaces
-                .Where(place => place.MatchedTags.Any(tag => tag.TagId == tagId.Value))
-                .ToList()
-            : rankedPlaces;
-
-        var pageItems = filteredPlaces
-            .Skip(normalizedSkip)
-            .Take(normalizedTake)
-            .ToList();
-
-        return new ExploreRecommendationsPageDto
-        {
-            SelectedDestination = MapExploreDestination(resolvedDestination),
-            Filters = filters,
-            Items = pageItems.Select(place => new ExploreRecommendationItemDto
-            {
-                Id = place.Id,
-                Title = place.Title,
-                Reason = place.Reason,
-                Description = TrimDescription(place.Description, 170),
-                Location = place.Location,
-                Image = place.Image,
-                Rating = place.AverageRating.HasValue ? Math.Round(place.AverageRating.Value, 1) : null,
-                ReviewCount = FormatReviewCountLabel(place.ReviewCount),
-                Distance = SpatialDistanceFormatter.Format(place.DistanceMeters),
-                OpeningHours = place.OpeningHours,
-                CategoryLabel = place.CategoryLabel,
-                MatchedTagId = place.PrimaryTagId,
-                IsSaved = favoriteIds.Contains(place.Id)
-            }).ToList(),
-            HasSignals = true,
-            EmptyReason = filteredPlaces.Count == 0
-                ? "No recommendations match this filter yet."
-                : null,
-            Skip = normalizedSkip,
-            Take = normalizedTake,
-            NextSkip = normalizedSkip + pageItems.Count,
-            HasMore = filteredPlaces.Count > normalizedSkip + pageItems.Count
-        };
-    }
-
-    public async Task<DestinationScopedResult<LocalPlacesCategoriesPageDto>> GetLocalPlacesCategoriesAsync(
-        int? destinationId,
-        double? latitude = null,
-        double? longitude = null,
-        int skip = 0,
-        int take = LocalCategoryDefaultTake)
-    {
-        if (!destinationId.HasValue || destinationId.Value <= 0)
-        {
-            return new DestinationScopedResult<LocalPlacesCategoriesPageDto> { Status = DestinationScopedStatus.InvalidDestination };
-        }
-
-        if (!await _db.Destinations.AsNoTracking().AnyAsync(d => d.Id == destinationId.Value))
-        {
-            return new DestinationScopedResult<LocalPlacesCategoriesPageDto> { Status = DestinationScopedStatus.DestinationNotFound };
-        }
-
-        var normalizedSkip = Math.Max(0, skip);
-        var normalizedTake = Math.Clamp(take, 1, LocalCategoryMaxTake);
-        var userPoint = BuildUserPoint(latitude, longitude)
-            ?? await ResolveDestinationPointAsync(destinationId.Value);
-
-        var categoryQuery = _db.Places
+        var query = _db.Places
             .AsNoTracking()
-            .Where(p => p.Stay == null);
-
-        IQueryable<LocalCategoryProjection> orderedQuery;
-
-        if (userPoint is null)
-        {
-            orderedQuery = categoryQuery
-                .GroupBy(p => new { p.PlaceTypeId, p.PlaceType.Name })
-                .Select(g => new LocalCategoryProjection
-                {
-                    Id = g.Key.PlaceTypeId,
-                    Title = g.Key.Name,
-                    Count = g.Count(),
-                    CurrentDestinationCount = g.Count(p => p.Location.DestinationId == destinationId.Value)
-                })
-                .OrderBy(g => g.CurrentDestinationCount > 0 ? 0 : 1)
-                .ThenByDescending(g => g.Count)
-                .ThenBy(g => g.Title);
-        }
-        else
-        {
-            orderedQuery = categoryQuery
-                .Where(p => EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
-                .GroupBy(p => new { p.PlaceTypeId, p.PlaceType.Name })
-                .Select(g => new LocalCategoryProjection
-                {
-                    Id = g.Key.PlaceTypeId,
-                    Title = g.Key.Name,
-                    Count = g.Count(),
-                    CurrentDestinationCount = g.Count(p => p.Location.DestinationId == destinationId.Value),
-                    MinDistanceMeters = g.Min(p => EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint))
-                })
-                .OrderBy(g => g.CurrentDestinationCount > 0 ? 0 : 1)
-                .ThenBy(g => g.MinDistanceMeters)
-                .ThenByDescending(g => g.Count)
-                .ThenBy(g => g.Title);
-        }
-
-        var categories = await orderedQuery
-            .Skip(normalizedSkip)
-            .Take(normalizedTake + 1)
-            .ToListAsync();
-        var hasMore = categories.Count > normalizedTake;
-        var pageItems = hasMore
-            ? categories.Take(normalizedTake).ToList()
-            : categories;
-
-        return new DestinationScopedResult<LocalPlacesCategoriesPageDto>
-        {
-            Status = DestinationScopedStatus.Success,
-            Data = new LocalPlacesCategoriesPageDto
+            .Where(p =>
+                p.Stay == null &&
+                p.Location.DestinationId == destination.Id &&
+                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
+                p.PlaceTags.Any(pt => tagIds.Contains(pt.TagId)))
+            .Select(p => new SectionPlaceProjection
             {
-                Items = pageItems.Select(category => new LocalPlacesCategoryDto
-                {
-                    Id = category.Id,
-                    Title = DisplayTextSafety.CleanRequired(category.Title, "Local places"),
-                    CategoryKey = ToCategoryKey(category.Title),
-                    Subtitle = FormatPlacesCountLabel(category.Count)
-                })
-                .DistinctBy(category => category.Title.ToLowerInvariant())
-                .ToList(),
-                Skip = normalizedSkip,
-                Take = normalizedTake,
-                NextSkip = normalizedSkip + pageItems.Count,
-                HasMore = hasMore
-            }
+                Id = p.Id,
+                Title = p.Name,
+                Subtitle = p.Subtitle,
+                Description = p.Description,
+                CategoryLabel = p.PlaceType.Name,
+                OpeningHours = p.OpeningHours,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
+                ReviewCount = p.PlaceReviews.Count(),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(destinationPoint),
+                Tags = p.PlaceTags
+                    .Where(pt => pt.Tag.ForPlace)
+                    .Select(pt => new ExploreFeedSectionTagDto
+                    {
+                        TagId = pt.TagId,
+                        Name = pt.Tag.Name,
+                        Slug = pt.Tag.Slug
+                    })
+                    .ToList()
+            });
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .OrderBy(p => p.DistanceMeters)
+            .ThenByDescending(p => p.AverageRating ?? 0)
+            .ThenByDescending(p => p.ReviewCount)
+            .ThenBy(p => p.Title)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync();
+
+        return SectionPage(
+            destination,
+            sectionKey,
+            title,
+            totalCount == 1 ? "1 matching place" : $"{totalCount} matching places",
+            "place-card",
+            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
+            totalCount,
+            skip,
+            take);
+    }
+
+    private async Task<ResolvedDestinationCandidate?> ResolveDestinationForSectionPageAsync(int destinationId)
+    {
+        return await _db.Destinations
+            .AsNoTracking()
+            .Where(d => d.Id == destinationId)
+            .Select(d => new ResolvedDestinationCandidate
+            {
+                Id = d.Id,
+                Name = d.Name,
+                Description = d.Description,
+                Latitude = d.Latitude,
+                Longitude = d.Longitude,
+                DistanceMeters = 0,
+                Priority = -1
+            })
+            .SingleOrDefaultAsync();
+    }
+
+    private static ExploreSectionPageDto EmptySectionPage(
+        ResolvedDestinationCandidate destination,
+        string key,
+        string title,
+        string? subtitle,
+        string cardType,
+        int skip,
+        int take,
+        string? emptyReason)
+    {
+        return SectionPage(
+            destination,
+            key,
+            title,
+            subtitle,
+            cardType,
+            [],
+            0,
+            skip,
+            take,
+            emptyReason);
+    }
+
+    private static ExploreSectionPageDto SectionPage(
+        ResolvedDestinationCandidate destination,
+        string key,
+        string title,
+        string? subtitle,
+        string cardType,
+        List<ExploreFeedSectionItemDto> items,
+        int totalCount,
+        int skip,
+        int take,
+        string? emptyReason = null)
+    {
+        return new ExploreSectionPageDto
+        {
+            IsKnownSection = true,
+            SelectedDestination = MapExploreDestination(destination),
+            Key = key,
+            Title = DisplayTextSafety.CleanRequired(title, "Explore"),
+            Subtitle = DisplayTextSafety.CleanOptional(subtitle),
+            CardType = cardType,
+            Items = items,
+            Skip = skip,
+            Take = take,
+            NextSkip = skip + items.Count,
+            HasMore = skip + items.Count < totalCount,
+            TotalCount = totalCount,
+            EmptyReason = emptyReason
         };
     }
 
+    private static ExploreFeedSectionItemDto MapPlaceProjection(
+        SectionPlaceProjection item,
+        string entityType,
+        string cardType,
+        ISet<int> placeFavoriteIds)
+    {
+        return new ExploreFeedSectionItemDto
+        {
+            Id = item.Id,
+            EntityType = entityType,
+            DetailRoute = entityType == "stay" ? $"/stays/{item.Id}" : $"/places/{item.Id}",
+            Title = DisplayTextSafety.CleanRequired(item.Title, entityType == "stay" ? "Stay" : "Place"),
+            Subtitle = DisplayTextSafety.CleanOptional(item.Subtitle),
+            Description = TrimDescription(item.Description, 170),
+            CategoryLabel = DisplayTextSafety.CleanOptional(item.CategoryLabel),
+            Image = item.Image,
+            Rating = item.AverageRating.HasValue ? Math.Round(item.AverageRating.Value, 1) : null,
+            ReviewCount = FormatReviewCountLabel(item.ReviewCount),
+            Distance = SpatialDistanceFormatter.Format(item.DistanceMeters),
+            OpeningHours = item.OpeningHours,
+            PricePerNight = cardType == "stay-card" ? item.PricePerNight : null,
+            IsSaved = placeFavoriteIds.Contains(item.Id),
+            Tags = item.Tags
+        };
+    }
+
+    private static ExploreFeedSectionItemDto MapEventProjection(
+        SectionEventProjection item,
+        ISet<int> eventFavoriteIds)
+    {
+        return new ExploreFeedSectionItemDto
+        {
+            Id = item.Id,
+            EntityType = "event",
+            DetailRoute = $"/events/{item.Id}",
+            Title = DisplayTextSafety.CleanRequired(item.Title, "Event"),
+            Subtitle = DisplayTextSafety.CleanOptional(item.Subtitle),
+            Description = TrimDescription(item.Description, 170),
+            Image = item.Image,
+            Distance = SpatialDistanceFormatter.Format(item.DistanceMeters),
+            DateLabel = FormatDateLabel(item.StartDate, item.EndDate),
+            IsSaved = eventFavoriteIds.Contains(item.Id),
+            Tags = item.Tags
+        };
+    }
+
+    private static ExploreFeedSectionItemDto MapRankedCuratedPlace(
+        RankedCuratedPlace place,
+        ISet<int> placeFavoriteIds)
+    {
+        return new ExploreFeedSectionItemDto
+        {
+            Id = place.Id,
+            EntityType = "place",
+            DetailRoute = $"/places/{place.Id}",
+            Title = place.Title,
+            Subtitle = place.Reason,
+            Description = TrimDescription(place.Description, 170),
+            CategoryLabel = place.CategoryLabel,
+            Image = place.Image,
+            Rating = place.AverageRating.HasValue ? Math.Round(place.AverageRating.Value, 1) : null,
+            ReviewCount = FormatReviewCountLabel(place.ReviewCount),
+            Distance = SpatialDistanceFormatter.Format(place.DistanceMeters),
+            OpeningHours = place.OpeningHours,
+            IsSaved = placeFavoriteIds.Contains(place.Id),
+            Tags = place.MatchedTags.Select(tag => new ExploreFeedSectionTagDto
+            {
+                TagId = tag.TagId,
+                Name = tag.Name,
+                Slug = ToCategoryKey(tag.Name)
+            }).ToList()
+        };
+    }
+
+    private static string HumanizeSectionKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return "Explore";
+        }
+
+        return string.Join(' ', key
+                .Split('-', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
+    }
 
     private static ExploreFeedSectionDto BuildCuratedForYouSection(
+        int destinationId,
         IReadOnlyCollection<RankedCuratedPlace> curatedPlaces,
         ISet<int> placeFavoriteIds)
     {
@@ -509,7 +871,7 @@ public class ExploreService : IExploreService
             Subtitle = "Based on your interests and recent activity nearby",
             Layout = "horizontal-cards",
             CardType = "place-card",
-            MoreRoute = "/recommendations",
+            MoreRoute = $"/explore/curated-for-you?destinationId={destinationId}",
             Priority = 10,
             Items = curatedPlaces.Select(p => new ExploreFeedSectionItemDto
             {
@@ -538,9 +900,9 @@ public class ExploreService : IExploreService
 
 
     private async Task<ExploreFeedSectionDto> BuildWhereToEatSectionAsync(
-        int destinationId,
-        Point userPoint,
-        ISet<int> placeFavoriteIds)
+      int destinationId,
+      Point userPoint,
+      ISet<int> placeFavoriteIds)
     {
         var items = await _db.Places
             .AsNoTracking()
@@ -548,11 +910,11 @@ public class ExploreService : IExploreService
                 p.Stay == null &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (
-                    FoodMusicTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
+                    WhereToEatTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
                     p.PlaceTags.Any(pt =>
                         pt.Tag.ForPlace &&
                         (
-                            FoodMusicTagSlugs.Contains(pt.Tag.Slug) ||
+                            WhereToEatTagSlugs.Contains(pt.Tag.Slug) ||
                             pt.Tag.TagType != null &&
                             WhereToEatTagTypeSlugs.Contains(pt.Tag.TagType.Slug)
                         ))
@@ -600,7 +962,7 @@ public class ExploreService : IExploreService
             Subtitle = "Restaurants, cafes and local food nearby",
             Layout = "horizontal-cards",
             CardType = "place-card",
-            MoreRoute = "/food-and-music",
+            MoreRoute = $"/explore/where-to-eat?destinationId={destinationId}",
             Priority = 30,
             Items = items.Select(p => new ExploreFeedSectionItemDto
             {
@@ -696,6 +1058,7 @@ public class ExploreService : IExploreService
                 {
                     section = new DynamicSectionAccumulator
                     {
+                        TagId = identity.TagId,
                         TagTypeId = identity.TagTypeId,
                         Key = identity.Key,
                         Title = identity.Title
@@ -771,6 +1134,7 @@ public class ExploreService : IExploreService
                 Subtitle = BuildDynamicSectionSubtitle(section),
                 Layout = "horizontal-cards",
                 CardType = "place-card",
+                MoreRoute = $"/explore/{section.Key}?destinationId={destinationId}",
                 Priority = 100 + index,
                 Items = section.Items
                     .OrderByDescending(item => item.Score)
@@ -1140,43 +1504,9 @@ public class ExploreService : IExploreService
 
     private async Task<ResolvedDestinationCandidate?> ResolveDestinationAsync(Point userPoint)
     {
-        var nearestPlace = await _db.Places
-            .AsNoTracking()
-            .Where(p => EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
-            .Select(p => new ResolvedDestinationCandidate
-            {
-                Id = p.Location.Destination.Id,
-                Name = p.Location.Destination.Name,
-                Description = p.Location.Destination.Description,
-                Latitude = p.Location.Destination.Latitude,
-                Longitude = p.Location.Destination.Longitude,
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
-                Priority = 0
-            })
-            .OrderBy(p => p.DistanceMeters)
-            .FirstOrDefaultAsync();
-
-        var nearestEvent = await _db.Events
-            .AsNoTracking()
-            .Where(e => EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
-            .Select(e => new ResolvedDestinationCandidate
-            {
-                Id = e.Destination.Id,
-                Name = e.Destination.Name,
-                Description = e.Destination.Description,
-                Latitude = e.Destination.Latitude,
-                Longitude = e.Destination.Longitude,
-                DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
-                Priority = 1
-            })
-            .OrderBy(e => e.DistanceMeters)
-            .FirstOrDefaultAsync();
-
         var nearestDestination = await _db.Destinations
             .AsNoTracking()
-            .Where(d =>
-                EF.Property<Point?>(d, SpatialPointFactory.CoordinatesPropertyName) != null &&
-                d.Locations.Any(l => l.Places.Any() || l.Events.Any()))
+            .Where(d => EF.Property<Point?>(d, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(d => new ResolvedDestinationCandidate
             {
                 Id = d.Id,
@@ -1185,25 +1515,30 @@ public class ExploreService : IExploreService
                 Latitude = d.Latitude,
                 Longitude = d.Longitude,
                 DistanceMeters = EF.Property<Point>(d, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
-                Priority = 2
+                Priority = 0
             })
             .OrderBy(d => d.DistanceMeters)
+            .ThenBy(d => d.Name)
             .FirstOrDefaultAsync();
 
-        return new[] { nearestPlace, nearestEvent, nearestDestination }
-            .Where(candidate => candidate is not null)
-            .OrderBy(candidate => candidate!.DistanceMeters)
-            .ThenBy(candidate => candidate!.Priority)
-            .FirstOrDefault();
+        if (nearestDestination is null)
+        {
+            return null;
+        }
+
+        if (nearestDestination.DistanceMeters > NearbyDestinationMaxDistanceMeters)
+        {
+            return null;
+        }
+
+        return nearestDestination;
     }
 
     private async Task<ResolvedDestinationCandidate?> ResolveDestinationByIdAsync(int destinationId, Point userPoint)
     {
         return await _db.Destinations
             .AsNoTracking()
-            .Where(d =>
-                d.Id == destinationId &&
-                (d.Locations.Any(l => l.Places.Any()) || d.Locations.Any(l => l.Events.Any())))
+            .Where(d => d.Id == destinationId)
             .Select(d => new ResolvedDestinationCandidate
             {
                 Id = d.Id,
@@ -1306,6 +1641,35 @@ public class ExploreService : IExploreService
     }
 
 
+    private sealed class SectionPlaceProjection
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Subtitle { get; set; }
+        public string? Description { get; set; }
+        public string? CategoryLabel { get; set; }
+        public string? OpeningHours { get; set; }
+        public string? Image { get; set; }
+        public double? AverageRating { get; set; }
+        public int ReviewCount { get; set; }
+        public decimal? PricePerNight { get; set; }
+        public double DistanceMeters { get; set; }
+        public List<ExploreFeedSectionTagDto> Tags { get; set; } = new();
+    }
+
+    private sealed class SectionEventProjection
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Subtitle { get; set; }
+        public string? Description { get; set; }
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public string? Image { get; set; }
+        public double DistanceMeters { get; set; }
+        public List<ExploreFeedSectionTagDto> Tags { get; set; } = new();
+    }
+
     private sealed class DynamicSectionCandidate
     {
         public int Id { get; set; }
@@ -1345,6 +1709,7 @@ public class ExploreService : IExploreService
 
     private sealed class DynamicSectionAccumulator
     {
+        public int TagId { get; set; }
         public int? TagTypeId { get; set; }
         public string Key { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
@@ -1446,4 +1811,6 @@ public class ExploreService : IExploreService
         public bool IsOutsideCurrentDestination { get; set; }
     }
 }
+
+
 

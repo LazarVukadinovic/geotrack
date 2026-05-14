@@ -145,6 +145,7 @@ builder.Services.AddScoped<IAgentProvider>(serviceProvider =>
         "claude",
         serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentOptions>>()));
 builder.Services.AddScoped<IExploreService, ExploreService>();
+builder.Services.AddScoped<IExploreSearchService, ExploreSearchService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 
 builder.Services.AddScoped<IPlaceContributionService, PlaceContributionService>();

@@ -1,6 +1,4 @@
-using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Geotrack.Server.Controllers;
@@ -10,10 +8,14 @@ namespace Geotrack.Server.Controllers;
 public class ExploreController : ControllerBase
 {
     private readonly IExploreService _exploreService;
+    private readonly IExploreSearchService _exploreSearchService;
 
-    public ExploreController(IExploreService exploreService)
+    public ExploreController(
+        IExploreService exploreService,
+        IExploreSearchService exploreSearchService)
     {
         _exploreService = exploreService;
+        _exploreSearchService = exploreSearchService;
     }
 
     [HttpGet]
@@ -29,7 +31,10 @@ public class ExploreController : ControllerBase
                 return BadRequest(new { error = "destinationId must be positive when provided." });
             }
 
-            var destinationResult = await _exploreService.GetExplorePageForDestinationAsync(destinationId.Value, GetUserId());
+            var destinationResult = await _exploreService.GetExplorePageForDestinationAsync(
+                destinationId.Value,
+                GetUserId());
+
             if (destinationResult.SelectedDestination is null)
             {
                 return NotFound(new { error = "Destination not found." });
@@ -48,68 +53,25 @@ public class ExploreController : ControllerBase
             return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
         }
 
-        var userId = GetUserId();
-        var result = await _exploreService.GetExplorePageAsync(latitude.Value, longitude.Value, userId);
+        var result = await _exploreService.GetExplorePageAsync(
+            latitude.Value,
+            longitude.Value,
+            GetUserId());
+
         return Ok(result);
     }
 
-    [HttpGet("categories")]
-    public async Task<ActionResult> GetLocalPlacesCategories(
-        [FromQuery] int? destinationId = null,
-        [FromQuery] double? latitude = null,
-        [FromQuery] double? longitude = null,
+    [HttpGet("search")]
+    public async Task<ActionResult> Search(
+        [FromQuery] int destinationId,
+        [FromQuery(Name = "q")] string? query,
         [FromQuery] int skip = 0,
-        [FromQuery] int? take = null)
+        [FromQuery] int take = 20,
+        CancellationToken cancellationToken = default)
     {
-        if (skip < 0)
+        if (destinationId <= 0)
         {
-            return BadRequest(new { error = "skip must be zero or greater." });
-        }
-
-        if (take.HasValue && take.Value <= 0)
-        {
-            return BadRequest(new { error = "take must be greater than zero." });
-        }
-
-        var coordinateError = ValidateOptionalCoordinates(latitude, longitude);
-        if (coordinateError is not null)
-        {
-            return coordinateError;
-        }
-
-        var result = await _exploreService.GetLocalPlacesCategoriesAsync(destinationId, latitude, longitude, skip, take ?? 10);
-        var wantsPagedResponse = Request.Query.ContainsKey("skip") || Request.Query.ContainsKey("take");
-        return result.Status switch
-        {
-            DestinationScopedStatus.Success => Ok(wantsPagedResponse ? result.Data! : result.Data!.Items),
-            DestinationScopedStatus.InvalidDestination => BadRequest(new { error = "destinationId is required and must be positive." }),
-            DestinationScopedStatus.DestinationNotFound => NotFound(new { error = "Destination not found." }),
-            _ => StatusCode(500)
-        };
-    }
-
-    [Authorize]
-    [HttpGet("recommendations")]
-    public async Task<ActionResult> GetRecommendations(
-        [FromQuery] double? latitude,
-        [FromQuery] double? longitude,
-        [FromQuery] int? tagId = null,
-        [FromQuery] int skip = 0,
-        [FromQuery] int take = 8)
-    {
-        if (!latitude.HasValue || !longitude.HasValue)
-        {
-            return BadRequest(new { error = "latitude and longitude are required." });
-        }
-
-        if (!HasValidCoordinates(latitude.Value, longitude.Value))
-        {
-            return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
-        }
-
-        if (tagId.HasValue && tagId.Value <= 0)
-        {
-            return BadRequest(new { error = "tagId must be positive when provided." });
+            return BadRequest(new { error = "destinationId is required and must be positive." });
         }
 
         if (skip < 0)
@@ -122,47 +84,36 @@ public class ExploreController : ControllerBase
             return BadRequest(new { error = "take must be greater than zero." });
         }
 
-        var userId = GetUserId();
-        if (!userId.HasValue)
+        if (!string.IsNullOrWhiteSpace(query) && query.Trim().Length > 100)
         {
-            return Unauthorized();
+            return BadRequest(new { error = "Search query must be 100 characters or fewer." });
         }
 
-        var result = await _exploreService.GetRecommendationsAsync(
-            latitude.Value,
-            longitude.Value,
-            userId.Value,
-            tagId,
-            skip,
-            take);
+        try
+        {
+            var result = await _exploreSearchService.SearchAsync(
+                destinationId,
+                query,
+                skip,
+                take,
+                cancellationToken);
 
-        return Ok(result);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { error = "Destination not found." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     private int? GetUserId()
     {
         var claim = User.FindFirst("userId")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
-    }
-
-    private ActionResult? ValidateOptionalCoordinates(double? latitude, double? longitude)
-    {
-        if (!latitude.HasValue && !longitude.HasValue)
-        {
-            return null;
-        }
-
-        if (latitude.HasValue != longitude.HasValue)
-        {
-            return BadRequest(new { error = "latitude and longitude must be provided together." });
-        }
-
-        if (!HasValidCoordinates(latitude!.Value, longitude!.Value))
-        {
-            return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
-        }
-
-        return null;
     }
 
     private static bool HasValidCoordinates(double latitude, double longitude)

@@ -889,9 +889,9 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.HasIndex("PlaceTypeId");
 
-                    b.HasIndex("Status");
-
                     b.HasIndex("RestaurantPlaceId");
+
+                    b.HasIndex("Status");
 
                     b.ToTable("Places", (string)null);
                 });
@@ -1676,6 +1676,15 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("FilterLabel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("FilterOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<bool>("ForDestination")
                         .HasColumnType("boolean");
 
@@ -1687,6 +1696,11 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Property<bool>("ForPlace")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsFilterable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1705,6 +1719,8 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.HasIndex("Slug")
                         .IsUnique();
+
+                    b.HasIndex("IsFilterable", "FilterOrder");
 
                     b.ToTable("TagTypes", (string)null);
                 });
@@ -2243,69 +2259,6 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("TerritoryManagerTerritories", (string)null);
                 });
 
-            modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserAiProviderKey", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DisplayName")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<string>("EncryptedApiKey")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<int>("FailedUseCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("KeyLast4")
-                        .IsRequired()
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
-
-                    b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "Provider");
-
-                    b.HasIndex("UserId", "Provider", "IsActive")
-                        .IsUnique()
-                        .HasFilter("\"IsActive\" = true");
-
-                    b.ToTable("UserAiProviderKeys", (string)null);
-                });
-
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.User", b =>
                 {
                     b.Property<int>("Id")
@@ -2340,15 +2293,15 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<bool>("EmailNotificationsEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.Property<bool>("EmailNewReviewEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("EmailNotificationsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("EmailRequestsEnabled")
                         .ValueGeneratedOnAdd()
@@ -2434,6 +2387,69 @@ namespace Geotrack.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserAiProviderKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("EncryptedApiKey")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("FailedUseCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("KeyLast4")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Provider");
+
+                    b.HasIndex("UserId", "Provider", "IsActive")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = true");
+
+                    b.ToTable("UserAiProviderKeys", (string)null);
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserNotification", b =>
@@ -3193,17 +3209,6 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserAiProviderKey", b =>
-                {
-                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
-                        .WithMany("AiProviderKeys")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.RegionalManagerRegion", b =>
                 {
                     b.HasOne("Geotrack.Domain.Entities.Core.Region", "Region")
@@ -3262,6 +3267,17 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("Territory");
 
                     b.Navigation("TerritoryManager");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserAiProviderKey", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
+                        .WithMany("AiProviderKeys")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserNotification", b =>

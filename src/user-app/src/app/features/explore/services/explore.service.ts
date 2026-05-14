@@ -77,6 +77,41 @@ const AUTH_PROMO_CARD: ExplorePromoCard = {
   ctaLabel: 'Sign In',
 };
 
+type SelectedExploreDestination = NonNullable<ExploreApiResponse['selectedDestination']>;
+
+
+export interface ExploreSearchResultItem {
+  id: number;
+  entityType: 'place' | 'location' | string;
+  placeKind: 'place' | 'stay' | 'area' | string;
+  displayType: 'Place' | 'Area' | string;
+  title: string;
+  subtitle?: string | null;
+  description?: string | null;
+  categoryLabel?: string | null;
+  image?: string | null;
+  detailRoute: string;
+  destinationId: number;
+  locationName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  rating?: number | null;
+  reviewCount?: string | null;
+  tags: string[];
+  score: number;
+}
+
+export interface ExploreSearchResponse {
+  destinationId: number;
+  query: string;
+  items: ExploreSearchResultItem[];
+  totalCount: number;
+  skip: number;
+  take: number;
+  nextSkip: number;
+  hasMore: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ExploreService {
   private readonly http = inject(HttpClient);
@@ -90,6 +125,7 @@ export class ExploreService {
 
   private readonly _sections = signal<ExploreSection[]>([]);
   private readonly _nearbyStatus = signal<NearbyStatus>({ ...DEFAULT_NEARBY_STATUS });
+  private readonly _selectedDestination = signal<SelectedExploreDestination | null>(null);
   private readonly _promo = signal<ExplorePromoCard>({ ...AUTH_PROMO_CARD });
   private readonly _loaded = signal(false);
   private readonly _loading = signal(false);
@@ -124,6 +160,8 @@ export class ExploreService {
       items: section.items.map(item => this.resolveSavedState(item)),
     })),
   );
+
+  readonly selectedDestination = computed(() => this._selectedDestination());
 
   readonly nearbyStatus = computed(() => this._nearbyStatus());
   readonly promo = computed(() => this._promo());
@@ -300,6 +338,22 @@ export class ExploreService {
     });
   }
 
+
+  searchCurrentDestination(
+    query: string,
+    destinationId: number,
+    skip = 0,
+    take = 20,
+  ): Observable<ExploreSearchResponse> {
+    const params = new HttpParams()
+      .set('destinationId', String(destinationId))
+      .set('q', query)
+      .set('skip', String(skip))
+      .set('take', String(take));
+
+    return this.http.get<ExploreSearchResponse>('/api/explore/search', { params });
+  }
+
   getSections$(): Observable<ExploreSection[]> {
     return of(this.sections()).pipe(delay(0));
   }
@@ -464,6 +518,7 @@ export class ExploreService {
 
   private applyResponse(res: ExploreApiResponse): void {
     this._sections.set(this.normalizeSections(res));
+    this._selectedDestination.set(res.selectedDestination ?? null);
 
     if (res.selectedDestination) {
       this._nearbyStatus.set({
@@ -638,6 +693,7 @@ export class ExploreService {
 
   private clearFeed(): void {
     this._sections.set([]);
+    this._selectedDestination.set(null);
   }
 
   private defaultDetailRoute(entityType: string, id: number): string {

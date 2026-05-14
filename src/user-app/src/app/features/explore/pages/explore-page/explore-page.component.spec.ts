@@ -2,6 +2,7 @@ import { ApplicationRef, computed, signal, type WritableSignal } from '@angular/
 import { Location } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
+import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DestinationService } from '../../../../core/services/destination.service';
@@ -38,6 +39,7 @@ describe('ExplorePageComponent dynamic sections', () => {
           provide: ExploreService,
           useValue: {
             sections: computed(() => sections()),
+            selectedDestination: computed(() => null),
             loadError: computed(() => null),
             loading: computed(() => exploreLoading()),
             loaded: computed(() => exploreLoaded()),
@@ -48,6 +50,16 @@ describe('ExplorePageComponent dynamic sections', () => {
             })),
             useCurrentLocation: vi.fn(),
             toggleSaved: vi.fn(),
+            searchCurrentDestination: vi.fn(() => of({
+              destinationId: 1,
+              query: '',
+              items: [],
+              totalCount: 0,
+              skip: 0,
+              take: 20,
+              nextSkip: 0,
+              hasMore: false,
+            })),
           },
         },
         {

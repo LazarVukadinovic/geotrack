@@ -23,7 +23,10 @@ public static class SeedData
         bool ForPlace = false,
         bool ForEvent = false,
         string Description = "",
-        string[]? AllowedPlaceTypes = null);
+        string[]? AllowedPlaceTypes = null,
+        bool IsFilterable = false,
+        string? FilterLabel = null,
+        int FilterOrder = 0);
 
     private sealed record SeedTagDefinition(
         string Name,
@@ -66,6 +69,7 @@ public static class SeedData
             var tagLookup1 = await EnsureSmartTagTaxonomyAsync(db);
             await EnsureExploreDemoPlaceTagsAsync(db, tagLookup1);
             await EnsureAdditionalExploreDemoDataAsync(db, tagLookup1);
+            await EnsureSerbiaDemoDataAsync(db, tagLookup1);
             await EnsureCoreEntityImagesAsync(db);
             await EnsureDefaultModerationTermsAsync(db);
             return;
@@ -877,6 +881,7 @@ public static class SeedData
         await db.SaveChangesAsync();
 
         await EnsureAdditionalExploreDemoDataAsync(db, tagLookup);
+        await EnsureSerbiaDemoDataAsync(db, tagLookup);
         await EnsureDefaultModerationTermsAsync(db);
     }
 
@@ -1067,6 +1072,9 @@ public static class SeedData
                     ForLocation = definition.ForLocation,
                     ForPlace = definition.ForPlace,
                     ForEvent = definition.ForEvent,
+                    IsFilterable = definition.IsFilterable,
+                    FilterLabel = definition.FilterLabel,
+                    FilterOrder = definition.FilterOrder,
                     CreatedAt = now
                 };
 
@@ -1081,6 +1089,9 @@ public static class SeedData
                 tagType.ForLocation = definition.ForLocation;
                 tagType.ForPlace = definition.ForPlace;
                 tagType.ForEvent = definition.ForEvent;
+                tagType.IsFilterable = definition.IsFilterable;
+                tagType.FilterLabel = definition.FilterLabel;
+                tagType.FilterOrder = definition.FilterOrder;
                 tagType.UpdatedAt = now;
             }
         }
@@ -1167,17 +1178,17 @@ public static class SeedData
 
     private static List<SeedTagTypeDefinition> BuildSeedTagTypes() =>
     [
-        new("Destination Theme", "destination-theme", ForDestination: true, Description: "High-level destination positioning."),
-        new("Location Character", "location-character", ForLocation: true, Description: "Area-level character and context."),
+        new("Destination Theme", "destination-theme", ForDestination: true, Description: "High-level destination positioning.", IsFilterable: true, FilterLabel: "Destination themes", FilterOrder: 10),
+        new("Location Character", "location-character", ForLocation: true, Description: "Area-level character and context.", IsFilterable: true, FilterLabel: "Area character", FilterOrder: 20),
 
-        new("Cuisine", "cuisine", ForPlace: true, Description: "Food cuisine tags for restaurants and cafes.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"]),
-        new("Dining Style", "dining-style", ForPlace: true, Description: "Dining style and service level.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"]),
-        new("Stay Style", "stay-style", ForPlace: true, Description: "Accommodation style and positioning.", AllowedPlaceTypes: ["Stay"]),
+        new("Cuisine", "cuisine", ForPlace: true, Description: "Food cuisine tags for restaurants and cafes.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"], IsFilterable: true, FilterLabel: "Cuisine", FilterOrder: 30),
+        new("Dining Style", "dining-style", ForPlace: true, Description: "Dining style and service level.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"], IsFilterable: true, FilterLabel: "Dining style", FilterOrder: 40),
+        new("Stay Style", "stay-style", ForPlace: true, Description: "Accommodation style and positioning.", AllowedPlaceTypes: ["Stay"], IsFilterable: true, FilterLabel: "Stay style", FilterOrder: 50),
 
-        new("Activity", "activity", ForPlace: true, Description: "Activity tags that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery"]),
-        new("Explore Topic", "explore-topic", ForPlace: true, Description: "Broad place topics that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery", "Attraction"]),
-        new("Setting", "setting", ForPlace: true, Description: "Physical setting or atmosphere.", AllowedPlaceTypes: ["Beach", "Restaurant", "Cafe", "Bar", "Landmark", "Nature", "Stay", "Activity", "Museum", "Gallery"]),
-        new("Price Level", "price-level", ForPlace: true, Description: "Simple price positioning.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar", "Stay"]),
+        new("Activity", "activity", ForPlace: true, Description: "Activity tags that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery"], IsFilterable: true, FilterLabel: "Activities", FilterOrder: 60),
+        new("Explore Topic", "explore-topic", ForPlace: true, Description: "Broad place topics that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery", "Attraction"], IsFilterable: true, FilterLabel: "Explore topics", FilterOrder: 70),
+        new("Setting", "setting", ForPlace: true, Description: "Physical setting or atmosphere.", AllowedPlaceTypes: ["Beach", "Restaurant", "Cafe", "Bar", "Landmark", "Nature", "Stay", "Activity", "Museum", "Gallery"], IsFilterable: true, FilterLabel: "Setting", FilterOrder: 80),
+        new("Price Level", "price-level", ForPlace: true, Description: "Simple price positioning.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar", "Stay"], IsFilterable: true, FilterLabel: "Price level", FilterOrder: 90),
 
         new("Event Category", "event-category", ForEvent: true, Description: "Event category and format."),
         new("Event Access", "event-access", ForEvent: true, Description: "Ticketing and access model.")
@@ -1189,6 +1200,13 @@ public static class SeedData
         new("Heritage City", "heritage-city", "destination-theme", ForDestination: true),
         new("Walkable City", "walkable-city", "destination-theme", ForDestination: true),
         new("Summer Destination", "summer-destination", "destination-theme", ForDestination: true),
+        new("Capital City", "capital-city", "destination-theme", ForDestination: true),
+        new("River City", "river-city", "destination-theme", ForDestination: true),
+        new("Urban Culture", "urban-culture", "destination-theme", ForDestination: true),
+        new("Mountain Destination", "mountain-destination", "destination-theme", ForDestination: true),
+        new("National Park", "national-park", "destination-theme", ForDestination: true),
+        new("Winter Destination", "winter-destination", "destination-theme", ForDestination: true),
+        new("Spa Destination", "spa-destination", "destination-theme", ForDestination: true),
 
         new("Old Town Core", "old-town-core", "location-character", ForLocation: true),
         new("Beach District", "beach-district", "location-character", ForLocation: true),
@@ -1291,6 +1309,636 @@ public static class SeedData
         new("Ticketed Event", "ticketed-event", "event-access", ForEvent: true)
     ];
 
+
+
+    private static async Task EnsureSerbiaDemoDataAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)
+    {
+        var now = DateTime.UtcNow;
+
+        async Task<Territory> EnsureTerritoryAsync(string name)
+        {
+            var territory = await db.Territories.FirstOrDefaultAsync(x => x.Name == name);
+            if (territory is not null)
+            {
+                return territory;
+            }
+
+            territory = new Territory
+            {
+                Name = name,
+                CreatedAt = now
+            };
+
+            db.Territories.Add(territory);
+            await db.SaveChangesAsync();
+            return territory;
+        }
+
+        async Task<Region> EnsureRegionAsync(string name, Territory territory)
+        {
+            var region = await db.Regions.FirstOrDefaultAsync(x => x.Name == name && x.TerritoryId == territory.Id);
+            if (region is not null)
+            {
+                return region;
+            }
+
+            region = new Region
+            {
+                Name = name,
+                TerritoryId = territory.Id,
+                CreatedAt = now
+            };
+
+            db.Regions.Add(region);
+            await db.SaveChangesAsync();
+            return region;
+        }
+
+        async Task<DestinationType> EnsureDestinationTypeAsync(string name, string description)
+        {
+            var destinationType = await db.DestinationTypes.FirstOrDefaultAsync(x => x.Name == name);
+            if (destinationType is not null)
+            {
+                return destinationType;
+            }
+
+            destinationType = new DestinationType
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.DestinationTypes.Add(destinationType);
+            await db.SaveChangesAsync();
+            return destinationType;
+        }
+
+        async Task<LocationType> EnsureLocationTypeAsync(string name, string description)
+        {
+            var locationType = await db.LocationTypes.FirstOrDefaultAsync(x => x.Name == name);
+            if (locationType is not null)
+            {
+                return locationType;
+            }
+
+            locationType = new LocationType
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.LocationTypes.Add(locationType);
+            await db.SaveChangesAsync();
+            return locationType;
+        }
+
+        async Task<PlaceType> EnsurePlaceTypeAsync(string name, string description)
+        {
+            var placeType = await db.PlaceTypes.FirstOrDefaultAsync(x => x.Name == name);
+            if (placeType is not null)
+            {
+                return placeType;
+            }
+
+            placeType = new PlaceType
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.PlaceTypes.Add(placeType);
+            await db.SaveChangesAsync();
+            return placeType;
+        }
+
+        async Task<StayType> EnsureStayTypeAsync(string name, string slug, string description)
+        {
+            var stayType = await db.StayTypes.FirstOrDefaultAsync(x => x.Slug == slug);
+            if (stayType is not null)
+            {
+                return stayType;
+            }
+
+            stayType = new StayType
+            {
+                Name = name,
+                Slug = slug,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.StayTypes.Add(stayType);
+            await db.SaveChangesAsync();
+            return stayType;
+        }
+
+        async Task<EventType> EnsureEventTypeAsync(string name, string description)
+        {
+            var eventType = await db.EventTypes.FirstOrDefaultAsync(x => x.Name == name);
+            if (eventType is not null)
+            {
+                return eventType;
+            }
+
+            eventType = new EventType
+            {
+                Name = name,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.EventTypes.Add(eventType);
+            await db.SaveChangesAsync();
+            return eventType;
+        }
+
+        async Task<StayAmenity> EnsureStayAmenityAsync(string name, string slug, string iconKey, string description)
+        {
+            var amenity = await db.StayAmenities.FirstOrDefaultAsync(x => x.Slug == slug);
+            if (amenity is not null)
+            {
+                return amenity;
+            }
+
+            amenity = new StayAmenity
+            {
+                Name = name,
+                Slug = slug,
+                IconKey = iconKey,
+                Description = description,
+                CreatedAt = now
+            };
+
+            db.StayAmenities.Add(amenity);
+            await db.SaveChangesAsync();
+            return amenity;
+        }
+
+        async Task<Destination> EnsureDestinationAsync(
+            string name,
+            string description,
+            DestinationType destinationType,
+            Region region,
+            double latitude,
+            double longitude)
+        {
+            var destination = await db.Destinations.FirstOrDefaultAsync(x => x.Name == name);
+            if (destination is not null)
+            {
+                return destination;
+            }
+
+            destination = new Destination
+            {
+                Name = name,
+                Description = description,
+                DestinationTypeId = destinationType.Id,
+                RegionId = region.Id,
+                Latitude = latitude,
+                Longitude = longitude,
+                CreatedAt = now
+            };
+
+            db.Destinations.Add(destination);
+            await db.SaveChangesAsync();
+            return destination;
+        }
+
+        async Task<Location> EnsureLocationAsync(Destination destination, string name, LocationType locationType, double latitude, double longitude)
+        {
+            var location = await db.Locations.FirstOrDefaultAsync(x => x.DestinationId == destination.Id && x.Name == name);
+            if (location is not null)
+            {
+                return location;
+            }
+
+            location = new Location
+            {
+                Name = name,
+                DestinationId = destination.Id,
+                LocationTypeId = locationType.Id,
+                Latitude = latitude,
+                Longitude = longitude,
+                CreatedAt = now
+            };
+
+            db.Locations.Add(location);
+            await db.SaveChangesAsync();
+            return location;
+        }
+
+        async Task<Place> EnsurePlaceAsync(
+            string name,
+            string subtitle,
+            string address,
+            PlaceType placeType,
+            Location location,
+            string description,
+            double latitude,
+            double longitude,
+            string openingHours,
+            double rating,
+            int reviewCount,
+            string? contactEmail = null,
+            string? number = null)
+        {
+            var place = await db.Places.FirstOrDefaultAsync(x => x.Name == name);
+            if (place is not null)
+            {
+                return place;
+            }
+
+            place = new Place
+            {
+                Name = name,
+                Subtitle = subtitle,
+                Address = address,
+                PlaceTypeId = placeType.Id,
+                LocationId = location.Id,
+                Description = description,
+                Latitude = latitude,
+                Longitude = longitude,
+                OpeningHours = openingHours,
+                AverageRating = rating,
+                ReviewCount = reviewCount,
+                ContactEmail = contactEmail,
+                Number = number,
+                CreatedAt = now
+            };
+
+            db.Places.Add(place);
+            await db.SaveChangesAsync();
+            return place;
+        }
+
+        async Task EnsureRestaurantAsync(Place place)
+        {
+            if (await db.Restaurants.AnyAsync(x => x.PlaceId == place.Id))
+            {
+                return;
+            }
+
+            db.Restaurants.Add(new Restaurant { PlaceId = place.Id });
+            await db.SaveChangesAsync();
+        }
+
+        async Task<Stay> EnsureStayAsync(Place place, StayType stayType, decimal pricePerNight, string checkIn, string checkOut)
+        {
+            var stay = await db.Stays.FirstOrDefaultAsync(x => x.PlaceId == place.Id);
+            if (stay is not null)
+            {
+                return stay;
+            }
+
+            stay = new Stay
+            {
+                PlaceId = place.Id,
+                StayTypeId = stayType.Id,
+                PricePerNight = pricePerNight,
+                CheckInTime = checkIn,
+                CheckOutTime = checkOut
+            };
+
+            db.Stays.Add(stay);
+            await db.SaveChangesAsync();
+            return stay;
+        }
+
+        async Task<Event> EnsureEventAsync(
+            string name,
+            EventType eventType,
+            Destination destination,
+            Location location,
+            string description,
+            DateTime startDate,
+            DateTime endDate,
+            string ticketPrice,
+            string duration,
+            string hostedBy,
+            Place? place = null)
+        {
+            var eventEntity = await db.Events.FirstOrDefaultAsync(x => x.Name == name);
+            if (eventEntity is not null)
+            {
+                return eventEntity;
+            }
+
+            eventEntity = new Event
+            {
+                Name = name,
+                EventTypeId = eventType.Id,
+                DestinationId = destination.Id,
+                LocationId = location.Id,
+                PlaceId = place?.Id,
+                Description = description,
+                StartDate = startDate,
+                EndDate = endDate,
+                TicketPrice = ticketPrice,
+                Duration = duration,
+                HostedBy = hostedBy,
+                VenueDescription = place is null ? location.Name : place.Name,
+                ArrivalTips = "Use public transport where possible and check local schedules before visiting.",
+                Accessibility = "Check official venue information before attending.",
+                CreatedAt = now
+            };
+
+            db.Events.Add(eventEntity);
+            await db.SaveChangesAsync();
+            return eventEntity;
+        }
+
+        async Task AddDestinationTagsIfMissingAsync(Destination destination, params string[] tagSlugs)
+        {
+            foreach (var tagSlug in tagSlugs)
+            {
+                if (!tagLookup.TryGetValue(tagSlug, out var tag))
+                {
+                    continue;
+                }
+
+                var exists = await db.DestinationTags.AnyAsync(x => x.DestinationId == destination.Id && x.TagId == tag.Id);
+                if (exists)
+                {
+                    continue;
+                }
+
+                db.DestinationTags.Add(new DestinationTag { DestinationId = destination.Id, TagId = tag.Id });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task AddLocationTagsIfMissingAsync(Location location, params string[] tagSlugs)
+        {
+            foreach (var tagSlug in tagSlugs)
+            {
+                if (!tagLookup.TryGetValue(tagSlug, out var tag))
+                {
+                    continue;
+                }
+
+                var exists = await db.LocationTags.AnyAsync(x => x.LocationId == location.Id && x.TagId == tag.Id);
+                if (exists)
+                {
+                    continue;
+                }
+
+                db.LocationTags.Add(new LocationTag { LocationId = location.Id, TagId = tag.Id });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task AddPlaceTagsIfMissingAsync(Place place, params string[] tagSlugs)
+        {
+            foreach (var tagSlug in tagSlugs)
+            {
+                if (!tagLookup.TryGetValue(tagSlug, out var tag))
+                {
+                    continue;
+                }
+
+                var exists = await db.PlaceTags.AnyAsync(x => x.PlaceId == place.Id && x.TagId == tag.Id);
+                if (exists)
+                {
+                    continue;
+                }
+
+                db.PlaceTags.Add(new PlaceTag { PlaceId = place.Id, TagId = tag.Id });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task AddEventTagsIfMissingAsync(Event eventEntity, params string[] tagSlugs)
+        {
+            foreach (var tagSlug in tagSlugs)
+            {
+                if (!tagLookup.TryGetValue(tagSlug, out var tag))
+                {
+                    continue;
+                }
+
+                var exists = await db.EventTags.AnyAsync(x => x.EventId == eventEntity.Id && x.TagId == tag.Id);
+                if (exists)
+                {
+                    continue;
+                }
+
+                db.EventTags.Add(new EventTag { EventId = eventEntity.Id, TagId = tag.Id });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task AddStayAmenitiesIfMissingAsync(Stay stay, params StayAmenity[] amenities)
+        {
+            foreach (var amenity in amenities)
+            {
+                var exists = await db.StayStayAmenities.AnyAsync(x =>
+                    x.StayPlaceId == stay.PlaceId &&
+                    x.StayAmenityId == amenity.Id);
+
+                if (exists)
+                {
+                    continue;
+                }
+
+                db.StayStayAmenities.Add(new StayStayAmenity
+                {
+                    StayPlaceId = stay.PlaceId,
+                    StayAmenityId = amenity.Id
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task AddEntityImagesIfMissingAsync(EntityImageTargetType targetType, string title, int? destinationId = null, int? placeId = null, int? eventId = null, params string[] urls)
+        {
+            var exists = await db.EntityImages.AnyAsync(x =>
+                x.TargetType == targetType &&
+                ((destinationId != null && x.DestinationId == destinationId) ||
+                 (placeId != null && x.PlaceId == placeId) ||
+                 (eventId != null && x.EventId == eventId)));
+
+            if (exists)
+            {
+                return;
+            }
+
+            for (var i = 0; i < urls.Length; i++)
+            {
+                db.EntityImages.Add(new EntityImage
+                {
+                    TargetType = targetType,
+                    DestinationId = destinationId,
+                    PlaceId = placeId,
+                    EventId = eventId,
+                    Url = urls[i],
+                    Caption = title,
+                    AltText = title,
+                    IsMain = i == 0,
+                    SortOrder = i,
+                    CreatedAt = now
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        var serbia = await EnsureTerritoryAsync("Serbia");
+        var centralSerbia = await EnsureRegionAsync("Central Serbia", serbia);
+        var vojvodina = await EnsureRegionAsync("Vojvodina", serbia);
+        var westernSerbia = await EnsureRegionAsync("Western Serbia", serbia);
+        var cityType = await EnsureDestinationTypeAsync("City", "Urban destination");
+        var mountainType = await EnsureDestinationTypeAsync("Mountain", "Mountain and outdoor destination");
+        var nationalParkType = await EnsureDestinationTypeAsync("National Park", "Protected nature destination");
+
+        var neighborhoodType = await EnsureLocationTypeAsync("Neighborhood", "City neighborhood");
+        var districtType = await EnsureLocationTypeAsync("District", "City district");
+        var parkType = await EnsureLocationTypeAsync("Park Area", "Park or green urban area");
+        var waterfrontType = await EnsureLocationTypeAsync("Waterfront Area", "River, lake or waterfront area");
+        var mountainAreaType = await EnsureLocationTypeAsync("Mountain Area", "Mountain or outdoor area");
+
+        var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments");
+        var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops");
+        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
+        var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
+        var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
+        var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation");
+        var ptActivity = await EnsurePlaceTypeAsync("Activity", "Activity providers, tours and outdoor experiences");
+        var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
+        var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
+        var ptBeach = await EnsurePlaceTypeAsync("Beach", "Beaches and swimming areas");
+
+        // New place types may not have existed when the taxonomy was first ensured,
+        // so run the taxonomy sync once more to attach allowed TagType <-> PlaceType links.
+        await EnsureSmartTagTaxonomyAsync(db);
+
+        var hotelStayType = await EnsureStayTypeAsync("Hotel", "hotel", "Hotel accommodation");
+        var apartmentStayType = await EnsureStayTypeAsync("Apartment", "apartment", "Private apartment accommodation");
+        var guesthouseStayType = await EnsureStayTypeAsync("Guesthouse", "guesthouse", "Guesthouse accommodation");
+        var wifi = await EnsureStayAmenityAsync("Free WiFi", "free-wifi", "wifi", "Wireless internet access");
+        var breakfast = await EnsureStayAmenityAsync("Breakfast Included", "breakfast-included", "breakfast", "Breakfast included in the stay");
+        var parking = await EnsureStayAmenityAsync("Parking", "parking", "parking", "Parking available");
+        var spa = await EnsureStayAmenityAsync("Spa", "spa", "spa", "Spa and wellness facilities");
+        var airConditioning = await EnsureStayAmenityAsync("Air Conditioning", "air-conditioning", "ac", "Air-conditioned rooms");
+
+        var festivalType = await EnsureEventTypeAsync("Festival", "Music and cultural festivals");
+        var outdoorType = await EnsureEventTypeAsync("Outdoor", "Outdoor activities");
+        var marketType = await EnsureEventTypeAsync("Market", "Food and craft markets");
+
+        var beograd = await EnsureDestinationAsync(
+            "Beograd",
+            "Serbia's capital with riverfront walks, historic fortresses, nightlife, museums and layered urban neighborhoods.",
+            cityType,
+            centralSerbia,
+            44.8125,
+            20.4612);
+        await AddDestinationTagsIfMissingAsync(beograd, "capital-city", "river-city", "urban-culture", "heritage-city", "walkable-city");
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Destination, "Beograd", destinationId: beograd.Id, urls: new[] { Unsplash("1546776310-eef45dd6d63c") });
+
+        var stariGrad = await EnsureLocationAsync(beograd, "Stari Grad", neighborhoodType, 44.8176, 20.4571);
+        var dorcol = await EnsureLocationAsync(beograd, "Dorcol", neighborhoodType, 44.8230, 20.4599);
+        var savamala = await EnsureLocationAsync(beograd, "Savamala", districtType, 44.8113, 20.4504);
+        var ada = await EnsureLocationAsync(beograd, "Ada Ciganlija", waterfrontType, 44.7850, 20.3958);
+        await AddLocationTagsIfMissingAsync(stariGrad, "old-town-core", "walkable-area", "local-area");
+        await AddLocationTagsIfMissingAsync(dorcol, "local-area", "walkable-area", "casual");
+        await AddLocationTagsIfMissingAsync(savamala, "waterfront-area", "local-area", "art");
+        await AddLocationTagsIfMissingAsync(ada, "waterfront-area", "family-friendly", "nature");
+
+        var kalemegdan = await EnsurePlaceAsync("Kalemegdan Fortress", "Historic fortress and park above the rivers", "Kalemegdan, Beograd", ptLandmark, stariGrad, "A large fortress park where the Sava and Danube meet, with viewpoints, museums and long walking paths.", 44.8231, 20.4502, "Open 24h", 4.8, 1240);
+        var skadarlija = await EnsurePlaceAsync("Skadarlija Restaurant Street", "Traditional restaurants and old-town atmosphere", "Skadarlija, Beograd", ptRestaurant, stariGrad, "A cobbled dining street known for traditional restaurants, music and evening walks.", 44.8175, 20.4643, "11:00 - 00:00", 4.6, 720);
+        var kafeterija = await EnsurePlaceAsync("Kafeterija Dorcol", "Specialty coffee in a local neighborhood", "Dorcol, Beograd", ptCafe, dorcol, "A casual coffee stop for specialty coffee, remote work breaks and neighborhood walks.", 44.8217, 20.4620, "08:00 - 22:00", 4.5, 280);
+        var adaLake = await EnsurePlaceAsync("Ada Ciganlija Lake", "Urban lake, beach and recreation area", "Ada Ciganlija, Beograd", ptBeach, ada, "A large urban recreation area with beaches, cycling paths, cafes and summer swimming spots.", 44.7854, 20.3971, "Open 24h", 4.7, 950);
+        var hotelMoskva = await EnsurePlaceAsync("Hotel Moskva", "Historic city hotel near Terazije", "Terazije 20, Beograd", ptStay, stariGrad, "A historic hotel and cafe in the city center, useful for visitors who want a classic central stay.", 44.8134, 20.4615, "Open 24h", 4.6, 610);
+        var hotelMoskvaStay = await EnsureStayAsync(hotelMoskva, hotelStayType, 135m, "14:00", "11:00");
+        await EnsureRestaurantAsync(skadarlija);
+        await EnsureRestaurantAsync(kafeterija);
+        await AddStayAmenitiesIfMissingAsync(hotelMoskvaStay, wifi, breakfast, airConditioning);
+        await AddPlaceTagsIfMissingAsync(kalemegdan, "history", "culture", "fortress", "panoramic-view", "walking-route");
+        await AddPlaceTagsIfMissingAsync(skadarlija, "traditional", "local-favorite", "casual", "dining-style", "walking-route");
+        await AddPlaceTagsIfMissingAsync(kafeterija, "specialty-coffee", "casual", "budget", "local-favorite");
+        await AddPlaceTagsIfMissingAsync(adaLake, "waterfront", "swimming", "family-friendly", "nature", "walking-route");
+        await AddPlaceTagsIfMissingAsync(hotelMoskva, "boutique-stay", "old-town-nearby", "premium", "history");
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kalemegdan.Name, placeId: kalemegdan.Id, urls: new[] { Unsplash("1558005530-a7958896ec60") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, adaLake.Name, placeId: adaLake.Id, urls: new[] { Unsplash("1500530855697-b586d89ba3ee") });
+
+        var noviSad = await EnsureDestinationAsync("Novi Sad", "Danube-side city known for Petrovaradin Fortress, relaxed streets, cafes and festival culture.", cityType, vojvodina, 45.2671, 19.8335);
+        await AddDestinationTagsIfMissingAsync(noviSad, "river-city", "urban-culture", "walkable-city", "heritage-city");
+        var nsCenter = await EnsureLocationAsync(noviSad, "Novi Sad Center", neighborhoodType, 45.2551, 19.8452);
+        var petrovaradin = await EnsureLocationAsync(noviSad, "Petrovaradin", districtType, 45.2528, 19.8625);
+        await AddLocationTagsIfMissingAsync(nsCenter, "walkable-area", "local-area", "casual");
+        await AddLocationTagsIfMissingAsync(petrovaradin, "panoramic-view", "history", "fortress");
+        var fortress = await EnsurePlaceAsync("Petrovaradin Fortress", "Fortress above the Danube", "Petrovaradin, Novi Sad", ptLandmark, petrovaradin, "Historic fortress with river views, galleries, tunnels and festival grounds.", 45.2528, 19.8625, "Open 24h", 4.8, 840);
+        var strand = await EnsurePlaceAsync("Strand Beach", "Urban beach on the Danube", "Strand, Novi Sad", ptBeach, nsCenter, "A popular city beach and summer recreation area on the Danube.", 45.2399, 19.8379, "08:00 - 23:00", 4.5, 320);
+        var fishZelenish = await EnsurePlaceAsync("Fish & Zelenish", "Modern local restaurant", "Novi Sad Center", ptRestaurant, nsCenter, "A central restaurant with local produce, fish, vegetables and relaxed service.", 45.2561, 19.8455, "12:00 - 23:00", 4.7, 230);
+        await EnsureRestaurantAsync(fishZelenish);
+        await AddPlaceTagsIfMissingAsync(fortress, "history", "culture", "fortress", "panoramic-view", "walking-route");
+        await AddPlaceTagsIfMissingAsync(strand, "waterfront", "swimming", "family-friendly", "summer-destination");
+        await AddPlaceTagsIfMissingAsync(fishZelenish, "local-favorite", "casual", "traditional", "vegetarian-friendly");
+
+        var kragujevac = await EnsureDestinationAsync("Kragujevac", "Central Serbian city with parks, memorial sites, student life and industrial heritage.", cityType, centralSerbia, 44.0128, 20.9114);
+        await AddDestinationTagsIfMissingAsync(kragujevac, "urban-culture", "heritage-city", "walkable-city");
+        var kgCenter = await EnsureLocationAsync(kragujevac, "Kragujevac Center", neighborhoodType, 44.0128, 20.9114);
+        var sumarice = await EnsureLocationAsync(kragujevac, "Sumarice", parkType, 44.0227, 20.8703);
+        await AddLocationTagsIfMissingAsync(kgCenter, "walkable-area", "local-area");
+        await AddLocationTagsIfMissingAsync(sumarice, "nature", "history", "quiet-area");
+        var sumaricePark = await EnsurePlaceAsync("Sumarice Memorial Park", "Large memorial park and museum area", "Sumarice, Kragujevac", ptNature, sumarice, "A large green memorial landscape with walking paths, monuments and museum context.", 44.0227, 20.8703, "Open 24h", 4.8, 410);
+        var knezevArsenal = await EnsurePlaceAsync("Knezev Arsenal", "Industrial heritage and culture district", "Kragujevac Center", ptLandmark, kgCenter, "Historic industrial complex now associated with culture, events and local heritage.", 44.0112, 20.9158, "10:00 - 18:00", 4.4, 120);
+        await AddPlaceTagsIfMissingAsync(sumaricePark, "nature", "history", "walking-route", "quiet-area");
+        await AddPlaceTagsIfMissingAsync(knezevArsenal, "history", "culture", "local-favorite");
+
+        var zlatibor = await EnsureDestinationAsync("Zlatibor", "Mountain destination with viewpoints, lakes, pine landscapes, family stays and outdoor activities.", mountainType, westernSerbia, 43.7297, 19.7003);
+        await AddDestinationTagsIfMissingAsync(zlatibor, "mountain-destination", "family-friendly", "nature", "walkable-city");
+        var zlatiborCenter = await EnsureLocationAsync(zlatibor, "Zlatibor Center", districtType, 43.7297, 19.7003);
+        var tornik = await EnsureLocationAsync(zlatibor, "Tornik", mountainAreaType, 43.6862, 19.6545);
+        await AddLocationTagsIfMissingAsync(zlatiborCenter, "family-friendly", "relaxed-area", "local-area");
+        await AddLocationTagsIfMissingAsync(tornik, "panoramic-view", "hiking", "nature");
+        var goldGondola = await EnsurePlaceAsync("Gold Gondola Zlatibor", "Long panoramic gondola ride", "Zlatibor Center", ptActivity, zlatiborCenter, "Panoramic gondola route toward Tornik with mountain and lake views.", 43.7304, 19.6971, "09:00 - 17:00", 4.7, 500);
+        var tornikViewpoint = await EnsurePlaceAsync("Tornik Viewpoint", "Mountain viewpoint and outdoor area", "Tornik, Zlatibor", ptNature, tornik, "High viewpoint area for mountain scenery, hiking and seasonal outdoor activities.", 43.6862, 19.6545, "Open 24h", 4.7, 260);
+        var zlatiborLodge = await EnsurePlaceAsync("Zlatibor Mountain Lodge", "Cozy mountain stay", "Zlatibor Center", ptStay, zlatiborCenter, "A simple mountain stay near the center for weekend trips and family visits.", 43.7289, 19.7008, "Open 24h", 4.4, 96);
+        var zlatiborStay = await EnsureStayAsync(zlatiborLodge, guesthouseStayType, 72m, "14:00", "10:00");
+        await AddStayAmenitiesIfMissingAsync(zlatiborStay, wifi, parking, breakfast);
+        await AddPlaceTagsIfMissingAsync(goldGondola, "cable-car", "panoramic-view", "family-friendly", "nature");
+        await AddPlaceTagsIfMissingAsync(tornikViewpoint, "hiking", "panoramic-view", "nature", "walking-route");
+        await AddPlaceTagsIfMissingAsync(zlatiborLodge, "family-stay", "budget", "nature", "mountain-destination");
+
+        var kopaonik = await EnsureDestinationAsync("Kopaonik", "Mountain and ski destination with trails, viewpoints, hotels and winter activities.", mountainType, centralSerbia, 43.2856, 20.8095);
+        await AddDestinationTagsIfMissingAsync(kopaonik, "mountain-destination", "winter-destination", "nature");
+        var skiCenter = await EnsureLocationAsync(kopaonik, "Kopaonik Ski Center", mountainAreaType, 43.2856, 20.8095);
+        var pancic = await EnsureLocationAsync(kopaonik, "Pancic Peak", mountainAreaType, 43.2670, 20.8229);
+        await AddLocationTagsIfMissingAsync(skiCenter, "family-friendly", "local-area", "nature");
+        await AddLocationTagsIfMissingAsync(pancic, "panoramic-view", "hiking", "nature");
+        var skiCenterPlace = await EnsurePlaceAsync("Kopaonik Ski Center", "Main ski and outdoor activity area", "Kopaonik", ptActivity, skiCenter, "Main mountain activity area for skiing, walking, viewpoints and seasonal outdoor activities.", 43.2856, 20.8095, "08:00 - 17:00", 4.7, 640);
+        var hotelGrand = await EnsurePlaceAsync("Hotel Grand Kopaonik", "Central mountain hotel", "Kopaonik Center", ptStay, skiCenter, "Central mountain hotel near the ski area and resort services.", 43.2858, 20.8101, "Open 24h", 4.6, 420);
+        var grandStay = await EnsureStayAsync(hotelGrand, hotelStayType, 180m, "15:00", "11:00");
+        await AddStayAmenitiesIfMissingAsync(grandStay, wifi, breakfast, parking, spa, airConditioning);
+        await AddPlaceTagsIfMissingAsync(skiCenterPlace, "hiking", "panoramic-view", "family-friendly", "winter-destination");
+        await AddPlaceTagsIfMissingAsync(hotelGrand, "luxury-stay", "premium", "wellness", "winter-destination");
+
+        var tara = await EnsureDestinationAsync("Tara", "National park destination with viewpoints, lakes, forest roads and quiet nature stays.", nationalParkType, westernSerbia, 43.9450, 19.4340);
+        await AddDestinationTagsIfMissingAsync(tara, "national-park", "mountain-destination", "nature", "family-friendly");
+        var mitrovac = await EnsureLocationAsync(tara, "Mitrovac", mountainAreaType, 43.9312, 19.4306);
+        var zaovine = await EnsureLocationAsync(tara, "Zaovine", waterfrontType, 43.8768, 19.3956);
+        await AddLocationTagsIfMissingAsync(mitrovac, "nature", "quiet-area", "family-friendly");
+        await AddLocationTagsIfMissingAsync(zaovine, "waterfront", "nature", "panoramic-view");
+        var banjskaStena = await EnsurePlaceAsync("Banjska Stena Viewpoint", "Iconic Tara viewpoint", "Tara National Park", ptNature, mitrovac, "A well-known viewpoint above the Drina canyon and one of Tara's classic short hikes.", 43.9534, 19.3909, "Open 24h", 4.9, 510);
+        var zaovineLake = await EnsurePlaceAsync("Zaovine Lake", "Mountain lake and quiet nature area", "Zaovine, Tara", ptNature, zaovine, "A quiet lake area for scenic drives, short walks and nature-focused stays.", 43.8768, 19.3956, "Open 24h", 4.8, 330);
+        await AddPlaceTagsIfMissingAsync(banjskaStena, "panoramic-view", "hiking", "nature", "walking-route");
+        await AddPlaceTagsIfMissingAsync(zaovineLake, "waterfront", "quiet-area", "nature", "family-friendly");
+
+        var belgradeSummer = await EnsureEventAsync("Belgrade Summer Nights", festivalType, beograd, savamala, "Open-air summer program with music, food and riverfront evening walks.", now.Date.AddDays(14).AddHours(19), now.Date.AddDays(14).AddHours(23), "Free", "4h", "City cultural venues");
+        var taraNatureWalk = await EnsureEventAsync("Tara Nature Walk", outdoorType, tara, mitrovac, "Guided forest walk for viewpoints and nature stories inside the national park.", now.Date.AddDays(21).AddHours(10), now.Date.AddDays(21).AddHours(13), "1200 RSD", "3h", "Tara local guides", banjskaStena);
+        var noviSadMarket = await EnsureEventAsync("Novi Sad Local Food Market", marketType, noviSad, nsCenter, "Weekend food and craft market with local producers and casual tastings.", now.Date.AddDays(10).AddHours(9), now.Date.AddDays(10).AddHours(15), "Free", "6h", "Novi Sad tourism board", fishZelenish);
+        await AddEventTagsIfMissingAsync(belgradeSummer, "summer-event", "live-music-event", "local-event", "free-entry-event");
+        await AddEventTagsIfMissingAsync(taraNatureWalk, "nature-walk-event", "guided-event", "outdoor-tour-event");
+        await AddEventTagsIfMissingAsync(noviSadMarket, "food-market-event", "local-event", "free-entry-event");
+    }
 
     private static async Task EnsureAdditionalExploreDemoDataAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)
     {

@@ -1,21 +1,26 @@
 import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
-import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
+import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import { ExploreScrollStateService } from '../../services/explore-scroll-state.service';
 import { AppHeaderComponent } from '../../../../shared/components/app-header/app-header.component';
 import { SearchBarComponent } from '../../../../shared/components/search-bar/search-bar.component';
 import { WelcomeHeroComponent } from '../../components/welcome-hero/welcome-hero.component';
 import { PromoCardComponent } from '../../components/promo-card/promo-card.component';
 import { ExploreSectionComponent, type ExploreSectionItemEvent, type ExploreSectionSaveEvent } from '../../components/explore-section/explore-section.component';
-import { ExploreService } from '../../services/explore.service';
+import { ExploreService, type ExploreSearchResultItem } from '../../services/explore.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { AppNotificationsService } from '../../../../core/services/app-notifications.service';
-import { SearchPageComponent } from '../../../search/pages/search-page/search-page.component';
 import type { ExploreSection } from '../../models/explore-extras.model';
+
+const MIN_EXPLORE_SEARCH_LENGTH = 2;
+const EXPLORE_SEARCH_TAKE = 20;
+const EXPLORE_SEARCH_MAX_DISTANCE_KM = 15;
+const EXPLORE_CONTENT_MAX_DISTANCE_KM = 75;
+const EXPLORE_SEARCH_DEBOUNCE_MS = 180;
 
 @Component({
   selector: 'app-explore-page',
@@ -27,7 +32,6 @@ import type { ExploreSection } from '../../models/explore-extras.model';
     PromoCardComponent,
     ExploreSectionComponent,
     EmptyStateComponent,
-    SearchPageComponent,
   ],
   templateUrl: './explore-page.component.html',
   styleUrl: './explore-page.component.scss',
@@ -39,18 +43,111 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly locationSvc = inject(LocationService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
-  private readonly location = inject(Location);
   private readonly elRef = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
   private readonly analytics = inject(AnalyticsService);
   private readonly notifications = inject(AppNotificationsService);
 
+  protected readonly imageFallback = EXPLORE_IMAGE_FALLBACK;
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
   protected readonly hasUnreadNotifications = computed(() => this.notifications.unreadCount() > 0);
   protected readonly loadError = this.explore.loadError;
   protected readonly loading = this.explore.loading;
   protected readonly loaded = this.explore.loaded;
   protected readonly promo = computed(() => this.explore.promo());
+
+  protected readonly searchQuery = signal('');
+  protected readonly searchResults = signal<ExploreSearchResultItem[]>([]);
+  protected readonly searchLoading = signal(false);
+  protected readonly searchError = signal<string | null>(null);
+  protected readonly searchHasMore = signal(false);
+  protected readonly isDestinationMode = computed(() => this.destinationSvc.isDestinationMode());
+  protected readonly sections = computed(() => this.explore.sections());
+
+  protected readonly canUseExploreSearch = computed(() => {
+    if (this.destinationSvc.isDestinationMode()) {
+      return true;
+    }
+
+    const selectedDestination = this.explore.selectedDestination();
+    const currentLocation = this.locationSvc.location();
+
+    if (!selectedDestination || !currentLocation) {
+      return false;
+    }
+
+    const distanceKm = this.haversineKm(
+      currentLocation.latitude,
+      currentLocation.longitude,
+      selectedDestination.latitude,
+      selectedDestination.longitude,
+    );
+
+    return distanceKm <= EXPLORE_SEARCH_MAX_DISTANCE_KM;
+  });
+
+  protected readonly noNearbyDestination = computed(() => {
+    if (this.destinationSvc.isDestinationMode()) {
+      return false;
+    }
+
+    if (this.loading() || !this.loaded() || this.loadError()) {
+      return false;
+    }
+
+    const selectedDestination = this.explore.selectedDestination();
+    const currentLocation = this.locationSvc.location();
+
+    if (!selectedDestination) {
+      return true;
+    }
+
+    if (!currentLocation) {
+      return false;
+    }
+
+    const distanceKm = this.haversineKm(
+      currentLocation.latitude,
+      currentLocation.longitude,
+      selectedDestination.latitude,
+      selectedDestination.longitude,
+    );
+
+    return distanceKm > EXPLORE_CONTENT_MAX_DISTANCE_KM;
+  });
+
+  protected readonly noNearbyLocationLabel = computed(() => {
+    const loc = this.locationSvc.location();
+    if (loc?.displayLabel?.trim()) return loc.displayLabel.trim();
+    if (loc?.city?.trim()) return loc.city.trim();
+    if (loc?.region?.trim()) return loc.region.trim();
+    if (loc?.country?.trim()) return loc.country.trim();
+    return 'your current area';
+  });
+
+  protected readonly showSearchPanel = computed(() =>
+    this.canUseExploreSearch() && this.searchQuery().trim().length >= MIN_EXPLORE_SEARCH_LENGTH,
+  );
+
+  protected readonly topSearchResult = computed(() => this.searchResults()[0] ?? null);
+
+  protected readonly placeSearchResults = computed(() => {
+    const top = this.topSearchResult();
+    return this.searchResults().filter(item =>
+      item !== top && item.entityType === 'place',
+    );
+  });
+
+  protected readonly areaSearchResults = computed(() => {
+    const top = this.topSearchResult();
+    return this.searchResults().filter(item =>
+      item !== top && item.entityType === 'location',
+    );
+  });
+
+  private searchTimeout?: ReturnType<typeof setTimeout>;
+  private searchNextSkip = 0;
+  private searchRequestVersion = 0;
 
   constructor() {
     const routeDestinationId = Number(this.route.snapshot.queryParamMap.get('destinationId'));
@@ -107,45 +204,102 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     return 'Location unavailable.';
   });
 
-  protected readonly searchQuery = signal('');
-  protected readonly isDestinationMode = computed(() => this.destinationSvc.isDestinationMode());
-  protected readonly searchOverlayOpen = signal(this.route.snapshot.data['searchOverlay'] === true);
-
-  protected readonly sections = computed(() => {
-    const q = this.searchQuery().trim().toLowerCase();
-    const sections = this.explore.sections();
-
-    if (!q) return sections;
-
-    return sections
-      .map(section => ({
-        ...section,
-        items: section.items.filter(item => this.matchesSearch(item, q)),
-      }))
-      .filter(section => section.items.length > 0);
-  });
-
-  protected openSearch(): void {
-    void this.router.navigate(['/search'], { state: { searchFromExplore: true } });
-  }
-
-  protected closeSearch(): void {
-    this.searchOverlayOpen.set(false);
-
-    if (this.router.url.startsWith('/search') && history.state?.['searchFromExplore']) {
-      this.location.back();
+  protected onExploreSearchChange(value: string): void {
+    if (!this.canUseExploreSearch()) {
+      this.searchQuery.set('');
+      this.resetSearchResults();
       return;
     }
 
-    if (this.router.url.startsWith('/search')) {
-      void this.router.navigate(['/explore'], { replaceUrl: true });
+    this.searchQuery.set(value);
+
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
     }
+
+    const query = value.trim();
+    if (query.length < MIN_EXPLORE_SEARCH_LENGTH) {
+      this.resetSearchResults();
+      return;
+    }
+
+    this.searchTimeout = setTimeout(() => {
+      this.runExploreSearch(query, 0, false);
+    }, EXPLORE_SEARCH_DEBOUNCE_MS);
+  }
+
+  protected onExploreSearchSubmit(value: string): void {
+    if (!this.canUseExploreSearch()) {
+      this.searchQuery.set('');
+      this.resetSearchResults();
+      return;
+    }
+
+    const query = value.trim();
+    if (query.length < MIN_EXPLORE_SEARCH_LENGTH) return;
+
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+    }
+
+    this.runExploreSearch(query, 0, false);
+  }
+
+  protected onExploreSearchCleared(): void {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+    }
+
+    this.searchQuery.set('');
+    this.resetSearchResults();
+  }
+
+  protected loadMoreExploreSearch(): void {
+    if (!this.canUseExploreSearch()) {
+      this.searchQuery.set('');
+      this.resetSearchResults();
+      return;
+    }
+
+    const query = this.searchQuery().trim();
+    if (query.length < MIN_EXPLORE_SEARCH_LENGTH || this.searchLoading()) return;
+
+    this.runExploreSearch(query, this.searchNextSkip, true);
+  }
+
+  protected openExploreSearchResult(item: ExploreSearchResultItem): void {
+    this.trackExploreSearchCommit(item.entityType, String(item.id), this.searchResults().length);
+
+    if (item.entityType === 'location' && item.latitude != null && item.longitude != null) {
+      void this.router.navigate(['/map'], {
+        state: {
+          mapFocus: {
+            id: item.id,
+            entityType: 'location',
+            title: item.title,
+            latitude: item.latitude,
+            longitude: item.longitude,
+            imageUrl: item.image,
+          },
+        },
+      });
+      return;
+    }
+
+    void this.router.navigateByUrl(item.detailRoute);
   }
 
   protected useCurrentLocation(): void {
     this.searchQuery.set('');
+    this.resetSearchResults();
     this.explore.useCurrentLocation();
     void this.router.navigate(['/explore'], { replaceUrl: true });
+  }
+
+  protected openMap(): void {
+    this.searchQuery.set('');
+    this.resetSearchResults();
+    void this.router.navigate(['/map']);
   }
 
   protected onPromoCta(): void {
@@ -163,7 +317,6 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected onSectionItem(event: ExploreSectionItemEvent): void {
     const sliderId = this.sliderId(event.section);
     this.scrollState.markClickedItem(sliderId, event.item.id);
-    this.trackExploreSearchCommit(event.item.entityType, event.item.id);
 
     const route = event.item.detailRoute?.trim() || this.defaultRoute(event.item.entityType, event.item.id);
     void this.router.navigateByUrl(route);
@@ -209,6 +362,10 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+    }
+
     const host = this.elRef.nativeElement as HTMLElement;
     const viewport = host.closest<HTMLElement>('.app-shell__viewport');
     const scrollTop = viewport?.scrollTop ?? 0;
@@ -221,6 +378,85 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     });
 
     this.scrollState.save(scrollTop, sliders);
+  }
+
+  private currentExploreDestinationId(): number | null {
+    return this.explore.selectedDestination()?.id
+      ?? this.destinationSvc.id()
+      ?? null;
+  }
+
+  private runExploreSearch(query: string, skip: number, append: boolean): void {
+    if (!this.canUseExploreSearch()) {
+      this.searchQuery.set('');
+      this.resetSearchResults();
+      return;
+    }
+
+    const destinationId = this.currentExploreDestinationId();
+
+    if (destinationId == null || destinationId <= 0) {
+      this.searchError.set('Destination is still loading. Try again in a moment.');
+      this.searchLoading.set(false);
+      return;
+    }
+
+    const requestVersion = ++this.searchRequestVersion;
+    this.searchLoading.set(true);
+    this.searchError.set(null);
+
+    this.explore.searchCurrentDestination(query, destinationId, skip, EXPLORE_SEARCH_TAKE)
+      .subscribe({
+        next: (response) => {
+          if (requestVersion !== this.searchRequestVersion) return;
+
+          this.searchResults.set(
+            append
+              ? [...this.searchResults(), ...response.items]
+              : response.items,
+          );
+
+          this.searchNextSkip = response.nextSkip;
+          this.searchHasMore.set(response.hasMore);
+          this.searchLoading.set(false);
+        },
+        error: () => {
+          if (requestVersion !== this.searchRequestVersion) return;
+
+          if (!append) {
+            this.searchResults.set([]);
+          }
+
+          this.searchHasMore.set(false);
+          this.searchError.set('Search failed. Try again.');
+          this.searchLoading.set(false);
+        },
+      });
+  }
+
+  private resetSearchResults(): void {
+    this.searchResults.set([]);
+    this.searchError.set(null);
+    this.searchHasMore.set(false);
+    this.searchNextSkip = 0;
+  }
+
+  private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const earthRadiusKm = 6371;
+    const toRad = (value: number) => (value * Math.PI) / 180;
+
+    const deltaLat = toRad(lat2 - lat1);
+    const deltaLon = toRad(lon2 - lon1);
+    const lat1Rad = toRad(lat1);
+    const lat2Rad = toRad(lat2);
+
+    const a =
+      Math.sin(deltaLat / 2) ** 2 +
+      Math.cos(lat1Rad) *
+        Math.cos(lat2Rad) *
+        Math.sin(deltaLon / 2) ** 2;
+
+    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   private splitDisplayLabel(label: string): { city: string; country: string } {
@@ -244,13 +480,6 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     return city.trim().toLowerCase() === country.trim().toLowerCase() ? '' : country;
   }
 
-  private matchesSearch(item: { title?: string; subtitle?: string; description?: string; categoryLabel?: string; dateLabel?: string }, q: string): boolean {
-    return [item.title, item.subtitle, item.description, item.categoryLabel, item.dateLabel]
-      .join(' ')
-      .toLowerCase()
-      .includes(q);
-  }
-
   private defaultRoute(entityType: string, id: string): string {
     if (entityType === 'event') return `/events/${id}`;
     if (entityType === 'stay') return `/stays/${id}`;
@@ -258,9 +487,9 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     return `/places/${id}`;
   }
 
-  private trackExploreSearchCommit(entityType: string, id: string): void {
+  private trackExploreSearchCommit(entityType: string, id: string, resultCount: number): void {
     const query = this.searchQuery().trim();
-    if (query.length < 2) return;
+    if (query.length < MIN_EXPLORE_SEARCH_LENGTH) return;
 
     const normalizedType: 'place' | 'event' = entityType === 'event' ? 'event' : 'place';
     const entityId = parseInt(id, 10);
@@ -268,9 +497,9 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
       entityType: normalizedType,
       entityId: isNaN(entityId) ? undefined : entityId,
       metadata: {
-        surface: 'explore',
+        surface: 'explore-scoped',
         queryLength: query.length,
-        localMatches: this.sections().reduce((sum, section) => sum + section.items.length, 0),
+        resultCount,
         committed: true,
       },
     });

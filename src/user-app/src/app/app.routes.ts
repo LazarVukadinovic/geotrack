@@ -28,6 +28,12 @@ export const routes: Routes = [
         data: { desktopLayout: 'wide' },
       },
       {
+        path: 'explore/:sectionKey',
+        loadComponent: () =>
+          import('./features/explore/pages/explore-section-listing-page/explore-section-listing-page.component').then(m => m.ExploreSectionListingPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
         path: 'map',
         loadComponent: () =>
           import('./features/map/pages/map-page/map-page.component').then(m => m.MapPageComponent),
@@ -48,7 +54,7 @@ export const routes: Routes = [
         data: { desktopLayout: 'full' },
       },
 
-      // ── Profile ──────────────────────────────────────────────────────────
+      // â”€â”€ Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       {
         path: 'profile',
         loadComponent: () =>
@@ -114,7 +120,7 @@ export const routes: Routes = [
         data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
 
-      // ── Settings ─────────────────────────────────────────────────────────
+      // â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       {
         path: 'settings',
         canActivate: [authGuard],
@@ -177,7 +183,7 @@ export const routes: Routes = [
         data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
 
-      // ── Auth (registracija) ───────────────────────────────────────────────
+      // â”€â”€ Auth (registracija) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       {
         path: 'recommendations',
         canActivate: [authGuard],
@@ -220,7 +226,7 @@ export const routes: Routes = [
         data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
 
-      // ── Ostale rute ───────────────────────────────────────────────────────
+      // â”€â”€ Ostale rute â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       {
         path: 'hotels',
         loadComponent: () =>
@@ -290,3 +296,4 @@ export const routes: Routes = [
     ],
   },
 ];
+

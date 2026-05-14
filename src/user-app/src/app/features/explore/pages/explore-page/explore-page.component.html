@@ -7,57 +7,218 @@
   />
 
   <div class="explore-page__main">
-    <app-welcome-hero [city]="heroCity()" [country]="heroCountry()" />
+    @if (noNearbyDestination()) {
+      <section class="explore-page__no-nearby" aria-label="No nearby destination">
+        <div class="explore-page__no-nearby-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M12 21s7-4.9 7-11a7 7 0 1 0-14 0c0 6.1 7 11 7 11Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+            <path d="M9.8 9.8h.01M14.2 9.8h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+            <path d="M9 14c1.8-1.1 4.2-1.1 6 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+        </div>
 
-    <div class="explore-page__search">
-      <app-search-bar
-        [value]="searchQuery()"
-        controlId="explore-search"
-        controlName="exploreSearch"
-        label="Search destinations or activities"
-        (focused)="openSearch()"
-      />
-    </div>
+        <p class="explore-page__no-nearby-eyebrow">No destination nearby yet</p>
+        <h1>We do not have Explore content for this area yet.</h1>
+        <p class="explore-page__no-nearby-text">
+          Your current area is <strong>{{ noNearbyLocationLabel() }}</strong>, but GeoTrack does not have a supported destination close enough to show a useful Explore page.
+        </p>
+        <p class="explore-page__no-nearby-hint">
+          Try changing your location, refreshing your current location, or opening the map to browse what is available.
+        </p>
 
-    <p class="explore-page__context">{{ contextLine() }}</p>
+        <div class="explore-page__no-nearby-actions">
+          <button type="button" class="explore-page__no-nearby-primary" (click)="useCurrentLocation()">
+            Refresh current location
+          </button>
+          <button type="button" class="explore-page__no-nearby-secondary" (click)="openMap()">
+            Open map
+          </button>
+        </div>
+      </section>
+    } @else {
+      <app-welcome-hero [city]="heroCity()" [country]="heroCountry()" />
 
-    @if (isDestinationMode()) {
-      <div class="explore-page__destination-mode">
-        <span>Selected destination: {{ heroCity() }}</span>
-        <button type="button" (click)="useCurrentLocation()">Use my location</button>
-      </div>
-    }
+      @if (canUseExploreSearch()) {
+        <div class="explore-page__search">
+          <app-search-bar
+            [value]="searchQuery()"
+            placeholder="Search places and areas here"
+            controlId="explore-search"
+            controlName="exploreSearch"
+            label="Search places and areas in this destination"
+            (valueChange)="onExploreSearchChange($event)"
+            (searchSubmit)="onExploreSearchSubmit($event)"
+            (cleared)="onExploreSearchCleared()"
+          />
 
-    @if (loadError()) {
-      <app-empty-state
-        title="Something went wrong"
-        [message]="loadError()!"
-      />
-    }
+          @if (showSearchPanel()) {
+            <section class="explore-search-panel" aria-label="Explore search results">
+              @if (searchLoading() && searchResults().length === 0) {
+                <p class="explore-search-panel__state">Searching...</p>
+              } @else if (searchError()) {
+                <p class="explore-search-panel__state explore-search-panel__state--error">
+                  {{ searchError() }}
+                </p>
+              } @else if (searchResults().length === 0) {
+                <p class="explore-search-panel__state">No places or areas found in this destination.</p>
+              } @else {
+                @if (topSearchResult(); as topResult) {
+                  <div class="explore-search-group">
+                    <h2>Top result</h2>
+                    <article
+                      class="explore-search-card explore-search-card--top"
+                      role="button"
+                      tabindex="0"
+                      [attr.aria-label]="'Open ' + topResult.title"
+                      (click)="openExploreSearchResult(topResult)"
+                      (keydown.enter)="openExploreSearchResult(topResult)"
+                      (keydown.space)="$event.preventDefault(); openExploreSearchResult(topResult)"
+                    >
+                      <img [src]="topResult.image || imageFallback" [alt]="''" />
+                      <div class="explore-search-card__body">
+                        <div class="explore-search-card__eyebrow">
+                          {{ topResult.categoryLabel || topResult.displayType }}
+                        </div>
+                        <h3>{{ topResult.title }}</h3>
+                        @if (topResult.subtitle) {
+                          <p>{{ topResult.subtitle }}</p>
+                        }
+                        @if (topResult.rating != null || topResult.reviewCount) {
+                          <div class="explore-search-card__meta">
+                            @if (topResult.rating != null) {
+                              <span>{{ topResult.rating.toFixed(1) }}</span>
+                            }
+                            @if (topResult.reviewCount) {
+                              <span>{{ topResult.reviewCount }}</span>
+                            }
+                          </div>
+                        }
+                      </div>
+                    </article>
+                  </div>
+                }
 
-    @if (!isLoggedIn()) {
-      <app-promo-card [promo]="promo()" (cta)="onPromoCta()" />
-    }
+                @if (placeSearchResults().length > 0) {
+                  <div class="explore-search-group">
+                    <h2>Places</h2>
+                    @for (item of placeSearchResults(); track item.entityType + ':' + item.id) {
+                      <article
+                        class="explore-search-card"
+                        role="button"
+                        tabindex="0"
+                        [attr.aria-label]="'Open ' + item.title"
+                        (click)="openExploreSearchResult(item)"
+                        (keydown.enter)="openExploreSearchResult(item)"
+                        (keydown.space)="$event.preventDefault(); openExploreSearchResult(item)"
+                      >
+                        <img [src]="item.image || imageFallback" [alt]="''" />
+                        <div class="explore-search-card__body">
+                          <div class="explore-search-card__eyebrow">
+                            {{ item.categoryLabel || 'Place' }}
+                          </div>
+                          <h3>{{ item.title }}</h3>
+                          @if (item.subtitle) {
+                            <p>{{ item.subtitle }}</p>
+                          }
+                          @if (item.rating != null || item.reviewCount) {
+                            <div class="explore-search-card__meta">
+                              @if (item.rating != null) {
+                                <span>{{ item.rating.toFixed(1) }}</span>
+                              }
+                              @if (item.reviewCount) {
+                                <span>{{ item.reviewCount }}</span>
+                              }
+                            </div>
+                          }
+                        </div>
+                      </article>
+                    }
+                  </div>
+                }
 
-    @if (!loading() && loaded() && sections().length === 0 && !loadError()) {
-      <app-empty-state
-        title="No Explore sections yet"
-        message="Try another location or add more approved places, events and tags."
-      />
-    }
+                @if (areaSearchResults().length > 0) {
+                  <div class="explore-search-group">
+                    <h2>Areas</h2>
+                    @for (item of areaSearchResults(); track item.entityType + ':' + item.id) {
+                      <article
+                        class="explore-search-card"
+                        role="button"
+                        tabindex="0"
+                        [attr.aria-label]="'Open ' + item.title"
+                        (click)="openExploreSearchResult(item)"
+                        (keydown.enter)="openExploreSearchResult(item)"
+                        (keydown.space)="$event.preventDefault(); openExploreSearchResult(item)"
+                      >
+                        <img [src]="item.image || imageFallback" [alt]="''" />
+                        <div class="explore-search-card__body">
+                          <div class="explore-search-card__eyebrow">
+                            {{ item.categoryLabel || 'Area' }}
+                          </div>
+                          <h3>{{ item.title }}</h3>
+                          @if (item.subtitle) {
+                            <p>{{ item.subtitle }}</p>
+                          }
+                        </div>
+                      </article>
+                    }
+                  </div>
+                }
 
-    @for (section of sections(); track section.key) {
-      <app-explore-section
-        [section]="section"
-        [showFavoriteButton]="isLoggedIn()"
-        (save)="onSectionSave($event)"
-        (itemActivated)="onSectionItem($event)"
-        (sectionMore)="onSectionMore($event)"
-      />
+                @if (searchLoading() && searchResults().length > 0) {
+                  <p class="explore-search-panel__state">Loading more...</p>
+                }
+
+                @if (searchHasMore()) {
+                  <button
+                    type="button"
+                    class="explore-search-panel__more"
+                    (click)="loadMoreExploreSearch()"
+                  >
+                    Load more
+                  </button>
+                }
+              }
+            </section>
+          }
+        </div>
+      }
+
+      <p class="explore-page__context">{{ contextLine() }}</p>
+
+      @if (isDestinationMode()) {
+        <div class="explore-page__destination-mode">
+          <span>Selected destination: {{ heroCity() }}</span>
+          <button type="button" (click)="useCurrentLocation()">Use my location</button>
+        </div>
+      }
+
+      @if (loadError()) {
+        <app-empty-state
+          title="Something went wrong"
+          [message]="loadError()!"
+        />
+      }
+
+      @if (!isLoggedIn()) {
+        <app-promo-card [promo]="promo()" (cta)="onPromoCta()" />
+      }
+
+      @if (!loading() && loaded() && sections().length === 0 && !loadError()) {
+        <app-empty-state
+          title="No Explore sections yet"
+          message="Try another location or add more approved places, events and tags."
+        />
+      }
+
+      @for (section of sections(); track section.key) {
+        <app-explore-section
+          [section]="section"
+          [showFavoriteButton]="isLoggedIn()"
+          (save)="onSectionSave($event)"
+          (itemActivated)="onSectionItem($event)"
+          (sectionMore)="onSectionMore($event)"
+        />
+      }
     }
   </div>
-
-  @if (searchOverlayOpen()) {
-    <app-search-page (closed)="closeSearch()" />
-  }
 </div>
