@@ -79,6 +79,11 @@ src/environments/environment.*.local.ts
 .env.*
 !.env.example
 
+# Certificate and private key material
+*.pfx
+*.pem
+*.key
+
 # =========================
 # PostgreSQL / database related
 # =========================

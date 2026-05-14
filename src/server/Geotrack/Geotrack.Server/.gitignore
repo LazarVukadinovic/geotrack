@@ -1,2 +1,5 @@
 media/uploads/avatars/*
 !media/uploads/avatars/.gitkeep
+*.pfx
+*.pem
+*.key
