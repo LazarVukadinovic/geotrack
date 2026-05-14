@@ -11,6 +11,7 @@ import { catchError, firstValueFrom, of, switchMap } from 'rxjs';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/services/auth.interceptor';
 import { authErrorInterceptor } from './core/services/auth-error.interceptor';
+import { apiBaseUrlInterceptor } from './core/services/api-base-url.interceptor';
 import { TokenStorageService } from './core/services/token-storage.service';
 import { TokenRefreshService } from './core/services/token-refresh.service';
 import { AuthService } from './core/services/auth.service';
@@ -28,7 +29,7 @@ export const appConfig: ApplicationConfig = {
 
     // authInterceptor first (attaches Authorization header / proactive refresh);
     // authErrorInterceptor second (retries with a fresh token on 401).
-    provideHttpClient(withInterceptors([authInterceptor, authErrorInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor, authErrorInterceptor, apiBaseUrlInterceptor])),
 
     // ── Startup session restore ─────────────────────────────────────────────
     // On every cold start:
