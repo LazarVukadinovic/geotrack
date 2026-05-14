@@ -24,6 +24,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+const string FrontendCorsPolicyName = "ConfiguredFrontendOrigins";
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -221,6 +222,21 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole(RoleNames.RegionalManager));
 });
 
+var allowedCorsOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()
+    ?.Select(origin => origin.Trim())
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? Array.Empty<string>();
+
+if (allowedCorsOrigins.Length == 0)
+{
+    throw new InvalidOperationException(
+        "Cors:AllowedOrigins must contain at least one frontend origin.");
+}
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -343,9 +359,9 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAllOrigins", policy =>
+    options.AddPolicy(FrontendCorsPolicyName, policy =>
     {
-        policy.SetIsOriginAllowed(_ => true)
+        policy.WithOrigins(allowedCorsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -402,12 +418,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowAllOrigins");
-
 if (forwardedHeadersEnabled)
 {
     app.UseForwardedHeaders();
 }
+
+app.UseCors(FrontendCorsPolicyName);
 
 // Local dev and PMF deployment run over plain HTTP. Enable this explicitly
 // only for hosts where the ASP.NET app terminates HTTPS itself.
@@ -527,7 +543,22 @@ app.MapControllers();
 
 if (File.Exists(Path.Combine(webRoot, "index.html")))
 {
-    app.MapFallbackToFile("index.html");
+    var userIndexPath = Path.Combine(webRoot, "index.html");
+    app.MapFallback(async context =>
+    {
+        var path = context.Request.Path;
+        if (!HttpMethods.IsGet(context.Request.Method) ||
+            path.StartsWithSegments("/api") ||
+            path.StartsWithSegments("/media") ||
+            Path.HasExtension(path.Value))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        context.Response.ContentType = "text/html";
+        await context.Response.SendFileAsync(userIndexPath);
+    });
 }
 
 app.Run();

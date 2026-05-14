@@ -7,7 +7,7 @@ namespace Geotrack.IntegrationTests;
 public sealed class CorsPolicyTests
 {
     [Fact]
-    public async Task Development_cors_allows_any_origin_with_credentials()
+    public async Task Development_cors_allows_configured_local_frontend_origins_with_credentials()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         using var client = app.CreateClient();
@@ -17,9 +17,7 @@ public sealed class CorsPolicyTests
             "http://localhost:4200",
             "http://127.0.0.1:4200",
             "http://localhost:4300",
-            "http://127.0.0.1:4300",
-            "https://example.invalid",
-            "http://192.168.1.25:5173"
+            "http://127.0.0.1:4300"
         };
 
         foreach (var origin in allowedOrigins)
@@ -32,16 +30,40 @@ public sealed class CorsPolicyTests
     }
 
     [Fact]
-    public async Task Production_cors_allows_any_origin_with_credentials()
+    public async Task Development_cors_rejects_unconfigured_origins()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        using var request = BuildPreflightRequest("https://example.invalid");
+        using var response = await client.SendAsync(request);
+
+        AssertCorsRejectsOrigin(response);
+    }
+
+    [Fact]
+    public async Task Production_cors_allows_only_configured_https_origin_with_credentials()
     {
         await using var app = await GeotrackApiFactory.CreateAsync(Environments.Production);
         using var client = app.CreateClient();
 
-        const string origin = "https://example.invalid";
+        const string origin = "https://softeng.pmf.kg.ac.rs:10131";
         using var request = BuildPreflightRequest(origin);
         using var response = await client.SendAsync(request);
 
         AssertCorsAllowsOrigin(response, origin);
+    }
+
+    [Fact]
+    public async Task Production_cors_rejects_unconfigured_origins()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync(Environments.Production);
+        using var client = app.CreateClient();
+
+        using var request = BuildPreflightRequest("http://softeng.pmf.kg.ac.rs:10131");
+        using var response = await client.SendAsync(request);
+
+        AssertCorsRejectsOrigin(response);
     }
 
     private static HttpRequestMessage BuildPreflightRequest(string origin)
@@ -64,5 +86,11 @@ public sealed class CorsPolicyTests
             response.Headers.TryGetValues("Access-Control-Allow-Credentials", out var credentialValues),
             $"Missing Access-Control-Allow-Credentials for {origin}.");
         Assert.Contains("true", credentialValues);
+    }
+
+    private static void AssertCorsRejectsOrigin(HttpResponseMessage response)
+    {
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Credentials"));
     }
 }
