@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpBackend, HttpClient } from '@angular/common/http';
 import { Observable, finalize, map, share, tap, throwError } from 'rxjs';
 import { TokenStorageService } from './token-storage.service';
+import { apiUrl } from './api-url';
 
 interface RefreshResponse {
   accessToken: string;
@@ -29,8 +30,9 @@ export class TokenRefreshService {
 
     this.refreshInFlight$ = this.http
       .post<RefreshResponse>(
-        '/api/auth/refresh',
+        apiUrl('/api/auth/refresh'),
         legacyRefreshToken ? { refreshToken: legacyRefreshToken } : {},
+        { withCredentials: true },
       )
       .pipe(
         tap((response) => {
