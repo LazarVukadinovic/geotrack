@@ -33,6 +33,7 @@ export interface ExploreSectionItem {
   subtitle?: string;
   description?: string;
   categoryLabel?: string;
+  locationName?: string;
   image: string;
 
   rating?: number;

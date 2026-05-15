@@ -233,6 +233,7 @@ public class ExploreService : IExploreService
                 e.Id,
                 e.Name,
                 EventTypeName = e.EventType.Name,
+                LocationName = e.Location != null ? e.Location.Name : e.Place != null ? e.Place.Location.Name : null,
                 e.StartDate,
                 e.EndDate,
                 IsHappeningNow = e.StartDate <= nowUtc && e.EndDate >= nowUtc,
@@ -260,6 +261,7 @@ public class ExploreService : IExploreService
                 p.Subtitle,
                 p.Description,
                 CategoryLabel = p.Stay != null && p.Stay.StayType != null ? p.Stay.StayType.Name : p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
@@ -333,6 +335,7 @@ public class ExploreService : IExploreService
                 Subtitle = DisplayTextSafety.CleanOptional(s.Subtitle),
                 Description = TrimDescription(s.Description, 170),
                 CategoryLabel = DisplayTextSafety.CleanOptional(s.CategoryLabel),
+                LocationName = DisplayTextSafety.CleanOptional(s.LocationName),
                 Image = s.Image,
                 Rating = s.AverageRating.HasValue ? Math.Round(s.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(s.ReviewCount),
@@ -372,6 +375,7 @@ public class ExploreService : IExploreService
                 DetailRoute = $"/events/{e.Id}",
                 Title = DisplayTextSafety.CleanRequired(e.Name, "Event"),
                 CategoryLabel = DisplayTextSafety.CleanOptional(e.EventTypeName),
+                LocationName = DisplayTextSafety.CleanOptional(e.LocationName),
                 Subtitle = null,
                 StatusBadge = BuildEventStatusBadge(e.IsHappeningNow, e.IsUpcoming),
                 DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
@@ -493,6 +497,7 @@ public class ExploreService : IExploreService
                 Subtitle = p.Subtitle,
                 Description = p.Description,
                 CategoryLabel = p.Stay != null && p.Stay.StayType != null ? p.Stay.StayType.Name : p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 OpeningHours = p.OpeningHours,
                 OperatingHoursEnabled = p.OperatingHoursEnabled,
                 OperatingHoursJson = p.OperatingHoursJson,
@@ -571,6 +576,7 @@ public class ExploreService : IExploreService
                 Subtitle = p.Subtitle,
                 Description = p.Description,
                 CategoryLabel = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 OpeningHours = p.OpeningHours,
                 OperatingHoursEnabled = p.OperatingHoursEnabled,
                 OperatingHoursJson = p.OperatingHoursJson,
@@ -644,6 +650,7 @@ public class ExploreService : IExploreService
                 Subtitle = p.Subtitle,
                 Description = p.Description,
                 CategoryLabel = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 OpeningHours = p.OpeningHours,
                 OperatingHoursEnabled = p.OperatingHoursEnabled,
                 OperatingHoursJson = p.OperatingHoursJson,
@@ -710,6 +717,7 @@ public class ExploreService : IExploreService
                 Id = e.Id,
                 Title = e.Name,
                 Subtitle = e.EventType.Name,
+                LocationName = e.Location != null ? e.Location.Name : e.Place != null ? e.Place.Location.Name : null,
                 Description = e.Description,
                 StartDate = e.StartDate,
                 EndDate = e.EndDate,
@@ -814,6 +822,7 @@ public class ExploreService : IExploreService
                 Subtitle = p.Subtitle,
                 Description = p.Description,
                 CategoryLabel = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 OpeningHours = p.OpeningHours,
                 OperatingHoursEnabled = p.OperatingHoursEnabled,
                 OperatingHoursJson = p.OperatingHoursJson,
@@ -1114,6 +1123,7 @@ public class ExploreService : IExploreService
             Subtitle = DisplayTextSafety.CleanOptional(item.Subtitle),
             Description = TrimDescription(item.Description, 170),
             CategoryLabel = DisplayTextSafety.CleanOptional(item.CategoryLabel),
+            LocationName = DisplayTextSafety.CleanOptional(item.LocationName),
             Image = item.Image,
             Rating = item.AverageRating.HasValue ? Math.Round(item.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(item.ReviewCount),
@@ -1137,6 +1147,7 @@ public class ExploreService : IExploreService
             DetailRoute = $"/events/{item.Id}",
             Title = DisplayTextSafety.CleanRequired(item.Title, "Event"),
             CategoryLabel = DisplayTextSafety.CleanOptional(item.Subtitle),
+            LocationName = DisplayTextSafety.CleanOptional(item.LocationName),
             Subtitle = null,
             StatusBadge = BuildEventStatusBadge(item.IsHappeningNow, item.IsUpcoming),
             Description = TrimDescription(item.Description, 170),
@@ -1161,6 +1172,7 @@ public class ExploreService : IExploreService
             Subtitle = place.Reason,
             Description = TrimDescription(place.Description, 170),
             CategoryLabel = place.CategoryLabel,
+            LocationName = place.Location,
             Image = place.Image,
             Rating = place.AverageRating.HasValue ? Math.Round(place.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(place.ReviewCount),
@@ -1302,6 +1314,7 @@ public class ExploreService : IExploreService
                 Subtitle = p.Reason,
                 Description = TrimDescription(p.Description, 130),
                 CategoryLabel = p.CategoryLabel,
+                LocationName = p.Location,
                 Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
@@ -1350,6 +1363,7 @@ public class ExploreService : IExploreService
                 p.Subtitle,
                 p.Description,
                 PlaceTypeName = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 p.OpeningHours,
                 p.OperatingHoursEnabled,
                 p.OperatingHoursJson,
@@ -1397,6 +1411,7 @@ public class ExploreService : IExploreService
                 Subtitle = DisplayTextSafety.CleanOptional(p.Subtitle),
                 Description = TrimDescription(p.Description, 130),
                 CategoryLabel = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
+                LocationName = DisplayTextSafety.CleanOptional(p.LocationName),
                 Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
@@ -1434,6 +1449,7 @@ public class ExploreService : IExploreService
                 p.Subtitle,
                 p.Description,
                 PlaceTypeName = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 p.OpeningHours,
                 p.OperatingHoursEnabled,
                 p.OperatingHoursJson,
@@ -1481,6 +1497,7 @@ public class ExploreService : IExploreService
                 Subtitle = DisplayTextSafety.CleanOptional(p.Subtitle),
                 Description = TrimDescription(p.Description, 130),
                 CategoryLabel = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
+                LocationName = DisplayTextSafety.CleanOptional(p.LocationName),
                 Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
@@ -1606,10 +1623,8 @@ public class ExploreService : IExploreService
                         Title = DisplayTextSafety.CleanRequired(candidate.Title, "Place"),
                         Subtitle = DisplayTextSafety.CleanOptional(candidate.Subtitle),
                         Description = TrimDescription(candidate.Description, 130),
-                        CategoryLabel = DisplayTextSafety.CleanLabelOrHumanizedKey(
-                            relevantTags.FirstOrDefault()?.Name,
-                            candidate.PlaceTypeName,
-                            "Place"),
+                        CategoryLabel = DisplayTextSafety.CleanOptional(candidate.PlaceTypeName) ?? "Place",
+                        LocationName = DisplayTextSafety.CleanOptional(candidate.Location),
                         Image = candidate.Image,
                         Rating = candidate.AverageRating.HasValue ? Math.Round(candidate.AverageRating.Value, 1) : null,
                         ReviewCount = FormatReviewCountLabel(candidate.ReviewCount),
@@ -1664,7 +1679,8 @@ public class ExploreService : IExploreService
                         Title = item.Title,
                         Subtitle = item.Subtitle,
                         Description = item.Description,
-                        CategoryLabel = null,
+                        CategoryLabel = item.CategoryLabel,
+                        LocationName = item.LocationName,
                         Image = item.Image,
                         Rating = item.Rating,
                         ReviewCount = item.ReviewCount,
@@ -2191,6 +2207,7 @@ public class ExploreService : IExploreService
         public string? Subtitle { get; set; }
         public string? Description { get; set; }
         public string? CategoryLabel { get; set; }
+        public string? LocationName { get; set; }
         public string? OpeningHours { get; set; }
         public bool OperatingHoursEnabled { get; set; }
         public string? OperatingHoursJson { get; set; }
@@ -2207,6 +2224,7 @@ public class ExploreService : IExploreService
         public int Id { get; set; }
         public string Title { get; set; } = string.Empty;
         public string? Subtitle { get; set; }
+        public string? LocationName { get; set; }
         public string? Description { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
@@ -2279,6 +2297,7 @@ public class ExploreService : IExploreService
         public string? Subtitle { get; set; }
         public string? Description { get; set; }
         public string? CategoryLabel { get; set; }
+        public string? LocationName { get; set; }
         public string? Image { get; set; }
         public double? Rating { get; set; }
         public string? ReviewCount { get; set; }

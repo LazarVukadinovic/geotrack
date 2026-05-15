@@ -93,8 +93,18 @@
 
           <div class="explore-listing__body">
             <div class="explore-listing__label-row">
-              @if (item.categoryLabel) {
-                <p class="explore-listing__category">{{ item.categoryLabel }}</p>
+              @if (item.categoryLabel || item.locationName) {
+                <p class="explore-listing__category">
+                  @if (item.categoryLabel) {
+                    <span>{{ item.categoryLabel }}</span>
+                  }
+                  @if (item.categoryLabel && item.locationName) {
+                    <span> · </span>
+                  }
+                  @if (item.locationName) {
+                    <span>{{ item.locationName }}</span>
+                  }
+                </p>
               }
 
               @if (item.statusBadge) {

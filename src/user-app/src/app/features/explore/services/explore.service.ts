@@ -53,6 +53,7 @@ interface ApiExploreSectionItem {
   subtitle?: string;
   description?: string;
   categoryLabel?: string;
+  locationName?: string;
   image?: string;
   rating?: number;
   reviewCount?: string;
@@ -585,6 +586,7 @@ export class ExploreService {
       subtitle: item.subtitle,
       description: item.description,
       categoryLabel: item.categoryLabel,
+      locationName: item.locationName ?? undefined,
       image: item.image ?? '',
       rating: item.rating,
       reviewCount: item.reviewCount,

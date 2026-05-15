@@ -50,8 +50,18 @@
 
           <div class="explore-section__body">
             <div class="explore-section__label-row">
-              @if (item.categoryLabel) {
-                <p class="explore-section__category">{{ item.categoryLabel }}</p>
+              @if (item.categoryLabel || item.locationName) {
+                <p class="explore-section__category">
+                  @if (item.categoryLabel) {
+                    <span>{{ item.categoryLabel }}</span>
+                  }
+                  @if (item.categoryLabel && item.locationName) {
+                    <span> · </span>
+                  }
+                  @if (item.locationName) {
+                    <span>{{ item.locationName }}</span>
+                  }
+                </p>
               }
 
               @if (item.statusBadge) {

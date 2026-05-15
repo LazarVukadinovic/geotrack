@@ -55,6 +55,7 @@ interface ApiExploreSectionItem {
   subtitle?: string;
   description?: string;
   categoryLabel?: string;
+  locationName?: string;
   image?: string;
   rating?: number;
   reviewCount?: string;
@@ -297,6 +298,7 @@ export class ExploreSectionListingService {
       subtitle: dto.subtitle,
       description: dto.description,
       categoryLabel: dto.categoryLabel,
+      locationName: dto.locationName ?? undefined,
       image: dto.image ?? '',
       rating: dto.rating,
       reviewCount: dto.reviewCount,

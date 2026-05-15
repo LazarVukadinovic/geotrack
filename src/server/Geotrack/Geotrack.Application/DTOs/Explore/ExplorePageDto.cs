@@ -49,6 +49,7 @@ public class ExploreFeedSectionItemDto
     public string? Subtitle { get; set; }
     public string? Description { get; set; }
     public string? CategoryLabel { get; set; }
+    public string? LocationName { get; set; }
     public string? Image { get; set; }
 
     public double? Rating { get; set; }
