@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Interests;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
@@ -77,6 +78,11 @@ public class AppDbContext : DbContext
     public DbSet<AnonymousSession> AnonymousSessions => Set<AnonymousSession>();
     public DbSet<UserInterestSignal> UserInterestSignals => Set<UserInterestSignal>();
 
+    public DbSet<InterestTopic> InterestTopics => Set<InterestTopic>();
+    public DbSet<InterestTopicTag> InterestTopicTags => Set<InterestTopicTag>();
+    public DbSet<UserInterestTopic> UserInterestTopics => Set<UserInterestTopic>();
+    public DbSet<UserInterestTopicSignal> UserInterestTopicSignals => Set<UserInterestTopicSignal>();
+
     public DbSet<TagTypePlaceType> TagTypePlaceTypes => Set<TagTypePlaceType>();
     public DbSet<Restaurant> Restaurants => Set<Restaurant>();
 
@@ -129,6 +135,7 @@ public class AppDbContext : DbContext
         ConfigureLookupTables(modelBuilder);
         ConfigureUsers(modelBuilder);
         ConfigureTags(modelBuilder);
+        ConfigureInterests(modelBuilder);
         ConfigureReviews(modelBuilder);
         ConfigureCollections(modelBuilder);
         ConfigureSupportAndNotifications(modelBuilder);
@@ -1289,6 +1296,141 @@ public class AppDbContext : DbContext
         });
     }
 
+
+    private static void ConfigureInterests(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InterestTopic>(entity =>
+        {
+            entity.ToTable("InterestTopics");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(120);
+
+            entity.Property(x => x.Slug)
+                .IsRequired()
+                .HasMaxLength(140);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.IconKey)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Group)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.IsActive)
+                .IsRequired()
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.ShowOnOnboarding)
+                .IsRequired()
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.SortOrder)
+                .IsRequired()
+                .HasDefaultValue(0);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(x => x.Slug)
+                .IsUnique();
+
+            entity.HasIndex(x => new { x.IsActive, x.ShowOnOnboarding, x.SortOrder });
+        });
+
+        modelBuilder.Entity<InterestTopicTag>(entity =>
+        {
+            entity.ToTable("InterestTopicTags");
+
+            entity.HasKey(x => new { x.InterestTopicId, x.TagId });
+
+            entity.Property(x => x.Weight)
+                .IsRequired()
+                .HasDefaultValue(1.0);
+
+            entity.HasOne(x => x.InterestTopic)
+                .WithMany(x => x.TopicTags)
+                .HasForeignKey(x => x.InterestTopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany()
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TagId);
+        });
+
+        modelBuilder.Entity<UserInterestTopic>(entity =>
+        {
+            entity.ToTable("UserInterestTopics");
+
+            entity.HasKey(x => new { x.UserId, x.InterestTopicId });
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.UserInterestTopics)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.InterestTopic)
+                .WithMany(x => x.UserInterests)
+                .HasForeignKey(x => x.InterestTopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.InterestTopicId);
+        });
+
+        modelBuilder.Entity<UserInterestTopicSignal>(entity =>
+        {
+            entity.ToTable("UserInterestTopicSignals");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Score)
+                .IsRequired();
+
+            entity.Property(x => x.Source)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue("inferred");
+
+            entity.Property(x => x.LastInteractionAt)
+                .IsRequired();
+
+            entity.Property(x => x.LastReason)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.IsDismissed)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.EvidenceSinceDismissal)
+                .HasDefaultValue(0.0);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.InterestTopic)
+                .WithMany(x => x.UserSignals)
+                .HasForeignKey(x => x.InterestTopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.InterestTopicId })
+                .IsUnique();
+
+            entity.HasIndex(x => new { x.UserId, x.Score });
+        });
+    }
+
     private static void ConfigureReviews(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<DestinationReview>(entity =>
@@ -2129,4 +2271,3 @@ public class AppDbContext : DbContext
         return null;
     }
 }
-

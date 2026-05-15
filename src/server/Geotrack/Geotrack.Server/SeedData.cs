@@ -2,6 +2,7 @@ using Geotrack.Application.Services;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Interests;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
@@ -49,6 +50,20 @@ public static class SeedData
         bool CanGenerateExploreSection = false,
         string Description = "");
 
+
+    private sealed record SeedInterestTopicDefinition(
+        string Name,
+        string Slug,
+        string Group,
+        string IconKey,
+        int SortOrder,
+        string Description,
+        IReadOnlyList<SeedInterestTopicTagDefinition> Tags,
+        bool IsActive = true,
+        bool ShowOnOnboarding = true);
+
+    private sealed record SeedInterestTopicTagDefinition(string TagSlug, double Weight = 1.0);
+
     private static string Unsplash(string photoId, int width = 900) =>
         $"https://images.unsplash.com/photo-{photoId}?auto=format&fit=crop&w={width}&q=80";
 
@@ -77,6 +92,7 @@ public static class SeedData
             await EnsureRolesAsync(db);
             await EnsureDemoUsersAsync(db);
             var tagLookup1 = await EnsureSmartTagTaxonomyAsync(db);
+            await EnsureInterestTopicsAsync(db, tagLookup1);
             await EnsureExploreDemoPlaceTagsAsync(db, tagLookup1);
             await EnsureAdditionalExploreDemoDataAsync(db, tagLookup1);
             await EnsureSerbiaDemoDataAsync(db, tagLookup1);
@@ -332,6 +348,7 @@ public static class SeedData
         var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
 
         var tagLookup = await EnsureSmartTagTaxonomyAsync(db);
+        await EnsureInterestTopicsAsync(db, tagLookup);
 
         var hotelStayType = await EnsureStayTypeAsync("Hotel", "hotel", "Hotel accommodation");
         var apartmentStayType = await EnsureStayTypeAsync("Apartment", "apartment", "Private apartment accommodation");
@@ -721,6 +738,8 @@ public static class SeedData
             });
 
         await db.SaveChangesAsync();
+        await BackfillUserInterestTopicsFromLegacyTagsAsync(db);
+        await BackfillUserInterestTopicSignalsFromLegacyTagSignalsAsync(db);
 
         var summerFest = new Event
         {
@@ -1329,10 +1348,13 @@ public static class SeedData
         new("Dalmatian", "dalmatian", "cuisine", ForPlace: true),
         new("Italian", "italian", "cuisine", ForPlace: true),
         new("Vegetarian Friendly", "vegetarian-friendly", "cuisine", ForPlace: true),
+        new("Local Food", "local-food", "cuisine", ForPlace: true),
 
         new("Fine Dining", "fine-dining", "dining-style", ForPlace: true),
         new("Traditional", "traditional", "dining-style", ForPlace: true),
         new("Casual", "casual", "dining-style", ForPlace: true),
+        new("Street Food", "street-food", "dining-style", ForPlace: true),
+        new("Food Market", "food-market", "dining-style", ForPlace: true),
         new("Specialty Coffee", "specialty-coffee", "dining-style", ForPlace: true),
 
         new("Luxury Stay", "luxury-stay", "stay-style", ForPlace: true),
@@ -1394,8 +1416,18 @@ public static class SeedData
         new("Guided Tour", "guided-tour", "activity", ForPlace: true, CanGenerateExploreSection: true),
 
         new("Architecture", "architecture", "explore-topic", ForPlace: true, CanGenerateExploreSection: true),
+        new("Monastery", "monastery", "explore-topic", ForPlace: true, CanGenerateExploreSection: true),
+        new("Religious Site", "religious-site", "explore-topic", ForPlace: true, CanGenerateExploreSection: true),
+        new("Garden", "garden", "explore-topic", ForLocation: true, ForPlace: true, CanGenerateExploreSection: true),
+        new("Park", "park", "explore-topic", ForLocation: true, ForPlace: true, CanGenerateExploreSection: true),
+        new("Gallery", "gallery", "explore-topic", ForPlace: true, CanGenerateExploreSection: true),
+        new("Nightlife", "nightlife", "explore-topic", ForPlace: true, ForEvent: true),
+        new("Live Music", "live-music", "explore-topic", ForPlace: true, ForEvent: true),
+        new("Skiing", "skiing", "activity", ForPlace: true, CanGenerateExploreSection: true),
 
         new("Budget", "budget", "price-level", ForPlace: true),
+        new("Budget Friendly", "budget-friendly", "price-level", ForPlace: true),
+        new("Luxury", "luxury", "price-level", ForPlace: true),
         new("Premium", "premium", "price-level", ForPlace: true),
 
         new("Cultural Festival", "cultural-festival", "event-category", ForEvent: true),
@@ -1417,6 +1449,558 @@ public static class SeedData
     ];
 
 
+
+
+    private static List<SeedInterestTopicDefinition> BuildSeedInterestTopics() =>
+    [
+        new(
+            "Beaches",
+            "beaches",
+            "Nature & Outdoors",
+            "waves",
+            10,
+            "Beaches, swimming spots, coastal views and relaxed seaside days.",
+            [
+                new("swimming", 3), new("pebble-beach", 2.5), new("cave-beach", 2.25),
+                new("sea-view", 2), new("waterfront", 1.75), new("dest-swimming", 2), new("dest-coastal", 1.75)
+            ]),
+
+        new(
+            "Islands & Boat Trips",
+            "islands-boat-trips",
+            "Nature & Outdoors",
+            "boat",
+            20,
+            "Islands, boat tours, island hopping and sea excursions.",
+            [
+                new("island-escape", 3), new("boat-tour", 3), new("island-hopping", 2.75),
+                new("boat-trip-event", 2.25), new("diving-snorkeling", 1.75), new("dest-island-nearby", 2), new("dest-boat-trips", 2)
+            ]),
+
+        new(
+            "Mountains & Hiking",
+            "mountains-hiking",
+            "Nature & Outdoors",
+            "mountain",
+            30,
+            "Mountain views, hiking paths, forests, ski areas and active outdoor routes.",
+            [
+                new("hiking", 3), new("walking-route", 2.5), new("panoramic-view", 2.25),
+                new("nature", 2), new("skiing", 2), new("dest-hiking", 2.25), new("dest-mountain-views", 2), new("dest-forest", 1.75), new("dest-skiing", 1.75)
+            ]),
+
+        new(
+            "Gardens & Parks",
+            "gardens-parks",
+            "Nature & Outdoors",
+            "flower",
+            40,
+            "Botanical gardens, parks, arboretums and calm green areas.",
+            [
+                new("botanical-garden", 3), new("garden", 3), new("park", 2.75), new("nature-reserve", 2.25),
+                new("nature", 2), new("quiet-area", 1.5), new("walking-route", 1.5), new("dest-forest", 1.75), new("dest-relaxed", 1.25)
+            ]),
+
+        new(
+            "Lakes & Rivers",
+            "lakes-rivers",
+            "Nature & Outdoors",
+            "droplets",
+            50,
+            "Lakes, rivers, waterfront walks and calmer water-based places.",
+            [
+                new("waterfront", 3), new("walking-route", 2), new("nature", 2), new("quiet-area", 1.5),
+                new("dest-lake", 2.5), new("dest-river-walks", 2.25), new("dest-riverfront", 2)
+            ]),
+
+        new(
+            "Viewpoints & Sunsets",
+            "viewpoints-sunsets",
+            "Nature & Outdoors",
+            "sunset",
+            60,
+            "Panoramic viewpoints, sunset spots, cable cars and scenic photo stops.",
+            [
+                new("panoramic-view", 3), new("sunset-view", 2.75), new("sea-view", 2), new("cable-car", 2),
+                new("photo-walk", 1.75), new("photography-event", 1.75), new("dest-mountain-views", 2), new("dest-sightseeing", 1.5)
+            ]),
+
+        new(
+            "Local Food",
+            "local-food",
+            "Food & Drink",
+            "utensils",
+            110,
+            "Traditional restaurants, local favorites, markets and regional food experiences.",
+            [
+                new("local-food", 3), new("traditional", 3), new("local-favorite", 2.5), new("food-market", 2.25),
+                new("food-market-event", 2.25), new("casual", 1.25), new("dest-local-food", 2.5), new("dest-mountain-food", 1.75)
+            ]),
+
+        new(
+            "Seafood",
+            "seafood",
+            "Food & Drink",
+            "fish",
+            120,
+            "Seafood restaurants, coastal dining and fresh fish experiences.",
+            [
+                new("seafood", 3), new("mediterranean", 2), new("waterfront-dining", 2), new("sea-view", 1.5),
+                new("harbor-view", 1.25), new("dest-seafood", 2.5), new("dest-coastal", 1.5)
+            ]),
+
+        new(
+            "Cafes & Coffee",
+            "cafes-coffee",
+            "Food & Drink",
+            "coffee",
+            130,
+            "Specialty coffee, cafes, desserts and relaxed coffee stops.",
+            [
+                new("specialty-coffee", 3), new("breakfast", 1.75), new("dessert", 1.75), new("ice-cream", 1.5),
+                new("casual", 1.25), new("dest-cafe-culture", 2.5)
+            ]),
+
+        new(
+            "Wine & Bars",
+            "wine-bars",
+            "Food & Drink",
+            "wine",
+            140,
+            "Wine bars, casual bars, nightlife spots and evening drinks.",
+            [
+                new("wine", 3), new("wine-bar", 3), new("nightlife", 2), new("evening-event", 1.75),
+                new("hidden-gem", 1.25), new("dest-wine-bars", 2.5), new("dest-nightlife", 2), new("dest-party", 1.5)
+            ]),
+
+        new(
+            "Fine Dining",
+            "fine-dining-interest",
+            "Food & Drink",
+            "sparkles",
+            150,
+            "Premium restaurants, refined dining, romantic dinners and polished service.",
+            [
+                new("fine-dining", 3), new("premium", 2.5), new("luxury", 2), new("mediterranean", 1.5),
+                new("waterfront-dining", 1.5), new("dest-fine-dining", 2.5)
+            ]),
+
+        new(
+            "Street Food & Casual Eats",
+            "street-food-casual",
+            "Food & Drink",
+            "sandwich",
+            160,
+            "Quick casual food, grills, desserts, simple local places and informal meals.",
+            [
+                new("street-food", 3), new("casual", 2.5), new("grill", 2.25), new("dessert", 1.5),
+                new("ice-cream", 1.5), new("budget", 1.5), new("dest-grill", 2)
+            ]),
+
+        new(
+            "Museums",
+            "museums",
+            "Culture & Heritage",
+            "museum",
+            210,
+            "Museums, collections, exhibitions and indoor cultural visits.",
+            [
+                new("museum", 3), new("art", 2), new("history", 2), new("culture", 2),
+                new("dest-museums", 2.5), new("dest-culture", 1.75)
+            ]),
+
+        new(
+            "Monasteries & Religious Sites",
+            "monasteries-religious-sites",
+            "Culture & Heritage",
+            "church",
+            220,
+            "Monasteries, religious heritage, cloisters, churches and quiet historic sites.",
+            [
+                new("monastery", 3), new("religious-site", 3), new("history", 2), new("culture", 2),
+                new("architecture", 1.75), new("old-town", 1), new("dest-historic", 1.75), new("dest-culture", 1.5)
+            ]),
+
+        new(
+            "Fortresses & City Walls",
+            "fortresses-city-walls",
+            "Culture & Heritage",
+            "shield",
+            230,
+            "Fortresses, medieval walls, citadels and historic defensive landmarks.",
+            [
+                new("fortress", 3), new("medieval-walls", 3), new("history", 2.25), new("panoramic-view", 1.5),
+                new("walking-route", 1.25), new("dest-historic", 2), new("dest-sightseeing", 1.5)
+            ]),
+
+        new(
+            "Old Towns & Architecture",
+            "old-towns-architecture",
+            "Culture & Heritage",
+            "landmark",
+            240,
+            "Old towns, historic streets, architecture, palaces and walkable heritage cores.",
+            [
+                new("old-town", 3), new("old-town-core", 2.75), new("architecture", 2.75), new("history", 2),
+                new("culture", 1.75), new("walking-route", 1.5), new("dest-old-town", 2.5), new("dest-historic", 1.75)
+            ]),
+
+        new(
+            "Galleries & Art",
+            "galleries-art",
+            "Culture & Heritage",
+            "palette",
+            250,
+            "Galleries, art spaces, photography exhibitions and creative cultural content.",
+            [
+                new("gallery", 3), new("art", 3), new("museum", 1.75), new("culture", 1.75),
+                new("photography-event", 2), new("hidden-gem", 1.25), new("dest-culture", 1.5)
+            ]),
+
+        new(
+            "Guided Tours",
+            "guided-tours",
+            "Activities & Events",
+            "map",
+            310,
+            "Guided walks, organized tours, photo walks and curated sightseeing experiences.",
+            [
+                new("guided-tour", 3), new("guided-event", 2.75), new("walking-tour-event", 2.5), new("photo-walk", 2),
+                new("dest-sightseeing", 2), new("dest-adventure", 1.5)
+            ]),
+
+        new(
+            "Adventure Activities",
+            "adventure-activities",
+            "Activities & Events",
+            "compass",
+            320,
+            "Kayaking, hiking, active tours, cable cars and outdoor adventures.",
+            [
+                new("kayaking", 3), new("hiking", 2.5), new("outdoor-tour-event", 2.5), new("cable-car", 2),
+                new("diving-snorkeling", 2), new("dest-adventure", 2.5), new("dest-hiking", 1.75)
+            ]),
+
+        new(
+            "Festivals & Live Music",
+            "festivals-live-music",
+            "Activities & Events",
+            "music",
+            330,
+            "Festivals, concerts, classical music, live performances and seasonal events.",
+            [
+                new("cultural-festival", 3), new("live-music-event", 3), new("classical-music-event", 2.5),
+                new("live-music", 2), new("summer-event", 1.75), new("ticketed-event", 1), new("dest-festivals", 2.5), new("dest-nightlife", 1.5)
+            ]),
+
+        new(
+            "Nightlife & Evening Events",
+            "nightlife-evening-events",
+            "Activities & Events",
+            "moon",
+            340,
+            "Evening events, nightlife, bars, live music and after-dark local experiences.",
+            [
+                new("nightlife", 3), new("evening-event", 3), new("live-music-event", 2.25), new("wine-bar", 1.5),
+                new("dest-nightlife", 2.5), new("dest-party", 2), new("dest-festivals", 1.25)
+            ]),
+
+        new(
+            "Family Friendly",
+            "family-friendly-interest",
+            "Travel Style",
+            "heart",
+            410,
+            "Easy places and experiences suitable for families and slower days.",
+            [
+                new("family-friendly", 3), new("family-stay", 2.25), new("relaxed-area", 1.75), new("swimming", 1.5),
+                new("walking-route", 1.25), new("dest-family-friendly", 2.5), new("dest-family-stays", 2)
+            ]),
+
+        new(
+            "Relaxed & Quiet",
+            "relaxed-quiet",
+            "Travel Style",
+            "leaf",
+            420,
+            "Quiet areas, local neighborhoods, hidden gems, wellness and slower experiences.",
+            [
+                new("quiet-area", 3), new("relaxed-area", 2.75), new("hidden-gem", 2), new("wellness", 2),
+                new("local-area", 1.5), new("dest-relaxed", 2.5), new("dest-wellness", 1.75)
+            ]),
+
+        new(
+            "Luxury Travel",
+            "luxury-travel",
+            "Travel Style",
+            "diamond",
+            430,
+            "Luxury stays, premium restaurants, boutique hotels and polished trip experiences.",
+            [
+                new("luxury", 3), new("luxury-stay", 3), new("premium", 2.5), new("fine-dining", 2),
+                new("boutique-stay", 1.75), new("dest-luxury-hotels", 2.75), new("dest-fine-dining", 1.75), new("dest-spa-hotels", 1.5)
+            ]),
+
+        new(
+            "Budget Friendly",
+            "budget-friendly-interest",
+            "Travel Style",
+            "wallet",
+            440,
+            "Budget stays, casual food, free events and low-cost things to do.",
+            [
+                new("budget", 3), new("budget-friendly", 2.5), new("free-entry-event", 2.5), new("casual", 1.75),
+                new("apartment-stay", 1.5), new("dest-budget-stays", 2.75)
+            ]),
+
+        new(
+            "Boutique & Unique Stays",
+            "boutique-unique-stays",
+            "Travel Style",
+            "bed",
+            450,
+            "Boutique stays, apartments, guesthouses and characterful accommodation.",
+            [
+                new("boutique-stay", 3), new("guesthouse-stay", 2.5), new("apartment-stay", 2.25),
+                new("harbor-stay", 1.5), new("architecture", 1), new("dest-boutique-hotels", 2.5), new("dest-mountain-lodges", 1.5)
+            ])
+    ];
+
+    private static async Task EnsureInterestTopicsAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)
+    {
+        var now = DateTime.UtcNow;
+        var existingTopicsBySlug = await db.InterestTopics
+            .Include(topic => topic.TopicTags)
+            .ToDictionaryAsync(topic => topic.Slug);
+
+        foreach (var definition in BuildSeedInterestTopics())
+        {
+            if (!existingTopicsBySlug.TryGetValue(definition.Slug, out var topic))
+            {
+                topic = new InterestTopic
+                {
+                    Name = definition.Name,
+                    Slug = definition.Slug,
+                    Description = definition.Description,
+                    IconKey = definition.IconKey,
+                    Group = definition.Group,
+                    SortOrder = definition.SortOrder,
+                    IsActive = definition.IsActive,
+                    ShowOnOnboarding = definition.ShowOnOnboarding,
+                    CreatedAt = now
+                };
+                db.InterestTopics.Add(topic);
+                await db.SaveChangesAsync();
+                existingTopicsBySlug[definition.Slug] = topic;
+            }
+            else
+            {
+                topic.Name = definition.Name;
+                topic.Description = definition.Description;
+                topic.IconKey = definition.IconKey;
+                topic.Group = definition.Group;
+                topic.SortOrder = definition.SortOrder;
+                topic.IsActive = definition.IsActive;
+                topic.ShowOnOnboarding = definition.ShowOnOnboarding;
+                topic.UpdatedAt = now;
+            }
+
+            var wantedLinks = definition.Tags
+                .Where(x => tagLookup.ContainsKey(x.TagSlug))
+                .Select(x => new { TagId = tagLookup[x.TagSlug].Id, x.Weight })
+                .GroupBy(x => x.TagId)
+                .ToDictionary(x => x.Key, x => x.Max(y => y.Weight));
+
+            var existingLinks = await db.InterestTopicTags
+                .Where(x => x.InterestTopicId == topic.Id)
+                .ToListAsync();
+
+            var existingTagIds = existingLinks.Select(x => x.TagId).ToHashSet();
+            var linksToRemove = existingLinks.Where(x => !wantedLinks.ContainsKey(x.TagId)).ToList();
+            if (linksToRemove.Count > 0)
+            {
+                db.InterestTopicTags.RemoveRange(linksToRemove);
+            }
+
+            foreach (var link in existingLinks.Where(x => wantedLinks.ContainsKey(x.TagId)))
+            {
+                link.Weight = wantedLinks[link.TagId];
+            }
+
+            foreach (var (tagId, weight) in wantedLinks)
+            {
+                if (existingTagIds.Contains(tagId))
+                {
+                    continue;
+                }
+
+                db.InterestTopicTags.Add(new InterestTopicTag
+                {
+                    InterestTopicId = topic.Id,
+                    TagId = tagId,
+                    Weight = weight
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        var activeSeedSlugs = BuildSeedInterestTopics()
+            .Select(x => x.Slug)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var obsoleteTopic in existingTopicsBySlug.Values.Where(x => !activeSeedSlugs.Contains(x.Slug)))
+        {
+            obsoleteTopic.IsActive = false;
+            obsoleteTopic.ShowOnOnboarding = false;
+            obsoleteTopic.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync();
+
+        await BackfillUserInterestTopicsFromLegacyTagsAsync(db);
+        await BackfillUserInterestTopicSignalsFromLegacyTagSignalsAsync(db);
+    }
+
+    private static async Task BackfillUserInterestTopicsFromLegacyTagsAsync(AppDbContext db)
+    {
+        var legacySelections = await db.UserTags
+            .AsNoTracking()
+            .Select(x => new { x.UserId, x.TagId })
+            .ToListAsync();
+
+        if (legacySelections.Count == 0)
+        {
+            return;
+        }
+
+        var tagToTopicIds = await db.InterestTopicTags
+            .AsNoTracking()
+            .Where(x => x.InterestTopic.IsActive)
+            .GroupBy(x => x.TagId)
+            .ToDictionaryAsync(x => x.Key, x => x.Select(y => y.InterestTopicId).Distinct().ToList());
+
+        var existing = await db.UserInterestTopics
+            .AsNoTracking()
+            .Select(x => new { x.UserId, x.InterestTopicId })
+            .ToListAsync();
+
+        var existingKeys = existing
+            .Select(x => (x.UserId, x.InterestTopicId))
+            .ToHashSet();
+
+        var now = DateTime.UtcNow;
+        foreach (var selection in legacySelections)
+        {
+            if (!tagToTopicIds.TryGetValue(selection.TagId, out var topicIds))
+            {
+                continue;
+            }
+
+            foreach (var topicId in topicIds)
+            {
+                var key = (selection.UserId, topicId);
+                if (existingKeys.Contains(key))
+                {
+                    continue;
+                }
+
+                db.UserInterestTopics.Add(new UserInterestTopic
+                {
+                    UserId = selection.UserId,
+                    InterestTopicId = topicId,
+                    CreatedAt = now
+                });
+                existingKeys.Add(key);
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task BackfillUserInterestTopicSignalsFromLegacyTagSignalsAsync(AppDbContext db)
+    {
+        var tagSignals = await db.UserInterestSignals
+            .AsNoTracking()
+            .Where(signal => signal.Source == "inferred" && signal.Score > 0)
+            .ToListAsync();
+
+        if (tagSignals.Count == 0)
+        {
+            return;
+        }
+
+        var tagToTopicLinks = await db.InterestTopicTags
+            .AsNoTracking()
+            .Where(x => x.InterestTopic.IsActive)
+            .Select(x => new { x.TagId, x.InterestTopicId, x.Weight })
+            .ToListAsync();
+
+        var linksByTagId = tagToTopicLinks
+            .GroupBy(x => x.TagId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        var existingSignals = await db.UserInterestTopicSignals
+            .ToListAsync();
+
+        var byKey = existingSignals
+            .ToDictionary(x => (x.UserId, x.InterestTopicId));
+
+        var grouped = new Dictionary<(int UserId, int InterestTopicId), (double Score, DateTime LastInteractionAt, string? LastReason)>();
+
+        foreach (var signal in tagSignals)
+        {
+            if (!linksByTagId.TryGetValue(signal.TagId, out var links))
+            {
+                continue;
+            }
+
+            foreach (var link in links)
+            {
+                var key = (signal.UserId, link.InterestTopicId);
+                var weightedScore = signal.Score * Math.Max(0.1, link.Weight);
+
+                if (grouped.TryGetValue(key, out var current))
+                {
+                    grouped[key] = (
+                        current.Score + weightedScore,
+                        signal.LastInteractionAt > current.LastInteractionAt ? signal.LastInteractionAt : current.LastInteractionAt,
+                        signal.LastInteractionAt > current.LastInteractionAt ? signal.LastReason : current.LastReason);
+                }
+                else
+                {
+                    grouped[key] = (weightedScore, signal.LastInteractionAt, signal.LastReason);
+                }
+            }
+        }
+
+        foreach (var (key, value) in grouped)
+        {
+            if (byKey.TryGetValue(key, out var existing))
+            {
+                if (existing.Score < value.Score)
+                {
+                    existing.Score = Math.Min(value.Score, 1000.0);
+                    existing.LastInteractionAt = value.LastInteractionAt;
+                    existing.LastReason = value.LastReason;
+                }
+            }
+            else
+            {
+                db.UserInterestTopicSignals.Add(new UserInterestTopicSignal
+                {
+                    UserId = key.UserId,
+                    InterestTopicId = key.InterestTopicId,
+                    Score = Math.Min(value.Score, 1000.0),
+                    Source = "inferred",
+                    LastInteractionAt = value.LastInteractionAt,
+                    LastReason = value.LastReason
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
 
     private static async Task EnsureDestinationDiscoveryTagAssignmentsAsync(
         AppDbContext db,
@@ -2164,7 +2748,7 @@ public static class SeedData
         await EnsureRestaurantAsync(fishZelenish);
         await AddPlaceTagsIfMissingAsync(fortress, "history", "culture", "fortress", "panoramic-view", "walking-route");
         await AddPlaceTagsIfMissingAsync(strand, "waterfront", "swimming", "family-friendly");
-        await AddPlaceTagsIfMissingAsync(fishZelenish, "local-favorite", "casual", "traditional", "vegetarian-friendly");
+        await AddPlaceTagsIfMissingAsync(fishZelenish, "local-favorite", "casual", "traditional", "vegetarian-friendly", "local-food", "food-market");
 
         var zlatibor = await EnsureDestinationAsync("Zlatibor", "Mountain destination with viewpoints, lakes, pine landscapes, family stays and outdoor activities.", mountainType, westernSerbia, 43.7297, 19.7003);
         await AddDestinationTagsIfMissingAsync(zlatibor,
@@ -3193,20 +3777,20 @@ public static class SeedData
         await AddBookingPartnerIfMissingAsync(familyBeachHotel, direct, "https://example.com/lapad-family-beach-hotel");
 
         await AddPlaceTagsIfMissingAsync(proto, "seafood", "mediterranean", "croatian", "fine-dining", "premium", "old-town");
-        await AddPlaceTagsIfMissingAsync(tajMahal, "traditional", "casual", "croatian", "old-town", "local-favorite");
+        await AddPlaceTagsIfMissingAsync(tajMahal, "traditional", "casual", "croatian", "old-town", "local-favorite", "local-food");
         await AddPlaceTagsIfMissingAsync(arsenal, "breakfast", "specialty-coffee", "waterfront-dining", "sea-view", "old-town");
-        await AddPlaceTagsIfMissingAsync(dvino, "wine", "wine-bar", "casual", "hidden-gem", "old-town");
+        await AddPlaceTagsIfMissingAsync(dvino, "wine", "wine-bar", "nightlife", "casual", "hidden-gem", "old-town");
         await AddPlaceTagsIfMissingAsync(peppino, "dessert", "ice-cream", "casual", "budget", "old-town");
         await AddPlaceTagsIfMissingAsync(orsan, "seafood", "grill", "waterfront-dining", "harbor-view", "local-favorite");
         await AddPlaceTagsIfMissingAsync(pantarul, "croatian", "mediterranean", "casual", "local-favorite");
 
         await AddPlaceTagsIfMissingAsync(rectorsPalace, "history", "culture", "art", "architecture", "museum", "old-town");
         await AddPlaceTagsIfMissingAsync(sponzaPalace, "history", "culture", "architecture", "old-town", "walking-route");
-        await AddPlaceTagsIfMissingAsync(franciscan, "history", "culture", "art", "museum", "old-town");
-        await AddPlaceTagsIfMissingAsync(warPhoto, "art", "history", "museum", "hidden-gem", "old-town");
+        await AddPlaceTagsIfMissingAsync(franciscan, "history", "culture", "art", "museum", "old-town", "monastery", "religious-site", "architecture");
+        await AddPlaceTagsIfMissingAsync(warPhoto, "art", "history", "museum", "gallery", "hidden-gem", "old-town");
         await AddPlaceTagsIfMissingAsync(lovrijenac, "history", "culture", "fortress", "panoramic-view", "walking-route");
         await AddPlaceTagsIfMissingAsync(mountSrd, "nature", "hiking", "panoramic-view", "sunset-view", "walking-route");
-        await AddPlaceTagsIfMissingAsync(trstenoArboretum, "nature", "botanical-garden", "walking-route", "quiet-area");
+        await AddPlaceTagsIfMissingAsync(trstenoArboretum, "nature", "botanical-garden", "garden", "park", "walking-route", "quiet-area");
         await AddPlaceTagsIfMissingAsync(betina, "swimming", "kayaking", "cave-beach", "nature", "hidden-gem");
         await AddPlaceTagsIfMissingAsync(copacabana, "swimming", "family-friendly", "popular-spot", "waterfront");
         await AddPlaceTagsIfMissingAsync(bellevueBeach, "swimming", "cave-beach", "quiet-area", "waterfront");
@@ -3343,7 +3927,7 @@ public static class SeedData
             "Dubrovnik Photo Guides",
             photoWalk);
 
-        await AddEventTagsIfMissingAsync(stradunClassical, "classical-music-event", "ticketed-event", "evening-event");
+        await AddEventTagsIfMissingAsync(stradunClassical, "classical-music-event", "live-music", "ticketed-event", "evening-event");
         await AddEventTagsIfMissingAsync(gundulicMarket, "food-market-event", "free-entry-event", "local-event");
         await AddEventTagsIfMissingAsync(lokrumNatureWalk, "nature-walk-event", "guided-event", "ticketed-event");
         await AddEventTagsIfMissingAsync(wallsSunset, "walking-tour-event", "guided-event", "ticketed-event");

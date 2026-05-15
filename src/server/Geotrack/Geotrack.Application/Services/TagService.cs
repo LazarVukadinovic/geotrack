@@ -7,22 +7,6 @@ namespace Geotrack.Application.Services;
 
 public class TagService : ITagService
 {
-    private static readonly string[] UserInterestSlugs =
-    {
-        "seafood",
-        "history",
-        "swimming",
-        "nature",
-        "art",
-        "local-event",
-        "live-music-event",
-        "cultural-festival",
-        "kayaking",
-        "walking-route",
-        "culture",
-        "boat-tour",
-    };
-
     private readonly ITagRepository _tagRepository;
 
     public TagService(ITagRepository tagRepository)
@@ -32,11 +16,9 @@ public class TagService : ITagService
 
     public async Task<List<TagDto>> GetTagsAsync(bool? forUser = null)
     {
-        IReadOnlyCollection<string>? allowedSlugs = forUser == true
-            ? UserInterestSlugs
-            : null;
-
-        var tags = await _tagRepository.GetTagsAsync(allowedSlugs);
+        var tags = forUser == true
+            ? await _tagRepository.GetTagsForActiveInterestTopicsAsync()
+            : await _tagRepository.GetTagsAsync();
 
         return tags.Select(MapTag).ToList();
     }

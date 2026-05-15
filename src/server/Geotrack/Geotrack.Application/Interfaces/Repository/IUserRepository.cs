@@ -1,5 +1,6 @@
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
+using Geotrack.Domain.Entities.Interests;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 
@@ -12,6 +13,7 @@ public interface IUserRepository : IRepository<User>
 
     Task<User?> GetByIdWithCollectionsAsync(int userId);
     Task<User?> GetByIdWithUserTagsAsync(int userId);
+    Task<User?> GetByIdWithUserInterestTopicsAsync(int userId);
 
     Task<List<Collection>> GetCollectionsByUserIdAsync(int userId);
     Task<Collection?> GetCollectionByIdForUserAsync(int userId, int collectionId);
@@ -21,6 +23,7 @@ public interface IUserRepository : IRepository<User>
     Task<List<string>> GetCollectionCoverImagesAsync(int collectionId, int maxCount);
 
     Task<List<Tag>> GetTagsByIdsAsync(IEnumerable<int> tagIds);
+    Task<List<InterestTopic>> GetInterestTopicsByIdsAsync(IEnumerable<int> interestTopicIds);
 
     Task<bool> CollectionItemExistsAsync(int collectionId, string entityType, int entityId);
     Task<CollectionItem?> GetCollectionItemByIdAsync(int collectionId, int itemId);
@@ -34,8 +37,12 @@ public interface IUserRepository : IRepository<User>
 
     Task AddUserTagAsync(UserTag userTag);
     Task DeleteUserTagsAsync(IEnumerable<UserTag> userTags);
+    Task AddUserInterestTopicAsync(UserInterestTopic userInterestTopic);
+    Task DeleteUserInterestTopicsAsync(IEnumerable<UserInterestTopic> userInterestTopics);
     Task<List<UserInterestSignal>> GetVisibleInferredInterestSignalsAsync(int userId, double minimumScore);
     Task<UserInterestSignal?> GetUserInterestSignalAsync(int userId, int tagId);
+    Task<List<UserInterestTopicSignal>> GetVisibleInferredInterestTopicSignalsAsync(int userId, double minimumScore);
+    Task<UserInterestTopicSignal?> GetUserInterestTopicSignalAsync(int userId, int interestTopicId);
 
     Task<User?> GetByIdWithExploreDataAsync(int userId);
     Task<Dictionary<int, double>> GetLocationRatingsByUserIdAsync(int userId);
@@ -53,4 +60,3 @@ public interface IUserRepository : IRepository<User>
     Task<RegionalManagerRegion?> GetUserRegionAsync(int userId, int regionId);
     Task DeleteUserRegionAsync(RegionalManagerRegion region);
 }
-

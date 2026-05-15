@@ -123,6 +123,7 @@ builder.Services.AddScoped<IReviewContentModerationService, ReviewContentModerat
 builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
 
 builder.Services.AddScoped<ITagService, TagService>();
+builder.Services.AddScoped<IInterestTopicService, InterestTopicService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IApiKeyEncryptionService, ApiKeyEncryptionService>();
 builder.Services.AddScoped<IAiProviderKeyService, AiProviderKeyService>();
@@ -182,6 +183,7 @@ builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IFavoriteRepository, FavoriteRepository>();
 builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 builder.Services.AddScoped<ITagRepository, TagRepository>();
+builder.Services.AddScoped<IInterestTopicRepository, InterestTopicRepository>();
 
 var forwardedHeadersEnabled = ConfigureForwardedHeaders(builder);
 
