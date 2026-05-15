@@ -72,6 +72,7 @@ public class ExploreSectionPageDto
     public string Title { get; set; } = string.Empty;
     public string? Subtitle { get; set; }
     public string CardType { get; set; } = "place-card";
+    public List<ExploreSectionFilterGroupDto> Filters { get; set; } = new();
     public List<ExploreFeedSectionItemDto> Items { get; set; } = new();
     public int Skip { get; set; }
     public int Take { get; set; }
@@ -79,6 +80,25 @@ public class ExploreSectionPageDto
     public bool HasMore { get; set; }
     public int TotalCount { get; set; }
     public string? EmptyReason { get; set; }
+}
+
+
+public class ExploreSectionFilterGroupDto
+{
+    public int TagTypeId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public int Order { get; set; }
+    public List<ExploreSectionFilterOptionDto> Options { get; set; } = new();
+}
+
+public class ExploreSectionFilterOptionDto
+{
+    public int TagId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public int Count { get; set; }
 }
 
 public class ExploreRecommendationsPageDto
@@ -145,4 +165,3 @@ public class ExploreLandmarkCategoryDto
     public string? Image { get; set; }
     public string? CategoryKey { get; set; }
 }
-

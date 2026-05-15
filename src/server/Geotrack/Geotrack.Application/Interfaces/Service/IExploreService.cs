@@ -19,5 +19,6 @@ public interface IExploreService
         int destinationId,
         int? userId = null,
         int skip = 0,
-        int take = 20);
+        int take = 20,
+        IReadOnlyCollection<int>? tagIds = null);
 }

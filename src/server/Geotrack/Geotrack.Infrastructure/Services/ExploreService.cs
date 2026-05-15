@@ -106,11 +106,13 @@ public class ExploreService : IExploreService
         int destinationId,
         int? userId = null,
         int skip = 0,
-        int take = SectionPageDefaultTake)
+        int take = SectionPageDefaultTake,
+        IReadOnlyCollection<int>? tagIds = null)
     {
         var normalizedKey = ToCategoryKey(sectionKey ?? string.Empty);
         var normalizedSkip = Math.Max(0, skip);
         var normalizedTake = Math.Clamp(take, 1, SectionPageMaxTake);
+        var selectedTagIds = NormalizeSelectedTagIds(tagIds);
 
         var destination = await ResolveDestinationForSectionPageAsync(destinationId);
         if (destination is null)
@@ -133,53 +135,62 @@ public class ExploreService : IExploreService
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
             : new HashSet<int>();
 
-        return normalizedKey switch
+        var candidateTake = Math.Max(SectionPageCandidateLimit, normalizedSkip + normalizedTake);
+
+        var page = normalizedKey switch
         {
             "curated-for-you" => await BuildCuratedForYouPageAsync(
                 destination,
                 destinationPoint,
                 userId,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             "top-stays" or "stays" or "hotels" => await BuildTopStaysPageAsync(
                 destination,
                 destinationPoint,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             "where-to-eat" or "food" or "food-and-music" => await BuildWhereToEatPageAsync(
                 destination,
                 destinationPoint,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             "drinks" or "cafes" or "bars" or "coffee" => await BuildDrinksPageAsync(
                 destination,
                 destinationPoint,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             "events" => await BuildEventsPageAsync(
                 destination,
                 destinationPoint,
                 eventFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             _ => await BuildDynamicSectionPageAsync(
                 normalizedKey,
                 destination,
                 destinationPoint,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake)
+                0,
+                candidateTake)
         };
+
+        return await ApplySectionFiltersAndPagingAsync(
+            page,
+            selectedTagIds,
+            normalizedSkip,
+            normalizedTake);
     }
+
 
 
     private async Task<ExplorePageDto> GetExplorePageCoreAsync(
@@ -303,7 +314,7 @@ public class ExploreService : IExploreService
             Layout = "horizontal-cards",
             CardType = "stay-card",
             MoreRoute = $"/explore/top-stays?destinationId={resolvedDestination.Id}",
-            Priority = 20,
+            Priority = 30,
             Items = topStays.Select(s => new ExploreFeedSectionItemDto
             {
                 Id = s.Id,
@@ -341,7 +352,7 @@ public class ExploreService : IExploreService
             Layout = "horizontal-cards",
             CardType = "event-card",
             MoreRoute = $"/explore/events?destinationId={resolvedDestination.Id}",
-            Priority = 40,
+            Priority = 20,
             Items = events.Select(e => new ExploreFeedSectionItemDto
             {
                 Id = e.Id,
@@ -822,6 +833,174 @@ public class ExploreService : IExploreService
             take);
     }
 
+    private async Task<ExploreSectionPageDto> ApplySectionFiltersAndPagingAsync(
+        ExploreSectionPageDto page,
+        IReadOnlyCollection<int> selectedTagIds,
+        int skip,
+        int take)
+    {
+        var allItems = page.Items;
+        var filters = await BuildSectionFilterGroupsAsync(allItems);
+        var filteredItems = ApplySelectedSectionTagFilters(allItems, selectedTagIds, filters);
+        var filteredTotalCount = selectedTagIds.Count > 0 ? filteredItems.Count : page.TotalCount;
+        var pageItems = filteredItems
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+
+        page.Filters = filters;
+        page.Items = pageItems;
+        page.Skip = skip;
+        page.Take = take;
+        page.NextSkip = skip + pageItems.Count;
+        page.TotalCount = filteredTotalCount;
+        page.HasMore = skip + pageItems.Count < filteredTotalCount;
+
+        return page;
+    }
+
+    private async Task<List<ExploreSectionFilterGroupDto>> BuildSectionFilterGroupsAsync(
+        IReadOnlyCollection<ExploreFeedSectionItemDto> items)
+    {
+        if (items.Count == 0)
+        {
+            return [];
+        }
+
+        var tagIds = items
+            .SelectMany(item => item.Tags)
+            .Select(tag => tag.TagId)
+            .Distinct()
+            .ToList();
+
+        if (tagIds.Count == 0)
+        {
+            return [];
+        }
+
+        var tagMetadata = await _db.Tags
+            .AsNoTracking()
+            .Where(tag => tagIds.Contains(tag.Id) && tag.TagType != null)
+            .Select(tag => new SectionTagMetadata
+            {
+                TagId = tag.Id,
+                TagName = tag.Name,
+                TagSlug = tag.Slug,
+                TagTypeId = tag.TagTypeId ?? 0,
+                TagTypeName = tag.TagType != null ? tag.TagType.Name : "Tags",
+                TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : "tags",
+                TagTypeLabel = tag.TagType != null && tag.TagType.FilterLabel != null
+                    ? tag.TagType.FilterLabel
+                    : tag.TagType != null
+                        ? tag.TagType.Name
+                        : "Tags",
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 0
+            })
+            .Where(tag => tag.TagTypeId > 0)
+            .ToListAsync();
+
+        if (tagMetadata.Count == 0)
+        {
+            return [];
+        }
+
+        var tagLookup = tagMetadata.ToDictionary(tag => tag.TagId);
+        var itemTags = items
+            .Select((item, index) => new
+            {
+                ItemKey = $"{item.EntityType}:{item.Id}:{index}",
+                TagIds = item.Tags
+                    .Select(tag => tag.TagId)
+                    .Where(tagLookup.ContainsKey)
+                    .Distinct()
+                    .ToList()
+            })
+            .Where(item => item.TagIds.Count > 0)
+            .ToList();
+
+        return tagMetadata
+            .GroupBy(tag => new
+            {
+                tag.TagTypeId,
+                tag.TagTypeName,
+                tag.TagTypeSlug,
+                tag.TagTypeLabel,
+                tag.TagTypeOrder
+            })
+            .Select(group => new ExploreSectionFilterGroupDto
+            {
+                TagTypeId = group.Key.TagTypeId,
+                Name = group.Key.TagTypeName,
+                Slug = group.Key.TagTypeSlug,
+                Label = group.Key.TagTypeLabel,
+                Order = group.Key.TagTypeOrder,
+                Options = group
+                    .GroupBy(tag => new { tag.TagId, tag.TagName, tag.TagSlug })
+                    .Select(option => new ExploreSectionFilterOptionDto
+                    {
+                        TagId = option.Key.TagId,
+                        Name = option.Key.TagName,
+                        Slug = option.Key.TagSlug,
+                        Count = itemTags.Count(item => item.TagIds.Contains(option.Key.TagId))
+                    })
+                    .Where(option => option.Count > 0)
+                    .OrderByDescending(option => option.Count)
+                    .ThenBy(option => option.Name)
+                    .ToList()
+            })
+            .Where(group => group.Options.Count > 0)
+            .OrderBy(group => group.Order == 0 ? int.MaxValue : group.Order)
+            .ThenBy(group => group.Label)
+            .ToList();
+    }
+
+    private static List<ExploreFeedSectionItemDto> ApplySelectedSectionTagFilters(
+        IReadOnlyCollection<ExploreFeedSectionItemDto> items,
+        IReadOnlyCollection<int> selectedTagIds,
+        IReadOnlyCollection<ExploreSectionFilterGroupDto> filters)
+    {
+        if (selectedTagIds.Count == 0)
+        {
+            return items.ToList();
+        }
+
+        var selectedTagSet = selectedTagIds.ToHashSet();
+        var selectedGroups = filters
+            .Select(group => new
+            {
+                Group = group,
+                TagIds = group.Options
+                    .Select(option => option.TagId)
+                    .Where(selectedTagSet.Contains)
+                    .ToHashSet()
+            })
+            .Where(group => group.TagIds.Count > 0)
+            .ToList();
+
+        if (selectedGroups.Count == 0)
+        {
+            return [];
+        }
+
+        return items
+            .Where(item =>
+            {
+                var itemTagIds = item.Tags.Select(tag => tag.TagId).ToHashSet();
+                return selectedGroups.All(group => itemTagIds.Overlaps(group.TagIds));
+            })
+            .ToList();
+    }
+
+    private static IReadOnlyCollection<int> NormalizeSelectedTagIds(IReadOnlyCollection<int>? tagIds)
+    {
+        return tagIds is null
+            ? []
+            : tagIds
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+    }
+
     private async Task<ResolvedDestinationCandidate?> ResolveDestinationForSectionPageAsync(int destinationId)
     {
         return await _db.Destinations
@@ -1085,7 +1264,7 @@ public class ExploreService : IExploreService
             Layout = "horizontal-cards",
             CardType = "place-card",
             MoreRoute = $"/explore/where-to-eat?destinationId={destinationId}",
-            Priority = 30,
+            Priority = 40,
             Items = items.Select(p => new ExploreFeedSectionItemDto
             {
                 Id = p.Id,
@@ -1166,7 +1345,7 @@ public class ExploreService : IExploreService
             Layout = "horizontal-cards",
             CardType = "place-card",
             MoreRoute = $"/explore/drinks?destinationId={destinationId}",
-            Priority = 35,
+            Priority = 50,
             Items = items.Select(p => new ExploreFeedSectionItemDto
             {
                 Id = p.Id,
@@ -1857,6 +2036,18 @@ public class ExploreService : IExploreService
             : trimmed;
     }
 
+
+    private sealed class SectionTagMetadata
+    {
+        public int TagId { get; set; }
+        public string TagName { get; set; } = string.Empty;
+        public string TagSlug { get; set; } = string.Empty;
+        public int TagTypeId { get; set; }
+        public string TagTypeName { get; set; } = string.Empty;
+        public string TagTypeSlug { get; set; } = string.Empty;
+        public string TagTypeLabel { get; set; } = string.Empty;
+        public int TagTypeOrder { get; set; }
+    }
 
     private sealed class SectionPlaceProjection
     {
