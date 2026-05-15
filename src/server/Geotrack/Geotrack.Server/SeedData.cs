@@ -327,7 +327,6 @@ public static class SeedData
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
         var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation");
-        var ptActivity = await EnsurePlaceTypeAsync("Activity", "Activity providers, tours and outdoor experiences");
         var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
         var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
         var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
@@ -504,7 +503,7 @@ public static class SeedData
             Name = "Gruz Fishing Pier",
             Subtitle = "Quiet harbor-side fishing spot",
             Address = "Gruz Harbor, Dubrovnik",
-            PlaceTypeId = ptActivity.Id,
+            PlaceTypeId = ptNature.Id,
             LocationId = gruz.Id,
             Description = "A low-key harbor-side spot for a slow evening walk and fishing atmosphere.",
             Latitude = 42.6588,
@@ -907,6 +906,47 @@ public static class SeedData
         await EnsureDefaultModerationTermsAsync(db);
     }
 
+    private static async Task RemoveDeprecatedActivityPlaceTypeAsync(AppDbContext db)
+    {
+        var activityType = await db.PlaceTypes.FirstOrDefaultAsync(x => x.Name == "Activity");
+        if (activityType is null)
+        {
+            return;
+        }
+
+        var fallbackType = await db.PlaceTypes.FirstOrDefaultAsync(x => x.Name == "Landmark")
+            ?? await db.PlaceTypes.FirstOrDefaultAsync(x => x.Name == "Nature");
+
+        if (fallbackType is not null)
+        {
+            var places = await db.Places
+                .Where(x => x.PlaceTypeId == activityType.Id)
+                .ToListAsync();
+
+            foreach (var place in places)
+            {
+                place.PlaceTypeId = fallbackType.Id;
+            }
+
+            var contributions = await db.PlaceContributions
+                .Where(x => x.PlaceTypeId == activityType.Id)
+                .ToListAsync();
+
+            foreach (var contribution in contributions)
+            {
+                contribution.PlaceTypeId = fallbackType.Id;
+            }
+        }
+
+        var tagTypeLinks = await db.TagTypePlaceTypes
+            .Where(x => x.PlaceTypeId == activityType.Id)
+            .ToListAsync();
+
+        db.TagTypePlaceTypes.RemoveRange(tagTypeLinks);
+        db.PlaceTypes.Remove(activityType);
+        await db.SaveChangesAsync();
+    }
+
     private static async Task EnsureCoreEntityImagesAsync(AppDbContext db)
     {
         var now = DateTime.UtcNow;
@@ -1219,9 +1259,9 @@ public static class SeedData
         new("Dining Style", "dining-style", ForPlace: true, Description: "Dining style and service level.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"]),
         new("Stay Style", "stay-style", ForPlace: true, Description: "Accommodation style and positioning.", AllowedPlaceTypes: ["Stay"]),
 
-        new("Activity", "activity", ForPlace: true, Description: "Activity tags that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery"]),
-        new("Explore Topic", "explore-topic", ForPlace: true, Description: "Broad place topics that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery", "Attraction"]),
-        new("Setting", "setting", ForPlace: true, Description: "Physical setting or atmosphere.", AllowedPlaceTypes: ["Beach", "Restaurant", "Cafe", "Bar", "Landmark", "Nature", "Stay", "Activity", "Museum", "Gallery"]),
+        new("Activity", "activity", ForPlace: true, Description: "Activity tags that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Museum", "Gallery"]),
+        new("Explore Topic", "explore-topic", ForPlace: true, Description: "Broad place topics that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Museum", "Gallery", "Attraction"]),
+        new("Setting", "setting", ForPlace: true, Description: "Physical setting or atmosphere.", AllowedPlaceTypes: ["Beach", "Restaurant", "Cafe", "Bar", "Landmark", "Nature", "Stay", "Museum", "Gallery"]),
         new("Price Level", "price-level", ForPlace: true, Description: "Simple price positioning.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar", "Stay"]),
 
         new("Event Category", "event-category", ForEvent: true, Description: "Event category and format."),
@@ -1765,6 +1805,25 @@ public static class SeedData
             var place = await db.Places.FirstOrDefaultAsync(x => x.Name == name);
             if (place is not null)
             {
+                var changed = false;
+
+                if (place.PlaceTypeId != placeType.Id)
+                {
+                    place.PlaceTypeId = placeType.Id;
+                    changed = true;
+                }
+
+                if (place.LocationId != location.Id)
+                {
+                    place.LocationId = location.Id;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    await db.SaveChangesAsync();
+                }
+
                 return place;
             }
 
@@ -2011,7 +2070,6 @@ public static class SeedData
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
         var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation");
-        var ptActivity = await EnsurePlaceTypeAsync("Activity", "Activity providers, tours and outdoor experiences");
         var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
         var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
         var ptBeach = await EnsurePlaceTypeAsync("Beach", "Beaches and swimming areas");
@@ -2126,7 +2184,7 @@ public static class SeedData
         var tornik = await EnsureLocationAsync(zlatibor, "Tornik", mountainAreaType, 43.6862, 19.6545);
         await AddLocationTagsIfMissingAsync(zlatiborCenter, "family-friendly", "relaxed-area", "local-area");
         await AddLocationTagsIfMissingAsync(tornik, "panoramic-view", "hiking", "nature");
-        var goldGondola = await EnsurePlaceAsync("Gold Gondola Zlatibor", "Long panoramic gondola ride", "Zlatibor Center", ptActivity, zlatiborCenter, "Panoramic gondola route toward Tornik with mountain and lake views.", 43.7304, 19.6971, "09:00 - 17:00", 4.7, 500);
+        var goldGondola = await EnsurePlaceAsync("Gold Gondola Zlatibor", "Long panoramic gondola ride", "Zlatibor Center", ptLandmark, zlatiborCenter, "Panoramic gondola route toward Tornik with mountain and lake views.", 43.7304, 19.6971, "09:00 - 17:00", 4.7, 500);
         var tornikViewpoint = await EnsurePlaceAsync("Tornik Viewpoint", "Mountain viewpoint and outdoor area", "Tornik, Zlatibor", ptNature, tornik, "High viewpoint area for mountain scenery, hiking and seasonal outdoor activities.", 43.6862, 19.6545, "Open 24h", 4.7, 260);
         var zlatiborLodge = await EnsurePlaceAsync("Zlatibor Mountain Lodge", "Cozy mountain stay", "Zlatibor Center", ptStay, zlatiborCenter, "A simple mountain stay near the center for weekend trips and family visits.", 43.7289, 19.7008, "Open 24h", 4.4, 96);
         var zlatiborStay = await EnsureStayAsync(zlatiborLodge, guesthouseStayType, 72m, "14:00", "10:00");
@@ -2151,7 +2209,7 @@ public static class SeedData
         var pancic = await EnsureLocationAsync(kopaonik, "Pancic Peak", mountainAreaType, 43.2670, 20.8229);
         await AddLocationTagsIfMissingAsync(skiCenter, "family-friendly", "local-area", "nature");
         await AddLocationTagsIfMissingAsync(pancic, "panoramic-view", "hiking", "nature");
-        var skiCenterPlace = await EnsurePlaceAsync("Kopaonik Ski Center", "Main ski and outdoor activity area", "Kopaonik", ptActivity, skiCenter, "Main mountain activity area for skiing, walking, viewpoints and seasonal outdoor activities.", 43.2856, 20.8095, "08:00 - 17:00", 4.7, 640);
+        var skiCenterPlace = await EnsurePlaceAsync("Kopaonik Ski Center", "Main ski and outdoor activity area", "Kopaonik", ptNature, skiCenter, "Main mountain activity area for skiing, walking, viewpoints and seasonal outdoor activities.", 43.2856, 20.8095, "08:00 - 17:00", 4.7, 640);
         var hotelGrand = await EnsurePlaceAsync("Hotel Grand Kopaonik", "Central mountain hotel", "Kopaonik Center", ptStay, skiCenter, "Central mountain hotel near the ski area and resort services.", 43.2858, 20.8101, "Open 24h", 4.6, 420);
         var grandStay = await EnsureStayAsync(hotelGrand, hotelStayType, 180m, "15:00", "11:00");
         await AddStayAmenitiesIfMissingAsync(grandStay, wifi, breakfast, parking, spa, airConditioning);
@@ -2375,6 +2433,25 @@ public static class SeedData
             var place = await db.Places.FirstOrDefaultAsync(x => x.Name == name);
             if (place is not null)
             {
+                var changed = false;
+
+                if (place.PlaceTypeId != placeType.Id)
+                {
+                    place.PlaceTypeId = placeType.Id;
+                    changed = true;
+                }
+
+                if (place.LocationId != location.Id)
+                {
+                    place.LocationId = location.Id;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    await db.SaveChangesAsync();
+                }
+
                 return place;
             }
 
@@ -2698,7 +2775,6 @@ public static class SeedData
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
         var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation");
-        var ptActivity = await EnsurePlaceTypeAsync("Activity", "Activity providers, tours and outdoor experiences");
         var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
         var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
 
@@ -2959,7 +3035,7 @@ public static class SeedData
             "Dubrovnik Cable Car",
             "Quick ride to Mount Srd views",
             "Petra Kresimira IV, Dubrovnik",
-            ptActivity,
+            ptLandmark,
             ploce,
             "A short scenic ride up to Mount Srd for views over the city, islands and sunset.",
             42.6427,
@@ -2972,7 +3048,7 @@ public static class SeedData
             "Blue Cave Boat Tour",
             "Boat trip to caves and swimming spots",
             "Gruz Harbor, Dubrovnik",
-            ptActivity,
+            ptLandmark,
             gruz,
             "A small-group boat tour for island coves, cave swimming and relaxed Adriatic views.",
             42.6590,
@@ -2985,7 +3061,7 @@ public static class SeedData
             "Elaphiti Islands Day Trip",
             "Island-hopping boat day from Gruz",
             "Gruz Harbor, Dubrovnik",
-            ptActivity,
+            ptLandmark,
             gruz,
             "A day trip connecting Kolocep, Lopud and Sipan with beaches, village walks and boat time.",
             42.6594,
@@ -2998,7 +3074,7 @@ public static class SeedData
             "Lokrum Kayak Route",
             "Sea kayaking route toward Lokrum",
             "Banje launch point, Dubrovnik",
-            ptActivity,
+            ptLandmark,
             ploce,
             "A sea-kayaking route from the city side toward Lokrum with cliffs, caves and swimming stops.",
             42.6410,
@@ -3011,7 +3087,7 @@ public static class SeedData
             "Old Town Photo Walk",
             "Guided photography walk through stone streets",
             "Pile Gate, Dubrovnik",
-            ptActivity,
+            ptLandmark,
             oldTown,
             "A guided walking route for viewpoints, alleys, architecture and early evening light around Old Town.",
             42.6418,
@@ -3024,7 +3100,7 @@ public static class SeedData
             "Dubrovnik Fishing Charter",
             "Morning fishing trips from Gruz",
             "Gruz Harbor, Dubrovnik",
-            ptActivity,
+            ptLandmark,
             gruz,
             "A private or small-group fishing charter from the harbor, focused on relaxed morning trips.",
             42.6590,

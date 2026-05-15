@@ -132,7 +132,18 @@ public class ExploreSearchService : IExploreSearchService
                 Title = place.Name,
                 Subtitle = place.Subtitle ?? place.Location.Name,
                 Description = TrimDescription(place.Description, 150),
-                CategoryLabel = place.Stay != null ? place.Stay.StayType.Name : place.PlaceType.Name,
+                CategoryLabel = place.Stay != null
+                    ? place.Stay.StayType.Name
+                    : place.PlaceType.Name.ToLower() == "activity"
+                        ? (place.PlaceTags
+                            .Where(placeTag =>
+                                placeTag.Tag.ForPlace &&
+                                (placeTag.Tag.Name.ToLower().Contains(term) ||
+                                 placeTag.Tag.Slug.ToLower().Contains(term)))
+                            .OrderBy(placeTag => placeTag.Tag.Name)
+                            .Select(placeTag => placeTag.Tag.Name)
+                            .FirstOrDefault() ?? "Place")
+                        : place.PlaceType.Name,
                 Image = place.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -145,8 +156,8 @@ public class ExploreSearchService : IExploreSearchService
                 LocationName = place.Location.Name,
                 Latitude = place.Latitude,
                 Longitude = place.Longitude,
-                Rating = place.AverageRating,
-                ReviewCount = FormatReviewCountLabel(place.ReviewCount),
+                Rating = place.PlaceReviews.Select(review => (double?)review.Rating).Average(),
+                ReviewCount = FormatReviewCountLabel(place.PlaceReviews.Count()),
                 Tags = place.PlaceTags
                     .Where(placeTag => placeTag.Tag.ForPlace)
                     .OrderBy(placeTag => placeTag.Tag.Name)
