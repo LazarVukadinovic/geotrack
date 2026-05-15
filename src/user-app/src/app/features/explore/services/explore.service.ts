@@ -382,6 +382,12 @@ export class ExploreService {
     return of(this.landmarkCategories()).pipe(delay(0));
   }
 
+  private distanceOriginForSource(
+    source?: 'gps' | 'approximate' | 'manual' | 'destination' | 'default' | 'unknown' | null,
+  ): 'current-location' | 'destination-centre' {
+    return source === 'gps' ? 'current-location' : 'destination-centre';
+  }
+
   private loadFromApi(
     lat: number,
     lng: number,
@@ -408,7 +414,8 @@ export class ExploreService {
 
     const params = new HttpParams()
       .set('latitude', String(lat))
-      .set('longitude', String(lng));
+      .set('longitude', String(lng))
+      .set('distanceOrigin', this.distanceOriginForSource(source));
 
     this.http.get<ExploreApiResponse>('/api/explore', { params }).subscribe({
       next: (res) => {
@@ -474,7 +481,9 @@ export class ExploreService {
     this._loadError.set(null);
     this._loading.set(true);
 
-    const params = new HttpParams().set('destinationId', String(destinationId));
+    const params = new HttpParams()
+      .set('destinationId', String(destinationId))
+      .set('distanceOrigin', 'destination-centre');
 
     this.http.get<ExploreApiResponse>('/api/explore', { params }).subscribe({
       next: (res) => {

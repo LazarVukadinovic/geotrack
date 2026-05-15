@@ -144,7 +144,7 @@ export class ExploreSectionListingService {
       this._loadMoreError.set(null);
     }
 
-    this.http.get<ApiExploreSectionListingResponse>(`/api/explore/sections/${encodeURIComponent(sectionKey)}`, {
+    this.http.get<ApiExploreSectionListingResponse>(`/api/explore/${encodeURIComponent(sectionKey)}`, {
       params: new HttpParams()
         .set('destinationId', destinationId)
         .set('skip', skip)

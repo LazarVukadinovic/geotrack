@@ -22,7 +22,8 @@ public class ExploreController : ControllerBase
     public async Task<ActionResult> GetExplorePage(
         [FromQuery] double? latitude,
         [FromQuery] double? longitude,
-        [FromQuery] int? destinationId = null)
+        [FromQuery] int? destinationId = null,
+        [FromQuery] string? distanceOrigin = null)
     {
         if (destinationId.HasValue)
         {
@@ -56,7 +57,8 @@ public class ExploreController : ControllerBase
         var result = await _exploreService.GetExplorePageAsync(
             latitude.Value,
             longitude.Value,
-            GetUserId());
+            GetUserId(),
+            UseCurrentLocationDistance(distanceOrigin));
 
         return Ok(result);
     }
@@ -161,6 +163,12 @@ public class ExploreController : ControllerBase
         }
 
         return Ok(result);
+    }
+
+    private static bool UseCurrentLocationDistance(string? distanceOrigin)
+    {
+        return string.Equals(distanceOrigin, "current-location", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(distanceOrigin, "user", StringComparison.OrdinalIgnoreCase);
     }
 
     private int? GetUserId()

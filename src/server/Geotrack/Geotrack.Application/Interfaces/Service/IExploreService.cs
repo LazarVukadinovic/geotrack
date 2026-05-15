@@ -7,7 +7,8 @@ public interface IExploreService
     Task<ExplorePageDto> GetExplorePageAsync(
         double latitude,
         double longitude,
-        int? userId = null);
+        int? userId = null,
+        bool useCurrentLocationDistance = false);
 
     Task<ExplorePageDto> GetExplorePageForDestinationAsync(
         int destinationId,

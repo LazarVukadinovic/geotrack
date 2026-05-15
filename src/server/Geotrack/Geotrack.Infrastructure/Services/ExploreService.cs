@@ -68,8 +68,12 @@ public class ExploreService : IExploreService
         _favoriteService = favoriteService;
     }
 
-    public Task<ExplorePageDto> GetExplorePageAsync(double latitude, double longitude, int? userId = null) =>
-        GetExplorePageCoreAsync(latitude, longitude, userId, preferredDestinationId: null);
+    public Task<ExplorePageDto> GetExplorePageAsync(
+        double latitude,
+        double longitude,
+        int? userId = null,
+        bool useCurrentLocationDistance = false) =>
+        GetExplorePageCoreAsync(latitude, longitude, userId, preferredDestinationId: null, useCurrentLocationDistance);
 
     public async Task<ExplorePageDto> GetExplorePageForDestinationAsync(int destinationId, int? userId = null)
     {
@@ -93,7 +97,8 @@ public class ExploreService : IExploreService
             destination.Latitude,
             destination.Longitude,
             userId,
-            destinationId);
+            destinationId,
+            useCurrentLocationDistance: false);
     }
 
     public async Task<ExploreSectionPageDto> GetExploreSectionPageAsync(
@@ -181,7 +186,8 @@ public class ExploreService : IExploreService
         double latitude,
         double longitude,
         int? userId,
-        int? preferredDestinationId)
+        int? preferredDestinationId,
+        bool useCurrentLocationDistance)
     {
         var userPoint = SpatialPointFactory.Create(latitude, longitude);
         var resolvedDestination = preferredDestinationId.HasValue
@@ -191,6 +197,10 @@ public class ExploreService : IExploreService
         {
             return new ExplorePageDto();
         }
+
+        var distancePoint = useCurrentLocationDistance
+            ? userPoint
+            : SpatialPointFactory.Create(resolvedDestination.Latitude, resolvedDestination.Longitude);
 
         var placeFavoriteIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
@@ -213,7 +223,7 @@ public class ExploreService : IExploreService
                 e.StartDate,
                 e.EndDate,
                 Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
-                DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
+                DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint)
             })
             .OrderBy(e => e.DistanceMeters)
             .ThenBy(e => e.StartDate)
@@ -234,7 +244,7 @@ public class ExploreService : IExploreService
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 PricePerNight = p.Stay != null ? p.Stay.PricePerNight : null,
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint)
             })
             .OrderBy(p => p.DistanceMeters)
             .ThenByDescending(p => p.AverageRating ?? 0)
@@ -243,19 +253,22 @@ public class ExploreService : IExploreService
 
         var whereToEatSection = await BuildWhereToEatSectionAsync(
             resolvedDestination.Id,
-            userPoint,
-            placeFavoriteIds);
+            distancePoint,
+            placeFavoriteIds,
+            useCurrentLocationDistance);
 
         var drinksSection = await BuildDrinksSectionAsync(
             resolvedDestination.Id,
-            userPoint,
-            placeFavoriteIds);
+            distancePoint,
+            placeFavoriteIds,
+            useCurrentLocationDistance);
 
         var dynamicSections = await BuildDynamicPlaceSectionsAsync(
             resolvedDestination.Id,
-            userPoint,
+            distancePoint,
             curationSignals,
-            placeFavoriteIds);
+            placeFavoriteIds,
+            useCurrentLocationDistance);
 
         var duplicatePlaceIds = dynamicSections
             .SelectMany(section => section.Items)
@@ -266,7 +279,7 @@ public class ExploreService : IExploreService
 
         var curatedPlaces = await BuildCuratedPlacesAsync(
             resolvedDestination.Id,
-            userPoint,
+            distancePoint,
             curationSignals,
             duplicatePlaceIds);
 
@@ -275,7 +288,8 @@ public class ExploreService : IExploreService
         var curatedSection = BuildCuratedForYouSection(
             resolvedDestination.Id,
             curatedPlaces,
-            placeFavoriteIds);
+            placeFavoriteIds,
+            useCurrentLocationDistance);
         if (curatedSection.Items.Count > 0)
         {
             sections.Add(curatedSection);
@@ -299,7 +313,7 @@ public class ExploreService : IExploreService
                 Image = s.Image,
                 Rating = s.AverageRating.HasValue ? Math.Round(s.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(s.ReviewCount),
-                Distance = SpatialDistanceFormatter.Format(s.DistanceMeters),
+                Distance = FormatDistanceLabel(s.DistanceMeters, useCurrentLocationDistance),
                 PricePerNight = s.PricePerNight,
                 IsSaved = placeFavoriteIds.Contains(s.Id)
             }).ToList()
@@ -337,7 +351,7 @@ public class ExploreService : IExploreService
                 Subtitle = DisplayTextSafety.CleanOptional(e.EventTypeName),
                 DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
                 Image = e.Image,
-                Distance = SpatialDistanceFormatter.Format(e.DistanceMeters)
+                Distance = FormatDistanceLabel(e.DistanceMeters, useCurrentLocationDistance)
             }).ToList()
         };
         if (eventsSection.Items.Count > 0)
@@ -897,7 +911,7 @@ public class ExploreService : IExploreService
             Image = item.Image,
             Rating = item.AverageRating.HasValue ? Math.Round(item.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(item.ReviewCount),
-            Distance = SpatialDistanceFormatter.Format(item.DistanceMeters),
+            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
             OpeningHours = item.OpeningHours,
             PricePerNight = cardType == "stay-card" ? item.PricePerNight : null,
             IsSaved = placeFavoriteIds.Contains(item.Id),
@@ -918,7 +932,7 @@ public class ExploreService : IExploreService
             Subtitle = DisplayTextSafety.CleanOptional(item.Subtitle),
             Description = TrimDescription(item.Description, 170),
             Image = item.Image,
-            Distance = SpatialDistanceFormatter.Format(item.DistanceMeters),
+            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
             DateLabel = FormatDateLabel(item.StartDate, item.EndDate),
             IsSaved = eventFavoriteIds.Contains(item.Id),
             Tags = item.Tags
@@ -941,7 +955,7 @@ public class ExploreService : IExploreService
             Image = place.Image,
             Rating = place.AverageRating.HasValue ? Math.Round(place.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(place.ReviewCount),
-            Distance = SpatialDistanceFormatter.Format(place.DistanceMeters),
+            Distance = FormatDistanceLabel(place.DistanceMeters, useCurrentLocationDistance: false),
             OpeningHours = place.OpeningHours,
             IsSaved = placeFavoriteIds.Contains(place.Id),
             Tags = place.MatchedTags.Select(tag => new ExploreFeedSectionTagDto
@@ -968,7 +982,8 @@ public class ExploreService : IExploreService
     private static ExploreFeedSectionDto BuildCuratedForYouSection(
         int destinationId,
         IReadOnlyCollection<RankedCuratedPlace> curatedPlaces,
-        ISet<int> placeFavoriteIds)
+        ISet<int> placeFavoriteIds,
+        bool useCurrentLocationDistance)
     {
         return new ExploreFeedSectionDto
         {
@@ -991,7 +1006,7 @@ public class ExploreService : IExploreService
                 Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
-                Distance = SpatialDistanceFormatter.Format(p.DistanceMeters),
+                Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
                 OpeningHours = p.OpeningHours,
                 IsSaved = placeFavoriteIds.Contains(p.Id),
                 Tags = p.MatchedTags.Select(tag => new ExploreFeedSectionTagDto
@@ -1007,8 +1022,9 @@ public class ExploreService : IExploreService
 
     private async Task<ExploreFeedSectionDto> BuildWhereToEatSectionAsync(
       int destinationId,
-      Point userPoint,
-      ISet<int> placeFavoriteIds)
+      Point distancePoint,
+      ISet<int> placeFavoriteIds,
+      bool useCurrentLocationDistance)
     {
         var items = await _db.Places
             .AsNoTracking()
@@ -1044,7 +1060,7 @@ public class ExploreService : IExploreService
                     .FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint),
                 Tags = p.PlaceTags
                     .Where(pt => pt.Tag.ForPlace)
                     .Select(pt => new ExploreFeedSectionTagDto
@@ -1082,7 +1098,7 @@ public class ExploreService : IExploreService
                 Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
-                Distance = SpatialDistanceFormatter.Format(p.DistanceMeters),
+                Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
                 OpeningHours = p.OpeningHours,
                 IsSaved = placeFavoriteIds.Contains(p.Id),
                 Tags = p.Tags
@@ -1092,8 +1108,9 @@ public class ExploreService : IExploreService
 
     private async Task<ExploreFeedSectionDto> BuildDrinksSectionAsync(
         int destinationId,
-        Point userPoint,
-        ISet<int> placeFavoriteIds)
+        Point distancePoint,
+        ISet<int> placeFavoriteIds,
+        bool useCurrentLocationDistance)
     {
         var items = await _db.Places
             .AsNoTracking()
@@ -1124,7 +1141,7 @@ public class ExploreService : IExploreService
                     .FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint),
                 Tags = p.PlaceTags
                     .Where(pt => pt.Tag.ForPlace)
                     .Select(pt => new ExploreFeedSectionTagDto
@@ -1162,7 +1179,7 @@ public class ExploreService : IExploreService
                 Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
-                Distance = SpatialDistanceFormatter.Format(p.DistanceMeters),
+                Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
                 OpeningHours = p.OpeningHours,
                 IsSaved = placeFavoriteIds.Contains(p.Id),
                 Tags = p.Tags
@@ -1172,9 +1189,10 @@ public class ExploreService : IExploreService
 
     private async Task<List<ExploreFeedSectionDto>> BuildDynamicPlaceSectionsAsync(
         int destinationId,
-        Point userPoint,
+        Point distancePoint,
         IReadOnlyCollection<CuratedInterestSignal> curationSignals,
-        ISet<int> placeFavoriteIds)
+        ISet<int> placeFavoriteIds,
+        bool useCurrentLocationDistance)
     {
         var signalByTagId = curationSignals
             .GroupBy(signal => signal.TagId)
@@ -1211,7 +1229,7 @@ public class ExploreService : IExploreService
                     .FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint),
                 MatchedTags = p.PlaceTags
                     .Where(pt => pt.Tag.ForPlace)
                     .Select(pt => new DynamicSectionTagMatch
@@ -1287,7 +1305,7 @@ public class ExploreService : IExploreService
                         Image = candidate.Image,
                         Rating = candidate.AverageRating.HasValue ? Math.Round(candidate.AverageRating.Value, 1) : null,
                         ReviewCount = FormatReviewCountLabel(candidate.ReviewCount),
-                        Distance = SpatialDistanceFormatter.Format(candidate.DistanceMeters),
+                        Distance = FormatDistanceLabel(candidate.DistanceMeters, useCurrentLocationDistance),
                         OpeningHours = candidate.OpeningHours,
                         IsSaved = placeFavoriteIds.Contains(candidate.Id),
                         DistanceMeters = candidate.DistanceMeters,
@@ -1525,13 +1543,13 @@ public class ExploreService : IExploreService
 
     private async Task<List<RankedCuratedPlace>> BuildCuratedPlacesAsync(
         int destinationId,
-        Point userPoint,
+        Point distancePoint,
         IReadOnlyCollection<CuratedInterestSignal> curationSignals,
         ISet<int> duplicatePlaceIds)
     {
         var rankedPlaces = await BuildRankedCuratedPlacesAsync(
             destinationId,
-            userPoint,
+            distancePoint,
             curationSignals,
             duplicatePlaceIds,
             CuratedCandidateLimit);
@@ -1543,7 +1561,7 @@ public class ExploreService : IExploreService
 
     private async Task<List<RankedCuratedPlace>> BuildRankedCuratedPlacesAsync(
         int destinationId,
-        Point userPoint,
+        Point distancePoint,
         IReadOnlyCollection<CuratedInterestSignal> curationSignals,
         ISet<int> duplicatePlaceIds,
         int candidateLimit)
@@ -1585,7 +1603,7 @@ public class ExploreService : IExploreService
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
-                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 ExplicitMatchCount = p.PlaceTags.Count(pt => explicitTagIds.Contains(pt.TagId)),
@@ -1748,6 +1766,19 @@ public class ExploreService : IExploreService
         }
 
         return $"{start:d MMM} - {end:d MMM}";
+    }
+
+    private static string? FormatDistanceLabel(double? distanceMeters, bool useCurrentLocationDistance)
+    {
+        var label = SpatialDistanceFormatter.Format(distanceMeters);
+        if (string.IsNullOrWhiteSpace(label) || useCurrentLocationDistance)
+        {
+            return label;
+        }
+
+        return label.EndsWith(" away", StringComparison.OrdinalIgnoreCase)
+            ? label[..^5] + " from centre"
+            : label + " from centre";
     }
 
     private static string? FormatReviewCountLabel(int count)
