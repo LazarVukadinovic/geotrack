@@ -19,6 +19,11 @@ export interface ExploreSectionTag {
   slug: string;
 }
 
+export interface ExploreItemStatusBadge {
+  label: string;
+  tone: 'success' | 'warning' | 'muted' | 'neutral' | string;
+}
+
 export interface ExploreSectionItem {
   id: string;
   entityType: ExploreEntityType;
@@ -35,6 +40,7 @@ export interface ExploreSectionItem {
   distance?: string;
   dateLabel?: string;
   openingHours?: string;
+  statusBadge?: ExploreItemStatusBadge;
   pricePerNight?: number;
 
   isSaved: boolean;
@@ -106,3 +112,4 @@ export interface ExploreCuratedItem {
   image: string;
   isSaved: boolean;
 }
+

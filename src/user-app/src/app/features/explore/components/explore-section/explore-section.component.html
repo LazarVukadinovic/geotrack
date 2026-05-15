@@ -49,9 +49,22 @@
           </div>
 
           <div class="explore-section__body">
-            @if (item.categoryLabel) {
-              <p class="explore-section__category">{{ item.categoryLabel }}</p>
-            }
+            <div class="explore-section__label-row">
+              @if (item.categoryLabel) {
+                <p class="explore-section__category">{{ item.categoryLabel }}</p>
+              }
+
+              @if (item.statusBadge) {
+                <span
+                  class="explore-section__status-badge"
+                  [class.explore-section__status-badge--success]="item.statusBadge.tone === 'success'"
+                  [class.explore-section__status-badge--warning]="item.statusBadge.tone === 'warning'"
+                  [class.explore-section__status-badge--muted]="item.statusBadge.tone === 'muted'"
+                >
+                  {{ item.statusBadge.label }}
+                </span>
+              }
+            </div>
 
             <h3 class="explore-section__title">{{ item.title }}</h3>
 

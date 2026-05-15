@@ -59,6 +59,7 @@ interface ApiExploreSectionItem {
   distance?: string;
   dateLabel?: string;
   openingHours?: string;
+  statusBadge?: { label?: string; tone?: string };
   pricePerNight?: number;
   isSaved?: boolean;
   tags?: { tagId: number; name: string; slug: string }[];
@@ -590,6 +591,12 @@ export class ExploreService {
       distance: item.distance,
       dateLabel: item.dateLabel,
       openingHours: item.openingHours,
+      statusBadge: item.statusBadge?.label
+        ? {
+            label: item.statusBadge.label,
+            tone: item.statusBadge.tone ?? 'neutral',
+          }
+        : undefined,
       pricePerNight: item.pricePerNight,
       isSaved: item.isSaved ?? false,
       tags: (item.tags ?? []).map(tag => ({
@@ -740,3 +747,4 @@ export class ExploreService {
     return requestId !== this.requestVersion || this.loadingRequestKey !== requestKey;
   }
 }
+

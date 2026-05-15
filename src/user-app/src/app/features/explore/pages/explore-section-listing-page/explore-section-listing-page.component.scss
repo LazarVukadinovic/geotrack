@@ -76,6 +76,16 @@
   padding: var(--space-4);
 }
 
+
+.explore-listing__label-row {
+  min-height: 20px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
 .explore-listing__category {
   margin: 0 0 var(--space-1);
   color: var(--color-accent-orange);
@@ -83,6 +93,34 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+
+.explore-listing__status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--color-muted);
+  background: rgba(26, 43, 76, 0.08);
+}
+
+.explore-listing__status-badge--success {
+  color: #047857;
+  background: rgba(4, 120, 87, 0.1);
+}
+
+.explore-listing__status-badge--warning {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.explore-listing__status-badge--muted {
+  color: var(--color-muted);
+  background: rgba(26, 43, 76, 0.07);
 }
 
 .explore-listing__card-title {

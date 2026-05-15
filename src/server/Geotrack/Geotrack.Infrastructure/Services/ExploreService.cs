@@ -2,6 +2,7 @@ using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Spatial;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
@@ -234,12 +235,14 @@ public class ExploreService : IExploreService
                 EventTypeName = e.EventType.Name,
                 e.StartDate,
                 e.EndDate,
-                IsUpcoming = e.EndDate >= nowUtc,
+                IsHappeningNow = e.StartDate <= nowUtc && e.EndDate >= nowUtc,
+                IsUpcoming = e.StartDate > nowUtc,
                 Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint)
             })
-            .OrderByDescending(e => e.IsUpcoming)
-            .ThenBy(e => e.StartDate)
+            .OrderBy(e => e.IsHappeningNow ? 0 : e.IsUpcoming ? 1 : 2)
+            .ThenBy(e => e.IsUpcoming || e.IsHappeningNow ? e.StartDate : DateTime.MaxValue)
+            .ThenByDescending(e => !e.IsUpcoming && !e.IsHappeningNow ? e.EndDate : DateTime.MinValue)
             .ThenBy(e => e.DistanceMeters)
             .Take(ExploreSectionItemLimit)
             .ToListAsync();
@@ -368,10 +371,9 @@ public class ExploreService : IExploreService
                 EntityType = "event",
                 DetailRoute = $"/events/{e.Id}",
                 Title = DisplayTextSafety.CleanRequired(e.Name, "Event"),
-                CategoryLabel = null,
-                Subtitle = DisplayTextSafety.CleanOptional(e.IsUpcoming
-                    ? $"Upcoming · {e.EventTypeName}"
-                    : e.EventTypeName),
+                CategoryLabel = DisplayTextSafety.CleanOptional(e.EventTypeName),
+                Subtitle = null,
+                StatusBadge = BuildEventStatusBadge(e.IsHappeningNow, e.IsUpcoming),
                 DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
                 Image = e.Image,
                 Distance = FormatDistanceLabel(e.DistanceMeters, useCurrentLocationDistance)
@@ -492,6 +494,8 @@ public class ExploreService : IExploreService
                 Description = p.Description,
                 CategoryLabel = p.Stay != null && p.Stay.StayType != null ? p.Stay.StayType.Name : p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -568,6 +572,8 @@ public class ExploreService : IExploreService
                 Description = p.Description,
                 CategoryLabel = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -639,6 +645,8 @@ public class ExploreService : IExploreService
                 Description = p.Description,
                 CategoryLabel = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -705,7 +713,8 @@ public class ExploreService : IExploreService
                 Description = e.Description,
                 StartDate = e.StartDate,
                 EndDate = e.EndDate,
-                IsUpcoming = e.EndDate >= nowUtc,
+                IsHappeningNow = e.StartDate <= nowUtc && e.EndDate >= nowUtc,
+                IsUpcoming = e.StartDate > nowUtc,
                 Image = e.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -727,8 +736,9 @@ public class ExploreService : IExploreService
 
         var totalCount = await query.CountAsync();
         var items = await query
-            .OrderByDescending(e => e.IsUpcoming)
-            .ThenBy(e => e.StartDate)
+            .OrderBy(e => e.IsHappeningNow ? 0 : e.IsUpcoming ? 1 : 2)
+            .ThenBy(e => e.IsUpcoming || e.IsHappeningNow ? e.StartDate : DateTime.MaxValue)
+            .ThenByDescending(e => !e.IsUpcoming && !e.IsHappeningNow ? e.EndDate : DateTime.MinValue)
             .ThenBy(e => e.DistanceMeters)
             .ThenBy(e => e.Title)
             .Skip(skip)
@@ -805,6 +815,8 @@ public class ExploreService : IExploreService
                 Description = p.Description,
                 CategoryLabel = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -1107,6 +1119,7 @@ public class ExploreService : IExploreService
             ReviewCount = FormatReviewCountLabel(item.ReviewCount),
             Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
             OpeningHours = item.OpeningHours,
+            StatusBadge = cardType == "stay-card" ? null : BuildPlaceStatusBadge(item.OperatingHoursEnabled, item.OperatingHoursJson),
             PricePerNight = cardType == "stay-card" ? item.PricePerNight : null,
             IsSaved = placeFavoriteIds.Contains(item.Id),
             Tags = item.Tags
@@ -1123,10 +1136,9 @@ public class ExploreService : IExploreService
             EntityType = "event",
             DetailRoute = $"/events/{item.Id}",
             Title = DisplayTextSafety.CleanRequired(item.Title, "Event"),
-            CategoryLabel = null,
-            Subtitle = DisplayTextSafety.CleanOptional(item.IsUpcoming
-                ? $"Upcoming · {item.Subtitle}"
-                : item.Subtitle),
+            CategoryLabel = DisplayTextSafety.CleanOptional(item.Subtitle),
+            Subtitle = null,
+            StatusBadge = BuildEventStatusBadge(item.IsHappeningNow, item.IsUpcoming),
             Description = TrimDescription(item.Description, 170),
             Image = item.Image,
             Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
@@ -1154,6 +1166,7 @@ public class ExploreService : IExploreService
             ReviewCount = FormatReviewCountLabel(place.ReviewCount),
             Distance = FormatDistanceLabel(place.DistanceMeters, useCurrentLocationDistance: false),
             OpeningHours = place.OpeningHours,
+            StatusBadge = BuildPlaceStatusBadge(place.OperatingHoursEnabled, place.OperatingHoursJson),
             IsSaved = placeFavoriteIds.Contains(place.Id),
             Tags = place.MatchedTags.Select(tag => new ExploreFeedSectionTagDto
             {
@@ -1162,6 +1175,95 @@ public class ExploreService : IExploreService
                 Slug = ToCategoryKey(tag.Name)
             }).ToList()
         };
+    }
+
+    private static ExploreFeedItemStatusBadgeDto? BuildEventStatusBadge(bool isHappeningNow, bool isUpcoming)
+    {
+        if (isHappeningNow)
+        {
+            return new ExploreFeedItemStatusBadgeDto
+            {
+                Label = "Happening now",
+                Tone = "success"
+            };
+        }
+
+        if (isUpcoming)
+        {
+            return new ExploreFeedItemStatusBadgeDto
+            {
+                Label = "Upcoming",
+                Tone = "warning"
+            };
+        }
+
+        return new ExploreFeedItemStatusBadgeDto
+        {
+            Label = "Past",
+            Tone = "muted"
+        };
+    }
+
+    private static ExploreFeedItemStatusBadgeDto? BuildPlaceStatusBadge(
+        bool operatingHoursEnabled,
+        string? operatingHoursJson)
+    {
+        if (!operatingHoursEnabled || string.IsNullOrWhiteSpace(operatingHoursJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            var hours = JsonSerializer.Deserialize<List<OperatingHourEntry>>(
+                operatingHoursJson,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+            if (hours is null || hours.Count == 0)
+            {
+                return null;
+            }
+
+            var today = DateTime.UtcNow.DayOfWeek.ToString();
+            var todayHours = hours.FirstOrDefault(hour =>
+                string.Equals(hour.DayOfWeek, today, StringComparison.OrdinalIgnoreCase));
+
+            if (todayHours is null)
+            {
+                return null;
+            }
+
+            if (!todayHours.IsOpen)
+            {
+                return new ExploreFeedItemStatusBadgeDto
+                {
+                    Label = "Closed",
+                    Tone = "muted"
+                };
+            }
+
+            if (!TimeSpan.TryParse(todayHours.OpenTime, out var openTime) ||
+                !TimeSpan.TryParse(todayHours.CloseTime, out var closeTime))
+            {
+                return null;
+            }
+
+            var now = DateTime.UtcNow.TimeOfDay;
+            var isOpen = now >= openTime && now < closeTime;
+
+            return new ExploreFeedItemStatusBadgeDto
+            {
+                Label = isOpen ? "Open" : "Closed",
+                Tone = isOpen ? "success" : "muted"
+            };
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static string HumanizeSectionKey(string key)
@@ -1205,6 +1307,7 @@ public class ExploreService : IExploreService
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
                 Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
                 OpeningHours = p.OpeningHours,
+                StatusBadge = BuildPlaceStatusBadge(p.OperatingHoursEnabled, p.OperatingHoursJson),
                 IsSaved = placeFavoriteIds.Contains(p.Id),
                 Tags = p.MatchedTags.Select(tag => new ExploreFeedSectionTagDto
                 {
@@ -1248,6 +1351,8 @@ public class ExploreService : IExploreService
                 p.Description,
                 PlaceTypeName = p.PlaceType.Name,
                 p.OpeningHours,
+                p.OperatingHoursEnabled,
+                p.OperatingHoursJson,
                 Image = p.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -1297,6 +1402,7 @@ public class ExploreService : IExploreService
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
                 Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
                 OpeningHours = p.OpeningHours,
+                StatusBadge = BuildPlaceStatusBadge(p.OperatingHoursEnabled, p.OperatingHoursJson),
                 IsSaved = placeFavoriteIds.Contains(p.Id),
                 Tags = p.Tags
             }).ToList()
@@ -1329,6 +1435,8 @@ public class ExploreService : IExploreService
                 p.Description,
                 PlaceTypeName = p.PlaceType.Name,
                 p.OpeningHours,
+                p.OperatingHoursEnabled,
+                p.OperatingHoursJson,
                 Image = p.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -1378,6 +1486,7 @@ public class ExploreService : IExploreService
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
                 Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
                 OpeningHours = p.OpeningHours,
+                StatusBadge = BuildPlaceStatusBadge(p.OperatingHoursEnabled, p.OperatingHoursJson),
                 IsSaved = placeFavoriteIds.Contains(p.Id),
                 Tags = p.Tags
             }).ToList()
@@ -1417,6 +1526,8 @@ public class ExploreService : IExploreService
                 PlaceTypeId = p.PlaceTypeId,
                 PlaceTypeName = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -1504,6 +1615,7 @@ public class ExploreService : IExploreService
                         ReviewCount = FormatReviewCountLabel(candidate.ReviewCount),
                         Distance = FormatDistanceLabel(candidate.DistanceMeters, useCurrentLocationDistance),
                         OpeningHours = candidate.OpeningHours,
+                        StatusBadge = BuildPlaceStatusBadge(candidate.OperatingHoursEnabled, candidate.OperatingHoursJson),
                         IsSaved = placeFavoriteIds.Contains(candidate.Id),
                         DistanceMeters = candidate.DistanceMeters,
                         ReviewCountRaw = candidate.ReviewCount,
@@ -1558,6 +1670,7 @@ public class ExploreService : IExploreService
                         ReviewCount = item.ReviewCount,
                         Distance = item.Distance,
                         OpeningHours = item.OpeningHours,
+                        StatusBadge = item.StatusBadge,
                         IsSaved = item.IsSaved,
                         Tags = item.Tags
                     })
@@ -1800,6 +1913,8 @@ public class ExploreService : IExploreService
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
@@ -1890,6 +2005,8 @@ public class ExploreService : IExploreService
             AverageRating = candidate.AverageRating,
             ReviewCount = candidate.ReviewCount,
             OpeningHours = candidate.OpeningHours,
+            OperatingHoursEnabled = candidate.OperatingHoursEnabled,
+            OperatingHoursJson = candidate.OperatingHoursJson,
             MatchedTags = candidate.MatchedTags
                 .Select(tag => new CuratedTagMatch
                 {
@@ -2075,6 +2192,8 @@ public class ExploreService : IExploreService
         public string? Description { get; set; }
         public string? CategoryLabel { get; set; }
         public string? OpeningHours { get; set; }
+        public bool OperatingHoursEnabled { get; set; }
+        public string? OperatingHoursJson { get; set; }
         public string? Image { get; set; }
         public double? AverageRating { get; set; }
         public int ReviewCount { get; set; }
@@ -2091,6 +2210,7 @@ public class ExploreService : IExploreService
         public string? Description { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
+        public bool IsHappeningNow { get; set; }
         public bool IsUpcoming { get; set; }
         public string? Image { get; set; }
         public double DistanceMeters { get; set; }
@@ -2109,6 +2229,8 @@ public class ExploreService : IExploreService
         public int PlaceTypeId { get; set; }
         public string PlaceTypeName { get; set; } = string.Empty;
         public string? OpeningHours { get; set; }
+        public bool OperatingHoursEnabled { get; set; }
+        public string? OperatingHoursJson { get; set; }
         public double DistanceMeters { get; set; }
         public double? AverageRating { get; set; }
         public int ReviewCount { get; set; }
@@ -2162,8 +2284,17 @@ public class ExploreService : IExploreService
         public string? ReviewCount { get; set; }
         public string? Distance { get; set; }
         public string? OpeningHours { get; set; }
+        public ExploreFeedItemStatusBadgeDto? StatusBadge { get; set; }
         public bool IsSaved { get; set; }
         public List<ExploreFeedSectionTagDto> Tags { get; set; } = new();
+    }
+
+    private sealed class OperatingHourEntry
+    {
+        public string? DayOfWeek { get; set; }
+        public bool IsOpen { get; set; }
+        public string? OpenTime { get; set; }
+        public string? CloseTime { get; set; }
     }
 
     private sealed class ResolvedDestinationCandidate
@@ -2204,6 +2335,8 @@ public class ExploreService : IExploreService
         public int DestinationId { get; set; }
         public string PlaceTypeName { get; set; } = string.Empty;
         public string? OpeningHours { get; set; }
+        public bool OperatingHoursEnabled { get; set; }
+        public string? OperatingHoursJson { get; set; }
         public double DistanceMeters { get; set; }
         public double? AverageRating { get; set; }
         public int ReviewCount { get; set; }
@@ -2233,6 +2366,8 @@ public class ExploreService : IExploreService
         public double? AverageRating { get; set; }
         public int ReviewCount { get; set; }
         public string? OpeningHours { get; set; }
+        public bool OperatingHoursEnabled { get; set; }
+        public string? OperatingHoursJson { get; set; }
         public List<CuratedTagMatch> MatchedTags { get; set; } = new();
         public bool IsDuplicateWithOtherSection { get; set; }
         public bool IsOutsideCurrentDestination { get; set; }

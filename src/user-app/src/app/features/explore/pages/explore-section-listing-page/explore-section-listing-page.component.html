@@ -92,9 +92,22 @@
           </div>
 
           <div class="explore-listing__body">
-            @if (item.categoryLabel) {
-              <p class="explore-listing__category">{{ item.categoryLabel }}</p>
-            }
+            <div class="explore-listing__label-row">
+              @if (item.categoryLabel) {
+                <p class="explore-listing__category">{{ item.categoryLabel }}</p>
+              }
+
+              @if (item.statusBadge) {
+                <span
+                  class="explore-listing__status-badge"
+                  [class.explore-listing__status-badge--success]="item.statusBadge.tone === 'success'"
+                  [class.explore-listing__status-badge--warning]="item.statusBadge.tone === 'warning'"
+                  [class.explore-listing__status-badge--muted]="item.statusBadge.tone === 'muted'"
+                >
+                  {{ item.statusBadge.label }}
+                </span>
+              }
+            </div>
 
             <h2 class="explore-listing__card-title">{{ item.title }}</h2>
 

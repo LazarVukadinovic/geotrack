@@ -33,6 +33,12 @@ public class ExploreFeedSectionDto
     public List<ExploreFeedSectionItemDto> Items { get; set; } = new();
 }
 
+public class ExploreFeedItemStatusBadgeDto
+{
+    public string Label { get; set; } = string.Empty;
+    public string Tone { get; set; } = "neutral";
+}
+
 public class ExploreFeedSectionItemDto
 {
     public int Id { get; set; }
@@ -50,6 +56,7 @@ public class ExploreFeedSectionItemDto
     public string? Distance { get; set; }
     public string? DateLabel { get; set; }
     public string? OpeningHours { get; set; }
+    public ExploreFeedItemStatusBadgeDto? StatusBadge { get; set; }
     public decimal? PricePerNight { get; set; }
 
     public bool IsSaved { get; set; }
@@ -165,3 +172,4 @@ public class ExploreLandmarkCategoryDto
     public string? Image { get; set; }
     public string? CategoryKey { get; set; }
 }
+

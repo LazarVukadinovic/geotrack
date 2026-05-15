@@ -61,6 +61,7 @@ interface ApiExploreSectionItem {
   distance?: string;
   dateLabel?: string;
   openingHours?: string;
+  statusBadge?: { label?: string; tone?: string };
   pricePerNight?: number;
   isSaved?: boolean;
   tags?: { tagId: number; name: string; slug: string }[];
@@ -302,6 +303,12 @@ export class ExploreSectionListingService {
       distance: dto.distance,
       dateLabel: dto.dateLabel,
       openingHours: dto.openingHours,
+      statusBadge: dto.statusBadge?.label
+        ? {
+            label: dto.statusBadge.label,
+            tone: dto.statusBadge.tone ?? 'neutral',
+          }
+        : undefined,
       pricePerNight: dto.pricePerNight,
       isSaved: dto.isSaved === true,
       tags: (dto.tags ?? []).map(tag => ({
@@ -334,3 +341,4 @@ export class ExploreSectionListingService {
     return `/places/${id}`;
   }
 }
+
