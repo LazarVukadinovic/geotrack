@@ -220,12 +220,13 @@ public class ExploreService : IExploreService
             ? await LoadCurationSignalsAsync(userId.Value)
             : new List<CuratedInterestSignal>();
 
+        var nowUtc = DateTime.UtcNow;
+
         var events = await _db.Events
             .AsNoTracking()
             .Where(e =>
                 e.DestinationId == resolvedDestination.Id &&
-                EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null &&
-                e.EndDate >= DateTime.UtcNow)
+                EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(e => new
             {
                 e.Id,
@@ -233,11 +234,13 @@ public class ExploreService : IExploreService
                 EventTypeName = e.EventType.Name,
                 e.StartDate,
                 e.EndDate,
+                IsUpcoming = e.EndDate >= nowUtc,
                 Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint)
             })
-            .OrderBy(e => e.DistanceMeters)
+            .OrderByDescending(e => e.IsUpcoming)
             .ThenBy(e => e.StartDate)
+            .ThenBy(e => e.DistanceMeters)
             .Take(ExploreSectionItemLimit)
             .ToListAsync();
 
@@ -251,6 +254,9 @@ public class ExploreService : IExploreService
             {
                 p.Id,
                 p.Name,
+                p.Subtitle,
+                p.Description,
+                CategoryLabel = p.Stay != null && p.Stay.StayType != null ? p.Stay.StayType.Name : p.PlaceType.Name,
                 Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
@@ -321,6 +327,9 @@ public class ExploreService : IExploreService
                 EntityType = "stay",
                 DetailRoute = $"/stays/{s.Id}",
                 Title = DisplayTextSafety.CleanRequired(s.Name, "Stay"),
+                Subtitle = DisplayTextSafety.CleanOptional(s.Subtitle),
+                Description = TrimDescription(s.Description, 170),
+                CategoryLabel = DisplayTextSafety.CleanOptional(s.CategoryLabel),
                 Image = s.Image,
                 Rating = s.AverageRating.HasValue ? Math.Round(s.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(s.ReviewCount),
@@ -359,7 +368,10 @@ public class ExploreService : IExploreService
                 EntityType = "event",
                 DetailRoute = $"/events/{e.Id}",
                 Title = DisplayTextSafety.CleanRequired(e.Name, "Event"),
-                Subtitle = DisplayTextSafety.CleanOptional(e.EventTypeName),
+                CategoryLabel = null,
+                Subtitle = DisplayTextSafety.CleanOptional(e.IsUpcoming
+                    ? $"Upcoming · {e.EventTypeName}"
+                    : e.EventTypeName),
                 DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
                 Image = e.Image,
                 Distance = FormatDistanceLabel(e.DistanceMeters, useCurrentLocationDistance)
@@ -678,11 +690,12 @@ public class ExploreService : IExploreService
         int skip,
         int take)
     {
+        var nowUtc = DateTime.UtcNow;
+
         var query = _db.Events
             .AsNoTracking()
             .Where(e =>
                 e.DestinationId == destination.Id &&
-                e.EndDate >= DateTime.UtcNow &&
                 EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(e => new SectionEventProjection
             {
@@ -692,6 +705,7 @@ public class ExploreService : IExploreService
                 Description = e.Description,
                 StartDate = e.StartDate,
                 EndDate = e.EndDate,
+                IsUpcoming = e.EndDate >= nowUtc,
                 Image = e.Images
                     .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
@@ -713,7 +727,8 @@ public class ExploreService : IExploreService
 
         var totalCount = await query.CountAsync();
         var items = await query
-            .OrderBy(e => e.StartDate)
+            .OrderByDescending(e => e.IsUpcoming)
+            .ThenBy(e => e.StartDate)
             .ThenBy(e => e.DistanceMeters)
             .ThenBy(e => e.Title)
             .Skip(skip)
@@ -1108,7 +1123,10 @@ public class ExploreService : IExploreService
             EntityType = "event",
             DetailRoute = $"/events/{item.Id}",
             Title = DisplayTextSafety.CleanRequired(item.Title, "Event"),
-            Subtitle = DisplayTextSafety.CleanOptional(item.Subtitle),
+            CategoryLabel = null,
+            Subtitle = DisplayTextSafety.CleanOptional(item.IsUpcoming
+                ? $"Upcoming · {item.Subtitle}"
+                : item.Subtitle),
             Description = TrimDescription(item.Description, 170),
             Image = item.Image,
             Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
@@ -2073,6 +2091,7 @@ public class ExploreService : IExploreService
         public string? Description { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
+        public bool IsUpcoming { get; set; }
         public string? Image { get; set; }
         public double DistanceMeters { get; set; }
         public List<ExploreFeedSectionTagDto> Tags { get; set; } = new();
@@ -2219,7 +2238,3 @@ public class ExploreService : IExploreService
         public bool IsOutsideCurrentDestination { get; set; }
     }
 }
-
-
-
-
