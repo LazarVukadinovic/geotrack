@@ -2,6 +2,7 @@ import { CommonModule, Location } from '@angular/common';
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import {
+  DestinationDiscoveryDestinationTypeFilter,
   DestinationDiscoveryService,
   DestinationDiscoverySearchItem,
   DestinationDiscoveryTagTypeFilter,
@@ -34,10 +35,14 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
   protected readonly hasMore = signal(false);
   protected readonly filtersLoading = signal(false);
   protected readonly filtersError = signal<string | null>(null);
+  protected readonly destinationTypeFilters = signal<DestinationDiscoveryDestinationTypeFilter[]>([]);
   protected readonly tagTypeFilters = signal<DestinationDiscoveryTagTypeFilter[]>([]);
-  protected readonly placeTypeFilters = signal<{ id: number; name: string; count: number }[]>([]);
+  protected readonly selectedDestinationTypeIds = signal<Set<number>>(new Set());
   protected readonly selectedTagIds = signal<Set<number>>(new Set());
-  protected readonly selectedPlaceTypeIds = signal<Set<number>>(new Set());
+
+  protected readonly visibleDestinationTypeFilters = computed(() =>
+    this.destinationTypeFilters().filter(type => type.count > 0),
+  );
 
   protected readonly visibleTagTypeFilters = computed(() =>
     this.tagTypeFilters().filter(group => group.options.length > 0),
@@ -45,8 +50,8 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
 
   protected readonly hasActiveFilters = computed(() =>
     this.query().trim().length > 0 ||
-    this.selectedTagIds().size > 0 ||
-    this.selectedPlaceTypeIds().size > 0,
+    this.selectedDestinationTypeIds().size > 0 ||
+    this.selectedTagIds().size > 0,
   );
 
   protected readonly resultSummary = computed(() => {
@@ -104,20 +109,20 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
     this.runSearch(0, false);
   }
 
+  protected toggleDestinationType(destinationTypeId: number): void {
+    this.selectedDestinationTypeIds.update(current => this.toggleSetValue(current, destinationTypeId));
+    this.runSearch(0, false);
+  }
+
   protected toggleTag(tagId: number): void {
     this.selectedTagIds.update(current => this.toggleSetValue(current, tagId));
     this.runSearch(0, false);
   }
 
-  protected togglePlaceType(placeTypeId: number): void {
-    this.selectedPlaceTypeIds.update(current => this.toggleSetValue(current, placeTypeId));
-    this.runSearch(0, false);
-  }
-
   protected clearFilters(): void {
     this.query.set('');
+    this.selectedDestinationTypeIds.set(new Set());
     this.selectedTagIds.set(new Set());
-    this.selectedPlaceTypeIds.set(new Set());
     this.runSearch(0, false);
   }
 
@@ -140,12 +145,12 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
     void this.router.navigateByUrl('/explore');
   }
 
-  protected isTagSelected(tagId: number): boolean {
-    return this.selectedTagIds().has(tagId);
+  protected isDestinationTypeSelected(destinationTypeId: number): boolean {
+    return this.selectedDestinationTypeIds().has(destinationTypeId);
   }
 
-  protected isPlaceTypeSelected(placeTypeId: number): boolean {
-    return this.selectedPlaceTypeIds().has(placeTypeId);
+  protected isTagSelected(tagId: number): boolean {
+    return this.selectedTagIds().has(tagId);
   }
 
   private loadFilters(): void {
@@ -154,8 +159,8 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
 
     this.discovery.getFilters().subscribe({
       next: (filters) => {
+        this.destinationTypeFilters.set(filters.destinationTypeFilters ?? []);
         this.tagTypeFilters.set(filters.tagTypeFilters ?? []);
-        this.placeTypeFilters.set(filters.placeTypeFilters ?? []);
         this.filtersLoading.set(false);
       },
       error: () => {
@@ -181,8 +186,8 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
 
     this.discovery.search({
       query: trimmed,
+      destinationTypeIds: [...this.selectedDestinationTypeIds()],
       tagIds: [...this.selectedTagIds()],
-      placeTypeIds: [...this.selectedPlaceTypeIds()],
       skip,
       take: PAGE_SIZE,
     }).subscribe({

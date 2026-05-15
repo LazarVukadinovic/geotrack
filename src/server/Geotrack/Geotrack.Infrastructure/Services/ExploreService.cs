@@ -32,13 +32,31 @@ public class ExploreService : IExploreService
 
     private static readonly string[] WhereToEatTypeNames =
     [
-        "restaurant",
-        "cafe"
+        "restaurant"
+    ];
+
+    private static readonly string[] WhereToEatExcludedTypeNames =
+    [
+        "cafe",
+        "bar"
     ];
 
     private static readonly string[] WhereToEatTagTypeSlugs =
     [
-        "cuisine"
+        "cuisine",
+        "dining-style"
+    ];
+
+    private static readonly string[] DrinksTypeNames =
+    [
+        "cafe",
+        "bar"
+    ];
+
+    private static readonly string[] DrinksTagSlugs =
+    [
+        "specialty-coffee",
+        "wine-bar"
     ];
 
     private readonly AppDbContext _db;
@@ -134,6 +152,13 @@ public class ExploreService : IExploreService
                 normalizedSkip,
                 normalizedTake),
 
+            "drinks" or "cafes" or "bars" or "coffee" => await BuildDrinksPageAsync(
+                destination,
+                destinationPoint,
+                placeFavoriteIds,
+                normalizedSkip,
+                normalizedTake),
+
             "events" => await BuildEventsPageAsync(
                 destination,
                 destinationPoint,
@@ -221,6 +246,11 @@ public class ExploreService : IExploreService
             userPoint,
             placeFavoriteIds);
 
+        var drinksSection = await BuildDrinksSectionAsync(
+            resolvedDestination.Id,
+            userPoint,
+            placeFavoriteIds);
+
         var dynamicSections = await BuildDynamicPlaceSectionsAsync(
             resolvedDestination.Id,
             userPoint,
@@ -231,6 +261,7 @@ public class ExploreService : IExploreService
             .SelectMany(section => section.Items)
             .Select(item => item.Id)
             .Concat(whereToEatSection.Items.Select(item => item.Id))
+            .Concat(drinksSection.Items.Select(item => item.Id))
             .ToHashSet();
 
         var curatedPlaces = await BuildCuratedPlacesAsync(
@@ -281,6 +312,11 @@ public class ExploreService : IExploreService
         if (whereToEatSection.Items.Count > 0)
         {
             sections.Add(whereToEatSection);
+        }
+
+        if (drinksSection.Items.Count > 0)
+        {
+            sections.Add(drinksSection);
         }
 
         var eventsSection = new ExploreFeedSectionDto
@@ -475,6 +511,7 @@ public class ExploreService : IExploreService
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destination.Id &&
+                !WhereToEatExcludedTypeNames.Contains(p.PlaceType.Name.ToLower()) &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (
                     WhereToEatTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
@@ -530,7 +567,78 @@ public class ExploreService : IExploreService
             destination,
             "where-to-eat",
             "Where to eat",
-            "Restaurants, cafes and local food nearby",
+            "Restaurants and local food nearby",
+            "place-card",
+            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
+            totalCount,
+            skip,
+            take);
+    }
+
+    private async Task<ExploreSectionPageDto> BuildDrinksPageAsync(
+        ResolvedDestinationCandidate destination,
+        Point destinationPoint,
+        ISet<int> placeFavoriteIds,
+        int skip,
+        int take)
+    {
+        var query = _db.Places
+            .AsNoTracking()
+            .Where(p =>
+                p.Stay == null &&
+                p.Location.DestinationId == destination.Id &&
+                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
+                (
+                    DrinksTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
+                    p.PlaceTags.Any(pt =>
+                        pt.Tag.ForPlace &&
+                        DrinksTagSlugs.Contains(pt.Tag.Slug))
+                ))
+            .Select(p => new SectionPlaceProjection
+            {
+                Id = p.Id,
+                Title = p.Name,
+                Subtitle = p.Subtitle,
+                Description = p.Description,
+                CategoryLabel = p.PlaceType.Name,
+                OpeningHours = p.OpeningHours,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
+                ReviewCount = p.PlaceReviews.Count(),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(destinationPoint),
+                Tags = p.PlaceTags
+                    .Where(pt => pt.Tag.ForPlace)
+                    .Select(pt => new ExploreFeedSectionTagDto
+                    {
+                        TagId = pt.TagId,
+                        Name = pt.Tag.Name,
+                        Slug = pt.Tag.Slug
+                    })
+                    .ToList()
+            });
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderBy(p => p.DistanceMeters)
+            .ThenByDescending(p => p.AverageRating ?? 0)
+            .ThenByDescending(p => p.ReviewCount)
+            .ThenBy(p => p.Title)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync();
+
+        return SectionPage(
+            destination,
+            "drinks",
+            "Drinks & coffee",
+            "Cafes, bars and places for drinks nearby",
             "place-card",
             items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
             totalCount,
@@ -907,6 +1015,7 @@ public class ExploreService : IExploreService
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destinationId &&
+                !WhereToEatExcludedTypeNames.Contains(p.PlaceType.Name.ToLower()) &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 (
                     WhereToEatTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
@@ -956,11 +1065,91 @@ public class ExploreService : IExploreService
         {
             Key = "where-to-eat",
             Title = "Where to eat",
-            Subtitle = "Restaurants, cafes and local food nearby",
+            Subtitle = "Restaurants and local food nearby",
             Layout = "horizontal-cards",
             CardType = "place-card",
             MoreRoute = $"/explore/where-to-eat?destinationId={destinationId}",
             Priority = 30,
+            Items = items.Select(p => new ExploreFeedSectionItemDto
+            {
+                Id = p.Id,
+                EntityType = "place",
+                DetailRoute = $"/places/{p.Id}",
+                Title = DisplayTextSafety.CleanRequired(p.Name, "Place"),
+                Subtitle = DisplayTextSafety.CleanOptional(p.Subtitle),
+                Description = TrimDescription(p.Description, 130),
+                CategoryLabel = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
+                Image = p.Image,
+                Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
+                ReviewCount = FormatReviewCountLabel(p.ReviewCount),
+                Distance = SpatialDistanceFormatter.Format(p.DistanceMeters),
+                OpeningHours = p.OpeningHours,
+                IsSaved = placeFavoriteIds.Contains(p.Id),
+                Tags = p.Tags
+            }).ToList()
+        };
+    }
+
+    private async Task<ExploreFeedSectionDto> BuildDrinksSectionAsync(
+        int destinationId,
+        Point userPoint,
+        ISet<int> placeFavoriteIds)
+    {
+        var items = await _db.Places
+            .AsNoTracking()
+            .Where(p =>
+                p.Stay == null &&
+                p.Location.DestinationId == destinationId &&
+                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
+                (
+                    DrinksTypeNames.Contains(p.PlaceType.Name.ToLower()) ||
+                    p.PlaceTags.Any(pt =>
+                        pt.Tag.ForPlace &&
+                        DrinksTagSlugs.Contains(pt.Tag.Slug))
+                ))
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Subtitle,
+                p.Description,
+                PlaceTypeName = p.PlaceType.Name,
+                p.OpeningHours,
+                Image = p.Images
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
+                ReviewCount = p.PlaceReviews.Count(),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
+                Tags = p.PlaceTags
+                    .Where(pt => pt.Tag.ForPlace)
+                    .Select(pt => new ExploreFeedSectionTagDto
+                    {
+                        TagId = pt.TagId,
+                        Name = pt.Tag.Name,
+                        Slug = pt.Tag.Slug
+                    })
+                    .ToList()
+            })
+            .OrderBy(p => p.DistanceMeters)
+            .ThenByDescending(p => p.AverageRating ?? 0)
+            .ThenByDescending(p => p.ReviewCount)
+            .Take(ExploreSectionItemLimit)
+            .ToListAsync();
+
+        return new ExploreFeedSectionDto
+        {
+            Key = "drinks",
+            Title = "Drinks & coffee",
+            Subtitle = "Cafes, bars and places for drinks nearby",
+            Layout = "horizontal-cards",
+            CardType = "place-card",
+            MoreRoute = $"/explore/drinks?destinationId={destinationId}",
+            Priority = 35,
             Items = items.Select(p => new ExploreFeedSectionItemDto
             {
                 Id = p.Id,
@@ -1808,6 +1997,7 @@ public class ExploreService : IExploreService
         public bool IsOutsideCurrentDestination { get; set; }
     }
 }
+
 
 
 

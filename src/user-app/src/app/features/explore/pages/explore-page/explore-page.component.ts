@@ -61,8 +61,11 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected readonly searchLoading = signal(false);
   protected readonly searchError = signal<string | null>(null);
   protected readonly searchHasMore = signal(false);
+  protected readonly exactLocationLoading = signal(false);
+  protected readonly exactLocationError = signal<string | null>(null);
   protected readonly isDestinationMode = computed(() => this.destinationSvc.isDestinationMode());
   protected readonly sections = computed(() => this.explore.sections());
+  protected readonly selectedDestination = computed(() => this.explore.selectedDestination());
 
   protected readonly canUseExploreSearch = computed(() => {
     if (this.destinationSvc.isDestinationMode()) {
@@ -162,7 +165,9 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
       });
     }
 
-    void this.locationSvc.resolveLocationForProductFlow();
+    // Explore uses approximate IP location by default.
+    // Browser GPS permission is requested only when the user clicks "Use exact location".
+    void this.locationSvc.ensureIpFallback();
   }
 
   private readonly heroLocation = computed(() => {
@@ -199,9 +204,23 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     const source = this.locationSvc.location()?.source;
     if (source === 'gps') return 'Using exact location.';
     if (source === 'manual') return 'Using selected location.';
-    if (source === 'approximate') return 'Using approximate location.';
-    if (this.locationSvc.loading()) return 'Resolving location.';
+    if (source === 'approximate') return 'Using approximate location from IP.';
+    if (this.locationSvc.loading()) return 'Resolving approximate location from IP.';
     return 'Location unavailable.';
+  });
+
+  protected readonly showLocationUpgrade = computed(() =>
+    !this.destinationSvc.isDestinationMode() &&
+    this.locationSvc.location()?.source !== 'gps',
+  );
+
+  protected readonly useLocationModeActionLabel = computed(() =>
+    this.locationSvc.location()?.source === 'gps' ? 'Use location' : 'Use IP location',
+  );
+
+  protected readonly displayedDestinationActionLabel = computed(() => {
+    const name = this.selectedDestination()?.name?.trim();
+    return name ? `Explore ${name}` : 'Explore other destinations';
   });
 
   protected onExploreSearchChange(value: string): void {
@@ -292,8 +311,56 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected useCurrentLocation(): void {
     this.searchQuery.set('');
     this.resetSearchResults();
-    this.explore.useCurrentLocation();
+    this.exactLocationError.set(null);
+
+    this.destinationSvc.useLocationMode();
+    void this.locationSvc.ensureIpFallback().then((loc) => {
+      if (loc) {
+        void this.explore.loadForLocation(loc.latitude, loc.longitude);
+      }
+    });
+
     void this.router.navigate(['/explore'], { replaceUrl: true });
+  }
+
+  protected useExactLocation(): void {
+    if (this.exactLocationLoading()) return;
+
+    this.exactLocationLoading.set(true);
+    this.exactLocationError.set(null);
+
+    this.locationSvc.requestGps()
+      .then(({ latitude, longitude }) => {
+        this.destinationSvc.useLocationMode();
+        return this.explore.loadForLocation(latitude, longitude);
+      })
+      .catch(() => {
+        this.exactLocationError.set('Exact location is unavailable. GeoTrack will keep using approximate IP location.');
+      })
+      .finally(() => {
+        this.exactLocationLoading.set(false);
+      });
+  }
+
+  protected openDisplayedDestinationOrDiscovery(): void {
+    const destination = this.selectedDestination();
+
+    if (!destination?.id) {
+      this.openDestinationDiscovery();
+      return;
+    }
+
+    this.searchQuery.set('');
+    this.resetSearchResults();
+    this.destinationSvc.setDestinationOverride({
+      id: destination.id,
+      name: destination.name,
+      latitude: destination.latitude,
+      longitude: destination.longitude,
+    });
+    void this.router.navigate(['/explore'], {
+      queryParams: { destinationId: destination.id },
+    });
   }
 
   protected openDestinationDiscovery(): void {

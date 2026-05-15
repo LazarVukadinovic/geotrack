@@ -15,6 +15,16 @@ public static class SeedData
 {
     private static readonly SemaphoreSlim InitializationLock = new(1, 1);
 
+    private static readonly HashSet<string> ManagedDestinationDiscoveryTagTypeSlugs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "destination-theme", // legacy destination filter group; kept for cleanup/backward compatibility
+        "destination-activity",
+        "destination-food",
+        "destination-stays",
+        "destination-vibe",
+        "destination-landscape"
+    };
+
     private sealed record SeedTagTypeDefinition(
         string Name,
         string Slug,
@@ -70,6 +80,7 @@ public static class SeedData
             await EnsureExploreDemoPlaceTagsAsync(db, tagLookup1);
             await EnsureAdditionalExploreDemoDataAsync(db, tagLookup1);
             await EnsureSerbiaDemoDataAsync(db, tagLookup1);
+            await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup1);
             await EnsureCoreEntityImagesAsync(db);
             await EnsureDefaultModerationTermsAsync(db);
             return;
@@ -639,10 +650,20 @@ public static class SeedData
         Tag T(string slug) => tagLookup[slug];
 
         AddDestinationTags(db, dubrovnik,
-            T("adriatic-coast"),
-            T("heritage-city"),
-            T("walkable-city"),
-            T("summer-destination"));
+            T("dest-coastal"),
+            T("dest-old-town"),
+            T("dest-island-nearby"),
+            T("dest-historic"),
+            T("dest-romantic"),
+            T("dest-culture"),
+            T("dest-sightseeing"),
+            T("dest-swimming"),
+            T("dest-boat-trips"),
+            T("dest-festivals"),
+            T("dest-seafood"),
+            T("dest-fine-dining"),
+            T("dest-luxury-hotels"),
+            T("dest-boutique-hotels"));
 
         AddLocationTags(db, oldTown, T("old-town-core"), T("walkable-area"));
         AddLocationTags(db, ploce, T("waterfront-area"), T("beach-access"));
@@ -882,6 +903,7 @@ public static class SeedData
 
         await EnsureAdditionalExploreDemoDataAsync(db, tagLookup);
         await EnsureSerbiaDemoDataAsync(db, tagLookup);
+        await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup);
         await EnsureDefaultModerationTermsAsync(db);
     }
 
@@ -1178,17 +1200,29 @@ public static class SeedData
 
     private static List<SeedTagTypeDefinition> BuildSeedTagTypes() =>
     [
-        new("Destination Theme", "destination-theme", ForDestination: true, Description: "High-level destination positioning.", IsFilterable: true, FilterLabel: "Destination themes", FilterOrder: 10),
-        new("Location Character", "location-character", ForLocation: true, Description: "Area-level character and context.", IsFilterable: true, FilterLabel: "Area character", FilterOrder: 20),
+        // Legacy group. Kept so old rows are updated, but no longer shown as a filter.
+        new("Destination Theme", "destination-theme", ForDestination: true, Description: "Legacy high-level destination tags.", IsFilterable: false),
 
-        new("Cuisine", "cuisine", ForPlace: true, Description: "Food cuisine tags for restaurants and cafes.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"], IsFilterable: true, FilterLabel: "Cuisine", FilterOrder: 30),
-        new("Dining Style", "dining-style", ForPlace: true, Description: "Dining style and service level.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"], IsFilterable: true, FilterLabel: "Dining style", FilterOrder: 40),
-        new("Stay Style", "stay-style", ForPlace: true, Description: "Accommodation style and positioning.", AllowedPlaceTypes: ["Stay"], IsFilterable: true, FilterLabel: "Stay style", FilterOrder: 50),
+        // Destination-level discovery filters. These describe what a destination is known for,
+        // not every single place/location/event inside it.
+        new("Destination Activity", "destination-activity", ForDestination: true, Description: "Activities the destination is known for.", IsFilterable: true, FilterLabel: "Activities", FilterOrder: 20),
+        new("Destination Food", "destination-food", ForDestination: true, Description: "Food and drink scene the destination is known for.", IsFilterable: true, FilterLabel: "Food", FilterOrder: 30),
+        new("Destination Stays", "destination-stays", ForDestination: true, Description: "Accommodation profile the destination is known for.", IsFilterable: true, FilterLabel: "Stays", FilterOrder: 40),
+        new("Destination Vibe", "destination-vibe", ForDestination: true, Description: "Overall travel vibe of the destination.", IsFilterable: true, FilterLabel: "Vibe", FilterOrder: 50),
+        new("Destination Landscape", "destination-landscape", ForDestination: true, Description: "Landscape and setting of the destination.", IsFilterable: true, FilterLabel: "Landscape", FilterOrder: 60),
 
-        new("Activity", "activity", ForPlace: true, Description: "Activity tags that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery"], IsFilterable: true, FilterLabel: "Activities", FilterOrder: 60),
-        new("Explore Topic", "explore-topic", ForPlace: true, Description: "Broad place topics that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery", "Attraction"], IsFilterable: true, FilterLabel: "Explore topics", FilterOrder: 70),
-        new("Setting", "setting", ForPlace: true, Description: "Physical setting or atmosphere.", AllowedPlaceTypes: ["Beach", "Restaurant", "Cafe", "Bar", "Landmark", "Nature", "Stay", "Activity", "Museum", "Gallery"], IsFilterable: true, FilterLabel: "Setting", FilterOrder: 80),
-        new("Price Level", "price-level", ForPlace: true, Description: "Simple price positioning.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar", "Stay"], IsFilterable: true, FilterLabel: "Price level", FilterOrder: 90),
+        // Entity-level tags stay useful for Explore sections, recommendations and details,
+        // but they are not destination discovery filters.
+        new("Location Character", "location-character", ForLocation: true, Description: "Area-level character and context."),
+
+        new("Cuisine", "cuisine", ForPlace: true, Description: "Food cuisine tags for restaurants and cafes.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"]),
+        new("Dining Style", "dining-style", ForPlace: true, Description: "Dining style and service level.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"]),
+        new("Stay Style", "stay-style", ForPlace: true, Description: "Accommodation style and positioning.", AllowedPlaceTypes: ["Stay"]),
+
+        new("Activity", "activity", ForPlace: true, Description: "Activity tags that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery"]),
+        new("Explore Topic", "explore-topic", ForPlace: true, Description: "Broad place topics that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Activity", "Museum", "Gallery", "Attraction"]),
+        new("Setting", "setting", ForPlace: true, Description: "Physical setting or atmosphere.", AllowedPlaceTypes: ["Beach", "Restaurant", "Cafe", "Bar", "Landmark", "Nature", "Stay", "Activity", "Museum", "Gallery"]),
+        new("Price Level", "price-level", ForPlace: true, Description: "Simple price positioning.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar", "Stay"]),
 
         new("Event Category", "event-category", ForEvent: true, Description: "Event category and format."),
         new("Event Access", "event-access", ForEvent: true, Description: "Ticketing and access model.")
@@ -1196,17 +1230,50 @@ public static class SeedData
 
     private static List<SeedTagDefinition> BuildSeedTags() =>
     [
-        new("Adriatic Coast", "adriatic-coast", "destination-theme", ForDestination: true),
-        new("Heritage City", "heritage-city", "destination-theme", ForDestination: true),
-        new("Walkable City", "walkable-city", "destination-theme", ForDestination: true),
-        new("Summer Destination", "summer-destination", "destination-theme", ForDestination: true),
-        new("Capital City", "capital-city", "destination-theme", ForDestination: true),
-        new("River City", "river-city", "destination-theme", ForDestination: true),
-        new("Urban Culture", "urban-culture", "destination-theme", ForDestination: true),
-        new("Mountain Destination", "mountain-destination", "destination-theme", ForDestination: true),
-        new("National Park", "national-park", "destination-theme", ForDestination: true),
-        new("Winter Destination", "winter-destination", "destination-theme", ForDestination: true),
-        new("Spa Destination", "spa-destination", "destination-theme", ForDestination: true),
+        // Destination discovery tags. These are direct destination-level signals.
+        // They should not duplicate DestinationType and should not be inferred from every place.
+        new("Sightseeing", "dest-sightseeing", "destination-activity", ForDestination: true),
+        new("Museums", "dest-museums", "destination-activity", ForDestination: true),
+        new("Nightlife", "dest-nightlife", "destination-activity", ForDestination: true),
+        new("Festivals", "dest-festivals", "destination-activity", ForDestination: true),
+        new("Hiking", "dest-hiking", "destination-activity", ForDestination: true),
+        new("Skiing", "dest-skiing", "destination-activity", ForDestination: true),
+        new("Swimming", "dest-swimming", "destination-activity", ForDestination: true),
+        new("Wellness", "dest-wellness", "destination-activity", ForDestination: true),
+        new("Boat Trips", "dest-boat-trips", "destination-activity", ForDestination: true),
+        new("River Walks", "dest-river-walks", "destination-activity", ForDestination: true),
+
+        new("Local Food", "dest-local-food", "destination-food", ForDestination: true),
+        new("Fine Dining", "dest-fine-dining", "destination-food", ForDestination: true),
+        new("Seafood", "dest-seafood", "destination-food", ForDestination: true),
+        new("Grill", "dest-grill", "destination-food", ForDestination: true),
+        new("Wine Bars", "dest-wine-bars", "destination-food", ForDestination: true),
+        new("Cafe Culture", "dest-cafe-culture", "destination-food", ForDestination: true),
+        new("Mountain Food", "dest-mountain-food", "destination-food", ForDestination: true),
+
+        new("Luxury Hotels", "dest-luxury-hotels", "destination-stays", ForDestination: true),
+        new("Boutique Hotels", "dest-boutique-hotels", "destination-stays", ForDestination: true),
+        new("Budget Stays", "dest-budget-stays", "destination-stays", ForDestination: true),
+        new("Family Stays", "dest-family-stays", "destination-stays", ForDestination: true),
+        new("Spa Hotels", "dest-spa-hotels", "destination-stays", ForDestination: true),
+        new("Mountain Lodges", "dest-mountain-lodges", "destination-stays", ForDestination: true),
+
+        new("Historic", "dest-historic", "destination-vibe", ForDestination: true),
+        new("Urban", "dest-urban", "destination-vibe", ForDestination: true),
+        new("Relaxed", "dest-relaxed", "destination-vibe", ForDestination: true),
+        new("Romantic", "dest-romantic", "destination-vibe", ForDestination: true),
+        new("Family Friendly", "dest-family-friendly", "destination-vibe", ForDestination: true),
+        new("Adventure", "dest-adventure", "destination-vibe", ForDestination: true),
+        new("Culture", "dest-culture", "destination-vibe", ForDestination: true),
+        new("Party", "dest-party", "destination-vibe", ForDestination: true),
+
+        new("Coastal", "dest-coastal", "destination-landscape", ForDestination: true),
+        new("Riverfront", "dest-riverfront", "destination-landscape", ForDestination: true),
+        new("Mountain Views", "dest-mountain-views", "destination-landscape", ForDestination: true),
+        new("Forest", "dest-forest", "destination-landscape", ForDestination: true),
+        new("Lake", "dest-lake", "destination-landscape", ForDestination: true),
+        new("Old Town", "dest-old-town", "destination-landscape", ForDestination: true),
+        new("Island Nearby", "dest-island-nearby", "destination-landscape", ForDestination: true),
 
         new("Old Town Core", "old-town-core", "location-character", ForLocation: true),
         new("Beach District", "beach-district", "location-character", ForLocation: true),
@@ -1310,6 +1377,156 @@ public static class SeedData
     ];
 
 
+
+    private static async Task EnsureDestinationDiscoveryTagAssignmentsAsync(
+        AppDbContext db,
+        IReadOnlyDictionary<string, Tag> tagLookup)
+    {
+        async Task SyncByNameAsync(string destinationName, params string[] tagSlugs)
+        {
+            var destination = await db.Destinations.FirstOrDefaultAsync(x => x.Name == destinationName);
+            if (destination is null)
+            {
+                return;
+            }
+
+            await SyncDestinationDiscoveryTagsAsync(db, tagLookup, destination, tagSlugs);
+        }
+
+        await SyncByNameAsync("Dubrovnik",
+            "dest-coastal",
+            "dest-old-town",
+            "dest-island-nearby",
+            "dest-historic",
+            "dest-romantic",
+            "dest-culture",
+            "dest-sightseeing",
+            "dest-swimming",
+            "dest-boat-trips",
+            "dest-festivals",
+            "dest-seafood",
+            "dest-fine-dining",
+            "dest-luxury-hotels",
+            "dest-boutique-hotels");
+
+        await SyncByNameAsync("Beograd",
+            "dest-riverfront",
+            "dest-urban",
+            "dest-culture",
+            "dest-party",
+            "dest-sightseeing",
+            "dest-museums",
+            "dest-nightlife",
+            "dest-festivals",
+            "dest-river-walks",
+            "dest-local-food",
+            "dest-grill",
+            "dest-cafe-culture",
+            "dest-boutique-hotels",
+            "dest-budget-stays");
+
+        await SyncByNameAsync("Novi Sad",
+            "dest-riverfront",
+            "dest-relaxed",
+            "dest-romantic",
+            "dest-culture",
+            "dest-festivals",
+            "dest-river-walks",
+            "dest-sightseeing",
+            "dest-local-food",
+            "dest-cafe-culture",
+            "dest-boutique-hotels",
+            "dest-budget-stays");
+
+        await SyncByNameAsync("Zlatibor",
+            "dest-mountain-views",
+            "dest-lake",
+            "dest-relaxed",
+            "dest-family-friendly",
+            "dest-adventure",
+            "dest-hiking",
+            "dest-wellness",
+            "dest-local-food",
+            "dest-mountain-food",
+            "dest-family-stays",
+            "dest-spa-hotels",
+            "dest-mountain-lodges");
+
+        await SyncByNameAsync("Kopaonik",
+            "dest-mountain-views",
+            "dest-adventure",
+            "dest-skiing",
+            "dest-hiking",
+            "dest-wellness",
+            "dest-mountain-food",
+            "dest-luxury-hotels",
+            "dest-spa-hotels",
+            "dest-mountain-lodges",
+            "dest-family-stays");
+
+        await SyncByNameAsync("Tara",
+            "dest-forest",
+            "dest-lake",
+            "dest-mountain-views",
+            "dest-relaxed",
+            "dest-family-friendly",
+            "dest-adventure",
+            "dest-hiking",
+            "dest-boat-trips",
+            "dest-local-food",
+            "dest-family-stays",
+            "dest-mountain-lodges");
+    }
+
+    private static async Task SyncDestinationDiscoveryTagsAsync(
+        AppDbContext db,
+        IReadOnlyDictionary<string, Tag> tagLookup,
+        Destination destination,
+        params string[] tagSlugs)
+    {
+        var managedTagIds = tagLookup.Values
+            .Where(tag => tag.TagType is not null && ManagedDestinationDiscoveryTagTypeSlugs.Contains(tag.TagType.Slug))
+            .Select(tag => tag.Id)
+            .ToHashSet();
+
+        var wantedTagIds = tagSlugs
+            .Where(tagLookup.ContainsKey)
+            .Select(tagSlug => tagLookup[tagSlug].Id)
+            .ToHashSet();
+
+        var existingManagedTags = await db.DestinationTags
+            .Where(x => x.DestinationId == destination.Id && managedTagIds.Contains(x.TagId))
+            .ToListAsync();
+
+        var tagsToRemove = existingManagedTags
+            .Where(x => !wantedTagIds.Contains(x.TagId))
+            .ToList();
+
+        if (tagsToRemove.Count > 0)
+        {
+            db.DestinationTags.RemoveRange(tagsToRemove);
+        }
+
+        var existingTagIds = existingManagedTags
+            .Select(x => x.TagId)
+            .ToHashSet();
+
+        foreach (var tagId in wantedTagIds)
+        {
+            if (existingTagIds.Contains(tagId))
+            {
+                continue;
+            }
+
+            db.DestinationTags.Add(new DestinationTag
+            {
+                DestinationId = destination.Id,
+                TagId = tagId
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
 
     private static async Task EnsureSerbiaDemoDataAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)
     {
@@ -1652,23 +1869,7 @@ public static class SeedData
 
         async Task AddDestinationTagsIfMissingAsync(Destination destination, params string[] tagSlugs)
         {
-            foreach (var tagSlug in tagSlugs)
-            {
-                if (!tagLookup.TryGetValue(tagSlug, out var tag))
-                {
-                    continue;
-                }
-
-                var exists = await db.DestinationTags.AnyAsync(x => x.DestinationId == destination.Id && x.TagId == tag.Id);
-                if (exists)
-                {
-                    continue;
-                }
-
-                db.DestinationTags.Add(new DestinationTag { DestinationId = destination.Id, TagId = tag.Id });
-            }
-
-            await db.SaveChangesAsync();
+            await SyncDestinationDiscoveryTagsAsync(db, tagLookup, destination, tagSlugs);
         }
 
         async Task AddLocationTagsIfMissingAsync(Location location, params string[] tagSlugs)
@@ -1839,7 +2040,21 @@ public static class SeedData
             centralSerbia,
             44.8125,
             20.4612);
-        await AddDestinationTagsIfMissingAsync(beograd, "capital-city", "river-city", "urban-culture", "heritage-city", "walkable-city");
+        await AddDestinationTagsIfMissingAsync(beograd,
+            "dest-riverfront",
+            "dest-urban",
+            "dest-culture",
+            "dest-party",
+            "dest-sightseeing",
+            "dest-museums",
+            "dest-nightlife",
+            "dest-festivals",
+            "dest-river-walks",
+            "dest-local-food",
+            "dest-grill",
+            "dest-cafe-culture",
+            "dest-boutique-hotels",
+            "dest-budget-stays");
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Destination, "Beograd", destinationId: beograd.Id, urls: new[] { Unsplash("1546776310-eef45dd6d63c") });
 
         var stariGrad = await EnsureLocationAsync(beograd, "Stari Grad", neighborhoodType, 44.8176, 20.4571);
@@ -1869,7 +2084,18 @@ public static class SeedData
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, adaLake.Name, placeId: adaLake.Id, urls: new[] { Unsplash("1500530855697-b586d89ba3ee") });
 
         var noviSad = await EnsureDestinationAsync("Novi Sad", "Danube-side city known for Petrovaradin Fortress, relaxed streets, cafes and festival culture.", cityType, vojvodina, 45.2671, 19.8335);
-        await AddDestinationTagsIfMissingAsync(noviSad, "river-city", "urban-culture", "walkable-city", "heritage-city");
+        await AddDestinationTagsIfMissingAsync(noviSad,
+            "dest-riverfront",
+            "dest-relaxed",
+            "dest-romantic",
+            "dest-culture",
+            "dest-festivals",
+            "dest-river-walks",
+            "dest-sightseeing",
+            "dest-local-food",
+            "dest-cafe-culture",
+            "dest-boutique-hotels",
+            "dest-budget-stays");
         var nsCenter = await EnsureLocationAsync(noviSad, "Novi Sad Center", neighborhoodType, 45.2551, 19.8452);
         var petrovaradin = await EnsureLocationAsync(noviSad, "Petrovaradin", districtType, 45.2528, 19.8625);
         await AddLocationTagsIfMissingAsync(nsCenter, "walkable-area", "local-area", "casual");
@@ -1879,22 +2105,23 @@ public static class SeedData
         var fishZelenish = await EnsurePlaceAsync("Fish & Zelenish", "Modern local restaurant", "Novi Sad Center", ptRestaurant, nsCenter, "A central restaurant with local produce, fish, vegetables and relaxed service.", 45.2561, 19.8455, "12:00 - 23:00", 4.7, 230);
         await EnsureRestaurantAsync(fishZelenish);
         await AddPlaceTagsIfMissingAsync(fortress, "history", "culture", "fortress", "panoramic-view", "walking-route");
-        await AddPlaceTagsIfMissingAsync(strand, "waterfront", "swimming", "family-friendly", "summer-destination");
+        await AddPlaceTagsIfMissingAsync(strand, "waterfront", "swimming", "family-friendly");
         await AddPlaceTagsIfMissingAsync(fishZelenish, "local-favorite", "casual", "traditional", "vegetarian-friendly");
 
-        var kragujevac = await EnsureDestinationAsync("Kragujevac", "Central Serbian city with parks, memorial sites, student life and industrial heritage.", cityType, centralSerbia, 44.0128, 20.9114);
-        await AddDestinationTagsIfMissingAsync(kragujevac, "urban-culture", "heritage-city", "walkable-city");
-        var kgCenter = await EnsureLocationAsync(kragujevac, "Kragujevac Center", neighborhoodType, 44.0128, 20.9114);
-        var sumarice = await EnsureLocationAsync(kragujevac, "Sumarice", parkType, 44.0227, 20.8703);
-        await AddLocationTagsIfMissingAsync(kgCenter, "walkable-area", "local-area");
-        await AddLocationTagsIfMissingAsync(sumarice, "nature", "history", "quiet-area");
-        var sumaricePark = await EnsurePlaceAsync("Sumarice Memorial Park", "Large memorial park and museum area", "Sumarice, Kragujevac", ptNature, sumarice, "A large green memorial landscape with walking paths, monuments and museum context.", 44.0227, 20.8703, "Open 24h", 4.8, 410);
-        var knezevArsenal = await EnsurePlaceAsync("Knezev Arsenal", "Industrial heritage and culture district", "Kragujevac Center", ptLandmark, kgCenter, "Historic industrial complex now associated with culture, events and local heritage.", 44.0112, 20.9158, "10:00 - 18:00", 4.4, 120);
-        await AddPlaceTagsIfMissingAsync(sumaricePark, "nature", "history", "walking-route", "quiet-area");
-        await AddPlaceTagsIfMissingAsync(knezevArsenal, "history", "culture", "local-favorite");
-
         var zlatibor = await EnsureDestinationAsync("Zlatibor", "Mountain destination with viewpoints, lakes, pine landscapes, family stays and outdoor activities.", mountainType, westernSerbia, 43.7297, 19.7003);
-        await AddDestinationTagsIfMissingAsync(zlatibor, "mountain-destination", "family-friendly", "nature", "walkable-city");
+        await AddDestinationTagsIfMissingAsync(zlatibor,
+            "dest-mountain-views",
+            "dest-lake",
+            "dest-relaxed",
+            "dest-family-friendly",
+            "dest-adventure",
+            "dest-hiking",
+            "dest-wellness",
+            "dest-local-food",
+            "dest-mountain-food",
+            "dest-family-stays",
+            "dest-spa-hotels",
+            "dest-mountain-lodges");
         var zlatiborCenter = await EnsureLocationAsync(zlatibor, "Zlatibor Center", districtType, 43.7297, 19.7003);
         var tornik = await EnsureLocationAsync(zlatibor, "Tornik", mountainAreaType, 43.6862, 19.6545);
         await AddLocationTagsIfMissingAsync(zlatiborCenter, "family-friendly", "relaxed-area", "local-area");
@@ -1906,10 +2133,20 @@ public static class SeedData
         await AddStayAmenitiesIfMissingAsync(zlatiborStay, wifi, parking, breakfast);
         await AddPlaceTagsIfMissingAsync(goldGondola, "cable-car", "panoramic-view", "family-friendly", "nature");
         await AddPlaceTagsIfMissingAsync(tornikViewpoint, "hiking", "panoramic-view", "nature", "walking-route");
-        await AddPlaceTagsIfMissingAsync(zlatiborLodge, "family-stay", "budget", "nature", "mountain-destination");
+        await AddPlaceTagsIfMissingAsync(zlatiborLodge, "family-stay", "budget", "nature");
 
         var kopaonik = await EnsureDestinationAsync("Kopaonik", "Mountain and ski destination with trails, viewpoints, hotels and winter activities.", mountainType, centralSerbia, 43.2856, 20.8095);
-        await AddDestinationTagsIfMissingAsync(kopaonik, "mountain-destination", "winter-destination", "nature");
+        await AddDestinationTagsIfMissingAsync(kopaonik,
+            "dest-mountain-views",
+            "dest-adventure",
+            "dest-skiing",
+            "dest-hiking",
+            "dest-wellness",
+            "dest-mountain-food",
+            "dest-luxury-hotels",
+            "dest-spa-hotels",
+            "dest-mountain-lodges",
+            "dest-family-stays");
         var skiCenter = await EnsureLocationAsync(kopaonik, "Kopaonik Ski Center", mountainAreaType, 43.2856, 20.8095);
         var pancic = await EnsureLocationAsync(kopaonik, "Pancic Peak", mountainAreaType, 43.2670, 20.8229);
         await AddLocationTagsIfMissingAsync(skiCenter, "family-friendly", "local-area", "nature");
@@ -1918,11 +2155,22 @@ public static class SeedData
         var hotelGrand = await EnsurePlaceAsync("Hotel Grand Kopaonik", "Central mountain hotel", "Kopaonik Center", ptStay, skiCenter, "Central mountain hotel near the ski area and resort services.", 43.2858, 20.8101, "Open 24h", 4.6, 420);
         var grandStay = await EnsureStayAsync(hotelGrand, hotelStayType, 180m, "15:00", "11:00");
         await AddStayAmenitiesIfMissingAsync(grandStay, wifi, breakfast, parking, spa, airConditioning);
-        await AddPlaceTagsIfMissingAsync(skiCenterPlace, "hiking", "panoramic-view", "family-friendly", "winter-destination");
-        await AddPlaceTagsIfMissingAsync(hotelGrand, "luxury-stay", "premium", "wellness", "winter-destination");
+        await AddPlaceTagsIfMissingAsync(skiCenterPlace, "hiking", "panoramic-view", "family-friendly");
+        await AddPlaceTagsIfMissingAsync(hotelGrand, "luxury-stay", "premium", "wellness");
 
         var tara = await EnsureDestinationAsync("Tara", "National park destination with viewpoints, lakes, forest roads and quiet nature stays.", nationalParkType, westernSerbia, 43.9450, 19.4340);
-        await AddDestinationTagsIfMissingAsync(tara, "national-park", "mountain-destination", "nature", "family-friendly");
+        await AddDestinationTagsIfMissingAsync(tara,
+            "dest-forest",
+            "dest-lake",
+            "dest-mountain-views",
+            "dest-relaxed",
+            "dest-family-friendly",
+            "dest-adventure",
+            "dest-hiking",
+            "dest-boat-trips",
+            "dest-local-food",
+            "dest-family-stays",
+            "dest-mountain-lodges");
         var mitrovac = await EnsureLocationAsync(tara, "Mitrovac", mountainAreaType, 43.9312, 19.4306);
         var zaovine = await EnsureLocationAsync(tara, "Zaovine", waterfrontType, 43.8768, 19.3956);
         await AddLocationTagsIfMissingAsync(mitrovac, "nature", "quiet-area", "family-friendly");

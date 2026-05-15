@@ -1,6 +1,5 @@
 using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Domain.Entities.Core;
-using Geotrack.Domain.Entities.Tags;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Services;
@@ -22,8 +21,8 @@ public class DestinationDiscoverySearchService
 
     public async Task<DestinationDiscoverySearchResponseDto> SearchAsync(
         string? query,
+        IEnumerable<int>? destinationTypeIds = null,
         IEnumerable<int>? tagIds = null,
-        IEnumerable<int>? placeTypeIds = null,
         int skip = 0,
         int take = DefaultTake,
         CancellationToken cancellationToken = default)
@@ -32,8 +31,8 @@ public class DestinationDiscoverySearchService
         var hasQuery = normalizedQuery.Length >= MinQueryLength;
         var normalizedSkip = Math.Max(0, skip);
         var normalizedTake = Math.Clamp(take <= 0 ? DefaultTake : take, 1, MaxTake);
+        var normalizedDestinationTypeIds = NormalizeIds(destinationTypeIds);
         var normalizedTagIds = NormalizeIds(tagIds);
-        var normalizedPlaceTypeIds = NormalizeIds(placeTypeIds);
 
         if (normalizedQuery.Length is > 0 and < MinQueryLength)
         {
@@ -52,25 +51,25 @@ public class DestinationDiscoverySearchService
             throw new InvalidOperationException("Search query must be 100 characters or fewer.");
         }
 
-        var selectedTagGroups = await LoadSelectedFilterableTagGroupsAsync(normalizedTagIds, cancellationToken);
+        if (normalizedDestinationTypeIds.Count > 0)
+        {
+            var validDestinationTypeCount = await _db.DestinationTypes
+                .AsNoTracking()
+                .CountAsync(destinationType => normalizedDestinationTypeIds.Contains(destinationType.Id), cancellationToken);
+
+            if (validDestinationTypeCount != normalizedDestinationTypeIds.Count)
+            {
+                throw new InvalidOperationException("One or more destination type filters are invalid.");
+            }
+        }
+
+        var selectedTagGroups = await LoadSelectedDestinationTagGroupsAsync(normalizedTagIds, cancellationToken);
         var selectedTagIdArray = selectedTagGroups
             .SelectMany(group => group.TagIds)
             .Distinct()
             .ToArray();
+        var destinationTypeIdArray = normalizedDestinationTypeIds.ToArray();
 
-        if (normalizedPlaceTypeIds.Count > 0)
-        {
-            var validPlaceTypeCount = await _db.PlaceTypes
-                .AsNoTracking()
-                .CountAsync(placeType => normalizedPlaceTypeIds.Contains(placeType.Id), cancellationToken);
-
-            if (validPlaceTypeCount != normalizedPlaceTypeIds.Count)
-            {
-                throw new InvalidOperationException("One or more place type filters are invalid.");
-            }
-        }
-
-        var placeTypeIdArray = normalizedPlaceTypeIds.ToArray();
         var baseQuery = _db.Destinations
             .AsNoTracking()
             .Where(destination => destination.Status == PublishedStatus);
@@ -80,8 +79,8 @@ public class DestinationDiscoverySearchService
             baseQuery = ApplyTextSearch(baseQuery, normalizedQuery);
         }
 
-        baseQuery = ApplyTagFilters(baseQuery, selectedTagGroups);
-        baseQuery = ApplyPlaceTypeFilters(baseQuery, placeTypeIdArray);
+        baseQuery = ApplyDestinationTypeFilters(baseQuery, destinationTypeIdArray);
+        baseQuery = ApplyDestinationTagFilters(baseQuery, selectedTagGroups);
 
         var totalCount = await baseQuery.CountAsync(cancellationToken);
 
@@ -105,6 +104,7 @@ public class DestinationDiscoverySearchService
                 Name = destination.Name,
                 Score =
                     (hasQuery && destination.Name.ToLower().Contains(normalizedQuery) ? 140 : 0) +
+                    (hasQuery && destination.DestinationType.Name.ToLower().Contains(normalizedQuery) ? 105 : 0) +
                     (hasQuery && destination.DestinationTags.Any(destinationTag =>
                         destinationTag.Tag.Name.ToLower().Contains(normalizedQuery) ||
                         destinationTag.Tag.Slug.ToLower().Contains(normalizedQuery)) ? 100 : 0) +
@@ -159,20 +159,8 @@ public class DestinationDiscoverySearchService
                         location.Places.Any(place =>
                             place.Status == PublishedStatus &&
                             place.Description.ToLower().Contains(normalizedQuery))) ? 15 : 0) +
-                    (selectedTagIdArray.Length > 0 && destination.DestinationTags.Any(destinationTag => selectedTagIdArray.Contains(destinationTag.TagId)) ? 35 : 0) +
-                    (selectedTagIdArray.Length > 0 && destination.Locations.Any(location =>
-                        location.Status == PublishedStatus &&
-                        location.LocationTags.Any(locationTag => selectedTagIdArray.Contains(locationTag.TagId))) ? 30 : 0) +
-                    (selectedTagIdArray.Length > 0 && destination.Locations.Any(location =>
-                        location.Status == PublishedStatus &&
-                        location.Places.Any(place =>
-                            place.Status == PublishedStatus &&
-                            place.PlaceTags.Any(placeTag => selectedTagIdArray.Contains(placeTag.TagId)))) ? 30 : 0) +
-                    (placeTypeIdArray.Length > 0 && destination.Locations.Any(location =>
-                        location.Status == PublishedStatus &&
-                        location.Places.Any(place =>
-                            place.Status == PublishedStatus &&
-                            placeTypeIdArray.Contains(place.PlaceTypeId))) ? 25 : 0)
+                    (destinationTypeIdArray.Length > 0 && destinationTypeIdArray.Contains(destination.DestinationTypeId) ? 45 : 0) +
+                    (selectedTagIdArray.Length > 0 && destination.DestinationTags.Any(destinationTag => selectedTagIdArray.Contains(destinationTag.TagId)) ? 40 : 0)
             })
             .OrderByDescending(destination => destination.Score)
             .ThenBy(destination => destination.Name)
@@ -182,7 +170,7 @@ public class DestinationDiscoverySearchService
 
         var destinationIds = scoredPage.Select(destination => destination.Id).ToArray();
         var scoresById = scoredPage.ToDictionary(destination => destination.Id, destination => destination.Score);
-        var rows = await LoadRowsAsync(destinationIds, normalizedQuery, hasQuery, selectedTagIdArray, placeTypeIdArray, cancellationToken);
+        var rows = await LoadRowsAsync(destinationIds, normalizedQuery, hasQuery, selectedTagIdArray, destinationTypeIdArray, cancellationToken);
         var items = rows
             .OrderBy(row => Array.IndexOf(destinationIds, row.Id))
             .Select(row => MapRow(row, scoresById.GetValueOrDefault(row.Id)))
@@ -202,9 +190,23 @@ public class DestinationDiscoverySearchService
 
     public async Task<DestinationDiscoveryFiltersDto> GetFiltersAsync(CancellationToken cancellationToken = default)
     {
+        var destinationTypeFilters = await _db.DestinationTypes
+            .AsNoTracking()
+            .Select(destinationType => new DestinationDiscoveryDestinationTypeFilterDto
+            {
+                Id = destinationType.Id,
+                Name = destinationType.Name,
+                Count = destinationType.Destinations.Count(destination => destination.Status == PublishedStatus)
+            })
+            .Where(option => option.Count > 0)
+            .OrderBy(option => option.Name)
+            .ToListAsync(cancellationToken);
+
         var tagTypeFilters = await _db.TagTypes
             .AsNoTracking()
-            .Where(tagType => tagType.IsFilterable)
+            .Where(tagType =>
+                tagType.IsFilterable &&
+                tagType.ForDestination)
             .OrderBy(tagType => tagType.FilterOrder)
             .ThenBy(tagType => tagType.Name)
             .Select(tagType => new DestinationDiscoveryTagTypeFilterDto
@@ -215,37 +217,18 @@ public class DestinationDiscoverySearchService
                 Label = tagType.FilterLabel ?? tagType.Name,
                 Order = tagType.FilterOrder,
                 Options = tagType.Tags
-                    .Where(tag =>
-                        tag.ForDestination ||
-                        tag.ForLocation ||
-                        tag.ForPlace)
+                    .Where(tag => tag.ForDestination)
                     .OrderBy(tag => tag.Name)
                     .Select(tag => new DestinationDiscoveryTagFilterOptionDto
                     {
                         Id = tag.Id,
                         Name = tag.Name,
                         Slug = tag.Slug,
-                        Count =
-                            tag.DestinationTags
-                                .Where(destinationTag => destinationTag.Destination.Status == PublishedStatus)
-                                .Select(destinationTag => destinationTag.DestinationId)
-                                .Distinct()
-                                .Count() +
-                            tag.LocationTags
-                                .Where(locationTag =>
-                                    locationTag.Location.Status == PublishedStatus &&
-                                    locationTag.Location.Destination.Status == PublishedStatus)
-                                .Select(locationTag => locationTag.Location.DestinationId)
-                                .Distinct()
-                                .Count() +
-                            tag.PlaceTags
-                                .Where(placeTag =>
-                                    placeTag.Place.Status == PublishedStatus &&
-                                    placeTag.Place.Location.Status == PublishedStatus &&
-                                    placeTag.Place.Location.Destination.Status == PublishedStatus)
-                                .Select(placeTag => placeTag.Place.Location.DestinationId)
-                                .Distinct()
-                                .Count()
+                        Count = tag.DestinationTags
+                            .Where(destinationTag => destinationTag.Destination.Status == PublishedStatus)
+                            .Select(destinationTag => destinationTag.DestinationId)
+                            .Distinct()
+                            .Count()
                     })
                     .Where(option => option.Count > 0)
                     .ToList()
@@ -253,33 +236,14 @@ public class DestinationDiscoverySearchService
             .Where(group => group.Options.Count > 0)
             .ToListAsync(cancellationToken);
 
-        var placeTypeFilters = await _db.PlaceTypes
-            .AsNoTracking()
-            .Select(placeType => new DestinationDiscoveryPlaceTypeFilterDto
-            {
-                Id = placeType.Id,
-                Name = placeType.Name,
-                Count = placeType.Places
-                    .Where(place =>
-                        place.Status == PublishedStatus &&
-                        place.Location.Status == PublishedStatus &&
-                        place.Location.Destination.Status == PublishedStatus)
-                    .Select(place => place.Location.DestinationId)
-                    .Distinct()
-                    .Count()
-            })
-            .Where(option => option.Count > 0)
-            .OrderBy(option => option.Name)
-            .ToListAsync(cancellationToken);
-
         return new DestinationDiscoveryFiltersDto
         {
-            TagTypeFilters = tagTypeFilters,
-            PlaceTypeFilters = placeTypeFilters
+            DestinationTypeFilters = destinationTypeFilters,
+            TagTypeFilters = tagTypeFilters
         };
     }
 
-    private async Task<List<SelectedTagGroup>> LoadSelectedFilterableTagGroupsAsync(
+    private async Task<List<SelectedTagGroup>> LoadSelectedDestinationTagGroupsAsync(
         IReadOnlyCollection<int> tagIds,
         CancellationToken cancellationToken)
     {
@@ -290,8 +254,10 @@ public class DestinationDiscoverySearchService
             .AsNoTracking()
             .Where(tag =>
                 tagIds.Contains(tag.Id) &&
+                tag.ForDestination &&
                 tag.TagType != null &&
-                tag.TagType.IsFilterable)
+                tag.TagType.IsFilterable &&
+                tag.TagType.ForDestination)
             .Select(tag => new
             {
                 tag.Id,
@@ -301,7 +267,7 @@ public class DestinationDiscoverySearchService
 
         if (tags.Count != tagIds.Count)
         {
-            throw new InvalidOperationException("One or more tag filters are invalid or not filterable.");
+            throw new InvalidOperationException("One or more tag filters are invalid, not filterable, or not destination-level tags.");
         }
 
         return tags
@@ -318,6 +284,7 @@ public class DestinationDiscoverySearchService
     {
         return query.Where(destination =>
             destination.Name.ToLower().Contains(term) ||
+            destination.DestinationType.Name.ToLower().Contains(term) ||
             (destination.Summary != null && destination.Summary.ToLower().Contains(term)) ||
             destination.Description.ToLower().Contains(term) ||
             destination.DestinationTags.Any(destinationTag =>
@@ -349,37 +316,24 @@ public class DestinationDiscoverySearchService
                 )));
     }
 
-    private static IQueryable<Destination> ApplyTagFilters(IQueryable<Destination> query, IReadOnlyCollection<SelectedTagGroup> tagGroups)
+    private static IQueryable<Destination> ApplyDestinationTypeFilters(IQueryable<Destination> query, int[] destinationTypeIds)
+    {
+        if (destinationTypeIds.Length == 0)
+            return query;
+
+        return query.Where(destination => destinationTypeIds.Contains(destination.DestinationTypeId));
+    }
+
+    private static IQueryable<Destination> ApplyDestinationTagFilters(IQueryable<Destination> query, IReadOnlyCollection<SelectedTagGroup> tagGroups)
     {
         foreach (var tagGroup in tagGroups)
         {
             var groupTagIds = tagGroup.TagIds;
             query = query.Where(destination =>
-                destination.DestinationTags.Any(destinationTag => groupTagIds.Contains(destinationTag.TagId)) ||
-                destination.Locations.Any(location =>
-                    location.Status == PublishedStatus &&
-                    location.LocationTags.Any(locationTag => groupTagIds.Contains(locationTag.TagId))) ||
-                destination.Locations.Any(location =>
-                    location.Status == PublishedStatus &&
-                    location.Places.Any(place =>
-                        place.Status == PublishedStatus &&
-                        place.PlaceTags.Any(placeTag => groupTagIds.Contains(placeTag.TagId)))));
+                destination.DestinationTags.Any(destinationTag => groupTagIds.Contains(destinationTag.TagId)));
         }
 
         return query;
-    }
-
-    private static IQueryable<Destination> ApplyPlaceTypeFilters(IQueryable<Destination> query, int[] placeTypeIds)
-    {
-        if (placeTypeIds.Length == 0)
-            return query;
-
-        return query.Where(destination =>
-            destination.Locations.Any(location =>
-                location.Status == PublishedStatus &&
-                location.Places.Any(place =>
-                    place.Status == PublishedStatus &&
-                    placeTypeIds.Contains(place.PlaceTypeId))));
     }
 
     private async Task<List<DestinationSearchRow>> LoadRowsAsync(
@@ -387,7 +341,7 @@ public class DestinationDiscoverySearchService
         string term,
         bool hasQuery,
         int[] selectedTagIds,
-        int[] selectedPlaceTypeIds,
+        int[] selectedDestinationTypeIds,
         CancellationToken cancellationToken)
     {
         if (destinationIds.Length == 0)
@@ -404,6 +358,8 @@ public class DestinationDiscoverySearchService
                 Description = destination.Description,
                 Latitude = destination.Latitude,
                 Longitude = destination.Longitude,
+                DestinationTypeId = destination.DestinationTypeId,
+                DestinationTypeName = destination.DestinationType.Name,
                 ImageUrl = destination.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Destination)
                     .OrderByDescending(image => image.IsMain)
@@ -423,6 +379,8 @@ public class DestinationDiscoverySearchService
                         TagTypeSlug = destinationTag.Tag.TagType != null ? destinationTag.Tag.TagType.Slug : null
                     })
                     .ToList(),
+                DestinationTypeMatched = selectedDestinationTypeIds.Contains(destination.DestinationTypeId) ||
+                    (hasQuery && destination.DestinationType.Name.ToLower().Contains(term)),
                 MatchedDestinationTags = destination.DestinationTags
                     .Where(destinationTag =>
                         selectedTagIds.Contains(destinationTag.TagId) ||
@@ -434,18 +392,15 @@ public class DestinationDiscoverySearchService
                 MatchedLocationNames = destination.Locations
                     .Where(location =>
                         location.Status == PublishedStatus &&
+                        hasQuery &&
                         (
-                            (hasQuery &&
-                             (
-                                 location.Name.ToLower().Contains(term) ||
-                                 (location.Summary != null && location.Summary.ToLower().Contains(term)) ||
-                                 location.Description.ToLower().Contains(term) ||
-                                 location.LocationType.Name.ToLower().Contains(term) ||
-                                 location.LocationTags.Any(locationTag =>
-                                     locationTag.Tag.Name.ToLower().Contains(term) ||
-                                     locationTag.Tag.Slug.ToLower().Contains(term))
-                             )) ||
-                            location.LocationTags.Any(locationTag => selectedTagIds.Contains(locationTag.TagId))
+                            location.Name.ToLower().Contains(term) ||
+                            (location.Summary != null && location.Summary.ToLower().Contains(term)) ||
+                            location.Description.ToLower().Contains(term) ||
+                            location.LocationType.Name.ToLower().Contains(term) ||
+                            location.LocationTags.Any(locationTag =>
+                                locationTag.Tag.Name.ToLower().Contains(term) ||
+                                locationTag.Tag.Slug.ToLower().Contains(term))
                         ))
                     .OrderBy(location => location.Name)
                     .Select(location => location.Name)
@@ -455,10 +410,9 @@ public class DestinationDiscoverySearchService
                     .Where(location => location.Status == PublishedStatus)
                     .SelectMany(location => location.LocationTags)
                     .Where(locationTag =>
-                        selectedTagIds.Contains(locationTag.TagId) ||
-                        (hasQuery &&
-                         (locationTag.Tag.Name.ToLower().Contains(term) ||
-                          locationTag.Tag.Slug.ToLower().Contains(term))))
+                        hasQuery &&
+                        (locationTag.Tag.Name.ToLower().Contains(term) ||
+                         locationTag.Tag.Slug.ToLower().Contains(term)))
                     .Select(locationTag => locationTag.Tag.Name)
                     .Take(8)
                     .ToList(),
@@ -467,21 +421,17 @@ public class DestinationDiscoverySearchService
                     .SelectMany(location => location.Places)
                     .Where(place =>
                         place.Status == PublishedStatus &&
+                        hasQuery &&
                         (
-                            (hasQuery &&
-                             (
-                                 place.Name.ToLower().Contains(term) ||
-                                 (place.Subtitle != null && place.Subtitle.ToLower().Contains(term)) ||
-                                 (place.Address != null && place.Address.ToLower().Contains(term)) ||
-                                 place.Description.ToLower().Contains(term) ||
-                                 place.PlaceType.Name.ToLower().Contains(term) ||
-                                 (place.Stay != null && place.Stay.StayType.Name.ToLower().Contains(term)) ||
-                                 place.PlaceTags.Any(placeTag =>
-                                     placeTag.Tag.Name.ToLower().Contains(term) ||
-                                     placeTag.Tag.Slug.ToLower().Contains(term))
-                             )) ||
-                            selectedPlaceTypeIds.Contains(place.PlaceTypeId) ||
-                            place.PlaceTags.Any(placeTag => selectedTagIds.Contains(placeTag.TagId))
+                            place.Name.ToLower().Contains(term) ||
+                            (place.Subtitle != null && place.Subtitle.ToLower().Contains(term)) ||
+                            (place.Address != null && place.Address.ToLower().Contains(term)) ||
+                            place.Description.ToLower().Contains(term) ||
+                            place.PlaceType.Name.ToLower().Contains(term) ||
+                            (place.Stay != null && place.Stay.StayType.Name.ToLower().Contains(term)) ||
+                            place.PlaceTags.Any(placeTag =>
+                                placeTag.Tag.Name.ToLower().Contains(term) ||
+                                placeTag.Tag.Slug.ToLower().Contains(term))
                         ))
                     .OrderBy(place => place.Name)
                     .Select(place => place.Name)
@@ -493,10 +443,9 @@ public class DestinationDiscoverySearchService
                     .Where(place => place.Status == PublishedStatus)
                     .SelectMany(place => place.PlaceTags)
                     .Where(placeTag =>
-                        selectedTagIds.Contains(placeTag.TagId) ||
-                        (hasQuery &&
-                         (placeTag.Tag.Name.ToLower().Contains(term) ||
-                          placeTag.Tag.Slug.ToLower().Contains(term))))
+                        hasQuery &&
+                        (placeTag.Tag.Name.ToLower().Contains(term) ||
+                         placeTag.Tag.Slug.ToLower().Contains(term)))
                     .Select(placeTag => placeTag.Tag.Name)
                     .Take(8)
                     .ToList(),
@@ -505,10 +454,8 @@ public class DestinationDiscoverySearchService
                     .SelectMany(location => location.Places)
                     .Where(place =>
                         place.Status == PublishedStatus &&
-                        (
-                            selectedPlaceTypeIds.Contains(place.PlaceTypeId) ||
-                            (hasQuery && place.PlaceType.Name.ToLower().Contains(term))
-                        ))
+                        hasQuery &&
+                        place.PlaceType.Name.ToLower().Contains(term))
                     .Select(place => place.PlaceType.Name)
                     .Take(8)
                     .ToList(),
@@ -526,39 +473,32 @@ public class DestinationDiscoverySearchService
                 MatchedLocationCount = destination.Locations
                     .Count(location =>
                         location.Status == PublishedStatus &&
+                        hasQuery &&
                         (
-                            location.LocationTags.Any(locationTag => selectedTagIds.Contains(locationTag.TagId)) ||
-                            (hasQuery &&
-                             (
-                                 location.Name.ToLower().Contains(term) ||
-                                 (location.Summary != null && location.Summary.ToLower().Contains(term)) ||
-                                 location.Description.ToLower().Contains(term) ||
-                                 location.LocationType.Name.ToLower().Contains(term) ||
-                                 location.LocationTags.Any(locationTag =>
-                                     locationTag.Tag.Name.ToLower().Contains(term) ||
-                                     locationTag.Tag.Slug.ToLower().Contains(term))
-                             ))
+                            location.Name.ToLower().Contains(term) ||
+                            (location.Summary != null && location.Summary.ToLower().Contains(term)) ||
+                            location.Description.ToLower().Contains(term) ||
+                            location.LocationType.Name.ToLower().Contains(term) ||
+                            location.LocationTags.Any(locationTag =>
+                                locationTag.Tag.Name.ToLower().Contains(term) ||
+                                locationTag.Tag.Slug.ToLower().Contains(term))
                         )),
                 MatchedPlaceCount = destination.Locations
                     .Where(location => location.Status == PublishedStatus)
                     .SelectMany(location => location.Places)
                     .Count(place =>
                         place.Status == PublishedStatus &&
+                        hasQuery &&
                         (
-                            selectedPlaceTypeIds.Contains(place.PlaceTypeId) ||
-                            place.PlaceTags.Any(placeTag => selectedTagIds.Contains(placeTag.TagId)) ||
-                            (hasQuery &&
-                             (
-                                 place.Name.ToLower().Contains(term) ||
-                                 (place.Subtitle != null && place.Subtitle.ToLower().Contains(term)) ||
-                                 (place.Address != null && place.Address.ToLower().Contains(term)) ||
-                                 place.Description.ToLower().Contains(term) ||
-                                 place.PlaceType.Name.ToLower().Contains(term) ||
-                                 (place.Stay != null && place.Stay.StayType.Name.ToLower().Contains(term)) ||
-                                 place.PlaceTags.Any(placeTag =>
-                                     placeTag.Tag.Name.ToLower().Contains(term) ||
-                                     placeTag.Tag.Slug.ToLower().Contains(term))
-                             ))
+                            place.Name.ToLower().Contains(term) ||
+                            (place.Subtitle != null && place.Subtitle.ToLower().Contains(term)) ||
+                            (place.Address != null && place.Address.ToLower().Contains(term)) ||
+                            place.Description.ToLower().Contains(term) ||
+                            place.PlaceType.Name.ToLower().Contains(term) ||
+                            (place.Stay != null && place.Stay.StayType.Name.ToLower().Contains(term)) ||
+                            place.PlaceTags.Any(placeTag =>
+                                placeTag.Tag.Name.ToLower().Contains(term) ||
+                                placeTag.Tag.Slug.ToLower().Contains(term))
                         ))
             })
             .ToListAsync(cancellationToken);
@@ -576,6 +516,8 @@ public class DestinationDiscoverySearchService
             DetailRoute = $"/explore?destinationId={row.Id}",
             Latitude = row.Latitude,
             Longitude = row.Longitude,
+            DestinationTypeId = row.DestinationTypeId,
+            DestinationTypeName = row.DestinationTypeName,
             Tags = row.Tags,
             MatchedBy = BuildMatchedBy(row),
             MatchedLocationCount = row.MatchedLocationCount,
@@ -586,13 +528,22 @@ public class DestinationDiscoverySearchService
 
     private static List<string> BuildMatchedBy(DestinationSearchRow row)
     {
-        return row.MatchedDestinationTags
-            .Concat(row.MatchedLocationNames)
-            .Concat(row.MatchedLocationTags)
-            .Concat(row.MatchedPlaceNames)
-            .Concat(row.MatchedPlaceTags)
-            .Concat(row.MatchedPlaceTypes)
-            .Concat(row.MatchedStayTypes)
+        var matches = new List<string>();
+
+        if (row.DestinationTypeMatched)
+        {
+            matches.Add(row.DestinationTypeName);
+        }
+
+        matches.AddRange(row.MatchedDestinationTags);
+        matches.AddRange(row.MatchedLocationNames);
+        matches.AddRange(row.MatchedLocationTags);
+        matches.AddRange(row.MatchedPlaceNames);
+        matches.AddRange(row.MatchedPlaceTags);
+        matches.AddRange(row.MatchedPlaceTypes);
+        matches.AddRange(row.MatchedStayTypes);
+
+        return matches
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -654,8 +605,11 @@ public class DestinationDiscoverySearchService
         public string? Description { get; set; }
         public double Latitude { get; set; }
         public double Longitude { get; set; }
+        public int DestinationTypeId { get; set; }
+        public string DestinationTypeName { get; set; } = string.Empty;
         public string? ImageUrl { get; set; }
         public List<DestinationDiscoveryTagDto> Tags { get; set; } = new();
+        public bool DestinationTypeMatched { get; set; }
         public List<string> MatchedDestinationTags { get; set; } = new();
         public List<string> MatchedLocationNames { get; set; } = new();
         public List<string> MatchedLocationTags { get; set; } = new();

@@ -27,8 +27,8 @@
         </p>
 
         <div class="explore-page__no-nearby-actions">
-          <button type="button" class="explore-page__no-nearby-primary" (click)="openDestinationDiscovery()">
-            Explore other destinations
+          <button type="button" class="explore-page__no-nearby-primary" (click)="openDisplayedDestinationOrDiscovery()">
+            {{ displayedDestinationActionLabel() }}
           </button>
           <button type="button" class="explore-page__no-nearby-secondary" (click)="openMap()">
             Open map
@@ -185,10 +185,26 @@
 
       <p class="explore-page__context">{{ contextLine() }}</p>
 
+      @if (showLocationUpgrade()) {
+        <div class="explore-page__location-mode">
+          <span>Using approximate location from IP.</span>
+          <button
+            type="button"
+            [disabled]="exactLocationLoading()"
+            (click)="useExactLocation()"
+          >
+            {{ exactLocationLoading() ? 'Updatingâ€¦' : 'Use exact location' }}
+          </button>
+        </div>
+        @if (exactLocationError()) {
+          <p class="explore-page__location-error">{{ exactLocationError() }}</p>
+        }
+      }
+
       @if (isDestinationMode()) {
         <div class="explore-page__destination-mode">
           <span>Selected destination: {{ heroCity() }}</span>
-          <button type="button" (click)="useCurrentLocation()">Use my location</button>
+          <button type="button" (click)="useCurrentLocation()">{{ useLocationModeActionLabel() }}</button>
         </div>
       }
 

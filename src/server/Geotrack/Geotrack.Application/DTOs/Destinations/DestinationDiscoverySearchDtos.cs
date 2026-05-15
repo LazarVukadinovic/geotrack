@@ -21,6 +21,8 @@ public class DestinationDiscoverySearchItemDto
     public string DetailRoute { get; set; } = string.Empty;
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+    public int DestinationTypeId { get; set; }
+    public string DestinationTypeName { get; set; } = string.Empty;
     public List<DestinationDiscoveryTagDto> Tags { get; set; } = new();
     public List<string> MatchedBy { get; set; } = new();
     public int MatchedLocationCount { get; set; }
@@ -39,8 +41,15 @@ public class DestinationDiscoveryTagDto
 
 public class DestinationDiscoveryFiltersDto
 {
+    public List<DestinationDiscoveryDestinationTypeFilterDto> DestinationTypeFilters { get; set; } = new();
     public List<DestinationDiscoveryTagTypeFilterDto> TagTypeFilters { get; set; } = new();
-    public List<DestinationDiscoveryPlaceTypeFilterDto> PlaceTypeFilters { get; set; } = new();
+}
+
+public class DestinationDiscoveryDestinationTypeFilterDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int Count { get; set; }
 }
 
 public class DestinationDiscoveryTagTypeFilterDto
@@ -58,12 +67,5 @@ public class DestinationDiscoveryTagFilterOptionDto
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
-    public int Count { get; set; }
-}
-
-public class DestinationDiscoveryPlaceTypeFilterDto
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
     public int Count { get; set; }
 }

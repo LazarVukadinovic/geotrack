@@ -9,7 +9,7 @@
     <div>
       <p class="destination-discovery__eyebrow">Explore destinations</p>
       <h1>Find another destination</h1>
-      <p>Search by name, tags, place types, or content inside each destination.</p>
+      <p>Search by name, destination tags, or content inside each destination.</p>
     </div>
   </header>
 
@@ -21,7 +21,7 @@
       <input
         type="search"
         [value]="query()"
-        placeholder="Search beaches, mountains, restaurants, spas..."
+        placeholder="Search beaches, culture, luxury hotels, local food..."
         aria-label="Search destinations"
         (input)="onQueryInput($any($event.target).value)"
         (keydown.enter)="submitSearch()"
@@ -50,6 +50,25 @@
           {{ filtersError() }}
         </p>
       } @else {
+        @if (visibleDestinationTypeFilters().length > 0) {
+          <div class="destination-filter-group">
+            <h3>Destination type</h3>
+            <div class="destination-filter-group__options">
+              @for (type of visibleDestinationTypeFilters(); track type.id) {
+                <button
+                  type="button"
+                  class="destination-filter-chip"
+                  [class.destination-filter-chip--active]="isDestinationTypeSelected(type.id)"
+                  (click)="toggleDestinationType(type.id)"
+                >
+                  <span>{{ type.name }}</span>
+                  <small>{{ type.count }}</small>
+                </button>
+              }
+            </div>
+          </div>
+        }
+
         @for (group of visibleTagTypeFilters(); track group.id) {
           <div class="destination-filter-group">
             <h3>{{ group.label }}</h3>
@@ -63,25 +82,6 @@
                 >
                   <span>{{ option.name }}</span>
                   <small>{{ option.count }}</small>
-                </button>
-              }
-            </div>
-          </div>
-        }
-
-        @if (placeTypeFilters().length > 0) {
-          <div class="destination-filter-group">
-            <h3>Place types</h3>
-            <div class="destination-filter-group__options">
-              @for (type of placeTypeFilters(); track type.id) {
-                <button
-                  type="button"
-                  class="destination-filter-chip"
-                  [class.destination-filter-chip--active]="isPlaceTypeSelected(type.id)"
-                  (click)="togglePlaceType(type.id)"
-                >
-                  <span>{{ type.name }}</span>
-                  <small>{{ type.count }}</small>
                 </button>
               }
             </div>
@@ -143,7 +143,6 @@
               <div class="destination-card__body">
                 <div class="destination-card__title-row">
                   <h3>{{ destination.name }}</h3>
-                  <span>Explore</span>
                 </div>
 
                 @if (destination.summary || destination.description) {

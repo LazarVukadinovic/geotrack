@@ -23,8 +23,8 @@ public class DestinationDiscoverySearchController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<DestinationDiscoverySearchResponseDto>> Search(
         [FromQuery(Name = "q")] string? query = null,
+        [FromQuery] string? destinationTypeIds = null,
         [FromQuery] string? tagIds = null,
-        [FromQuery] string? placeTypeIds = null,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20,
         CancellationToken cancellationToken = default)
@@ -39,8 +39,8 @@ public class DestinationDiscoverySearchController : ControllerBase
         {
             var result = await _searchService.SearchAsync(
                 query,
+                ParsePositiveIds(destinationTypeIds),
                 ParsePositiveIds(tagIds),
-                ParsePositiveIds(placeTypeIds),
                 skip,
                 take,
                 cancellationToken);

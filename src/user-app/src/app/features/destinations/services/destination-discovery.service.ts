@@ -21,6 +21,8 @@ export interface DestinationDiscoverySearchItem {
   detailRoute: string;
   latitude: number;
   longitude: number;
+  destinationTypeId: number;
+  destinationTypeName: string;
   tags: DestinationDiscoveryTag[];
   matchedBy: string[];
   matchedLocationCount: number;
@@ -37,8 +39,14 @@ export interface DestinationDiscoveryTag {
 }
 
 export interface DestinationDiscoveryFilters {
+  destinationTypeFilters: DestinationDiscoveryDestinationTypeFilter[];
   tagTypeFilters: DestinationDiscoveryTagTypeFilter[];
-  placeTypeFilters: DestinationDiscoveryPlaceTypeFilter[];
+}
+
+export interface DestinationDiscoveryDestinationTypeFilter {
+  id: number;
+  name: string;
+  count: number;
 }
 
 export interface DestinationDiscoveryTagTypeFilter {
@@ -57,16 +65,10 @@ export interface DestinationDiscoveryTagFilterOption {
   count: number;
 }
 
-export interface DestinationDiscoveryPlaceTypeFilter {
-  id: number;
-  name: string;
-  count: number;
-}
-
 export interface DestinationDiscoverySearchRequest {
   query?: string;
+  destinationTypeIds?: number[];
   tagIds?: number[];
-  placeTypeIds?: number[];
   skip?: number;
   take?: number;
 }
@@ -85,12 +87,12 @@ export class DestinationDiscoveryService {
       params = params.set('q', query);
     }
 
-    if (request.tagIds?.length) {
-      params = params.set('tagIds', this.joinIds(request.tagIds));
+    if (request.destinationTypeIds?.length) {
+      params = params.set('destinationTypeIds', this.joinIds(request.destinationTypeIds));
     }
 
-    if (request.placeTypeIds?.length) {
-      params = params.set('placeTypeIds', this.joinIds(request.placeTypeIds));
+    if (request.tagIds?.length) {
+      params = params.set('tagIds', this.joinIds(request.tagIds));
     }
 
     return this.http.get<DestinationDiscoverySearchResponse>('/api/destinations/discovery-search', { params });
