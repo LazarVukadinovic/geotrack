@@ -1,5 +1,4 @@
 import { Component, computed, inject, ViewChild } from '@angular/core';
-import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { CollectionsService } from '../../services/collections';
 import { NewCollectionSheetComponent } from '../new-collection-sheet/new-collection-sheet.component';
@@ -13,7 +12,6 @@ import { ImageFallbackDirective } from '../../../../shared/directives/image-fall
   styleUrl: './my-collections-page.component.css',
 })
 export class MyCollectionsPageComponent {
-  private readonly location    = inject(Location);
   private readonly router      = inject(Router);
   private readonly collService = inject(CollectionsService);
 
@@ -33,7 +31,7 @@ export class MyCollectionsPageComponent {
   }
 
   protected goBack(): void {
-    this.location.back();
+    globalThis.history.back();
   }
 
   protected onCollectionCreated(id: number): void {

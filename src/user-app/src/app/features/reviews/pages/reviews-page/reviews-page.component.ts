@@ -1,5 +1,4 @@
 import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
-import { Location } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
@@ -20,7 +19,6 @@ type ReviewsLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
 export class ReviewsPageComponent {
   private readonly pageSize = 10;
   private readonly route = inject(ActivatedRoute);
-  private readonly location = inject(Location);
   private readonly destroyRef = inject(DestroyRef);
   private readonly reviewsService = inject(ReviewsService);
   private readonly auth = inject(AuthService);
@@ -81,7 +79,7 @@ export class ReviewsPageComponent {
   }
 
   protected goBack(): void {
-    this.location.back();
+    globalThis.history.back();
   }
 
   protected retry(): void {

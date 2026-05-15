@@ -1,5 +1,5 @@
 import { AfterViewInit, ChangeDetectorRef, Component, OnDestroy } from '@angular/core';
-import { CommonModule, Location as AngularLocation } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, {
@@ -137,7 +137,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     private readonly mapApi: MapApiService,
     private readonly analytics: AnalyticsService,
     private readonly locationSvc: LocationService,
-    private readonly angularLocation: AngularLocation,
     private readonly mapFilterState: MapFilterStateService,
   ) {
     const nav = this.router.getCurrentNavigation();
@@ -833,11 +832,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     if (!mapFocus) return;
 
     try {
-      this.angularLocation.replaceState(this.router.url, '', {
+      globalThis.history.replaceState({
         ...(history.state ?? {}),
         mapFocus,
         mapPreviewRestore: true,
-      } satisfies MapNavigationState);
+      } satisfies MapNavigationState, '', this.router.url);
     } catch {
       // History state may be unavailable in restricted browser modes.
     }
@@ -851,7 +850,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       const nextState = { ...currentState };
       delete nextState.mapFocus;
       delete nextState.mapPreviewRestore;
-      this.angularLocation.replaceState(this.router.url, '', nextState);
+      globalThis.history.replaceState(nextState, '', this.router.url);
     } catch {
       // If history state cannot be updated, the in-memory selectedPlace still controls this view.
     }

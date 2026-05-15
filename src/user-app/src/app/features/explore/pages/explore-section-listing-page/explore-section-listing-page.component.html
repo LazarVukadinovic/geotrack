@@ -98,28 +98,34 @@
 
             <h2 class="explore-listing__card-title">{{ item.title }}</h2>
 
-            @if (item.subtitle) {
+            @if (item.subtitle && !item.subtitle.startsWith('Matches your saved interest')) {
               <p class="explore-listing__description">{{ item.subtitle }}</p>
             } @else if (item.description) {
               <p class="explore-listing__description">{{ item.description }}</p>
             }
 
             <div class="explore-listing__meta">
-              @if (item.rating != null) {
-                <span>★ {{ item.rating.toFixed(1) }}</span>
-              }
-              @if (item.reviewCount) {
-                <span>{{ item.reviewCount }}</span>
-              }
               @if (item.distance) {
-                <span>{{ item.distance }}</span>
+                <div class="explore-listing__meta-row explore-listing__meta-row--distance">
+                  <span>{{ item.distance }}</span>
+                </div>
               }
-              @if (item.dateLabel) {
-                <span>{{ item.dateLabel }}</span>
-              }
-              @if (item.pricePerNight != null) {
-                <span>€{{ item.pricePerNight }}/night</span>
-              }
+
+              <div class="explore-listing__meta-row explore-listing__meta-row--reviews">
+                @if (item.rating != null) {
+                  <span class="explore-listing__rating">★ {{ item.rating.toFixed(1) }}</span>
+
+                  @if (item.reviewCount) {
+                    <span>{{ item.reviewCount }}</span>
+                  }
+                } @else if (item.entityType !== 'event') {
+                  <span class="explore-listing__rating explore-listing__rating--empty">☆ No Reviews</span>
+                }
+
+                @if (item.dateLabel) {
+                  <span>{{ item.dateLabel }}</span>
+                }
+              </div>
             </div>
           </div>
         </article>
@@ -144,3 +150,4 @@
     }
   }
 </main>
+

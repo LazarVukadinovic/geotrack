@@ -1,5 +1,5 @@
 import { Component, inject } from '@angular/core';
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 
 @Component({
@@ -34,13 +34,12 @@ import { Router } from '@angular/router';
 })
 export class NotFoundPageComponent {
   private readonly router = inject(Router);
-  private readonly location = inject(Location);
 
   protected goHome(): void {
     void this.router.navigate(['/home']);
   }
 
   protected goBack(): void {
-    this.location.back();
+    globalThis.history.back();
   }
 }

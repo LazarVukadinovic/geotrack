@@ -100,13 +100,33 @@
 }
 
 .explore-listing__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  display: grid;
+  gap: 6px;
   margin-top: var(--space-3);
   color: var(--color-muted);
   font-size: var(--text-xs);
   font-weight: 700;
+}
+
+.explore-listing__meta-row {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.explore-listing__meta-row--distance,
+.explore-listing__meta-row--price {
+  display: block;
+}
+
+.explore-listing__rating {
+  color: var(--color-primary-navy);
+  font-weight: 800;
+}
+
+.explore-listing__rating--empty {
+  color: var(--color-muted);
 }
 
 .explore-listing__load-more-wrap {
@@ -226,3 +246,4 @@
   opacity: 0.72;
   font-size: var(--text-xs);
 }
+

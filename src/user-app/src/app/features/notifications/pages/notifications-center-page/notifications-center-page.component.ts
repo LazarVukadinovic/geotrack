@@ -1,4 +1,3 @@
-import { Location } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import {
@@ -19,7 +18,6 @@ type NotificationFilter = 'all' | 'unread' | 'updates';
 })
 export class NotificationsCenterPageComponent {
   private readonly notifications = inject(AppNotificationsService);
-  private readonly location = inject(Location);
   private readonly router = inject(Router);
 
   protected readonly activeFilter = signal<NotificationFilter>('all');
@@ -55,7 +53,7 @@ export class NotificationsCenterPageComponent {
     const navigationId = Number(globalThis.history?.state?.navigationId ?? 0);
 
     if (navigationId > 1) {
-      this.location.back();
+      globalThis.history.back();
       return;
     }
 

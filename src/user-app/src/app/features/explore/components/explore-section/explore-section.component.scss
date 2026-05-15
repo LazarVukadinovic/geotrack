@@ -130,16 +130,31 @@
 }
 
 .explore-section__meta {
+  display: grid;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.explore-section__meta-row {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 4px 8px;
-  font-size: var(--text-xs);
-  color: var(--color-muted);
+}
+
+.explore-section__meta-row--distance,
+.explore-section__meta-row--price {
+  display: block;
 }
 
 .explore-section__rating {
   font-weight: 800;
   color: var(--color-primary-navy);
+}
+
+.explore-section__rating--empty {
+  color: var(--color-muted);
 }
 
 @media (min-width: 1024px) {
@@ -159,3 +174,4 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+

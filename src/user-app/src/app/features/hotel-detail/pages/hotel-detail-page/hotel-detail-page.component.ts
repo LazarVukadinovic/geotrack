@@ -1,5 +1,4 @@
 import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
-import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
@@ -27,7 +26,6 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
 export class HotelDetailPageComponent {
   private readonly route    = inject(ActivatedRoute);
   private readonly router   = inject(Router);
-  private readonly location = inject(Location);
   private readonly service  = inject(HotelDetailService);
   private readonly auth     = inject(AuthService);
   private readonly locationSvc = inject(LocationService);
@@ -109,7 +107,7 @@ export class HotelDetailPageComponent {
   }
 
   protected goBack(): void {
-    this.location.back();
+    globalThis.history.back();
   }
 
   protected goToLogin(): void {

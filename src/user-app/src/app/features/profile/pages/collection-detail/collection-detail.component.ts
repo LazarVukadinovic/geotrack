@@ -1,5 +1,4 @@
 import { Component, computed, inject, signal, NgZone, OnDestroy } from '@angular/core';
-import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CollectionPlace, CollectionsService } from '../../services/collections';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
@@ -14,7 +13,6 @@ const DISMISS_THRESHOLD = 120;
   styleUrl: './collection-detail.component.css',
 })
 export class CollectionDetailComponent {
-  private readonly location    = inject(Location);
   private readonly route       = inject(ActivatedRoute);
   private readonly router      = inject(Router);
   private readonly collService = inject(CollectionsService);
@@ -60,7 +58,7 @@ export class CollectionDetailComponent {
   ngOnDestroy(): void {
     this.detachDocListeners();
   }
-  protected goBack(): void { this.location.back(); }
+  protected goBack(): void { globalThis.history.back(); }
 
   protected onRemovePlace(itemId: number): void {
     this.collService.removePlace(this.id, itemId);
@@ -102,7 +100,7 @@ export class CollectionDetailComponent {
   protected onDelete(): void {
     this.collService.deleteCollection(this.id);
     this.menuOpen.set(false);
-    this.location.back();
+    globalThis.history.back();
   }
 
   protected reloadCollection(): void {

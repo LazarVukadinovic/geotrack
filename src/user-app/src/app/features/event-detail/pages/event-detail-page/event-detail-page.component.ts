@@ -1,5 +1,4 @@
 import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
-import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
@@ -21,7 +20,6 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
 export class EventDetailPageComponent {
   private readonly route    = inject(ActivatedRoute);
   private readonly router   = inject(Router);
-  private readonly location = inject(Location);
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly service  = inject(EventDetailService);
@@ -83,7 +81,7 @@ export class EventDetailPageComponent {
   }
 
   protected goBack(): void {
-    this.location.back();
+    globalThis.history.back();
   }
 
   protected toggleSaved(): void {
