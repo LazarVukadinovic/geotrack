@@ -19,11 +19,10 @@
             (click)="toggleNotifications($event)"
             class="relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
           >
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 01-3.46 0"/>
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            Review Reports
+            Pending Reports
             @if (unreadCount > 0) {
               <span class="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
                 {{ unreadCount }}
@@ -110,9 +109,9 @@
                       <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
                     }
                     @case ('alert') {
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                      <circle cx="12" cy="12" r="10" stroke-linecap="round"/>
+                      <line x1="12" y1="8" x2="12" y2="12" stroke-linecap="round"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16" stroke-linecap="round"/>
                     }
                   }
                 </svg>
@@ -161,20 +160,13 @@
           (click)="navigateTo('/admin-reviews')"
           class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-left hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer"
         >
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style="background: rgba(239,68,68,0.1)">
-            <svg class="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style="background: rgba(139,92,246,0.1)">
+            <svg class="w-5 h-5 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
             </svg>
           </div>
-          <p class="text-sm font-semibold text-gray-900">Review Reports</p>
-          <p class="text-xs text-gray-400 mt-1">
-            Moderate reported reviews and take action on repeat offenders
-            @if (reportedReviews > 0) {
-              <span class="ml-1 inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
-                {{ reportedReviews }} pending
-              </span>
-            }
-          </p>
+          <p class="text-sm font-semibold text-gray-900">Manage Reviews</p>
+          <p class="text-xs text-gray-400 mt-1">Moderate reported reviews and take action on repeat offenders</p>
         </button>
       </div>
 
