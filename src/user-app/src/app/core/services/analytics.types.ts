@@ -7,6 +7,7 @@
 export type AnalyticsEventType =
   | 'page_view'
   | 'detail_view'
+  | 'page_duration'
   | 'search_performed'
   | 'filter_applied'
   | 'map_marker_opened'
@@ -33,6 +34,7 @@ export type AnalyticsEntityType =
   | 'hotel'
   | 'event'
   | 'destination'
+  | 'location'
   | 'region'
   | 'collection'
   | 'agent_card';
@@ -45,6 +47,7 @@ export interface TrackPayload {
   entityType?: AnalyticsEntityType;
   entityId?: number;
   destinationId?: number;
+  durationMs?: number;
   /**
    * Free-form key/value bag persisted as JSONB on the server. Keep small —
    * payload over ~4KB serialized is dropped by the server.
@@ -62,6 +65,7 @@ export interface AnalyticsEventEnvelope {
   entityId?: number;
   destinationId?: number;
   route?: string;
+  durationMs?: number;
   metadata?: Record<string, unknown>;
   clientOccurredAt: string;
 }
