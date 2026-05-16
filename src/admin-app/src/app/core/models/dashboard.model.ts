@@ -79,3 +79,9 @@ export interface RegionalDashboardActivityResponse {
   take: number;
   hasMore: boolean;
 }
+
+export interface RegionalSidebarSummary {
+  assignedRegions: RegionalAssignedRegion[];
+  activeRegion?: RegionalAssignedRegion | null;
+  pendingRequestsCount: number;
+}
