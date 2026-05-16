@@ -1,8 +1,8 @@
 <div class="flex h-screen overflow-hidden bg-gray-50" (click)="onDocumentClick()">
-  <app-sidebar />
+  <app-sidebar [reportedReviewsCount]="reportedReviewsCount" />
 
   <div class="flex flex-col flex-1 min-w-0 overflow-hidden">
-    <app-topbar title="User Management" />
+    <app-topbar title="User Management" [showBack]="true" backRoute="/admin-dashboard" />
 
     <main class="flex-1 overflow-y-auto px-6 py-6">
 

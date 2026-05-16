@@ -271,13 +271,39 @@ export class TerritoryService {
     return TERRITORY_MANAGERS.filter(m => m.status === 'Active');
   }
 
-  getPage$(search = '', pageSize = 20): Observable<TerritoryPage> {
+  getPage$(
+    search = '',
+    pageSize = 20,
+    sortField: 'name' | 'status' | 'countries' | 'createdAt' = 'createdAt',
+    sortDir: 'asc' | 'desc' = 'desc',
+    countryFilter: string[] = [],
+  ): Observable<TerritoryPage> {
     let filtered = TERRITORIES.filter(t => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return t.name.toLowerCase().includes(q)
-        || (t.assignedManagerName?.toLowerCase().includes(q) ?? false);
+      if (search) {
+        const q = search.toLowerCase();
+        const matchName    = t.name.toLowerCase().includes(q);
+        const matchManager = t.assignedManagerName?.toLowerCase().includes(q) ?? false;
+        const matchCountry = t.countries.some(code => {
+          const c = ALL_COUNTRIES.find(x => x.code === code);
+          return c?.name.toLowerCase().includes(q) ?? false;
+        });
+        if (!matchName && !matchManager && !matchCountry) return false;
+      }
+      if (countryFilter.length > 0) {
+        return countryFilter.every(code => t.countries.includes(code));
+      }
+      return true;
     });
+
+    filtered = [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'name')      cmp = a.name.localeCompare(b.name);
+      else if (sortField === 'status')    cmp = a.status.localeCompare(b.status);
+      else if (sortField === 'countries') cmp = a.countries.length - b.countries.length;
+      else if (sortField === 'createdAt') cmp = a.createdAt.localeCompare(b.createdAt);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
     const total = filtered.length;
     const items = filtered.slice(0, pageSize);
     const page = { items, total };
@@ -285,6 +311,13 @@ export class TerritoryService {
       delay(300),
       tap(p => this.lastPage$.next(p)),
     );
+  }
+
+  updateCountries$(id: string, name: string, countries: string[]): Observable<Territory | null> {
+    const idx = TERRITORIES.findIndex(t => t.id === id);
+    if (idx === -1) return of(null).pipe(delay(300));
+    TERRITORIES[idx] = { ...TERRITORIES[idx], name, countries, updatedAt: new Date().toISOString() };
+    return of({ ...TERRITORIES[idx] }).pipe(delay(400));
   }
 
   create$(req: CreateTerritoryRequest): Observable<Territory> {
