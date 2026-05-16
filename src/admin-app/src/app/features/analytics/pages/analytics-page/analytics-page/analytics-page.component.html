@@ -1,7 +1,14 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans" (click)="onDocumentClick()">
 
   <!-- ════════════════ SIDEBAR ════════════════ -->
-  <app-sidebar [region]="region" />
+  <app-sidebar
+    [region]="regionDisplayName"
+    [regions]="assignedRegions"
+    [activeRegionId]="activeRegionId"
+    [pendingRequestsCount]="pendingRequestsCount"
+    [regionLoading]="regionLoading"
+    (regionChange)="onRegionSelected($event)"
+  />
 
   <!-- ════════════════ MAIN ════════════════ -->
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -30,11 +37,11 @@
             <input
               type="text"
               [ngModel]="searchQuery()"
-              (ngModelChange)="searchQuery.set($event)"
+              (ngModelChange)="onSearchChange($event)"
               [placeholder]="searchPlaceholder()"
               class="text-sm text-gray-700 border-0 bg-transparent outline-none w-full placeholder-gray-400"
             />
-            <button *ngIf="searchQuery()" (click)="searchQuery.set('')"
+            <button *ngIf="searchQuery()" (click)="clearSearch()"
                     class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer p-0 leading-none text-lg flex-shrink-0">
               &times;
             </button>
@@ -71,16 +78,32 @@
           <!-- Export -->
           <button
             (click)="exportData()"
+            [disabled]="!activeRegionId || exporting"
             class="flex items-center gap-2 text-sm font-semibold text-white px-4 py-1.5 rounded-lg transition-colors cursor-pointer border-0 bg-[#185FA5] hover:bg-[#0f4f8c]"
+            [ngClass]="(!activeRegionId || exporting) ? 'opacity-60 cursor-not-allowed' : ''"
           >
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            Export Data
+            {{ exporting ? 'Exporting...' : 'Export Data' }}
           </button>
         </div>
+      </div>
+
+      <div
+        *ngIf="(regionLoading || analyticsLoading) && sortedRows().length === 0 && !errorMessage"
+        class="bg-white rounded-xl border border-gray-100 p-6 text-sm text-gray-500 mb-4"
+      >
+        Loading analytics for the active region...
+      </div>
+
+      <div *ngIf="errorMessage" class="bg-white rounded-xl border border-red-100 p-6 mb-4">
+        <p class="text-sm font-semibold text-red-600">
+          {{ authRequired ? 'Authentication required' : 'Analytics unavailable' }}
+        </p>
+        <p class="text-sm text-gray-500 mt-1">{{ errorMessage }}</p>
       </div>
 
       <!-- ══ Main layout: content + right panel ══════════════════════════ -->
@@ -210,12 +233,82 @@
             </div>
           </div>
 
+          <!-- Monthly Visits Over Time -->
+          <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);" data-testid="monthly-visits-card">
+            <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+              <div>
+                <div class="text-sm font-semibold text-gray-800 mb-0.5">Monthly Visits Over Time</div>
+                <div class="text-xs text-gray-400">Entity detail and entity-scoped page views by month</div>
+              </div>
+
+              <label class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
+                <span class="text-sm text-gray-500">Range:</span>
+                <select
+                  [ngModel]="selectedMonthlyVisitYears"
+                  (ngModelChange)="onMonthlyVisitYearsChange($event)"
+                  class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer"
+                  aria-label="Monthly visits year range"
+                >
+                  <option *ngFor="let option of monthlyVisitYearOptions" [ngValue]="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+            </div>
+
+            <div *ngIf="monthlyVisitsErrorMessage" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-3">
+              {{ monthlyVisitsErrorMessage }}
+            </div>
+
+            <ng-container *ngIf="monthlyVisitChart() as monthlyChart">
+              <div class="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                <div class="text-xs text-gray-500">
+                  Total visits:
+                  <span class="font-semibold text-gray-800">{{ formatNum(monthlyChart.totalVisits) }}</span>
+                </div>
+                <div class="flex items-center gap-4 flex-wrap">
+                  <div *ngFor="let item of monthlyChart.legend" class="flex items-center gap-1.5 text-xs text-gray-600">
+                    <span class="w-3 h-3 rounded-full flex-shrink-0" [style.background]="item.color"></span>
+                    <span>{{ item.label }}</span>
+                    <span class="text-gray-400">({{ formatNum(item.total) }})</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="overflow-x-auto -mx-1 px-1">
+                <svg viewBox="0 0 720 230" class="w-full min-w-[640px]" style="height: 230px;" role="img" aria-label="Monthly visits over time bar chart">
+                  <ng-container *ngFor="let label of monthlyChart.yLabels">
+                    <line x1="48" [attr.y1]="label.y" x2="702" [attr.y2]="label.y" stroke="#f3f4f6" stroke-width="1"/>
+                    <text x="4" [attr.y]="label.y + 3" font-size="10" fill="#9ca3af">{{ label.text }}</text>
+                  </ng-container>
+
+                  <line x1="48" y1="184" x2="702" y2="184" stroke="#e5e7eb" stroke-width="1"/>
+
+                  <rect
+                    *ngFor="let bar of monthlyChart.bars"
+                    [attr.x]="bar.x"
+                    [attr.y]="bar.y"
+                    [attr.width]="bar.width"
+                    [attr.height]="bar.height"
+                    [attr.fill]="bar.color"
+                    rx="3"
+                  >
+                    <title>{{ bar.monthLabel }} {{ bar.yearLabel }}: {{ formatNum(bar.value) }} visits</title>
+                  </rect>
+
+                  <text *ngFor="let label of monthlyChart.xLabels" [attr.x]="label.x" y="212" font-size="10" fill="#6b7280" text-anchor="middle">{{ label.text }}</text>
+                  <text *ngIf="monthlyChart.isEmpty" x="375" y="100" text-anchor="middle" font-size="13" fill="#9ca3af">No visit data yet for this selection.</text>
+                </svg>
+              </div>
+
+              <p *ngIf="monthlyVisitsLoading" class="text-xs text-gray-400 mt-2">Loading monthly visits...</p>
+            </ng-container>
+          </div>
+
           <!-- Entity Performance Details Table -->
           <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
             <div class="flex items-start justify-between mb-4">
               <div>
                 <div class="text-sm font-semibold text-gray-800 mb-0.5">{{ entityDetailsTitle() }}</div>
-                <div class="text-xs text-gray-400">Top 50 {{ entityTypeWord() }} by {{ currentSortLabel() | lowercase }}.</div>
+                <div class="text-xs text-gray-400">Filtered {{ entityTypeWord() }} by {{ currentSortLabel() | lowercase }}.</div>
               </div>
               <div class="flex items-center gap-3">
                 <!-- Sort dropdown -->
@@ -296,13 +389,8 @@
                       </div>
                     </td>
                     <td class="py-3 text-right">
-                      <span class="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-semibold" [ngClass]="trendClass(row.trend)">
-                        <ng-container [ngSwitch]="row.trend">
-                          <svg *ngSwitchCase="'up'"     class="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
-                          <svg *ngSwitchCase="'stable'" class="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                          <svg *ngSwitchCase="'down'"   class="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        </ng-container>
-                        {{ trendLabel(row.trend) }}
+                      <span class="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-semibold" [ngClass]="entityStatusClass(row.status)">
+                        {{ row.status || 'Unknown' }}
                       </span>
                     </td>
                   </tr>
@@ -317,16 +405,16 @@
             <div class="flex flex-col items-center gap-3 mt-4 pt-4 border-t border-gray-100">
               <p class="text-sm text-gray-500">
                 Showing
-                <span class="font-semibold text-gray-700">{{ Math.min(visibleCount(), sortedRows().length) }}</span>
-                of
                 <span class="font-semibold text-gray-700">{{ sortedRows().length }}</span>
+                of
+                <span class="font-semibold text-gray-700">{{ totalRows() }}</span>
                 {{ entityTypeWord() }}
               </p>
               <button *ngIf="tableHasMore()" (click)="showMore()"
                       class="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 transition-colors cursor-pointer">
                 <span>Show More</span>
                 <span class="text-[10px] font-bold bg-blue-100 text-blue-600 rounded-full px-1.5 py-0.5">
-                  +{{ sortedRows().length - visibleCount() }}
+                  +{{ remainingRows() }}
                 </span>
               </button>
               <span *ngIf="!tableHasMore() && sortedRows().length > 0"
@@ -345,9 +433,14 @@
               <svg class="w-4 h-4 text-gray-800" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
               <span class="text-sm font-semibold text-gray-800">Actionable Insights</span>
             </div>
-            <p class="text-xs text-gray-400 mb-4">Automated analysis for Šumadija region.</p>
+            <p class="text-xs text-gray-400 mb-4">
+              Automated analysis for {{ regionDisplayName || 'the active region' }}.
+            </p>
 
             <div class="flex flex-col gap-3">
+              <p *ngIf="actionableInsightsSig().length === 0" class="text-sm text-gray-400 py-3">
+                No actionable insights yet for the current filters.
+              </p>
               <div
                 *ngFor="let ins of actionableInsightsSig()"
                 class="rounded-lg p-4 border"
@@ -369,10 +462,83 @@
               </div>
             </div>
 
-            <button class="w-full mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 border border-blue-200 rounded-lg py-2.5 bg-white hover:bg-blue-50 transition-colors cursor-pointer">
+            <button
+              (click)="exportData()"
+              [disabled]="!activeRegionId || exporting"
+              class="w-full mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 border border-blue-200 rounded-lg py-2.5 bg-white hover:bg-blue-50 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-              Generate Full Report
+              {{ exporting ? 'Generating...' : 'Generate Full Report' }}
             </button>
+          </div>
+
+          <!-- Visitor Behavior -->
+          <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+            <div class="flex items-center gap-2 mb-1">
+              <svg class="w-4 h-4 text-gray-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M22 12h-4"/>
+                <path d="M20 10v4"/>
+              </svg>
+              <span class="text-sm font-semibold text-gray-800">Visitor Behavior</span>
+            </div>
+            <p class="text-xs text-gray-400 mb-4">
+              Active-region visitor engagement for {{ selectedPeriod | lowercase }}.
+            </p>
+
+            <ng-container *ngIf="visitorBehaviorSig() as behavior">
+              <div class="grid grid-cols-2 gap-2 mb-3">
+                <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Logged-in users</div>
+                  <div class="text-xl font-bold text-gray-900 mt-1">{{ formatNum(behavior.loggedInVisitors) }}</div>
+                </div>
+                <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Anonymous visitors</div>
+                  <div class="text-xl font-bold text-gray-900 mt-1">{{ formatNum(behavior.anonymousVisitors) }}</div>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-blue-100 bg-blue-50 p-3 mb-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Returned during this period</div>
+                    <div class="text-xl font-bold text-gray-900 mt-1">{{ formatNum(behavior.returningVisitors) }}</div>
+                  </div>
+                  <div class="text-sm font-semibold text-blue-700">
+                    {{ behavior.returningVisitorRatePercent | number:'1.0-1' }}%
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-gray-100 bg-white p-3">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                  <svg class="w-3.5 h-3.5 text-gray-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M12 7v5l3 2"/>
+                  </svg>
+                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Longest engagement</span>
+                </div>
+
+                <ng-container *ngIf="behavior.topTimeSpentEntity as topTimeSpent; else noTimeSpent">
+                  <div class="text-sm font-semibold text-gray-800 leading-snug">
+                    {{ topTimeSpent.pageOrEntityName }}
+                  </div>
+                  <div class="text-xs text-gray-500 mt-1">
+                    Avg {{ formatDurationSeconds(topTimeSpent.averageTimeSpentSeconds) }}
+                    <span class="text-gray-300">/</span>
+                    Total {{ formatDurationSeconds(topTimeSpent.totalTimeSpentSeconds) }}
+                  </div>
+                  <div class="text-[11px] text-gray-400 mt-1">
+                    {{ topTimeSpent.visitCount }} timed {{ topTimeSpent.visitCount === 1 ? 'visit' : 'visits' }}
+                  </div>
+                </ng-container>
+
+                <ng-template #noTimeSpent>
+                  <p class="text-sm text-gray-400 py-2">Not enough visitor behavior data yet.</p>
+                </ng-template>
+              </div>
+            </ng-container>
           </div>
 
           <!-- Auto Insights -->
