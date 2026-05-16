@@ -127,25 +127,6 @@ export class AuthService {
   clearSession(): void {
     this.clearLocalSession();
   }
-  //hardcoded
-  devLoginAs(role: UserRole): void {
-    const user: User = {
-      id: '0',
-      firstName: 'Dev',
-      lastName: role,
-      email: 'dev@geotrack.local',
-      role,
-      region: '',
-      memberSince: '',
-      bio: '',
-      language: navigator.language || 'en-US',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-      notifyRequests: true,
-      notifyNewReview: true,
-    };
-    this._currentUser.set(user);
-    this.setSessionHint();
-  }
 
   getHomeRoute(): string {
     const role: UserRole | undefined = this._currentUser()?.role;

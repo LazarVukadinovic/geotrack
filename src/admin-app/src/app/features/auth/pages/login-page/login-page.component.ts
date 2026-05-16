@@ -95,12 +95,6 @@ export class LoginComponent {
 
     return value;
   }
-  //temporarily
-  devLoginAs(role: 'Administrator' | 'National Manager' | 'Regional Manager'): void {
-    this.authService.devLoginAs(role);
-    this.router.navigateByUrl(this.authService.getHomeRoute());
-  }
-
   setSubmitHover(event: Event, isHover: boolean): void {
     const btn = event.target as HTMLButtonElement;
     if (this.isLoading()) return;
