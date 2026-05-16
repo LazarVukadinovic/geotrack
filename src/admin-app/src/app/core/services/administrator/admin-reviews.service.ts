@@ -65,7 +65,8 @@ export class AdminReviewsService {
       const matchStatus = req.statusFilter === 'all'
         || (req.statusFilter === 'reported' && r.status === 'Reported')
         || (req.statusFilter === 'active' && r.status === 'Active');
-      return matchSearch && matchStatus;
+      const matchType = !req.typeFilter?.length || req.typeFilter.includes(r.targetType);
+      return matchSearch && matchStatus && matchType;
     });
 
     filtered = filtered.sort((a, b) => {

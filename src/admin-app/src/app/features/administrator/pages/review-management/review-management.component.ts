@@ -47,21 +47,28 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
 
   searchQuery                  = '';
   statusFilter: ReviewStatusFilter = 'reported';
-  sortField: ReviewSortField   = 'reportedAt';
+  sortField: ReviewSortField   = 'createdAt';
   sortDir: ReviewSortDir       = 'desc';
   sortOpen                     = false;
 
+  readonly reviewTypes: AdminReview['targetType'][] = ['Destination', 'Place', 'Location', 'Event'];
+  typeFilter: string[]         = [];
+  typeFilterOpen               = false;
+
   sortOptions: { label: string; field: ReviewSortField; dir: ReviewSortDir }[] = [
-    { label: 'Reported: Newest First', field: 'reportedAt', dir: 'desc' },
-    { label: 'Reported: Oldest First', field: 'reportedAt', dir: 'asc'  },
-    { label: 'Most Reports First',     field: 'reportCount', dir: 'desc' },
-    { label: 'Highest Rating',         field: 'rating',     dir: 'desc' },
-    { label: 'Lowest Rating',          field: 'rating',     dir: 'asc'  },
-    { label: 'Newest Review',          field: 'createdAt',  dir: 'desc' },
+    { label: 'Newest First',    field: 'createdAt',   dir: 'desc' },
+    { label: 'Oldest First',    field: 'createdAt',   dir: 'asc'  },
+    { label: 'Most Reports',    field: 'reportCount', dir: 'desc' },
   ];
 
   get currentSortLabel(): string {
-    return this.sortOptions.find(o => o.field === this.sortField && o.dir === this.sortDir)?.label ?? 'Sort';
+    return this.sortOptions.find(o => o.field === this.sortField && o.dir === this.sortDir)?.label ?? 'Newest First';
+  }
+
+  get typeFilterLabel(): string {
+    if (this.typeFilter.length === 0) return 'All types';
+    if (this.typeFilter.length === 1) return this.typeFilter[0];
+    return `${this.typeFilter.length} types`;
   }
 
   // ── Dropdown ─────────────────────────────────────────────────────────────
@@ -75,6 +82,18 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
   // ── Delete user from review ───────────────────────────────────────────────
   deleteUserFromReview: AdminReview | null = null;
   isDeletingUser                           = false;
+
+  // ── Suspend user from review ──────────────────────────────────────────────
+  suspendUserFromReview: AdminReview | null = null;
+  isSuspendingUser                          = false;
+
+  // ── Remove review + delete user ───────────────────────────────────────────
+  removeReviewAndDeleteUser: AdminReview | null = null;
+  isRemoveAndDeleting                           = false;
+
+  // ── Remove review + suspend user ─────────────────────────────────────────
+  removeReviewAndSuspendUser: AdminReview | null = null;
+  isRemoveAndSuspending                          = false;
 
   // ── Detail view ───────────────────────────────────────────────────────────
   detailReview: AdminReview | null = null;
@@ -94,7 +113,6 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
       distinctUntilChanged(),
       takeUntil(this.destroy$),
     ).subscribe(() => {
-      this.displayCount = PAGE_SIZE_INITIAL;
       this.loadReviews();
     });
 
@@ -109,13 +127,14 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
   @HostListener('document:click')
   onDocumentClick(): void {
     let changed = false;
-    if (this.openDropdownId) { this.openDropdownId = null; changed = true; }
-    if (this.sortOpen)       { this.sortOpen = false;       changed = true; }
+    if (this.openDropdownId)  { this.openDropdownId = null;  changed = true; }
+    if (this.sortOpen)        { this.sortOpen = false;        changed = true; }
+    if (this.typeFilterOpen)  { this.typeFilterOpen = false;  changed = true; }
     if (changed) this.cdr.detectChanges();
   }
 
   buildReq(): AdminReviewsPageRequest {
-    return { pageSize: this.displayCount, search: this.searchQuery, sortField: this.sortField, sortDir: this.sortDir, statusFilter: this.statusFilter };
+    return { pageSize: this.displayCount, search: this.searchQuery, sortField: this.sortField, sortDir: this.sortDir, statusFilter: this.statusFilter, typeFilter: this.typeFilter };
   }
 
   loadReviews(): void {
@@ -156,7 +175,15 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
 
   onSearchChange(): void { this.searchSubject.next(this.searchQuery); }
 
-  onStatusFilterChange(): void { this.displayCount = PAGE_SIZE_INITIAL; this.sortField = this.statusFilter === 'reported' ? 'reportedAt' : 'createdAt'; this.loadReviews(); }
+  onStatusFilterChange(): void { this.loadReviews(); }
+
+  toggleTypeFilter(type: string): void {
+    const idx = this.typeFilter.indexOf(type);
+    this.typeFilter = idx === -1 ? [...this.typeFilter, type] : this.typeFilter.filter(t => t !== type);
+    this.loadReviews();
+  }
+
+  isTypeSelected(type: string): boolean { return this.typeFilter.includes(type); }
 
   applySortOption(opt: { label: string; field: ReviewSortField; dir: ReviewSortDir }): void {
     this.sortField = opt.field;
@@ -172,8 +199,9 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
       this.openDropdownId = null;
     } else {
       const rect           = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      const dropdownHeight = 200;
       const spaceBelow     = window.innerHeight - rect.bottom;
-      const top = spaceBelow < 140 ? rect.top - 144 : rect.bottom + 4;
+      const top = spaceBelow < dropdownHeight ? rect.top - dropdownHeight : rect.bottom + 4;
       this.dropdownPos    = { top, right: window.innerWidth - rect.right };
       this.openDropdownId = id;
     }
@@ -231,6 +259,82 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
         this.isDeletingUser       = false;
         this.deleteUserFromReview = null;
         this.loadReviews();
+      });
+  }
+
+  // ── Suspend user from review context ──────────────────────────────────────
+  openSuspendUser(review: AdminReview, event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.openDropdownId       = null;
+    this.suspendUserFromReview = { ...review };
+    this.cdr.detectChanges();
+  }
+
+  closeSuspendUser(): void { this.suspendUserFromReview = null; this.cdr.detectChanges(); }
+
+  confirmSuspendUser(): void {
+    if (!this.suspendUserFromReview) return;
+    this.isSuspendingUser = true;
+    this.usersSvc.suspend$(this.suspendUserFromReview.authorId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.isSuspendingUser      = false;
+        this.suspendUserFromReview = null;
+        this.loadReviews();
+      });
+  }
+
+  // ── Remove review + delete user ───────────────────────────────────────────
+  openRemoveReviewAndDeleteUser(review: AdminReview, event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.openDropdownId           = null;
+    this.removeReviewAndDeleteUser = { ...review };
+    this.cdr.detectChanges();
+  }
+
+  closeRemoveReviewAndDeleteUser(): void { this.removeReviewAndDeleteUser = null; this.cdr.detectChanges(); }
+
+  confirmRemoveReviewAndDeleteUser(): void {
+    if (!this.removeReviewAndDeleteUser) return;
+    this.isRemoveAndDeleting = true;
+    const review = this.removeReviewAndDeleteUser;
+    this.revSvc.deleteReview$(review.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.usersSvc.delete$(review.authorId)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe(() => {
+            this.isRemoveAndDeleting      = false;
+            this.removeReviewAndDeleteUser = null;
+            this.loadReviews();
+          });
+      });
+  }
+
+  // ── Remove review + suspend user ──────────────────────────────────────────
+  openRemoveReviewAndSuspendUser(review: AdminReview, event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.openDropdownId            = null;
+    this.removeReviewAndSuspendUser = { ...review };
+    this.cdr.detectChanges();
+  }
+
+  closeRemoveReviewAndSuspendUser(): void { this.removeReviewAndSuspendUser = null; this.cdr.detectChanges(); }
+
+  confirmRemoveReviewAndSuspendUser(): void {
+    if (!this.removeReviewAndSuspendUser) return;
+    this.isRemoveAndSuspending = true;
+    const review = this.removeReviewAndSuspendUser;
+    this.revSvc.deleteReview$(review.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.usersSvc.suspend$(review.authorId)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe(() => {
+            this.isRemoveAndSuspending      = false;
+            this.removeReviewAndSuspendUser = null;
+            this.loadReviews();
+          });
       });
   }
 

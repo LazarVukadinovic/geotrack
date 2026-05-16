@@ -34,6 +34,7 @@ export interface AdminReviewsPageRequest {
   sortField: ReviewSortField;
   sortDir: ReviewSortDir;
   statusFilter: ReviewStatusFilter;
+  typeFilter?: string[];
 }
 
 export interface ReviewNotification {
