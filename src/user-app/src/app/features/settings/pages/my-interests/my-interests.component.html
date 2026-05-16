@@ -105,14 +105,27 @@
       <div class="my-interests__section my-interests__section--discover">
         <p class="my-interests__section-title ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Discover More</p>
 
-        <div class="my-interests__discover-card flex flex-wrap gap-2 justify-center">
-          @for (tag of availableTags(); track tag.id) {
-            <button
-              type="button"
-              (click)="addTag(tag)"
-              class="my-interests__discover-chip flex items-center px-4 py-2.5 bg-white border border-slate-200 rounded-full shadow-sm active:bg-slate-50 transition-colors">
-              <span class="text-sm font-medium text-slate-700">{{ tag.name }}</span>
-            </button>
+        <div class="my-interests__discover-card flex flex-col gap-4">
+          @if (availableTags().length > 0) {
+            @for (group of availableTagGroups(); track group.group) {
+              <div class="my-interests__discover-group">
+                <p class="my-interests__discover-group-title text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400 mb-2">
+                  {{ group.group }}
+                </p>
+
+                <div class="my-interests__discover-group-items flex flex-wrap gap-2">
+                  @for (tag of group.items; track tag.id) {
+                    <button
+                      type="button"
+                      (click)="addTag(tag)"
+                      class="my-interests__discover-chip flex items-center px-4 py-2.5 bg-white border border-slate-200 rounded-full shadow-sm active:bg-slate-50 transition-colors"
+                      [attr.title]="tag.description || tag.name">
+                      <span class="text-sm font-medium text-slate-700">{{ tag.name }}</span>
+                    </button>
+                  }
+                </div>
+              </div>
+            }
           }
 
           @if (tags().length === 0) {
@@ -162,3 +175,4 @@
 
   </div>
 </app-settings-subpage-shell>
+

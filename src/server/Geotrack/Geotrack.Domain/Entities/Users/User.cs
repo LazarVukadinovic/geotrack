@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Geotrack.Domain.Entities.Interests;
 
 namespace Geotrack.Domain.Entities.Users;
 
@@ -19,6 +20,8 @@ public class User
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>(); // NAVIGATIONAL
 
     public ICollection<UserTag> UserTags { get; set; } = new List<UserTag>(); // NAVIGATIONAL
+
+    public ICollection<UserInterestTopic> UserInterestTopics { get; set; } = new List<UserInterestTopic>(); // NAVIGATIONAL
 
     public ICollection<UserNotification> Notifications { get; set; } = new List<UserNotification>(); // NAVIGATIONAL
 

@@ -1822,49 +1822,58 @@ public class ExploreService : IExploreService
 
     private async Task<List<CuratedInterestSignal>> LoadCurationSignalsAsync(int userId)
     {
-        var explicitInterests = await _db.UserTags
+        var explicitTopics = await _db.UserInterestTopics
             .AsNoTracking()
-            .Where(ut => ut.UserId == userId)
-            .Select(ut => new CuratedInterestSignal
-            {
-                TagId = ut.TagId,
-                IsExplicit = true,
-                Weight = ExplicitInterestWeight
-            })
+            .Include(uit => uit.InterestTopic)
+                .ThenInclude(topic => topic.TopicTags)
+                    .ThenInclude(link => link.Tag)
+            .Where(uit => uit.UserId == userId && uit.InterestTopic.IsActive)
             .ToListAsync();
 
-        var explicitTagIds = explicitInterests
-            .Select(interest => interest.TagId)
+        var explicitTopicIds = explicitTopics
+            .Select(interest => interest.InterestTopicId)
+            .ToHashSet();
+
+        var explicitSignals = explicitTopics
+            .SelectMany(interest => interest.InterestTopic.TopicTags.Select(link => new CuratedInterestSignal
+            {
+                TagId = link.TagId,
+                InterestTopicId = interest.InterestTopicId,
+                InterestTopicName = interest.InterestTopic.Name,
+                IsExplicit = true,
+                Weight = ExplicitInterestWeight * Math.Max(0.1, link.Weight)
+            }))
             .ToList();
 
-        var inferredSignals = await _db.UserInterestSignals
+        var inferredTopicSignals = await _db.UserInterestTopicSignals
             .AsNoTracking()
+            .Include(signal => signal.InterestTopic)
+                .ThenInclude(topic => topic.TopicTags)
+                    .ThenInclude(link => link.Tag)
             .Where(signal =>
                 signal.UserId == userId &&
                 signal.Source == "inferred" &&
                 !signal.IsDismissed &&
                 signal.Score >= MinimumInferredInterestScore &&
-                !explicitTagIds.Contains(signal.TagId))
+                signal.InterestTopic.IsActive &&
+                !explicitTopicIds.Contains(signal.InterestTopicId))
             .OrderByDescending(signal => signal.Score)
             .ThenByDescending(signal => signal.LastInteractionAt)
-            .Select(signal => new
-            {
-                TagId = signal.TagId,
-                signal.Score,
-                LastInteractionAt = signal.LastInteractionAt
-            })
             .Take(20)
             .ToListAsync();
 
-        explicitInterests.AddRange(inferredSignals.Select(signal => new CuratedInterestSignal
-        {
-            TagId = signal.TagId,
-            IsExplicit = false,
-            Weight = Math.Min(signal.Score, MaximumInferredInterestWeight),
-            LastInteractionAt = signal.LastInteractionAt
-        }));
+        explicitSignals.AddRange(inferredTopicSignals.SelectMany(signal =>
+            signal.InterestTopic.TopicTags.Select(link => new CuratedInterestSignal
+            {
+                TagId = link.TagId,
+                InterestTopicId = signal.InterestTopicId,
+                InterestTopicName = signal.InterestTopic.Name,
+                IsExplicit = false,
+                Weight = Math.Min(signal.Score, MaximumInferredInterestWeight) * Math.Max(0.1, link.Weight),
+                LastInteractionAt = signal.LastInteractionAt
+            })));
 
-        return explicitInterests;
+        return explicitSignals;
     }
 
     private async Task<List<RankedCuratedPlace>> BuildCuratedPlacesAsync(
@@ -1999,12 +2008,16 @@ public class ExploreService : IExploreService
         }
 
         var categoryLabel = DisplayTextSafety.CleanLabelOrHumanizedKey(
-            bestTag?.Name,
             candidate.PlaceTypeName,
+            bestTag?.Name,
             "Local place");
+        var topicLabel = DisplayTextSafety.CleanLabelOrHumanizedKey(
+            bestSignal?.InterestTopicName,
+            bestTag?.Name,
+            categoryLabel);
         var reason = bestSignal?.IsExplicit == true
-            ? $"Matches your saved interest: {categoryLabel}"
-            : $"Based on recent activity: {categoryLabel}";
+            ? $"Matches your interest: {topicLabel}"
+            : $"Based on recent activity: {topicLabel}";
 
         return new RankedCuratedPlace
         {
@@ -2330,6 +2343,8 @@ public class ExploreService : IExploreService
     private sealed class CuratedInterestSignal
     {
         public int TagId { get; set; }
+        public int InterestTopicId { get; set; }
+        public string InterestTopicName { get; set; } = string.Empty;
         public bool IsExplicit { get; set; }
         public double Weight { get; set; }
         public DateTime? LastInteractionAt { get; set; }

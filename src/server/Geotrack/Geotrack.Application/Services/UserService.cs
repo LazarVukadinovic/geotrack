@@ -1,10 +1,12 @@
 using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Users;
+using Geotrack.Application.DTOs.Interests;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Core;
+using Geotrack.Domain.Entities.Interests;
 using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
@@ -255,63 +257,66 @@ public class UserService : IUserService
 
     public async Task<GetUserInterestsResponseDto> GetUserInterestsAsync(int userId)
     {
-        var user = await _userRepository.GetByIdWithUserTagsAsync(userId)
+        var user = await _userRepository.GetByIdWithUserInterestTopicsAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
-        var explicitTags = user.UserTags
-            .Where(x => x.Tag != null)
-            .Select(x => MapTagToInterestItemDto(x.Tag!))
-            .OrderBy(x => x.Name)
+        var explicitTopics = user.UserInterestTopics
+            .Where(x => x.InterestTopic is { IsActive: true })
+            .Select(x => MapInterestTopicToInterestItemDto(x.InterestTopic))
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
             .ToList();
 
-        var inferredSignals = await _userRepository.GetVisibleInferredInterestSignalsAsync(userId, InferredInterestVisibleScore);
+        var inferredSignals = await _userRepository.GetVisibleInferredInterestTopicSignalsAsync(userId, InferredInterestVisibleScore);
 
         return new GetUserInterestsResponseDto
         {
-            Tags = explicitTags,
-            ExplicitTags = explicitTags,
+            Tags = explicitTopics,
+            ExplicitTags = explicitTopics,
             InferredTags = inferredSignals
-                .Where(x => x.Tag != null)
-                .Select(MapSignalToInferredInterestItemDto)
+                .Where(x => x.InterestTopic is { IsActive: true })
+                .Select(MapTopicSignalToInferredInterestItemDto)
                 .ToList()
         };
     }
 
     public async Task<UpdateUserInterestsResponseDto> UpdateUserInterestsAsync(int userId, UpdateUserInterestsRequestDto request)
     {
-        request.TagIds ??= new List<int>();
+        var requestedIds = request.InterestTopicIds is { Count: > 0 }
+            ? request.InterestTopicIds
+            : request.TagIds ?? new List<int>();
 
-        var distinctTagIds = request.TagIds.Distinct().ToList();
+        var distinctTopicIds = requestedIds.Distinct().ToList();
 
-        var user = await _userRepository.GetByIdWithUserTagsAsync(userId)
+        var user = await _userRepository.GetByIdWithUserInterestTopicsAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
-        var tags = await _userRepository.GetTagsByIdsAsync(distinctTagIds);
+        var topics = await _userRepository.GetInterestTopicsByIdsAsync(distinctTopicIds);
 
-        if (tags.Count != distinctTagIds.Count)
-            throw new InvalidOperationException("One or more tags do not exist");
+        if (topics.Count != distinctTopicIds.Count)
+            throw new InvalidOperationException("One or more interest topics do not exist");
 
-        var existingTagIds = user.UserTags.Select(x => x.TagId).ToHashSet();
+        var existingTopicIds = user.UserInterestTopics.Select(x => x.InterestTopicId).ToHashSet();
 
-        var userTagsToRemove = user.UserTags
-            .Where(x => !distinctTagIds.Contains(x.TagId))
+        var userTopicsToRemove = user.UserInterestTopics
+            .Where(x => !distinctTopicIds.Contains(x.InterestTopicId))
             .ToList();
 
-        if (userTagsToRemove.Any())
+        if (userTopicsToRemove.Any())
         {
-            await _userRepository.DeleteUserTagsAsync(userTagsToRemove);
+            await _userRepository.DeleteUserInterestTopicsAsync(userTopicsToRemove);
         }
 
-        var tagIdsToAdd = distinctTagIds
-            .Where(tagId => !existingTagIds.Contains(tagId))
+        var topicIdsToAdd = distinctTopicIds
+            .Where(topicId => !existingTopicIds.Contains(topicId))
             .ToList();
 
-        foreach (var tagId in tagIdsToAdd)
+        foreach (var topicId in topicIdsToAdd)
         {
-            await _userRepository.AddUserTagAsync(new UserTag
+            await _userRepository.AddUserInterestTopicAsync(new UserInterestTopic
             {
                 UserId = userId,
-                TagId = tagId,
+                InterestTopicId = topicId,
                 CreatedAt = DateTime.UtcNow
             });
         }
@@ -320,25 +325,26 @@ public class UserService : IUserService
         user.UpdatedAt = DateTime.UtcNow;
         await _userRepository.SaveChangesAsync();
 
-        var updatedUser = await _userRepository.GetByIdWithUserTagsAsync(userId)
+        var updatedUser = await _userRepository.GetByIdWithUserInterestTopicsAsync(userId)
             ?? throw new KeyNotFoundException("User not found");
 
-        var explicitTags = updatedUser.UserTags
-            .Where(x => x.Tag != null)
-            .Select(x => MapTagToInterestItemDto(x.Tag!))
-            .OrderBy(x => x.Name)
+        var explicitTopics = updatedUser.UserInterestTopics
+            .Where(x => x.InterestTopic is { IsActive: true })
+            .Select(x => MapInterestTopicToInterestItemDto(x.InterestTopic))
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
             .ToList();
 
         return new UpdateUserInterestsResponseDto
         {
-            Tags = explicitTags,
-            ExplicitTags = explicitTags
+            Tags = explicitTopics,
+            ExplicitTags = explicitTopics
         };
     }
 
-    public async Task DismissInferredInterestAsync(int userId, int tagId)
+    public async Task DismissInferredInterestAsync(int userId, int interestTopicId)
     {
-        var signal = await _userRepository.GetUserInterestSignalAsync(userId, tagId);
+        var signal = await _userRepository.GetUserInterestTopicSignalAsync(userId, interestTopicId);
         if (signal is null)
         {
             return;
@@ -623,61 +629,56 @@ public class UserService : IUserService
         }
     }
 
-    private static InterestItemDto MapTagToInterestItemDto(Tag tag)
+    private static InterestItemDto MapInterestTopicToInterestItemDto(InterestTopic topic) => new()
     {
-        return new InterestItemDto
-        {
-            TagId = tag.Id,
-            Name = tag.Name,
-            Slug = tag.Slug,
-            Description = tag.Description,
+        InterestTopicId = topic.Id,
+        Name = topic.Name,
+        Slug = topic.Slug,
+        Description = topic.Description,
+        IconKey = topic.IconKey,
+        Group = topic.Group,
+        SortOrder = topic.SortOrder,
+        Tags = topic.TopicTags
+            .OrderByDescending(x => x.Weight)
+            .ThenBy(x => x.Tag.Name)
+            .Select(x => new InterestTopicTagDto
+            {
+                TagId = x.TagId,
+                Name = x.Tag.Name,
+                Slug = x.Tag.Slug,
+                Weight = x.Weight
+            })
+            .ToList(),
+        CreatedAt = topic.CreatedAt,
+        UpdatedAt = topic.UpdatedAt
+    };
 
-            ForDestination = tag.ForDestination,
-            ForLocation = tag.ForLocation,
-            ForPlace = tag.ForPlace,
-            ForEvent = tag.ForEvent,
-
-            TagTypeId = tag.TagTypeId,
-            TagTypeName = tag.TagType?.Name,
-            TagTypeSlug = tag.TagType?.Slug,
-
-            AllowedPlaceTypeIds = tag.TagType?.PlaceTypes
-                .Select(x => x.PlaceTypeId)
-                .Distinct()
-                .ToList() ?? new List<int>(),
-
-            CreatedAt = tag.CreatedAt,
-            UpdatedAt = tag.UpdatedAt
-        };
-    }
-
-    private static InferredInterestItemDto MapSignalToInferredInterestItemDto(UserInterestSignal signal)
+    private static InferredInterestItemDto MapTopicSignalToInferredInterestItemDto(UserInterestTopicSignal signal)
     {
-        var tag = signal.Tag;
+        var topic = signal.InterestTopic;
 
         return new InferredInterestItemDto
         {
-            TagId = tag.Id,
-            Name = tag.Name,
-            Slug = tag.Slug,
-            Description = tag.Description,
-
-            ForDestination = tag.ForDestination,
-            ForLocation = tag.ForLocation,
-            ForPlace = tag.ForPlace,
-            ForEvent = tag.ForEvent,
-
-            TagTypeId = tag.TagTypeId,
-            TagTypeName = tag.TagType?.Name,
-            TagTypeSlug = tag.TagType?.Slug,
-
-            AllowedPlaceTypeIds = tag.TagType?.PlaceTypes
-                .Select(x => x.PlaceTypeId)
-                .Distinct()
-                .ToList() ?? new List<int>(),
-
-            CreatedAt = tag.CreatedAt,
-            UpdatedAt = tag.UpdatedAt,
+            InterestTopicId = topic.Id,
+            Name = topic.Name,
+            Slug = topic.Slug,
+            Description = topic.Description,
+            IconKey = topic.IconKey,
+            Group = topic.Group,
+            SortOrder = topic.SortOrder,
+            Tags = topic.TopicTags
+                .OrderByDescending(x => x.Weight)
+                .ThenBy(x => x.Tag.Name)
+                .Select(x => new InterestTopicTagDto
+                {
+                    TagId = x.TagId,
+                    Name = x.Tag.Name,
+                    Slug = x.Tag.Slug,
+                    Weight = x.Weight
+                })
+                .ToList(),
+            CreatedAt = topic.CreatedAt,
+            UpdatedAt = topic.UpdatedAt,
             Score = signal.Score,
             LastInteractionAt = signal.LastInteractionAt,
             LastReason = signal.LastReason
