@@ -1969,6 +1969,8 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Route)
                 .HasMaxLength(300);
 
+            entity.Property(x => x.DurationMs);
+
             entity.Property(x => x.MetadataJson)
                 .IsRequired()
                 .HasColumnType("jsonb")

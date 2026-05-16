@@ -41,6 +41,9 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int?>("DestinationId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("EntityId")
                         .HasColumnType("integer");
 

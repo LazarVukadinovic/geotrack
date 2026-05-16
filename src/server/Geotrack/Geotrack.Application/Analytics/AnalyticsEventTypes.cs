@@ -9,6 +9,7 @@ public static class AnalyticsEventTypes
 {
     public const string PageView = "page_view";
     public const string DetailView = "detail_view";
+    public const string PageDuration = "page_duration";
 
     public const string SearchPerformed = "search_performed";
     public const string FilterApplied = "filter_applied";
@@ -40,7 +41,7 @@ public static class AnalyticsEventTypes
 
     public static readonly IReadOnlySet<string> AllowedSet = new HashSet<string>(StringComparer.Ordinal)
     {
-        PageView, DetailView,
+        PageView, DetailView, PageDuration,
         SearchPerformed, FilterApplied,
         MapMarkerOpened, DirectionsStarted, OutboundLinkClicked,
         FavoriteAdded, FavoriteRemoved,

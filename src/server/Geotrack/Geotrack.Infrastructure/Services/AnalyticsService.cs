@@ -22,6 +22,8 @@ public class AnalyticsService : IAnalyticsService
     private const int MaxMetadataKeys = 30;
     private const int MaxMetadataKeyLength = 80;
     private const int MaxRouteLength = 300;
+    private const int MinDurationMs = 1_000;
+    private const int MaxDurationMs = 30 * 60 * 1_000;
 
     private static readonly IReadOnlyDictionary<string, TimeSpan> DedupeWindows =
         new Dictionary<string, TimeSpan>(StringComparer.Ordinal)
@@ -242,6 +244,15 @@ public class AnalyticsService : IAnalyticsService
             return null;
         }
 
+        var durationMs = NormalizeDurationMs(eventType!, dto.DurationMs);
+        if (eventType == AnalyticsEventTypes.PageDuration && durationMs is null)
+        {
+            _logger.LogDebug(
+                "Dropping analytics duration event with missing or too-short duration {DurationMs}.",
+                dto.DurationMs);
+            return null;
+        }
+
         var metadataJson = SerializeMetadata(dto.Metadata);
         if (metadataJson is null)
         {
@@ -260,6 +271,7 @@ public class AnalyticsService : IAnalyticsService
             EntityId = dto.EntityId,
             DestinationId = dto.DestinationId,
             Route = NormalizeRoute(dto.Route),
+            DurationMs = durationMs,
             MetadataJson = metadataJson,
             OccurredAt = now,
             ClientOccurredAt = NormalizeClientOccurredAt(dto.ClientOccurredAt, now),
@@ -447,6 +459,21 @@ public class AnalyticsService : IAnalyticsService
         }
 
         return value;
+    }
+
+    private static int? NormalizeDurationMs(string eventType, int? durationMs)
+    {
+        if (eventType != AnalyticsEventTypes.PageDuration)
+        {
+            return null;
+        }
+
+        if (!durationMs.HasValue || durationMs.Value < MinDurationMs)
+        {
+            return null;
+        }
+
+        return Math.Min(durationMs.Value, MaxDurationMs);
     }
 
     private static string BuildDedupeFingerprint(
