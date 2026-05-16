@@ -14,6 +14,21 @@ export const authGuard: CanActivateFn = (_route, state) => {
   );
 };
 
+//ADMINISTRATOR GUARD
+export const administratorGuard: CanActivateFn = (_route, state) => {
+  const auth   = inject(AuthService);
+  const router = inject(Router);
+
+  if (auth.isAdministrator()) return true;
+
+  return auth.restoreSession().pipe(
+    map(user => {
+      if (!user) return loginTree(router, state);
+      return auth.isAdministrator() ? true : router.parseUrl(auth.getHomeRoute());
+    }),
+  );
+};
+
 //NATIONAL MANAGER GUARD
 export const nationalManagerGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);

@@ -33,6 +33,7 @@ export class AuthService {
 
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
+  readonly isAdministrator = computed(() => this._currentUser()?.role === 'Administrator');
   readonly isNationalManager = computed(() => this._currentUser()?.role === 'National Manager');
   readonly isRegionalManager = computed(() => this._currentUser()?.role === 'Regional Manager');
 
@@ -126,10 +127,33 @@ export class AuthService {
   clearSession(): void {
     this.clearLocalSession();
   }
+  //hardcoded
+  devLoginAs(role: UserRole): void {
+    const user: User = {
+      id: '0',
+      firstName: 'Dev',
+      lastName: role,
+      email: 'dev@geotrack.local',
+      role,
+      region: '',
+      memberSince: '',
+      bio: '',
+      language: navigator.language || 'en-US',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      notifyRequests: true,
+      notifyNewReview: true,
+    };
+    this._currentUser.set(user);
+    this.setSessionHint();
+  }
 
   getHomeRoute(): string {
     const role: UserRole | undefined = this._currentUser()?.role;
     switch (role) {
+      case 'Administrator':
+        return '/admin-dashboard';
+      case 'National Manager':
+        return '/national-dashboard';
       case 'Regional Manager':
         return '/dashboard';
       default:
@@ -177,6 +201,10 @@ export class AuthService {
   }
 
   private resolveAdminRole(roles: string[]): UserRole {
+    if (roles.some(role => ['administrator', 'superadmin', 'sysadmin'].includes(this.normalizeRole(role)))) {
+      return 'Administrator';
+    }
+
     if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {
       return 'Regional Manager';
     }
