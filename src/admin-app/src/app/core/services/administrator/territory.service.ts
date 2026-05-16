@@ -393,6 +393,27 @@ export class TerritoryService {
     return of(undefined).pipe(delay(400));
   }
 
+  setManagerStatus$(id: string, status: 'Active' | 'Inactive'): Observable<void> {
+    const idx = TERRITORY_MANAGERS.findIndex(m => m.id === id);
+    if (idx !== -1) TERRITORY_MANAGERS[idx] = { ...TERRITORY_MANAGERS[idx], status };
+    if (status === 'Inactive') {
+      for (let i = 0; i < TERRITORIES.length; i++) {
+        if (TERRITORIES[i].assignedManagerId === id) {
+          TERRITORIES[i] = {
+            ...TERRITORIES[i],
+            assignedManagerId: null,
+            assignedManagerName: null,
+            assignedManagerEmail: null,
+            status: 'Unassigned',
+            updatedAt: new Date().toISOString(),
+          };
+        }
+      }
+      if (idx !== -1) TERRITORY_MANAGERS[idx] = { ...TERRITORY_MANAGERS[idx], assignedTerritoryIds: [] };
+    }
+    return of(undefined).pipe(delay(400));
+  }
+
   getAssignedCountryCodes(): Set<string> {
     const codes = new Set<string>();
     for (const t of TERRITORIES) {

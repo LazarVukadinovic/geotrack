@@ -285,6 +285,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
     this.showCreatePanel = true;
     this.newName = '';
     this.newManagerId = '';
+    this.activeManagers = this.svc.getActiveManagers();
     this.cdr.detectChanges();
   }
 
@@ -321,6 +322,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
     this.openDropdownId  = null;
     this.assignTarget    = { ...territory };
     this.assignManagerId = '';
+    this.activeManagers  = this.svc.getActiveManagers();
     this.cdr.detectChanges();
   }
 
@@ -400,6 +402,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
     this.editCountryCodes    = new Set(territory.countries);
     this.editActiveContinent = 'All';
     this.editCountrySearch   = '';
+    this.activeManagers      = this.svc.getActiveManagers();
     this.cdr.detectChanges();
   }
 

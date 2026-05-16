@@ -12,7 +12,7 @@ import { AppUsersService } from '../../../../core/services/administrator/app-use
 import { AppUser, AppUsersPageRequest, AppUserSortField, AppUserSortDir } from '../../../../core/models/administrator/app-user.model';
 import { TerritoryService } from '../../../../core/services/administrator/territory.service';
 import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
-import { TerritoryManager } from '../../../../core/models/administrator/territory.model';
+import { TerritoryManager, Territory } from '../../../../core/models/administrator/territory.model';
 
 type ActiveTab = 'appUsers' | 'managers';
 
@@ -47,7 +47,8 @@ export class UserManagementComponent implements OnInit, OnDestroy {
   displayCount         = PAGE_SIZE_INITIAL;
   searchQuery          = '';
   statusFilter: 'all' | 'active' | 'suspended' = 'all';
-  sortField: AppUserSortField = 'reportedReviewCount';
+  statusFilterOpen     = false;
+  sortField: AppUserSortField = 'joinedAt';
   sortDir: AppUserSortDir     = 'desc';
   sortOpen                    = false;
 
@@ -56,20 +57,27 @@ export class UserManagementComponent implements OnInit, OnDestroy {
     { label: 'Most Reviews First',   field: 'reviewCount',         dir: 'desc' },
     { label: 'Newest Members',       field: 'joinedAt',            dir: 'desc' },
     { label: 'Oldest Members',       field: 'joinedAt',            dir: 'asc'  },
+    { label: 'Status: Active First', field: 'status',              dir: 'asc'  },
     { label: 'A–Z',                  field: 'name',                dir: 'asc'  },
     { label: 'Z–A',                  field: 'name',                dir: 'desc' },
-    { label: 'Status: Active First', field: 'status',              dir: 'asc'  },
   ];
 
   get currentSortLabel(): string {
-    return this.sortOptions.find(o => o.field === this.sortField && o.dir === this.sortDir)?.label ?? 'Sort';
+    return this.sortOptions.find(o => o.field === this.sortField && o.dir === this.sortDir)?.label ?? 'Newest Members';
+  }
+
+  get statusFilterLabel(): string {
+    if (this.statusFilter === 'all')       return 'All statuses';
+    if (this.statusFilter === 'active')    return 'Active';
+    return 'Suspended';
   }
 
   // ── National Managers ────────────────────────────────────────────────────
   managers: TerritoryManager[]     = [];
+  allTerritories: Territory[]      = [];
   managerSearch                    = '';
   managerStatusFilter: 'all' | 'active' | 'inactive' = 'all';
-  managerSortOpen                  = false;
+  managerStatusFilterOpen          = false;
 
   get filteredManagers(): TerritoryManager[] {
     return this.managers.filter(m => {
@@ -82,28 +90,54 @@ export class UserManagementComponent implements OnInit, OnDestroy {
     });
   }
 
+  get managerStatusFilterLabel(): string {
+    if (this.managerStatusFilter === 'all')      return 'All statuses';
+    if (this.managerStatusFilter === 'active')   return 'Active';
+    return 'Inactive';
+  }
+
+  // ── Manager detail ────────────────────────────────────────────────────────
+  selectedManager: TerritoryManager | null = null;
+  managerTerritoryTarget: Territory | null  = null;
+
+  get selectedManagerTerritories(): Territory[] {
+    if (!this.selectedManager) return [];
+    return this.allTerritories.filter(t => t.assignedManagerId === this.selectedManager!.id);
+  }
+
   // ── Dropdowns ────────────────────────────────────────────────────────────
   openDropdownId: string | null = null;
   dropdownPos = { top: 0, right: 0 };
 
   // ── Delete confirm ────────────────────────────────────────────────────────
-  deleteAppUser:  AppUser | null         = null;
+  deleteAppUser:  AppUser | null          = null;
   deleteManager:  TerritoryManager | null = null;
-  isDeleting                             = false;
+  isDeleting                              = false;
 
   // ── Suspend confirm ───────────────────────────────────────────────────────
   suspendTarget: AppUser | null = null;
   isSuspending                  = false;
 
+  // ── Manager status change ─────────────────────────────────────────────────
+  activateTarget:   TerritoryManager | null = null;
+  deactivateTarget: TerritoryManager | null = null;
+  isChangingStatus                          = false;
+
   ngOnInit(): void {
     this.managers = this.territorySvc.getAllManagers();
+
+    this.territorySvc.getPage$('', 1000, 'createdAt', 'desc', [])
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(page => {
+        this.allTerritories = page.items;
+        this.cdr.detectChanges();
+      });
 
     this.searchSubject.pipe(
       debounceTime(300),
       distinctUntilChanged(),
       takeUntil(this.destroy$),
     ).subscribe(() => {
-      this.displayCount = PAGE_SIZE_INITIAL;
       this.loadAppUsers();
     });
 
@@ -115,8 +149,10 @@ export class UserManagementComponent implements OnInit, OnDestroy {
   @HostListener('document:click')
   onDocumentClick(): void {
     let changed = false;
-    if (this.openDropdownId) { this.openDropdownId = null; changed = true; }
-    if (this.sortOpen)       { this.sortOpen = false;       changed = true; }
+    if (this.openDropdownId)          { this.openDropdownId = null;              changed = true; }
+    if (this.sortOpen)                { this.sortOpen = false;                   changed = true; }
+    if (this.statusFilterOpen)        { this.statusFilterOpen = false;           changed = true; }
+    if (this.managerStatusFilterOpen) { this.managerStatusFilterOpen = false;    changed = true; }
     if (changed) this.cdr.detectChanges();
   }
 
@@ -154,7 +190,17 @@ export class UserManagementComponent implements OnInit, OnDestroy {
 
   onSearchChange(): void { this.searchSubject.next(this.searchQuery); }
 
-  onStatusFilterChange(): void { this.displayCount = PAGE_SIZE_INITIAL; this.loadAppUsers(); }
+  applyStatusFilter(value: string): void {
+    this.statusFilter     = value as 'all' | 'active' | 'suspended';
+    this.statusFilterOpen = false;
+    this.loadAppUsers();
+  }
+
+  applyManagerStatusFilter(value: string): void {
+    this.managerStatusFilter     = value as 'all' | 'active' | 'inactive';
+    this.managerStatusFilterOpen = false;
+    this.cdr.detectChanges();
+  }
 
   applySortOption(opt: { label: string; field: AppUserSortField; dir: AppUserSortDir }): void {
     this.sortField = opt.field;
@@ -170,7 +216,7 @@ export class UserManagementComponent implements OnInit, OnDestroy {
       this.openDropdownId = null;
     } else {
       const rect           = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      const dropdownHeight = 120;
+      const dropdownHeight = 140;
       const spaceBelow     = window.innerHeight - rect.bottom;
       const top = spaceBelow < dropdownHeight ? rect.top - dropdownHeight - 4 : rect.bottom + 4;
       this.dropdownPos    = { top, right: window.innerWidth - rect.right };
@@ -236,22 +282,112 @@ export class UserManagementComponent implements OnInit, OnDestroy {
   confirmDeleteManager(): void {
     if (!this.deleteManager) return;
     this.isDeleting = true;
-    // Remove from local list (mock)
     setTimeout(() => {
-      this.managers       = this.managers.filter(m => m.id !== this.deleteManager!.id);
-      this.isDeleting     = false;
-      this.deleteManager  = null;
+      this.managers      = this.managers.filter(m => m.id !== this.deleteManager!.id);
+      this.isDeleting    = false;
+      this.deleteManager = null;
       this.cdr.detectChanges();
     }, 500);
   }
 
+  // ── Activate manager ──────────────────────────────────────────────────────
+  openActivateManager(mgr: TerritoryManager, event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.openDropdownId = null;
+    this.activateTarget = { ...mgr };
+    this.cdr.detectChanges();
+  }
+
+  closeActivateManager(): void { this.activateTarget = null; this.cdr.detectChanges(); }
+
+  confirmActivateManager(): void {
+    if (!this.activateTarget) return;
+    this.isChangingStatus = true;
+    const id = this.activateTarget.id;
+    this.territorySvc.setManagerStatus$(id, 'Active')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        const idx = this.managers.findIndex(m => m.id === id);
+        if (idx !== -1) this.managers[idx] = { ...this.managers[idx], status: 'Active' };
+        this.isChangingStatus = false;
+        this.activateTarget   = null;
+        this.cdr.detectChanges();
+      });
+  }
+
+  // ── Deactivate manager ────────────────────────────────────────────────────
+  openDeactivateManager(mgr: TerritoryManager, event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.openDropdownId   = null;
+    this.deactivateTarget = { ...mgr };
+    this.cdr.detectChanges();
+  }
+
+  closeDeactivateManager(): void { this.deactivateTarget = null; this.cdr.detectChanges(); }
+
+  confirmDeactivateManager(): void {
+    if (!this.deactivateTarget) return;
+    this.isChangingStatus = true;
+    const id = this.deactivateTarget.id;
+    this.territorySvc.setManagerStatus$(id, 'Inactive')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        const idx = this.managers.findIndex(m => m.id === id);
+        if (idx !== -1) this.managers[idx] = { ...this.managers[idx], status: 'Inactive' };
+        this.isChangingStatus = false;
+        this.deactivateTarget = null;
+        this.cdr.detectChanges();
+      });
+  }
+
+  // ── Manager detail ────────────────────────────────────────────────────────
+  openManagerDetail(mgr: TerritoryManager, event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (target.closest('[data-action="menu"]')) return;
+    this.selectedManager = mgr;
+    this.cdr.detectChanges();
+  }
+
+  closeManagerDetail(): void { this.selectedManager = null; this.cdr.detectChanges(); }
+
+  openTerritoryFromManager(t: Territory, event: MouseEvent): void {
+    event.stopPropagation();
+    this.managerTerritoryTarget = t;
+    this.cdr.detectChanges();
+  }
+
+  closeTerritoryFromManager(): void { this.managerTerritoryTarget = null; this.cdr.detectChanges(); }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   formatDate(iso: string): string { return this.appUsersSvc.formatDate(iso); }
+
+  formatTerritoryDate(iso: string): string {
+    return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
 
   statusClass(status: string): string {
     return status === 'Active'
       ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
       : 'bg-red-50 text-red-600 ring-1 ring-red-200';
+  }
+
+  territoryStatusClass(status: string): string {
+    return status === 'Active'
+      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+      : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+  }
+
+  countryName(code: string): string { return this.territorySvc.getCountryByCode(code)?.name ?? code; }
+  countryFlag(code: string): string { return this.territorySvc.getCountryByCode(code)?.flag ?? ''; }
+
+  managerInitials(managerId: string | null): string {
+    if (!managerId) return '?';
+    return this.managers.find(m => m.id === managerId)?.initials ?? '?';
+  }
+
+  managerColor(managerId: string | null): string {
+    if (!managerId) return '#9ca3af';
+    return this.managers.find(m => m.id === managerId)?.avatarColor ?? '#9ca3af';
   }
 
   trackById(_: number, u: AppUser): string { return u.id; }
