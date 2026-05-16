@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
@@ -18,6 +19,8 @@ public class AdminRegionalController : ControllerBase
     private readonly IRegionalPlaceService _places;
     private readonly IRegionalEventService _events;
     private readonly IRegionalMapService _map;
+    private readonly IRegionalAnalyticsService _analytics;
+    private readonly ILogger<AdminRegionalController> _logger;
 
     public AdminRegionalController(
         IRegionalDashboardService regionalDashboard,
@@ -26,7 +29,9 @@ public class AdminRegionalController : ControllerBase
         IRegionalLocationService locations,
         IRegionalPlaceService places,
         IRegionalEventService events,
-        IRegionalMapService map)
+        IRegionalMapService map,
+        IRegionalAnalyticsService analytics,
+        ILogger<AdminRegionalController> logger)
     {
         _regionalDashboard = regionalDashboard;
         _requestQueue = requestQueue;
@@ -35,6 +40,8 @@ public class AdminRegionalController : ControllerBase
         _places = places;
         _events = events;
         _map = map;
+        _analytics = analytics;
+        _logger = logger;
     }
 
     [HttpGet("regions")]
@@ -43,6 +50,131 @@ public class AdminRegionalController : ControllerBase
         try
         {
             return Ok(await _regionalDashboard.GetAssignedRegionsAsync(GetCurrentUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("sidebar-summary")]
+    public async Task<ActionResult<RegionalSidebarSummaryDto>> GetSidebarSummary(
+        [FromQuery] int? regionId = null)
+    {
+        if (regionId is <= 0)
+            return BadRequest(new { message = "regionId must be positive." });
+
+        try
+        {
+            return Ok(await _regionalDashboard.GetSidebarSummaryAsync(GetCurrentUserId(), regionId));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("analytics/overview")]
+    public async Task<ActionResult<RegionalAnalyticsOverviewDto>> GetAnalyticsOverview(
+        [FromQuery] int regionId,
+        [FromQuery] string? period = null,
+        [FromQuery] string? entityType = null,
+        [FromQuery] string? search = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 25,
+        [FromQuery] string? sort = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        try
+        {
+            return Ok(await _analytics.GetOverviewAsync(
+                GetCurrentUserId(),
+                new RegionalAnalyticsOverviewQuery
+                {
+                    RegionId = regionId,
+                    Period = period,
+                    EntityType = entityType,
+                    Search = search,
+                    Skip = skip,
+                    Take = take,
+                    Sort = sort
+                },
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("analytics/monthly-visits")]
+    public async Task<ActionResult<RegionalMonthlyVisitsDto>> GetMonthlyVisits(
+        [FromQuery] int regionId,
+        [FromQuery] int selectedYearsBack = 1,
+        [FromQuery] string? entityType = null,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        if (selectedYearsBack is < 1 or > 3)
+            return BadRequest(new { message = "selectedYearsBack must be between 1 and 3." });
+
+        try
+        {
+            return Ok(await _analytics.GetMonthlyVisitsAsync(
+                GetCurrentUserId(),
+                new RegionalMonthlyVisitsQuery
+                {
+                    RegionId = regionId,
+                    SelectedYearsBack = selectedYearsBack,
+                    EntityType = entityType,
+                    Search = search
+                },
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("analytics/export")]
+    public async Task<IActionResult> ExportAnalytics(
+        [FromQuery] int regionId,
+        [FromQuery] string? period = null,
+        [FromQuery] string? entityType = null,
+        [FromQuery] string? search = null,
+        [FromQuery] string? sort = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        try
+        {
+            var csv = await _analytics.ExportCsvAsync(
+                GetCurrentUserId(),
+                new RegionalAnalyticsOverviewQuery
+                {
+                    RegionId = regionId,
+                    Period = period,
+                    EntityType = entityType,
+                    Search = search,
+                    Skip = 0,
+                    Take = 5000,
+                    Sort = sort
+                },
+                cancellationToken);
+
+            return File(
+                Encoding.UTF8.GetBytes(csv),
+                "text/csv",
+                $"regional-analytics-{regionId}-{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
         }
         catch (Exception ex)
         {
@@ -977,6 +1109,13 @@ public class AdminRegionalController : ControllerBase
 
     private ActionResult HandleException(Exception ex)
     {
+        if (ex is not UnauthorizedAccessException &&
+            ex is not KeyNotFoundException &&
+            ex is not InvalidOperationException)
+        {
+            _logger.LogError(ex, "Unexpected regional admin request failure.");
+        }
+
         return ex switch
         {
             UnauthorizedAccessException => StatusCode(StatusCodes.Status403Forbidden, new { message = "Forbidden." }),

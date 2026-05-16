@@ -161,6 +161,7 @@ builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();
 builder.Services.AddScoped<IRegionalPlaceService, RegionalPlaceService>();
 builder.Services.AddScoped<IRegionalEventService, RegionalEventService>();
 builder.Services.AddScoped<IRegionalMapService, RegionalMapService>();
+builder.Services.AddScoped<IRegionalAnalyticsService, RegionalAnalyticsService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(5);
