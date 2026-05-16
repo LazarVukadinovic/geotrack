@@ -68,3 +68,10 @@ public class RegionalDashboardActivityResponseDto
     public int Take { get; set; }
     public bool HasMore { get; set; }
 }
+
+public class RegionalSidebarSummaryDto
+{
+    public List<RegionalAssignedRegionDto> AssignedRegions { get; set; } = new();
+    public RegionalAssignedRegionDto? ActiveRegion { get; set; }
+    public int PendingRequestsCount { get; set; }
+}
