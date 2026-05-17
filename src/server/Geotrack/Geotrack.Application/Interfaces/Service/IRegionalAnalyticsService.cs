@@ -14,6 +14,16 @@ public interface IRegionalAnalyticsService
         RegionalMonthlyVisitsQuery query,
         CancellationToken cancellationToken);
 
+    Task<RegionalTagViewsAnalyticsResponseDto> GetTagViewsAsync(
+        int userId,
+        RegionalTagViewsQuery query,
+        CancellationToken cancellationToken);
+
+    Task<RegionalAnalyticsEntityDetailDto> GetEntityDetailAsync(
+        int userId,
+        RegionalAnalyticsEntityDetailQuery query,
+        CancellationToken cancellationToken);
+
     Task<string> ExportCsvAsync(
         int userId,
         RegionalAnalyticsOverviewQuery query,

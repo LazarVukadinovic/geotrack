@@ -1,9 +1,11 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using Geotrack.Application.Analytics;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Domain.Entities.Core;
 using Microsoft.EntityFrameworkCore;
 using AnalyticsEvent = Geotrack.Domain.Entities.Analytics.AnalyticsEvent;
 using CollectionItem = Geotrack.Domain.Entities.Users.CollectionItem;
@@ -20,6 +22,10 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
     private const int DefaultTake = 25;
     private const int MaxTake = 100;
     private const int ExportTake = 5000;
+    private const int DestinationRankingTake = 5;
+    private const int DefaultTagViewsTake = 15;
+    private const int MaxTagViewsTake = 50;
+    private const int MaxSelectedTagIds = 50;
     private const int MaxMonthlyVisitYearsBack = 3;
     private const int MinDurationMs = 1_000;
     private const int MaxDurationMs = 30 * 60 * 1_000;
@@ -72,6 +78,14 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         var previousTotals = await BuildPreviousTotalsAsync(entities, period, cancellationToken);
         var rows = SortRows(current.Rows.Where(HasEngagement).ToList(), sort);
         var pageRows = rows.Skip(skip).Take(take).ToList();
+        var destinationRanking = entityType is "all" or AnalyticsEntityTypes.Destination
+            ? BuildDestinationRanking(current.Rows, query.RegionId)
+            : await BuildDestinationRankingAsync(
+                query.RegionId,
+                activeRegion.DisplayName,
+                query.Search,
+                period,
+                cancellationToken);
         var pendingRequestsCount = await GetPendingRequestsCountAsync(userId, query.RegionId);
 
         return new RegionalAnalyticsOverviewDto
@@ -103,6 +117,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
                 Reviews = current.Totals.TotalReviews
             },
             ActionableInsights = BuildActionableInsights(rows, entities.Count),
+            DestinationRanking = destinationRanking,
             VisitorBehavior = BuildVisitorBehavior(current.ViewEvents, current.DurationEvents, current.Rows),
             EntityRows = pageRows,
             Pagination = new RegionalAnalyticsPaginationDto
@@ -187,6 +202,143 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         };
     }
 
+    public async Task<RegionalTagViewsAnalyticsResponseDto> GetTagViewsAsync(
+        int userId,
+        RegionalTagViewsQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (query.RegionId <= 0)
+            throw new InvalidOperationException("regionId is required.");
+
+        var activeRegion = await GetAssignedRegionAsync(userId, query.RegionId);
+        var period = ResolveTagViewsPeriod(query.Period);
+        var entityType = NormalizeEntityTypeFilter(query.EntityType);
+        var take = Math.Clamp(query.Take <= 0 ? DefaultTagViewsTake : query.Take, 1, MaxTagViewsTake);
+        var selectedTagIds = NormalizeSelectedTagIds(query.TagIds);
+
+        var availableTags = await LoadAvailableTagViewsTagsAsync(query.RegionId, cancellationToken);
+        var availableByTagId = availableTags.ToDictionary(tag => tag.TagId);
+
+        if (selectedTagIds.Any(tagId => !availableByTagId.ContainsKey(tagId)))
+        {
+            throw new InvalidOperationException("One or more selected tags are not available for the active region.");
+        }
+
+        var aggregateRows = await LoadTagViewAggregatesAsync(
+            query.RegionId,
+            entityType,
+            selectedTagIds,
+            period.StartDate,
+            period.EndDate,
+            cancellationToken);
+
+        var viewsByTagId = aggregateRows
+            .GroupBy(row => row.TagId)
+            .ToDictionary(group => group.Key, group => group.Sum(row => row.Views));
+
+        var totalViews = viewsByTagId.Values.Sum();
+        var items = selectedTagIds.Count > 0
+            ? selectedTagIds
+                .Select(tagId => BuildTagViewsItem(availableByTagId[tagId], viewsByTagId.GetValueOrDefault(tagId), totalViews))
+                .ToList()
+            : aggregateRows
+                .GroupBy(row => row.TagId)
+                .Select(group => BuildTagViewsItem(availableByTagId[group.Key], group.Sum(row => row.Views), totalViews))
+                .Where(item => item.Views > 0)
+                .OrderByDescending(item => item.Views)
+                .ThenBy(item => item.TagName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.TagId)
+                .Take(take)
+                .ToList();
+
+        return new RegionalTagViewsAnalyticsResponseDto
+        {
+            Period = period.Key,
+            RegionId = query.RegionId,
+            RegionDisplayName = activeRegion.DisplayName,
+            TotalViews = totalViews,
+            AvailableTags = availableTags,
+            Items = items
+        };
+    }
+
+    public async Task<RegionalAnalyticsEntityDetailDto> GetEntityDetailAsync(
+        int userId,
+        RegionalAnalyticsEntityDetailQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (query.RegionId <= 0)
+            throw new InvalidOperationException("regionId is required.");
+
+        if (query.EntityId <= 0)
+            throw new InvalidOperationException("entityId is required.");
+
+        var activeRegion = await GetAssignedRegionAsync(userId, query.RegionId);
+        var entityType = NormalizeEntityTypeForDetail(query.EntityType);
+        var period = ResolvePeriod(query.Period);
+
+        var detail = entityType switch
+        {
+            AnalyticsEntityTypes.Destination => await LoadDestinationDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, cancellationToken),
+            AnalyticsEntityTypes.Location => await LoadLocationDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, cancellationToken),
+            AnalyticsEntityTypes.Place => await LoadPlaceDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, cancellationToken),
+            AnalyticsEntityTypes.Event => await LoadEventDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, cancellationToken),
+            _ => throw new InvalidOperationException("Invalid entity type.")
+        };
+
+        var projection = new EntityProjection
+        {
+            EntityType = detail.EntityType,
+            EntityId = detail.EntityId,
+            Name = detail.Name,
+            RegionDisplayName = detail.RegionDisplayName,
+            ImageUrl = detail.ImageUrl,
+            CategoryLabel = DetailCategoryLabel(detail),
+            Status = detail.Status,
+            DetailRoute = DetailRoute(detail.EntityType, detail.EntityId)
+        };
+
+        var current = await BuildMetricSetAsync(new[] { projection }, period.StartDate, period.EndDate, cancellationToken);
+        var currentMetric = current.Rows.Single();
+        RegionalAnalyticsEntityMetricDto? previousMetric = null;
+
+        if (period.StartDate.HasValue && period.Duration.HasValue)
+        {
+            var previousEnd = period.StartDate.Value;
+            var previousStart = previousEnd - period.Duration.Value;
+            var previous = await BuildMetricSetAsync(new[] { projection }, previousStart, previousEnd, cancellationToken);
+            previousMetric = previous.Rows.Single();
+        }
+
+        detail.Analytics = new RegionalAnalyticsEntityDetailMetricsDto
+        {
+            Views = currentMetric.PageViews,
+            UniqueVisitors = currentMetric.UniqueVisitors,
+            Saves = currentMetric.Saves,
+            ExternalClicks = currentMetric.ExternalClicks,
+            Reviews = currentMetric.ReviewCount,
+            AverageRating = currentMetric.AverageRating,
+            RatingCount = currentMetric.ReviewCount,
+            TrendChangePercent = previousMetric is null ? 0 : PercentChange(currentMetric.PageViews, previousMetric.PageViews),
+            LastViewedAt = current.ViewEvents
+                .OrderByDescending(evt => evt.OccurredAt)
+                .Select(evt => (DateTime?)evt.OccurredAt)
+                .FirstOrDefault()
+        };
+
+        if (IsStayDetail(detail))
+        {
+            detail.TypeSpecific.ExternalPartnerClicks = await BuildExternalPartnerClicksAsync(
+                detail.EntityId,
+                detail.TypeSpecific.BookingPartners,
+                period.StartDate,
+                period.EndDate,
+                cancellationToken);
+        }
+
+        return detail;
+    }
+
     public async Task<string> ExportCsvAsync(
         int userId,
         RegionalAnalyticsOverviewQuery query,
@@ -250,6 +402,768 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
     {
         var summary = await _regionalDashboard.GetSidebarSummaryAsync(userId, regionId);
         return summary.PendingRequestsCount;
+    }
+
+    private async Task<RegionalAnalyticsEntityDetailDto> LoadDestinationDetailAsync(
+        int regionId,
+        int entityId,
+        string regionDisplayName,
+        CancellationToken cancellationToken)
+    {
+        var row = await _db.Destinations
+            .AsNoTracking()
+            .Where(destination => destination.Id == entityId)
+            .Select(destination => new
+            {
+                destination.Id,
+                destination.Name,
+                destination.Summary,
+                destination.Description,
+                destination.Status,
+                destination.RegionId,
+                DestinationType = destination.DestinationType.Name,
+                destination.BoundaryNote,
+                destination.BoundaryShapeType,
+                destination.Latitude,
+                destination.Longitude,
+                destination.CreatedAt,
+                destination.UpdatedAt,
+                destination.PublishedAt,
+                GalleryImages = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
+                Tags = destination.DestinationTags
+                    .OrderBy(destinationTag => destinationTag.Tag.Name)
+                    .Select(destinationTag => new RegionalAnalyticsEntityTagDto
+                    {
+                        Id = destinationTag.TagId,
+                        Name = destinationTag.Tag.Name,
+                        Slug = destinationTag.Tag.Slug
+                    })
+                    .ToList(),
+                LocationsCount = destination.Locations.Count(),
+                PlacesCount = destination.Locations.SelectMany(location => location.Places).Count(),
+                EventsCount = destination.Events.Count()
+            })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new KeyNotFoundException("Destination not found.");
+
+        EnsureEntityInRegion(row.RegionId, regionId, "Destination");
+
+        var gallery = NormalizeGallery(row.GalleryImages);
+        return new RegionalAnalyticsEntityDetailDto
+        {
+            EntityType = AnalyticsEntityTypes.Destination,
+            EntityId = row.Id,
+            Name = row.Name,
+            Title = row.Name,
+            Status = NormalizeStatusLabel(row.Status),
+            RegionId = row.RegionId,
+            RegionDisplayName = regionDisplayName,
+            DestinationId = row.Id,
+            DestinationName = row.Name,
+            Description = NullIfWhiteSpace(row.Description),
+            Summary = NullIfWhiteSpace(row.Summary) ?? BuildSummary(row.Description),
+            ImageUrl = gallery.FirstOrDefault(),
+            GalleryImages = gallery,
+            Tags = row.Tags,
+            Latitude = row.Latitude,
+            Longitude = row.Longitude,
+            CreatedAt = row.CreatedAt,
+            UpdatedAt = row.UpdatedAt,
+            PublishedAt = row.PublishedAt,
+            TypeSpecific = new RegionalAnalyticsEntityTypeSpecificDto
+            {
+                DestinationType = row.DestinationType,
+                BoundaryNote = NullIfWhiteSpace(row.BoundaryNote),
+                BoundaryShapeType = NullIfWhiteSpace(row.BoundaryShapeType),
+                LocationsCount = row.LocationsCount,
+                PlacesCount = row.PlacesCount,
+                EventsCount = row.EventsCount
+            }
+        };
+    }
+
+    private async Task<RegionalAnalyticsEntityDetailDto> LoadLocationDetailAsync(
+        int regionId,
+        int entityId,
+        string regionDisplayName,
+        CancellationToken cancellationToken)
+    {
+        var row = await _db.Locations
+            .AsNoTracking()
+            .Where(location => location.Id == entityId)
+            .Select(location => new
+            {
+                location.Id,
+                location.Name,
+                location.Summary,
+                location.Description,
+                location.Status,
+                RegionId = location.Destination.RegionId,
+                location.DestinationId,
+                DestinationName = location.Destination.Name,
+                LocationType = location.LocationType.Name,
+                location.BoundaryNote,
+                location.BoundaryShapeType,
+                location.Latitude,
+                location.Longitude,
+                location.CreatedAt,
+                location.UpdatedAt,
+                location.PublishedAt,
+                GalleryImages = location.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Location)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
+                Tags = location.LocationTags
+                    .OrderBy(locationTag => locationTag.Tag.Name)
+                    .Select(locationTag => new RegionalAnalyticsEntityTagDto
+                    {
+                        Id = locationTag.TagId,
+                        Name = locationTag.Tag.Name,
+                        Slug = locationTag.Tag.Slug
+                    })
+                    .ToList(),
+                PlacesCount = location.Places.Count()
+            })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new KeyNotFoundException("Location not found.");
+
+        EnsureEntityInRegion(row.RegionId, regionId, "Location");
+
+        var eventsCount = await _db.Events
+            .AsNoTracking()
+            .CountAsync(evt =>
+                evt.Destination.RegionId == regionId &&
+                (evt.LocationId == row.Id ||
+                 (evt.PlaceId.HasValue && evt.Place != null && evt.Place.LocationId == row.Id)),
+                cancellationToken);
+
+        var gallery = NormalizeGallery(row.GalleryImages);
+        return new RegionalAnalyticsEntityDetailDto
+        {
+            EntityType = AnalyticsEntityTypes.Location,
+            EntityId = row.Id,
+            Name = row.Name,
+            Title = row.Name,
+            Status = NormalizeStatusLabel(row.Status),
+            RegionId = row.RegionId,
+            RegionDisplayName = regionDisplayName,
+            DestinationId = row.DestinationId,
+            DestinationName = row.DestinationName,
+            LocationId = row.Id,
+            LocationName = row.Name,
+            Description = NullIfWhiteSpace(row.Description),
+            Summary = NullIfWhiteSpace(row.Summary) ?? BuildSummary(row.Description),
+            ImageUrl = gallery.FirstOrDefault(),
+            GalleryImages = gallery,
+            Tags = row.Tags,
+            Latitude = row.Latitude,
+            Longitude = row.Longitude,
+            CreatedAt = row.CreatedAt,
+            UpdatedAt = row.UpdatedAt,
+            PublishedAt = row.PublishedAt,
+            TypeSpecific = new RegionalAnalyticsEntityTypeSpecificDto
+            {
+                LocationType = row.LocationType,
+                ParentDestination = row.DestinationName,
+                BoundaryNote = NullIfWhiteSpace(row.BoundaryNote),
+                BoundaryShapeType = NullIfWhiteSpace(row.BoundaryShapeType),
+                PlacesCount = row.PlacesCount,
+                EventsCount = eventsCount
+            }
+        };
+    }
+
+    private async Task<RegionalAnalyticsEntityDetailDto> LoadPlaceDetailAsync(
+        int regionId,
+        int entityId,
+        string regionDisplayName,
+        CancellationToken cancellationToken)
+    {
+        var row = await _db.Places
+            .AsNoTracking()
+            .Where(place => place.Id == entityId)
+            .Select(place => new
+            {
+                place.Id,
+                place.Name,
+                place.Subtitle,
+                place.Description,
+                place.Status,
+                place.Address,
+                place.Latitude,
+                place.Longitude,
+                place.CreatedAt,
+                place.UpdatedAt,
+                place.PublishedAt,
+                place.Website,
+                place.BookingExternalLink,
+                ContactPhone = place.Number,
+                place.ContactEmail,
+                place.AdmissionPriceRange,
+                place.OpeningHours,
+                place.OperatingHoursJson,
+                place.BestTimeToVisit,
+                place.VisitorTips,
+                place.AccessNotes,
+                place.AccessibilityNotes,
+                PlaceType = place.PlaceType.Name,
+                StayType = place.Stay != null ? place.Stay.StayType.Name : null,
+                RegionId = place.Location.Destination.RegionId,
+                place.LocationId,
+                LocationName = place.Location.Name,
+                DestinationId = place.Location.DestinationId,
+                DestinationName = place.Location.Destination.Name,
+                GalleryImages = place.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Place)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
+                Tags = place.PlaceTags
+                    .OrderBy(placeTag => placeTag.Tag.Name)
+                    .Select(placeTag => new RegionalAnalyticsEntityTagDto
+                    {
+                        Id = placeTag.TagId,
+                        Name = placeTag.Tag.Name,
+                        Slug = placeTag.Tag.Slug
+                    })
+                    .ToList()
+            })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new KeyNotFoundException("Place not found.");
+
+        EnsureEntityInRegion(row.RegionId, regionId, "Place");
+
+        var placeAmenities = await _db.PlaceAmenities
+            .AsNoTracking()
+            .Where(item => item.PlaceId == row.Id)
+            .Select(item => item.Amenity.Name)
+            .ToListAsync(cancellationToken);
+
+        var stayAmenities = await _db.StayStayAmenities
+            .AsNoTracking()
+            .Where(item => item.StayPlaceId == row.Id)
+            .Select(item => item.StayAmenity.Name)
+            .ToListAsync(cancellationToken);
+
+        var bookingPartners = await _db.PlaceBookingPartners
+            .AsNoTracking()
+            .Where(item => item.PlaceId == row.Id)
+            .OrderBy(item => item.BookingPartner.Name)
+            .Select(item => new RegionalAnalyticsEntityLinkDto
+            {
+                Label = item.BookingPartner.Name,
+                Url = item.Url
+            })
+            .ToListAsync(cancellationToken);
+
+        var gallery = NormalizeGallery(row.GalleryImages);
+        return new RegionalAnalyticsEntityDetailDto
+        {
+            EntityType = AnalyticsEntityTypes.Place,
+            EntityId = row.Id,
+            Name = row.Name,
+            Title = row.Name,
+            Subtitle = NullIfWhiteSpace(row.Subtitle),
+            Status = NormalizeStatusLabel(row.Status),
+            RegionId = row.RegionId,
+            RegionDisplayName = regionDisplayName,
+            DestinationId = row.DestinationId,
+            DestinationName = row.DestinationName,
+            LocationId = row.LocationId,
+            LocationName = row.LocationName,
+            PlaceId = row.Id,
+            PlaceName = row.Name,
+            Description = NullIfWhiteSpace(row.Description),
+            Summary = NullIfWhiteSpace(row.Subtitle) ?? BuildSummary(row.Description),
+            ImageUrl = gallery.FirstOrDefault(),
+            GalleryImages = gallery,
+            Tags = row.Tags,
+            Address = NullIfWhiteSpace(row.Address),
+            Latitude = row.Latitude,
+            Longitude = row.Longitude,
+            CreatedAt = row.CreatedAt,
+            UpdatedAt = row.UpdatedAt,
+            PublishedAt = row.PublishedAt,
+            TypeSpecific = new RegionalAnalyticsEntityTypeSpecificDto
+            {
+                PlaceType = row.PlaceType,
+                StayType = NullIfWhiteSpace(row.StayType),
+                ParentLocation = row.LocationName,
+                ParentDestination = row.DestinationName,
+                Website = NullIfWhiteSpace(row.Website),
+                BookingExternalLink = NullIfWhiteSpace(row.BookingExternalLink),
+                ContactPhone = NullIfWhiteSpace(row.ContactPhone),
+                ContactEmail = NullIfWhiteSpace(row.ContactEmail),
+                PriceRange = NullIfWhiteSpace(row.AdmissionPriceRange),
+                OpeningHours = NullIfWhiteSpace(row.OpeningHours),
+                OperatingHours = DeserializeOperatingHours(row.OperatingHoursJson),
+                Amenities = placeAmenities
+                    .Concat(stayAmenities)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                BookingPartners = bookingPartners,
+                BestTimeToVisit = NullIfWhiteSpace(row.BestTimeToVisit),
+                VisitorTips = NullIfWhiteSpace(row.VisitorTips),
+                AccessNotes = NullIfWhiteSpace(row.AccessNotes),
+                AccessibilityNotes = NullIfWhiteSpace(row.AccessibilityNotes)
+            }
+        };
+    }
+
+    private async Task<RegionalAnalyticsEntityDetailDto> LoadEventDetailAsync(
+        int regionId,
+        int entityId,
+        string regionDisplayName,
+        CancellationToken cancellationToken)
+    {
+        var row = await _db.Events
+            .AsNoTracking()
+            .Where(evt => evt.Id == entityId)
+            .Select(evt => new
+            {
+                evt.Id,
+                evt.Name,
+                evt.Summary,
+                evt.Description,
+                evt.Status,
+                RegionId = evt.Destination.RegionId,
+                evt.DestinationId,
+                DestinationName = evt.Destination.Name,
+                evt.LocationId,
+                LocationName = evt.Location != null ? evt.Location.Name : null,
+                evt.PlaceId,
+                PlaceName = evt.Place != null ? evt.Place.Name : null,
+                Address = evt.Place != null ? evt.Place.Address : null,
+                Latitude = evt.Place != null ? evt.Place.Latitude : evt.Location != null ? evt.Location.Latitude : evt.Destination.Latitude,
+                Longitude = evt.Place != null ? evt.Place.Longitude : evt.Location != null ? evt.Location.Longitude : evt.Destination.Longitude,
+                EventType = evt.EventType.Name,
+                Category = evt.EventType.Name,
+                evt.ParentEntityType,
+                evt.VenueName,
+                StartsAt = evt.StartDate,
+                EndsAt = evt.EndDate,
+                evt.IsAllDay,
+                evt.IsRecurring,
+                evt.TicketPrice,
+                evt.IsFree,
+                evt.ExternalTicketLink,
+                OrganizerName = evt.HostedBy,
+                evt.ContactEmail,
+                evt.AttendanceLimit,
+                evt.AgeRestriction,
+                evt.Duration,
+                evt.VenueDescription,
+                evt.ArrivalTips,
+                evt.Accessibility,
+                evt.CreatedAt,
+                evt.UpdatedAt,
+                evt.PublishedAt,
+                GalleryImages = evt.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Event)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
+                Tags = evt.EventTags
+                    .OrderBy(eventTag => eventTag.Tag.Name)
+                    .Select(eventTag => new RegionalAnalyticsEntityTagDto
+                    {
+                        Id = eventTag.TagId,
+                        Name = eventTag.Tag.Name,
+                        Slug = eventTag.Tag.Slug
+                    })
+                    .ToList()
+            })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new KeyNotFoundException("Event not found.");
+
+        EnsureEntityInRegion(row.RegionId, regionId, "Event");
+
+        var gallery = NormalizeGallery(row.GalleryImages);
+        return new RegionalAnalyticsEntityDetailDto
+        {
+            EntityType = AnalyticsEntityTypes.Event,
+            EntityId = row.Id,
+            Name = row.Name,
+            Title = row.Name,
+            Status = NormalizeStatusLabel(row.Status),
+            RegionId = row.RegionId,
+            RegionDisplayName = regionDisplayName,
+            DestinationId = row.DestinationId,
+            DestinationName = row.DestinationName,
+            LocationId = row.LocationId,
+            LocationName = row.LocationName,
+            PlaceId = row.PlaceId,
+            PlaceName = row.PlaceName,
+            Description = NullIfWhiteSpace(row.Description),
+            Summary = NullIfWhiteSpace(row.Summary) ?? BuildSummary(row.Description),
+            ImageUrl = gallery.FirstOrDefault(),
+            GalleryImages = gallery,
+            Tags = row.Tags,
+            Address = NullIfWhiteSpace(row.Address),
+            Latitude = row.Latitude,
+            Longitude = row.Longitude,
+            CreatedAt = row.CreatedAt,
+            UpdatedAt = row.UpdatedAt,
+            PublishedAt = row.PublishedAt,
+            TypeSpecific = new RegionalAnalyticsEntityTypeSpecificDto
+            {
+                EventType = row.EventType,
+                Category = row.Category,
+                ParentEntityType = NullIfWhiteSpace(row.ParentEntityType),
+                ParentDestination = row.DestinationName,
+                ParentLocation = NullIfWhiteSpace(row.LocationName),
+                ParentPlace = NullIfWhiteSpace(row.PlaceName),
+                VenueName = NullIfWhiteSpace(row.VenueName),
+                StartsAt = row.StartsAt,
+                EndsAt = row.EndsAt,
+                AllDay = row.IsAllDay,
+                IsRecurring = row.IsRecurring,
+                TicketPrice = NullIfWhiteSpace(row.TicketPrice),
+                IsFree = row.IsFree,
+                ExternalTicketLink = NullIfWhiteSpace(row.ExternalTicketLink),
+                OrganizerName = NullIfWhiteSpace(row.OrganizerName),
+                ContactEmail = NullIfWhiteSpace(row.ContactEmail),
+                AttendanceLimit = row.AttendanceLimit,
+                AgeRestriction = NullIfWhiteSpace(row.AgeRestriction),
+                Duration = NullIfWhiteSpace(row.Duration),
+                VenueDescription = NullIfWhiteSpace(row.VenueDescription),
+                ArrivalTips = NullIfWhiteSpace(row.ArrivalTips),
+                Accessibility = NullIfWhiteSpace(row.Accessibility)
+            }
+        };
+    }
+
+    private async Task<List<RegionalAnalyticsExternalPartnerClickDto>> BuildExternalPartnerClicksAsync(
+        int placeId,
+        IReadOnlyList<RegionalAnalyticsEntityLinkDto> bookingPartners,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var partnerDefinitions = BuildExternalPartnerDefinitions(bookingPartners);
+        if (partnerDefinitions.Count == 0)
+        {
+            return new List<RegionalAnalyticsExternalPartnerClickDto>();
+        }
+
+        var eventRows = await ApplyAnalyticsPeriod(_db.AnalyticsEvents.AsNoTracking(), fromUtc, toUtc)
+            .Where(evt =>
+                evt.EventType == AnalyticsEventTypes.OutboundLinkClicked &&
+                evt.EntityId == placeId &&
+                (evt.EntityType == AnalyticsEntityTypes.Place || evt.EntityType == AnalyticsEntityTypes.Hotel))
+            .Select(evt => new ExternalPartnerClickEventRow
+            {
+                MetadataJson = evt.MetadataJson
+            })
+            .ToListAsync(cancellationToken);
+
+        var countsByDefinition = partnerDefinitions.ToDictionary(definition => definition.Id, _ => 0);
+        var uniqueHosts = partnerDefinitions
+            .Where(definition => !string.IsNullOrWhiteSpace(definition.Host))
+            .GroupBy(definition => definition.Host!, StringComparer.Ordinal)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Single(),
+                StringComparer.Ordinal);
+
+        foreach (var row in eventRows)
+        {
+            var metadata = ParsePartnerClickMetadata(row.MetadataJson);
+            var matchedPartner = MatchExternalPartnerClick(partnerDefinitions, uniqueHosts, metadata);
+
+            if (matchedPartner is not null)
+            {
+                countsByDefinition[matchedPartner.Id]++;
+            }
+        }
+
+        var totalAttributedClicks = countsByDefinition.Values.Sum();
+
+        return partnerDefinitions
+            .Select(definition =>
+            {
+                var count = countsByDefinition[definition.Id];
+                return new RegionalAnalyticsExternalPartnerClickDto
+                {
+                    PartnerKey = definition.PartnerKey,
+                    PartnerLabel = definition.PartnerLabel,
+                    Url = definition.Url,
+                    ClickCount = count,
+                    SharePercent = totalAttributedClicks <= 0
+                        ? 0
+                        : Math.Round((double)count / totalAttributedClicks * 100, 1, MidpointRounding.AwayFromZero)
+                };
+            })
+            .ToList();
+    }
+
+    private static List<ExternalPartnerDefinition> BuildExternalPartnerDefinitions(
+        IReadOnlyList<RegionalAnalyticsEntityLinkDto> bookingPartners)
+    {
+        return bookingPartners
+            .Select((partner, index) =>
+            {
+                var url = NullIfWhiteSpace(partner.Url);
+                if (url is null)
+                {
+                    return null;
+                }
+
+                var label = NullIfWhiteSpace(partner.Label) ?? "Other External Link";
+                var host = ExtractHost(url);
+                var partnerKey = ResolvePartnerKey(label, host);
+                var providerSlug = partnerKey switch
+                {
+                    "booking" => "booking",
+                    "airbnb" => "airbnb",
+                    _ => SlugifyPartnerProvider(label)
+                };
+
+                return new ExternalPartnerDefinition(
+                    index,
+                    partnerKey,
+                    label,
+                    url,
+                    providerSlug,
+                    host,
+                    PartnerSortOrder(partnerKey));
+            })
+            .Where(definition => definition is not null)
+            .Cast<ExternalPartnerDefinition>()
+            .GroupBy(
+                definition => (
+                    Key: definition.PartnerKey,
+                    Label: definition.PartnerLabel.ToLowerInvariant(),
+                    Url: definition.Url?.ToLowerInvariant() ?? string.Empty))
+            .Select(group => group.First())
+            .OrderBy(definition => definition.SortOrder)
+            .ThenBy(definition => definition.PartnerLabel, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(definition => definition.Id)
+            .ToList();
+    }
+
+    private static ExternalPartnerDefinition? MatchExternalPartnerClick(
+        IReadOnlyList<ExternalPartnerDefinition> partnerDefinitions,
+        IReadOnlyDictionary<string, ExternalPartnerDefinition> uniqueHosts,
+        PartnerClickMetadata metadata)
+    {
+        if (!string.IsNullOrWhiteSpace(metadata.Host) &&
+            uniqueHosts.TryGetValue(metadata.Host!, out var hostMatchedPartner))
+        {
+            return hostMatchedPartner;
+        }
+
+        if (metadata.PartnerKey is "booking" or "airbnb")
+        {
+            var partnerKeyMatch = partnerDefinitions.FirstOrDefault(definition => definition.PartnerKey == metadata.PartnerKey);
+            if (partnerKeyMatch is not null)
+            {
+                return partnerKeyMatch;
+            }
+        }
+
+        if (metadata.Provider is "booking" or "airbnb")
+        {
+            var providerKeyMatch = partnerDefinitions.FirstOrDefault(definition => definition.PartnerKey == metadata.Provider);
+            if (providerKeyMatch is not null)
+            {
+                return providerKeyMatch;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(metadata.Provider))
+        {
+            var providerMatch = partnerDefinitions.FirstOrDefault(definition =>
+                definition.ProviderSlug == metadata.Provider &&
+                definition.PartnerKey == "external");
+
+            if (providerMatch is not null)
+            {
+                return providerMatch;
+            }
+        }
+
+        if (metadata.PartnerKey == "external")
+        {
+            var externalPartners = partnerDefinitions
+                .Where(definition => definition.PartnerKey == "external")
+                .ToList();
+
+            if (externalPartners.Count == 1)
+            {
+                return externalPartners[0];
+            }
+        }
+
+        return null;
+    }
+
+    private static PartnerClickMetadata ParsePartnerClickMetadata(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return new PartnerClickMetadata(null, null, null);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(metadataJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return new PartnerClickMetadata(null, null, null);
+            }
+
+            var provider = ReadMetadataString(root, "provider");
+            var partnerKey = ReadMetadataString(root, "partnerKey");
+            var host = NormalizeHost(ReadMetadataString(root, "host"));
+
+            return new PartnerClickMetadata(
+                NormalizeProviderToken(provider),
+                NormalizeProviderToken(partnerKey),
+                host);
+        }
+        catch (JsonException)
+        {
+            return new PartnerClickMetadata(null, null, null);
+        }
+    }
+
+    private static string? ReadMetadataString(JsonElement root, string propertyName)
+    {
+        return root.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? NullIfWhiteSpace(value.GetString())
+            : null;
+    }
+
+    private static string ResolvePartnerKey(string label, string? host)
+    {
+        var token = NormalizeToken(label);
+
+        if (token is "booking" or "bookingcom" || IsHostOrSubdomain(host, "booking.com"))
+        {
+            return "booking";
+        }
+
+        if (token == "airbnb" || IsHostOrSubdomain(host, "airbnb.com"))
+        {
+            return "airbnb";
+        }
+
+        return "external";
+    }
+
+    private static int PartnerSortOrder(string partnerKey) =>
+        partnerKey switch
+        {
+            "booking" => 0,
+            "airbnb" => 1,
+            _ => 2
+        };
+
+    private static string? ExtractHost(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) ||
+            !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        return NormalizeHost(uri.Host);
+    }
+
+    private static string? NormalizeHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return null;
+        }
+
+        var normalized = host.Trim().TrimEnd('.').ToLowerInvariant();
+        return normalized.StartsWith("www.", StringComparison.Ordinal)
+            ? normalized[4..]
+            : normalized;
+    }
+
+    private static bool IsHostOrSubdomain(string? host, string rootDomain)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return false;
+        }
+
+        return host.Equals(rootDomain, StringComparison.Ordinal) ||
+            host.EndsWith("." + rootDomain, StringComparison.Ordinal);
+    }
+
+    private static string? NormalizeProviderToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static string SlugifyPartnerProvider(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        var previousDash = false;
+
+        foreach (var character in value.Trim().ToLowerInvariant())
+        {
+            if ((character >= 'a' && character <= 'z') || (character >= '0' && character <= '9'))
+            {
+                builder.Append(character);
+                previousDash = false;
+            }
+            else if (!previousDash)
+            {
+                builder.Append('-');
+                previousDash = true;
+            }
+        }
+
+        var slug = builder.ToString().Trim('-');
+        return string.IsNullOrWhiteSpace(slug) ? "other" : slug;
+    }
+
+    private static bool IsStayDetail(RegionalAnalyticsEntityDetailDto detail)
+    {
+        if (detail.EntityType != AnalyticsEntityTypes.Place)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(detail.TypeSpecific.StayType))
+        {
+            return true;
+        }
+
+        var placeType = NormalizeToken(detail.TypeSpecific.PlaceType ?? string.Empty);
+        return placeType is "stay" or "stays" or "hotel" or "hotels" or "accommodation" or "accommodations" or "lodging";
     }
 
     private async Task<List<EntityProjection>> LoadEntitiesAsync(
@@ -551,6 +1465,337 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         var previousStart = previousEnd - period.Duration.Value;
         var previous = await BuildMetricSetAsync(entities, previousStart, previousEnd, cancellationToken);
         return previous.Totals;
+    }
+
+    private async Task<List<RegionalDestinationRankingItemDto>> BuildDestinationRankingAsync(
+        int regionId,
+        string regionDisplayName,
+        string? search,
+        PeriodWindow period,
+        CancellationToken cancellationToken)
+    {
+        var destinations = await LoadEntitiesAsync(
+            regionId,
+            regionDisplayName,
+            AnalyticsEntityTypes.Destination,
+            search,
+            cancellationToken);
+
+        var destinationMetrics = await BuildMetricSetAsync(
+            destinations,
+            period.StartDate,
+            period.EndDate,
+            cancellationToken);
+
+        return BuildDestinationRanking(destinationMetrics.Rows, regionId);
+    }
+
+    private static List<RegionalDestinationRankingItemDto> BuildDestinationRanking(
+        IReadOnlyList<RegionalAnalyticsEntityMetricDto> rows,
+        int regionId)
+    {
+        var topDestinations = rows
+            .Where(row => row.EntityType == AnalyticsEntityTypes.Destination && row.PageViews > 0)
+            .OrderByDescending(row => row.PageViews)
+            .ThenByDescending(row => row.UniqueVisitors)
+            .ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.EntityId)
+            .Take(DestinationRankingTake)
+            .ToList();
+
+        var topValue = topDestinations.FirstOrDefault()?.PageViews ?? 0;
+
+        return topDestinations
+            .Select((row, index) => new RegionalDestinationRankingItemDto
+            {
+                DestinationId = row.EntityId,
+                DestinationName = row.Name,
+                RegionId = regionId,
+                RegionDisplayName = row.RegionDisplayName,
+                Visits = row.PageViews,
+                Rank = index + 1,
+                PercentageOfTopValue = topValue <= 0
+                    ? 0
+                    : Math.Round((double)row.PageViews / topValue * 100, 1, MidpointRounding.AwayFromZero),
+                ImageUrl = row.ImageUrl,
+                DetailRoute = row.DetailRoute
+            })
+            .ToList();
+    }
+
+    private async Task<List<RegionalTagViewsAvailableTagDto>> LoadAvailableTagViewsTagsAsync(
+        int regionId,
+        CancellationToken cancellationToken)
+    {
+        var rows = new List<TagScopeRow>();
+
+        rows.AddRange(await _db.DestinationTags
+            .AsNoTracking()
+            .Where(destinationTag => destinationTag.Destination.RegionId == regionId)
+            .Select(destinationTag => new TagScopeRow
+            {
+                TagId = destinationTag.TagId,
+                TagName = destinationTag.Tag.Name,
+                EntityScope = AnalyticsEntityTypes.Destination
+            })
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await _db.LocationTags
+            .AsNoTracking()
+            .Where(locationTag => locationTag.Location.Destination.RegionId == regionId)
+            .Select(locationTag => new TagScopeRow
+            {
+                TagId = locationTag.TagId,
+                TagName = locationTag.Tag.Name,
+                EntityScope = AnalyticsEntityTypes.Location
+            })
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await _db.PlaceTags
+            .AsNoTracking()
+            .Where(placeTag => placeTag.Place.Location.Destination.RegionId == regionId)
+            .Select(placeTag => new TagScopeRow
+            {
+                TagId = placeTag.TagId,
+                TagName = placeTag.Tag.Name,
+                EntityScope = AnalyticsEntityTypes.Place
+            })
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await _db.EventTags
+            .AsNoTracking()
+            .Where(eventTag => eventTag.Event.Destination.RegionId == regionId)
+            .Select(eventTag => new TagScopeRow
+            {
+                TagId = eventTag.TagId,
+                TagName = eventTag.Tag.Name,
+                EntityScope = AnalyticsEntityTypes.Event
+            })
+            .ToListAsync(cancellationToken));
+
+        return rows
+            .GroupBy(row => row.TagId)
+            .Select(group => new RegionalTagViewsAvailableTagDto
+            {
+                TagId = group.Key,
+                Name = group.Select(row => row.TagName).FirstOrDefault() ?? string.Empty,
+                EntityScopes = group
+                    .Select(row => row.EntityScope)
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(TagScopeOrder)
+                    .ThenBy(scope => scope, StringComparer.Ordinal)
+                    .ToList()
+            })
+            .OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(tag => tag.TagId)
+            .ToList();
+    }
+
+    private async Task<List<TagViewAggregateRow>> LoadTagViewAggregatesAsync(
+        int regionId,
+        string entityType,
+        IReadOnlyCollection<int> selectedTagIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var rows = new List<TagViewAggregateRow>();
+
+        if (entityType is "all" or AnalyticsEntityTypes.Destination)
+        {
+            rows.AddRange(await LoadDestinationTagViewAggregatesAsync(regionId, selectedTagIds, fromUtc, toUtc, cancellationToken));
+        }
+
+        if (entityType is "all" or AnalyticsEntityTypes.Location)
+        {
+            rows.AddRange(await LoadLocationTagViewAggregatesAsync(regionId, selectedTagIds, fromUtc, toUtc, cancellationToken));
+        }
+
+        if (entityType is "all" or AnalyticsEntityTypes.Place)
+        {
+            rows.AddRange(await LoadPlaceTagViewAggregatesAsync(regionId, selectedTagIds, fromUtc, toUtc, cancellationToken));
+        }
+
+        if (entityType is "all" or AnalyticsEntityTypes.Event)
+        {
+            rows.AddRange(await LoadEventTagViewAggregatesAsync(regionId, selectedTagIds, fromUtc, toUtc, cancellationToken));
+        }
+
+        return rows;
+    }
+
+    private async Task<List<TagViewAggregateRow>> LoadDestinationTagViewAggregatesAsync(
+        int regionId,
+        IReadOnlyCollection<int> selectedTagIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var query =
+            from analyticsEvent in ApplyTagViewPeriod(_db.AnalyticsEvents.AsNoTracking(), fromUtc, toUtc)
+            join destinationTag in _db.DestinationTags
+                .AsNoTracking()
+                .Where(destinationTag => destinationTag.Destination.RegionId == regionId)
+                on analyticsEvent.EntityId!.Value equals destinationTag.DestinationId
+            where analyticsEvent.EntityId.HasValue &&
+                analyticsEvent.EntityType == AnalyticsEntityTypes.Destination &&
+                ViewEventTypes.Contains(analyticsEvent.EventType)
+            select new
+            {
+                destinationTag.TagId,
+                TagName = destinationTag.Tag.Name
+            };
+
+        if (selectedTagIds.Count > 0)
+        {
+            query = query.Where(row => selectedTagIds.Contains(row.TagId));
+        }
+
+        return await query
+            .GroupBy(row => new { row.TagId, row.TagName })
+            .Select(group => new TagViewAggregateRow
+            {
+                TagId = group.Key.TagId,
+                TagName = group.Key.TagName,
+                EntityScope = AnalyticsEntityTypes.Destination,
+                Views = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<TagViewAggregateRow>> LoadLocationTagViewAggregatesAsync(
+        int regionId,
+        IReadOnlyCollection<int> selectedTagIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var query =
+            from analyticsEvent in ApplyTagViewPeriod(_db.AnalyticsEvents.AsNoTracking(), fromUtc, toUtc)
+            join locationTag in _db.LocationTags
+                .AsNoTracking()
+                .Where(locationTag => locationTag.Location.Destination.RegionId == regionId)
+                on analyticsEvent.EntityId!.Value equals locationTag.LocationId
+            where analyticsEvent.EntityId.HasValue &&
+                analyticsEvent.EntityType == AnalyticsEntityTypes.Location &&
+                ViewEventTypes.Contains(analyticsEvent.EventType)
+            select new
+            {
+                locationTag.TagId,
+                TagName = locationTag.Tag.Name
+            };
+
+        if (selectedTagIds.Count > 0)
+        {
+            query = query.Where(row => selectedTagIds.Contains(row.TagId));
+        }
+
+        return await query
+            .GroupBy(row => new { row.TagId, row.TagName })
+            .Select(group => new TagViewAggregateRow
+            {
+                TagId = group.Key.TagId,
+                TagName = group.Key.TagName,
+                EntityScope = AnalyticsEntityTypes.Location,
+                Views = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<TagViewAggregateRow>> LoadPlaceTagViewAggregatesAsync(
+        int regionId,
+        IReadOnlyCollection<int> selectedTagIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var query =
+            from analyticsEvent in ApplyTagViewPeriod(_db.AnalyticsEvents.AsNoTracking(), fromUtc, toUtc)
+            join placeTag in _db.PlaceTags
+                .AsNoTracking()
+                .Where(placeTag => placeTag.Place.Location.Destination.RegionId == regionId)
+                on analyticsEvent.EntityId!.Value equals placeTag.PlaceId
+            where analyticsEvent.EntityId.HasValue &&
+                (analyticsEvent.EntityType == AnalyticsEntityTypes.Place ||
+                 analyticsEvent.EntityType == AnalyticsEntityTypes.Hotel) &&
+                ViewEventTypes.Contains(analyticsEvent.EventType)
+            select new
+            {
+                placeTag.TagId,
+                TagName = placeTag.Tag.Name
+            };
+
+        if (selectedTagIds.Count > 0)
+        {
+            query = query.Where(row => selectedTagIds.Contains(row.TagId));
+        }
+
+        return await query
+            .GroupBy(row => new { row.TagId, row.TagName })
+            .Select(group => new TagViewAggregateRow
+            {
+                TagId = group.Key.TagId,
+                TagName = group.Key.TagName,
+                EntityScope = AnalyticsEntityTypes.Place,
+                Views = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<TagViewAggregateRow>> LoadEventTagViewAggregatesAsync(
+        int regionId,
+        IReadOnlyCollection<int> selectedTagIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var query =
+            from analyticsEvent in ApplyTagViewPeriod(_db.AnalyticsEvents.AsNoTracking(), fromUtc, toUtc)
+            join eventTag in _db.EventTags
+                .AsNoTracking()
+                .Where(eventTag => eventTag.Event.Destination.RegionId == regionId)
+                on analyticsEvent.EntityId!.Value equals eventTag.EventId
+            where analyticsEvent.EntityId.HasValue &&
+                analyticsEvent.EntityType == AnalyticsEntityTypes.Event &&
+                ViewEventTypes.Contains(analyticsEvent.EventType)
+            select new
+            {
+                eventTag.TagId,
+                TagName = eventTag.Tag.Name
+            };
+
+        if (selectedTagIds.Count > 0)
+        {
+            query = query.Where(row => selectedTagIds.Contains(row.TagId));
+        }
+
+        return await query
+            .GroupBy(row => new { row.TagId, row.TagName })
+            .Select(group => new TagViewAggregateRow
+            {
+                TagId = group.Key.TagId,
+                TagName = group.Key.TagName,
+                EntityScope = AnalyticsEntityTypes.Event,
+                Views = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+    }
+
+    private static RegionalTagViewsItemDto BuildTagViewsItem(
+        RegionalTagViewsAvailableTagDto tag,
+        int views,
+        int totalViews)
+    {
+        return new RegionalTagViewsItemDto
+        {
+            TagId = tag.TagId,
+            TagName = tag.Name,
+            Views = views,
+            PercentageOfTotal = totalViews <= 0
+                ? 0
+                : Math.Round((double)views / totalViews * 100, 1, MidpointRounding.AwayFromZero),
+            EntityScopes = tag.EntityScopes.ToList()
+        };
     }
 
     private static void ApplyAnalyticsEventMetrics(
@@ -1074,6 +2319,42 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         };
     }
 
+    private static PeriodWindow ResolveTagViewsPeriod(string? value)
+    {
+        var key = NormalizeToken(value ?? "1m");
+        var now = DateTime.UtcNow;
+
+        return key switch
+        {
+            "24h" or "last24h" => new PeriodWindow("24h", now.AddHours(-24), now, TimeSpan.FromHours(24)),
+            "7d" or "last7days" => new PeriodWindow("7d", now.AddDays(-7), now, TimeSpan.FromDays(7)),
+            "1m" or "30d" or "lastmonth" or "last30days" => new PeriodWindow("1m", now.AddMonths(-1), now, now - now.AddMonths(-1)),
+            "3m" or "90d" or "last3months" or "last90days" => new PeriodWindow("3m", now.AddMonths(-3), now, now - now.AddMonths(-3)),
+            "6m" or "last6months" => new PeriodWindow("6m", now.AddMonths(-6), now, now - now.AddMonths(-6)),
+            "1y" or "12m" or "lastyear" => new PeriodWindow("1y", now.AddYears(-1), now, now - now.AddYears(-1)),
+            _ => throw new InvalidOperationException("Invalid period filter.")
+        };
+    }
+
+    private static List<int> NormalizeSelectedTagIds(IEnumerable<int>? tagIds)
+    {
+        var normalized = (tagIds ?? Enumerable.Empty<int>())
+            .Distinct()
+            .ToList();
+
+        if (normalized.Any(tagId => tagId <= 0))
+        {
+            throw new InvalidOperationException("tagIds must contain positive integer values.");
+        }
+
+        if (normalized.Count > MaxSelectedTagIds)
+        {
+            throw new InvalidOperationException("Too many tagIds were selected.");
+        }
+
+        return normalized;
+    }
+
     private static string NormalizeEntityTypeFilter(string? value)
     {
         var normalized = NormalizeToken(value ?? "all");
@@ -1086,6 +2367,87 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
             "event" or "events" => AnalyticsEntityTypes.Event,
             _ => throw new InvalidOperationException("Invalid entity type filter.")
         };
+    }
+
+    private static string NormalizeEntityTypeForDetail(string? value)
+    {
+        var normalized = NormalizeToken(value ?? string.Empty);
+        return normalized switch
+        {
+            "destination" or "destinations" => AnalyticsEntityTypes.Destination,
+            "location" or "locations" => AnalyticsEntityTypes.Location,
+            "place" or "places" or "hotel" or "hotels" or "stay" or "stays" => AnalyticsEntityTypes.Place,
+            "event" or "events" => AnalyticsEntityTypes.Event,
+            _ => throw new InvalidOperationException("Invalid entity type.")
+        };
+    }
+
+    private static string? DetailCategoryLabel(RegionalAnalyticsEntityDetailDto detail) =>
+        detail.EntityType switch
+        {
+            AnalyticsEntityTypes.Destination => detail.TypeSpecific.DestinationType,
+            AnalyticsEntityTypes.Location => detail.TypeSpecific.LocationType,
+            AnalyticsEntityTypes.Place => detail.TypeSpecific.PlaceType,
+            AnalyticsEntityTypes.Event => detail.TypeSpecific.EventType,
+            _ => null
+        };
+
+    private static string? DetailRoute(string entityType, int entityId) =>
+        entityType switch
+        {
+            AnalyticsEntityTypes.Destination => "/destinations/detail/" + entityId,
+            AnalyticsEntityTypes.Location => "/locations/detail/" + entityId,
+            AnalyticsEntityTypes.Place => "/places/detail/" + entityId,
+            AnalyticsEntityTypes.Event => "/events/detail/" + entityId,
+            _ => null
+        };
+
+    private static void EnsureEntityInRegion(int entityRegionId, int requestedRegionId, string entityLabel)
+    {
+        if (entityRegionId != requestedRegionId)
+        {
+            throw new UnauthorizedAccessException(entityLabel + " is not in the active assigned region.");
+        }
+    }
+
+    private static List<string> NormalizeGallery(IEnumerable<string?> imageUrls) =>
+        imageUrls
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    private static string NormalizeStatusLabel(string? status) =>
+        string.IsNullOrWhiteSpace(status) ? "Published" : status.Trim();
+
+    private static string? NullIfWhiteSpace(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? BuildSummary(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return null;
+
+        var normalized = string.Join(" ", description.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return normalized.Length <= 160 ? normalized : normalized[..157] + "...";
+    }
+
+    private static List<RegionalPlaceOperatingHourDto> DeserializeOperatingHours(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return new List<RegionalPlaceOperatingHourDto>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<RegionalPlaceOperatingHourDto>>(
+                    json,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                ?? new List<RegionalPlaceOperatingHourDto>();
+        }
+        catch (JsonException)
+        {
+            return new List<RegionalPlaceOperatingHourDto>();
+        }
     }
 
     private static string NormalizeSort(string? value)
@@ -1135,6 +2497,25 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
 
         return query.Where(item => item.OccurredAt < toUtc);
     }
+
+    private static IQueryable<AnalyticsEvent> ApplyTagViewPeriod(
+        IQueryable<AnalyticsEvent> query,
+        DateTime? fromUtc,
+        DateTime toUtc)
+    {
+        return ApplyAnalyticsPeriod(query, fromUtc, toUtc)
+            .Where(item => item.EntityId.HasValue && ViewEventTypes.Contains(item.EventType));
+    }
+
+    private static int TagScopeOrder(string scope) =>
+        scope switch
+        {
+            AnalyticsEntityTypes.Destination => 0,
+            AnalyticsEntityTypes.Location => 1,
+            AnalyticsEntityTypes.Place => 2,
+            AnalyticsEntityTypes.Event => 3,
+            _ => 4
+        };
 
     private static IQueryable<T> ApplyCreatedPeriod<T>(
         IQueryable<T> query,
@@ -1238,6 +2619,37 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         public int Year { get; set; }
         public int Month { get; set; }
         public int Count { get; set; }
+    }
+
+    private sealed class TagScopeRow
+    {
+        public int TagId { get; set; }
+        public string TagName { get; set; } = string.Empty;
+        public string EntityScope { get; set; } = string.Empty;
+    }
+
+    private sealed class TagViewAggregateRow
+    {
+        public int TagId { get; set; }
+        public string TagName { get; set; } = string.Empty;
+        public string EntityScope { get; set; } = string.Empty;
+        public int Views { get; set; }
+    }
+
+    private sealed record ExternalPartnerDefinition(
+        int Id,
+        string PartnerKey,
+        string PartnerLabel,
+        string? Url,
+        string ProviderSlug,
+        string? Host,
+        int SortOrder);
+
+    private sealed record PartnerClickMetadata(string? Provider, string? PartnerKey, string? Host);
+
+    private sealed class ExternalPartnerClickEventRow
+    {
+        public string MetadataJson { get; set; } = "{}";
     }
 
     private sealed class AnalyticsMetricEventRow
