@@ -11,6 +11,7 @@ import {
   RegionalLocationParentDestinationDto,
   RegionalLocationTagDto,
   RegionalLocationTypeDto,
+  RegionalLocationUpdateRequest,
 } from '../models/location.model';
 
 export interface LocationListItem {
@@ -109,6 +110,15 @@ export class LocationsListService {
     return this.http.post<RegionalLocationDetailDto>(this.endpoint, payload);
   }
 
+  updateLocation(
+    regionId: number,
+    locationId: string | number,
+    payload: RegionalLocationUpdateRequest,
+  ): Observable<RegionalLocationDetailDto> {
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http.put<RegionalLocationDetailDto>(`${this.endpoint}/${locationId}`, payload, { params });
+  }
+
   getParentDestinations(
     regionId: number,
     search?: string | null,
@@ -176,7 +186,7 @@ export class LocationsListService {
       createdAt: dto.createdAt ?? null,
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
       detailRoute: dto.detailRoute ?? `/locations/detail/${dto.id}`,
-      editRoute: dto.editRoute ?? '/locations/new',
+      editRoute: dto.editRoute ?? `/locations/edit/${dto.id}`,
     };
 
     this.cache.set(id, item);

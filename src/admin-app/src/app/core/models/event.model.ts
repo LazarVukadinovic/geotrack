@@ -1,3 +1,5 @@
+import { RegionalEntityImageDto, RegionalEntityImageInput } from './regional-image.model';
+
 export type EventSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc' | 'eventDateAsc' | 'eventDateDesc';
 export type EventStatusFilter = 'all' | 'published' | 'draft' | 'archived';
 
@@ -43,6 +45,7 @@ export interface RegionalEventListItemDto {
   accessibility?: string | null;
   tags?: RegionalEventTagDto[];
   imageUrl?: string | null;
+  images?: RegionalEntityImageDto[];
   detailRoute?: string | null;
   editRoute?: string | null;
   latitude?: number | null;
@@ -92,6 +95,34 @@ export interface RegionalEventCreateRequest {
   attendanceLimit?: number | null;
   ageRestriction?: string | null;
   tagIds: number[];
+  images?: RegionalEntityImageInput[];
+}
+
+export interface RegionalEventUpdateRequest {
+  regionId?: number;
+  parentEntityType: 'Destination' | 'Location' | 'Place';
+  destinationId?: number | null;
+  locationId?: number | null;
+  placeId?: number | null;
+  eventTypeId: number;
+  name: string;
+  summary: string;
+  description?: string | null;
+  status?: 'Published' | 'Draft' | 'Archived';
+  venueName?: string | null;
+  isAllDay: boolean;
+  startsAt: string;
+  endsAt: string;
+  isRecurring: boolean;
+  isFree: boolean;
+  ticketPrice?: string | null;
+  externalTicketLink?: string | null;
+  organizerName?: string | null;
+  contactEmail?: string | null;
+  attendanceLimit?: number | null;
+  ageRestriction?: string | null;
+  tagIds?: number[];
+  images?: RegionalEntityImageInput[];
 }
 
 export interface RegionalEventTagDto {

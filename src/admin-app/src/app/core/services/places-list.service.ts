@@ -11,6 +11,7 @@ import {
   RegionalPlaceParentLocationDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
+  RegionalPlaceUpdateRequest,
 } from '../models/place.model';
 
 export interface PlaceListItem {
@@ -130,6 +131,15 @@ export class PlacesListService {
     return this.http.post<RegionalPlaceDetailDto>(this.endpoint, payload);
   }
 
+  updatePlace(
+    regionId: number,
+    placeId: string | number,
+    payload: RegionalPlaceUpdateRequest,
+  ): Observable<RegionalPlaceDetailDto> {
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http.put<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, payload, { params });
+  }
+
   getParentLocations(
     regionId: number,
     search?: string | null,
@@ -204,7 +214,7 @@ export class PlacesListService {
       tags: (dto.tags ?? []).map(tag => tag.name),
       imageUrl: dto.imageUrl ?? null,
       detailRoute: dto.detailRoute ?? `/places/detail/${dto.id}`,
-      editRoute: dto.editRoute ?? '/places/new',
+      editRoute: dto.editRoute ?? `/places/edit/${dto.id}`,
       address: dto.address ?? undefined,
     };
 

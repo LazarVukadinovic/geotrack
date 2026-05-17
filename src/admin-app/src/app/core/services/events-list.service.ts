@@ -13,6 +13,7 @@ import {
   RegionalEventParentPlaceDto,
   RegionalEventTagDto,
   RegionalEventTypeDto,
+  RegionalEventUpdateRequest,
 } from '../models/event.model';
 
 export interface EventListItem {
@@ -139,6 +140,15 @@ export class EventsListService {
     return this.http.post<RegionalEventDetailDto>(this.endpoint, payload);
   }
 
+  updateEvent(
+    regionId: number,
+    eventId: string | number,
+    payload: RegionalEventUpdateRequest,
+  ): Observable<RegionalEventDetailDto> {
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http.put<RegionalEventDetailDto>(`${this.endpoint}/${eventId}`, payload, { params });
+  }
+
   deleteEvent(regionId: number, eventId: string | number): Observable<void> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.delete<void>(`${this.endpoint}/${eventId}`, { params });
@@ -220,7 +230,7 @@ export class EventsListService {
       endsAt: dto.endsAt ?? null,
       imageUrl: dto.imageUrl ?? null,
       detailRoute: dto.detailRoute ?? `/events/detail/${dto.id}`,
-      editRoute: dto.editRoute ?? '/events/new',
+      editRoute: dto.editRoute ?? `/events/edit/${dto.id}`,
       dateRange: this.formatDateRange(dto.startsAt ?? null, dto.endsAt ?? null),
       startDate: this.formatDate(dto.startsAt ?? null),
       endDate: this.formatDate(dto.endsAt ?? null),

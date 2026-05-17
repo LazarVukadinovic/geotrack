@@ -1,3 +1,5 @@
+import { RegionalEntityImageDto, RegionalEntityImageInput } from './regional-image.model';
+
 export type PlaceSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type PlaceStatusFilter = 'all' | 'published' | 'draft' | 'archived';
 
@@ -26,6 +28,7 @@ export interface RegionalPlaceListItemDto {
   createdAt?: string | null;
   publishedAt?: string | null;
   imageUrl?: string | null;
+  images?: RegionalEntityImageDto[];
   detailRoute?: string | null;
   editRoute?: string | null;
 }
@@ -115,4 +118,30 @@ export interface RegionalPlaceCreateRequest {
   operatingHoursEnabled: boolean;
   operatingHours: RegionalPlaceOperatingHourDto[];
   tagIds: number[];
+  images?: RegionalEntityImageInput[];
+}
+
+export interface RegionalPlaceUpdateRequest {
+  locationId: number;
+  placeTypeId: number;
+  stayTypeId?: number | null;
+  name: string;
+  summary: string;
+  description?: string | null;
+  status?: 'Published' | 'Draft' | 'Archived';
+  latitude: number;
+  longitude: number;
+  streetAddress?: string | null;
+  bestTimeToVisit?: string | null;
+  visitorTips?: string | null;
+  accessNotes?: string | null;
+  accessibilityNotes?: string | null;
+  website?: string | null;
+  contactPhone?: string | null;
+  admissionPriceRange?: string | null;
+  bookingExternalLink?: string | null;
+  operatingHoursEnabled: boolean;
+  operatingHours: RegionalPlaceOperatingHourDto[];
+  tagIds?: number[];
+  images?: RegionalEntityImageInput[];
 }

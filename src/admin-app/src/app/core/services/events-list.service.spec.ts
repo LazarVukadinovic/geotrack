@@ -158,7 +158,7 @@ describe('EventsListService', () => {
       lastUpdatedAt: '2026-05-12T10:00:00Z',
       imageUrl: '/media/seed/events/backend.webp',
       detailRoute: '/events/detail/15',
-      editRoute: '/events/new',
+      editRoute: '/events/edit/15',
       latitude: 42.1,
       longitude: 18.1,
     };

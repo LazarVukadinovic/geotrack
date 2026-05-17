@@ -1,3 +1,5 @@
+import { RegionalEntityImageDto, RegionalEntityImageInput } from './regional-image.model';
+
 export type DestinationSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type DestinationStatusFilter = 'all' | 'published' | 'draft' | 'archived';
 
@@ -20,6 +22,7 @@ export interface RegionalDestinationListItemDto {
   createdAt?: string | null;
   publishedAt?: string | null;
   imageUrl?: string | null;
+  images?: RegionalEntityImageDto[];
   detailRoute?: string | null;
   editRoute?: string | null;
 }
@@ -71,5 +74,20 @@ export interface RegionalDestinationCreateRequest {
   longitude?: number | null;
   boundaryNote?: string | null;
   boundary?: RegionalDestinationBoundaryDto | null;
+  images?: RegionalEntityImageInput[];
   tagIds: number[];
+}
+
+export interface RegionalDestinationUpdateRequest {
+  name: string;
+  summary?: string | null;
+  description?: string | null;
+  status?: 'Published' | 'Draft' | 'Archived';
+  destinationTypeId?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  boundaryNote?: string | null;
+  boundary?: RegionalDestinationBoundaryDto | null;
+  images?: RegionalEntityImageInput[];
+  tagIds?: number[];
 }

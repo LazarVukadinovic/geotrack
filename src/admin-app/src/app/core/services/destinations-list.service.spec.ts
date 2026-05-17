@@ -88,7 +88,7 @@ describe('DestinationsListService', () => {
       lastUpdatedAt: '2026-05-12T10:00:00Z',
       imageUrl: '/media/seed/destinations/backend.webp',
       detailRoute: '/destinations/detail/15',
-      editRoute: '/destinations/new',
+      editRoute: '/destinations/edit/15',
     };
   }
 });
