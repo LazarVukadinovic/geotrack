@@ -7,7 +7,11 @@ export const authGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isLoggedIn()) return true;
+  if (auth.isLoggedIn() && auth.hasValidAccessToken()) return true;
+  if (auth.isLoggedIn()) {
+    auth.clearSession();
+    return loginTree(router, state, true);
+  }
 
   return auth.restoreSession().pipe(
     map(user => user ? true : loginTree(router, state)),
@@ -19,7 +23,11 @@ export const nationalManagerGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isNationalManager()) return true;
+  if (auth.isNationalManager() && auth.hasValidAccessToken()) return true;
+  if (auth.getUser() && !auth.hasValidAccessToken()) {
+    auth.clearSession();
+    return loginTree(router, state, true);
+  }
 
   return auth.restoreSession().pipe(
     map(user => {
@@ -35,7 +43,11 @@ export const regionalManagerGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isRegionalManager()) return true;
+  if (auth.isRegionalManager() && auth.hasValidAccessToken()) return true;
+  if (auth.getUser() && !auth.hasValidAccessToken()) {
+    auth.clearSession();
+    return loginTree(router, state, true);
+  }
 
   return auth.restoreSession().pipe(
     map(user => {
@@ -45,11 +57,11 @@ export const regionalManagerGuard: CanActivateFn = (_route, state) => {
   );
 };
 
-function loginTree(router: Router, state: RouterStateSnapshot) {
+function loginTree(router: Router, state: RouterStateSnapshot, sessionExpired = false) {
   const returnUrl = safeReturnUrl(state.url);
   return returnUrl
-    ? router.createUrlTree(['/login'], { queryParams: { returnUrl } })
-    : router.parseUrl('/login');
+    ? router.createUrlTree(['/login'], { queryParams: { returnUrl, ...(sessionExpired ? { sessionExpired: '1' } : {}) } })
+    : router.createUrlTree(['/login'], { queryParams: sessionExpired ? { sessionExpired: '1' } : undefined });
 }
 
 function safeReturnUrl(value: string): string | null {

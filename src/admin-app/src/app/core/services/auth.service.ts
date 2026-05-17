@@ -28,6 +28,7 @@ export class AuthService {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
 
   private accessToken: string | null = null;
+  private accessTokenExpiresAtMs: number | null = null;
   private refreshRequest$: Observable<User | null> | null = null;
   private readonly _currentUser = signal<User | null>(null);
 
@@ -46,6 +47,12 @@ export class AuthService {
     return this.accessToken;
   }
 
+  hasValidAccessToken(): boolean {
+    if (!this.accessToken) return false;
+    if (!this.accessTokenExpiresAtMs) return true;
+    return Date.now() < this.accessTokenExpiresAtMs;
+  }
+
   get fullName(): string {
     const user = this._currentUser();
     return user ? `${user.firstName} ${user.lastName}`.trim() : '';
@@ -59,7 +66,7 @@ export class AuthService {
         { withCredentials: true },
       )
       .pipe(
-        tap(response => this.setToken(response.accessToken)),
+        tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
         map(response => this.mapAdminUser(response.user)),
         tap(user => {
           this._currentUser.set(user);
@@ -88,7 +95,7 @@ export class AuthService {
     this.refreshRequest$ = this.httpClient
       .post<LoginResponse>('/api/admin/auth/refresh', {}, { withCredentials: true })
       .pipe(
-        tap(response => this.setToken(response.accessToken)),
+        tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
         map(response => this.mapAdminUser(response.user)),
         tap(user => this._currentUser.set(user)),
         map(user => user as User | null),
@@ -188,8 +195,22 @@ export class AuthService {
     throw new Error('This account is not assigned to an admin role.');
   }
 
-  private setToken(token: string): void {
+  private setToken(token: string, expiresAt?: string | null, expiresIn?: number | null): void {
     this.accessToken = token;
+    this.accessTokenExpiresAtMs = this.resolveExpiryMs(expiresAt, expiresIn);
+  }
+
+  private resolveExpiryMs(expiresAt?: string | null, expiresIn?: number | null): number | null {
+    const parsed = expiresAt ? Date.parse(expiresAt) : NaN;
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+
+    if (typeof expiresIn === 'number' && Number.isFinite(expiresIn) && expiresIn > 0) {
+      return Date.now() + expiresIn * 1000;
+    }
+
+    return null;
   }
 
   private normalizeRole(role: string): string {
@@ -230,6 +251,7 @@ export class AuthService {
 
   private clearLocalSession(): void {
     this.accessToken = null;
+    this.accessTokenExpiresAtMs = null;
     this._currentUser.set(null);
     try {
       sessionStorage.removeItem(AuthService.sessionHintKey);

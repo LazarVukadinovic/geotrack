@@ -79,7 +79,19 @@ export const routes: Routes = [
           import('./features/add-pages/pages/add-destination/add-destination.component').then(m => m.AddDestinationComponent),
       },
       {
+        path: 'destinations/edit/:id',
+        canActivate: [regionalManagerGuard],
+        loadComponent: () =>
+          import('./features/add-pages/pages/add-destination/add-destination.component').then(m => m.AddDestinationComponent),
+      },
+      {
         path: 'locations/new',
+        canActivate: [regionalManagerGuard],
+        loadComponent: () =>
+          import('./features/add-pages/pages/add-location/add-location.component').then(m => m.NewLocationComponent),
+      },
+      {
+        path: 'locations/edit/:id',
         canActivate: [regionalManagerGuard],
         loadComponent: () =>
           import('./features/add-pages/pages/add-location/add-location.component').then(m => m.NewLocationComponent),
@@ -98,6 +110,12 @@ export const routes: Routes = [
       },
       {
         path: 'events/new',
+        canActivate: [regionalManagerGuard],
+        loadComponent: () =>
+          import('./features/add-pages/pages/add-event/add-event.component').then(m => m.NewEventComponent),
+      },
+      {
+        path: 'events/edit/:id',
         canActivate: [regionalManagerGuard],
         loadComponent: () =>
           import('./features/add-pages/pages/add-event/add-event.component').then(m => m.NewEventComponent),

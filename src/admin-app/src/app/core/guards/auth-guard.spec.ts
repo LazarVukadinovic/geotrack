@@ -15,13 +15,25 @@ describe('authGuard', () => {
 
   const authService = {
     isLoggedIn: vi.fn(),
+    hasValidAccessToken: vi.fn(),
+    getUser: vi.fn(),
+    clearSession: vi.fn(),
     isRegionalManager: vi.fn(),
+    isNationalManager: vi.fn(),
     restoreSession: vi.fn(),
     getHomeRoute: vi.fn(),
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    authService.isLoggedIn.mockReturnValue(false);
+    authService.hasValidAccessToken.mockReturnValue(false);
+    authService.getUser.mockReturnValue(null);
+    authService.clearSession.mockReturnValue(undefined);
+    authService.isRegionalManager.mockReturnValue(false);
+    authService.isNationalManager.mockReturnValue(false);
+    authService.restoreSession.mockReturnValue(of(null));
+    authService.getHomeRoute.mockReturnValue('/login');
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
@@ -46,10 +58,20 @@ describe('authGuard', () => {
     expect(router.serializeUrl(result as UrlTree)).toBe('/login?returnUrl=%2Fdashboard');
   });
 
+  it('clears expired local auth and redirects to login with session-expired state', () => {
+    authService.isLoggedIn.mockReturnValue(true);
+    authService.hasValidAccessToken.mockReturnValue(false);
+
+    const router = TestBed.inject(Router);
+    const result = executeGuard({} as never, { url: '/destinations' } as never) as UrlTree;
+
+    expect(authService.clearSession).toHaveBeenCalledTimes(1);
+    expect(router.serializeUrl(result)).toBe('/login?returnUrl=%2Fdestinations&sessionExpired=1');
+  });
+
   it('allows authenticated regional managers', async () => {
-    authService.isRegionalManager.mockReturnValue(false);
-    authService.restoreSession.mockReturnValue(of({ role: 'Regional Manager' }));
     authService.isRegionalManager.mockReturnValue(true);
+    authService.hasValidAccessToken.mockReturnValue(true);
 
     const result = executeRegionalGuard({} as never, { url: '/dashboard' } as never);
 
