@@ -236,6 +236,69 @@
       </div>
     </div>
 
+    <!-- Legend toggle button -->
+    <button
+      (click)="showLegend = !showLegend"
+      [attr.aria-expanded]="showLegend"
+      aria-label="Map legend"
+      class="map-page__legend-button absolute right-3 w-10 h-10 bg-white rounded-full shadow-md border border-slate-100 flex items-center justify-center text-slate-500 active:bg-slate-50 transition-colors"
+      [class.text-[#1a2b4a]]="showLegend"
+      [class.border-[#1a2b4a]]="showLegend">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/>
+      </svg>
+    </button>
+
+    <!-- Legend modal -->
+    @if (showLegend) {
+      <div class="map-page__legend-overlay absolute inset-0 flex items-center justify-center"
+        (click)="showLegend = false">
+        <div class="map-page__legend-card bg-white rounded-2xl shadow-xl border border-slate-100 p-5"
+          (click)="$event.stopPropagation()">
+          <div class="flex items-center justify-between mb-4">
+            <p class="text-xs font-extrabold uppercase tracking-wide text-slate-400">Legend</p>
+            <button (click)="showLegend = false" aria-label="Close legend"
+              class="w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <ul class="flex flex-col gap-3">
+            <li class="flex items-center gap-3">
+              <span class="map-page__legend-dot" style="background: #2f855a;"></span>
+              <div>
+                <p class="text-sm font-semibold text-slate-700">Place</p>
+                <p class="text-xs text-slate-400">Restaurants, attractions, points of interest</p>
+              </div>
+            </li>
+            <li class="flex items-center gap-3">
+              <span class="map-page__legend-dot" style="background: #e8570a;"></span>
+              <div>
+                <p class="text-sm font-semibold text-slate-700">Stay</p>
+                <p class="text-xs text-slate-400">Hotels, hostels, apartments</p>
+              </div>
+            </li>
+            <li class="flex items-center gap-3">
+              <span class="map-page__legend-dot" style="background: #1a2b4a;"></span>
+              <div>
+                <p class="text-sm font-semibold text-slate-700">Event</p>
+                <p class="text-xs text-slate-400">Concerts, festivals, exhibitions</p>
+              </div>
+            </li>
+            <li class="flex items-center gap-3">
+              <span class="map-page__legend-dot map-page__legend-dot--lg" style="background: #1a2b4a;"></span>
+              <div>
+                <p class="text-sm font-semibold text-slate-700">Destination</p>
+                <p class="text-xs text-slate-400">City or region to explore</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    }
+
     <button
       (click)="locateMe()"
       class="map-page__locate-button absolute right-3 w-11 h-11 bg-[#e8570a] rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-all">

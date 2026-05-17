@@ -131,6 +131,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   loadErrorMessage = '';
   routeErrorMessage = '';
   showNoDataModal = false;
+  showLegend = false;
 
   categories = [
     { id: 'all', label: 'All' },
