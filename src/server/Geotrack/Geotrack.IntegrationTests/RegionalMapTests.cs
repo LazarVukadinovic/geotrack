@@ -36,13 +36,16 @@ public sealed class RegionalMapTests
         Assert.Equal(3, map.Markers.Count);
         Assert.All(map.Markers, marker => Assert.Equal(fixture.AssignedRegionId, marker.RegionId));
 
-        Assert.Contains(map.Markers, marker =>
+        var destinationMarker = Assert.Single(map.Markers, marker =>
             marker.EntityType == "Destination" &&
             marker.Id == fixture.AssignedDestinationId);
-        Assert.Contains(map.Markers, marker =>
+        Assert.Equal("/media/test/map-destination.svg", destinationMarker.ImageUrl);
+
+        var locationMarker = Assert.Single(map.Markers, marker =>
             marker.EntityType == "Location" &&
             marker.Id == fixture.AssignedLocationId &&
             marker.DestinationId == fixture.AssignedDestinationId);
+        Assert.Equal("/media/test/map-location.svg", locationMarker.ImageUrl);
 
         var placeMarker = Assert.Single(map.Markers, marker => marker.EntityType == "Place");
         Assert.Equal(fixture.AssignedPlaceId, placeMarker.Id);
@@ -272,6 +275,24 @@ public sealed class RegionalMapTests
         await db.SaveChangesAsync();
 
         db.EntityImages.AddRange(
+            new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = assignedDestination.Id,
+                Url = "/media/test/map-destination.svg",
+                IsMain = true,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new EntityImage
+            {
+                TargetType = EntityImageTargetType.Location,
+                LocationId = assignedLocation.Id,
+                Url = "/media/test/map-location.svg",
+                IsMain = true,
+                SortOrder = 0,
+                CreatedAt = now
+            },
             new EntityImage
             {
                 TargetType = EntityImageTargetType.Place,
