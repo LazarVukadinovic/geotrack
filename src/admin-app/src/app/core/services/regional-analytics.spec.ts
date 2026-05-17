@@ -2,7 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { RegionalAnalyticsService } from './regional-analytics';
-import { RegionalAnalyticsOverview, RegionalMonthlyVisits } from '../models/regional-analytics.model';
+import {
+  RegionalAnalyticsOverview,
+  RegionalMonthlyVisits,
+  RegionalTagViewsAnalyticsResponse,
+} from '../models/regional-analytics.model';
 
 describe('RegionalAnalyticsService', () => {
   let service: RegionalAnalyticsService;
@@ -108,6 +112,56 @@ describe('RegionalAnalyticsService', () => {
     request.flush(monthlyVisitsResponse());
   });
 
+  it('loads tag views with local period and repeated selected tag ids', () => {
+    service
+      .getTagViews({
+        regionId: 12,
+        period: '1m',
+        tagIds: [7, 9],
+        take: 15,
+        entityType: 'place',
+      })
+      .subscribe((tagViews) => {
+        expect(tagViews.availableTags.length).toBe(2);
+        expect(tagViews.items[0].tagName).toBe('Coastal Walks');
+      });
+
+    const request = http.expectOne((req) =>
+      req.url === '/api/admin/regional/analytics/tag-views' &&
+      req.params.get('regionId') === '12' &&
+      req.params.get('period') === '1m' &&
+      req.params.get('take') === '15' &&
+      req.params.get('entityType') === 'place' &&
+      req.params.getAll('tagIds')?.join(',') === '7,9',
+    );
+
+    expect(request.request.method).toBe('GET');
+    request.flush(tagViewsResponse());
+  });
+
+  it('loads entity detail with entity type, id, region, and period', () => {
+    service
+      .getEntityDetail({
+        regionId: 12,
+        entityType: 'place',
+        entityId: 8,
+        period: '30d',
+      })
+      .subscribe((detail) => {
+        expect(detail.entityId).toBe(8);
+        expect(detail.analytics.views).toBe(42);
+      });
+
+    const request = http.expectOne((req) =>
+      req.url === '/api/admin/regional/analytics/entities/place/8/details' &&
+      req.params.get('regionId') === '12' &&
+      req.params.get('period') === '30d',
+    );
+
+    expect(request.request.method).toBe('GET');
+    request.flush(entityDetailResponse());
+  });
+
   function overviewResponse(): RegionalAnalyticsOverview {
     return {
       activeRegion: {
@@ -181,6 +235,19 @@ describe('RegionalAnalyticsService', () => {
         highestPerformingEvent: null,
         messages: [],
       },
+      destinationRanking: [
+        {
+          destinationId: 2,
+          destinationName: 'Real Destination',
+          regionId: 12,
+          regionDisplayName: 'Assigned Region',
+          visits: 42,
+          rank: 1,
+          percentageOfTopValue: 100,
+          imageUrl: null,
+          detailRoute: '/destinations/detail/2',
+        },
+      ],
       visitorBehavior: {
         loggedInVisitors: 4,
         anonymousVisitors: 3,
@@ -257,6 +324,80 @@ describe('RegionalAnalyticsService', () => {
       visitMetric: 'entity_view',
       visitEventTypes: ['detail_view', 'page_view'],
       timeZone: 'UTC',
+    };
+  }
+
+  function tagViewsResponse(): RegionalTagViewsAnalyticsResponse {
+    return {
+      period: '1m',
+      regionId: 12,
+      regionDisplayName: 'Assigned Region',
+      totalViews: 12,
+      availableTags: [
+        { tagId: 7, name: 'Coastal Walks', entityScopes: ['place'] },
+        { tagId: 9, name: 'Museums', entityScopes: ['place'] },
+      ],
+      items: [
+        { tagId: 7, tagName: 'Coastal Walks', views: 8, percentageOfTotal: 66.7, entityScopes: ['place'] },
+        { tagId: 9, tagName: 'Museums', views: 4, percentageOfTotal: 33.3, entityScopes: ['place'] },
+      ],
+    };
+  }
+
+  function entityDetailResponse() {
+    return {
+      entityType: 'place',
+      entityId: 8,
+      name: 'Real Place',
+      title: 'Real Place',
+      subtitle: 'A real place',
+      status: 'Published',
+      regionId: 12,
+      regionDisplayName: 'Assigned Region',
+      destinationId: 2,
+      destinationName: 'Real Destination',
+      locationId: 4,
+      locationName: 'Real Location',
+      placeId: 8,
+      placeName: 'Real Place',
+      description: 'Real backend detail.',
+      summary: 'A real place',
+      imageUrl: '/images/place.webp',
+      galleryImages: ['/images/place.webp'],
+      tags: [{ id: 7, name: 'Coastal Walks', slug: 'coastal-walks' }],
+      address: 'Harbor 1',
+      latitude: 42.1,
+      longitude: 18.1,
+      createdAt: '2026-05-01T00:00:00Z',
+      updatedAt: '2026-05-02T00:00:00Z',
+      publishedAt: '2026-05-03T00:00:00Z',
+      analytics: {
+        views: 42,
+        uniqueVisitors: 7,
+        saves: 3,
+        externalClicks: 2,
+        reviews: 4,
+        averageRating: 4.5,
+        ratingCount: 4,
+        trendChangePercent: 10,
+        lastViewedAt: '2026-05-15T00:00:00Z',
+      },
+      typeSpecific: {
+        placeType: 'Cafe',
+        stayType: null,
+        parentLocation: 'Real Location',
+        parentDestination: 'Real Destination',
+        website: 'https://example.com',
+        bookingExternalLink: null,
+        contactPhone: '+111',
+        contactEmail: 'hello@example.com',
+        priceRange: '$$',
+        openingHours: '09:00 - 17:00',
+        operatingHours: [],
+        amenities: ['WiFi'],
+        bookingPartners: [],
+        externalPartnerClicks: [],
+      },
     };
   }
 });

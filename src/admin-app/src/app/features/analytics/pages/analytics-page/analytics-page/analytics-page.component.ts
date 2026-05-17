@@ -26,11 +26,21 @@ import {
   EntityRow,
   EntitySortField,
   MetricCard,
+  RegionalAnalyticsEntityDetail,
+  RegionalAnalyticsEntityDetailMetrics,
+  RegionalAnalyticsExternalPartnerClick,
+  RegionalAnalyticsEntityTypeSpecific,
   RegionalAnalyticsEngagementFunnel,
   RegionalAnalyticsEntityType,
   RegionalAnalyticsPagination,
+  RegionalPlaceOperatingHour,
+  RegionalDestinationRankingItem,
   RegionalMonthlyVisits,
   RegionalMonthlyVisitYearsBack,
+  RegionalTagViewsAnalyticsResponse,
+  RegionalTagViewsAvailableTag,
+  RegionalTagViewsItem,
+  RegionalTagViewsPeriod,
   RegionalVisitorBehaviorAnalytics,
 } from '../../../../../core/models/regional-analytics.model';
 
@@ -54,6 +64,53 @@ interface MonthlyVisitChartBar {
   value: number;
   monthLabel: string;
   yearLabel: string;
+}
+
+interface TagViewsChart {
+  width: number;
+  bars: TagViewsChartBar[];
+  yLabels: { y: number; text: string; value: number }[];
+  xLabels: { x: number; text: string; fullText: string }[];
+  isEmpty: boolean;
+  totalViews: number;
+}
+
+interface TagViewsChartBar {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  value: number;
+  tagName: string;
+  percentageOfTotal: number;
+}
+
+interface ExternalPartnerClickChart {
+  arcs: ExternalPartnerClickArc[];
+  items: ExternalPartnerClickLegendItem[];
+  totalClicks: number;
+  hasClickData: boolean;
+}
+
+interface ExternalPartnerClickArc {
+  partnerLabel: string;
+  clickCount: number;
+  sharePercent: number;
+  color: string;
+  dasharray: string;
+  dashoffset: string;
+}
+
+interface ExternalPartnerClickLegendItem extends RegionalAnalyticsExternalPartnerClick {
+  color: string;
+}
+
+interface DetailInfoItem {
+  label: string;
+  value: string;
+  href?: string;
+  external?: boolean;
 }
 
 @Component({
@@ -80,16 +137,21 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   regionLoading = false;
   analyticsLoading = false;
   monthlyVisitsLoading = false;
+  tagViewsLoading = false;
   exporting = false;
   errorMessage: string | null = null;
   monthlyVisitsErrorMessage: string | null = null;
+  tagViewsErrorMessage: string | null = null;
   authRequired = false;
 
   private assignedRegionsSubscription: Subscription | null = null;
   private sidebarSummarySubscription: Subscription | null = null;
   private analyticsSubscription: Subscription | null = null;
   private monthlyVisitsSubscription: Subscription | null = null;
+  private tagViewsSubscription: Subscription | null = null;
   private exportSubscription: Subscription | null = null;
+  private entityDetailSubscription: Subscription | null = null;
+  private previousBodyOverflow: string | null = null;
   private searchHandle: ReturnType<typeof setTimeout> | null = null;
   private tableTake = AnalyticsPageComponent.initialTake;
 
@@ -103,6 +165,16 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     { value: 2, label: '2 years' },
     { value: 3, label: '3 years' },
   ];
+  selectedTagViewsPeriod: RegionalTagViewsPeriod = '1m';
+  readonly tagViewPeriodOptions: { value: RegionalTagViewsPeriod; label: string }[] = [
+    { value: '24h', label: '24h' },
+    { value: '7d', label: '7 days' },
+    { value: '1m', label: '1 month' },
+    { value: '3m', label: '3 months' },
+    { value: '6m', label: '6 months' },
+    { value: '1y', label: '1 year' },
+  ];
+  tagSelectorOpen = false;
 
   showCustomDateModal = false;
   customDateFrom = '';
@@ -208,8 +280,34 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     externalClicks: 0,
     reviews: 0,
   });
+  private readonly destinationRankingSig = signal<RegionalDestinationRankingItem[]>([]);
   private readonly monthlyVisitsSig = signal<RegionalMonthlyVisits>(this.emptyMonthlyVisits(1));
   readonly monthlyVisitChart = computed(() => this.buildMonthlyVisitChart(this.monthlyVisitsSig()));
+  private readonly tagViewsSig = signal<RegionalTagViewsAnalyticsResponse>(this.emptyTagViews());
+  private readonly selectedTagIdsSig = signal<number[]>([]);
+  readonly tagSearchSig = signal('');
+  readonly tagViewsChart = computed(() => this.buildTagViewsChart(this.tagViewsSig()));
+  readonly availableTagOptions = computed(() => this.tagViewsSig().availableTags ?? []);
+  readonly visibleTagOptions = computed(() => {
+    const search = this.tagSearchSig().trim().toLowerCase();
+    const tags = this.availableTagOptions();
+    if (!search) {
+      return tags;
+    }
+
+    return tags.filter(tag =>
+      tag.name.toLowerCase().includes(search) ||
+      tag.entityScopes.some(scope => this.entityScopeLabel(scope).toLowerCase().includes(search)),
+    );
+  });
+  readonly selectedTagControlLabel = computed(() => {
+    const selectedCount = this.selectedTagIdsSig().length;
+    if (selectedCount === 0) {
+      return 'Top tags';
+    }
+
+    return selectedCount === 1 ? '1 tag selected' : `${selectedCount} tags selected`;
+  });
   private readonly paginationSig = signal<RegionalAnalyticsPagination>({
     totalCount: 0,
     skip: 0,
@@ -221,6 +319,18 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   readonly actionableInsightsSig = signal<ActionableInsight[]>([]);
   readonly insightsSig = signal<AutoInsight[]>([]);
   readonly visibleCount = signal(AnalyticsPageComponent.initialTake);
+  readonly selectedEntityRowSig = signal<EntityRow | null>(null);
+  readonly selectedEntityDetailSig = signal<RegionalAnalyticsEntityDetail | null>(null);
+  entityDetailLoading = false;
+  entityDetailErrorMessage: string | null = null;
+  readonly selectedExternalPartnerClickChart = computed(() => {
+    const detail = this.selectedEntityDetailSig();
+    if (!detail || !this.isStayDetail(detail)) {
+      return null;
+    }
+
+    return this.buildExternalPartnerClickChart(detail.typeSpecific.externalPartnerClicks ?? []);
+  });
 
   readonly filteredMetrics = computed(() => this.metricsByFilterSig()[this.activeFilter()] ?? []);
   readonly sortedRows = computed(() => this.entityRowsSig());
@@ -228,8 +338,10 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   readonly totalRows = computed(() => this.paginationSig().totalCount);
   readonly remainingRows = computed(() => Math.max(0, this.paginationSig().totalCount - this.sortedRows().length));
   readonly topPerformers = computed(() => this.topPerformersSig());
+  readonly destinationRanking = computed(() => this.destinationRankingSig());
 
   private readonly CIRCUMFERENCE = 2 * Math.PI * 64;
+  private readonly externalPartnerClickColors = ['#185FA5', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6'];
 
   readonly donutArcs = computed(() => {
     const slices = this.distributionSig()[this.activeFilter()] ?? [];
@@ -344,7 +456,10 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.sidebarSummarySubscription?.unsubscribe();
     this.analyticsSubscription?.unsubscribe();
     this.monthlyVisitsSubscription?.unsubscribe();
+    this.tagViewsSubscription?.unsubscribe();
     this.exportSubscription?.unsubscribe();
+    this.entityDetailSubscription?.unsubscribe();
+    this.unlockBodyScroll();
 
     if (this.searchHandle) {
       clearTimeout(this.searchHandle);
@@ -390,6 +505,23 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     if (this.sortOpen) {
       this.sortOpen = false;
     }
+    if (this.tagSelectorOpen) {
+      this.tagSelectorOpen = false;
+    }
+  }
+
+  @HostListener('document:keydown.escape', ['$event'])
+  onEscapeKey(event: Event): void {
+    if (this.selectedEntityRowSig()) {
+      event.preventDefault();
+      this.closeEntityDetails();
+      return;
+    }
+
+    if (this.showCustomDateModal) {
+      event.preventDefault();
+      this.cancelCustomRange();
+    }
   }
 
   loadAssignedRegions(): void {
@@ -415,6 +547,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
             this.activeRegionId = null;
             this.pendingRequestsCount = null;
             this.clearPersistedRegion();
+            this.resetSelectedTagViews();
             this.clearAnalyticsData();
             return;
           }
@@ -428,8 +561,10 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
           this.loadSidebarSummary(selectedRegion.id);
           this.loadAnalytics();
           this.loadMonthlyVisits();
+          this.loadTagViews();
         },
         error: error => {
+          this.resetSelectedTagViews();
           this.clearAnalyticsData();
           this.handleLoadError(error, 'Unable to load assigned regions.');
         },
@@ -442,11 +577,14 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     }
 
     this.setActiveRegion(regionId, true);
+    this.closeEntityDetails();
+    this.resetSelectedTagViews();
     this.tableTake = AnalyticsPageComponent.initialTake;
     this.visibleCount.set(this.tableTake);
     this.loadSidebarSummary(regionId);
     this.loadAnalytics();
     this.loadMonthlyVisits();
+    this.loadTagViews();
   }
 
   setFilter(filter: CategoryFilter): void {
@@ -455,10 +593,12 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     }
 
     this.activeFilter.set(filter);
+    this.closeEntityDetails();
     this.tableTake = AnalyticsPageComponent.initialTake;
     this.visibleCount.set(this.tableTake);
     this.loadAnalytics();
     this.loadMonthlyVisits();
+    this.loadTagViews();
   }
 
   onSearchChange(value: string): void {
@@ -506,6 +646,42 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.loadMonthlyVisits();
   }
 
+  onTagViewsPeriodChange(value: RegionalTagViewsPeriod | string): void {
+    if (!this.isTagViewsPeriod(value) || value === this.selectedTagViewsPeriod) {
+      return;
+    }
+
+    this.selectedTagViewsPeriod = value;
+    this.loadTagViews();
+  }
+
+  toggleTagSelector(event: Event): void {
+    event.stopPropagation();
+    this.tagSelectorOpen = !this.tagSelectorOpen;
+  }
+
+  onTagSearchChange(value: string): void {
+    this.tagSearchSig.set(value);
+  }
+
+  onTagCheckboxChange(tagId: number, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.setTagSelection(tagId, input.checked);
+  }
+
+  isTagSelected(tagId: number): boolean {
+    return this.selectedTagIdsSig().includes(tagId);
+  }
+
+  clearSelectedTags(): void {
+    if (this.selectedTagIdsSig().length === 0) {
+      return;
+    }
+
+    this.selectedTagIdsSig.set([]);
+    this.loadTagViews();
+  }
+
   applyCustomRange(): void {
     if (!this.canApply) return;
     this.customDateFrom = `${this.fromDay}.${this.fromMonth}.${this.fromYear}`;
@@ -545,6 +721,59 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.loadAnalytics();
   }
 
+  openEntityDetails(row: EntityRow, event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    if (!this.activeRegionId) {
+      return;
+    }
+
+    this.selectedEntityRowSig.set(row);
+    this.selectedEntityDetailSig.set(null);
+    this.entityDetailErrorMessage = null;
+    this.entityDetailLoading = true;
+    this.lockBodyScroll();
+    this.notifyStateChanged();
+
+    this.entityDetailSubscription?.unsubscribe();
+    this.entityDetailSubscription = this.analyticsService
+      .getEntityDetail({
+        regionId: this.activeRegionId,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        period: this.periodKey(),
+      })
+      .pipe(
+        finalize(() => {
+          this.entityDetailLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: detail => {
+          this.selectedEntityDetailSig.set(this.normalizeEntityDetail(detail));
+          this.notifyStateChanged();
+        },
+        error: error => {
+          this.selectedEntityDetailSig.set(null);
+          this.entityDetailErrorMessage = this.entityDetailError(error);
+          this.notifyStateChanged();
+        },
+      });
+  }
+
+  closeEntityDetails(): void {
+    this.entityDetailSubscription?.unsubscribe();
+    this.entityDetailSubscription = null;
+    this.selectedEntityRowSig.set(null);
+    this.selectedEntityDetailSig.set(null);
+    this.entityDetailErrorMessage = null;
+    this.entityDetailLoading = false;
+    this.unlockBodyScroll();
+    this.notifyStateChanged();
+  }
+
   exportData(): void {
     if (!this.activeRegionId || this.exporting) return;
 
@@ -572,6 +801,34 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     return top?.views ? Math.round((entity.views / top.views) * 100) : 0;
   }
 
+  destinationRankingBarPct(item: RegionalDestinationRankingItem): number {
+    const topVisits = this.destinationRanking().reduce((max, row) => Math.max(max, row.visits), 0);
+    return topVisits > 0 ? Math.round((item.visits / topVisits) * 100) : 0;
+  }
+
+  entityScopeLabel(scope: string): string {
+    switch (scope) {
+      case 'destination':
+        return 'Destination';
+      case 'location':
+        return 'Location';
+      case 'event':
+        return 'Event';
+      case 'place':
+        return 'Place';
+      default:
+        return scope;
+    }
+  }
+
+  tagScopeSummary(tag: RegionalTagViewsAvailableTag | RegionalTagViewsItem): string {
+    return (tag.entityScopes ?? []).map(scope => this.entityScopeLabel(scope)).join(', ');
+  }
+
+  formatPercent(value: number): string {
+    return `${Math.max(0, value).toFixed(value % 1 === 0 ? 0 : 1)}%`;
+  }
+
   formatNum(value: number): string {
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
     if (value >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}K`;
@@ -584,6 +841,187 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     const remainder = seconds % 60;
     if (minutes <= 0) return `${remainder}s`;
     return `${minutes}m ${remainder.toString().padStart(2, '0')}s`;
+  }
+
+  formatDateTime(value: string | null | undefined): string {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  formatDate(value: string | null | undefined): string {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(date);
+  }
+
+  formatCoordinates(detail: RegionalAnalyticsEntityDetail): string | null {
+    if (detail.latitude === null || detail.latitude === undefined || detail.longitude === null || detail.longitude === undefined) {
+      return null;
+    }
+
+    return `${detail.latitude.toFixed(5)}, ${detail.longitude.toFixed(5)}`;
+  }
+
+  entityDetailImageBackground(row: EntityRow | null, detail: RegionalAnalyticsEntityDetail | null): string {
+    if (detail?.imageUrl) {
+      return `url("${detail.imageUrl}") center/cover`;
+    }
+
+    return row?.imageBg ?? 'linear-gradient(135deg, #1252A0 0%, #38bdf8 100%)';
+  }
+
+  entityDetailTitle(row: EntityRow | null, detail: RegionalAnalyticsEntityDetail | null): string {
+    return detail?.title || detail?.name || row?.name || 'Entity details';
+  }
+
+  entityDetailType(row: EntityRow | null, detail: RegionalAnalyticsEntityDetail | null): EntityRow['type'] {
+    if (row) {
+      return row.type;
+    }
+
+    switch (detail?.entityType) {
+      case 'destination':
+        return 'DESTINATION';
+      case 'location':
+        return 'LOCATION';
+      case 'event':
+        return 'EVENT';
+      case 'place':
+      default:
+        return 'PLACE';
+    }
+  }
+
+  isStayDetail(detail: RegionalAnalyticsEntityDetail | null): boolean {
+    if (!detail || detail.entityType !== 'place') {
+      return false;
+    }
+
+    if (detail.typeSpecific?.stayType?.trim()) {
+      return true;
+    }
+
+    const placeType = (detail.typeSpecific?.placeType ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+
+    return ['stay', 'stays', 'hotel', 'hotels', 'accommodation', 'accommodations', 'lodging'].includes(placeType);
+  }
+
+  entityDetailMetrics(detail: RegionalAnalyticsEntityDetail | null): { label: string; value: string; sub?: string }[] {
+    const analytics = detail?.analytics ?? this.emptyEntityDetailMetrics();
+    return [
+      { label: 'Views', value: this.formatNum(analytics.views) },
+      { label: 'Visitors', value: this.formatNum(analytics.uniqueVisitors) },
+      { label: 'Saves', value: this.formatNum(analytics.saves) },
+      { label: 'Actions', value: this.formatNum(analytics.externalClicks) },
+      { label: 'Rating', value: analytics.averageRating.toFixed(1), sub: `${analytics.ratingCount} ratings` },
+      { label: 'Reviews', value: this.formatNum(analytics.reviews) },
+    ];
+  }
+
+  entityOverviewItems(detail: RegionalAnalyticsEntityDetail): DetailInfoItem[] {
+    return [
+      { label: 'Region', value: detail.regionDisplayName },
+      { label: 'Destination', value: detail.destinationName ?? '' },
+      { label: 'Location', value: detail.locationName ?? '' },
+      { label: 'Place', value: detail.placeName ?? '' },
+      { label: 'Address', value: detail.address ?? '' },
+      { label: 'Coordinates', value: this.formatCoordinates(detail) ?? '' },
+      { label: 'Created', value: this.formatDate(detail.createdAt) },
+      { label: 'Updated', value: this.formatDate(detail.updatedAt) },
+      { label: 'Published', value: this.formatDate(detail.publishedAt) },
+      { label: 'Last viewed', value: this.formatDateTime(detail.analytics.lastViewedAt) },
+    ].filter(item => !!item.value);
+  }
+
+  typeSpecificItems(detail: RegionalAnalyticsEntityDetail): DetailInfoItem[] {
+    const typeSpecific = detail.typeSpecific ?? this.emptyTypeSpecific();
+
+    switch (detail.entityType) {
+      case 'destination':
+        return this.compactItems([
+          { label: 'Destination type', value: typeSpecific.destinationType ?? '' },
+          { label: 'Locations', value: this.optionalCount(typeSpecific.locationsCount) },
+          { label: 'Places', value: this.optionalCount(typeSpecific.placesCount) },
+          { label: 'Events', value: this.optionalCount(typeSpecific.eventsCount) },
+          { label: 'Boundary type', value: typeSpecific.boundaryShapeType ?? '' },
+          { label: 'Boundary note', value: typeSpecific.boundaryNote ?? '' },
+        ]);
+      case 'location':
+        return this.compactItems([
+          { label: 'Location type', value: typeSpecific.locationType ?? '' },
+          { label: 'Parent destination', value: typeSpecific.parentDestination ?? '' },
+          { label: 'Places', value: this.optionalCount(typeSpecific.placesCount) },
+          { label: 'Events', value: this.optionalCount(typeSpecific.eventsCount) },
+          { label: 'Boundary type', value: typeSpecific.boundaryShapeType ?? '' },
+          { label: 'Boundary note', value: typeSpecific.boundaryNote ?? '' },
+        ]);
+      case 'place':
+        return this.compactItems([
+          { label: 'Place type', value: typeSpecific.placeType ?? '' },
+          { label: 'Stay type', value: typeSpecific.stayType ?? '' },
+          { label: 'Parent location', value: typeSpecific.parentLocation ?? '' },
+          { label: 'Parent destination', value: typeSpecific.parentDestination ?? '' },
+          { label: 'Website', value: typeSpecific.website ?? '', href: typeSpecific.website ?? undefined, external: true },
+          { label: 'Booking link', value: typeSpecific.bookingExternalLink ?? '', href: typeSpecific.bookingExternalLink ?? undefined, external: true },
+          { label: 'Contact phone', value: typeSpecific.contactPhone ?? '' },
+          { label: 'Contact email', value: typeSpecific.contactEmail ?? '' },
+          { label: 'Price range', value: typeSpecific.priceRange ?? '' },
+          { label: 'Opening hours', value: typeSpecific.openingHours ?? '' },
+          { label: 'Best time', value: typeSpecific.bestTimeToVisit ?? '' },
+          { label: 'Visitor tips', value: typeSpecific.visitorTips ?? '' },
+          { label: 'Access notes', value: typeSpecific.accessNotes ?? '' },
+          { label: 'Accessibility', value: typeSpecific.accessibilityNotes ?? '' },
+        ]);
+      case 'event':
+        return this.compactItems([
+          { label: 'Event type', value: typeSpecific.eventType ?? typeSpecific.category ?? '' },
+          { label: 'Parent', value: typeSpecific.parentEntityType ?? '' },
+          { label: 'Destination', value: typeSpecific.parentDestination ?? '' },
+          { label: 'Location', value: typeSpecific.parentLocation ?? '' },
+          { label: 'Place', value: typeSpecific.parentPlace ?? '' },
+          { label: 'Starts', value: this.formatDateTime(typeSpecific.startsAt) },
+          { label: 'Ends', value: this.formatDateTime(typeSpecific.endsAt) },
+          { label: 'All day', value: typeSpecific.allDay === null || typeSpecific.allDay === undefined ? '' : typeSpecific.allDay ? 'Yes' : 'No' },
+          { label: 'Recurring', value: typeSpecific.isRecurring === null || typeSpecific.isRecurring === undefined ? '' : typeSpecific.isRecurring ? 'Yes' : 'No' },
+          { label: 'Venue', value: typeSpecific.venueName ?? '' },
+          { label: 'Ticket', value: typeSpecific.isFree ? 'Free' : typeSpecific.ticketPrice ?? '' },
+          { label: 'Ticket link', value: typeSpecific.externalTicketLink ?? '', href: typeSpecific.externalTicketLink ?? undefined, external: true },
+          { label: 'Organizer', value: typeSpecific.organizerName ?? '' },
+          { label: 'Contact email', value: typeSpecific.contactEmail ?? '' },
+          { label: 'Attendance limit', value: this.optionalCount(typeSpecific.attendanceLimit) },
+          { label: 'Age restriction', value: typeSpecific.ageRestriction ?? '' },
+          { label: 'Duration', value: typeSpecific.duration ?? '' },
+          { label: 'Venue details', value: typeSpecific.venueDescription ?? '' },
+          { label: 'Arrival tips', value: typeSpecific.arrivalTips ?? '' },
+          { label: 'Accessibility', value: typeSpecific.accessibility ?? '' },
+        ]);
+      default:
+        return [];
+    }
+  }
+
+  operatingHoursLabel(hour: RegionalPlaceOperatingHour): string {
+    if (!hour.isOpen) {
+      return `${hour.dayOfWeek}: Closed`;
+    }
+
+    return `${hour.dayOfWeek}: ${hour.openTime ?? ''} - ${hour.closeTime ?? ''}`.trim();
   }
 
   trendLabel(trend: EntityRow['trend']): string {
@@ -682,6 +1120,72 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     return labels[type];
   }
 
+  private compactItems(items: DetailInfoItem[]): DetailInfoItem[] {
+    return items.filter(item => !!item.value?.trim());
+  }
+
+  private optionalCount(value: number | null | undefined): string {
+    return value === null || value === undefined ? '' : this.formatNum(value);
+  }
+
+  private emptyEntityDetailMetrics(): RegionalAnalyticsEntityDetailMetrics {
+    return {
+      views: 0,
+      uniqueVisitors: 0,
+      saves: 0,
+      externalClicks: 0,
+      reviews: 0,
+      averageRating: 0,
+      ratingCount: 0,
+      trendChangePercent: 0,
+      lastViewedAt: null,
+    };
+  }
+
+  private emptyTypeSpecific(): RegionalAnalyticsEntityTypeSpecific {
+    return {
+      operatingHours: [],
+      amenities: [],
+      bookingPartners: [],
+      externalPartnerClicks: [],
+    };
+  }
+
+  private normalizeEntityDetail(detail: RegionalAnalyticsEntityDetail): RegionalAnalyticsEntityDetail {
+    return {
+      ...detail,
+      galleryImages: detail.galleryImages ?? [],
+      tags: detail.tags ?? [],
+      analytics: detail.analytics ?? this.emptyEntityDetailMetrics(),
+      typeSpecific: {
+        ...this.emptyTypeSpecific(),
+        ...(detail.typeSpecific ?? {}),
+        operatingHours: detail.typeSpecific?.operatingHours ?? [],
+        amenities: detail.typeSpecific?.amenities ?? [],
+        bookingPartners: detail.typeSpecific?.bookingPartners ?? [],
+        externalPartnerClicks: detail.typeSpecific?.externalPartnerClicks ?? [],
+      },
+    };
+  }
+
+  private lockBodyScroll(): void {
+    if (this.previousBodyOverflow !== null) {
+      return;
+    }
+
+    this.previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+
+  private unlockBodyScroll(): void {
+    if (this.previousBodyOverflow === null) {
+      return;
+    }
+
+    document.body.style.overflow = this.previousBodyOverflow;
+    this.previousBodyOverflow = null;
+  }
+
   private loadSidebarSummary(regionId: number): void {
     this.sidebarSummarySubscription?.unsubscribe();
     this.sidebarSummarySubscription = this.dashboardService
@@ -739,6 +1243,38 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       });
   }
 
+  private loadTagViews(): void {
+    if (!this.activeRegionId) {
+      this.clearTagViewData();
+      return;
+    }
+
+    this.tagViewsLoading = true;
+    this.tagViewsErrorMessage = null;
+    this.notifyStateChanged();
+
+    this.tagViewsSubscription?.unsubscribe();
+    this.tagViewsSubscription = this.analyticsService
+      .getTagViews(this.currentTagViewsParams())
+      .pipe(
+        finalize(() => {
+          this.tagViewsLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: tagViews => {
+          this.tagViewsSig.set(tagViews ?? this.emptyTagViews());
+          this.notifyStateChanged();
+        },
+        error: error => {
+          this.tagViewsSig.set(this.emptyTagViews());
+          this.tagViewsErrorMessage = this.tagViewsError(error, 'Unable to load tag views for the active region.');
+          this.notifyStateChanged();
+        },
+      });
+  }
+
   private loadAnalytics(): void {
     if (!this.activeRegionId) {
       this.clearAnalyticsData();
@@ -771,6 +1307,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
           this.distributionSig.set(this.analyticsService.asBucket(filter, this.analyticsService.mapDistribution(overview.entityTypeDistribution), [] as DistributionSlice[]));
           this.pageViewsTrendSig.set(this.analyticsService.asBucket(filter, this.analyticsService.mapTrend(overview.pageViewsTrend), [] as number[]));
           this.actionableInsightsSig.set(this.analyticsService.buildActionableInsights(overview.actionableInsights));
+          this.destinationRankingSig.set(overview.destinationRanking ?? []);
           this.insightsSig.set(this.analyticsService.buildAutoInsights(overview.actionableInsights.messages ?? []));
           this.visitorBehaviorSig.set(overview.visitorBehavior ?? this.emptyVisitorBehavior());
           this.funnelSig.set(overview.engagementFunnel);
@@ -791,6 +1328,16 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       selectedYearsBack: this.selectedMonthlyVisitYears,
       entityType: this.entityTypeKey(),
       search: this.searchQuery(),
+    };
+  }
+
+  private currentTagViewsParams() {
+    return {
+      regionId: this.activeRegionId ?? 0,
+      period: this.selectedTagViewsPeriod,
+      tagIds: this.selectedTagIdsSig(),
+      take: 15,
+      entityType: this.entityTypeKey(),
     };
   }
 
@@ -869,17 +1416,30 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.distributionSig.set(this.emptyBuckets<DistributionSlice[]>());
     this.pageViewsTrendSig.set(this.emptyBuckets<number[]>());
     this.actionableInsightsSig.set([]);
+    this.destinationRankingSig.set([]);
     this.insightsSig.set([]);
     this.visitorBehaviorSig.set(this.emptyVisitorBehavior());
     this.funnelSig.set({ pageViews: 0, uniqueVisitors: 0, saves: 0, externalClicks: 0, reviews: 0 });
     this.paginationSig.set({ totalCount: 0, skip: 0, take: AnalyticsPageComponent.initialTake, hasMore: false });
     this.visibleCount.set(AnalyticsPageComponent.initialTake);
     this.clearMonthlyVisitData();
+    this.clearTagViewData();
   }
 
   private clearMonthlyVisitData(): void {
     this.monthlyVisitsErrorMessage = null;
     this.monthlyVisitsSig.set(this.emptyMonthlyVisits(this.selectedMonthlyVisitYears));
+  }
+
+  private clearTagViewData(): void {
+    this.tagViewsErrorMessage = null;
+    this.tagViewsSig.set(this.emptyTagViews());
+  }
+
+  private resetSelectedTagViews(): void {
+    this.selectedTagIdsSig.set([]);
+    this.tagSearchSig.set('');
+    this.tagSelectorOpen = false;
   }
 
   private emptyVisitorBehavior(): RegionalVisitorBehaviorAnalytics {
@@ -917,6 +1477,17 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       visitMetric: 'entity_view',
       visitEventTypes: ['detail_view', 'page_view'],
       timeZone: 'UTC',
+    };
+  }
+
+  private emptyTagViews(): RegionalTagViewsAnalyticsResponse {
+    return {
+      period: this.selectedTagViewsPeriod,
+      regionId: this.activeRegionId ?? 0,
+      regionDisplayName: this.regionDisplayName,
+      totalViews: 0,
+      availableTags: [],
+      items: [],
     };
   }
 
@@ -1007,12 +1578,63 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     return fallback;
   }
 
+  private tagViewsError(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 401) {
+        return 'Sign in with an authenticated Regional Manager account to view tag views.';
+      }
+      if (error.status === 403) {
+        return 'You do not have access to tag views for this assigned region.';
+      }
+      return error.error?.message ?? fallback;
+    }
+
+    return fallback;
+  }
+
+  private entityDetailError(error: unknown): string {
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 401) {
+        return 'Sign in with an authenticated Regional Manager account to view entity details.';
+      }
+      if (error.status === 403) {
+        return 'You do not have access to this entity in the active assigned region.';
+      }
+      if (error.status === 404) {
+        return 'This entity could not be found.';
+      }
+      return error.error?.message ?? 'Unable to load entity details.';
+    }
+
+    return 'Unable to load entity details.';
+  }
+
   private notifyStateChanged(): void {
     this.cdr.markForCheck();
   }
 
   private isMonthlyVisitYearsBack(value: number): value is RegionalMonthlyVisitYearsBack {
     return value === 1 || value === 2 || value === 3;
+  }
+
+  private isTagViewsPeriod(value: string): value is RegionalTagViewsPeriod {
+    return value === '24h' || value === '7d' || value === '1m' || value === '3m' || value === '6m' || value === '1y';
+  }
+
+  private setTagSelection(tagId: number, selected: boolean): void {
+    const current = this.selectedTagIdsSig();
+    const exists = current.includes(tagId);
+
+    if (selected && !exists) {
+      this.selectedTagIdsSig.set([...current, tagId]);
+      this.loadTagViews();
+      return;
+    }
+
+    if (!selected && exists) {
+      this.selectedTagIdsSig.set(current.filter(id => id !== tagId));
+      this.loadTagViews();
+    }
   }
 
   private buildMonthlyVisitChart(data: RegionalMonthlyVisits): MonthlyVisitChart {
@@ -1077,6 +1699,97 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       })),
       isEmpty: maxValue === 0,
       totalVisits: data.totalVisits,
+    };
+  }
+
+  private buildTagViewsChart(data: RegionalTagViewsAnalyticsResponse): TagViewsChart {
+    const items = data.items ?? [];
+    const chartWidth = Math.max(720, items.length * 74 + 76);
+    const plotLeft = 54;
+    const plotRight = 22;
+    const plotTop = 20;
+    const plotHeight = 150;
+    const plotBottom = plotTop + plotHeight;
+    const values = items.map(item => Math.max(0, item.views));
+    const maxValue = Math.max(0, ...values);
+    const step = this.niceStep(Math.max(1, maxValue));
+    const yMax = Math.max(step * 4, 1);
+    const plotWidth = chartWidth - plotLeft - plotRight;
+    const groupWidth = items.length > 0 ? plotWidth / items.length : plotWidth;
+    const barWidth = Math.max(10, Math.min(36, groupWidth * 0.48));
+    const color = '#185FA5';
+
+    const bars = items.map((item, index) => {
+      const value = Math.max(0, item.views);
+      const height = (value / yMax) * plotHeight;
+      const groupX = plotLeft + index * groupWidth;
+      return {
+        x: +(groupX + (groupWidth - barWidth) / 2).toFixed(1),
+        y: +(plotBottom - height).toFixed(1),
+        width: +barWidth.toFixed(1),
+        height: +height.toFixed(1),
+        color,
+        value,
+        tagName: item.tagName,
+        percentageOfTotal: item.percentageOfTotal,
+      };
+    });
+
+    return {
+      width: chartWidth,
+      bars,
+      yLabels: [4, 3, 2, 1, 0].map(multiplier => ({
+        y: +(plotBottom - (multiplier / 4) * plotHeight).toFixed(1),
+        text: this.fmtK(step * multiplier),
+        value: step * multiplier,
+      })),
+      xLabels: items.map((item, index) => ({
+        x: +(plotLeft + index * groupWidth + groupWidth / 2).toFixed(1),
+        text: this.truncateTagLabel(item.tagName),
+        fullText: item.tagName,
+      })),
+      isEmpty: items.length === 0 || maxValue === 0,
+      totalViews: data.totalViews,
+    };
+  }
+
+  private buildExternalPartnerClickChart(items: RegionalAnalyticsExternalPartnerClick[]): ExternalPartnerClickChart {
+    const normalizedItems = (items ?? [])
+      .map((item, index) => ({
+        ...item,
+        partnerLabel: item.partnerLabel?.trim() || 'Other External Link',
+        clickCount: Math.max(0, item.clickCount ?? 0),
+        sharePercent: Number.isFinite(item.sharePercent) ? Math.max(0, item.sharePercent) : 0,
+        color: this.externalPartnerClickColors[index % this.externalPartnerClickColors.length],
+      }))
+      .filter(item => item.partnerLabel.length > 0);
+
+    const totalClicks = normalizedItems.reduce((sum, item) => sum + item.clickCount, 0);
+    const circumference = 2 * Math.PI * 54;
+    let offset = 0;
+
+    const arcs = normalizedItems.map(item => {
+      const sharePercent = totalClicks > 0
+        ? (item.sharePercent || (item.clickCount / totalClicks) * 100)
+        : 0;
+      const arcLength = totalClicks > 0 ? (item.clickCount / totalClicks) * circumference : 0;
+      const arc = {
+        partnerLabel: item.partnerLabel,
+        clickCount: item.clickCount,
+        sharePercent,
+        color: item.color,
+        dasharray: `${arcLength.toFixed(1)} ${(circumference - arcLength).toFixed(1)}`,
+        dashoffset: `-${offset.toFixed(1)}`,
+      };
+      offset += arcLength;
+      return arc;
+    });
+
+    return {
+      arcs,
+      items: normalizedItems,
+      totalClicks,
+      hasClickData: totalClicks > 0,
     };
   }
 
@@ -1194,6 +1907,11 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
     if (value >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}K`;
     return Math.round(value).toString();
+  }
+
+  private truncateTagLabel(value: string): string {
+    const trimmed = value.trim();
+    return trimmed.length > 14 ? `${trimmed.slice(0, 13)}...` : trimmed;
   }
 
   private smoothSVGPath(points: { x: number; y: number }[]): string {

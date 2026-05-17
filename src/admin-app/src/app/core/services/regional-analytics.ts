@@ -10,9 +10,13 @@ import {
   MetricCard,
   RegionalAnalyticsActionableInsights,
   RegionalAnalyticsDistributionItem,
+  RegionalAnalyticsEntityDetail,
+  RegionalAnalyticsEntityDetailParams,
   RegionalAnalyticsEntityMetric,
   RegionalMonthlyVisits,
   RegionalMonthlyVisitsParams,
+  RegionalTagViewsAnalyticsResponse,
+  RegionalTagViewsParams,
   RegionalAnalyticsOverview,
   RegionalAnalyticsOverviewParams,
   RegionalAnalyticsTrendPoint,
@@ -33,6 +37,23 @@ export class RegionalAnalyticsService {
     return this.http.get<RegionalMonthlyVisits>('/api/admin/regional/analytics/monthly-visits', {
       params: this.toMonthlyVisitHttpParams(params),
     });
+  }
+
+  getTagViews(params: RegionalTagViewsParams): Observable<RegionalTagViewsAnalyticsResponse> {
+    return this.http.get<RegionalTagViewsAnalyticsResponse>('/api/admin/regional/analytics/tag-views', {
+      params: this.toTagViewsHttpParams(params),
+    });
+  }
+
+  getEntityDetail(params: RegionalAnalyticsEntityDetailParams): Observable<RegionalAnalyticsEntityDetail> {
+    return this.http.get<RegionalAnalyticsEntityDetail>(
+      `/api/admin/regional/analytics/entities/${encodeURIComponent(params.entityType)}/${params.entityId}/details`,
+      {
+        params: new HttpParams()
+          .set('regionId', String(params.regionId))
+          .set('period', params.period ?? '30d'),
+      },
+    );
   }
 
   exportCsv(params: RegionalAnalyticsOverviewParams): Observable<Blob> {
@@ -234,6 +255,20 @@ export class RegionalAnalyticsService {
 
     if (params.search?.trim()) {
       httpParams = httpParams.set('search', params.search.trim());
+    }
+
+    return httpParams;
+  }
+
+  private toTagViewsHttpParams(params: RegionalTagViewsParams): HttpParams {
+    let httpParams = new HttpParams()
+      .set('regionId', String(params.regionId))
+      .set('period', params.period)
+      .set('take', String(params.take ?? 15))
+      .set('entityType', params.entityType ?? 'all');
+
+    for (const tagId of params.tagIds ?? []) {
+      httpParams = httpParams.append('tagIds', String(tagId));
     }
 
     return httpParams;

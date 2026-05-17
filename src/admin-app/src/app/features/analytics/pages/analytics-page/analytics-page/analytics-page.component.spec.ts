@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { vi } from 'vitest';
 import { AnalyticsPageComponent } from './analytics-page.component';
 import { AuthService } from '../../../../../core/services/auth.service';
@@ -8,11 +8,14 @@ import { DashboardService } from '../../../../../core/services/dashboard.service
 import { RegionalAnalyticsService } from '../../../../../core/services/regional-analytics';
 import {
   CategoryFilter,
+  EntityRow,
   MetricCard,
+  RegionalAnalyticsEntityDetail,
   RegionalAnalyticsEntityMetric,
   RegionalAnalyticsOverview,
   RegionalMonthlyVisits,
   RegionalMonthlyVisitYearsBack,
+  RegionalTagViewsAnalyticsResponse,
 } from '../../../../../core/models/regional-analytics.model';
 
 describe('AnalyticsPageComponent', () => {
@@ -29,6 +32,9 @@ describe('AnalyticsPageComponent', () => {
       getOverview: vi.fn(() => of(overviewResponse())),
       getMonthlyVisits: vi.fn((params: { selectedYearsBack: RegionalMonthlyVisitYearsBack }) =>
         of(monthlyVisitsResponse(params.selectedYearsBack))),
+      getTagViews: vi.fn(() => of(tagViewsResponse())),
+      getEntityDetail: vi.fn((params: { entityType: string; entityId: number }) =>
+        of(entityDetailResponse(params.entityId === 18 ? 'stay' : params.entityId === 19 ? 'stay-empty' : params.entityType))),
       exportCsv: vi.fn(() => of(new Blob(['csv'], { type: 'text/csv' }))),
       downloadCsv: vi.fn(),
       buildMetricCards: vi.fn(() => metricCards()),
@@ -117,6 +123,12 @@ describe('AnalyticsPageComponent', () => {
       selectedYearsBack: 1,
       entityType: 'all',
     }));
+    expect(analyticsService.getTagViews).toHaveBeenCalledWith(expect.objectContaining({
+      regionId: 21,
+      period: '1m',
+      entityType: 'all',
+      tagIds: [],
+    }));
   });
 
   it('reloads analytics when entity type changes', () => {
@@ -132,6 +144,10 @@ describe('AnalyticsPageComponent', () => {
     expect(analyticsService.getMonthlyVisits).toHaveBeenCalledWith(expect.objectContaining({
       entityType: 'location',
       selectedYearsBack: 1,
+    }));
+    expect(analyticsService.getTagViews).toHaveBeenCalledWith(expect.objectContaining({
+      entityType: 'location',
+      period: '1m',
     }));
   });
 
@@ -150,6 +166,72 @@ describe('AnalyticsPageComponent', () => {
       selectedYearsBack: 2,
       regionId: 21,
     }));
+  });
+
+  it('renders tag views card directly below monthly visits', () => {
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    const monthlyIndex = text.indexOf('Monthly Visits Over Time');
+    const tagViewsIndex = text.indexOf('Tag Views');
+    const detailsIndex = text.indexOf('Entity Performance Details');
+
+    expect(monthlyIndex).toBeGreaterThanOrEqual(0);
+    expect(tagViewsIndex).toBeGreaterThan(monthlyIndex);
+    expect(detailsIndex).toBeGreaterThan(tagViewsIndex);
+    expect(text).toContain('Coastal Walks');
+    expect(text).toContain('Museums');
+  });
+
+  it('defaults tag views to one month and reloads when the local period changes', () => {
+    fixture.detectChanges();
+    vi.mocked(analyticsService.getTagViews).mockClear();
+
+    expect(component.selectedTagViewsPeriod).toBe('1m');
+
+    component.onTagViewsPeriodChange('24h');
+
+    expect(component.selectedTagViewsPeriod).toBe('24h');
+    expect(analyticsService.getTagViews).toHaveBeenCalledWith(expect.objectContaining({
+      regionId: 21,
+      period: '24h',
+      tagIds: [],
+    }));
+  });
+
+  it('shows backend tag options and reloads when a tag is selected', () => {
+    fixture.detectChanges();
+    vi.mocked(analyticsService.getTagViews).mockClear();
+
+    const button = fixture.nativeElement.querySelector('[aria-haspopup="listbox"]') as HTMLButtonElement;
+    button.click();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Coastal Walks');
+    expect(text).toContain('Museums');
+
+    const checkbox = fixture.nativeElement.querySelector('[data-testid="tag-selector-menu"] input[type="checkbox"]') as HTMLInputElement;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+
+    expect(analyticsService.getTagViews).toHaveBeenCalledWith(expect.objectContaining({
+      tagIds: [7],
+      period: '1m',
+    }));
+  });
+
+  it('renders tag views empty state safely', () => {
+    const emptyTagViews = tagViewsResponse();
+    emptyTagViews.totalViews = 0;
+    emptyTagViews.items = [];
+    vi.mocked(analyticsService.getTagViews).mockReturnValue(of(emptyTagViews));
+
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('No tag view data for this period.');
+    expect(text).not.toContain('Fake Tag');
   });
 
   it('exports current filtered analytics data', () => {
@@ -175,6 +257,383 @@ describe('AnalyticsPageComponent', () => {
     expect(text).toContain('Real Place');
     expect(text).toContain('2m 14s');
   });
+
+  it('renders destination ranking data above actionable insights', () => {
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    const rankingIndex = text.indexOf('Destination Ranking');
+    const insightsIndex = text.indexOf('Actionable Insights');
+
+    expect(rankingIndex).toBeGreaterThanOrEqual(0);
+    expect(insightsIndex).toBeGreaterThan(rankingIndex);
+    expect(text).toContain('Coastal Capital');
+    expect(text).toContain('Harbor Quarter');
+    expect(text).not.toContain('Banje Beach');
+  });
+
+  it('renders destination ranking empty state when no destination visits exist', () => {
+    const emptyOverview = overviewResponse();
+    emptyOverview.destinationRanking = [];
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(emptyOverview));
+
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('No destination visit data yet.');
+  });
+
+  it('scales destination ranking bars against the top visit count', () => {
+    fixture.detectChanges();
+
+    const bars = fixture.nativeElement.querySelectorAll('[data-testid="destination-ranking-bar-fill"]') as NodeListOf<HTMLElement>;
+
+    expect(bars.length).toBe(2);
+    expect(bars[0].style.width).toBe('100%');
+    expect(bars[1].style.width).toBe('50%');
+  });
+
+  it('reloads overview analytics when the period changes', () => {
+    fixture.detectChanges();
+    vi.mocked(analyticsService.getOverview).mockClear();
+
+    component.onPeriodChange('Last 7 Days');
+
+    expect(analyticsService.getOverview).toHaveBeenCalledWith(expect.objectContaining({
+      regionId: 21,
+      period: '7d',
+    }));
+  });
+
+  it('opens entity detail overlay from a table row and calls the detail endpoint', () => {
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('[data-testid="entity-performance-row"]') as HTMLTableRowElement;
+    row.click();
+    fixture.detectChanges();
+
+    expect(analyticsService.getEntityDetail).toHaveBeenCalledWith({
+      regionId: 21,
+      entityType: 'place',
+      entityId: 8,
+      period: '30d',
+    });
+    expect(fixture.nativeElement.textContent).toContain('Real backend place detail');
+    expect(fixture.nativeElement.textContent).toContain('Website');
+  });
+
+  it('shows loading state while entity detail is loading', () => {
+    const pending = new Subject<RegionalAnalyticsEntityDetail>();
+    vi.mocked(analyticsService.getEntityDetail).mockReturnValueOnce(pending.asObservable());
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('[data-testid="entity-performance-row"]') as HTMLTableRowElement;
+    row.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Loading entity details...');
+
+    pending.next(entityDetailResponse('place'));
+    pending.complete();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Real backend place detail');
+  });
+
+  it('renders destination, location, place, stay, and event details safely', () => {
+    fixture.detectChanges();
+
+    const cases = [
+      { row: entityRow('destination'), expected: ['Destination Fields', 'Locations', 'Boundary note'] },
+      { row: entityRow('location'), expected: ['Location Fields', 'Parent destination', 'Places'] },
+      { row: entityRow('place'), expected: ['Place Fields', 'Website', 'Opening hours'] },
+      { row: entityRow('place', 18, 'Real Stay'), expected: ['Stay type', 'Hotel', 'WiFi'] },
+      { row: entityRow('event'), expected: ['Event Fields', 'Starts', 'Venue'] },
+    ];
+
+    for (const item of cases) {
+      component.openEntityDetails(item.row);
+      fixture.detectChanges();
+      const text = fixture.nativeElement.textContent as string;
+      for (const expected of item.expected) {
+        expect(text).toContain(expected);
+      }
+      component.closeEntityDetails();
+      fixture.detectChanges();
+    }
+  });
+
+  it('renders stay external partner click distribution with labels and shares', () => {
+    fixture.detectChanges();
+
+    component.openEntityDetails(entityRow('place', 18, 'Real Stay'));
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(fixture.nativeElement.querySelector('[data-testid="external-partner-click-card"]')).not.toBeNull();
+    expect(text).toContain('External Partner Click Distribution');
+    expect(text).toContain('Booking.com');
+    expect(text).toContain('Airbnb');
+    expect(text).toContain('Expedia');
+    expect(text).toContain('33.3%');
+    expect(text).toContain('16.7%');
+    expect(text).toContain('50%');
+  });
+
+  it('renders stay external partner click empty state when no partner clicks exist', () => {
+    fixture.detectChanges();
+
+    component.openEntityDetails(entityRow('place', 19, 'Quiet Stay'));
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(fixture.nativeElement.querySelector('[data-testid="external-partner-click-card"]')).not.toBeNull();
+    expect(text).toContain('No external partner click data available yet.');
+    expect(text).toContain('Booking.com');
+    expect(text).toContain('Airbnb');
+  });
+
+  it('does not render external partner click chart for non-stay places', () => {
+    fixture.detectChanges();
+
+    component.openEntityDetails(entityRow('place', 8, 'Real Place'));
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(fixture.nativeElement.querySelector('[data-testid="external-partner-click-card"]')).toBeNull();
+    expect(text).not.toContain('External Partner Click Distribution');
+  });
+
+  it('handles missing detail fields without rendering broken values', () => {
+    vi.mocked(analyticsService.getEntityDetail).mockReturnValueOnce(of(missingFieldsDetail()));
+    fixture.detectChanges();
+
+    component.openEntityDetails(entityRow('place', 44, 'Sparse Place'));
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('No additional description is available.');
+    expect(text).not.toContain('undefined');
+    expect(text).not.toContain('null');
+    expect(text).not.toContain('Fake');
+  });
+
+  it('closes entity detail overlay with the close button and Escape key', () => {
+    fixture.detectChanges();
+
+    component.openEntityDetails(entityRow('place'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="entity-detail-overlay"]')).not.toBeNull();
+
+    const closeButton = fixture.nativeElement.querySelector('[data-testid="entity-detail-close"]') as HTMLButtonElement;
+    closeButton.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="entity-detail-overlay"]')).toBeNull();
+
+    component.openEntityDetails(entityRow('event'));
+    fixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="entity-detail-overlay"]')).toBeNull();
+  });
+
+  function entityRow(
+    entityType: RegionalAnalyticsEntityDetail['entityType'] = 'place',
+    entityId = entityType === 'destination' ? 2 : entityType === 'location' ? 4 : entityType === 'event' ? 12 : 8,
+    name = `Real ${entityType}`,
+  ): EntityRow {
+    const typeMap: Record<RegionalAnalyticsEntityDetail['entityType'], EntityRow['type']> = {
+      destination: 'DESTINATION',
+      location: 'LOCATION',
+      place: 'PLACE',
+      event: 'EVENT',
+    };
+
+    return {
+      entityType,
+      entityId,
+      name,
+      type: typeMap[entityType],
+      location: 'Assigned Region',
+      views: 12,
+      visitors: 3,
+      saves: 2,
+      actions: 1,
+      reviewAvg: 4.4,
+      reviewCount: 1,
+      trend: 'up',
+      imageBg: '#fff',
+      imageUrl: null,
+      status: 'Published',
+      detailRoute: null,
+    };
+  }
+
+  function entityDetailResponse(entityType: string): RegionalAnalyticsEntityDetail {
+    const base: RegionalAnalyticsEntityDetail = {
+      entityType: entityType === 'destination' || entityType === 'location' || entityType === 'event' ? entityType : 'place',
+      entityId: entityType === 'destination' ? 2 : entityType === 'location' ? 4 : entityType === 'event' ? 12 : 8,
+      name: `Real ${entityType}`,
+      title: `Real ${entityType}`,
+      subtitle: entityType === 'place' ? 'A useful place' : null,
+      status: 'Published',
+      regionId: 21,
+      regionDisplayName: 'Assigned Region',
+      destinationId: 2,
+      destinationName: 'Real Destination',
+      locationId: entityType === 'destination' ? null : 4,
+      locationName: entityType === 'destination' ? null : 'Real Location',
+      placeId: entityType === 'place' ? 8 : null,
+      placeName: entityType === 'place' ? 'Real place' : null,
+      description: `Real backend ${entityType} detail`,
+      summary: `Real backend ${entityType} detail`,
+      imageUrl: null,
+      galleryImages: [],
+      tags: [{ id: 7, name: 'Coastal Walks', slug: 'coastal-walks' }],
+      address: entityType === 'place' ? 'Harbor 1' : null,
+      latitude: 42.1,
+      longitude: 18.1,
+      createdAt: '2026-05-01T00:00:00Z',
+      updatedAt: '2026-05-02T00:00:00Z',
+      publishedAt: '2026-05-03T00:00:00Z',
+      analytics: {
+        views: 12,
+        uniqueVisitors: 3,
+        saves: 2,
+        externalClicks: 1,
+        reviews: 1,
+        averageRating: 4.4,
+        ratingCount: 1,
+        trendChangePercent: 10,
+        lastViewedAt: '2026-05-15T00:00:00Z',
+      },
+      typeSpecific: {
+        operatingHours: [],
+        amenities: [],
+        bookingPartners: [],
+        externalPartnerClicks: [],
+      },
+    };
+
+    if (entityType === 'destination') {
+      return {
+        ...base,
+        entityType: 'destination',
+        typeSpecific: {
+          ...base.typeSpecific,
+          destinationType: 'Coastal',
+          locationsCount: 2,
+          placesCount: 5,
+          eventsCount: 1,
+          boundaryNote: 'Boundary note',
+        },
+      };
+    }
+
+    if (entityType === 'location') {
+      return {
+        ...base,
+        entityType: 'location',
+        typeSpecific: {
+          ...base.typeSpecific,
+          locationType: 'Harbor',
+          parentDestination: 'Real Destination',
+          placesCount: 3,
+          eventsCount: 2,
+        },
+      };
+    }
+
+    if (entityType === 'event') {
+      return {
+        ...base,
+        entityType: 'event',
+        typeSpecific: {
+          ...base.typeSpecific,
+          eventType: 'Festival',
+          parentDestination: 'Real Destination',
+          parentLocation: 'Real Location',
+          startsAt: '2026-06-01T18:00:00Z',
+          endsAt: '2026-06-01T20:00:00Z',
+          allDay: false,
+          venueName: 'Main Square',
+          ticketPrice: '$12',
+        },
+      };
+    }
+
+    const isStay = entityType === 'stay' || entityType === 'stay-empty';
+    const hasStayClickData = entityType === 'stay';
+    return {
+      ...base,
+      entityType: 'place',
+      entityId: isStay ? (hasStayClickData ? 18 : 19) : 8,
+      name: isStay ? (hasStayClickData ? 'Real Stay' : 'Quiet Stay') : 'Real place',
+      title: isStay ? (hasStayClickData ? 'Real Stay' : 'Quiet Stay') : 'Real place',
+      placeId: isStay ? (hasStayClickData ? 18 : 19) : 8,
+      placeName: isStay ? (hasStayClickData ? 'Real Stay' : 'Quiet Stay') : 'Real place',
+      typeSpecific: {
+        ...base.typeSpecific,
+        placeType: isStay ? 'Stay' : 'Cafe',
+        stayType: isStay ? 'Hotel' : null,
+        parentLocation: 'Real Location',
+        parentDestination: 'Real Destination',
+        website: 'https://example.com',
+        contactPhone: '+111',
+        openingHours: '09:00 - 17:00',
+        amenities: isStay ? ['WiFi'] : [],
+        bookingPartners: isStay ? [
+          { label: 'Booking.com', url: 'https://www.booking.com/hotel/hr/real-stay.html' },
+          { label: 'Airbnb', url: 'https://www.airbnb.com/rooms/real-stay' },
+          ...(hasStayClickData ? [{ label: 'Expedia', url: 'https://www.expedia.com/real-stay' }] : []),
+        ] : [],
+        externalPartnerClicks: isStay ? [
+          {
+            partnerKey: 'booking',
+            partnerLabel: 'Booking.com',
+            url: 'https://www.booking.com/hotel/hr/real-stay.html',
+            clickCount: hasStayClickData ? 2 : 0,
+            sharePercent: hasStayClickData ? 33.3 : 0,
+          },
+          {
+            partnerKey: 'airbnb',
+            partnerLabel: 'Airbnb',
+            url: 'https://www.airbnb.com/rooms/real-stay',
+            clickCount: hasStayClickData ? 1 : 0,
+            sharePercent: hasStayClickData ? 16.7 : 0,
+          },
+          ...(hasStayClickData ? [{
+            partnerKey: 'external',
+            partnerLabel: 'Expedia',
+            url: 'https://www.expedia.com/real-stay',
+            clickCount: 3,
+            sharePercent: 50,
+          }] : []),
+        ] : [],
+      },
+    };
+  }
+
+  function missingFieldsDetail(): RegionalAnalyticsEntityDetail {
+    return {
+      ...entityDetailResponse('place'),
+      entityId: 44,
+      name: 'Sparse Place',
+      title: 'Sparse Place',
+      description: null,
+      summary: null,
+      tags: [],
+      address: null,
+      latitude: null,
+      longitude: null,
+      typeSpecific: {
+        operatingHours: [],
+        amenities: [],
+        bookingPartners: [],
+        externalPartnerClicks: [],
+      },
+    };
+  }
 
   function metricCards(): MetricCard[] {
     return [
@@ -237,6 +696,30 @@ describe('AnalyticsPageComponent', () => {
         highestPerformingEvent: null,
         messages: [],
       },
+      destinationRanking: [
+        {
+          destinationId: 2,
+          destinationName: 'Coastal Capital',
+          regionId: 21,
+          regionDisplayName: 'Assigned Region',
+          visits: 20,
+          rank: 1,
+          percentageOfTopValue: 100,
+          imageUrl: null,
+          detailRoute: '/destinations/detail/2',
+        },
+        {
+          destinationId: 3,
+          destinationName: 'Harbor Quarter',
+          regionId: 21,
+          regionDisplayName: 'Assigned Region',
+          visits: 10,
+          rank: 2,
+          percentageOfTopValue: 50,
+          imageUrl: null,
+          detailRoute: '/destinations/detail/3',
+        },
+      ],
       visitorBehavior: {
         loggedInVisitors: 2,
         anonymousVisitors: 1,
@@ -298,6 +781,23 @@ describe('AnalyticsPageComponent', () => {
       visitMetric: 'entity_view',
       visitEventTypes: ['detail_view', 'page_view'],
       timeZone: 'UTC',
+    };
+  }
+
+  function tagViewsResponse(): RegionalTagViewsAnalyticsResponse {
+    return {
+      period: '1m',
+      regionId: 21,
+      regionDisplayName: 'Assigned Region',
+      totalViews: 12,
+      availableTags: [
+        { tagId: 7, name: 'Coastal Walks', entityScopes: ['place'] },
+        { tagId: 9, name: 'Museums', entityScopes: ['destination', 'place'] },
+      ],
+      items: [
+        { tagId: 7, tagName: 'Coastal Walks', views: 8, percentageOfTotal: 66.7, entityScopes: ['place'] },
+        { tagId: 9, tagName: 'Museums', views: 4, percentageOfTotal: 33.3, entityScopes: ['destination', 'place'] },
+      ],
     };
   }
 });
