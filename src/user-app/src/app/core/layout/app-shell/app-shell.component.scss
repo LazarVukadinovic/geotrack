@@ -20,6 +20,7 @@
   height: 100dvh;
   overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: var(--shell-bottom-pad);
 }
 

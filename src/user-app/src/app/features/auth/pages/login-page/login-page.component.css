@@ -1,22 +1,25 @@
 /*
-  Auth page layout: fill exactly the viewport content area above the bottom nav /
-  safe-area padding, then let overflow scroll via the app-shell viewport.
+  Mobile: :host IS the scroll container. height: 100dvh pins it to the viewport;
+  content that overflows scrolls within :host directly.
 
-  `--shell-bottom-pad` is set on .app-shell and inherited through the DOM:
-    - with nav:    calc(--bottom-nav-height + env(safe-area-inset-bottom, 0))
-    - without nav: env(safe-area-inset-bottom, 0)
-
-  Using `height` (not `min-height`) gives the host a *definite* height so that
-  the inner div's `min-h-full` resolves correctly. `overflow: visible` (default)
-  lets any overflow propagate to the app-shell scroll container, which handles
-  scroll naturally on smaller phones.
+  This avoids routing scroll through the app-shell viewport (an intermediate
+  container), which on Android Chrome causes touch events landing on inputs or
+  buttons to be swallowed without triggering a scroll on the parent.
 */
 :host {
   display: block;
-  /* vh fallback for browsers that don't support dvh yet */
-  min-height: calc(100vh - var(--shell-bottom-pad));
-  min-height: calc(100dvh - var(--shell-bottom-pad));
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   background: #ffffff;
+  touch-action: pan-y;
+}
+
+/* Extra bottom room so the card's rounded corners are fully visible after scrolling */
+.auth-login {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6rem);
 }
 
 /*
@@ -38,21 +41,46 @@ input::-webkit-strong-password-auto-fill-button {
 }
 
 .auth-login__showcase,
-.auth-login__divider,
-.auth-login__card-footer {
+.auth-login__divider {
   display: none;
+}
+
+.auth-login__footer {
+  display: none;
+}
+
+.auth-login__card-footer {
+  margin: 0;
+  color: #8192b3;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.auth-login__card-footer button {
+  margin-left: 4px;
+  color: #e8570a;
+  font-weight: 800;
+  background: none;
+  border: none;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 @media (min-width: 1024px) {
   :host {
     display: grid;
     place-items: center;
+    height: auto;
     min-height: 100%;
+    overflow-y: visible;
+    overscroll-behavior-y: auto;
     padding: clamp(1rem, 2vw, var(--space-6));
     background: var(--color-page-bg);
   }
 
   .auth-login {
+    padding-bottom: 0;
     display: grid;
     grid-template-columns: minmax(300px, 0.95fr) minmax(400px, 1fr);
     width: min(100%, 1280px);

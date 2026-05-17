@@ -210,7 +210,7 @@ export const routes: Routes = [
         canActivate: [guestGuard],
         loadComponent: () =>
           import('./features/auth/pages/login-page/login-page.component').then(m => m.LoginPageComponent),
-        data: { desktopLayout: 'wide' },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'register',

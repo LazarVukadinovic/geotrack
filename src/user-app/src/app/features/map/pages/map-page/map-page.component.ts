@@ -342,7 +342,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.searchResults = [];
     this.noDataSearchResults = [];
     this.isSearchFocused = false;
-    this.noDataModalDismissed = false;
+    this.noDataModalDismissed = true;
     this.searchQuery = result.name;
     this.destinationName = result.name;
     this.destinationLat = result.latitude;

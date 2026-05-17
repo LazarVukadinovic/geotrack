@@ -183,7 +183,5 @@ function hasValidContributionLocation(basics: BasicsData): boolean {
     basics.lat <= 90 &&
     basics.lng >= -180 &&
     basics.lng <= 180 &&
-    (basics.lat !== 0 || basics.lng !== 0) &&
-    !!basics.city.trim() &&
-    !!basics.country.trim();
+    (basics.lat !== 0 || basics.lng !== 0);
 }
