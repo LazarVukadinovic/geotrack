@@ -13,22 +13,32 @@ import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, Subscription } from 'rxjs';
+import { finalize, of, Subscription, switchMap } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { ZoneDrawService, DrawTool } from '../../../../core/services/zone-draw.service';
 import { LocationsListService } from '../../../../core/services/locations-list.service';
+import { AdminMapService } from '../../../../core/services/admin-map.service';
+import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
+import { AdminMapGeometry, AdminMapViewport, AdminMapZone } from '../../../../core/models/admin-map.model';
 import {
   RegionalLocationBoundaryDto,
   RegionalLocationCreateRequest,
+  RegionalLocationDetailDto,
   RegionalLocationParentDestinationDto,
   RegionalLocationTagDto,
   RegionalLocationTypeDto,
+  RegionalLocationUpdateRequest,
 } from '../../../../core/models/location.model';
+import {
+  RegionalEntityImageDto,
+  RegionalEntityImageInput,
+  RegionalImageUploadResult,
+} from '../../../../core/models/regional-image.model';
 
 declare const L: any;
 
@@ -75,6 +85,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   locationTypesLoading = false;
   tagsLoading = false;
   tagSearchLoading = false;
+  detailLoading = false;
   isSaving = false;
   errorMessage: string | null = null;
   feedbackMessage: string | null = null;
@@ -85,6 +96,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   locationTypeId: number | null = null;
   boundaryNote = '';
   tagInput = '';
+  internalReferenceId = '';
+  locationStatus: 'Published' | 'Draft' | 'Archived' = 'Published';
 
   parentDestinations: RegionalLocationParentDestinationDto[] = [];
   locationTypes: RegionalLocationTypeDto[] = [];
@@ -101,13 +114,15 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
   coverImageUrl: string | null = null;
   coverImageName = '';
-  galleryImages: { url: string; name: string }[] = [];
+  coverImageFile: File | null = null;
+  galleryImages: { url: string; name: string; file?: File }[] = [];
 
   zoneModalOpen = false;
   zoneConfirmed = false;
   zoneAreaKm2: number | null = null;
   drawTool: DrawTool = 'polygon';
   confirmedShapeType: BoundaryShapeType | null = null;
+  zoneValidationMessage: string | null = null;
 
   isEditMode = false;
 
@@ -116,13 +131,21 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   private drawnLayer: any = null;
   private confirmedLayer: any = null;
   private drawControl: any = null;
+  private regionViewport: AdminMapViewport | null = null;
+  private mapZones: AdminMapZone[] = [];
   private assignedRegionsSubscription: Subscription | null = null;
   private parentDestinationsSubscription: Subscription | null = null;
   private locationTypesSubscription: Subscription | null = null;
   private tagsSubscription: Subscription | null = null;
   private tagSearchSubscription: Subscription | null = null;
   private createSubscription: Subscription | null = null;
+  private viewportSubscription: Subscription | null = null;
+  private zonesSubscription: Subscription | null = null;
+  private detailSubscription: Subscription | null = null;
   private tagSearchHandle: ReturnType<typeof setTimeout> | null = null;
+  private editLocationId: string | null = null;
+  private pendingDescriptionHtml: string | null = null;
+  private imagesTouched = false;
 
   constructor(
     private readonly zone: NgZone,
@@ -133,17 +156,24 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly lightboxService: LightboxService,
     private readonly zoneDrawService: ZoneDrawService,
     private readonly locationsService: LocationsListService,
+    private readonly adminMapService: AdminMapService,
+    private readonly regionalMediaService: RegionalMediaService,
     private readonly auth: AuthService,
   ) {}
 
   ngOnInit(): void {
+    this.editLocationId = this.route.snapshot.paramMap.get('id');
+    this.isEditMode = Boolean(this.editLocationId);
     this.loadAssignedRegions();
     this.loadLocationTypes();
     this.loadLocationTags();
   }
 
   ngAfterViewInit(): void {
-    setTimeout(() => this.initMiniMap(), 0);
+    setTimeout(() => {
+      this.initMiniMap();
+      this.applyPendingDescription();
+    }, 0);
   }
 
   ngOnDestroy(): void {
@@ -153,6 +183,9 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     this.tagsSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
+    this.viewportSubscription?.unsubscribe();
+    this.zonesSubscription?.unsubscribe();
+    this.detailSubscription?.unsubscribe();
 
     if (this.tagSearchHandle) {
       clearTimeout(this.tagSearchHandle);
@@ -181,16 +214,28 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   get canPublish(): boolean {
     return Boolean(this.activeRegionId) &&
       Boolean(this.parentDestinationId) &&
+      Boolean(this.selectedParentDestinationZone) &&
+      this.zoneConfirmed &&
+      !this.zoneValidationMessage &&
       !this.regionLoading &&
       !this.parentDestinationsLoading &&
       !this.locationTypesLoading &&
       !this.tagsLoading &&
+      !this.detailLoading &&
       !this.isSaving;
   }
 
   get selectedParentDestinationName(): string {
     if (!this.parentDestinationId) return '-';
     return this.parentDestinations.find(item => item.id === this.parentDestinationId)?.displayName ?? '-';
+  }
+
+  get selectedParentDestinationZone(): AdminMapZone | null {
+    if (!this.parentDestinationId) return null;
+    return this.mapZones.find(zone =>
+      zone.entityType === 'Destination' &&
+      zone.id === this.parentDestinationId &&
+      !!zone.geometryGeoJson) ?? null;
   }
 
   get selectedAdditionalTags(): RegionalLocationTagDto[] {
@@ -265,6 +310,9 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
           this.setActiveRegion(selectedRegion.id, false);
           this.loadParentDestinations();
+          if (this.isEditMode) {
+            this.loadLocationForEdit(selectedRegion.id);
+          }
         },
         error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
@@ -272,6 +320,11 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onRegionSelected(regionId: number): void {
     if (regionId === this.activeRegionId) return;
+    if (this.isEditMode) {
+      this.feedbackMessage = 'The region is locked while editing this location.';
+      this.notifyStateChanged();
+      return;
+    }
 
     this.setActiveRegion(regionId, true);
     this.parentDestinationId = null;
@@ -279,6 +332,18 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     this.resetZone();
     this.loadParentDestinations();
     this.feedbackMessage = 'Region changed. Parent destination and boundary selection were cleared.';
+    this.notifyStateChanged();
+  }
+
+  onParentDestinationChanged(): void {
+    this.resetZone();
+    this.zoneValidationMessage = null;
+    this.renderParentBoundaryOnMaps(true);
+
+    this.feedbackMessage = this.parentDestinationId && !this.selectedParentDestinationZone
+      ? 'Select a parent destination with a defined boundary before drawing this location.'
+      : null;
+
     this.notifyStateChanged();
   }
 
@@ -311,6 +376,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
           ) {
             this.parentDestinationId = null;
           }
+          this.renderParentBoundaryOnMaps(true);
         },
         error: error => this.handleLoadError(error, 'Unable to load parent destinations.'),
       });
@@ -462,6 +528,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       this.zone.run(() => {
         this.coverImageUrl = reader.result as string;
         this.coverImageName = file.name;
+        this.coverImageFile = file;
+        this.imagesTouched = true;
         this.notifyStateChanged();
       });
     };
@@ -472,6 +540,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   removeCoverImage(): void {
     this.coverImageUrl = null;
     this.coverImageName = '';
+    this.coverImageFile = null;
+    this.imagesTouched = true;
     this.notifyStateChanged();
   }
 
@@ -482,7 +552,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       const reader = new FileReader();
       reader.onload = () => {
         this.zone.run(() => {
-          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name }];
+          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name, file }];
+          this.imagesTouched = true;
           this.notifyStateChanged();
         });
       };
@@ -493,6 +564,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
   removeGalleryImage(index: number): void {
     this.galleryImages = this.galleryImages.filter((_, currentIndex) => currentIndex !== index);
+    this.imagesTouched = true;
     this.notifyStateChanged();
   }
 
@@ -501,6 +573,18 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   openZoneModal(): void {
+    if (!this.parentDestinationId) {
+      this.errorMessage = 'Parent destination is required.';
+      this.notifyStateChanged();
+      return;
+    }
+
+    if (!this.selectedParentDestinationZone) {
+      this.errorMessage = 'Select a parent destination with a defined boundary before drawing this location.';
+      this.notifyStateChanged();
+      return;
+    }
+
     this.zoneModalOpen = true;
     this.notifyStateChanged();
     setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
@@ -534,6 +618,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       this.drawControl.disable();
       this.drawControl = null;
     }
+    this.zoneValidationMessage = null;
     this.activateDrawTool();
   }
 
@@ -544,10 +629,20 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
+    const validationMessage = this.validateDrawnLayer(this.drawnLayer);
+    if (validationMessage) {
+      this.zoneValidationMessage = validationMessage;
+      this.errorMessage = validationMessage;
+      this.styleDrawnLayer(this.drawnLayer, false);
+      this.notifyStateChanged();
+      return;
+    }
+
     this.zoneAreaKm2 = this.zoneDrawService.calculateAreaKm2(this.drawnLayer);
     this.zoneConfirmed = true;
     this.confirmedLayer = this.drawnLayer;
     this.confirmedShapeType = this.shapeTypeFromDrawTool(this.drawTool);
+    this.zoneValidationMessage = null;
     this.errorMessage = null;
 
     this.showZoneOnMiniMap();
@@ -557,7 +652,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   publish(): void {
     if (this.isSaving) return;
 
-    const payload = this.buildCreatePayload();
+    const payload = this.buildPayload();
     if (!payload) {
       this.notifyStateChanged();
       return;
@@ -569,27 +664,52 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     this.notifyStateChanged();
 
     this.createSubscription?.unsubscribe();
-    this.createSubscription = this.locationsService
-      .createLocation(payload)
+    const saveRegionId = this.activeRegionId;
+    const saveLocationId = this.editLocationId;
+    this.createSubscription = of(payload)
       .pipe(
+        switchMap(payloadWithoutImages => {
+          const files = this.selectedImageFiles();
+          if (files.length === 0) {
+            const request = this.shouldSendImages(files)
+              ? { ...payloadWithoutImages, images: this.buildImageInputs([]) }
+              : payloadWithoutImages;
+            return this.isEditMode && saveRegionId && saveLocationId
+              ? this.locationsService.updateLocation(saveRegionId, saveLocationId, request)
+              : this.locationsService.createLocation(request as RegionalLocationCreateRequest);
+          }
+
+          return this.regionalMediaService.uploadImages(this.activeRegionId!, files).pipe(
+            switchMap(uploaded => {
+              const request = {
+                ...payloadWithoutImages,
+                images: this.buildImageInputs(uploaded.images),
+              };
+              return this.isEditMode && saveRegionId && saveLocationId
+                ? this.locationsService.updateLocation(saveRegionId, saveLocationId, request)
+                : this.locationsService.createLocation(request as RegionalLocationCreateRequest);
+            }),
+          );
+        }),
         finalize(() => {
           this.isSaving = false;
           this.notifyStateChanged();
         }),
       )
       .subscribe({
-        next: created => {
-          this.feedbackMessage = 'Location published.';
+        next: saved => {
+          const message = this.isEditMode ? 'Location saved.' : 'Location published.';
+          this.feedbackMessage = message;
           this.router.navigate(['/locations'], {
-            queryParams: { regionId: created.regionId },
-            state: { feedbackMessage: 'Location published.' },
+            queryParams: { regionId: saved.regionId },
+            state: { feedbackMessage: message },
           });
         },
         error: error => this.handleActionError(error),
       });
   }
 
-  private buildCreatePayload(): RegionalLocationCreateRequest | null {
+  private buildPayload(): (RegionalLocationCreateRequest | RegionalLocationUpdateRequest) | null {
     const regionId = this.activeRegionId;
     if (!regionId) {
       this.errorMessage = 'Select an assigned region before publishing.';
@@ -619,6 +739,16 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
+    if (this.zoneValidationMessage) {
+      this.errorMessage = this.zoneValidationMessage;
+      return null;
+    }
+
+    if (!this.selectedParentDestinationZone) {
+      this.errorMessage = 'Select a parent destination with a defined boundary before drawing this location.';
+      return null;
+    }
+
     const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
     const { zone, centerLat, centerLng } = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
     const boundary = this.createBoundaryPayload(zone);
@@ -628,12 +758,12 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     return {
-      regionId,
+      ...(this.isEditMode ? {} : { regionId }),
       destinationId,
       name,
       summary: normalizedSummary || null,
       description: descriptionHtml || null,
-      status: 'Published',
+      status: this.isEditMode ? this.locationStatus : 'Published',
       locationTypeId: this.locationTypeId,
       latitude: centerLat,
       longitude: centerLng,
@@ -641,6 +771,51 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       boundary,
       tagIds: [...this.selectedTagIds],
     };
+  }
+
+  private loadLocationForEdit(regionId: number): void {
+    const locationId = this.editLocationId;
+    if (!locationId) return;
+
+    this.detailLoading = true;
+    this.errorMessage = null;
+    this.notifyStateChanged();
+
+    this.detailSubscription?.unsubscribe();
+    this.detailSubscription = this.locationsService
+      .getLocation(regionId, locationId)
+      .pipe(
+        finalize(() => {
+          this.detailLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: location => this.applyLocationDetail(location),
+        error: error => this.handleLoadError(error, 'Unable to load location details.'),
+      });
+  }
+
+  private applyLocationDetail(location: RegionalLocationDetailDto): void {
+    this.locationName = location.name ?? '';
+    this.summary = location.summary ?? '';
+    this.parentDestinationId = location.destinationId ?? null;
+    this.locationTypeId = location.locationTypeId ?? null;
+    this.boundaryNote = location.boundaryNote ?? '';
+    this.internalReferenceId = location.internalReferenceId ?? '';
+    this.locationStatus = this.normalizeEditableStatus(location.status);
+    this.confirmedShapeType = this.normalizeShapeType(location.boundaryShapeType);
+    this.selectedTagIds = new Set((location.tags ?? []).map(tag => tag.id));
+    (location.tags ?? []).forEach(tag => this.upsertLocationTag(tag));
+    this.classItems = this.locationTags.map(tag => ({
+      tag,
+      checked: this.selectedTagIds.has(tag.id),
+    }));
+    this.applyEntityImages(location.images ?? [], location.imageUrl ?? null, location.name);
+    this.setDescriptionHtml(location.description ?? '');
+    this.renderParentBoundaryOnMaps(true);
+    this.applyEditBoundaryFromZones(location);
+    this.notifyStateChanged();
   }
 
   private createBoundaryPayload(zone: [number, number][]): RegionalLocationBoundaryDto | null {
@@ -651,10 +826,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       shapeType,
       coordinates: zone.map(([latitude, longitude]) => ({ latitude, longitude })),
     };
-  }
-
-  private loadMapCenter(): [number, number] {
-    return [44.0, 20.9];
   }
 
   private initMiniMap(): void {
@@ -669,11 +840,13 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       doubleClickZoom: false,
       touchZoom: false,
       attributionControl: false,
-    }).setView(this.loadMapCenter(), 8);
+    });
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.miniMap);
+
+    this.renderParentBoundaryOnMaps(true);
   }
 
   private initModalMap(el: HTMLDivElement): void {
@@ -682,13 +855,14 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     this.modalMap = L.map(el, {
       zoomControl: true,
       attributionControl: false,
-    }).setView(this.loadMapCenter(), 9);
+    });
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.modalMap);
 
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
+    this.renderParentBoundaryOnMaps(false);
 
     if (this.confirmedLayer) {
       const layerCopy = this.zoneDrawService.cloneLayer(this.confirmedLayer);
@@ -697,6 +871,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         this.drawnLayer = layerCopy;
         this.modalMap.fitBounds(layerCopy.getBounds(), { padding: [30, 30] });
       }
+    } else {
+      this.fitContext(this.modalMap, [30, 30]);
     }
 
     this.activateDrawTool();
@@ -728,6 +904,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         this.drawnLayer = layer;
         this.modalMap.addLayer(this.drawnLayer);
+        this.zoneValidationMessage = this.validateDrawnLayer(this.drawnLayer);
+        this.styleDrawnLayer(this.drawnLayer, !this.zoneValidationMessage);
         this.notifyStateChanged();
       },
     );
@@ -764,7 +942,9 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       this.miniMap.eachLayer((layer: any) => {
         if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
       });
+      this.fitContext(this.miniMap, [10, 10]);
     }
+    this.zoneValidationMessage = null;
   }
 
   private searchTags(query: string): void {
@@ -845,6 +1025,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   private setActiveRegion(regionId: number, updateUrl: boolean): void {
     this.activeRegionId = regionId;
     this.persistRegion(regionId);
+    this.loadRegionViewport(regionId);
+    this.loadMapZones(regionId);
 
     if (updateUrl) {
       this.router.navigate([], {
@@ -854,6 +1036,384 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         replaceUrl: true,
       });
     }
+  }
+
+  private loadRegionViewport(regionId: number): void {
+    this.viewportSubscription?.unsubscribe();
+    this.viewportSubscription = this.adminMapService.getViewport(regionId)
+      .subscribe({
+        next: viewport => {
+          this.regionViewport = viewport;
+          this.fitContext(this.miniMap, [10, 10]);
+          if (this.modalMap && !this.drawnLayer) {
+            this.fitContext(this.modalMap, [30, 30]);
+          }
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.regionViewport = null;
+          this.fitContext(this.miniMap, [10, 10]);
+          this.notifyStateChanged();
+        },
+      });
+  }
+
+  private loadMapZones(regionId: number): void {
+    this.zonesSubscription?.unsubscribe();
+    this.zonesSubscription = this.adminMapService.getZones(regionId)
+      .subscribe({
+        next: zones => {
+          this.mapZones = zones ?? [];
+          this.renderParentBoundaryOnMaps(true);
+          if (this.isEditMode) {
+            this.applyEditBoundaryFromZones();
+          }
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.mapZones = [];
+          this.renderParentBoundaryOnMaps(true);
+          this.notifyStateChanged();
+        },
+      });
+  }
+
+  private renderParentBoundaryOnMaps(fitMiniMap: boolean): void {
+    this.renderParentBoundaryOnMap(this.miniMap, fitMiniMap, [10, 10]);
+    this.renderParentBoundaryOnMap(this.modalMap, true, [30, 30]);
+  }
+
+  private renderParentBoundaryOnMap(map: any, fit: boolean, padding: [number, number]): void {
+    if (!map || typeof L === 'undefined') return;
+
+    this.removeFlaggedLayers(map, '_isParentDestinationBoundary');
+
+    const geometry = this.selectedParentDestinationZone?.geometryGeoJson;
+    if (!geometry) {
+      if (fit) this.fitContext(map, padding);
+      return;
+    }
+
+    const layer = L.geoJSON(geometry, {
+      interactive: false,
+      style: {
+        color: '#1d4ed8',
+        weight: 2,
+        opacity: 0.9,
+        fillColor: '#93c5fd',
+        fillOpacity: 0.14,
+        dashArray: '6 4',
+      },
+    });
+    layer._isParentDestinationBoundary = true;
+    layer.addTo(map);
+
+    if (fit) {
+      try {
+        map.fitBounds(layer.getBounds(), { padding, animate: false });
+      } catch {
+        this.applyRegionViewport(map, padding);
+      }
+    }
+  }
+
+  private fitContext(map: any, padding: [number, number]): void {
+    if (!map || typeof L === 'undefined') return;
+
+    const selectedZone = this.selectedParentDestinationZone;
+    if (selectedZone?.geometryGeoJson) {
+      this.renderParentBoundaryOnMap(map, true, padding);
+      return;
+    }
+
+    this.applyRegionViewport(map, padding);
+  }
+
+  private applyRegionViewport(map: any, padding: [number, number]): void {
+    if (!map || typeof L === 'undefined') return;
+
+    const viewport = this.regionViewport;
+    try {
+      if (viewport?.bounds) {
+        map.fitBounds(
+          [
+            [viewport.bounds.south, viewport.bounds.west],
+            [viewport.bounds.north, viewport.bounds.east],
+          ],
+          { padding, animate: false },
+        );
+        return;
+      }
+
+      if (
+        typeof viewport?.centerLatitude === 'number' &&
+        typeof viewport.centerLongitude === 'number' &&
+        typeof viewport.zoom === 'number'
+      ) {
+        map.setView([viewport.centerLatitude, viewport.centerLongitude], viewport.zoom, { animate: false });
+        return;
+      }
+
+      map.fitWorld({ animate: false });
+    } catch {
+      // Leaflet can throw while the container is hidden; a later invalidateSize will settle the view.
+    }
+  }
+
+  private removeFlaggedLayers(map: any, flag: string): void {
+    map.eachLayer((layer: any) => {
+      if (layer?.[flag]) {
+        map.removeLayer(layer);
+      }
+    });
+  }
+
+  private validateDrawnLayer(layer: any): string | null {
+    if (!this.selectedParentDestinationZone?.geometryGeoJson) {
+      return 'Select a parent destination with a defined boundary before drawing this location.';
+    }
+
+    try {
+      const { zone } = this.zoneDrawService.extractZoneResult(layer);
+      if (!this.isZoneCoveredByParent(zone, this.selectedParentDestinationZone.geometryGeoJson)) {
+        return 'This location boundary is partially outside the destination.';
+      }
+    } catch {
+      return 'Boundary geometry is invalid.';
+    }
+
+    return null;
+  }
+
+  private styleDrawnLayer(layer: any, valid: boolean): void {
+    if (typeof layer?.setStyle !== 'function') return;
+    layer.setStyle(valid
+      ? { color: '#2563eb', fillColor: '#60a5fa', fillOpacity: 0.18, weight: 2 }
+      : { color: '#dc2626', fillColor: '#fecaca', fillOpacity: 0.28, weight: 2 });
+  }
+
+  private isZoneCoveredByParent(zone: [number, number][], geometry: AdminMapGeometry): boolean {
+    const ring = this.closeRing(zone.map(([latitude, longitude]) => [longitude, latitude] as [number, number]));
+    if (ring.length < 4) return false;
+
+    const checkPoints: [number, number][] = [];
+    for (let index = 0; index < ring.length - 1; index += 1) {
+      const current = ring[index];
+      const next = ring[index + 1];
+      checkPoints.push(current);
+      checkPoints.push([(current[0] + next[0]) / 2, (current[1] + next[1]) / 2]);
+    }
+
+    return this.parentPolygons(geometry).some(polygon =>
+      checkPoints.every(point => this.pointCoveredByPolygon(point, polygon)),
+    );
+  }
+
+  private parentPolygons(geometry: AdminMapGeometry): [number, number][][][] {
+    if (geometry.type === 'Polygon') {
+      return [geometry.coordinates as [number, number][][]];
+    }
+
+    return geometry.coordinates as [number, number][][][];
+  }
+
+  private pointCoveredByPolygon(point: [number, number], rings: [number, number][][]): boolean {
+    const exterior = rings[0] ?? [];
+    if (!this.pointInRingOrBoundary(point, exterior)) return false;
+
+    return rings.slice(1).every(hole => !this.pointInRingStrict(point, hole));
+  }
+
+  private pointInRingOrBoundary(point: [number, number], ring: [number, number][]): boolean {
+    if (this.pointOnRingBoundary(point, ring)) return true;
+    return this.pointInRingStrict(point, ring);
+  }
+
+  private pointInRingStrict(point: [number, number], ring: [number, number][]): boolean {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+      const xi = ring[i][0];
+      const yi = ring[i][1];
+      const xj = ring[j][0];
+      const yj = ring[j][1];
+      const intersects = yi > point[1] !== yj > point[1] &&
+        point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi;
+      if (intersects) inside = !inside;
+    }
+    return inside;
+  }
+
+  private pointOnRingBoundary(point: [number, number], ring: [number, number][]): boolean {
+    for (let index = 0; index < ring.length - 1; index += 1) {
+      if (this.pointOnSegment(point, ring[index], ring[index + 1])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private pointOnSegment(point: [number, number], start: [number, number], end: [number, number]): boolean {
+    const cross = (point[1] - start[1]) * (end[0] - start[0]) -
+      (point[0] - start[0]) * (end[1] - start[1]);
+    if (Math.abs(cross) > 1e-9) return false;
+
+    const dot = (point[0] - start[0]) * (end[0] - start[0]) +
+      (point[1] - start[1]) * (end[1] - start[1]);
+    if (dot < -1e-9) return false;
+
+    const lengthSquared = (end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2;
+    return dot <= lengthSquared + 1e-9;
+  }
+
+  private closeRing(points: [number, number][]): [number, number][] {
+    if (points.length === 0) return points;
+    const first = points[0];
+    const last = points[points.length - 1];
+    if (Math.abs(first[0] - last[0]) < 1e-9 && Math.abs(first[1] - last[1]) < 1e-9) {
+      return points;
+    }
+    return [...points, first];
+  }
+
+  private selectedImageFiles(): File[] {
+    const files: File[] = [];
+    if (this.coverImageFile) {
+      files.push(this.coverImageFile);
+    }
+
+    files.push(...this.galleryImages
+      .map(image => image.file)
+      .filter((file): file is File => !!file));
+    return files;
+  }
+
+  private shouldSendImages(files: File[]): boolean {
+    return !this.isEditMode || this.imagesTouched || files.length > 0;
+  }
+
+  private buildImageInputs(uploaded: RegionalImageUploadResult[]): RegionalEntityImageInput[] {
+    const images: RegionalEntityImageInput[] = [];
+    let uploadIndex = 0;
+    const fallbackName = this.locationName.trim() || 'Location image';
+
+    if (this.coverImageUrl) {
+      const uploadedCover = this.coverImageFile ? uploaded[uploadIndex++] : null;
+      images.push({
+        url: uploadedCover?.url ?? this.coverImageUrl,
+        altText: `${fallbackName} cover`,
+        caption: null,
+        isMain: true,
+        sortOrder: 0,
+      });
+    }
+
+    for (const image of this.galleryImages) {
+      const uploadedGalleryImage = image.file ? uploaded[uploadIndex++] : null;
+      images.push({
+        url: uploadedGalleryImage?.url ?? image.url,
+        altText: image.name || fallbackName,
+        caption: null,
+        isMain: false,
+        sortOrder: images.length,
+      });
+    }
+
+    return images.map((image, index) => ({
+      ...image,
+      isMain: index === 0,
+      sortOrder: index,
+    }));
+  }
+
+  private applyEntityImages(images: RegionalEntityImageDto[], fallbackImageUrl: string | null, fallbackName: string): void {
+    const orderedImages = [...images]
+      .sort((a, b) => Number(b.isMain) - Number(a.isMain) || a.sortOrder - b.sortOrder || a.id - b.id);
+
+    if (orderedImages.length === 0 && fallbackImageUrl) {
+      this.coverImageUrl = fallbackImageUrl;
+      this.coverImageName = fallbackName;
+      this.coverImageFile = null;
+      this.galleryImages = [];
+      this.imagesTouched = false;
+      return;
+    }
+
+    const [cover, ...gallery] = orderedImages;
+    this.coverImageUrl = cover?.url ?? null;
+    this.coverImageName = cover?.altText ?? fallbackName;
+    this.coverImageFile = null;
+    this.galleryImages = gallery.map(image => ({
+      url: image.url,
+      name: image.altText ?? fallbackName,
+    }));
+    this.imagesTouched = false;
+  }
+
+  private setDescriptionHtml(html: string): void {
+    this.pendingDescriptionHtml = html;
+    this.applyPendingDescription();
+  }
+
+  private applyPendingDescription(): void {
+    if (this.pendingDescriptionHtml === null || !this.editorRef?.nativeElement) return;
+    this.editorRef.nativeElement.innerHTML = this.pendingDescriptionHtml;
+    this.pendingDescriptionHtml = null;
+    this.syncEmptyState();
+  }
+
+  private applyEditBoundaryFromZones(location?: RegionalLocationDetailDto): void {
+    const id = Number(location?.id ?? this.editLocationId);
+    if (!Number.isFinite(id) || id <= 0) return;
+
+    const zone = this.mapZones.find(item => item.entityType === 'Location' && item.id === id);
+    const layer = this.layerFromGeometry(zone?.geometryGeoJson ?? null);
+    if (!layer) return;
+
+    this.confirmedLayer = layer;
+    this.drawnLayer = layer;
+    this.zoneConfirmed = true;
+    if (location?.boundaryShapeType) {
+      this.confirmedShapeType = this.normalizeShapeType(location.boundaryShapeType);
+    } else if (!this.confirmedShapeType) {
+      this.confirmedShapeType = 'Polygon';
+    }
+    this.zoneAreaKm2 = this.zoneDrawService.calculateAreaKm2(layer);
+    this.zoneValidationMessage = this.validateDrawnLayer(layer);
+    this.styleDrawnLayer(layer, !this.zoneValidationMessage);
+    this.showZoneOnMiniMap();
+  }
+
+  private layerFromGeometry(geometry: AdminMapGeometry | null): any {
+    if (!geometry || typeof L === 'undefined') return null;
+
+    const exteriorRing = geometry.type === 'Polygon'
+      ? (geometry.coordinates as [number, number][][])[0]
+      : ((geometry.coordinates as [number, number][][][])[0]?.[0] ?? []);
+
+    const points = exteriorRing
+      .map(([longitude, latitude]) => [latitude, longitude] as [number, number])
+      .filter(([latitude, longitude]) => Number.isFinite(latitude) && Number.isFinite(longitude));
+
+    if (points.length > 1) {
+      const first = points[0];
+      const last = points[points.length - 1];
+      if (Math.abs(first[0] - last[0]) < 1e-9 && Math.abs(first[1] - last[1]) < 1e-9) {
+        points.pop();
+      }
+    }
+
+    return points.length >= 3 ? L.polygon(points, this.zoneDrawService.cloneStyle) : null;
+  }
+
+  private normalizeShapeType(value?: string | null): BoundaryShapeType {
+    return value === 'Rectangle' || value === 'Circle' ? value : 'Polygon';
+  }
+
+  private normalizeEditableStatus(value?: string | null): 'Published' | 'Draft' | 'Archived' {
+    const normalized = (value ?? '').toLowerCase();
+    if (normalized === 'draft') return 'Draft';
+    if (normalized === 'archived') return 'Archived';
+    return 'Published';
   }
 
   private readPersistedRegionId(): number | null {

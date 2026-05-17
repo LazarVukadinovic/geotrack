@@ -10,12 +10,6 @@
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
     <app-topbar [title]="isEditMode ? 'Edit Place' : 'New Place'" [showBack]="true"></app-topbar>
 
-    @if (isEditMode) {
-      <div class="px-8 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-700 font-medium">
-        This screen is create-only for now. Existing places are still protected from local mock edits.
-      </div>
-    }
-
     <div class="flex-1 overflow-y-auto px-8 py-6">
       @if (errorMessage) {
         <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -112,7 +106,7 @@
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Internal Reference ID</label>
                 <input
                   class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none"
-                  value="Generated automatically after publish"
+                  [value]="internalReferenceId || 'Generated automatically after publish'"
                   readonly
                 />
               </div>
@@ -468,7 +462,7 @@
 
         <div class="w-90 min-w-[350px]">
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
-            <h4 class="text-sm font-bold text-gray-900 mb-3">Publishing</h4>
+            <h4 class="text-sm font-bold text-gray-900 mb-3">{{ isEditMode ? 'Save Changes' : 'Publishing' }}</h4>
             <button
               type="button"
               (click)="publish()"
@@ -480,7 +474,7 @@
               [class.bg-gray-300]="!canPublish"
               [class.cursor-not-allowed]="!canPublish"
             >
-              {{ isSaving ? 'Publishing...' : 'Publish' }}
+              {{ isSaving ? (isEditMode ? 'Saving...' : 'Publishing...') : (isEditMode ? 'Save Changes' : 'Publish') }}
             </button>
           </div>
 
