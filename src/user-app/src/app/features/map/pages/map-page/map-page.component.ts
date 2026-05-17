@@ -25,7 +25,7 @@ import type { AnalyticsEntityType } from '../../../../core/services/analytics.ty
 import type { ResolvedLocation } from '../../../../core/models/location.model';
 import { MapFilterOption, MapFilterStateService } from '../../services/map-filter-state.service';
 
-const MAP_STYLE_URL = '/map-style.json?v=no-poi-v4';
+const MAP_STYLE_URL = '/map-style.json?v=osm-liberty-v1';
 
 const DESTINATION_ZOOM_THRESHOLD = 10;
 const VIEWPORT_DEBOUNCE_MS = 250;
@@ -67,6 +67,7 @@ interface MapNavigationState {
   cleared?: boolean;
   mapFocus?: Partial<MapEntityMarker> | null;
   mapPreviewRestore?: boolean;
+  fromExplore?: boolean;
 }
 
 @Component({
@@ -85,6 +86,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private map!: MapLibreMap;
   private searchTimeout?: ReturnType<typeof setTimeout>;
+  private noDataSearchTimeout?: ReturnType<typeof setTimeout>;
   private filterCategories: string[] = [];
   private selectedCategoryLabelFilters: string[] = [];
   private readonly markersByKey = new Map<string, MarkerEntry>();
@@ -96,9 +98,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private lastFetchedViewport: CachedViewport | null = null;
   private isDestroyed = false;
   private readonly initialMapFocus: MapEntityMarker | null;
+  private readonly navigatedWithDestination: boolean;
   private preserveSelectedPlaceFromNavigation = false;
   private lastMarkerActivationKey: string | null = null;
   private lastMarkerActivationAt = 0;
+  private noDataModalDismissed = false;
 
   currentMode: MapMarkersMode = 'entities';
 
@@ -116,11 +120,17 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   searchQuery = '';
   searchResults: MapSearchResult[] = [];
+  isSearchFocused = false;
+  noDataSearchQuery = '';
+  noDataSearchResults: MapSearchResult[] = [];
+  allDestinations: MapSearchResult[] = [];
+  private searchBlurTimeout?: ReturnType<typeof setTimeout>;
 
   selectedPlace: MapEntityMarker | null = null;
   emptyStateMessage = '';
   loadErrorMessage = '';
   routeErrorMessage = '';
+  showNoDataModal = false;
 
   categories = [
     { id: 'all', label: 'All' },
@@ -168,6 +178,18 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       }));
     }
 
+    this.navigatedWithDestination = !!(
+      state?.fromExplore &&
+      state.name &&
+      !state.isUserLocation &&
+      typeof state.lat === 'number' &&
+      typeof state.lon === 'number'
+    );
+
+    if (this.navigatedWithDestination) {
+      this.noDataModalDismissed = true;
+    }
+
     this.initialMapFocus = this.readMapFocus(state?.mapFocus);
     if (this.initialMapFocus) {
       this.destinationName = this.initialMapFocus.title;
@@ -203,6 +225,14 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       clearTimeout(this.viewportLoadTimeout);
     }
 
+    if (this.noDataSearchTimeout) {
+      clearTimeout(this.noDataSearchTimeout);
+    }
+
+    if (this.searchBlurTimeout) {
+      clearTimeout(this.searchBlurTimeout);
+    }
+
     if (this.map) {
       this.persistMapViewState();
 
@@ -230,9 +260,55 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.map?.zoomOut({ duration: 300 });
   }
 
+  get filteredDestinations(): MapSearchResult[] {
+    const q = this.noDataSearchQuery.trim().toLowerCase();
+    if (!q) return this.allDestinations;
+    return this.allDestinations.filter(d => d.name.toLowerCase().includes(q) || (d.subtitle ?? '').toLowerCase().includes(q));
+  }
+
+  private loadDestinationsIfNeeded(): void {
+    if (this.allDestinations.length > 0) return;
+    this.mapApi.getDestinations().subscribe({
+      next: (results) => {
+        this.allDestinations = results;
+        this.cdr.detectChanges();
+      },
+      error: () => {},
+    });
+  }
+
+  selectNoDataDestination(result: MapSearchResult): void {
+    this.noDataSearchQuery = '';
+    this.showNoDataModal = false;
+    this.selectSearchResult(result);
+    this.noDataModalDismissed = true;
+  }
+
+  exploreAnyway(): void {
+    this.showNoDataModal = false;
+    this.noDataModalDismissed = true;
+  }
+
   goBack(): void {
     this.clearMapFocusHistoryState();
     this.router.navigate(['/home']);
+  }
+
+  onSearchFocus(): void {
+    if (this.searchBlurTimeout) {
+      clearTimeout(this.searchBlurTimeout);
+      this.searchBlurTimeout = undefined;
+    }
+    this.isSearchFocused = true;
+    this.loadDestinationsIfNeeded();
+    this.cdr.detectChanges();
+  }
+
+  onSearchBlur(): void {
+    this.searchBlurTimeout = setTimeout(() => {
+      this.isSearchFocused = false;
+      this.cdr.detectChanges();
+    }, 200);
   }
 
   onSearchInput(value: string): void {
@@ -264,6 +340,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       candidate.latitude === result.latitude &&
       candidate.longitude === result.longitude);
     this.searchResults = [];
+    this.noDataSearchResults = [];
+    this.isSearchFocused = false;
+    this.noDataModalDismissed = false;
     this.searchQuery = result.name;
     this.destinationName = result.name;
     this.destinationLat = result.latitude;
@@ -282,7 +361,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       isUserLocation: false,
     }));
 
-    this.map.jumpTo({ center: [result.longitude, result.latitude], zoom: 14 });
+    this.map.flyTo({ center: [result.longitude, result.latitude], zoom: 14, duration: 900, essential: true });
     this.analytics.track('search_performed', {
       metadata: {
         surface: 'map',
@@ -536,15 +615,17 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.markMapOpenedThisSession();
 
     window.addEventListener('resize', this.resizeHandler);
+    this.map.scrollZoom.setWheelZoomRate(1 / 150);
     this.map.touchZoomRotate.enable();
     this.map.touchPitch.enable();
+
+    this.map.on('styleimagemissing', (event: MapStyleImageMissingEvent) => {
+      this.map.addImage(event.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
+    });
 
     this.map.on('load', () => {
       this.map.resize();
       this.hideExternalPoiLayers();
-      this.map.on('styleimagemissing', (event: MapStyleImageMissingEvent) => {
-        this.map.addImage(event.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
-      });
 
       const exactLocation = this.getExactUserLocation();
       if (exactLocation) {
@@ -565,55 +646,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private hideExternalPoiLayers(): void {
     const layers = this.map.getStyle().layers ?? [];
-
-    const blockedPoiClasses = [
-      'food',
-      'shop',
-      'tourism',
-      'lodging',
-      'accommodation',
-      'commercial',
-      'entertainment',
-      'leisure',
-    ];
-
-    const blockedPoiSubclasses = [
-      'restaurant',
-      'cafe',
-      'bar',
-      'pub',
-      'fast_food',
-      'biergarten',
-      'food_court',
-      'hotel',
-      'hostel',
-      'motel',
-      'guest_house',
-      'apartment',
-      'chalet',
-      'camp_site',
-      'caravan_site',
-      'museum',
-      'attraction',
-      'viewpoint',
-      'art_gallery',
-      'gallery',
-      'theme_park',
-      'zoo',
-      'aquarium',
-      'cinema',
-      'theatre',
-      'nightclub',
-      'casino',
-      'supermarket',
-      'marketplace',
-      'mall',
-      'bakery',
-      'clothes',
-      'jewelry',
-      'gift',
-      'convenience',
-    ];
 
     const keepLabelKeywords = [
       'road',
@@ -655,7 +687,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
       const layerLike = layer as {
         id: string;
-        layout?: Record<string, unknown>;
         ['source-layer']?: string;
       };
 
@@ -670,22 +701,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       if (!looksLikePoiLayer) continue;
 
       try {
-        const oldFilter = this.map.getFilter(layerLike.id) as unknown[] | undefined;
-        const filteredPoiExpression: unknown[] = [
-          'all',
-          ...(oldFilter ? [oldFilter] : []),
-          ['!', ['in', ['get', 'class'], ['literal', blockedPoiClasses]]],
-          ['!', ['in', ['get', 'subclass'], ['literal', blockedPoiSubclasses]]],
-          ['!', ['in', ['get', 'type'], ['literal', blockedPoiSubclasses]]],
-        ];
-
-        this.map.setFilter(layerLike.id, filteredPoiExpression as any);
+        this.map.setLayoutProperty(layerLike.id, 'visibility', 'none');
       } catch {
-        try {
-          this.map.setLayoutProperty(layerLike.id, 'visibility', 'none');
-        } catch {
-          // Ignore style layers that cannot be modified by MapLibre at runtime.
-        }
+        // Ignore style layers that cannot be modified by MapLibre at runtime.
       }
     }
   }
@@ -709,14 +727,23 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private async resolveInitialMapView(): Promise<MapInitialView> {
-    const exactLocation = await this.locationSvc.refreshExactLocationForMap();
-
     if (this.initialMapFocus) {
+      void this.locationSvc.refreshExactLocationForMap();
       return {
         center: [this.initialMapFocus.longitude, this.initialMapFocus.latitude],
         zoom: DETAIL_FOCUS_ZOOM,
       };
     }
+
+    if (this.navigatedWithDestination) {
+      void this.locationSvc.refreshExactLocationForMap();
+      return {
+        center: [this.destinationLon, this.destinationLat],
+        zoom: INITIAL_LOCATION_ZOOM,
+      };
+    }
+
+    const exactLocation = await this.locationSvc.refreshExactLocationForMap();
 
     const savedView = this.readSavedMapViewState();
     if (this.hasOpenedMapThisSession() && savedView) {
@@ -977,13 +1004,22 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       }
     }
 
-    this.emptyStateMessage = markers.length === 0
-      ? (mode === 'destinations'
-        ? 'Pan or zoom in to discover destinations.'
-        : this.selectedCategoryLabelFilters.length > 0
-          ? 'No backend-backed map entities in this view match those filters.'
-          : 'GeoTrack does not have backend-backed places, stays, or events mapped for this area yet.')
-      : '';
+    if (markers.length > 0) {
+      this.emptyStateMessage = '';
+      this.showNoDataModal = false;
+    } else if (mode === 'destinations') {
+      this.emptyStateMessage = 'Pan or zoom in to discover destinations.';
+      this.showNoDataModal = false;
+    } else if (this.selectedCategoryLabelFilters.length > 0) {
+      this.emptyStateMessage = 'No results in this area match those filters.';
+      this.showNoDataModal = false;
+    } else {
+      this.emptyStateMessage = '';
+      if (!this.noDataModalDismissed) {
+        this.showNoDataModal = true;
+        this.loadDestinationsIfNeeded();
+      }
+    }
   }
 
   private createMarkerEntry(marker: MapEntityMarker): MarkerEntry {
@@ -1075,6 +1111,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.routeErrorMessage = '';
       this.searchResults = [];
       this.clearRoute();
+      this.noDataModalDismissed = true;
 
       this.destinationName = marker.title;
       this.destinationLat = marker.latitude;
@@ -1341,6 +1378,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.selectedPlace = null;
     this.routeErrorMessage = '';
     this.clearRoute();
+    this.noDataModalDismissed = false;
 
     this.map.resize();
     this.map.flyTo({

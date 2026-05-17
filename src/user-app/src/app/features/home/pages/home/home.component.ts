@@ -66,7 +66,7 @@ export class Home implements OnInit, OnDestroy {
       style: MAP_STYLE_URL,
       center: [14.0, 20.0],
       zoom: 1.8,
-      pitch: 0,
+      pitch: 30,
       bearing: 0,
       interactive: false,
       attributionControl: false,
@@ -81,9 +81,13 @@ export class Home implements OnInit, OnDestroy {
 
     this.bgMap.on('load', () => {
       this.bgMap?.resize();
-
-      // Force a second resize after the shell/layout has finished painting.
       requestAnimationFrame(() => this.bgMap?.resize());
+
+      this.bgMap?.getStyle().layers?.forEach(layer => {
+        if (layer.type === 'symbol') {
+          this.bgMap?.setLayoutProperty(layer.id, 'visibility', 'none');
+        }
+      });
 
       this.startCinematicLoop();
     });
@@ -95,7 +99,7 @@ export class Home implements OnInit, OnDestroy {
     const animate = () => {
       if (this.isDestroyed || !this.bgMap) return;
 
-      lng += 0.025;
+      lng += 0.10;
       if (lng > 180) lng = -180;
 
       this.bgMap.setCenter([lng, 20.0]);
@@ -197,7 +201,20 @@ export class Home implements OnInit, OnDestroy {
 
       this.isLocating = false;
       this.locationSvc.markLocationEntryComplete();
-      void this.router.navigate(['/explore'], { replaceUrl: true });
+
+      if (this.exploreSvc.selectedDestination() === null) {
+        void this.router.navigate(['/map'], {
+          replaceUrl: true,
+          state: {
+            name: 'Current Location',
+            lat: coords.latitude,
+            lon: coords.longitude,
+            isUserLocation: true,
+          },
+        });
+      } else {
+        void this.router.navigate(['/explore'], { replaceUrl: true });
+      }
     } catch {
       const approximateLoc = await this.locationSvc.ensureIpFallback();
 
@@ -208,7 +225,20 @@ export class Home implements OnInit, OnDestroy {
         await this.exploreSvc.loadForLocation(approximateLoc.latitude, approximateLoc.longitude);
       }
 
-      void this.router.navigate(['/explore'], { replaceUrl: true });
+      const hasDestination = this.exploreSvc.selectedDestination() !== null;
+      if (!hasDestination && approximateLoc) {
+        void this.router.navigate(['/map'], {
+          replaceUrl: true,
+          state: {
+            name: 'Current Location',
+            lat: approximateLoc.latitude,
+            lon: approximateLoc.longitude,
+            isUserLocation: true,
+          },
+        });
+      } else {
+        void this.router.navigate(['/explore'], { replaceUrl: true });
+      }
     }
   }
 }

@@ -50,6 +50,16 @@
   z-index: var(--map-layer-info);
 }
 
+.map-page__no-data-overlay {
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.map-page__no-data-card {
+  animation: map-bottom-card-enter 200ms ease-out both;
+}
+
 .map-page__more-panel {
   display: none;
 }

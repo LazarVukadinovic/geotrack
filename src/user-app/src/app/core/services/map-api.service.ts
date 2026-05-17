@@ -71,6 +71,10 @@ export interface MapMarkersResponse {
 export class MapApiService {
   private readonly http = inject(HttpClient);
 
+  getDestinations(): Observable<MapSearchResult[]> {
+    return this.http.get<MapSearchResult[]>('/api/map/destinations');
+  }
+
   search(query: string): Observable<MapSearchResult[]> {
     return this.http.get<MapSearchResult[]>('/api/map/search', {
       params: new HttpParams()
