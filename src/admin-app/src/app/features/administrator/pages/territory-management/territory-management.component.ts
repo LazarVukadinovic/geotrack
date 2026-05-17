@@ -188,13 +188,14 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
 
   loadTerritories(): void {
     this.isLoading = true;
-    this.svc.getPage$(
-      this.listSearch,
-      50,
-      this.listSortField,
-      this.listSortDir,
-      this.filterCountryCodes,
-    ).pipe(takeUntil(this.destroy$)).subscribe(page => {
+    this.svc.getPage$({
+      page: 1,
+      pageSize: 50,
+      search: this.listSearch,
+      sortField: this.listSortField,
+      sortDir: this.listSortDir,
+      countryFilter: this.filterCountryCodes,
+    }).pipe(takeUntil(this.destroy$)).subscribe(page => {
       this.territories      = page.items;
       this.totalTerritories = page.total;
       this.assignedCodes    = this.svc.getAssignedCountryCodes();

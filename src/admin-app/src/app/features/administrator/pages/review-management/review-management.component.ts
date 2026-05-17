@@ -134,7 +134,7 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
   }
 
   buildReq(): AdminReviewsPageRequest {
-    return { pageSize: this.displayCount, search: this.searchQuery, sortField: this.sortField, sortDir: this.sortDir, statusFilter: this.statusFilter, typeFilter: this.typeFilter };
+    return { page: 1, pageSize: this.displayCount, search: this.searchQuery, sortField: this.sortField, sortDir: this.sortDir, statusFilter: this.statusFilter, typeFilter: this.typeFilter };
   }
 
   loadReviews(): void {

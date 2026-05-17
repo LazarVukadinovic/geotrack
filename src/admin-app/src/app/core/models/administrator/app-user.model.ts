@@ -23,6 +23,7 @@ export interface AppUsersPage {
 }
 
 export interface AppUsersPageRequest {
+  page: number;
   pageSize: number;
   search: string;
   sortField: AppUserSortField;

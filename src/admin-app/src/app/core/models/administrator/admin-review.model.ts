@@ -29,6 +29,7 @@ export interface AdminReviewsPage {
 }
 
 export interface AdminReviewsPageRequest {
+  page: number;
   pageSize: number;
   search: string;
   sortField: ReviewSortField;

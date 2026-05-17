@@ -31,19 +31,12 @@ let ALL_REVIEWS: AdminReview[] = [
   { id: 'REV-014', targetType: 'Event', targetName: 'Belgrade Beer Fest', rating: 4, content: 'Great event, nice atmosphere and decent beer selection.', authorId: 'AU-001', authorName: 'Nikola Jovanović', authorEmail: 'n.jovanovic@mail.com', authorInitials: 'NJ', authorAvatarColor: color(0), status: 'Reported', reportCount: 3, reportReason: REPORT_REASONS[0], createdAt: '2026-04-28T19:00:00Z', reportedAt: '2026-04-29T10:00:00Z' },
   { id: 'REV-015', targetType: 'Place', targetName: 'Đavolja Varoš', rating: 5, content: 'Truly unique rock formations unlike anything else I have seen.', authorId: 'AU-020', authorName: 'Dragana Vučić', authorEmail: 'd.vucic@mail.com', authorInitials: 'DV', authorAvatarColor: color(3), status: 'Active', reportCount: 0, reportReason: null, createdAt: '2026-05-05T12:00:00Z', reportedAt: null },
   { id: 'REV-016', targetType: 'Destination', targetName: 'Niš Fortress', rating: 3, content: 'Historic but poorly maintained. Needs more investment and better signage.', authorId: 'AU-017', authorName: 'Goran Marinković', authorEmail: 'g.marinkovic@rs.com', authorInitials: 'GM', authorAvatarColor: color(0), status: 'Active', reportCount: 1, reportReason: null, createdAt: '2026-04-15T13:00:00Z', reportedAt: null },
-  { id: 'REV-017', targetType: 'Location', targetName: 'Fruška Gora', rating: 4, content: 'Beautiful monasteries and vineyards. A peaceful escape from the city.', authorId: 'AU-012', authorName: 'Nataša Radović', authorEmail: 'n.radovic@email.rs', authorInitials: 'NR', avatarColor: color(3), status: 'Active', reportCount: 0, reportReason: null, createdAt: '2026-04-20T11:00:00Z', reportedAt: null } as unknown as AdminReview,
+  { id: 'REV-017', targetType: 'Location', targetName: 'Fruška Gora', rating: 4, content: 'Beautiful monasteries and vineyards. A peaceful escape from the city.', authorId: 'AU-012', authorName: 'Nataša Radović', authorEmail: 'n.radovic@email.rs', authorInitials: 'NR', authorAvatarColor: color(3), status: 'Active', reportCount: 0, reportReason: null, createdAt: '2026-04-20T11:00:00Z', reportedAt: null },
   { id: 'REV-018', targetType: 'Place', targetName: 'Skadarlija', rating: 1, content: 'Overpriced tourist trap. Nothing authentic about it. Total scam!', authorId: 'AU-009', authorName: 'Dragan Vasić', authorEmail: 'd.vasic@webmail.com', authorInitials: 'DV', authorAvatarColor: color(0), status: 'Reported', reportCount: 4, reportReason: REPORT_REASONS[4], createdAt: '2026-02-05T10:00:00Z', reportedAt: '2026-05-15T14:30:00Z' },
   { id: 'REV-019', targetType: 'Destination', targetName: 'Ada Bojana', rating: 5, content: 'Hidden gem! Pristine nature, amazing seafood and wonderful people.', authorId: 'AU-004', authorName: 'Ana Đorđević', authorEmail: 'ana.djordjevic@gmail.com', authorInitials: 'AĐ', authorAvatarColor: color(3), status: 'Active', reportCount: 0, reportReason: null, createdAt: '2026-05-08T15:00:00Z', reportedAt: null },
   { id: 'REV-020', targetType: 'Event', targetName: 'Guča Trumpet Festival', rating: 4, content: 'Incredible cultural experience. Lively, loud and unforgettable!', authorId: 'AU-006', authorName: 'Jelena Stanković', authorEmail: 'j.stankovic@email.rs', authorInitials: 'JS', authorAvatarColor: color(5), status: 'Reported', reportCount: 2, reportReason: REPORT_REASONS[0], createdAt: '2026-05-15T09:00:00Z', reportedAt: '2026-05-15T11:00:00Z' },
 ];
 
-// Fix data issue from REV-017
-ALL_REVIEWS = ALL_REVIEWS.map(r => {
-  if (!(r as any).authorAvatarColor && (r as any).avatarColor) {
-    return { ...r, authorAvatarColor: (r as any).avatarColor };
-  }
-  return r;
-});
 
 let NOTIFICATIONS: ReviewNotification[] = [
   { id: 'NOTIF-001', reviewId: 'REV-020', authorName: 'Jelena Stanković', targetName: 'Guča Trumpet Festival', targetType: 'Event', reportedAt: '2026-05-15T11:00:00Z', isRead: false },

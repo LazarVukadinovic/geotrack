@@ -126,7 +126,7 @@ export class UserManagementComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.managers = this.territorySvc.getAllManagers();
 
-    this.territorySvc.getPage$('', 1000, 'createdAt', 'desc', [])
+    this.territorySvc.getPage$({ page: 1, pageSize: 1000, search: '', sortField: 'createdAt', sortDir: 'desc', countryFilter: [] })
       .pipe(takeUntil(this.destroy$))
       .subscribe(page => {
         this.allTerritories = page.items;
@@ -158,7 +158,7 @@ export class UserManagementComponent implements OnInit, OnDestroy {
 
   // ── App users ─────────────────────────────────────────────────────────────
   buildReq(): AppUsersPageRequest {
-    return { pageSize: this.displayCount, search: this.searchQuery, sortField: this.sortField, sortDir: this.sortDir, statusFilter: this.statusFilter };
+    return { page: 1, pageSize: this.displayCount, search: this.searchQuery, sortField: this.sortField, sortDir: this.sortDir, statusFilter: this.statusFilter };
   }
 
   loadAppUsers(): void {

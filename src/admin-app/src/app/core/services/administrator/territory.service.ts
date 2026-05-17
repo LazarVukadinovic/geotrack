@@ -3,7 +3,7 @@ import { Observable, BehaviorSubject, of } from 'rxjs';
 import { delay, tap } from 'rxjs/operators';
 import {
   Country, Territory, TerritoryManager,
-  CreateTerritoryRequest, TerritoryPage,
+  CreateTerritoryRequest, TerritoryPage, TerritoryPageRequest,
 } from '../../models/administrator/territory.model';
 
 export const ALL_COUNTRIES: Country[] = [
@@ -271,13 +271,9 @@ export class TerritoryService {
     return TERRITORY_MANAGERS.filter(m => m.status === 'Active');
   }
 
-  getPage$(
-    search = '',
-    pageSize = 20,
-    sortField: 'name' | 'status' | 'countries' | 'createdAt' = 'createdAt',
-    sortDir: 'asc' | 'desc' = 'desc',
-    countryFilter: string[] = [],
-  ): Observable<TerritoryPage> {
+  getPage$(req: TerritoryPageRequest): Observable<TerritoryPage> {
+    const { search, pageSize, page, sortField, sortDir, countryFilter } = req;
+
     let filtered = TERRITORIES.filter(t => {
       if (search) {
         const q = search.toLowerCase();
@@ -297,7 +293,7 @@ export class TerritoryService {
 
     filtered = [...filtered].sort((a, b) => {
       let cmp = 0;
-      if (sortField === 'name')      cmp = a.name.localeCompare(b.name);
+      if (sortField === 'name')           cmp = a.name.localeCompare(b.name);
       else if (sortField === 'status')    cmp = a.status.localeCompare(b.status);
       else if (sortField === 'countries') cmp = a.countries.length - b.countries.length;
       else if (sortField === 'createdAt') cmp = a.createdAt.localeCompare(b.createdAt);
@@ -305,9 +301,10 @@ export class TerritoryService {
     });
 
     const total = filtered.length;
-    const items = filtered.slice(0, pageSize);
-    const page = { items, total };
-    return of(page).pipe(
+    const offset = (page - 1) * pageSize;
+    const items = filtered.slice(offset, offset + pageSize);
+    const result = { items, total };
+    return of(result).pipe(
       delay(300),
       tap(p => this.lastPage$.next(p)),
     );

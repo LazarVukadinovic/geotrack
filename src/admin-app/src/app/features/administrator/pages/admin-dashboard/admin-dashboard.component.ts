@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
@@ -24,8 +25,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   private readonly userSvc = inject(AppUsersService);
   private readonly revSvc  = inject(AdminReviewsService);
   private readonly cdr     = inject(ChangeDetectorRef);
-
-  constructor(private router: Router) {}
+  private readonly router  = inject(Router);
 
   private destroy$ = new Subject<void>();
 
@@ -45,7 +45,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   stats: { label: string; value: number; sub: string; color: string; icon: string; route: string }[] = [];
 
   ngOnInit(): void {
-    this.terrSvc.getPage$('', 100).pipe(takeUntil(this.destroy$)).subscribe(page => {
+    this.terrSvc.getPage$({ page: 1, pageSize: 100, search: '', sortField: 'createdAt', sortDir: 'desc', countryFilter: [] }).pipe(takeUntil(this.destroy$)).subscribe(page => {
       this.totalTerritories   = page.total;
       this.assignedTerritories = page.items.filter(t => t.status === 'Active').length;
       this.buildStats();

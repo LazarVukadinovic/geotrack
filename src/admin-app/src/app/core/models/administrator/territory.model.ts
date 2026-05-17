@@ -37,3 +37,15 @@ export interface TerritoryPage {
   items: Territory[];
   total: number;
 }
+
+export type TerritoryPageSortField = 'name' | 'status' | 'countries' | 'createdAt';
+export type TerritoryPageSortDir = 'asc' | 'desc';
+
+export interface TerritoryPageRequest {
+  page: number;
+  pageSize: number;
+  search: string;
+  sortField: TerritoryPageSortField;
+  sortDir: TerritoryPageSortDir;
+  countryFilter: string[];
+}
