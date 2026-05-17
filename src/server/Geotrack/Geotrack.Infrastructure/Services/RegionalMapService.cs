@@ -350,7 +350,7 @@ public class RegionalMapService : IRegionalMapService
                     RegionId = data.Region.Id,
                     DestinationId = destination.Id,
                     DetailRoute = $"/destinations/detail/{destination.Id}",
-                    EditRoute = "/destinations/new"
+                    EditRoute = $"/destinations/edit/{destination.Id}"
                 }));
         }
 
@@ -373,7 +373,7 @@ public class RegionalMapService : IRegionalMapService
                     DestinationId = location.DestinationId,
                     LocationId = location.Id,
                     DetailRoute = $"/locations/detail/{location.Id}",
-                    EditRoute = "/locations/new"
+                    EditRoute = $"/locations/edit/{location.Id}"
                 }));
         }
 
@@ -397,7 +397,7 @@ public class RegionalMapService : IRegionalMapService
                     LocationId = place.LocationId,
                     PlaceId = place.Id,
                     DetailRoute = $"/places/detail/{place.Id}",
-                    EditRoute = "/places/new"
+                    EditRoute = $"/places/edit/{place.Id}"
                 }));
         }
 
@@ -443,7 +443,7 @@ public class RegionalMapService : IRegionalMapService
                 destination.Status,
                 destination.BoundaryGeometry,
                 $"/destinations/detail/{destination.Id}",
-                "/destinations/new"))
+                $"/destinations/edit/{destination.Id}"))
             .Where(zone => zone is not null)
             .Select(zone => zone!));
 
@@ -456,7 +456,7 @@ public class RegionalMapService : IRegionalMapService
                 location.Status,
                 location.BoundaryGeometry,
                 $"/locations/detail/{location.Id}",
-                "/locations/new"))
+                $"/locations/edit/{location.Id}"))
             .Where(zone => zone is not null)
             .Select(zone => zone!));
 

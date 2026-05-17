@@ -20,6 +20,7 @@ public class RegionalDestinationListItemDto
     public DateTime CreatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
     public string? ImageUrl { get; set; }
+    public List<RegionalEntityImageDto> Images { get; set; } = new();
     public string? DetailRoute { get; set; }
     public string? EditRoute { get; set; }
 }
@@ -41,10 +42,16 @@ public class RegionalDestinationListResponseDto
 public class RegionalDestinationUpdateRequestDto
 {
     public string? Name { get; set; }
+    public string? Summary { get; set; }
     public string? Description { get; set; }
+    public string? Status { get; set; }
     public int? DestinationTypeId { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public string? BoundaryNote { get; set; }
+    public RegionalDestinationBoundaryDto? Boundary { get; set; }
+    public List<RegionalEntityImageInputDto>? Images { get; set; }
+    public List<int>? TagIds { get; set; }
 }
 
 public class RegionalDestinationCreateRequestDto
@@ -59,6 +66,7 @@ public class RegionalDestinationCreateRequestDto
     public double? Longitude { get; set; }
     public string? BoundaryNote { get; set; }
     public RegionalDestinationBoundaryDto? Boundary { get; set; }
+    public List<RegionalEntityImageInputDto> Images { get; set; } = new();
     public List<int> TagIds { get; set; } = new();
 
     // Present only so accidental/tampered clients can be rejected explicitly.

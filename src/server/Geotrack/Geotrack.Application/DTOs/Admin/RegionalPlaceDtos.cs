@@ -26,6 +26,7 @@ public class RegionalPlaceListItemDto
     public DateTime CreatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
     public string? ImageUrl { get; set; }
+    public List<RegionalEntityImageDto> Images { get; set; } = new();
     public string? DetailRoute { get; set; }
     public string? EditRoute { get; set; }
 }
@@ -59,17 +60,32 @@ public class RegionalPlaceListResponseDto
 public class RegionalPlaceUpdateRequestDto
 {
     public string? Name { get; set; }
+    public string? Summary { get; set; }
     public string? Subtitle { get; set; }
     public string? Description { get; set; }
+    public string? Status { get; set; }
     public string? Address { get; set; }
+    public string? StreetAddress { get; set; }
     public string? OpeningHours { get; set; }
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? ContactPhone { get; set; }
+    public string? Website { get; set; }
+    public string? AdmissionPriceRange { get; set; }
+    public string? BookingExternalLink { get; set; }
+    public string? BestTimeToVisit { get; set; }
+    public string? VisitorTips { get; set; }
+    public string? AccessNotes { get; set; }
+    public string? AccessibilityNotes { get; set; }
+    public bool? OperatingHoursEnabled { get; set; }
+    public List<RegionalPlaceOperatingHourDto>? OperatingHours { get; set; }
     public int? PlaceTypeId { get; set; }
     public int? StayTypeId { get; set; }
     public int? LocationId { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public List<int>? TagIds { get; set; }
+    public List<RegionalEntityImageInputDto>? Images { get; set; }
 }
 
 public class RegionalPlaceCreateRequestDto
@@ -96,6 +112,7 @@ public class RegionalPlaceCreateRequestDto
     public bool OperatingHoursEnabled { get; set; }
     public List<RegionalPlaceOperatingHourDto> OperatingHours { get; set; } = new();
     public List<int> TagIds { get; set; } = new();
+    public List<RegionalEntityImageInputDto> Images { get; set; } = new();
 
     // Present only so accidental/tampered clients can be rejected explicitly.
     public string? InternalReferenceId { get; set; }

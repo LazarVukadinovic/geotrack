@@ -16,7 +16,6 @@ public class RegionalPlaceService : IRegionalPlaceService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
-    private const string ExistingEditRoute = "/places/new";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
 
     private readonly AppDbContext _db;
@@ -107,6 +106,22 @@ public class RegionalPlaceService : IRegionalPlaceService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
+                Images = place.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Place)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => new RegionalEntityImageDto
+                    {
+                        Id = image.Id,
+                        Url = image.Url,
+                        AltText = image.AltText,
+                        Caption = image.Caption,
+                        IsMain = image.IsMain,
+                        SortOrder = image.SortOrder
+                    })
+                    .ToList(),
                 Tags = place.PlaceTags
                     .OrderBy(placeTag => placeTag.Tag.Name)
                     .Select(placeTag => new RegionalPlaceTagDto
@@ -181,6 +196,22 @@ public class RegionalPlaceService : IRegionalPlaceService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
+                Images = place.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Place)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => new RegionalEntityImageDto
+                    {
+                        Id = image.Id,
+                        Url = image.Url,
+                        AltText = image.AltText,
+                        Caption = image.Caption,
+                        IsMain = image.IsMain,
+                        SortOrder = image.SortOrder
+                    })
+                    .ToList(),
                 Tags = place.PlaceTags
                     .OrderBy(placeTag => placeTag.Tag.Name)
                     .Select(placeTag => new RegionalPlaceTagDto
@@ -239,6 +270,7 @@ public class RegionalPlaceService : IRegionalPlaceService
         ValidateCoordinatesWithinBoundaries(coordinates, location.LocationBoundaryGeometry, location.DestinationBoundaryGeometry);
         var tagIds = await ValidatePlaceTagIdsAsync(request.TagIds);
         var operatingHours = NormalizeOperatingHours(request.OperatingHoursEnabled, request.OperatingHours);
+        var images = RegionalEntityImageRequestNormalizer.Normalize(request.Images, name);
         var now = DateTime.UtcNow;
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -268,6 +300,18 @@ public class RegionalPlaceService : IRegionalPlaceService
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
             CreatedAt = now,
+            Images = images
+                .Select(image => new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Place,
+                    Url = image.Url,
+                    AltText = image.AltText,
+                    Caption = image.Caption,
+                    IsMain = image.IsMain,
+                    SortOrder = image.SortOrder,
+                    CreatedAt = now
+                })
+                .ToList(),
             PlaceTags = tagIds
                 .Select(tagId => new PlaceTag { TagId = tagId })
                 .ToList()
@@ -303,6 +347,8 @@ public class RegionalPlaceService : IRegionalPlaceService
             .Include(item => item.Location)
                 .ThenInclude(location => location.Destination)
             .Include(item => item.Stay)
+            .Include(item => item.PlaceTags)
+            .Include(item => item.Images)
             .SingleOrDefaultAsync(item => item.Id == placeId && item.Location.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Place not found.");
 
@@ -332,6 +378,18 @@ public class RegionalPlaceService : IRegionalPlaceService
                 throw new InvalidOperationException("Stay type is invalid.");
 
             place.Stay.StayTypeId = request.StayTypeId.Value;
+        }
+
+        if (request.TagIds is not null)
+        {
+            var tagIds = await ValidatePlaceTagIdsAsync(request.TagIds);
+            ReplaceTags(place, tagIds);
+        }
+
+        if (request.Images is not null)
+        {
+            var fallbackAltText = request.Name ?? place.Name;
+            ReplaceImages(place, request.Images, fallbackAltText);
         }
 
         ApplyUpdate(place, request);
@@ -579,13 +637,22 @@ public class RegionalPlaceService : IRegionalPlaceService
             place.Name = name;
         }
 
-        if (request.Subtitle is not null)
+        if (request.Summary is not null)
+        {
+            place.Subtitle = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
+        }
+        else if (request.Subtitle is not null)
         {
             var subtitle = request.Subtitle.Trim();
             if (subtitle.Length > 500)
                 throw new InvalidOperationException("Subtitle is too long.");
 
             place.Subtitle = subtitle.Length == 0 ? null : subtitle;
+        }
+
+        if (request.Status is not null)
+        {
+            place.Status = NormalizeUpdateStatus(request.Status);
         }
 
         if (request.Description is not null)
@@ -597,9 +664,10 @@ public class RegionalPlaceService : IRegionalPlaceService
             place.Description = description;
         }
 
-        if (request.Address is not null)
+        var requestedAddress = request.StreetAddress ?? request.Address;
+        if (requestedAddress is not null)
         {
-            var address = request.Address.Trim();
+            var address = requestedAddress.Trim();
             if (address.Length > 500)
                 throw new InvalidOperationException("Address is too long.");
 
@@ -624,13 +692,69 @@ public class RegionalPlaceService : IRegionalPlaceService
             place.ContactEmail = contactEmail.Length == 0 ? null : contactEmail;
         }
 
-        if (request.PhoneNumber is not null)
+        var requestedPhoneNumber = request.ContactPhone ?? request.PhoneNumber;
+        if (requestedPhoneNumber is not null)
         {
-            var phoneNumber = request.PhoneNumber.Trim();
+            var phoneNumber = requestedPhoneNumber.Trim();
             if (phoneNumber.Length > 50)
                 throw new InvalidOperationException("Phone number is too long.");
 
             place.Number = phoneNumber.Length == 0 ? null : phoneNumber;
+        }
+
+        if (request.Website is not null)
+        {
+            place.Website = NormalizeUrl(request.Website, "Website URL is invalid.");
+        }
+
+        if (request.AdmissionPriceRange is not null)
+        {
+            place.AdmissionPriceRange = NormalizeOptionalText(
+                request.AdmissionPriceRange,
+                200,
+                "Admission / price range is too long.");
+        }
+
+        if (request.BookingExternalLink is not null)
+        {
+            place.BookingExternalLink = NormalizeUrl(request.BookingExternalLink, "Booking / external link is invalid.");
+        }
+
+        if (request.BestTimeToVisit is not null)
+        {
+            place.BestTimeToVisit = NormalizeOptionalText(
+                request.BestTimeToVisit,
+                500,
+                "Best time to visit is too long.");
+        }
+
+        if (request.VisitorTips is not null)
+        {
+            place.VisitorTips = NormalizeOptionalText(request.VisitorTips, 1000, "Visitor tips are too long.");
+        }
+
+        if (request.AccessNotes is not null)
+        {
+            place.AccessNotes = NormalizeOptionalText(request.AccessNotes, 1000, "Access notes are too long.");
+        }
+
+        if (request.AccessibilityNotes is not null)
+        {
+            place.AccessibilityNotes = NormalizeOptionalText(
+                request.AccessibilityNotes,
+                1000,
+                "Accessibility notes are too long.");
+        }
+
+        if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
+        {
+            var operatingHours = NormalizeOperatingHours(
+                request.OperatingHoursEnabled ?? place.OperatingHoursEnabled,
+                request.OperatingHours ?? DeserializeOperatingHours(place.OperatingHoursJson));
+
+            place.OperatingHoursEnabled = operatingHours.Enabled;
+            place.OperatingHoursJson = operatingHours.Json;
+            place.OpeningHours = operatingHours.Enabled ? BuildOpeningHoursSummary(operatingHours.Hours) : null;
         }
 
         if (request.PlaceTypeId.HasValue)
@@ -655,6 +779,45 @@ public class RegionalPlaceService : IRegionalPlaceService
                 throw new InvalidOperationException("Longitude is invalid.");
 
             place.Longitude = request.Longitude.Value;
+        }
+    }
+
+    private void ReplaceImages(
+        Place place,
+        IEnumerable<RegionalEntityImageInputDto> imageRequests,
+        string fallbackAltText)
+    {
+        var images = RegionalEntityImageRequestNormalizer.Normalize(imageRequests, fallbackAltText);
+        var now = DateTime.UtcNow;
+
+        _db.EntityImages.RemoveRange(place.Images.Where(image => image.TargetType == EntityImageTargetType.Place));
+
+        foreach (var image in images)
+        {
+            place.Images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = place.Id,
+                Url = image.Url,
+                AltText = image.AltText,
+                Caption = image.Caption,
+                IsMain = image.IsMain,
+                SortOrder = image.SortOrder,
+                CreatedAt = now
+            });
+        }
+    }
+
+    private static void ReplaceTags(Place place, IEnumerable<int> tagIds)
+    {
+        place.PlaceTags.Clear();
+        foreach (var tagId in tagIds)
+        {
+            place.PlaceTags.Add(new PlaceTag
+            {
+                PlaceId = place.Id,
+                TagId = tagId
+            });
         }
     }
 
@@ -971,8 +1134,9 @@ public class RegionalPlaceService : IRegionalPlaceService
             PublishedAt = row.PublishedAt,
             LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
+            Images = row.Images,
             DetailRoute = "/places/detail/" + row.Id,
-            EditRoute = ExistingEditRoute
+            EditRoute = "/places/edit/" + row.Id
         };
     }
 
@@ -1005,6 +1169,7 @@ public class RegionalPlaceService : IRegionalPlaceService
             PublishedAt = item.PublishedAt,
             LastUpdatedAt = item.LastUpdatedAt,
             ImageUrl = item.ImageUrl,
+            Images = item.Images,
             DetailRoute = item.DetailRoute,
             EditRoute = item.EditRoute,
             Latitude = row.Latitude,
@@ -1076,6 +1241,19 @@ public class RegionalPlaceService : IRegionalPlaceService
             _ => PublishedStatus
         };
 
+    private static string NormalizeUpdateStatus(string value)
+    {
+        var normalized = NormalizeToken(value);
+        if (normalized is "published" or "publish")
+            return PublishedStatus;
+        if (normalized == "draft")
+            return DraftStatus;
+        if (normalized == "archived")
+            return ArchivedStatus;
+
+        throw new InvalidOperationException("Place status is invalid.");
+    }
+
     private static string NormalizeSort(string? sort)
     {
         var normalized = NormalizeToken(sort ?? "newest");
@@ -1142,6 +1320,7 @@ public class RegionalPlaceService : IRegionalPlaceService
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public string? ImageUrl { get; set; }
+        public List<RegionalEntityImageDto> Images { get; set; } = new();
         public List<RegionalPlaceTagDto> Tags { get; set; } = new();
     }
 }

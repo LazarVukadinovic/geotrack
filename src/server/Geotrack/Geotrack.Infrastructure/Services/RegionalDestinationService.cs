@@ -15,7 +15,6 @@ public class RegionalDestinationService : IRegionalDestinationService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
-    private const string ExistingEditRoute = "/destinations/new";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
@@ -88,6 +87,22 @@ public class RegionalDestinationService : IRegionalDestinationService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
+                Images = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => new RegionalEntityImageDto
+                    {
+                        Id = image.Id,
+                        Url = image.Url,
+                        AltText = image.AltText,
+                        Caption = image.Caption,
+                        IsMain = image.IsMain,
+                        SortOrder = image.SortOrder
+                    })
+                    .ToList(),
                 Tags = destination.DestinationTags
                     .OrderBy(destinationTag => destinationTag.Tag.Name)
                     .Select(destinationTag => new RegionalDestinationTagDto
@@ -145,6 +160,22 @@ public class RegionalDestinationService : IRegionalDestinationService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
+                Images = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => new RegionalEntityImageDto
+                    {
+                        Id = image.Id,
+                        Url = image.Url,
+                        AltText = image.AltText,
+                        Caption = image.Caption,
+                        IsMain = image.IsMain,
+                        SortOrder = image.SortOrder
+                    })
+                    .ToList(),
                 Tags = destination.DestinationTags
                     .OrderBy(destinationTag => destinationTag.Tag.Name)
                     .Select(destinationTag => new RegionalDestinationTagDto
@@ -179,6 +210,7 @@ public class RegionalDestinationService : IRegionalDestinationService
         var coordinates = ResolveCoordinates(request, boundary?.Geometry);
         var destinationTypeId = await ResolveDestinationTypeIdAsync(request.DestinationTypeId);
         var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
+        var images = RegionalEntityImageRequestNormalizer.Normalize(request.Images, name);
         var now = DateTime.UtcNow;
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -198,6 +230,18 @@ public class RegionalDestinationService : IRegionalDestinationService
             BoundaryNote = boundaryNote,
             BoundaryShapeType = boundary?.ShapeType,
             CreatedAt = now,
+            Images = images
+                .Select(image => new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Destination,
+                    Url = image.Url,
+                    AltText = image.AltText,
+                    Caption = image.Caption,
+                    IsMain = image.IsMain,
+                    SortOrder = image.SortOrder,
+                    CreatedAt = now
+                })
+                .ToList(),
             DestinationTags = tagIds
                 .Select(tagId => new DestinationTag { TagId = tagId })
                 .ToList()
@@ -229,6 +273,8 @@ public class RegionalDestinationService : IRegionalDestinationService
         await EnsureAssignedRegionAsync(userId, regionId);
 
         var destination = await _db.Destinations
+            .Include(item => item.Images)
+            .Include(item => item.DestinationTags)
             .SingleOrDefaultAsync(item => item.Id == destinationId && item.RegionId == regionId)
             ?? throw new KeyNotFoundException("Destination not found.");
 
@@ -239,6 +285,33 @@ public class RegionalDestinationService : IRegionalDestinationService
         }
 
         ApplyUpdate(destination, request);
+
+        if (request.Boundary is not null)
+        {
+            var boundary = BuildBoundary(request.Boundary)
+                ?? throw new InvalidOperationException("Boundary geometry is invalid.");
+            _db.Entry(destination)
+                .Property<Geometry?>(BoundaryGeometryPropertyName)
+                .CurrentValue = boundary.Geometry;
+            destination.BoundaryShapeType = boundary.ShapeType;
+        }
+
+        if (request.BoundaryNote is not null)
+        {
+            destination.BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long.");
+        }
+
+        if (request.Images is not null)
+        {
+            ReplaceImages(destination, request.Images, destination.Name);
+        }
+
+        if (request.TagIds is not null)
+        {
+            var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
+            ReplaceTags(destination, tagIds);
+        }
+
         destination.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -345,6 +418,45 @@ public class RegionalDestinationService : IRegionalDestinationService
             .AnyAsync(item => item.DestinationId == destinationId);
     }
 
+    private void ReplaceImages(
+        Destination destination,
+        IEnumerable<RegionalEntityImageInputDto> imageRequests,
+        string fallbackAltText)
+    {
+        var images = RegionalEntityImageRequestNormalizer.Normalize(imageRequests, fallbackAltText);
+        var now = DateTime.UtcNow;
+
+        _db.EntityImages.RemoveRange(destination.Images.Where(image => image.TargetType == EntityImageTargetType.Destination));
+
+        foreach (var image in images)
+        {
+            destination.Images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = destination.Id,
+                Url = image.Url,
+                AltText = image.AltText,
+                Caption = image.Caption,
+                IsMain = image.IsMain,
+                SortOrder = image.SortOrder,
+                CreatedAt = now
+            });
+        }
+    }
+
+    private static void ReplaceTags(Destination destination, IEnumerable<int> tagIds)
+    {
+        destination.DestinationTags.Clear();
+        foreach (var tagId in tagIds)
+        {
+            destination.DestinationTags.Add(new DestinationTag
+            {
+                DestinationId = destination.Id,
+                TagId = tagId
+            });
+        }
+    }
+
     private static IQueryable<Destination> ApplySearch(IQueryable<Destination> query, string? search)
     {
         if (string.IsNullOrWhiteSpace(search))
@@ -391,9 +503,19 @@ public class RegionalDestinationService : IRegionalDestinationService
                 "Destination name is too long.");
         }
 
+        if (request.Summary is not null)
+        {
+            destination.Summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
+        }
+
         if (request.Description is not null)
         {
             destination.Description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+        }
+
+        if (request.Status is not null)
+        {
+            destination.Status = NormalizeUpdateStatus(request.Status);
         }
 
         if (request.DestinationTypeId.HasValue)
@@ -623,8 +745,9 @@ public class RegionalDestinationService : IRegionalDestinationService
             PublishedAt = row.PublishedAt,
             LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
+            Images = row.Images,
             DetailRoute = "/destinations/detail/" + row.Id,
-            EditRoute = ExistingEditRoute
+            EditRoute = "/destinations/edit/" + row.Id
         };
     }
 
@@ -651,6 +774,7 @@ public class RegionalDestinationService : IRegionalDestinationService
             PublishedAt = item.PublishedAt,
             LastUpdatedAt = item.LastUpdatedAt,
             ImageUrl = item.ImageUrl,
+            Images = item.Images,
             DetailRoute = item.DetailRoute,
             EditRoute = item.EditRoute,
             Latitude = row.Latitude,
@@ -756,5 +880,18 @@ public class RegionalDestinationService : IRegionalDestinationService
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public string? ImageUrl { get; set; }
+        public List<RegionalEntityImageDto> Images { get; set; } = new();
+    }
+
+    private static string NormalizeUpdateStatus(string value)
+    {
+        var normalized = NormalizeToken(value);
+        return normalized switch
+        {
+            "published" or "publish" => PublishedStatus,
+            "draft" => DraftStatus,
+            "archived" => ArchivedStatus,
+            _ => throw new InvalidOperationException("Destination status is invalid.")
+        };
     }
 }

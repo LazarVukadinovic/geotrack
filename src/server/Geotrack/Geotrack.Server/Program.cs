@@ -162,6 +162,7 @@ builder.Services.AddScoped<IRegionalPlaceService, RegionalPlaceService>();
 builder.Services.AddScoped<IRegionalEventService, RegionalEventService>();
 builder.Services.AddScoped<IRegionalMapService, RegionalMapService>();
 builder.Services.AddScoped<IRegionalAnalyticsService, RegionalAnalyticsService>();
+builder.Services.AddScoped<IRegionalMediaService, RegionalMediaService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(5);
@@ -176,6 +177,7 @@ builder.Services.AddHttpClient<IMapService, MapService>(client =>
 
 builder.Services.AddScoped<IUserAvatarStorageService, LocalUserAvatarStorageService>();
 builder.Services.AddScoped<IContributionMediaStorageService, LocalContributionMediaStorageService>();
+builder.Services.AddScoped<IRegionalEntityImageStorageService, LocalRegionalEntityImageStorageService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
@@ -445,6 +447,7 @@ var mediaRoot = Path.Combine(app.Environment.ContentRootPath, "media");
 Directory.CreateDirectory(Path.Combine(mediaRoot, "seed"));
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "avatars"));
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "contributions"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "regional"));
 
 var mediaContentTypes = new FileExtensionContentTypeProvider();
 mediaContentTypes.Mappings[".svg"] = "image/svg+xml";
@@ -467,6 +470,13 @@ app.UseStaticFiles(new StaticFileOptions
         }
 
         if (context.Context.Request.Path.StartsWithSegments("/media/uploads/contributions"))
+        {
+            headers[HeaderNames.CacheControl] = "no-store";
+            headers["X-Robots-Tag"] = "noindex, noarchive, nosnippet";
+            return;
+        }
+
+        if (context.Context.Request.Path.StartsWithSegments("/media/uploads/regional"))
         {
             headers[HeaderNames.CacheControl] = "no-store";
             headers["X-Robots-Tag"] = "noindex, noarchive, nosnippet";

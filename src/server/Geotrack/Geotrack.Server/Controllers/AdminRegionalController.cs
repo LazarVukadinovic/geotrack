@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Geotrack.Server.Controllers;
 
@@ -20,6 +22,7 @@ public class AdminRegionalController : ControllerBase
     private readonly IRegionalEventService _events;
     private readonly IRegionalMapService _map;
     private readonly IRegionalAnalyticsService _analytics;
+    private readonly IRegionalMediaService _media;
     private readonly ILogger<AdminRegionalController> _logger;
 
     public AdminRegionalController(
@@ -31,6 +34,7 @@ public class AdminRegionalController : ControllerBase
         IRegionalEventService events,
         IRegionalMapService map,
         IRegionalAnalyticsService analytics,
+        IRegionalMediaService media,
         ILogger<AdminRegionalController> logger)
     {
         _regionalDashboard = regionalDashboard;
@@ -41,6 +45,7 @@ public class AdminRegionalController : ControllerBase
         _events = events;
         _map = map;
         _analytics = analytics;
+        _media = media;
         _logger = logger;
     }
 
@@ -110,6 +115,40 @@ public class AdminRegionalController : ControllerBase
         }
     }
 
+    [HttpGet("analytics/entities/{entityType}/{entityId:int}/details")]
+    [EnableRateLimiting("analytics")]
+    public async Task<ActionResult<RegionalAnalyticsEntityDetailDto>> GetAnalyticsEntityDetails(
+        [FromRoute] string entityType,
+        [FromRoute] int entityId,
+        [FromQuery] int regionId,
+        [FromQuery] string? period = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        if (entityId <= 0)
+            return BadRequest(new { message = "entityId is required." });
+
+        try
+        {
+            return Ok(await _analytics.GetEntityDetailAsync(
+                GetCurrentUserId(),
+                new RegionalAnalyticsEntityDetailQuery
+                {
+                    RegionId = regionId,
+                    EntityType = entityType,
+                    EntityId = entityId,
+                    Period = period
+                },
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("analytics/monthly-visits")]
     public async Task<ActionResult<RegionalMonthlyVisitsDto>> GetMonthlyVisits(
         [FromQuery] int regionId,
@@ -134,6 +173,41 @@ public class AdminRegionalController : ControllerBase
                     SelectedYearsBack = selectedYearsBack,
                     EntityType = entityType,
                     Search = search
+                },
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("analytics/tag-views")]
+    [EnableRateLimiting("analytics")]
+    public async Task<ActionResult<RegionalTagViewsAnalyticsResponseDto>> GetTagViews(
+        [FromQuery] int regionId,
+        [FromQuery] string? period = null,
+        [FromQuery] int take = 15,
+        [FromQuery] string? entityType = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        if (!TryReadPositiveIntQueryValues("tagIds", out var tagIds, out var tagIdsError))
+            return BadRequest(new { message = tagIdsError });
+
+        try
+        {
+            return Ok(await _analytics.GetTagViewsAsync(
+                GetCurrentUserId(),
+                new RegionalTagViewsQuery
+                {
+                    RegionId = regionId,
+                    Period = period,
+                    TagIds = tagIds,
+                    Take = take,
+                    EntityType = entityType
                 },
                 cancellationToken));
         }
@@ -253,6 +327,46 @@ public class AdminRegionalController : ControllerBase
         try
         {
             return Ok(await _map.SearchAsync(GetCurrentUserId(), regionId, query, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("media/images")]
+    [RequestSizeLimit(96 * 1024 * 1024)]
+    public async Task<ActionResult<RegionalImageUploadResponseDto>> UploadImages(
+        [FromQuery] int regionId,
+        [FromForm] List<IFormFile>? files,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        if (files is null || files.Count == 0)
+            return BadRequest(new { message = "Please select at least one image to upload." });
+
+        try
+        {
+            var uploads = new List<RegionalImageUploadFileDto>();
+            foreach (var file in files)
+            {
+                await using var stream = new MemoryStream();
+                await file.CopyToAsync(stream, cancellationToken);
+                uploads.Add(new RegionalImageUploadFileDto
+                {
+                    FileName = file.FileName,
+                    ContentType = file.ContentType,
+                    Content = stream.ToArray()
+                });
+            }
+
+            return Ok(await _media.UploadImagesAsync(
+                GetCurrentUserId(),
+                regionId,
+                uploads,
+                cancellationToken));
         }
         catch (Exception ex)
         {
@@ -1138,5 +1252,41 @@ public class AdminRegionalController : ControllerBase
         return string.IsNullOrWhiteSpace(value)
             ? Array.Empty<string>()
             : value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private bool TryReadPositiveIntQueryValues(string key, out List<int> values, out string? error)
+    {
+        values = new List<int>();
+        error = null;
+
+        if (!Request.Query.TryGetValue(key, out var rawValues))
+        {
+            return true;
+        }
+
+        foreach (var rawValue in rawValues)
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                continue;
+            }
+
+            var tokens = rawValue.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            foreach (var token in tokens)
+            {
+                if (!int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ||
+                    parsed <= 0)
+                {
+                    error = key + " must contain positive integer values.";
+                    values.Clear();
+                    return false;
+                }
+
+                values.Add(parsed);
+            }
+        }
+
+        values = values.Distinct().ToList();
+        return true;
     }
 }
