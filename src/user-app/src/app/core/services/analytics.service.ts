@@ -202,12 +202,16 @@ export class AnalyticsService {
     url: string | null | undefined,
     payload?: Omit<TrackPayload, 'metadata'> & { metadata?: Record<string, unknown> },
   ): void {
+    const host = this.extractHost(url);
+    const partnerKey = this.normalizePartnerKey(providerName, host);
+
     this.track('outbound_link_clicked', {
       ...payload,
       metadata: {
         ...payload?.metadata,
-        provider: this.normalizeProvider(providerName, url),
-        host: this.extractHost(url),
+        provider: this.normalizeProvider(providerName, host, partnerKey),
+        partnerKey,
+        host,
       },
     });
   }
@@ -358,10 +362,12 @@ export class AnalyticsService {
     });
   }
 
-  private normalizeProvider(providerName: string | null | undefined, url: string | null | undefined): string {
-    const source = `${providerName ?? ''} ${this.extractHost(url) ?? ''}`.toLowerCase();
-    if (source.includes('booking')) return 'booking';
-    if (source.includes('airbnb')) return 'airbnb';
+  private normalizeProvider(
+    providerName: string | null | undefined,
+    host: string | null,
+    partnerKey: 'booking' | 'airbnb' | 'external',
+  ): string {
+    if (partnerKey === 'booking' || partnerKey === 'airbnb') return partnerKey;
 
     const nameSlug = (providerName ?? '')
       .trim()
@@ -369,7 +375,36 @@ export class AnalyticsService {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    return nameSlug || 'other';
+    if (nameSlug) return nameSlug;
+
+    const hostSlug = (host ?? '')
+      .split('.')[0]
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    return hostSlug || 'other';
+  }
+
+  private normalizePartnerKey(
+    providerName: string | null | undefined,
+    host: string | null,
+  ): 'booking' | 'airbnb' | 'external' {
+    const nameToken = (providerName ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+
+    if (nameToken === 'booking' || nameToken === 'bookingcom' || this.isHostOrSubdomain(host, 'booking.com')) {
+      return 'booking';
+    }
+
+    if (nameToken === 'airbnb' || this.isHostOrSubdomain(host, 'airbnb.com')) {
+      return 'airbnb';
+    }
+
+    return 'external';
   }
 
   private extractHost(url: string | null | undefined): string | null {
@@ -379,6 +414,11 @@ export class AnalyticsService {
     } catch {
       return null;
     }
+  }
+
+  private isHostOrSubdomain(host: string | null, rootDomain: string): boolean {
+    if (!host) return false;
+    return host === rootDomain || host.endsWith(`.${rootDomain}`);
   }
 
   private scheduleFlush(mode: FlushMode): void {

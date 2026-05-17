@@ -146,7 +146,24 @@ describe('AnalyticsService', () => {
     expect(body.events[0].eventType).toBe('outbound_link_clicked');
     expect(body.events[0].metadata).toEqual({
       provider: 'booking',
+      partnerKey: 'booking',
       host: 'booking.com',
+    });
+    req.flush(null);
+  });
+
+  it('marks non-booking partner links as external with a provider slug', () => {
+    service.trackOutboundLink('Direct Booking', 'https://direct.example/stays/7', {
+      entityType: 'hotel',
+      entityId: 7,
+    });
+
+    const req = httpMock.expectOne('/api/analytics/events');
+    const body = req.request.body as { events: { eventType: string; metadata?: Record<string, unknown> }[] };
+    expect(body.events[0].metadata).toEqual({
+      provider: 'direct-booking',
+      partnerKey: 'external',
+      host: 'direct.example',
     });
     req.flush(null);
   });
