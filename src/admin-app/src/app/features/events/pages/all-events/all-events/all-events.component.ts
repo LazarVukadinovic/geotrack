@@ -261,7 +261,7 @@ export class AllEventsComponent implements OnInit, OnDestroy {
   editEvent(item: EventListItem): void {
     this.saveListState();
     const full = this.eventsService.findById(item.id) ?? item;
-    this.router.navigate([full.editRoute ?? '/events/new'], {
+    this.router.navigate([full.editRoute ?? `/events/edit/${full.id}`], {
       queryParams: this.activeRegionId ? { regionId: this.activeRegionId } : undefined,
       state: {
         place: full,

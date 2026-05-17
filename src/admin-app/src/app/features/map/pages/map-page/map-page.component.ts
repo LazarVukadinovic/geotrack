@@ -819,8 +819,9 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private searchResultToPopupEntity(result: AdminMapSearchResult): PopupEntity {
+    const id = result.id;
     return {
-      id: result.id,
+      id,
       entityType: result.entityType,
       title: result.title,
       subtitle: result.subtitle,
@@ -829,11 +830,13 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       longitude: result.longitude,
       imageUrl: result.imageUrl,
       detailRoute: result.detailRoute,
-      editRoute: result.entityType === 'Destination'
-        ? '/destinations/new'
-        : result.entityType === 'Location'
-          ? '/locations/new'
-          : '/places/new',
+      editRoute: id
+        ? result.entityType === 'Destination'
+          ? `/destinations/edit/${id}`
+          : result.entityType === 'Location'
+            ? `/locations/edit/${id}`
+            : `/places/edit/${id}`
+        : null,
     };
   }
 

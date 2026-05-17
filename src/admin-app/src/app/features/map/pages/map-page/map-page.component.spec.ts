@@ -162,6 +162,28 @@ describe('MapPageComponent', () => {
     });
   });
 
+  it('navigates marker edit actions with entity id and active region context', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    component.activeRegionId = 17;
+    component.selectedEntity = {
+      id: 8,
+      entityType: 'Place',
+      title: 'Real Place',
+      latitude: 45.1,
+      longitude: 16.2,
+      editRoute: '/places/edit/8',
+    };
+
+    component.editSelected();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/places/edit/8'], {
+      queryParams: { regionId: 17 },
+      state: { regionId: 17, returnTo: '/map' },
+    });
+  });
+
   function flushRegions(regions: RegionalAssignedRegion[]): void {
     const request = http.expectOne('/api/admin/regional/regions');
     expect(request.request.method).toBe('GET');
@@ -215,7 +237,7 @@ describe('MapPageComponent', () => {
           regionId,
           placeId: 8,
           detailRoute: '/places/detail/8',
-          editRoute: '/places/new',
+          editRoute: '/places/edit/8',
         },
       ],
       zones: [

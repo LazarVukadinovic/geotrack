@@ -188,7 +188,7 @@ describe('AllEventsComponent', () => {
     expect(component.items.map(item => item.name)).toEqual(['Region 8 Event']);
   });
 
-  it('navigates edit through the existing event create/edit flow with active region context', () => {
+  it('navigates edit through the canonical event edit route with active region context', () => {
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
@@ -198,7 +198,7 @@ describe('AllEventsComponent', () => {
 
     component.editEvent(component.items[0]);
 
-    expect(navigateSpy).toHaveBeenCalledWith(['/events/new'], {
+    expect(navigateSpy).toHaveBeenCalledWith(['/events/edit/21'], {
       queryParams: { regionId: 7 },
       state: {
         place: expect.objectContaining({ id: '21', name: 'Editable Event' }),
@@ -282,7 +282,7 @@ describe('AllEventsComponent', () => {
       lastUpdatedAt: '2026-05-12T10:00:00Z',
       imageUrl: null,
       detailRoute: `/events/detail/${id}`,
-      editRoute: '/events/new',
+      editRoute: `/events/edit/${id}`,
       latitude: 42.1,
       longitude: 18.1,
     };
