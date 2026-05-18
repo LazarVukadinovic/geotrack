@@ -157,6 +157,67 @@ describe('AnalyticsPageComponent', () => {
     expect(document.body.querySelector('[data-testid="analytics-chart-tooltip"]')).toBeNull();
   });
 
+  it('does not render always-visible page views trend point circles by default', () => {
+    const overview = overviewResponse();
+    overview.pageViewsTrend = multiTrendPoints();
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
+
+    fixture.detectChanges();
+
+    const chart = pageViewsTrendChart();
+    expect(chart.querySelectorAll('[data-testid="page-views-trend-point"]').length).toBe(3);
+    expect(chart.querySelectorAll('[data-testid="page-views-trend-point"] circle').length).toBe(0);
+    expect(activeTrendPoint()).toBeNull();
+  });
+
+  it('activates one page views trend point on hover, moves it to the hovered value, and hides it on leave', () => {
+    const overview = overviewResponse();
+    overview.pageViewsTrend = multiTrendPoints();
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
+
+    fixture.detectChanges();
+
+    const points = pageViewsTrendPoints();
+    expect(points.length).toBe(3);
+
+    expect(showTooltip(points[1])).toContain('May 14, 2026');
+    expect(tooltipText()).toContain('Page Views');
+    expect(tooltipText()).toContain('18');
+    let active = activeTrendPoint();
+    expect(active).not.toBeNull();
+    expect(active?.getAttribute('cx')).toBe('170');
+
+    points[1].dispatchEvent(new MouseEvent('mouseleave'));
+    fixture.detectChanges();
+    points[2].dispatchEvent(new MouseEvent('mouseenter', {
+      clientX: 280,
+      clientY: 130,
+      bubbles: true,
+    }));
+    fixture.detectChanges();
+
+    active = activeTrendPoint();
+    expect(pageViewsTrendChart().querySelectorAll('[data-testid="page-views-trend-active-point"]').length).toBe(1);
+    expect(active?.getAttribute('cx')).toBe('316');
+
+    points[2].dispatchEvent(new MouseEvent('mouseleave'));
+    fixture.detectChanges();
+    expect(activeTrendPoint()).toBeNull();
+    expect(document.body.querySelector('[data-testid="analytics-chart-tooltip"]')).toBeNull();
+  });
+
+  it('renders page views trend safely when trend data is empty', () => {
+    const overview = overviewResponse();
+    overview.pageViewsTrend = [];
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
+
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Page Views Trend');
+    expect(pageViewsTrendPoints().length).toBe(0);
+    expect(activeTrendPoint()).toBeNull();
+  });
+
   it('shows top performing entity tooltip with entity name and real views', () => {
     fixture.detectChanges();
 
@@ -566,6 +627,18 @@ describe('AnalyticsPageComponent', () => {
       .trim();
   }
 
+  function pageViewsTrendChart(): SVGElement {
+    return fixture.nativeElement.querySelector('[data-testid="page-views-trend-chart"]') as SVGElement;
+  }
+
+  function pageViewsTrendPoints(): Element[] {
+    return Array.from(fixture.nativeElement.querySelectorAll('[data-testid="page-views-trend-point"]')) as Element[];
+  }
+
+  function activeTrendPoint(): Element | null {
+    return fixture.nativeElement.querySelector('[data-testid="page-views-trend-active-point"]') as Element | null;
+  }
+
   function entityRow(
     entityType: RegionalAnalyticsEntityDetail['entityType'] = 'place',
     entityId = entityType === 'destination' ? 2 : entityType === 'location' ? 4 : entityType === 'event' ? 12 : 8,
@@ -891,6 +964,14 @@ describe('AnalyticsPageComponent', () => {
       },
       pendingRequestsCount: 6,
     };
+  }
+
+  function multiTrendPoints(): RegionalAnalyticsTrendPoint[] {
+    return [
+      { date: '2026-05-13T00:00:00Z', views: 12, uniqueVisitors: 3 },
+      { date: '2026-05-14T00:00:00Z', views: 18, uniqueVisitors: 5 },
+      { date: '2026-05-15T00:00:00Z', views: 9, uniqueVisitors: 2 },
+    ];
   }
 
   function monthlyVisitsResponse(selectedYearsBack: RegionalMonthlyVisitYearsBack = 1): RegionalMonthlyVisits {

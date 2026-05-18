@@ -73,6 +73,8 @@ interface TrendChart {
 interface TrendChartPoint {
   x: number;
   y: number;
+  hoverX: number;
+  hoverWidth: number;
   dateLabel: string;
   pageViews: number;
   uniqueVisitors: number | null;
@@ -192,6 +194,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   private entityDetailSubscription: Subscription | null = null;
   private previousBodyOverflow: string | null = null;
   private searchHandle: ReturnType<typeof setTimeout> | null = null;
+  private trendTouchClearHandle: ReturnType<typeof setTimeout> | null = null;
   private tableTake = AnalyticsPageComponent.initialTake;
 
   selectedPeriod = 'Last 30 Days';
@@ -294,6 +297,15 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.pageViewsTrendSig()[this.activeFilter()] ?? [],
     this.selectedPeriodSig(),
   ));
+  private readonly activeTrendPointIndexSig = signal<number | null>(null);
+  readonly activeTrendPoint = computed(() => {
+    const index = this.activeTrendPointIndexSig();
+    if (index === null) {
+      return null;
+    }
+
+    return this.trendChart().points[index] ?? null;
+  });
 
   private readonly metricsByFilterSig = signal<Record<CategoryFilter, MetricCard[]>>({
     all: [],
@@ -505,6 +517,8 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     if (this.searchHandle) {
       clearTimeout(this.searchHandle);
     }
+
+    this.clearTrendTouchTimer();
   }
 
   get userName(): string {
@@ -633,6 +647,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.clearActiveTrendPoint();
     this.activeFilter.set(filter);
     this.closeEntityDetails();
     this.tableTake = AnalyticsPageComponent.initialTake;
@@ -670,6 +685,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.previousPeriod = value;
     this.selectedPeriod = value;
     this.selectedPeriodSig.set(value);
+    this.clearActiveTrendPoint();
     this.customDateFrom = this.customDateTo = '';
     this.fromDay = this.fromMonth = this.fromYear = this.toDay = this.toMonth = this.toYear = '';
     this.tableTake = AnalyticsPageComponent.initialTake;
@@ -835,6 +851,25 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
         next: blob => this.analyticsService.downloadCsv(blob, this.regionDisplayName, this.periodKey()),
         error: error => this.handleLoadError(error, 'Unable to export analytics data.'),
       });
+  }
+
+  setActiveTrendPoint(index: number): void {
+    this.clearTrendTouchTimer();
+    const points = this.trendChart().points;
+    this.activeTrendPointIndexSig.set(index >= 0 && index < points.length ? index : null);
+  }
+
+  setActiveTrendPointFromTouch(index: number): void {
+    this.setActiveTrendPoint(index);
+    this.trendTouchClearHandle = setTimeout(() => this.clearActiveTrendPoint(index), 3500);
+  }
+
+  clearActiveTrendPoint(index?: number): void {
+    const currentIndex = this.activeTrendPointIndexSig();
+    if (index === undefined || currentIndex === index) {
+      this.clearTrendTouchTimer();
+      this.activeTrendPointIndexSig.set(null);
+    }
   }
 
   trendTooltip(point: TrendChartPoint): AnalyticsTooltipContent {
@@ -1569,6 +1604,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   }
 
   private clearAnalyticsData(): void {
+    this.clearActiveTrendPoint();
     this.metricsByFilterSig.set(this.emptyBuckets<MetricCard[]>());
     this.entityRowsSig.set([]);
     this.topPerformersSig.set([]);
@@ -1593,6 +1629,15 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   private clearTagViewData(): void {
     this.tagViewsErrorMessage = null;
     this.tagViewsSig.set(this.emptyTagViews());
+  }
+
+  private clearTrendTouchTimer(): void {
+    if (!this.trendTouchClearHandle) {
+      return;
+    }
+
+    clearTimeout(this.trendTouchClearHandle);
+    this.trendTouchClearHandle = null;
   }
 
   private resetSelectedTagViews(): void {
@@ -1979,13 +2024,29 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     const count = points.length;
     const toX = (index: number) => 24 + (count > 1 ? index / (count - 1) : 0) * 292;
     const toY = (value: number) => Math.min(148, 134 - ((value - step) / (step * 3)) * 120);
-    const pts = points.map((point, index) => ({
+    const plotLeft = 24;
+    const plotRight = 316;
+    const ptsWithoutHover = points.map((point, index) => ({
       x: toX(index),
       y: toY(point.pageViews),
       dateLabel: point.dateLabel,
       pageViews: point.pageViews,
       uniqueVisitors: point.uniqueVisitors,
     }));
+    const pts = ptsWithoutHover.map((point, index) => {
+      const hoverStart = index === 0
+        ? plotLeft
+        : (ptsWithoutHover[index - 1].x + point.x) / 2;
+      const hoverEnd = index === count - 1
+        ? plotRight
+        : (point.x + ptsWithoutHover[index + 1].x) / 2;
+
+      return {
+        ...point,
+        hoverX: +hoverStart.toFixed(1),
+        hoverWidth: +(hoverEnd - hoverStart).toFixed(1),
+      };
+    });
     const linePath = this.smoothSVGPath(pts);
     const areaPath = `${linePath} L${pts[count - 1].x.toFixed(1)},148 L${pts[0].x.toFixed(1)},148 Z`;
 

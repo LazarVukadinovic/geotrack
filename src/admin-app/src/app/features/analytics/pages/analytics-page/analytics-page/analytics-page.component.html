@@ -146,7 +146,15 @@
               <div class="text-sm font-semibold text-gray-800 mb-0.5">Page Views Trend</div>
               <ng-container *ngIf="trendChart() as chart">
                 <div class="text-xs text-gray-400 mb-4">{{ chart.subtitle }}</div>
-                <svg viewBox="0 0 320 160" class="w-full" style="height: 160px;" role="img" aria-label="Page views trend line chart">
+                <svg
+                  viewBox="0 0 320 160"
+                  class="w-full"
+                  style="height: 160px;"
+                  role="img"
+                  aria-label="Page views trend line chart"
+                  data-testid="page-views-trend-chart"
+                  (mouseleave)="clearActiveTrendPoint()"
+                >
                   <defs>
                     <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stop-color="#185FA5" stop-opacity="0.15"/>
@@ -159,20 +167,53 @@
                   <line x1="24" y1="94"  x2="316" y2="94"  stroke="#f3f4f6" stroke-width="1"/>
                   <line x1="24" y1="134" x2="316" y2="134" stroke="#f3f4f6" stroke-width="1"/>
                   <path [attr.d]="chart.areaPath" fill="url(#areaGrad)"/>
-                  <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round"/>
+                  <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
                   <g
-                    *ngFor="let point of chart.points"
-                    [attr.transform]="'translate(' + point.x + ' ' + point.y + ')'"
+                    *ngFor="let point of chart.points; let pointIndex = index"
                     [appAnalyticsTooltip]="trendTooltip(point)"
                     [attr.aria-label]="trendAriaLabel(point)"
+                    (mouseenter)="setActiveTrendPoint(pointIndex)"
+                    (mousemove)="setActiveTrendPoint(pointIndex)"
+                    (mouseleave)="clearActiveTrendPoint(pointIndex)"
+                    (focus)="setActiveTrendPoint(pointIndex)"
+                    (blur)="clearActiveTrendPoint(pointIndex)"
+                    (touchstart)="setActiveTrendPointFromTouch(pointIndex)"
                     tabindex="0"
+                    focusable="true"
                     role="img"
                     data-testid="page-views-trend-point"
                     style="cursor: pointer;"
                   >
-                    <circle r="9" fill="transparent"></circle>
-                    <circle r="3" fill="#ffffff" stroke="#185FA5" stroke-width="1.5"></circle>
+                    <rect
+                      [attr.x]="point.hoverX"
+                      y="14"
+                      [attr.width]="point.hoverWidth"
+                      height="134"
+                      fill="transparent"
+                    ></rect>
                   </g>
+                  <ng-container *ngIf="activeTrendPoint() as activePoint">
+                    <circle
+                      [attr.cx]="activePoint.x"
+                      [attr.cy]="activePoint.y"
+                      r="7"
+                      fill="#185FA5"
+                      opacity="0.14"
+                      aria-hidden="true"
+                      style="pointer-events: none;"
+                    ></circle>
+                    <circle
+                      [attr.cx]="activePoint.x"
+                      [attr.cy]="activePoint.y"
+                      r="4.5"
+                      fill="#ffffff"
+                      stroke="#185FA5"
+                      stroke-width="2"
+                      aria-hidden="true"
+                      data-testid="page-views-trend-active-point"
+                      style="pointer-events: none;"
+                    ></circle>
+                  </ng-container>
                   <text *ngFor="let lbl of chart.xLabels" [attr.x]="lbl.x" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">{{ lbl.text }}</text>
                 </svg>
               </ng-container>
