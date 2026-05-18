@@ -1,11 +1,12 @@
 import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ReviewsService } from '../../services/reviews.service';
-import type { FullReview, ReviewReportTargetType, ReviewsEntityType } from '../../services/reviews.service';
+import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
+import type { FullReview, ReviewsEntityType } from '../../services/reviews.service';
 
 type ReviewsLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
 
@@ -13,6 +14,7 @@ type ReviewsLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
   selector: 'app-reviews-page',
   standalone: true,
   imports: [ImageFallbackDirective],
+  providers: [ReviewInteractionsService],
   templateUrl: './reviews-page.component.html',
   styleUrl: './reviews-page.component.scss',
 })
@@ -21,7 +23,9 @@ export class ReviewsPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly reviewsService = inject(ReviewsService);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
+
+  protected readonly ri = inject(ReviewInteractionsService);
 
   private readonly entityTypeParam = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('entityType'))),
@@ -47,10 +51,6 @@ export class ReviewsPageComponent {
   protected readonly hasMore = signal(false);
   protected readonly nextSkip = signal(0);
   protected readonly loadingMore = signal(false);
-  protected readonly reportMessage = signal('');
-  protected readonly reportError = signal('');
-  private readonly reportingReviewIds = signal<Record<string, boolean>>({});
-  private readonly reportedReviewIds = signal<Record<string, boolean>>({});
 
   protected readonly entityKindLabel = computed(() => {
     switch (this.normalizeEntityType(this.entityTypeParam())) {
@@ -73,6 +73,28 @@ export class ReviewsPageComponent {
   });
 
   constructor() {
+    this.ri.configure({
+      targetType: () => {
+        const et = this.normalizeEntityType(this.entityTypeParam());
+        if (!et) return null;
+        return et === 'event' ? 'event' : 'place';
+      },
+      onEditSuccess: (reviewId, updated) => {
+        this.reviews.update(current => current.map(item =>
+          item.id === reviewId ? { ...item, rating: updated.rating, body: updated.body } : item,
+        ));
+      },
+      onDeleteSuccess: (reviewId) => {
+        this.reviews.update(current => current.filter(item => item.id !== reviewId));
+        this.reviewsCount.update(n => Math.max(0, n - 1));
+      },
+      onReportSuccess: (reviewId) => {
+        this.reviews.update(current => current.map(item =>
+          item.id === reviewId ? { ...item, reportedByCurrentUser: true } : item,
+        ));
+      },
+    });
+
     effect(() => {
       this.loadReviews(this.entityTypeParam(), this.entityIdParam());
     });
@@ -113,8 +135,7 @@ export class ReviewsPageComponent {
         error: () => {
           if (seq !== this.requestSeq) return;
           this.loadingMore.set(false);
-          this.reportMessage.set('');
-          this.reportError.set('Could not load more reviews. Please try again.');
+          this.ri.reportError.set('Could not load more reviews. Please try again.');
         },
       });
   }
@@ -127,51 +148,6 @@ export class ReviewsPageComponent {
 
   protected trackReview(_index: number, review: FullReview): string {
     return review.id;
-  }
-
-  protected isReviewReported(review: FullReview): boolean {
-    return review.reportedByCurrentUser || !!this.reportedReviewIds()[review.id];
-  }
-
-  protected isReviewReporting(reviewId: string): boolean {
-    return !!this.reportingReviewIds()[reviewId];
-  }
-
-  protected reportReview(review: FullReview): void {
-    if (!this.auth.isLoggedIn()) {
-      this.reportMessage.set('');
-      this.reportError.set('Log in to report a review.');
-      return;
-    }
-
-    const targetType = this.reportTargetType();
-    const reviewId = parseInt(review.id, 10);
-    if (!targetType || isNaN(reviewId) || this.isReviewReporting(review.id)) return;
-
-    this.reportMessage.set('');
-    this.reportError.set('');
-    this.setReviewReporting(review.id, true);
-
-    this.reviewsService.reportReview(targetType, reviewId)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (response) => {
-          this.setReviewReporting(review.id, false);
-          this.markReviewReported(review.id);
-          this.reviews.update(current => current.map(item =>
-            item.id === review.id
-              ? { ...item, reportedByCurrentUser: true }
-              : item,
-          ));
-          this.reportMessage.set(response.alreadyReported
-            ? 'You have already reported this review.'
-            : 'Thanks. A regional manager will review this report.');
-        },
-        error: (err) => {
-          this.setReviewReporting(review.id, false);
-          this.reportError.set(err?.error?.message || 'Could not report this review. Please try again.');
-        },
-      });
   }
 
   private loadReviews(entityTypeParam: string | null, entityIdParam: string | null): void {
@@ -208,10 +184,6 @@ export class ReviewsPageComponent {
           this.reviewsCount.set(result.reviewsCount);
           this.nextSkip.set(result.nextSkip);
           this.hasMore.set(result.hasMore);
-          this.reportMessage.set('');
-          this.reportError.set('');
-          this.reportingReviewIds.set({});
-          this.reportedReviewIds.set({});
           this.loadState.set('loaded');
         },
         error: () => {
@@ -238,28 +210,6 @@ export class ReviewsPageComponent {
   private normalizeEntityType(value: string | null): ReviewsEntityType | null {
     if (value === 'place' || value === 'stay' || value === 'event') return value;
     return null;
-  }
-
-  private reportTargetType(): ReviewReportTargetType | null {
-    const entityType = this.normalizeEntityType(this.entityTypeParam());
-    if (!entityType) return null;
-    return entityType === 'event' ? 'event' : 'place';
-  }
-
-  private markReviewReported(reviewId: string): void {
-    this.reportedReviewIds.update(current => ({ ...current, [reviewId]: true }));
-  }
-
-  private setReviewReporting(reviewId: string, isReporting: boolean): void {
-    this.reportingReviewIds.update(current => {
-      const next = { ...current };
-      if (isReporting) {
-        next[reviewId] = true;
-      } else {
-        delete next[reviewId];
-      }
-      return next;
-    });
   }
 
   private readNavigationTitle(): string | null {

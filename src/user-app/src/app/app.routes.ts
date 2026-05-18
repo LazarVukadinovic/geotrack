@@ -84,6 +84,21 @@ export const routes: Routes = [
         data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
+        path: 'profile/reviews',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/reviews/pages/my-reviews-page/my-reviews-page.component')
+            .then(m => m.MyReviewsPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
+        path: 'users/:userId/reviews',
+        loadComponent: () =>
+          import('./features/reviews/pages/user-reviews-page/user-reviews-page.component')
+            .then(m => m.UserReviewsPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
         path: 'contributions',
         canActivate: [authGuard],
         loadComponent: () =>

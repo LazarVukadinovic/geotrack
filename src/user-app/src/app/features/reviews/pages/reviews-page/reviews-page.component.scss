@@ -332,6 +332,272 @@
   }
 }
 
+// --- Author button ---
+
+.reviews-page__author-btn {
+  display: inline-flex;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.reviews-page__author-name-btn {
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  color: #1a2b4c;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// --- Review actions row ---
+
+.reviews-page__review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.reviews-page__action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: 1.5px solid;
+  background: none;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+
+  svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  &--edit {
+    color: #e8570a;
+    border-color: #e8570a;
+
+    &:active {
+      background: rgba(232, 87, 10, 0.06);
+    }
+  }
+
+  &--delete {
+    color: #b42318;
+    border-color: #b42318;
+
+    &:active {
+      background: rgba(180, 35, 24, 0.06);
+    }
+  }
+}
+
+// --- Bottom sheet / modal ---
+
+.reviews-page__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 50;
+}
+
+.reviews-page__sheet {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  z-index: 60;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 20px 20px calc(env(safe-area-inset-bottom, 0px) + 20px);
+  box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.18);
+
+  &--report {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 24px 24px 0 0;
+    padding: 20px 20px calc(env(safe-area-inset-bottom, 0px) + 28px);
+  }
+}
+
+.reviews-page__sheet-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 20px;
+  margin-bottom: 12px;
+  cursor: grab;
+  touch-action: none;
+
+  &::after {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: #d1d5db;
+  }
+}
+
+.reviews-page__sheet-title {
+  margin: 0 0 4px;
+  font-size: var(--text-base);
+  font-weight: 800;
+  color: #1a2b4c;
+}
+
+.reviews-page__sheet-sub {
+  margin: 0 0 16px;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  line-height: 1.45;
+}
+
+.reviews-page__reasons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.reviews-page__reason-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 10px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+
+  &:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  &--selected {
+    border-color: #e8570a;
+    background: rgba(232, 87, 10, 0.06);
+    color: #e8570a;
+    font-weight: 700;
+  }
+}
+
+.reviews-page__reason-text {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: #1a2b4c;
+  resize: none;
+  margin-bottom: 14px;
+
+  &:focus {
+    outline: none;
+    border-color: #e8570a;
+  }
+}
+
+.reviews-page__sheet-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.reviews-page__sheet-cancel {
+  flex: 1;
+  padding: 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: #6b7280;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.reviews-page__sheet-submit {
+  flex: 1.5;
+  padding: 12px;
+  border: none;
+  border-radius: 14px;
+  background: #1a2b4c;
+  font: inherit;
+  font-weight: 800;
+  color: #ffffff;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  &--danger {
+    background: #b42318;
+  }
+}
+
+// --- Edit stars ---
+
+.reviews-page__edit-stars {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.reviews-page__star-btn {
+  display: inline-flex;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+
+  svg {
+    width: 32px;
+    height: 32px;
+    fill: #e2e8f0;
+  }
+
+  &--active svg {
+    fill: #e8570a;
+  }
+}
+
 @keyframes reviews-spin {
   to {
     transform: rotate(360deg);
