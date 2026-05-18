@@ -69,7 +69,7 @@ export interface RegionalAnalyticsData {
   actionableInsights: ActionableInsight[];
   insights: AutoInsight[];
   distribution: Record<CategoryFilter, DistributionSlice[]>;
-  pageViewsTrend: Record<CategoryFilter, number[]>;
+  pageViewsTrend: Record<CategoryFilter, RegionalAnalyticsTrendPoint[]>;
 }
 
 export interface RegionalAnalyticsOverviewParams {

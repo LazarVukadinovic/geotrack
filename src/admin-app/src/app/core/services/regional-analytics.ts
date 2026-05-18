@@ -142,8 +142,12 @@ export class RegionalAnalyticsService {
     }));
   }
 
-  mapTrend(points: RegionalAnalyticsTrendPoint[]): number[] {
-    return points.map((point) => point.views);
+  mapTrend(points: RegionalAnalyticsTrendPoint[]): RegionalAnalyticsTrendPoint[] {
+    return points.map((point) => ({
+      date: point.date,
+      views: Math.max(0, Number(point.views) || 0),
+      uniqueVisitors: Math.max(0, Number(point.uniqueVisitors) || 0),
+    }));
   }
 
   buildActionableInsights(insights: RegionalAnalyticsActionableInsights): ActionableInsight[] {
@@ -217,7 +221,7 @@ export class RegionalAnalyticsService {
         categories: [],
         entityRows: this.mapEntityRows(overview.entityRows),
         distribution: this.asBucket('all', this.mapDistribution(overview.entityTypeDistribution), [] as DistributionSlice[]),
-        pageViewsTrend: this.asBucket('all', this.mapTrend(overview.pageViewsTrend), [] as number[]),
+        pageViewsTrend: this.asBucket('all', this.mapTrend(overview.pageViewsTrend), [] as RegionalAnalyticsTrendPoint[]),
         actionableInsights: this.buildActionableInsights(overview.actionableInsights),
         insights: this.buildAutoInsights(overview.actionableInsights.messages ?? []),
       })),

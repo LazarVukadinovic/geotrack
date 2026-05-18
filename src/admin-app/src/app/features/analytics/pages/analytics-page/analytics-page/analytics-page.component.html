@@ -146,7 +146,7 @@
               <div class="text-sm font-semibold text-gray-800 mb-0.5">Page Views Trend</div>
               <ng-container *ngIf="trendChart() as chart">
                 <div class="text-xs text-gray-400 mb-4">{{ chart.subtitle }}</div>
-                <svg viewBox="0 0 320 160" class="w-full" style="height: 160px;">
+                <svg viewBox="0 0 320 160" class="w-full" style="height: 160px;" role="img" aria-label="Page views trend line chart">
                   <defs>
                     <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stop-color="#185FA5" stop-opacity="0.15"/>
@@ -160,6 +160,19 @@
                   <line x1="24" y1="134" x2="316" y2="134" stroke="#f3f4f6" stroke-width="1"/>
                   <path [attr.d]="chart.areaPath" fill="url(#areaGrad)"/>
                   <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round"/>
+                  <g
+                    *ngFor="let point of chart.points"
+                    [attr.transform]="'translate(' + point.x + ' ' + point.y + ')'"
+                    [appAnalyticsTooltip]="trendTooltip(point)"
+                    [attr.aria-label]="trendAriaLabel(point)"
+                    tabindex="0"
+                    role="img"
+                    data-testid="page-views-trend-point"
+                    style="cursor: pointer;"
+                  >
+                    <circle r="9" fill="transparent"></circle>
+                    <circle r="3" fill="#ffffff" stroke="#185FA5" stroke-width="1.5"></circle>
+                  </g>
                   <text *ngFor="let lbl of chart.xLabels" [attr.x]="lbl.x" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">{{ lbl.text }}</text>
                 </svg>
               </ng-container>
@@ -171,7 +184,15 @@
               <div class="text-xs text-gray-400 mb-4">By total page views</div>
               <div class="flex flex-col gap-3">
                 <ng-container *ngIf="topPerformers().length > 0; else noPerformers">
-                  <div *ngFor="let e of topPerformers()" class="flex items-center gap-3">
+                  <div
+                    *ngFor="let e of topPerformers()"
+                    class="flex items-center gap-3 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    [appAnalyticsTooltip]="topPerformerTooltip(e)"
+                    [attr.aria-label]="topPerformerAriaLabel(e)"
+                    tabindex="0"
+                    role="img"
+                    data-testid="top-performing-row"
+                  >
                     <span class="text-xs text-gray-600 w-36 truncate flex-shrink-0">{{ e.name }}</span>
                     <div class="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
                       <div class="h-full rounded" style="background: #185FA5;" [style.width]="topPerformerBarPct(e) + '%'"></div>
@@ -203,12 +224,26 @@
                     [attr.stroke-dasharray]="arc.dasharray"
                     [attr.stroke-dashoffset]="arc.dashoffset"
                     transform="rotate(-90 80 80)"
+                    [appAnalyticsTooltip]="distributionTooltip(arc)"
+                    [attr.aria-label]="distributionAriaLabel(arc)"
+                    tabindex="0"
+                    role="img"
+                    data-testid="entity-distribution-segment"
+                    style="cursor: pointer;"
                   />
                   <text x="80" y="74" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">{{ donutTotalDisplay() }}</text>
                   <text x="80" y="91" text-anchor="middle" font-size="10" fill="#9ca3af">TOTAL</text>
                 </svg>
                 <div class="flex items-center gap-4 flex-wrap justify-center">
-                  <div *ngFor="let arc of donutArcs()" class="flex items-center gap-1.5 text-xs text-gray-600">
+                  <div
+                    *ngFor="let arc of donutArcs()"
+                    class="flex items-center gap-1.5 text-xs text-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    [appAnalyticsTooltip]="distributionTooltip(arc)"
+                    [attr.aria-label]="distributionAriaLabel(arc)"
+                    tabindex="0"
+                    role="img"
+                    data-testid="entity-distribution-legend-item"
+                  >
                     <span class="w-3 h-3 rounded-full flex-shrink-0" [style.background]="arc.color"></span>
                     {{ arc.label }} <span class="text-gray-400">({{ arc.count }})</span>
                   </div>
@@ -221,7 +256,15 @@
               <div class="text-sm font-semibold text-gray-800 mb-0.5">Engagement Funnel</div>
               <div class="text-xs text-gray-400 mb-4">User journey completion</div>
               <div class="flex flex-col gap-2.5">
-                <div *ngFor="let item of funnelData()" class="flex flex-col gap-1">
+                <div
+                  *ngFor="let item of funnelData()"
+                  class="flex flex-col gap-1 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  [appAnalyticsTooltip]="funnelTooltip(item)"
+                  [attr.aria-label]="funnelAriaLabel(item)"
+                  tabindex="0"
+                  role="img"
+                  data-testid="engagement-funnel-row"
+                >
                   <div class="flex justify-between text-xs text-gray-600 font-medium">
                     <span>{{ item.label }}</span><span class="text-gray-400">{{ item.value }}</span>
                   </div>
@@ -282,17 +325,22 @@
 
                   <line x1="48" y1="184" x2="702" y2="184" stroke="#e5e7eb" stroke-width="1"/>
 
-                  <rect
-                    *ngFor="let bar of monthlyChart.bars"
-                    [attr.x]="bar.x"
-                    [attr.y]="bar.y"
-                    [attr.width]="bar.width"
-                    [attr.height]="bar.height"
-                    [attr.fill]="bar.color"
-                    rx="3"
-                  >
-                    <title>{{ bar.monthLabel }} {{ bar.yearLabel }}: {{ formatNum(bar.value) }} visits</title>
-                  </rect>
+                  <ng-container *ngIf="!monthlyChart.isEmpty">
+                    <rect
+                      *ngFor="let bar of monthlyChart.bars"
+                      [attr.x]="bar.x"
+                      [attr.y]="bar.y"
+                      [attr.width]="bar.width"
+                      [attr.height]="bar.height"
+                      [attr.fill]="bar.color"
+                      [appAnalyticsTooltip]="monthlyVisitTooltip(bar)"
+                      [attr.aria-label]="monthlyVisitAriaLabel(bar)"
+                      tabindex="0"
+                      role="img"
+                      data-testid="monthly-visits-bar"
+                      rx="3"
+                    ></rect>
+                  </ng-container>
 
                   <text *ngFor="let label of monthlyChart.xLabels" [attr.x]="label.x" y="212" font-size="10" fill="#6b7280" text-anchor="middle">{{ label.text }}</text>
                   <text *ngIf="monthlyChart.isEmpty" x="375" y="100" text-anchor="middle" font-size="13" fill="#9ca3af">No visit data yet for this selection.</text>
@@ -426,10 +474,13 @@
                       [attr.width]="bar.width"
                       [attr.height]="bar.height"
                       [attr.fill]="bar.color"
+                      [appAnalyticsTooltip]="tagViewTooltip(bar)"
+                      [attr.aria-label]="tagViewAriaLabel(bar)"
+                      tabindex="0"
+                      role="img"
+                      data-testid="tag-views-bar"
                       rx="4"
-                    >
-                      <title>{{ bar.tagName }}: {{ formatNum(bar.value) }} views ({{ formatPercent(bar.percentageOfTotal) }})</title>
-                    </rect>
+                    ></rect>
 
                     <text
                       *ngFor="let label of tagChart.xLabels"
@@ -601,8 +652,12 @@
               <div *ngIf="destinationRanking().length > 0; else noDestinationRanking" class="flex flex-col gap-3">
                 <div
                   *ngFor="let item of destinationRanking()"
-                  class="grid items-center gap-2"
+                  class="grid items-center gap-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
                   style="grid-template-columns: 1.5rem minmax(0, 1fr) 2.25rem;"
+                  [appAnalyticsTooltip]="destinationRankingTooltip(item)"
+                  [attr.aria-label]="destinationRankingAriaLabel(item)"
+                  tabindex="0"
+                  role="img"
                   data-testid="destination-ranking-row"
                 >
                   <span class="text-[11px] font-bold text-blue-600 bg-blue-50 rounded-full w-6 h-6 flex items-center justify-center">
@@ -947,8 +1002,13 @@
                             [attr.stroke-dasharray]="arc.dasharray"
                             [attr.stroke-dashoffset]="arc.dashoffset"
                             transform="rotate(-90 80 80)"
+                            [appAnalyticsTooltip]="externalPartnerClickTooltip(arc)"
+                            [attr.aria-label]="externalPartnerClickAriaLabel(arc)"
+                            tabindex="0"
+                            role="img"
+                            data-testid="external-partner-click-segment"
+                            style="cursor: pointer;"
                           >
-                            <title>{{ arc.partnerLabel }}: {{ formatNum(arc.clickCount) }} clicks ({{ formatPercent(arc.sharePercent) }})</title>
                           </circle>
                           <text x="80" y="76" text-anchor="middle" font-size="19" font-weight="700" fill="#111827">{{ formatNum(partnerChart.totalClicks) }}</text>
                           <text x="80" y="94" text-anchor="middle" font-size="10" fill="#9ca3af">CLICKS</text>
@@ -957,7 +1017,12 @@
                         <div class="flex flex-col gap-2 min-w-0">
                           <div
                             *ngFor="let item of partnerChart.items"
-                            class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                            class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            [appAnalyticsTooltip]="externalPartnerClickTooltip(item)"
+                            [attr.aria-label]="externalPartnerClickAriaLabel(item)"
+                            tabindex="0"
+                            role="img"
+                            data-testid="external-partner-click-legend-item"
                           >
                             <span class="w-3 h-3 rounded-full flex-shrink-0" [style.background]="item.color"></span>
                             <div class="min-w-0">

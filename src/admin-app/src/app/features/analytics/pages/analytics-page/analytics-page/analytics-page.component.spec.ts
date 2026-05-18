@@ -13,6 +13,7 @@ import {
   RegionalAnalyticsEntityDetail,
   RegionalAnalyticsEntityMetric,
   RegionalAnalyticsOverview,
+  RegionalAnalyticsTrendPoint,
   RegionalMonthlyVisits,
   RegionalMonthlyVisitYearsBack,
   RegionalTagViewsAnalyticsResponse,
@@ -57,7 +58,7 @@ describe('AnalyticsPageComponent', () => {
         detailRoute: row.detailRoute,
       }))),
       mapDistribution: vi.fn(() => [{ label: 'Places', count: 1, color: '#1252A0' }]),
-      mapTrend: vi.fn(() => [12]),
+      mapTrend: vi.fn((points: RegionalAnalyticsTrendPoint[]) => points),
       buildActionableInsights: vi.fn(() => [
         { icon: 'pin', label: 'TOP VIEWED LOCATION', title: 'Real Location', subtitle: '12 Views' },
       ]),
@@ -105,6 +106,7 @@ describe('AnalyticsPageComponent', () => {
 
   afterEach(() => {
     sessionStorage.clear();
+    document.querySelectorAll('[data-testid="analytics-chart-tooltip"]').forEach(element => element.remove());
   });
 
   it('loads active region analytics from the backend service', () => {
@@ -129,6 +131,63 @@ describe('AnalyticsPageComponent', () => {
       entityType: 'all',
       tagIds: [],
     }));
+  });
+
+  it('shows page views trend tooltip on hover and focus, then hides it', () => {
+    fixture.detectChanges();
+
+    const point = fixture.nativeElement.querySelector('[data-testid="page-views-trend-point"]') as Element;
+
+    expect(showTooltip(point)).toContain('May 15, 2026');
+    expect(tooltipText()).toContain('Page Views');
+    expect(tooltipText()).toContain('12');
+    expect(tooltipText()).toContain('Unique Visitors');
+    expect(tooltipText()).toContain('3');
+
+    point.dispatchEvent(new MouseEvent('mouseleave'));
+    fixture.detectChanges();
+    expect(document.body.querySelector('[data-testid="analytics-chart-tooltip"]')).toBeNull();
+
+    point.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(tooltipText()).toContain('May 15, 2026');
+
+    point.dispatchEvent(new Event('blur'));
+    fixture.detectChanges();
+    expect(document.body.querySelector('[data-testid="analytics-chart-tooltip"]')).toBeNull();
+  });
+
+  it('shows top performing entity tooltip with entity name and real views', () => {
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('[data-testid="top-performing-row"]') as Element;
+
+    expect(showTooltip(row)).toContain('Real Location');
+    expect(tooltipText()).toContain('Views');
+    expect(tooltipText()).toContain('12');
+    expect(tooltipText()).toContain('Visitors');
+    expect(tooltipText()).toContain('3');
+  });
+
+  it('shows entity type distribution tooltip with count and percentage', () => {
+    fixture.detectChanges();
+
+    const segment = fixture.nativeElement.querySelector('[data-testid="entity-distribution-segment"]') as Element;
+
+    expect(showTooltip(segment)).toContain('Places');
+    expect(tooltipText()).toContain('1 entities');
+    expect(tooltipText()).toContain('100%');
+  });
+
+  it('shows engagement funnel tooltip with metric value and page-view share', () => {
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="engagement-funnel-row"]') as NodeListOf<Element>;
+
+    expect(showTooltip(rows[1])).toContain('Unique Visitors');
+    expect(tooltipText()).toContain('Value');
+    expect(tooltipText()).toContain('3');
+    expect(tooltipText()).toContain('25%');
   });
 
   it('reloads analytics when entity type changes', () => {
@@ -166,6 +225,18 @@ describe('AnalyticsPageComponent', () => {
       selectedYearsBack: 2,
       regionId: 21,
     }));
+  });
+
+  it('shows monthly visits tooltip with month, year, and visits', () => {
+    fixture.detectChanges();
+
+    const bars = Array.from(fixture.nativeElement.querySelectorAll('[data-testid="monthly-visits-bar"]')) as Element[];
+    const mayBar = bars.find(bar => bar.getAttribute('aria-label')?.includes('May 2026'));
+
+    expect(mayBar).toBeDefined();
+    expect(showTooltip(mayBar as Element)).toContain('May 2026');
+    expect(tooltipText()).toContain('Visits');
+    expect(tooltipText()).toContain('6');
   });
 
   it('renders tag views card directly below monthly visits', () => {
@@ -232,6 +303,18 @@ describe('AnalyticsPageComponent', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('No tag view data for this period.');
     expect(text).not.toContain('Fake Tag');
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="tag-views-bar"]').length).toBe(0);
+  });
+
+  it('shows tag views tooltip with tag name, views, and total share', () => {
+    fixture.detectChanges();
+
+    const bar = fixture.nativeElement.querySelector('[data-testid="tag-views-bar"]') as Element;
+
+    expect(showTooltip(bar)).toContain('Coastal Walks');
+    expect(tooltipText()).toContain('Views');
+    expect(tooltipText()).toContain('8');
+    expect(tooltipText()).toContain('66.7%');
   });
 
   it('exports current filtered analytics data', () => {
@@ -272,6 +355,19 @@ describe('AnalyticsPageComponent', () => {
     expect(text).not.toContain('Banje Beach');
   });
 
+  it('shows destination ranking tooltip with rank, destination, visits, and top share', () => {
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('[data-testid="destination-ranking-row"]') as Element;
+
+    expect(showTooltip(row)).toContain('Coastal Capital');
+    expect(tooltipText()).toContain('Rank');
+    expect(tooltipText()).toContain('#1');
+    expect(tooltipText()).toContain('Visits');
+    expect(tooltipText()).toContain('20');
+    expect(tooltipText()).toContain('100%');
+  });
+
   it('renders destination ranking empty state when no destination visits exist', () => {
     const emptyOverview = overviewResponse();
     emptyOverview.destinationRanking = [];
@@ -291,6 +387,23 @@ describe('AnalyticsPageComponent', () => {
     expect(bars.length).toBe(2);
     expect(bars[0].style.width).toBe('100%');
     expect(bars[1].style.width).toBe('50%');
+  });
+
+  it('does not render monthly tooltip targets for empty monthly chart data', () => {
+    const emptyMonthlyVisits = monthlyVisitsResponse(1);
+    emptyMonthlyVisits.totalVisits = 0;
+    emptyMonthlyVisits.series = emptyMonthlyVisits.series.map(series => ({
+      ...series,
+      monthlyVisitCounts: series.monthlyVisitCounts.map(() => 0),
+      totalVisits: 0,
+    }));
+    vi.mocked(analyticsService.getMonthlyVisits).mockReturnValue(of(emptyMonthlyVisits));
+
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('No visit data yet for this selection.');
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="monthly-visits-bar"]').length).toBe(0);
   });
 
   it('reloads overview analytics when the period changes', () => {
@@ -436,6 +549,22 @@ describe('AnalyticsPageComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="entity-detail-overlay"]')).toBeNull();
   });
+
+  function showTooltip(element: Element): string {
+    element.dispatchEvent(new MouseEvent('mouseenter', {
+      clientX: 160,
+      clientY: 160,
+      bubbles: true,
+    }));
+    fixture.detectChanges();
+    return tooltipText();
+  }
+
+  function tooltipText(): string {
+    return (document.body.querySelector('[data-testid="analytics-chart-tooltip"]')?.textContent ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 
   function entityRow(
     entityType: RegionalAnalyticsEntityDetail['entityType'] = 'place',

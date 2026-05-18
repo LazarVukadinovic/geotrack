@@ -14,6 +14,10 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { finalize, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
+import {
+  AnalyticsTooltipContent,
+  AnalyticsTooltipDirective,
+} from '../../../../../shared/directives/analytics-tooltip.directive';
 import { AuthService } from '../../../../../core/services/auth.service';
 import { DashboardService } from '../../../../../core/services/dashboard.service';
 import { RegionalAnalyticsService } from '../../../../../core/services/regional-analytics';
@@ -33,6 +37,7 @@ import {
   RegionalAnalyticsEngagementFunnel,
   RegionalAnalyticsEntityType,
   RegionalAnalyticsPagination,
+  RegionalAnalyticsTrendPoint,
   RegionalPlaceOperatingHour,
   RegionalDestinationRankingItem,
   RegionalMonthlyVisits,
@@ -55,6 +60,30 @@ interface MonthlyVisitChart {
   totalVisits: number;
 }
 
+interface TrendChart {
+  linePath: string;
+  areaPath: string;
+  yLabels: { y: number; text: string }[];
+  xLabels: { x: number; text: string }[];
+  subtitle: string;
+  points: TrendChartPoint[];
+  isEmpty: boolean;
+}
+
+interface TrendChartPoint {
+  x: number;
+  y: number;
+  dateLabel: string;
+  pageViews: number;
+  uniqueVisitors: number | null;
+}
+
+interface TrendSlicePoint {
+  dateLabel: string;
+  pageViews: number;
+  uniqueVisitors: number | null;
+}
+
 interface MonthlyVisitChartBar {
   x: number;
   y: number;
@@ -64,6 +93,7 @@ interface MonthlyVisitChartBar {
   value: number;
   monthLabel: string;
   yearLabel: string;
+  monthYearLabel: string;
 }
 
 interface TagViewsChart {
@@ -84,6 +114,15 @@ interface TagViewsChartBar {
   value: number;
   tagName: string;
   percentageOfTotal: number;
+}
+
+interface FunnelChartItem {
+  label: string;
+  value: string;
+  rawValue: number;
+  pct: number;
+  shareOfPageViews: number;
+  color: string;
 }
 
 interface ExternalPartnerClickChart {
@@ -116,7 +155,7 @@ interface DetailInfoItem {
 @Component({
   selector: 'app-analytics-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent, AnalyticsTooltipDirective],
   templateUrl: './analytics-page.component.html',
 })
 export class AnalyticsPageComponent implements OnInit, OnDestroy {
@@ -243,7 +282,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     return this.sortOptions.find(option => option.field === field && option.dir === dir)?.label ?? 'Most Views';
   });
 
-  private readonly pageViewsTrendSig = signal<Record<CategoryFilter, number[]>>({
+  private readonly pageViewsTrendSig = signal<Record<CategoryFilter, RegionalAnalyticsTrendPoint[]>>({
     all: [],
     locations: [],
     destinations: [],
@@ -351,6 +390,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       const arc = total > 0 ? (slice.count / total) * this.CIRCUMFERENCE : 0;
       const item = {
         ...slice,
+        percentage: total > 0 ? (slice.count / total) * 100 : 0,
         dasharray: `${arc.toFixed(1)} ${(this.CIRCUMFERENCE - arc).toFixed(1)}`,
         dashoffset: `-${offset.toFixed(1)}`,
       };
@@ -434,16 +474,17 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     return labels[this.activeFilter()];
   });
 
-  readonly funnelData = computed(() => {
+  readonly funnelData = computed<FunnelChartItem[]>(() => {
     const funnel = this.funnelSig();
-    const base = funnel.pageViews || 1;
+    const base = funnel.pageViews;
     const pct = (value: number) => Math.min(100, Math.round((value / base) * 100));
+    const share = (value: number) => base > 0 ? (value / base) * 100 : 0;
     return [
-      { label: 'Page Views', value: this.formatNum(funnel.pageViews), pct: 100, color: '#185FA5' },
-      { label: 'Unique Visitors', value: this.formatNum(funnel.uniqueVisitors), pct: pct(funnel.uniqueVisitors), color: '#2d8dd6' },
-      { label: 'Saved', value: this.formatNum(funnel.saves), pct: pct(funnel.saves), color: '#38bdf8' },
-      { label: 'Ext. Clicks', value: this.formatNum(funnel.externalClicks), pct: pct(funnel.externalClicks), color: '#60c4f5' },
-      { label: 'Reviews', value: this.formatNum(funnel.reviews), pct: pct(funnel.reviews), color: '#f59e0b' },
+      { label: 'Page Views', value: this.formatNum(funnel.pageViews), rawValue: funnel.pageViews, pct: base > 0 ? 100 : 0, shareOfPageViews: base > 0 ? 100 : 0, color: '#185FA5' },
+      { label: 'Unique Visitors', value: this.formatNum(funnel.uniqueVisitors), rawValue: funnel.uniqueVisitors, pct: base > 0 ? pct(funnel.uniqueVisitors) : 0, shareOfPageViews: share(funnel.uniqueVisitors), color: '#2d8dd6' },
+      { label: 'Saved', value: this.formatNum(funnel.saves), rawValue: funnel.saves, pct: base > 0 ? pct(funnel.saves) : 0, shareOfPageViews: share(funnel.saves), color: '#38bdf8' },
+      { label: 'Ext. Clicks', value: this.formatNum(funnel.externalClicks), rawValue: funnel.externalClicks, pct: base > 0 ? pct(funnel.externalClicks) : 0, shareOfPageViews: share(funnel.externalClicks), color: '#60c4f5' },
+      { label: 'Reviews', value: this.formatNum(funnel.reviews), rawValue: funnel.reviews, pct: base > 0 ? pct(funnel.reviews) : 0, shareOfPageViews: share(funnel.reviews), color: '#f59e0b' },
     ];
   });
 
@@ -796,6 +837,123 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       });
   }
 
+  trendTooltip(point: TrendChartPoint): AnalyticsTooltipContent {
+    return {
+      title: point.dateLabel,
+      rows: [
+        { label: 'Page Views', value: this.formatNum(point.pageViews) },
+        ...(point.uniqueVisitors === null ? [] : [{ label: 'Unique Visitors', value: this.formatNum(point.uniqueVisitors) }]),
+      ],
+    };
+  }
+
+  trendAriaLabel(point: TrendChartPoint): string {
+    const visitors = point.uniqueVisitors === null ? '' : `, ${this.formatNum(point.uniqueVisitors)} unique visitors`;
+    return `${point.dateLabel}: ${this.formatNum(point.pageViews)} page views${visitors}`;
+  }
+
+  topPerformerTooltip(entity: EntityRow): AnalyticsTooltipContent {
+    return {
+      title: entity.name,
+      rows: [
+        { label: 'Type', value: this.typeLabel(entity.type) },
+        { label: 'Views', value: this.formatNum(entity.views) },
+        { label: 'Visitors', value: this.formatNum(entity.visitors) },
+        { label: 'Saves', value: this.formatNum(entity.saves) },
+        { label: 'Ext. Clicks', value: this.formatNum(entity.actions) },
+      ],
+    };
+  }
+
+  topPerformerAriaLabel(entity: EntityRow): string {
+    return `${entity.name}, ${this.typeLabel(entity.type)}, ${this.formatNum(entity.views)} views, ${this.formatNum(entity.visitors)} visitors, ${this.formatNum(entity.saves)} saves`;
+  }
+
+  distributionTooltip(arc: DistributionSlice & { percentage: number }): AnalyticsTooltipContent {
+    return {
+      title: arc.label,
+      rows: [
+        { label: 'Count', value: `${this.formatNum(arc.count)} entities` },
+        { label: 'Share', value: this.formatPercent(arc.percentage) },
+      ],
+    };
+  }
+
+  distributionAriaLabel(arc: DistributionSlice & { percentage: number }): string {
+    return `${arc.label}: ${this.formatNum(arc.count)} entities, ${this.formatPercent(arc.percentage)}`;
+  }
+
+  funnelTooltip(item: FunnelChartItem): AnalyticsTooltipContent {
+    return {
+      title: item.label,
+      rows: [
+        { label: 'Value', value: this.formatNum(item.rawValue) },
+        { label: 'Of page views', value: this.formatPercent(item.shareOfPageViews) },
+      ],
+    };
+  }
+
+  funnelAriaLabel(item: FunnelChartItem): string {
+    return `${item.label}: ${this.formatNum(item.rawValue)}, ${this.formatPercent(item.shareOfPageViews)} of page views`;
+  }
+
+  monthlyVisitTooltip(bar: MonthlyVisitChartBar): AnalyticsTooltipContent {
+    return {
+      title: bar.monthYearLabel,
+      rows: [
+        { label: 'Visits', value: this.formatNum(bar.value) },
+      ],
+      footer: bar.yearLabel && bar.yearLabel !== bar.monthYearLabel ? bar.yearLabel : undefined,
+    };
+  }
+
+  monthlyVisitAriaLabel(bar: MonthlyVisitChartBar): string {
+    return `${bar.monthYearLabel}: ${this.formatNum(bar.value)} visits`;
+  }
+
+  tagViewTooltip(bar: TagViewsChartBar): AnalyticsTooltipContent {
+    return {
+      title: bar.tagName,
+      rows: [
+        { label: 'Views', value: this.formatNum(bar.value) },
+        { label: 'Share', value: this.formatPercent(bar.percentageOfTotal) },
+      ],
+    };
+  }
+
+  tagViewAriaLabel(bar: TagViewsChartBar): string {
+    return `${bar.tagName}: ${this.formatNum(bar.value)} views, ${this.formatPercent(bar.percentageOfTotal)} of total`;
+  }
+
+  destinationRankingTooltip(item: RegionalDestinationRankingItem): AnalyticsTooltipContent {
+    return {
+      title: item.destinationName,
+      rows: [
+        { label: 'Rank', value: `#${item.rank}` },
+        { label: 'Visits', value: this.formatNum(item.visits) },
+        { label: 'Relative to top', value: this.formatPercent(item.percentageOfTopValue) },
+      ],
+    };
+  }
+
+  destinationRankingAriaLabel(item: RegionalDestinationRankingItem): string {
+    return `Rank ${item.rank}, ${item.destinationName}: ${this.formatNum(item.visits)} visits, ${this.formatPercent(item.percentageOfTopValue)} relative to top destination`;
+  }
+
+  externalPartnerClickTooltip(item: Pick<ExternalPartnerClickArc, 'partnerLabel' | 'clickCount' | 'sharePercent'>): AnalyticsTooltipContent {
+    return {
+      title: item.partnerLabel,
+      rows: [
+        { label: 'Clicks', value: this.formatNum(item.clickCount) },
+        { label: 'Share', value: this.formatPercent(item.sharePercent) },
+      ],
+    };
+  }
+
+  externalPartnerClickAriaLabel(item: Pick<ExternalPartnerClickArc, 'partnerLabel' | 'clickCount' | 'sharePercent'>): string {
+    return `${item.partnerLabel}: ${this.formatNum(item.clickCount)} clicks, ${this.formatPercent(item.sharePercent)}`;
+  }
+
   topPerformerBarPct(entity: EntityRow): number {
     const top = this.topPerformers()[0];
     return top?.views ? Math.round((entity.views / top.views) * 100) : 0;
@@ -826,7 +984,8 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   }
 
   formatPercent(value: number): string {
-    return `${Math.max(0, value).toFixed(value % 1 === 0 ? 0 : 1)}%`;
+    const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
+    return `${safeValue.toFixed(safeValue % 1 === 0 ? 0 : 1)}%`;
   }
 
   formatNum(value: number): string {
@@ -1305,7 +1464,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
           this.entityRowsSig.set(this.analyticsService.mapEntityRows(overview.entityRows));
           this.topPerformersSig.set(this.analyticsService.mapEntityRows(overview.topPerformingEntities));
           this.distributionSig.set(this.analyticsService.asBucket(filter, this.analyticsService.mapDistribution(overview.entityTypeDistribution), [] as DistributionSlice[]));
-          this.pageViewsTrendSig.set(this.analyticsService.asBucket(filter, this.analyticsService.mapTrend(overview.pageViewsTrend), [] as number[]));
+          this.pageViewsTrendSig.set(this.analyticsService.asBucket(filter, this.analyticsService.mapTrend(overview.pageViewsTrend), [] as RegionalAnalyticsTrendPoint[]));
           this.actionableInsightsSig.set(this.analyticsService.buildActionableInsights(overview.actionableInsights));
           this.destinationRankingSig.set(overview.destinationRanking ?? []);
           this.insightsSig.set(this.analyticsService.buildAutoInsights(overview.actionableInsights.messages ?? []));
@@ -1414,7 +1573,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.entityRowsSig.set([]);
     this.topPerformersSig.set([]);
     this.distributionSig.set(this.emptyBuckets<DistributionSlice[]>());
-    this.pageViewsTrendSig.set(this.emptyBuckets<number[]>());
+    this.pageViewsTrendSig.set(this.emptyBuckets<RegionalAnalyticsTrendPoint[]>());
     this.actionableInsightsSig.set([]);
     this.destinationRankingSig.set([]);
     this.insightsSig.set([]);
@@ -1677,6 +1836,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
           value,
           monthLabel,
           yearLabel: item.yearLabel,
+          monthYearLabel: this.monthYearLabel(item.startDate, monthIndex, monthLabel, item.yearLabel),
         });
       });
     });
@@ -1793,13 +1953,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     };
   }
 
-  private buildTrendChart(raw: number[], period: string): {
-    linePath: string;
-    areaPath: string;
-    yLabels: { y: number; text: string }[];
-    xLabels: { x: number; text: string }[];
-    subtitle: string;
-  } {
+  private buildTrendChart(raw: RegionalAnalyticsTrendPoint[], period: string): TrendChart {
     const { points, xLabels, subtitle } = this.getPeriodSlice(raw, period);
     const fallback = {
       linePath: '',
@@ -1812,18 +1966,26 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       ],
       xLabels,
       subtitle,
+      points: [] as TrendChartPoint[],
+      isEmpty: true,
     };
 
-    if (points.length === 0 || points.every(value => value === 0)) {
+    if (points.length === 0 || points.every(point => point.pageViews === 0 && (point.uniqueVisitors ?? 0) === 0)) {
       return fallback;
     }
 
-    const maxVal = Math.max(...points);
+    const maxVal = Math.max(...points.map(point => point.pageViews));
     const step = this.niceStep(maxVal);
     const count = points.length;
     const toX = (index: number) => 24 + (count > 1 ? index / (count - 1) : 0) * 292;
     const toY = (value: number) => Math.min(148, 134 - ((value - step) / (step * 3)) * 120);
-    const pts = points.map((value, index) => ({ x: toX(index), y: toY(value) }));
+    const pts = points.map((point, index) => ({
+      x: toX(index),
+      y: toY(point.pageViews),
+      dateLabel: point.dateLabel,
+      pageViews: point.pageViews,
+      uniqueVisitors: point.uniqueVisitors,
+    }));
     const linePath = this.smoothSVGPath(pts);
     const areaPath = `${linePath} L${pts[count - 1].x.toFixed(1)},148 L${pts[0].x.toFixed(1)},148 Z`;
 
@@ -1838,18 +2000,21 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       ],
       xLabels,
       subtitle,
+      points: pts,
+      isEmpty: false,
     };
   }
 
-  private getPeriodSlice(raw: number[], period: string): {
-    points: number[];
+  private getPeriodSlice(raw: RegionalAnalyticsTrendPoint[], period: string): {
+    points: TrendSlicePoint[];
     xLabels: { x: number; text: string }[];
     subtitle: string;
   } {
     const px = (index: number, count: number) => +(24 + (count > 1 ? index / (count - 1) : 0) * 292).toFixed(1);
+    const source = (raw ?? []).map(point => this.normalizeTrendPoint(point));
 
     if (period === 'Last 7 Days') {
-      const points = raw.slice(-7);
+      const points = source.slice(-7);
       return {
         points,
         xLabels: points.map((_, index) => ({ x: px(index, points.length), text: String(index + 1) })),
@@ -1858,10 +2023,10 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     }
 
     if (period === 'Last 90 Days') {
-      const source = raw.length >= 90 ? raw.slice(-90) : raw;
-      const bucketSize = Math.max(1, Math.ceil(source.length / 6));
-      const points = Array.from({ length: Math.ceil(source.length / bucketSize) }, (_, index) =>
-        source.slice(index * bucketSize, (index + 1) * bucketSize).reduce((sum, value) => sum + value, 0),
+      const scoped = source.length >= 90 ? source.slice(-90) : source;
+      const bucketSize = Math.max(1, Math.ceil(scoped.length / 6));
+      const points = Array.from({ length: Math.ceil(scoped.length / bucketSize) }, (_, index) =>
+        this.buildTrendBucket(scoped.slice(index * bucketSize, (index + 1) * bucketSize), index),
       );
       return {
         points,
@@ -1871,10 +2036,10 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     }
 
     if (period === 'All Time') {
-      const source = raw.length > 0 ? raw : [];
-      const bucketSize = Math.max(1, Math.ceil(source.length / 12));
-      const points = Array.from({ length: Math.ceil(source.length / bucketSize) }, (_, index) =>
-        source.slice(index * bucketSize, (index + 1) * bucketSize).reduce((sum, value) => sum + value, 0),
+      const scoped = source.length > 0 ? source : [];
+      const bucketSize = Math.max(1, Math.ceil(scoped.length / 12));
+      const points = Array.from({ length: Math.ceil(scoped.length / bucketSize) }, (_, index) =>
+        this.buildTrendBucket(scoped.slice(index * bucketSize, (index + 1) * bucketSize), index),
       );
       return {
         points,
@@ -1883,7 +2048,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       };
     }
 
-    const points = raw.slice(-30);
+    const points = source.slice(-30);
     const count = points.length;
     return {
       points,
@@ -1892,6 +2057,67 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
         .map(([index, text]) => ({ x: px(index, count), text })),
       subtitle: 'Rolling 30-day view engagement',
     };
+  }
+
+  private normalizeTrendPoint(point: RegionalAnalyticsTrendPoint): TrendSlicePoint {
+    const pageViews = Number(point.views);
+    const uniqueVisitors = Number(point.uniqueVisitors);
+
+    return {
+      dateLabel: this.formatTrendDate(point.date) || 'Unknown date',
+      pageViews: Number.isFinite(pageViews) ? Math.max(0, pageViews) : 0,
+      uniqueVisitors: Number.isFinite(uniqueVisitors) ? Math.max(0, uniqueVisitors) : null,
+    };
+  }
+
+  private buildTrendBucket(points: TrendSlicePoint[], index: number): TrendSlicePoint {
+    if (points.length === 0) {
+      return {
+        dateLabel: `Period ${index + 1}`,
+        pageViews: 0,
+        uniqueVisitors: null,
+      };
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
+    const visitorValues = points
+      .map(point => point.uniqueVisitors)
+      .filter((value): value is number => value !== null);
+
+    return {
+      dateLabel: first.dateLabel === last.dateLabel ? first.dateLabel : `${first.dateLabel} - ${last.dateLabel}`,
+      pageViews: points.reduce((sum, point) => sum + point.pageViews, 0),
+      uniqueVisitors: visitorValues.length > 0 ? visitorValues.reduce((sum, value) => sum + value, 0) : null,
+    };
+  }
+
+  private formatTrendDate(value: string | null | undefined): string {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(date);
+  }
+
+  private monthYearLabel(startDate: string | null | undefined, monthIndex: number, monthLabel: string, yearLabel: string): string {
+    if (startDate) {
+      const date = new Date(startDate);
+      if (!Number.isNaN(date.getTime())) {
+        const monthDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + monthIndex, 1));
+        return new Intl.DateTimeFormat('en-US', {
+          month: 'short',
+          year: 'numeric',
+          timeZone: 'UTC',
+        }).format(monthDate);
+      }
+    }
+
+    return `${monthLabel} ${yearLabel}`.trim();
   }
 
   private niceStep(maxVal: number): number {
