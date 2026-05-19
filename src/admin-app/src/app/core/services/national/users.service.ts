@@ -1,247 +1,200 @@
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, of, BehaviorSubject } from 'rxjs';
-import { tap } from 'rxjs/operators';
-import { PlatformUser, PlatformUserRole, PlatformUserStatus } from '../../models/platform-user.model';
+import { BehaviorSubject, Observable, map, tap } from 'rxjs';
+import { TerritoryAssignedTerritory } from '../../models/dashboard.model';
+
+export type UserSortValue =
+  | 'status_active_first'
+  | 'name_asc'
+  | 'name_desc'
+  | 'last_login_desc'
+  | 'last_login_asc'
+  | 'role'
+  | 'regions_count_desc';
+
+export interface TerritoryUserAssignedRegion {
+  regionId: number;
+  regionName: string;
+  displayName: string;
+}
+
+export interface TerritoryUser {
+  userId: number;
+  displayName: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  avatarUrl?: string | null;
+  initials: string;
+  roleCode: string;
+  roleDisplayName: string;
+  assignedRegions: TerritoryUserAssignedRegion[];
+  status: 'Active' | 'Inactive' | string;
+  isActive: boolean;
+  lastLoginAt?: string | null;
+  lastLoginDisplay: string;
+  canEdit: boolean;
+  canAddRegion: boolean;
+  canRemoveManagerRole: boolean;
+  createdAt: string;
+}
 
 export interface UsersPage {
-  items: PlatformUser[];
+  territory?: TerritoryAssignedTerritory | null;
+  items: TerritoryUser[];
   total: number;
+  totalCount: number;
+  skip: number;
+  take: number;
+  hasMore: boolean;
 }
 
-export type UserSortField = 'role' | 'status' | 'name';
-export type UserSortDir  = 'asc'  | 'desc';
+interface TerritoryUserListResponse {
+  territory?: TerritoryAssignedTerritory | null;
+  items: TerritoryUser[];
+  totalCount: number;
+  skip: number;
+  take: number;
+  hasMore: boolean;
+}
 
 export interface UsersPageRequest {
-  pageSize:   number;
-  search:     string;
-  sortField?: UserSortField;
-  sortDir?:   UserSortDir;
+  territoryId?: number | null;
+  search?: string | null;
+  sort?: UserSortValue | string | null;
+  skip?: number;
+  take?: number;
 }
 
-const MOCK_USERS: PlatformUser[] = [
-  {
-    id: 'USR-001', firstName: 'Sarah', lastName: 'Jenkins',
-    email: 'sarah.j@geotrack.com', avatarInitials: 'SJ', avatarColor: '#3b82f6',
-    role: 'Regional Manager', status: 'Active',
-    assignedRegions: ['Šumadija'],
-    lastLogin: '2026-05-10T12:30:00Z', createdAt: '2023-09-01',
-  },
-  {
-    id: 'USR-002', firstName: 'Michael', lastName: 'Roberts',
-    email: 'm.roberts@geotrack.com', avatarInitials: 'MR', avatarColor: '#8b5cf6',
-    role: 'Viewer', status: 'Active',
-    assignedRegions: ['Banat'],
-    lastLogin: '2026-05-05T09:15:00Z', createdAt: '2023-10-15',
-  },
-  {
-    id: 'USR-003', firstName: 'Emily', lastName: 'Chen',
-    email: 'echen@geotrack.com', avatarInitials: 'EC', avatarColor: '#10b981',
-    role: 'Viewer', status: 'Inactive',
-    assignedRegions: ['Bačka', 'Mačva'],
-    lastLogin: '2026-03-01T17:45:00Z', createdAt: '2023-11-20',
-  },
-  {
-    id: 'USR-004', firstName: 'Nikola', lastName: 'Petrović',
-    email: 'n.petrovic@geotrack.com', avatarInitials: 'NP', avatarColor: '#f59e0b',
-    role: 'Regional Manager', status: 'Active',
-    assignedRegions: ['Pomoravlje'],
-    lastLogin: '2026-05-09T08:00:00Z', createdAt: '2023-08-12',
-  },
-  {
-    id: 'USR-005', firstName: 'Ana', lastName: 'Kovačević',
-    email: 'a.kovacevic@geotrack.com', avatarInitials: 'AK', avatarColor: '#ef4444',
-    role: 'Regional Manager', status: 'Active',
-    assignedRegions: ['Raška'],
-    lastLogin: '2026-05-08T14:20:00Z', createdAt: '2023-07-30',
-  },
-  {
-    id: 'USR-006', firstName: 'Stefan', lastName: 'Đorđević',
-    email: 's.djordjevic@geotrack.com', avatarInitials: 'SĐ', avatarColor: '#06b6d4',
-    role: 'Regional Manager', status: 'Active',
-    assignedRegions: ['Podunavlje'],
-    lastLogin: '2026-05-07T11:10:00Z', createdAt: '2023-06-18',
-  },
-  {
-    id: 'USR-007', firstName: 'Milica', lastName: 'Stanković',
-    email: 'm.stankovic@geotrack.com', avatarInitials: 'MS', avatarColor: '#84cc16',
-    role: 'Viewer', status: 'Active',
-    assignedRegions: [],
-    lastLogin: '2026-05-06T16:55:00Z', createdAt: '2024-01-05',
-  },
-  {
-    id: 'USR-008', firstName: 'Jovan', lastName: 'Milošević',
-    email: 'j.milosevic@geotrack.com', avatarInitials: 'JM', avatarColor: '#f97316',
-    role: 'Viewer', status: 'Inactive',
-    assignedRegions: [],
-    lastLogin: '2026-02-14T10:30:00Z', createdAt: '2024-02-01',
-  },
-  {
-    id: 'USR-009', firstName: 'Dragana', lastName: 'Nikolić',
-    email: 'd.nikolic@geotrack.com', avatarInitials: 'DN', avatarColor: '#ec4899',
-    role: 'Regional Manager', status: 'Active',
-    assignedRegions: ['Zlatiborski okrug', 'Mačva'],
-    lastLogin: '2026-05-10T07:45:00Z', createdAt: '2023-12-10',
-  },
-  {
-    id: 'USR-010', firstName: 'Ivan', lastName: 'Vasić',
-    email: 'i.vasic@geotrack.com', avatarInitials: 'IV', avatarColor: '#14b8a6',
-    role: 'Viewer', status: 'Active',
-    assignedRegions: ['Timočka Krajina'],
-    lastLogin: '2026-05-04T13:00:00Z', createdAt: '2024-03-20',
-  },
-  {
-    id: 'USR-011', firstName: 'Katarina', lastName: 'Vuković',
-    email: 'k.vukovic@geotrack.com', avatarInitials: 'KV', avatarColor: '#a855f7',
-    role: 'Viewer', status: 'Active',
-    assignedRegions: [],
-    lastLogin: '2026-05-03T09:20:00Z', createdAt: '2024-04-01',
-  },
-  {
-    id: 'USR-012', firstName: 'Petar', lastName: 'Jovanović',
-    email: 'p.jovanovic@geotrack.com', avatarInitials: 'PJ', avatarColor: '#0ea5e9',
-    role: 'Viewer', status: 'Inactive',
-    assignedRegions: ['Nišavski okrug'],
-    lastLogin: '2026-01-20T15:10:00Z', createdAt: '2024-01-15',
-  },
-  {
-    id: 'USR-013', firstName: 'Bojana', lastName: 'Lazić',
-    email: 'b.lazic@geotrack.com', avatarInitials: 'BL', avatarColor: '#f43f5e',
-    role: 'Regional Manager', status: 'Active',
-    assignedRegions: ['Banat', 'Bačka'],
-    lastLogin: '2026-05-09T17:30:00Z', createdAt: '2023-10-01',
-  },
-  {
-    id: 'USR-014', firstName: 'Tamara', lastName: 'Nikolov',
-    email: 't.nikolov@geotrack.com', avatarInitials: 'TN', avatarColor: '#64748b',
-    role: 'Viewer', status: 'Active',
-    assignedRegions: [],
-    lastLogin: '2026-05-02T08:45:00Z', createdAt: '2024-05-01',
-  },
-  {
-    id: 'USR-015', firstName: 'Luka', lastName: 'Popović',
-    email: 'l.popovic@geotrack.com', avatarInitials: 'LP', avatarColor: '#22c55e',
-    role: 'Viewer', status: 'Active',
-    assignedRegions: ['Raška'],
-    lastLogin: '2026-05-01T12:00:00Z', createdAt: '2024-02-28',
-  },
-];
+export interface TerritoryUserUpdateRequest {
+  territoryId: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+}
 
-const ALL_REGIONS = [
-  'Šumadija', 'Banat', 'Pomoravlje', 'Raška', 'Bačka',
-  'Mačva', 'Podunavlje', 'Timočka Krajina', 'Zlatiborski okrug', 'Nišavski okrug',
-];
+export interface TerritoryUserAvailableRegion {
+  regionId: number;
+  regionName: string;
+  displayName: string;
+}
+
+interface AvailableRegionsResponse {
+  items: TerritoryUserAvailableRegion[];
+}
 
 @Injectable({ providedIn: 'root' })
 export class UsersService {
-
   readonly lastPage$ = new BehaviorSubject<UsersPage | null>(null);
 
-  getAllRegions(): string[] {
-    return ALL_REGIONS;
-  }
+  constructor(private readonly http: HttpClient) {}
 
-  getPage$(req: UsersPageRequest): Observable<UsersPage> {
-    let filtered = [...MOCK_USERS];
+  getPage$(request: UsersPageRequest): Observable<UsersPage> {
+    let params = this.applyDirectoryParams(new HttpParams(), request);
+    if (request.territoryId && request.territoryId > 0) {
+      params = params.set('territoryId', String(request.territoryId));
+    }
 
-    if (req.search.trim()) {
-      const q = req.search.toLowerCase();
-      filtered = filtered.filter(u =>
-        `${u.firstName} ${u.lastName}`.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q) ||
-        u.assignedRegions.some(r => r.toLowerCase().includes(q))
+    return this.http
+      .get<TerritoryUserListResponse>('/api/admin/territory/users', { params })
+      .pipe(
+        map(response => ({
+          ...response,
+          total: response.totalCount,
+        })),
+        tap(page => this.lastPage$.next(page)),
       );
+  }
+
+  updateUser$(userId: number, request: TerritoryUserUpdateRequest): Observable<TerritoryUser> {
+    return this.http.put<TerritoryUser>(`/api/admin/territory/users/${userId}`, request);
+  }
+
+  getAvailableRegions$(
+    userId: number,
+    territoryId: number,
+    search?: string | null,
+    take = 50,
+  ): Observable<TerritoryUserAvailableRegion[]> {
+    let params = new HttpParams()
+      .set('territoryId', String(territoryId))
+      .set('take', String(Math.max(1, take)));
+
+    if (search?.trim()) {
+      params = params.set('search', search.trim());
     }
 
-    if (req.sortField === 'name') {
-      filtered.sort((a, b) => {
-        const an = `${a.firstName} ${a.lastName}`;
-        const bn = `${b.firstName} ${b.lastName}`;
-        return req.sortDir === 'asc' ? an.localeCompare(bn) : bn.localeCompare(an);
-      });
-    } else if (req.sortField === 'role') {
-      const ord = (r: string) => r === 'Viewer' ? 0 : 1;
-      filtered.sort((a, b) => req.sortDir === 'asc'
-        ? ord(a.role) - ord(b.role)
-        : ord(b.role) - ord(a.role));
-    } else if (req.sortField === 'status') {
-      const ord = (s: string) => s === 'Active' ? 0 : 1;
-      filtered.sort((a, b) => req.sortDir === 'asc'
-        ? ord(a.status) - ord(b.status)
-        : ord(b.status) - ord(a.status));
+    return this.http
+      .get<AvailableRegionsResponse>(`/api/admin/territory/users/${userId}/available-regions`, { params })
+      .pipe(map(response => response.items ?? []));
+  }
+
+  addRegion$(userId: number, territoryId: number, regionId: number): Observable<TerritoryUser> {
+    return this.http.post<TerritoryUser>(`/api/admin/territory/users/${userId}/regions`, {
+      territoryId,
+      regionId,
+    });
+  }
+
+  removeManagerRole$(userId: number, territoryId: number): Observable<TerritoryUser> {
+    return this.http.post<TerritoryUser>(`/api/admin/territory/users/${userId}/remove-manager-role`, {
+      territoryId,
+    });
+  }
+
+  formatLastLogin(lastLoginAt?: string | null, lastLoginDisplay?: string | null): string {
+    if (lastLoginDisplay?.trim()) {
+      return lastLoginDisplay.trim();
     }
 
-    const total  = filtered.length;
-    const items  = filtered.slice(0, req.pageSize);
-    const result = { items, total };
-
-    return of(result).pipe(
-      tap(page => this.lastPage$.next(page)),
-    );
-  }
-
-  getById(id: string): PlatformUser | null {
-    return MOCK_USERS.find(u => u.id === id) ?? null;
-  }
-
-  updateUser$(id: string, patch: Partial<PlatformUser>): Observable<PlatformUser | null> {
-    const idx = MOCK_USERS.findIndex(u => u.id === id);
-    if (idx === -1) return of(null);
-    Object.assign(MOCK_USERS[idx], patch);
-    return of({ ...MOCK_USERS[idx] });
-  }
-
-  promoteToManager$(id: string): Observable<PlatformUser | null> {
-    return this.updateUser$(id, { role: 'Regional Manager', status: 'Active' });
-  }
-
-  removeManagerRole$(id: string): Observable<PlatformUser | null> {
-    return this.updateUser$(id, { role: 'Viewer', status: 'Inactive', assignedRegions: [] });
-  }
-
-  addRegion$(id: string, region: string): Observable<PlatformUser | null> {
-    const user = MOCK_USERS.find(u => u.id === id);
-    if (!user) return of(null);
-    if (!user.assignedRegions.includes(region)) {
-      user.assignedRegions = [...user.assignedRegions, region];
+    if (!lastLoginAt) {
+      return 'Never';
     }
-    return of({ ...user });
+
+    const date = new Date(lastLoginAt);
+    if (Number.isNaN(date.getTime())) {
+      return 'Never';
+    }
+
+    const diffMs = Date.now() - date.getTime();
+    if (diffMs < 60_000) return 'Just now';
+
+    const diffHours = Math.floor(diffMs / 3_600_000);
+    if (diffHours < 1) {
+      const minutes = Math.max(1, Math.floor(diffMs / 60_000));
+      return `${minutes} min ago`;
+    }
+
+    if (diffHours < 24) {
+      return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
+    }
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 30) {
+      return diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
+    }
+
+    const diffMonths = Math.max(1, Math.floor(diffDays / 30));
+    return diffMonths === 1 ? '1 month ago' : `${diffMonths} months ago`;
   }
 
-  removeRegion$(id: string, region: string): Observable<PlatformUser | null> {
-    const user = MOCK_USERS.find(u => u.id === id);
-    if (!user) return of(null);
-    user.assignedRegions = user.assignedRegions.filter(r => r !== region);
-    return of({ ...user });
-  }
+  private applyDirectoryParams(params: HttpParams, request: UsersPageRequest): HttpParams {
+    if (request.search?.trim()) {
+      params = params.set('search', request.search.trim());
+    }
 
-  createUser$(data: Omit<PlatformUser, 'id' | 'avatarInitials' | 'avatarColor' | 'lastLogin' | 'createdAt'>): Observable<PlatformUser> {
-    const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#f97316'];
-    const initials = (data.firstName[0] + data.lastName[0]).toUpperCase();
-    const newUser: PlatformUser = {
-      ...data,
-      id: 'USR-' + String(MOCK_USERS.length + 1).padStart(3, '0'),
-      avatarInitials: initials,
-      avatarColor: colors[MOCK_USERS.length % colors.length],
-      lastLogin: '—',
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    MOCK_USERS.push(newUser);
-    return of(newUser);
-  }
+    if (request.sort?.trim()) {
+      params = params.set('sort', request.sort.trim());
+    }
 
-  formatLastLogin(iso: string): string {
-    if (iso === '—') return '—';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffH = Math.floor(diffMs / 3600000);
-    if (diffH < 1) return 'Just now';
-    if (diffH < 24) return `${diffH} hr${diffH > 1 ? 's' : ''} ago`;
-    const diffD = Math.floor(diffH / 24);
-    if (diffD < 30) return `${diffD} day${diffD > 1 ? 's' : ''} ago`;
-    const diffM = Math.floor(diffD / 30);
-    return `${diffM} mo${diffM > 1 ? 's' : ''} ago`;
+    if (request.skip !== undefined) {
+      params = params.set('skip', String(Math.max(0, request.skip)));
+    }
+
+    if (request.take !== undefined) {
+      params = params.set('take', String(Math.max(1, request.take)));
+    }
+
+    return params;
   }
 }
