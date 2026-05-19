@@ -74,7 +74,7 @@ public sealed class TerritoryDashboardTests
         Assert.Equal(1, dashboard.Stats.DestinationsAddedLastMonth);
         Assert.Equal(2, dashboard.Stats.TotalLocations);
         Assert.Equal(1, dashboard.Stats.LocationsAddedLastMonth);
-        Assert.Equal(2, dashboard.Stats.TotalPlaces);
+        Assert.Equal(3, dashboard.Stats.TotalPlaces);
         Assert.Equal(1, dashboard.Stats.PlacesAddedLastMonth);
         Assert.Equal(2, dashboard.Stats.TotalEvents);
         Assert.Equal(1, dashboard.Stats.EventsAddedLastMonth);
@@ -84,10 +84,17 @@ public sealed class TerritoryDashboardTests
         Assert.Equal(2, health.DestinationsCount);
         Assert.Equal(2, health.LocationsCount);
         Assert.Equal(2, health.PlacesCount);
+        Assert.Equal(1, health.StaysCount);
         Assert.Equal(2, health.EventsCount);
         Assert.Equal(1, health.PendingRequestsCount);
         Assert.InRange(health.ActivityScore, 0, 100);
         Assert.False(string.IsNullOrWhiteSpace(health.ManagerDisplayName));
+        Assert.Contains(health.AssignedManagers, manager =>
+            manager.AvatarUrl == "/media/uploads/avatars/elena-territory-test.png" &&
+            !string.IsNullOrWhiteSpace(manager.Initials));
+        Assert.Contains(health.AssignedManagers, manager =>
+            manager.AvatarUrl is null &&
+            !string.IsNullOrWhiteSpace(manager.Initials));
 
         var topRegion = Assert.Single(dashboard.TopPerformingRegions);
         Assert.Equal(fixture.AssignedRegionId, topRegion.RegionId);
@@ -121,6 +128,9 @@ public sealed class TerritoryDashboardTests
         var region = Assert.Single(regions!.Items);
         Assert.Equal(fixture.AssignedRegionId, region.Id);
         Assert.Equal(2, region.DestinationsCount);
+        Assert.Equal(1, region.StaysCount);
+        Assert.Contains(region.AssignedManagers, manager =>
+            manager.AvatarUrl == "/media/uploads/avatars/elena-territory-test.png");
 
         var destinations = await client.GetFromJsonAsync<TerritoryContentDirectoryResponseDto>(
             $"/api/admin/territory/content?territoryId={fixture.AssignedTerritoryId}&type=destinations");
@@ -132,6 +142,204 @@ public sealed class TerritoryDashboardTests
             "/api/admin/regional/destinations",
             new { regionId = fixture.AssignedRegionId });
         Assert.Equal(HttpStatusCode.Forbidden, regionalMutation.StatusCode);
+    }
+
+    [Fact]
+    public async Task Territory_region_list_supports_pagination_search_and_sorting()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+        await AddAdditionalRegionsAsync(app, fixture.AssignedTerritoryId, 30);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+        var firstPage = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}&skip=0&take=25");
+        Assert.NotNull(firstPage);
+        Assert.Equal(25, firstPage!.Items.Count);
+        Assert.Equal(0, firstPage.Skip);
+        Assert.Equal(25, firstPage.Take);
+        Assert.True(firstPage.HasMore);
+
+        var secondPage = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}&skip=25&take=25");
+        Assert.NotNull(secondPage);
+        Assert.NotEmpty(secondPage!.Items);
+        Assert.DoesNotContain(secondPage.Items, item => firstPage.Items.Any(first => first.RegionId == item.RegionId));
+
+        var search = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}&search=Scoped%20Territory%20Region&skip=0&take=25");
+        Assert.NotNull(search);
+        var searchedRegion = Assert.Single(search!.Items);
+        Assert.Equal(fixture.AssignedRegionId, searchedRegion.RegionId);
+
+        var sorted = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}&sort=most-destinations&skip=0&take=5");
+        Assert.NotNull(sorted);
+        Assert.Equal(fixture.AssignedRegionId, sorted!.Items.First().RegionId);
+        Assert.Equal(2, sorted.Items.First().DestinationsCount);
+    }
+
+    [Fact]
+    public async Task Territory_manager_cannot_list_or_view_unassigned_region_data()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+        var list = await client.GetAsync($"/api/admin/territory/regions?territoryId={fixture.UnassignedTerritoryId}");
+        Assert.Equal(HttpStatusCode.Forbidden, list.StatusCode);
+
+        var detail = await client.GetAsync(
+            $"/api/admin/territory/regions/{fixture.UnassignedRegionId}/detail?territoryId={fixture.AssignedTerritoryId}");
+        Assert.Equal(HttpStatusCode.Forbidden, detail.StatusCode);
+
+        var content = await client.GetAsync(
+            $"/api/admin/territory/regions/{fixture.UnassignedRegionId}/content?territoryId={fixture.AssignedTerritoryId}&entityType=destinations");
+        Assert.Equal(HttpStatusCode.Forbidden, content.StatusCode);
+    }
+
+    [Fact]
+    public async Task Region_detail_returns_summary_previews_and_scoped_content_lists()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+        var detail = await client.GetFromJsonAsync<TerritoryRegionDetailDto>(
+            $"/api/admin/territory/regions/{fixture.AssignedRegionId}/detail?territoryId={fixture.AssignedTerritoryId}");
+
+        Assert.NotNull(detail);
+        Assert.Equal(fixture.AssignedRegionId, detail!.Region.Id);
+        Assert.Equal(fixture.AssignedTerritoryId, detail.Region.TerritoryId);
+        Assert.Equal(2, detail.Summary.DestinationsCount);
+        Assert.Equal(2, detail.Summary.LocationsCount);
+        Assert.Equal(2, detail.Summary.PlacesCount);
+        Assert.Equal(1, detail.Summary.StaysCount);
+        Assert.Equal(2, detail.Summary.EventsCount);
+        Assert.Equal(1, detail.Summary.PendingRequestsCount);
+        Assert.NotEmpty(detail.Managers);
+        Assert.Contains(detail.Managers, manager =>
+            manager.AvatarUrl == "/media/uploads/avatars/elena-territory-test.png" &&
+            !string.IsNullOrWhiteSpace(manager.Initials));
+        Assert.Contains(detail.Managers, manager => manager.AvatarUrl is null);
+        Assert.InRange(detail.Health.Score ?? 0, 0, 100);
+        Assert.NotEmpty(detail.Content.Destinations);
+        Assert.NotEmpty(detail.Content.Locations);
+        Assert.NotEmpty(detail.Content.Places);
+        Assert.NotEmpty(detail.Content.Stays);
+        Assert.NotEmpty(detail.Content.Events);
+        Assert.Contains(detail.Analytics.TopEntities, item => item.EntityId == fixture.AssignedDestinationId);
+        Assert.Contains(detail.Content.Destinations, item =>
+            item.Id == fixture.AssignedDestinationId &&
+            item.PublicDetailRoute == $"/explore?destinationId={fixture.AssignedDestinationId}");
+        Assert.Contains(detail.Content.Locations, item =>
+            item.Id == fixture.AssignedLocationId &&
+            item.PublicDetailRoute is null);
+        Assert.Contains(detail.Content.Places, item =>
+            item.Id == fixture.AssignedPlaceId &&
+            item.PublicDetailRoute == $"/places/{fixture.AssignedPlaceId}");
+        Assert.Contains(detail.Content.Stays, item =>
+            item.Id == fixture.AssignedStayPlaceId &&
+            item.PublicDetailRoute == $"/stays/{fixture.AssignedStayPlaceId}");
+        Assert.Contains(detail.Content.Events, item =>
+            item.Id == fixture.UpcomingEventId &&
+            item.PublicDetailRoute == $"/events/{fixture.UpcomingEventId}");
+
+        var destination = await AssertRegionContentContainsAsync(
+            client,
+            fixture.AssignedTerritoryId,
+            fixture.AssignedRegionId,
+            "destinations",
+            fixture.AssignedDestinationId);
+        var location = await AssertRegionContentContainsAsync(
+            client,
+            fixture.AssignedTerritoryId,
+            fixture.AssignedRegionId,
+            "locations",
+            fixture.AssignedLocationId);
+        var place = await AssertRegionContentContainsAsync(
+            client,
+            fixture.AssignedTerritoryId,
+            fixture.AssignedRegionId,
+            "places",
+            fixture.AssignedPlaceId);
+        var stay = await AssertRegionContentContainsAsync(
+            client,
+            fixture.AssignedTerritoryId,
+            fixture.AssignedRegionId,
+            "stays",
+            fixture.AssignedStayPlaceId);
+        var @event = await AssertRegionContentContainsAsync(
+            client,
+            fixture.AssignedTerritoryId,
+            fixture.AssignedRegionId,
+            "events",
+            fixture.UpcomingEventId);
+
+        Assert.Equal($"/explore?destinationId={fixture.AssignedDestinationId}", destination.PublicDetailRoute);
+        Assert.Null(location.PublicDetailRoute);
+        Assert.Equal($"/places/{fixture.AssignedPlaceId}", place.PublicDetailRoute);
+        Assert.Equal($"/stays/{fixture.AssignedStayPlaceId}", stay.PublicDetailRoute);
+        Assert.Equal($"/events/{fixture.UpcomingEventId}", @event.PublicDetailRoute);
+        Assert.All(new[] { destination, place, stay, @event }, item =>
+            Assert.DoesNotContain("/territory", item.PublicDetailRoute, StringComparison.OrdinalIgnoreCase));
+        Assert.All(new[] { destination, place, stay, @event }, item =>
+            Assert.DoesNotContain("/admin", item.PublicDetailRoute, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Destination_health_recommendations_are_generated_from_real_missing_data()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var content = await client.GetFromJsonAsync<TerritoryRegionContentResponseDto>(
+            $"/api/admin/territory/regions/{fixture.AssignedRegionId}/content?territoryId={fixture.AssignedTerritoryId}&entityType=destinations&skip=0&take=25");
+
+        Assert.NotNull(content);
+        var destination = Assert.Single(content!.Items, item => item.Id == fixture.AssignedDestinationId);
+        Assert.NotNull(destination.Health);
+        Assert.InRange(destination.Health!.Score ?? 0, 0, 100);
+        Assert.Contains(destination.Health.Recommendations, recommendation =>
+            recommendation.Detail.Contains("hero image", StringComparison.OrdinalIgnoreCase) ||
+            recommendation.Detail.Contains("tags", StringComparison.OrdinalIgnoreCase) ||
+            recommendation.Detail.Contains("boundary", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Empty_region_detail_returns_safe_zero_and_empty_dtos()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var (territoryId, regionId) = await CreateEmptyAssignedRegionAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var detail = await client.GetFromJsonAsync<TerritoryRegionDetailDto>(
+            $"/api/admin/territory/regions/{regionId}/detail?territoryId={territoryId}");
+
+        Assert.NotNull(detail);
+        Assert.Equal(0, detail!.Summary.DestinationsCount);
+        Assert.Equal(0, detail.Summary.LocationsCount);
+        Assert.Equal(0, detail.Summary.PlacesCount);
+        Assert.Equal(0, detail.Summary.StaysCount);
+        Assert.Equal(0, detail.Summary.EventsCount);
+        Assert.Equal(0, detail.Summary.PendingRequestsCount);
+        Assert.Empty(detail.Content.Destinations);
+        Assert.Empty(detail.Content.Locations);
+        Assert.Empty(detail.Content.Places);
+        Assert.Empty(detail.Content.Stays);
+        Assert.Empty(detail.Content.Events);
+        Assert.True(detail.Health.Score is null or >= 0);
+
+        var content = await client.GetFromJsonAsync<TerritoryRegionContentResponseDto>(
+            $"/api/admin/territory/regions/{regionId}/content?territoryId={territoryId}&entityType=destinations&skip=0&take=25");
+        Assert.NotNull(content);
+        Assert.Empty(content!.Items);
+        Assert.Equal(0, content.TotalCount);
+        Assert.False(content.HasMore);
     }
 
     [Fact]
@@ -195,10 +403,14 @@ public sealed class TerritoryDashboardTests
         var destinationType = await db.DestinationTypes.OrderBy(existing => existing.Id).FirstAsync();
         var locationType = await db.LocationTypes.OrderBy(existing => existing.Id).FirstAsync();
         var placeType = await db.PlaceTypes.OrderBy(existing => existing.Id).FirstAsync();
+        var stayType = await db.StayTypes.OrderBy(existing => existing.Id).FirstAsync();
         var eventType = await db.EventTypes.OrderBy(existing => existing.Id).FirstAsync();
         var territoryManager = await db.Users.SingleAsync(user => user.Email == "mika@gmail.com");
         var regionalManager = await db.Users.SingleAsync(user => user.Email == "elena@example.com");
         var user = await db.Users.SingleAsync(existing => existing.Email == "marko.p@example.com");
+        regionalManager.AvatarUrl = "/media/uploads/avatars/elena-territory-test.png";
+        user.AvatarUrl = null;
+        await db.SaveChangesAsync();
 
         var assignedTerritory = new Territory
         {
@@ -238,6 +450,7 @@ public sealed class TerritoryDashboardTests
         await db.SaveChangesAsync();
 
         await GrantRegionalManagerCoverageAsync(db, regionalManager, assignedRegion.Id);
+        await GrantRegionalManagerCoverageAsync(db, user, assignedRegion.Id);
 
         var oldDestination = new Destination
         {
@@ -324,6 +537,16 @@ public sealed class TerritoryDashboardTests
             Longitude = 15.2,
             CreatedAt = recentDate
         };
+        var stayPlace = new Place
+        {
+            Name = "Scoped Territory Stay",
+            PlaceTypeId = placeType.Id,
+            LocationId = recentLocation.Id,
+            Description = "Scoped territory accommodation.",
+            Latitude = 45.25,
+            Longitude = 15.25,
+            CreatedAt = oldDate
+        };
         var outPlace = new Place
         {
             Name = "Out Territory Place",
@@ -335,7 +558,15 @@ public sealed class TerritoryDashboardTests
             CreatedAt = recentDate
         };
 
-        db.Places.AddRange(oldPlace, recentPlace, outPlace);
+        db.Places.AddRange(oldPlace, recentPlace, stayPlace, outPlace);
+        await db.SaveChangesAsync();
+
+        db.Stays.Add(new Stay
+        {
+            PlaceId = stayPlace.Id,
+            StayTypeId = stayType.Id,
+            PricePerNight = 120m
+        });
         await db.SaveChangesAsync();
 
         var oldEvent = new Event
@@ -459,9 +690,11 @@ public sealed class TerritoryDashboardTests
             assignedTerritory.Name,
             unassignedTerritory.Id,
             assignedRegion.Id,
+            outRegion.Id,
             oldDestination.Id,
             oldLocation.Id,
             recentPlace.Id,
+            stayPlace.Id,
             upcomingEvent.Id);
     }
 
@@ -488,6 +721,79 @@ public sealed class TerritoryDashboardTests
         await db.SaveChangesAsync();
 
         return territory.Id;
+    }
+
+    private static async Task<(int TerritoryId, int RegionId)> CreateEmptyAssignedRegionAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var manager = await db.Users.SingleAsync(user => user.Email == "mika@gmail.com");
+        var now = DateTime.UtcNow;
+
+        var territory = new Territory
+        {
+            Name = $"Territory Empty Region {Guid.NewGuid():N}",
+            CreatedAt = now
+        };
+        db.Territories.Add(territory);
+        await db.SaveChangesAsync();
+
+        db.TerritoryManagerTerritories.Add(new TerritoryManagerTerritory
+        {
+            UserId = manager.Id,
+            TerritoryId = territory.Id,
+            CreatedAt = now
+        });
+
+        var region = new Region
+        {
+            Name = "Empty Scoped Region",
+            TerritoryId = territory.Id,
+            CreatedAt = now
+        };
+        db.Regions.Add(region);
+        await db.SaveChangesAsync();
+
+        return (territory.Id, region.Id);
+    }
+
+    private static async Task AddAdditionalRegionsAsync(
+        GeotrackApiFactory app,
+        int territoryId,
+        int count)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var now = DateTime.UtcNow;
+
+        for (var i = 1; i <= count; i++)
+        {
+            db.Regions.Add(new Region
+            {
+                Name = $"Paged Territory Region {i:D2}",
+                TerritoryId = territoryId,
+                CreatedAt = now.AddMinutes(-i)
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<TerritoryRegionContentItemDto> AssertRegionContentContainsAsync(
+        HttpClient client,
+        int territoryId,
+        int regionId,
+        string entityType,
+        int expectedId)
+    {
+        var response = await client.GetFromJsonAsync<TerritoryRegionContentResponseDto>(
+            $"/api/admin/territory/regions/{regionId}/content?territoryId={territoryId}&entityType={entityType}&skip=0&take=25");
+
+        Assert.NotNull(response);
+        var item = Assert.Single(response!.Items, item => item.Id == expectedId);
+        Assert.Equal(0, response.Skip);
+        Assert.Equal(25, response.Take);
+        return item;
     }
 
     private static async Task GrantRegionalManagerCoverageAsync(AppDbContext db, User reviewer, int regionId)
@@ -526,8 +832,10 @@ public sealed class TerritoryDashboardTests
         string AssignedTerritoryName,
         int UnassignedTerritoryId,
         int AssignedRegionId,
+        int UnassignedRegionId,
         int AssignedDestinationId,
         int AssignedLocationId,
         int AssignedPlaceId,
+        int AssignedStayPlaceId,
         int UpcomingEventId);
 }
