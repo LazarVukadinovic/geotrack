@@ -259,8 +259,9 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   editItem(): void {
     const full = this.svc.findById(this.item!.id) ?? this.item!;
-    this.router.navigate(['/places/new'], {
-      state: { place: full, returnTo: `/places/detail/${full.id}` }
+    this.router.navigate(['/places/edit', full.id], {
+      queryParams: { regionId: full.regionId },
+      state: { place: full, returnTo: `/places/detail/${full.id}`, regionId: full.regionId }
     });
   }
 

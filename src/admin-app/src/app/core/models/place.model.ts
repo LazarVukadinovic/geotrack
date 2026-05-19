@@ -39,6 +39,7 @@ export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
   openingHours?: string | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
+  contactPhone?: string | null;
   website?: string | null;
   admissionPriceRange?: string | null;
   bookingExternalLink?: string | null;
@@ -133,4 +134,30 @@ export interface RegionalPlaceCreateRequest {
   cardImageFile?: File | null;
   coverImageFile?: File | null;
   galleryImageFiles?: File[];
+}
+
+export interface RegionalPlaceUpdateRequest {
+  locationId?: number | null;
+  placeTypeId?: number | null;
+  stayTypeId?: number | null;
+  name?: string | null;
+  subtitle?: string | null;
+  description?: string | null;
+  address?: string | null;
+  openingHours?: string | null;
+  contactEmail?: string | null;
+  phoneNumber?: string | null;
+  contactPhone?: string | null;
+  website?: string | null;
+  admissionPriceRange?: string | null;
+  bookingExternalLink?: string | null;
+  bestTimeToVisit?: string | null;
+  visitorTips?: string | null;
+  accessNotes?: string | null;
+  accessibilityNotes?: string | null;
+  operatingHoursEnabled?: boolean | null;
+  operatingHours?: RegionalPlaceOperatingHourDto[] | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  tagIds?: number[] | null;
 }

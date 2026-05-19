@@ -533,7 +533,7 @@
               [class.bg-gray-300]="!canPublish"
               [class.cursor-not-allowed]="!canPublish"
             >
-              {{ isSaving ? 'Publishing...' : 'Publish' }}
+              {{ isSaving ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update' : 'Publish') }}
             </button>
           </div>
 

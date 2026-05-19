@@ -13,6 +13,7 @@ import {
   RegionalPlaceOwnerDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
+  RegionalPlaceUpdateRequest,
 } from '../models/place.model';
 
 export interface PlaceListItem {
@@ -128,7 +129,12 @@ export class PlacesListService {
 
   getPlace(regionId: number, placeId: string | number): Observable<RegionalPlaceDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.get<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, { params });
+    return this.http.get<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, { params }).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
   }
 
   addOwner(
@@ -141,7 +147,26 @@ export class PlacesListService {
   }
 
   createPlace(payload: RegionalPlaceCreateRequest): Observable<RegionalPlaceDetailDto> {
-    return this.http.post<RegionalPlaceDetailDto>(this.endpoint, this.buildCreateFormData(payload));
+    return this.http.post<RegionalPlaceDetailDto>(this.endpoint, this.buildCreateFormData(payload)).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
+  }
+
+  updatePlace(
+    regionId: number,
+    placeId: string | number,
+    payload: RegionalPlaceUpdateRequest,
+  ): Observable<RegionalPlaceDetailDto> {
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http.put<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, payload, { params }).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
   }
 
   getParentLocations(
@@ -208,6 +233,7 @@ export class PlacesListService {
     const destinationName = dto.destinationName ?? null;
     const placeType = dto.placeType ?? null;
     const stayType = dto.stayType ?? null;
+    const detail = dto as Partial<RegionalPlaceDetailDto>;
     const item: PlaceListItem = {
       id,
       name: dto.name,
@@ -240,8 +266,21 @@ export class PlacesListService {
       tags: (dto.tags ?? []).map(tag => tag.name),
       imageUrl: dto.imageUrl ?? null,
       detailRoute: dto.detailRoute ?? `/places/detail/${dto.id}`,
-      editRoute: dto.editRoute ?? '/places/new',
+      editRoute: dto.editRoute ?? `/places/edit/${dto.id}`,
       address: dto.address ?? undefined,
+      lat: typeof detail.latitude === 'number' ? detail.latitude : undefined,
+      lng: typeof detail.longitude === 'number' ? detail.longitude : undefined,
+      openingHours: detail.openingHours ?? undefined,
+      contactEmail: detail.contactEmail ?? undefined,
+      phoneNumber: detail.phoneNumber ?? undefined,
+      contactPhone: detail.contactPhone ?? detail.phoneNumber ?? undefined,
+      website: detail.website ?? undefined,
+      admissionPrice: detail.admissionPriceRange ?? undefined,
+      bookingLink: detail.bookingExternalLink ?? undefined,
+      bestTimeToVisit: detail.bestTimeToVisit ?? undefined,
+      visitorTips: detail.visitorTips ?? undefined,
+      accessNotes: detail.accessNotes ?? undefined,
+      accessibilityNotes: detail.accessibilityNotes ?? undefined,
     };
 
     this.cache.set(id, item);

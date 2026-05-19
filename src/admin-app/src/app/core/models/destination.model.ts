@@ -20,6 +20,9 @@ export interface RegionalDestinationListItemDto {
   createdAt?: string | null;
   publishedAt?: string | null;
   imageUrl?: string | null;
+  cardImageUrl?: string | null;
+  coverImageUrl?: string | null;
+  galleryImageUrls?: string[];
   detailRoute?: string | null;
   editRoute?: string | null;
 }
@@ -80,8 +83,10 @@ export interface RegionalDestinationCreateRequest {
 
 export interface RegionalDestinationUpdateRequest {
   name?: string | null;
+  summary?: string | null;
   description?: string | null;
   destinationTypeId?: number | null;
   latitude?: number | null;
   longitude?: number | null;
+  tagIds?: number[] | null;
 }

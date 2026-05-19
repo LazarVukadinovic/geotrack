@@ -200,10 +200,10 @@ describe('AllLocationsComponent', () => {
 
     component.editLocation(component.items[0]);
 
-    expect(navigateSpy).toHaveBeenCalledWith(['/locations/new'], {
+    expect(navigateSpy).toHaveBeenCalledWith(['/locations/edit/21'], {
       queryParams: { regionId: 7 },
       state: {
-        place: expect.objectContaining({ id: '21', name: 'Editable Location' }),
+        location: expect.objectContaining({ id: '21', name: 'Editable Location' }),
         editMode: true,
         returnTo: '/locations',
         regionId: 7,
@@ -275,7 +275,7 @@ describe('AllLocationsComponent', () => {
       lastUpdatedAt: '2026-05-12T10:00:00Z',
       imageUrl: null,
       detailRoute: `/locations/detail/${id}`,
-      editRoute: '/locations/new',
+      editRoute: `/locations/edit/${id}`,
     };
   }
 });

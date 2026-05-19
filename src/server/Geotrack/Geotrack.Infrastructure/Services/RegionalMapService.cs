@@ -350,7 +350,7 @@ public class RegionalMapService : IRegionalMapService
                     RegionId = data.Region.Id,
                     DestinationId = destination.Id,
                     DetailRoute = $"/destinations/detail/{destination.Id}",
-                    EditRoute = "/destinations/new"
+                    EditRoute = $"/destinations/edit/{destination.Id}"
                 }));
         }
 
@@ -397,7 +397,7 @@ public class RegionalMapService : IRegionalMapService
                     LocationId = place.LocationId,
                     PlaceId = place.Id,
                     DetailRoute = $"/places/detail/{place.Id}",
-                    EditRoute = "/places/new"
+                    EditRoute = $"/places/edit/{place.Id}"
                 }));
         }
 
@@ -414,53 +414,9 @@ public class RegionalMapService : IRegionalMapService
         List<DestinationMapProjection> destinations,
         List<LocationMapProjection> locations)
     {
-        var zones = new List<RegionalMapZoneDto>();
-
-        var regionGeometry = BuildRegionGeometry(destinations, locations);
-        var regionGeoJson = ToGeoJson(regionGeometry);
-        if (regionGeoJson is not null)
-        {
-            var centroid = regionGeometry!.Centroid;
-            zones.Add(new RegionalMapZoneDto
-            {
-                Id = region.Id,
-                EntityType = "Region",
-                Name = region.Name,
-                DisplayName = BuildRegionDisplayName(region.Name, region.TerritoryName),
-                Status = "Assigned",
-                GeometryGeoJson = regionGeoJson,
-                CenterLatitude = centroid.Y,
-                CenterLongitude = centroid.X
-            });
-        }
-
-        zones.AddRange(destinations
-            .Select(destination => BuildZone(
-                destination.Id,
-                "Destination",
-                destination.Name,
-                destination.Name,
-                destination.Status,
-                destination.BoundaryGeometry,
-                $"/destinations/detail/{destination.Id}",
-                "/destinations/new"))
-            .Where(zone => zone is not null)
-            .Select(zone => zone!));
-
-        zones.AddRange(locations
-            .Select(location => BuildZone(
-                location.Id,
-                "Location",
-                location.Name,
-                location.Name,
-                location.Status,
-                location.BoundaryGeometry,
-                $"/locations/detail/{location.Id}",
-                "/locations/new"))
-            .Where(zone => zone is not null)
-            .Select(zone => zone!));
-
-        return zones;
+        // Destinations and locations are managed by center points only.
+        // Do not expose old polygon/boundary zones on the regional map.
+        return new List<RegionalMapZoneDto>();
     }
 
     private static RegionalMapZoneDto? BuildZone(

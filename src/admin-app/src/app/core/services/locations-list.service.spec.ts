@@ -179,7 +179,7 @@ describe('LocationsListService', () => {
       lastUpdatedAt: '2026-05-12T10:00:00Z',
       imageUrl: '/media/seed/locations/backend.webp',
       detailRoute: '/locations/detail/15',
-      editRoute: '/locations/new',
+      editRoute: '/locations/edit/15',
     };
   }
 });

@@ -11,6 +11,7 @@ import {
   RegionalLocationParentDestinationDto,
   RegionalLocationTagDto,
   RegionalLocationTypeDto,
+  RegionalLocationUpdateRequest,
 } from '../models/location.model';
 
 export interface LocationListItem {
@@ -106,7 +107,26 @@ export class LocationsListService {
   }
 
   createLocation(payload: RegionalLocationCreateRequest): Observable<RegionalLocationDetailDto> {
-    return this.http.post<RegionalLocationDetailDto>(this.endpoint, this.buildCreateFormData(payload));
+    return this.http.post<RegionalLocationDetailDto>(this.endpoint, this.buildCreateFormData(payload)).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
+  }
+
+  updateLocation(
+    regionId: number,
+    locationId: string | number,
+    payload: RegionalLocationUpdateRequest,
+  ): Observable<RegionalLocationDetailDto> {
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http.put<RegionalLocationDetailDto>(`${this.endpoint}/${locationId}`, payload, { params }).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
   }
 
   getParentDestinations(
@@ -170,6 +190,7 @@ export class LocationsListService {
     const id = String(dto.id);
     const lastUpdatedIso = dto.lastUpdatedAt ?? dto.createdAt ?? null;
     const destinationName = dto.destinationName ?? null;
+    const detail = dto as Partial<RegionalLocationDetailDto>;
     const item: LocationListItem = {
       id,
       name: dto.name,
@@ -187,6 +208,8 @@ export class LocationsListService {
       regionDisplayName: dto.regionDisplayName,
       destinationId: dto.destinationId ?? null,
       destinationName,
+      lat: typeof detail.latitude === 'number' ? detail.latitude : undefined,
+      lng: typeof detail.longitude === 'number' ? detail.longitude : undefined,
       locationTypeId: dto.locationTypeId ?? null,
       locationType: dto.locationType ?? null,
       parentDestination: destinationName ?? undefined,
@@ -195,7 +218,7 @@ export class LocationsListService {
       createdAt: dto.createdAt ?? null,
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
       detailRoute: dto.detailRoute ?? `/locations/detail/${dto.id}`,
-      editRoute: dto.editRoute ?? '/locations/new',
+      editRoute: dto.editRoute ?? `/locations/edit/${dto.id}`,
     };
 
     this.cache.set(id, item);

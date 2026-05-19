@@ -43,10 +43,13 @@ public class RegionalLocationListResponseDto
 public class RegionalLocationUpdateRequestDto
 {
     public string? Name { get; set; }
+    public string? Summary { get; set; }
+    public string? Description { get; set; }
     public int? DestinationId { get; set; }
     public int? LocationTypeId { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public List<int>? TagIds { get; set; }
 }
 
 public class RegionalLocationCreateRequestDto

@@ -91,6 +91,12 @@ export const routes: Routes = [
           import('./features/add-pages/pages/add-location/add-location.component').then(m => m.NewLocationComponent),
       },
       {
+        path: 'locations/edit/:id',
+        canActivate: [regionalManagerGuard],
+        loadComponent: () =>
+          import('./features/add-pages/pages/add-location/add-location.component').then(m => m.NewLocationComponent),
+      },
+      {
         path: 'places/new',
         canActivate: [regionalManagerGuard],
         loadComponent: () =>

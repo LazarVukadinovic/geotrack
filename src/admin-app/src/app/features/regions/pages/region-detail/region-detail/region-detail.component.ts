@@ -129,10 +129,11 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   }
 
   saveChanges(): void {
-    if (!this.region) return;
+    if (!this.region || this.isSaving) return;
 
     const patch: Partial<RegionDetail> = {
       name:            this.editName,
+      description:     this.editSummary,
       internalRefId:   this.editRefId,
       shortSummary:    this.editSummary,
       fullDescription: this.editDescription,
@@ -143,9 +144,20 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
 
     Object.assign(this.region, patch);
     this.isViewMode = true;
+    this.isSaving = true;
     this.cdr.markForCheck();
 
-    this.svc.updateDetail$(this.region.id, patch).pipe(takeUntil(this.destroy$)).subscribe();
+    this.svc.updateDetail$(this.region.id, patch)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(updated => {
+        if (updated && this.region) {
+          this.region = { ...this.region, ...updated, ...patch };
+          this.syncEditFields();
+        }
+
+        this.isSaving = false;
+        this.cdr.markForCheck();
+      });
   }
 
   cancelEdit(): void {

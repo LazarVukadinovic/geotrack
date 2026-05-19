@@ -50,23 +50,30 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
+    const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
     const navState = history.state as Partial<DestinationListItem> & { regionId?: number };
 
     if (id) {
       const fromService = this.svc.findById(id);
-      if (fromService) {
-        this.setItem(fromService);
+      const regionId = navState?.regionId ?? fromService?.regionId ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+      if (regionId) {
+        this.loadFromBackend(regionId, id);
         return;
       }
 
-      const regionId = navState?.regionId ?? null;
-      if (regionId) {
-        this.loadFromBackend(regionId, id);
+      if (fromService) {
+        this.setItem(fromService);
         return;
       }
     }
 
     if (navState?.id && navState?.name && navState?.status) {
+      const regionId = navState?.regionId ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+      if (regionId) {
+        this.loadFromBackend(regionId, String(navState.id));
+        return;
+      }
+
       this.setItem(navState as DestinationListItem);
       return;
     }
@@ -119,46 +126,42 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
   private initMiniMap(): void {
     if (this.miniMap || !this.miniMapContainer?.nativeElement) return;
     const el = this.miniMapContainer.nativeElement;
-    const zone = (this.item as any)?.zone as [number,number][] | undefined;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.miniMap = L.map(el, {
       zoomControl: true, dragging: true, scrollWheelZoom: false,
       doubleClickZoom: false, touchZoom: false, attributionControl: false,
-    }).setView([lat, lng], zone ? 12 : 8);
+    }).setView([lat, lng], hasCoords ? 12 : 8);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.miniMap);
 
-    if (zone && zone.length > 0) {
-      this.miniMarker = L.polygon(zone, {
-        color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
-      }).addTo(this.miniMap);
-      try { this.miniMap.fitBounds(this.miniMarker.getBounds(), { padding: [10, 10] }); } catch {}
+    if (hasCoords) {
+      this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
+        .addTo(this.miniMap);
     }
     setTimeout(() => this.miniMap?.invalidateSize(), 200);
   }
 
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap) return;
-    const zone = (this.item as any)?.zone as [number,number][] | undefined;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false })
-      .setView([lat, lng], zone ? 13 : 9);
+      .setView([lat, lng], hasCoords ? 13 : 9);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.modalMap);
 
-    if (zone && zone.length > 0) {
-      this.modalMarker = L.polygon(zone, {
-        color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
-      }).addTo(this.modalMap);
-      try { this.modalMap.fitBounds(this.modalMarker.getBounds(), { padding: [30, 30] }); } catch {}
+    if (hasCoords) {
+      this.modalMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
+        .addTo(this.modalMap);
     }
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
   }

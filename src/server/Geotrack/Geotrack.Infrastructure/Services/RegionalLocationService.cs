@@ -18,7 +18,7 @@ public class RegionalLocationService : IRegionalLocationService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
-    private const string ExistingEditRoute = "/locations/new";
+    private static string ExistingEditRoute(int locationId) => $"/locations/edit/{locationId}";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
@@ -238,6 +238,7 @@ public class RegionalLocationService : IRegionalLocationService
 
         var location = await _db.Locations
             .Include(item => item.Destination)
+            .Include(item => item.LocationTags)
             .SingleOrDefaultAsync(item => item.Id == locationId && item.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Location not found.");
 
@@ -259,6 +260,15 @@ public class RegionalLocationService : IRegionalLocationService
         }
 
         ApplyUpdate(location, request);
+
+        if (request.TagIds is not null)
+        {
+            var tagIds = await ValidateLocationTagIdsAsync(request.TagIds);
+            location.LocationTags.Clear();
+            foreach (var tagId in tagIds)
+                location.LocationTags.Add(new LocationTag { LocationId = location.Id, TagId = tagId });
+        }
+
         location.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -463,6 +473,24 @@ public class RegionalLocationService : IRegionalLocationService
                 throw new InvalidOperationException("Location name is too long.");
 
             location.Name = name;
+        }
+
+        if (request.Summary is not null)
+        {
+            var summary = request.Summary.Trim();
+            if (summary.Length > 160)
+                throw new InvalidOperationException("Summary is too long.");
+
+            location.Summary = summary.Length == 0 ? null : summary;
+        }
+
+        if (request.Description is not null)
+        {
+            var description = request.Description.Trim();
+            if (description.Length > 2000)
+                throw new InvalidOperationException("Description is too long.");
+
+            location.Description = description;
         }
 
         if (request.LocationTypeId.HasValue)
@@ -682,7 +710,7 @@ public class RegionalLocationService : IRegionalLocationService
             LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
             DetailRoute = "/locations/detail/" + row.Id,
-            EditRoute = ExistingEditRoute
+            EditRoute = ExistingEditRoute(row.Id)
         };
     }
 

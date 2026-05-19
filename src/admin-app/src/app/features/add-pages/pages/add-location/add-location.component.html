@@ -8,7 +8,7 @@
   ></app-sidebar>
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-    <app-topbar title="New Location" [showBack]="true"></app-topbar>
+    <app-topbar [title]="isEditMode ? 'Edit Location' : 'New Location'" [showBack]="true"></app-topbar>
 
     <div class="flex-1 overflow-y-auto px-8 py-6">
       @if (errorMessage) {
@@ -328,7 +328,7 @@
             <button type="button" (click)="publish()"
                     [disabled]="!canPublish"
                     class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
-              {{ isSaving ? 'Publishing...' : 'Publish' }}
+              {{ isSaving ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update' : 'Publish') }}
             </button>
           </div>
 

@@ -50,23 +50,35 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
+    const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
     const navState = history.state as Partial<LocationListItem> & { regionId?: number };
 
     if (id) {
       const fromService = this.svc.findById(id);
-      if (fromService) {
-        this.setItem(fromService);
+      const regionId = navState?.regionId
+        ?? fromService?.regionId
+        ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+
+      if (regionId) {
+        this.loadFromBackend(regionId, id);
         return;
       }
 
-      const regionId = navState?.regionId ?? null;
-      if (regionId) {
-        this.loadFromBackend(regionId, id);
+      if (fromService) {
+        this.setItem(fromService);
         return;
       }
     }
 
     if (navState?.id && navState?.name && navState?.status) {
+      const regionId = navState?.regionId
+        ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+
+      if (regionId) {
+        this.loadFromBackend(regionId, String(navState.id));
+        return;
+      }
+
       this.setItem(navState as LocationListItem);
       return;
     }
@@ -191,8 +203,9 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
 
   editItem(): void {
     const full = this.svc.findById(this.item!.id) ?? this.item!;
-    this.router.navigate(['/locations/new'], {
-      state: { place: full, returnTo: `/locations/detail/${full.id}` }
+    this.router.navigate(['/locations/edit', full.id], {
+      queryParams: { regionId: full.regionId },
+      state: { location: full, returnTo: `/locations/detail/${full.id}`, regionId: full.regionId }
     });
   }
 

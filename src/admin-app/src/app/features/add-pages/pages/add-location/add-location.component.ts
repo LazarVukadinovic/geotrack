@@ -28,6 +28,7 @@ import {
   RegionalLocationParentDestinationDto,
   RegionalLocationTagDto,
   RegionalLocationTypeDto,
+  RegionalLocationUpdateRequest,
 } from '../../../../core/models/location.model';
 
 declare const L: any;
@@ -118,6 +119,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
   isEditMode = false;
 
+  private editLocationId: number | null = null;
+
   private miniMap: any = null;
   private modalMap: any = null;
   private drawnLayer: any = null;
@@ -144,6 +147,10 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    const editId = Number(this.route.snapshot.paramMap.get('id'));
+    this.isEditMode = Number.isFinite(editId) && editId > 0;
+    this.editLocationId = this.isEditMode ? editId : null;
+
     this.loadAssignedRegions();
     this.loadLocationTypes();
     this.loadLocationTags();
@@ -186,11 +193,12 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get canPublish(): boolean {
+    const mediaReady = this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
     return Boolean(this.activeRegionId) &&
       Boolean(this.parentDestinationId) &&
+      this.locationName.trim().length > 0 &&
       this.zoneConfirmed &&
-      Boolean(this.cardImageFile) &&
-      Boolean(this.coverImageFile) &&
+      mediaReady &&
       !this.regionLoading &&
       !this.parentDestinationsLoading &&
       !this.locationTypesLoading &&
@@ -275,6 +283,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
           this.setActiveRegion(selectedRegion.id, false);
           this.loadParentDestinations();
+          this.loadLocationForEditIfNeeded();
         },
         error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
@@ -376,6 +385,52 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         },
         error: error => this.handleLoadError(error, 'Unable to load location tags.'),
       });
+  }
+
+  private loadLocationForEditIfNeeded(): void {
+    if (!this.isEditMode || !this.editLocationId || !this.activeRegionId) {
+      return;
+    }
+
+    this.locationsService.getLocation(this.activeRegionId, this.editLocationId).subscribe({
+      next: dto => {
+        this.locationName = dto.name ?? '';
+        this.summary = dto.summary ?? '';
+        this.parentDestinationId = dto.destinationId ?? null;
+        this.locationTypeId = dto.locationTypeId ?? null;
+        this.boundaryNote = dto.boundaryNote ?? '';
+        this.centerLat = dto.latitude ?? null;
+        this.centerLng = dto.longitude ?? null;
+        this.zoneConfirmed = this.hasValidCenter();
+
+        this.cardImageUrl = dto.imageUrl ?? null;
+        this.cardImageName = dto.imageUrl ? 'Existing card image' : '';
+        this.coverImageUrl = dto.imageUrl ?? null;
+        this.coverImageName = dto.imageUrl ? 'Existing cover image' : '';
+
+        this.selectedTagIds = new Set((dto.tags ?? []).map(tag => tag.id));
+        for (const tag of dto.tags ?? []) {
+          this.upsertLocationTag(tag);
+          this.upsertClassItem(tag, true);
+        }
+        this.classItems = this.classItems.map(item => ({
+          ...item,
+          checked: this.selectedTagIds.has(item.tag.id),
+        }));
+
+        setTimeout(() => {
+          if (this.editorRef?.nativeElement) {
+            this.editorRef.nativeElement.innerHTML = dto.description ?? '';
+            this.syncEmptyState();
+            this.notifyStateChanged();
+          }
+        }, 0);
+
+        setTimeout(() => this.showZoneOnMiniMap(), 0);
+        this.notifyStateChanged();
+      },
+      error: error => this.handleLoadError(error, 'Unable to load location for editing.'),
+    });
   }
 
   onClassItemChange(item: ClassItem): void {
@@ -590,6 +645,11 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   publish(): void {
     if (this.isSaving) return;
 
+    if (this.isEditMode) {
+      this.updateExistingLocation();
+      return;
+    }
+
     const payload = this.buildCreatePayload();
     if (!payload) {
       this.notifyStateChanged();
@@ -616,6 +676,41 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
           this.router.navigate(['/locations'], {
             queryParams: { regionId: created.regionId },
             state: { feedbackMessage: 'Location published.' },
+          });
+        },
+        error: error => this.handleActionError(error),
+      });
+  }
+
+  private updateExistingLocation(): void {
+    const regionId = this.activeRegionId;
+    const locationId = this.editLocationId;
+    const payload = this.buildUpdatePayload();
+    if (!regionId || !locationId || !payload) {
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.isSaving = true;
+    this.errorMessage = null;
+    this.feedbackMessage = null;
+    this.notifyStateChanged();
+
+    this.createSubscription?.unsubscribe();
+    this.createSubscription = this.locationsService
+      .updateLocation(regionId, locationId, payload)
+      .pipe(
+        finalize(() => {
+          this.isSaving = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: updated => {
+          this.feedbackMessage = 'Location updated.';
+          this.router.navigate(['/locations/detail', updated.id], {
+            queryParams: { regionId: updated.regionId },
+            state: { regionId: updated.regionId, feedbackMessage: 'Location updated.' },
           });
         },
         error: error => this.handleActionError(error),
@@ -680,6 +775,44 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
       galleryImageFiles: this.galleryImages.map(image => image.file),
+    };
+  }
+
+  private buildUpdatePayload(): RegionalLocationUpdateRequest | null {
+    const destinationId = this.parentDestinationId;
+    if (!destinationId) {
+      this.errorMessage = 'Parent destination is required.';
+      return null;
+    }
+
+    const name = this.locationName.trim();
+    if (!name) {
+      this.errorMessage = 'Location name is required.';
+      return null;
+    }
+
+    const normalizedSummary = this.summary.trim();
+    if (normalizedSummary.length > 160) {
+      this.errorMessage = 'Summary must be 160 characters or less.';
+      return null;
+    }
+
+    if (!this.zoneConfirmed || !this.hasValidCenter()) {
+      this.errorMessage = 'Choose a location center point before updating.';
+      return null;
+    }
+
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+
+    return {
+      destinationId,
+      name,
+      summary: normalizedSummary || null,
+      description: descriptionHtml || null,
+      locationTypeId: this.locationTypeId,
+      latitude: this.centerLat,
+      longitude: this.centerLng,
+      tagIds: [...this.selectedTagIds],
     };
   }
 
@@ -1020,12 +1153,12 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private handleActionError(error: unknown): void {
     if (error instanceof HttpErrorResponse) {
-      this.errorMessage = error.error?.message ?? 'Unable to publish location.';
+      this.errorMessage = error.error?.message ?? (this.isEditMode ? 'Unable to update location.' : 'Unable to publish location.');
       this.notifyStateChanged();
       return;
     }
 
-    this.errorMessage = 'Unable to publish location.';
+    this.errorMessage = this.isEditMode ? 'Unable to update location.' : 'Unable to publish location.';
     this.notifyStateChanged();
   }
 

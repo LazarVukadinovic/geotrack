@@ -80,6 +80,27 @@ public class RegionalDestinationService : IRegionalDestinationService
                 PublishedAt = destination.PublishedAt,
                 Latitude = destination.Latitude,
                 Longitude = destination.Longitude,
+                CardImageUrl = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Card)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                CoverImageUrl = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Cover)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                GalleryImageUrls = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Gallery)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
                 ImageUrl = destination.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Destination)
                     .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
@@ -137,6 +158,27 @@ public class RegionalDestinationService : IRegionalDestinationService
                 PublishedAt = destination.PublishedAt,
                 Latitude = destination.Latitude,
                 Longitude = destination.Longitude,
+                CardImageUrl = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Card)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                CoverImageUrl = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Cover)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                GalleryImageUrls = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Gallery)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
                 ImageUrl = destination.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Destination)
                     .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
@@ -174,9 +216,7 @@ public class RegionalDestinationService : IRegionalDestinationService
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
         var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
-        var boundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long.");
-        var boundary = BuildBoundary(request.Boundary);
-        var coordinates = ResolveCoordinates(request, boundary?.Geometry);
+        var coordinates = ResolveCoordinates(request);
         var destinationTypeId = await ResolveDestinationTypeIdAsync(request.DestinationTypeId);
         var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
@@ -195,8 +235,8 @@ public class RegionalDestinationService : IRegionalDestinationService
             Longitude = coordinates.Longitude,
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
-            BoundaryNote = boundaryNote,
-            BoundaryShapeType = boundary?.ShapeType,
+            BoundaryNote = null,
+            BoundaryShapeType = null,
             CreatedAt = now,
             DestinationTags = tagIds
                 .Select(tagId => new DestinationTag { TagId = tagId })
@@ -204,12 +244,6 @@ public class RegionalDestinationService : IRegionalDestinationService
         };
 
         _db.Destinations.Add(destination);
-        if (boundary?.Geometry is not null)
-        {
-            _db.Entry(destination)
-                .Property<Geometry?>(BoundaryGeometryPropertyName)
-                .CurrentValue = boundary.Geometry;
-        }
 
         await _db.SaveChangesAsync();
 
@@ -231,6 +265,7 @@ public class RegionalDestinationService : IRegionalDestinationService
         await EnsureAssignedRegionAsync(userId, regionId);
 
         var destination = await _db.Destinations
+            .Include(item => item.DestinationTags)
             .SingleOrDefaultAsync(item => item.Id == destinationId && item.RegionId == regionId)
             ?? throw new KeyNotFoundException("Destination not found.");
 
@@ -241,6 +276,16 @@ public class RegionalDestinationService : IRegionalDestinationService
         }
 
         ApplyUpdate(destination, request);
+
+        if (request.TagIds is not null)
+        {
+            var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
+            destination.DestinationTags.Clear();
+            destination.DestinationTags = tagIds
+                .Select(tagId => new DestinationTag { DestinationId = destination.Id, TagId = tagId })
+                .ToList();
+        }
+
         destination.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -252,6 +297,7 @@ public class RegionalDestinationService : IRegionalDestinationService
         await EnsureAssignedRegionAsync(userId, regionId);
 
         var destination = await _db.Destinations
+            .Include(item => item.DestinationTags)
             .SingleOrDefaultAsync(item => item.Id == destinationId && item.RegionId == regionId)
             ?? throw new KeyNotFoundException("Destination not found.");
 
@@ -393,6 +439,11 @@ public class RegionalDestinationService : IRegionalDestinationService
                 "Destination name is too long.");
         }
 
+        if (request.Summary is not null)
+        {
+            destination.Summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
+        }
+
         if (request.Description is not null)
         {
             destination.Description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
@@ -513,27 +564,14 @@ public class RegionalDestinationService : IRegionalDestinationService
         return new BoundaryResult(shapeType, polygon);
     }
 
-    private static DestinationCoordinates ResolveCoordinates(
-        RegionalDestinationCreateRequestDto request,
-        Geometry? boundaryGeometry)
+    private static DestinationCoordinates ResolveCoordinates(RegionalDestinationCreateRequestDto request)
     {
-        if (request.Latitude.HasValue || request.Longitude.HasValue)
-        {
-            if (!request.Latitude.HasValue || !request.Longitude.HasValue)
-                throw new InvalidOperationException("Latitude and longitude must be provided together.");
+        if (!request.Latitude.HasValue || !request.Longitude.HasValue)
+            throw new InvalidOperationException("Destination center coordinates are required.");
 
-            ValidateLatitude(request.Latitude.Value);
-            ValidateLongitude(request.Longitude.Value);
-            return new DestinationCoordinates(request.Latitude.Value, request.Longitude.Value);
-        }
-
-        if (boundaryGeometry is null)
-            throw new InvalidOperationException("A destination boundary or coordinates are required.");
-
-        var centroid = boundaryGeometry.Centroid;
-        ValidateLatitude(centroid.Y);
-        ValidateLongitude(centroid.X);
-        return new DestinationCoordinates(centroid.Y, centroid.X);
+        ValidateLatitude(request.Latitude.Value);
+        ValidateLongitude(request.Longitude.Value);
+        return new DestinationCoordinates(request.Latitude.Value, request.Longitude.Value);
     }
 
     private static string NormalizeCreateStatus(string? value)
@@ -625,6 +663,9 @@ public class RegionalDestinationService : IRegionalDestinationService
             PublishedAt = row.PublishedAt,
             LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
+            CardImageUrl = row.CardImageUrl,
+            CoverImageUrl = row.CoverImageUrl,
+            GalleryImageUrls = row.GalleryImageUrls,
             DetailRoute = "/destinations/detail/" + row.Id,
             EditRoute = ExistingEditRoute(row.Id)
         };
@@ -653,6 +694,9 @@ public class RegionalDestinationService : IRegionalDestinationService
             PublishedAt = item.PublishedAt,
             LastUpdatedAt = item.LastUpdatedAt,
             ImageUrl = item.ImageUrl,
+            CardImageUrl = item.CardImageUrl,
+            CoverImageUrl = item.CoverImageUrl,
+            GalleryImageUrls = item.GalleryImageUrls,
             DetailRoute = item.DetailRoute,
             EditRoute = item.EditRoute,
             Latitude = row.Latitude,
@@ -834,5 +878,8 @@ public class RegionalDestinationService : IRegionalDestinationService
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public string? ImageUrl { get; set; }
+        public string? CardImageUrl { get; set; }
+        public string? CoverImageUrl { get; set; }
+        public List<string> GalleryImageUrls { get; set; } = new();
     }
 }

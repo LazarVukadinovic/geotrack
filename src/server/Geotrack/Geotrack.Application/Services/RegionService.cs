@@ -90,6 +90,30 @@ namespace Geotrack.Application.Services
             };
         }
 
+        public async Task<GetRegionDetailsResponseDto> UpdateRegionAsync(int regionId, UpdateRegionRequestDto request)
+        {
+            var region = await _regionRepository.GetByIdAsync(regionId);
+
+            if (region == null)
+                throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
+
+            if (request.Name is not null)
+            {
+                var name = request.Name.Trim();
+                if (name.Length == 0)
+                    throw new InvalidOperationException("Region name cannot be empty.");
+
+                var exists = await _regionRepository.ExistsInTerritoryAsync(region.TerritoryId, name);
+                if (exists && !string.Equals(region.Name, name, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Region with name '{name}' already exists in this territory.");
+
+                region.Name = name;
+            }
+
+            await _regionRepository.SaveChangesAsync();
+            return await GetRegionDetailsAsync(regionId);
+        }
+
         public async Task DeleteRegionAsync(int regionId)
         {
             var region = await _regionRepository.GetByIdAsync(regionId);

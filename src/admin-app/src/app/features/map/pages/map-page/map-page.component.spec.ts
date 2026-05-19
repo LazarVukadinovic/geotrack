@@ -188,7 +188,7 @@ describe('MapPageComponent', () => {
           regionId,
           placeId: 8,
           detailRoute: '/places/detail/8',
-          editRoute: '/places/new',
+          editRoute: '/places/edit/8',
         },
       ],
       zones: [

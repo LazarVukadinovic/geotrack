@@ -17,7 +17,7 @@ public class RegionalPlaceService : IRegionalPlaceService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
-    private const string ExistingEditRoute = "/places/new";
+    private static string ExistingEditRoute(int placeId) => $"/places/edit/{placeId}";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
 
     private readonly AppDbContext _db;
@@ -330,6 +330,7 @@ public class RegionalPlaceService : IRegionalPlaceService
             .Include(item => item.Location)
                 .ThenInclude(location => location.Destination)
             .Include(item => item.Stay)
+            .Include(item => item.PlaceTags)
             .SingleOrDefaultAsync(item => item.Id == placeId && item.Location.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Place not found.");
 
@@ -362,6 +363,25 @@ public class RegionalPlaceService : IRegionalPlaceService
         }
 
         ApplyUpdate(place, request);
+
+        if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
+        {
+            var operatingHours = NormalizeOperatingHours(
+                request.OperatingHoursEnabled ?? place.OperatingHoursEnabled,
+                request.OperatingHours ?? DeserializeOperatingHours(place.OperatingHoursJson));
+            place.OperatingHoursEnabled = operatingHours.Enabled;
+            place.OperatingHoursJson = operatingHours.Json;
+            place.OpeningHours = operatingHours.Enabled ? BuildOpeningHoursSummary(operatingHours.Hours) : null;
+        }
+
+        if (request.TagIds is not null)
+        {
+            var tagIds = await ValidatePlaceTagIdsAsync(request.TagIds);
+            place.PlaceTags.Clear();
+            foreach (var tagId in tagIds)
+                place.PlaceTags.Add(new PlaceTag { PlaceId = place.Id, TagId = tagId });
+        }
+
         place.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -655,9 +675,9 @@ public class RegionalPlaceService : IRegionalPlaceService
             place.Name = name;
         }
 
-        if (request.Subtitle is not null)
+        if (request.Summary is not null || request.Subtitle is not null)
         {
-            var subtitle = request.Subtitle.Trim();
+            var subtitle = (request.Summary ?? request.Subtitle ?? string.Empty).Trim();
             if (subtitle.Length > 500)
                 throw new InvalidOperationException("Subtitle is too long.");
 
@@ -707,6 +727,58 @@ public class RegionalPlaceService : IRegionalPlaceService
                 throw new InvalidOperationException("Phone number is too long.");
 
             place.Number = phoneNumber.Length == 0 ? null : phoneNumber;
+        }
+
+        if (request.Website is not null)
+        {
+            place.Website = NormalizeUrl(request.Website, "Website URL is invalid.");
+        }
+
+        if (request.AdmissionPriceRange is not null)
+        {
+            place.AdmissionPriceRange = NormalizeOptionalText(
+                request.AdmissionPriceRange,
+                200,
+                "Admission / price range is too long.");
+        }
+
+        if (request.BookingExternalLink is not null)
+        {
+            place.BookingExternalLink = NormalizeUrl(
+                request.BookingExternalLink,
+                "Booking / external link is invalid.");
+        }
+
+        if (request.BestTimeToVisit is not null)
+        {
+            place.BestTimeToVisit = NormalizeOptionalText(
+                request.BestTimeToVisit,
+                500,
+                "Best time to visit is too long.");
+        }
+
+        if (request.VisitorTips is not null)
+        {
+            place.VisitorTips = NormalizeOptionalText(
+                request.VisitorTips,
+                1000,
+                "Visitor tips are too long.");
+        }
+
+        if (request.AccessNotes is not null)
+        {
+            place.AccessNotes = NormalizeOptionalText(
+                request.AccessNotes,
+                1000,
+                "Access notes are too long.");
+        }
+
+        if (request.AccessibilityNotes is not null)
+        {
+            place.AccessibilityNotes = NormalizeOptionalText(
+                request.AccessibilityNotes,
+                1000,
+                "Accessibility notes are too long.");
         }
 
         if (request.PlaceTypeId.HasValue)
@@ -1048,7 +1120,7 @@ public class RegionalPlaceService : IRegionalPlaceService
             LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
             DetailRoute = "/places/detail/" + row.Id,
-            EditRoute = ExistingEditRoute
+            EditRoute = ExistingEditRoute(row.Id)
         };
     }
 

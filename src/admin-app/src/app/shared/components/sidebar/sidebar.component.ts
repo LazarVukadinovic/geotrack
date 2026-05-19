@@ -59,7 +59,7 @@ export class SidebarComponent {
   }
 
   get canSelectRegion(): boolean {
-    return this.regions.length > 1;
+    return this.regions.length > 0;
   }
 
   get isNational(): boolean {

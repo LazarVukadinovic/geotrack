@@ -504,6 +504,13 @@ export class RegionsService {
   }
 
   updateDetail$(id: string, patch: Partial<RegionDetail>): Observable<RegionDetail | null> {
+    if (/^\d+$/.test(id)) {
+      return this.http.put<ApiRegionDetail>(`/api/regions/${id}`, { name: patch.name }).pipe(
+        map(dto => ({ ...this.mapApiDetail(dto), ...patch })),
+        catchError(() => of(null)),
+      );
+    }
+
     const idx = ALL_REGIONS.findIndex(r => r.id === id);
     if (idx === -1) return of(null).pipe(delay(500));
 

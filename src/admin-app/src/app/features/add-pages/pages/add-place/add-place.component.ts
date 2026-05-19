@@ -29,6 +29,7 @@ import {
   RegionalPlaceParentLocationDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
+  RegionalPlaceUpdateRequest,
 } from '../../../../core/models/place.model';
 
 declare const L: any;
@@ -185,9 +186,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit(): void {
     this.editPlaceId = this.route.snapshot.paramMap.get('id');
     this.isEditMode = Boolean(this.editPlaceId);
-    if (this.isEditMode) {
-      this.errorMessage = 'Place editing is not available from this create form.';
-    }
 
     this.loadAssignedRegions();
     this.applyInitialCoordinatesFromRoute();
@@ -284,15 +282,14 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get canPublish(): boolean {
-    return !this.isEditMode &&
-      Boolean(this.activeRegionId) &&
+    const mediaReady = this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
+    return Boolean(this.activeRegionId) &&
       Boolean(this.parentLocationId) &&
       Boolean(this.placeTypeId) &&
       this.placeName.trim().length > 0 &&
       this.summary.trim().length > 0 &&
       this.pinConfirmed &&
-      Boolean(this.cardImageFile) &&
-      Boolean(this.coverImageFile) &&
+      mediaReady &&
       !this.regionLoading &&
       !this.parentLocationsLoading &&
       !this.placeTypesLoading &&
@@ -342,6 +339,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
           this.setActiveRegion(selectedRegion.id, false);
           this.loadParentLocations();
           this.loadRegionViewport(selectedRegion.id);
+          this.loadPlaceForEditIfNeeded();
         },
         error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
@@ -462,6 +460,67 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         },
         error: error => this.handleLoadError(error, 'Unable to load place tags.'),
       });
+  }
+
+  private loadPlaceForEditIfNeeded(): void {
+    if (!this.isEditMode || !this.editPlaceId || !this.activeRegionId) {
+      return;
+    }
+
+    this.placesService.getPlace(this.activeRegionId, this.editPlaceId).subscribe({
+      next: dto => {
+        this.placeName = dto.name ?? '';
+        this.summary = dto.summary ?? dto.subtitle ?? '';
+        this.parentLocationId = dto.locationId ?? null;
+        this.placeTypeId = dto.placeTypeId ?? null;
+        this.bestTimeToVisit = dto.bestTimeToVisit ?? '';
+        this.visitorTips = dto.visitorTips ?? '';
+        this.accessNotes = dto.accessNotes ?? '';
+        this.accessibilityNotes = dto.accessibilityNotes ?? '';
+        this.website = dto.website ?? '';
+        this.contactPhone = dto.phoneNumber ?? dto.contactPhone ?? '';
+        this.admissionPrice = dto.admissionPriceRange ?? '';
+        this.bookingLink = dto.bookingExternalLink ?? '';
+        this.streetAddress = dto.address ?? '';
+        this.opsEnabled = Boolean(dto.operatingHoursEnabled);
+        this.applyOperatingHours(dto.operatingHours ?? []);
+
+        if (typeof dto.latitude === 'number' && typeof dto.longitude === 'number') {
+          this.pinLat = dto.latitude.toFixed(6);
+          this.pinLng = dto.longitude.toFixed(6);
+          this.modalPinLat = dto.latitude;
+          this.modalPinLng = dto.longitude;
+          this.pinConfirmed = this.hasValidCoordinates(dto.latitude, dto.longitude);
+          setTimeout(() => this.updateMiniMapPin(dto.latitude, dto.longitude), 0);
+        }
+
+        this.cardImageUrl = dto.imageUrl ?? null;
+        this.cardImageName = dto.imageUrl ? 'Existing card image' : '';
+        this.coverImageUrl = dto.imageUrl ?? null;
+        this.coverImageName = dto.imageUrl ? 'Existing cover image' : '';
+
+        this.selectedTagIds = new Set((dto.tags ?? []).map(tag => tag.id));
+        for (const tag of dto.tags ?? []) {
+          this.upsertPlaceTag(tag);
+          this.upsertClassItem(tag, true);
+        }
+        this.classItems = this.classItems.map(item => ({
+          ...item,
+          checked: this.selectedTagIds.has(item.tag.id),
+        }));
+
+        setTimeout(() => {
+          if (this.editorRef?.nativeElement) {
+            this.editorRef.nativeElement.innerHTML = dto.description ?? '';
+            this.syncEmptyState();
+            this.notifyStateChanged();
+          }
+        }, 0);
+
+        this.notifyStateChanged();
+      },
+      error: error => this.handleLoadError(error, 'Unable to load place for editing.'),
+    });
   }
 
   onParentLocationChanged(): void {
@@ -697,6 +756,11 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   publish(): void {
     if (this.isSaving) return;
 
+    if (this.isEditMode) {
+      this.updateExistingPlace();
+      return;
+    }
+
     const payload = this.buildCreatePayload();
     if (!payload) {
       this.notifyStateChanged();
@@ -723,6 +787,41 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
           this.router.navigate(['/places'], {
             queryParams: { regionId: created.regionId },
             state: { feedbackMessage: 'Place published.' },
+          });
+        },
+        error: error => this.handleActionError(error),
+      });
+  }
+
+  private updateExistingPlace(): void {
+    const regionId = this.activeRegionId;
+    const placeId = this.editPlaceId;
+    const payload = this.buildUpdatePayload();
+    if (!regionId || !placeId || !payload) {
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.isSaving = true;
+    this.errorMessage = null;
+    this.feedbackMessage = null;
+    this.notifyStateChanged();
+
+    this.createSubscription?.unsubscribe();
+    this.createSubscription = this.placesService
+      .updatePlace(regionId, placeId, payload)
+      .pipe(
+        finalize(() => {
+          this.isSaving = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: updated => {
+          this.feedbackMessage = 'Place updated.';
+          this.router.navigate(['/places/detail', updated.id], {
+            queryParams: { regionId: updated.regionId },
+            state: { regionId: updated.regionId, feedbackMessage: 'Place updated.' },
           });
         },
         error: error => this.handleActionError(error),
@@ -827,6 +926,78 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     };
   }
 
+  private buildUpdatePayload(): RegionalPlaceUpdateRequest | null {
+    const locationId = this.parentLocationId;
+    if (!locationId) {
+      this.errorMessage = 'Parent location is required.';
+      return null;
+    }
+
+    const placeTypeId = this.placeTypeId;
+    if (!placeTypeId) {
+      this.errorMessage = 'Place type is required.';
+      return null;
+    }
+
+    const name = this.placeName.trim();
+    if (!name) {
+      this.errorMessage = 'Place name is required.';
+      return null;
+    }
+
+    const normalizedSummary = this.summary.trim();
+    if (!normalizedSummary) {
+      this.errorMessage = 'Summary is required.';
+      return null;
+    }
+    if (normalizedSummary.length > 160) {
+      this.errorMessage = 'Summary must be 160 characters or less.';
+      return null;
+    }
+
+    const coordinates = this.readPinnedCoordinates();
+    if (!coordinates || !this.pinConfirmed) {
+      this.errorMessage = 'Pin the place on the map before updating.';
+      return null;
+    }
+
+    const website = this.normalizeUrl(this.website, 'Website URL is invalid.');
+    if (website === false) return null;
+
+    const bookingLink = this.normalizeUrl(this.bookingLink, 'Booking / external link is invalid.');
+    if (bookingLink === false) return null;
+
+    const contactPhone = this.normalizePhone(this.contactPhone);
+    if (contactPhone === false) return null;
+
+    const operatingHours = this.buildOperatingHoursPayload();
+    if (!operatingHours) return null;
+
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+
+    return {
+      locationId,
+      placeTypeId,
+      name,
+      subtitle: normalizedSummary,
+      description: descriptionHtml || null,
+      address: this.streetAddress.trim() || null,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      bestTimeToVisit: this.bestTimeToVisit.trim() || null,
+      visitorTips: this.visitorTips.trim() || null,
+      accessNotes: this.accessNotes.trim() || null,
+      accessibilityNotes: this.accessibilityNotes.trim() || null,
+      website,
+      phoneNumber: contactPhone,
+      admissionPriceRange: this.admissionPrice.trim() || null,
+      bookingExternalLink: bookingLink,
+      operatingHoursEnabled: this.opsEnabled,
+      operatingHours,
+      tagIds: [...this.selectedTagIds],
+    };
+  }
+
   private buildOperatingHoursPayload(): RegionalPlaceOperatingHourDto[] | null {
     if (!this.opsEnabled) return [];
 
@@ -851,6 +1022,25 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     return hours;
+  }
+
+  private applyOperatingHours(hours: RegionalPlaceOperatingHourDto[]): void {
+    if (!hours.length) {
+      return;
+    }
+
+    const byDay = new Map(hours.map(hour => [hour.dayOfWeek.toLowerCase(), hour]));
+    this.days = this.days.map(day => {
+      const incoming = byDay.get(day.name.toLowerCase());
+      if (!incoming) return day;
+
+      return {
+        ...day,
+        open: incoming.isOpen,
+        openTime: incoming.openTime ?? day.openTime,
+        closeTime: incoming.closeTime ?? day.closeTime,
+      };
+    });
   }
 
   private initMiniMap(): void {
@@ -1330,12 +1520,12 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private handleActionError(error: unknown): void {
     if (error instanceof HttpErrorResponse) {
-      this.errorMessage = error.error?.message ?? 'Unable to publish place.';
+      this.errorMessage = error.error?.message ?? (this.isEditMode ? 'Unable to update place.' : 'Unable to publish place.');
       this.notifyStateChanged();
       return;
     }
 
-    this.errorMessage = 'Unable to publish place.';
+    this.errorMessage = this.isEditMode ? 'Unable to update place.' : 'Unable to publish place.';
     this.notifyStateChanged();
   }
 

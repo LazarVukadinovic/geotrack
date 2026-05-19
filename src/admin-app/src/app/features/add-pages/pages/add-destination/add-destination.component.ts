@@ -9,7 +9,7 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import { CommonModule, DecimalPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -18,21 +18,16 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
-import { ZoneDrawService } from '../../../../core/services/zone-draw.service';
 import { DestinationsListService } from '../../../../core/services/destinations-list.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import {
-  RegionalDestinationBoundaryDto,
   RegionalDestinationCreateRequest,
   RegionalDestinationTagDto,
   RegionalDestinationUpdateRequest,
 } from '../../../../core/models/destination.model';
 
 declare const L: any;
-
-type DrawTool = 'polygon' | 'rectangle' | 'circle';
-type BoundaryShapeType = 'Polygon' | 'Rectangle' | 'Circle';
 
 interface ClassItem {
   tag: RegionalDestinationTagDto;
@@ -42,22 +37,28 @@ interface ClassItem {
 @Component({
   selector: 'app-add-destination',
   standalone: true,
-  imports: [CommonModule, FormsModule, DecimalPipe, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
   templateUrl: './add-destination.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  styles: [`
-    .rte-field { position: relative; }
-    .rte-ph {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      padding: 0.5rem 0.75rem;
-      color: #9ca3af;
-      font-size: 0.875rem;
-      pointer-events: none;
-      user-select: none;
-      line-height: 1.5rem;
-    }
-  `]
+  styles: [
+    `
+      .rte-field {
+        position: relative;
+      }
+      .rte-ph {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 0.5rem 0.75rem;
+        color: #9ca3af;
+        font-size: 0.875rem;
+        pointer-events: none;
+        user-select: none;
+        line-height: 1.5rem;
+      }
+    `,
+  ],
 })
 export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
@@ -80,7 +81,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   destinationName = '';
   summary = '';
-  boundaryNote = '';
   tagInput = '';
 
   classItems: ClassItem[] = [];
@@ -105,15 +105,13 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   zoneModalOpen = false;
   zoneConfirmed = false;
-  zoneAreaKm2: number | null = null;
-  drawTool: DrawTool = 'polygon';
-  confirmedShapeType: BoundaryShapeType | null = null;
+  centerLat: number | null = null;
+  centerLng: number | null = null;
 
   private miniMap: any = null;
   private modalMap: any = null;
-  private drawnLayer: any = null;
-  private confirmedLayer: any = null;
-  private drawControl: any = null;
+  private miniMapCenterMarker: any = null;
+  private modalCenterMarker: any = null;
   private assignedRegionsSubscription: Subscription | null = null;
   private tagsSubscription: Subscription | null = null;
   private tagSearchSubscription: Subscription | null = null;
@@ -130,7 +128,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     private readonly route: ActivatedRoute,
     private readonly dashboardService: DashboardService,
     private readonly lightboxService: LightboxService,
-    private readonly zoneDrawService: ZoneDrawService,
     private readonly destinationsService: DestinationsListService,
     private readonly auth: AuthService,
   ) {}
@@ -171,7 +168,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   get activeRegion(): RegionalAssignedRegion | null {
-    return this.assignedRegions.find(region => region.id === this.activeRegionId) ?? null;
+    return this.assignedRegions.find((region) => region.id === this.activeRegionId) ?? null;
   }
 
   get regionDisplayName(): string {
@@ -179,18 +176,23 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   get canPublish(): boolean {
-    const mediaReady = this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
-    return Boolean(this.activeRegionId) &&
+    const mediaReady =
+      this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
+    return (
+      Boolean(this.activeRegionId) &&
+      this.destinationName.trim().length > 0 &&
+      this.hasValidCenter() &&
       mediaReady &&
       !this.regionLoading &&
       !this.tagsLoading &&
-      !this.isSaving;
+      !this.isSaving
+    );
   }
 
   get selectedAdditionalTags(): RegionalDestinationTagDto[] {
-    const primaryIds = new Set(this.classItems.map(item => item.tag.id));
+    const primaryIds = new Set(this.classItems.map((item) => item.tag.id));
     return this.destinationTags
-      .filter(tag => this.selectedTagIds.has(tag.id) && !primaryIds.has(tag.id))
+      .filter((tag) => this.selectedTagIds.has(tag.id) && !primaryIds.has(tag.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -217,7 +219,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   get drawHint(): string {
-    return this.zoneDrawService.drawHints[this.drawTool];
+    return this.hasValidCenter()
+      ? `Selected center: ${this.centerLat!.toFixed(5)}, ${this.centerLng!.toFixed(5)}`
+      : 'Click the map to place the destination center point. No polygon is drawn.';
   }
 
   loadAssignedRegions(): void {
@@ -235,7 +239,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         }),
       )
       .subscribe({
-        next: regions => {
+        next: (regions) => {
           this.assignedRegions = regions ?? [];
 
           if (this.assignedRegions.length === 0) {
@@ -250,15 +254,15 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
           const persistedRegionId = this.readPersistedRegionId();
           const stateRegionId = Number((history.state as { regionId?: number | null })?.regionId);
           const selectedRegion =
-            this.assignedRegions.find(region => region.id === queryRegionId) ??
-            this.assignedRegions.find(region => region.id === stateRegionId) ??
-            this.assignedRegions.find(region => region.id === persistedRegionId) ??
+            this.assignedRegions.find((region) => region.id === queryRegionId) ??
+            this.assignedRegions.find((region) => region.id === stateRegionId) ??
+            this.assignedRegions.find((region) => region.id === persistedRegionId) ??
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
           this.loadDestinationForEditIfNeeded();
         },
-        error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
+        error: (error) => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
   }
 
@@ -267,7 +271,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
     this.setActiveRegion(regionId, true);
     this.resetZone();
-    this.feedbackMessage = 'Region changed. Boundary selection was cleared.';
+    this.feedbackMessage = 'Region changed. Destination center was cleared.';
     this.notifyStateChanged();
   }
 
@@ -285,12 +289,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         }),
       )
       .subscribe({
-        next: tags => {
+        next: (tags) => {
           this.destinationTags = this.normalizeTags(tags);
-          this.classItems = this.destinationTags
-            .map(tag => ({ tag, checked: this.selectedTagIds.has(tag.id) }));
+          this.classItems = this.destinationTags.map((tag) => ({
+            tag,
+            checked: this.selectedTagIds.has(tag.id),
+          }));
         },
-        error: error => this.handleLoadError(error, 'Unable to load destination tags.'),
+        error: (error) => this.handleLoadError(error, 'Unable to load destination tags.'),
       });
   }
 
@@ -300,13 +306,30 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     }
 
     this.destinationsService.getDestination(this.activeRegionId, this.editDestinationId).subscribe({
-      next: dto => {
+      next: (dto) => {
         this.destinationName = dto.name ?? '';
         this.summary = dto.summary ?? '';
         this.originalLatitude = dto.latitude ?? null;
         this.originalLongitude = dto.longitude ?? null;
-        this.selectedTagIds = new Set((dto.tags ?? []).map(tag => tag.id));
-        this.classItems = this.classItems.map(item => ({
+        if (this.hasValidCoordinatePair(dto.latitude, dto.longitude)) {
+          this.centerLat = dto.latitude;
+          this.centerLng = dto.longitude;
+          this.zoneConfirmed = true;
+          setTimeout(() => this.showZoneOnMiniMap(), 0);
+        }
+
+        this.cardImageUrl = dto.cardImageUrl ?? dto.imageUrl ?? this.cardImageUrl;
+        this.cardImageName = this.cardImageUrl ? 'Existing card image' : this.cardImageName;
+        this.coverImageUrl = dto.coverImageUrl ?? dto.imageUrl ?? this.coverImageUrl;
+        this.coverImageName = this.coverImageUrl ? 'Existing cover image' : this.coverImageName;
+        this.galleryImages = (dto.galleryImageUrls ?? []).map((url, index) => ({
+          url,
+          name: `Existing gallery image ${index + 1}`,
+          file: null as unknown as File,
+        }));
+
+        this.selectedTagIds = new Set((dto.tags ?? []).map((tag) => tag.id));
+        this.classItems = this.classItems.map((item) => ({
           ...item,
           checked: this.selectedTagIds.has(item.tag.id),
         }));
@@ -321,7 +344,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
         this.notifyStateChanged();
       },
-      error: error => this.handleLoadError(error, 'Unable to load destination for editing.'),
+      error: (error) => this.handleLoadError(error, 'Unable to load destination for editing.'),
     });
   }
 
@@ -357,7 +380,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   addTag(event: Event): void {
     event.preventDefault();
-    const firstAvailable = this.additionalTagResults.find(tag => !this.selectedTagIds.has(tag.id));
+    const firstAvailable = this.additionalTagResults.find(
+      (tag) => !this.selectedTagIds.has(tag.id),
+    );
     if (firstAvailable) {
       this.selectAdditionalTag(firstAvailable);
     }
@@ -374,7 +399,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   removeTag(tag: RegionalDestinationTagDto): void {
     this.selectedTagIds.delete(tag.id);
-    const classItem = this.classItems.find(item => item.tag.id === tag.id);
+    const classItem = this.classItems.find((item) => item.tag.id === tag.id);
     if (classItem) {
       classItem.checked = false;
     }
@@ -400,7 +425,10 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   onEditorBlur(): void {
     this.syncToolbarState();
     const el = this.editorRef?.nativeElement;
-    if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
+    if (
+      el &&
+      (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')
+    ) {
       el.innerHTML = '';
     }
     this.syncEmptyState();
@@ -464,12 +492,15 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   onGalleryImagesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const files = Array.from(input.files ?? []).filter(file => this.isAllowedImage(file));
+    const files = Array.from(input.files ?? []).filter((file) => this.isAllowedImage(file));
     for (const file of files) {
       const reader = new FileReader();
       reader.onload = () => {
         this.zone.run(() => {
-          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name, file }];
+          this.galleryImages = [
+            ...this.galleryImages,
+            { url: reader.result as string, name: file.name, file },
+          ];
           this.notifyStateChanged();
         });
       };
@@ -503,40 +534,25 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.closeZoneModal();
   }
 
-  setDrawTool(tool: DrawTool): void {
-    this.drawTool = tool;
-    if (this.modalMap) {
-      this.clearZone();
-      this.activateDrawTool();
-    }
+  clearZone(): void {
+    this.centerLat = null;
+    this.centerLng = null;
+    this.zoneConfirmed = false;
+    this.errorMessage = null;
+    this.showCenterOnModalMap();
+    this.removeMiniMapCenterMarker();
     this.notifyStateChanged();
   }
 
-  clearZone(): void {
-    if (this.drawnLayer && this.modalMap) {
-      this.modalMap.removeLayer(this.drawnLayer);
-      this.drawnLayer = null;
-    }
-    if (this.drawControl) {
-      this.drawControl.disable();
-      this.drawControl = null;
-    }
-    this.activateDrawTool();
-  }
-
   confirmZone(): void {
-    if (!this.drawnLayer) {
-      this.errorMessage = 'Draw a destination zone before confirming.';
+    if (!this.hasValidCenter()) {
+      this.errorMessage = 'Choose a destination center point before confirming.';
       this.notifyStateChanged();
       return;
     }
 
-    this.zoneAreaKm2 = this.zoneDrawService.calculateAreaKm2(this.drawnLayer);
     this.zoneConfirmed = true;
-    this.confirmedLayer = this.drawnLayer;
-    this.confirmedShapeType = this.shapeTypeFromDrawTool(this.drawTool);
     this.errorMessage = null;
-
     this.showZoneOnMiniMap();
     this.closeZoneModal();
   }
@@ -570,14 +586,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         }),
       )
       .subscribe({
-        next: created => {
+        next: (created) => {
           this.feedbackMessage = 'Destination published.';
           this.router.navigate(['/destinations'], {
             queryParams: { regionId: created.regionId },
             state: { feedbackMessage: 'Destination published.' },
           });
         },
-        error: error => this.handleActionError(error),
+        error: (error) => this.handleActionError(error),
       });
   }
 
@@ -605,14 +621,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         }),
       )
       .subscribe({
-        next: updated => {
+        next: (updated) => {
           this.feedbackMessage = 'Destination updated.';
           this.router.navigate(['/destinations/detail', updated.id], {
             queryParams: { regionId: updated.regionId },
             state: { regionId: updated.regionId, feedbackMessage: 'Destination updated.' },
           });
         },
-        error: error => this.handleActionError(error),
+        error: (error) => this.handleActionError(error),
       });
   }
 
@@ -645,18 +661,12 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
-    if (!this.zoneConfirmed || !this.confirmedLayer) {
-      this.errorMessage = 'Draw a destination zone before publishing.';
+    if (!this.hasValidCenter()) {
+      this.errorMessage = 'Choose a destination center point before publishing.';
       return null;
     }
 
     const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
-    const { zone, centerLat, centerLng } = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
-    const boundary = this.createBoundaryPayload(zone);
-    if (!boundary) {
-      this.errorMessage = 'Boundary geometry is invalid.';
-      return null;
-    }
 
     return {
       regionId,
@@ -664,14 +674,12 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       summary: normalizedSummary || null,
       description: descriptionHtml || null,
       status: 'Published',
-      latitude: centerLat,
-      longitude: centerLng,
-      boundaryNote: this.boundaryNote.trim() || null,
-      boundary,
+      latitude: this.centerLat,
+      longitude: this.centerLng,
       tagIds: [...this.selectedTagIds],
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
-      galleryImageFiles: this.galleryImages.map(image => image.file),
+      galleryImageFiles: this.galleryImages.map((image) => image.file),
     };
   }
 
@@ -682,31 +690,26 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
-    let latitude = this.originalLatitude;
-    let longitude = this.originalLongitude;
-
-    if (this.zoneConfirmed && this.confirmedLayer) {
-      const zoneResult = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
-      latitude = zoneResult.centerLat;
-      longitude = zoneResult.centerLng;
+    const normalizedSummary = this.summary.trim();
+    if (normalizedSummary.length > 160) {
+      this.errorMessage = 'Summary must be 160 characters or less.';
+      return null;
     }
+
+    if (!this.hasValidCenter()) {
+      this.errorMessage = 'Choose a destination center point before updating.';
+      return null;
+    }
+
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
 
     return {
       name,
+      summary: normalizedSummary || null,
       description: descriptionHtml || null,
-      latitude,
-      longitude,
-    };
-  }
-
-  private createBoundaryPayload(zone: [number, number][]): RegionalDestinationBoundaryDto | null {
-    const shapeType = this.confirmedShapeType;
-    if (!shapeType || zone.length < 3) return null;
-
-    return {
-      shapeType,
-      coordinates: zone.map(([latitude, longitude]) => ({ latitude, longitude })),
+      latitude: this.centerLat,
+      longitude: this.centerLng,
+      tagIds: [...this.selectedTagIds],
     };
   }
 
@@ -736,92 +739,100 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap || typeof L === 'undefined') return;
 
+    const initialCenter = this.hasValidCenter()
+      ? [this.centerLat as number, this.centerLng as number]
+      : this.loadMapCenter();
+
     this.modalMap = L.map(el, {
       zoomControl: true,
       attributionControl: false,
-    }).setView(this.loadMapCenter(), 9);
+    }).setView(initialCenter, this.hasValidCenter() ? 12 : 9);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.modalMap);
 
+    this.modalMap.on('click', (event: any) => {
+      this.zone.run(() => {
+        this.centerLat = event.latlng.lat;
+        this.centerLng = event.latlng.lng;
+        this.zoneConfirmed = false;
+        this.errorMessage = null;
+        this.showCenterOnModalMap();
+        this.notifyStateChanged();
+      });
+    });
+
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
-
-    if (this.confirmedLayer) {
-      const layerCopy = this.zoneDrawService.cloneLayer(this.confirmedLayer);
-      if (layerCopy) {
-        layerCopy.addTo(this.modalMap);
-        this.drawnLayer = layerCopy;
-        this.modalMap.fitBounds(layerCopy.getBounds(), { padding: [30, 30] });
-      }
-    }
-
-    this.activateDrawTool();
+    this.showCenterOnModalMap();
   }
 
   private destroyModalMap(): void {
     if (this.modalMap) {
       this.modalMap.remove();
       this.modalMap = null;
-      this.drawnLayer = null;
-      this.drawControl = null;
+      this.modalCenterMarker = null;
     }
-  }
-
-  private activateDrawTool(): void {
-    if (!this.modalMap || typeof L === 'undefined') return;
-
-    if (this.drawControl) {
-      this.drawControl.disable();
-      this.drawControl = null;
-    }
-
-    this.drawControl = this.zoneDrawService.activateDrawTool(
-      this.modalMap,
-      this.drawTool,
-      layer => {
-        if (this.drawnLayer) {
-          this.modalMap.removeLayer(this.drawnLayer);
-        }
-        this.drawnLayer = layer;
-        this.modalMap.addLayer(this.drawnLayer);
-        this.notifyStateChanged();
-      },
-    );
   }
 
   private showZoneOnMiniMap(): void {
     if (!this.miniMap) this.initMiniMap();
-    if (!this.miniMap || !this.confirmedLayer) return;
+    if (!this.miniMap || !this.hasValidCenter()) return;
 
-    this.miniMap.eachLayer((layer: any) => {
-      if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
-    });
+    this.removeMiniMapCenterMarker();
 
-    const clone = this.zoneDrawService.cloneLayer(this.confirmedLayer);
-    if (!clone) return;
+    this.miniMapCenterMarker = L.marker([this.centerLat as number, this.centerLng as number]);
+    this.miniMapCenterMarker.addTo(this.miniMap);
+    this.miniMap.setView([this.centerLat as number, this.centerLng as number], 12);
+  }
 
-    clone._isConfirmedZone = true;
-    clone.addTo(this.miniMap);
+  private showCenterOnModalMap(): void {
+    if (!this.modalMap || typeof L === 'undefined') return;
 
-    try {
-      this.miniMap.fitBounds(clone.getBounds(), { padding: [10, 10] });
-    } catch {
-      // Fitting can fail while Leaflet is still settling container dimensions.
+    if (this.modalCenterMarker) {
+      this.modalMap.removeLayer(this.modalCenterMarker);
+      this.modalCenterMarker = null;
     }
+
+    if (!this.hasValidCenter()) return;
+
+    this.modalCenterMarker = L.marker([this.centerLat as number, this.centerLng as number]);
+    this.modalCenterMarker.addTo(this.modalMap);
+  }
+
+  private removeMiniMapCenterMarker(): void {
+    if (this.miniMapCenterMarker && this.miniMap) {
+      this.miniMap.removeLayer(this.miniMapCenterMarker);
+      this.miniMapCenterMarker = null;
+    }
+  }
+
+  private hasValidCenter(): boolean {
+    return this.hasValidCoordinatePair(this.centerLat, this.centerLng);
+  }
+
+  private hasValidCoordinatePair(
+    latitude: number | null | undefined,
+    longitude: number | null | undefined,
+  ): boolean {
+    return (
+      typeof latitude === 'number' &&
+      typeof longitude === 'number' &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      (latitude !== 0 || longitude !== 0)
+    );
   }
 
   private resetZone(): void {
     this.zoneConfirmed = false;
-    this.zoneAreaKm2 = null;
-    this.confirmedLayer = null;
-    this.confirmedShapeType = null;
-
-    if (this.miniMap) {
-      this.miniMap.eachLayer((layer: any) => {
-        if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
-      });
-    }
+    this.centerLat = null;
+    this.centerLng = null;
+    this.removeMiniMapCenterMarker();
   }
 
   private searchTags(query: string): void {
@@ -838,20 +849,23 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         }),
       )
       .subscribe({
-        next: tags => {
-          const normalized = this.normalizeTags(tags)
-            .filter(tag => !this.selectedTagIds.has(tag.id));
-          normalized.forEach(tag => this.upsertDestinationTag(tag));
+        next: (tags) => {
+          const normalized = this.normalizeTags(tags).filter(
+            (tag) => !this.selectedTagIds.has(tag.id),
+          );
+          normalized.forEach((tag) => this.upsertDestinationTag(tag));
           this.additionalTagResults = normalized;
         },
-        error: error => this.handleLoadError(error, 'Unable to search destination tags.'),
+        error: (error) => this.handleLoadError(error, 'Unable to search destination tags.'),
       });
   }
 
-  private normalizeTags(tags: RegionalDestinationTagDto[] | null | undefined): RegionalDestinationTagDto[] {
+  private normalizeTags(
+    tags: RegionalDestinationTagDto[] | null | undefined,
+  ): RegionalDestinationTagDto[] {
     const seen = new Set<number>();
     return (tags ?? [])
-      .filter(tag => {
+      .filter((tag) => {
         if (!tag || seen.has(tag.id)) return false;
         seen.add(tag.id);
         return true;
@@ -860,19 +874,22 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   private upsertDestinationTag(tag: RegionalDestinationTagDto): void {
-    if (this.destinationTags.some(existing => existing.id === tag.id)) return;
-    this.destinationTags = [...this.destinationTags, tag].sort((a, b) => a.name.localeCompare(b.name));
+    if (this.destinationTags.some((existing) => existing.id === tag.id)) return;
+    this.destinationTags = [...this.destinationTags, tag].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
   }
 
   private upsertClassItem(tag: RegionalDestinationTagDto, checked: boolean): void {
-    const existing = this.classItems.find(item => item.tag.id === tag.id);
+    const existing = this.classItems.find((item) => item.tag.id === tag.id);
     if (existing) {
       existing.checked = checked || existing.checked;
       return;
     }
 
-    this.classItems = [...this.classItems, { tag, checked }]
-      .sort((a, b) => a.tag.name.localeCompare(b.tag.name));
+    this.classItems = [...this.classItems, { tag, checked }].sort((a, b) =>
+      a.tag.name.localeCompare(b.tag.name),
+    );
   }
 
   private setActiveRegion(regionId: number, updateUrl: boolean): void {
@@ -915,17 +932,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     }
   }
 
-  private shapeTypeFromDrawTool(tool: DrawTool): BoundaryShapeType {
-    switch (tool) {
-      case 'rectangle':
-        return 'Rectangle';
-      case 'circle':
-        return 'Circle';
-      default:
-        return 'Polygon';
-    }
-  }
-
   private isAllowedImage(file: File): boolean {
     const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
     if (!allowed.has(file.type)) {
@@ -963,7 +969,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private handleLoadError(error: unknown, fallback: string): void {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 401) {
-        this.errorMessage = 'Sign in with an authenticated Regional Manager account to create destinations.';
+        this.errorMessage =
+          'Sign in with an authenticated Regional Manager account to create destinations.';
         this.notifyStateChanged();
         return;
       }

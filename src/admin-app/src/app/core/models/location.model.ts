@@ -93,3 +93,14 @@ export interface RegionalLocationCreateRequest {
   coverImageFile?: File | null;
   galleryImageFiles?: File[];
 }
+
+export interface RegionalLocationUpdateRequest {
+  destinationId?: number | null;
+  name?: string | null;
+  summary?: string | null;
+  description?: string | null;
+  locationTypeId?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  tagIds?: number[] | null;
+}

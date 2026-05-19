@@ -802,10 +802,10 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       imageUrl: result.imageUrl,
       detailRoute: result.detailRoute,
       editRoute: result.entityType === 'Destination'
-        ? '/destinations/new'
+        ? `/destinations/edit/${result.id}`
         : result.entityType === 'Location'
-          ? '/locations/new'
-          : '/places/new',
+          ? `/locations/edit/${result.id}`
+          : `/places/edit/${result.id}`,
     };
   }
 
