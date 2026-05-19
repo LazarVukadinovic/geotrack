@@ -92,7 +92,7 @@ describe('AnalyticsPageComponent', () => {
           useValue: {
             fullName: 'Regional User',
             getUser: () => ({ role: 'Regional Manager' }),
-            isNationalManager: () => false,
+            isTerritoryManager: () => false,
             isRegionalManager: () => true,
           },
         },
