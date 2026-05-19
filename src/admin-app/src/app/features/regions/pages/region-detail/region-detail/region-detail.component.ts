@@ -155,6 +155,22 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
 
   goBack(): void { this.router.navigate(['/regions']); }
 
+  get parentTerritoryName(): string {
+    return this.region?.territoryName || '';
+  }
+
+  goToParentTerritory(event?: Event): void {
+    event?.preventDefault();
+    const territoryId = this.region?.territoryId;
+    if (!territoryId) return;
+    this.router.navigate(['/territories', territoryId], {
+      state: {
+        territoryId,
+        territoryName: this.parentTerritoryName,
+      },
+    });
+  }
+
   // ── Assign User Modal ────────────────────────────────────────────
 
   openAssignModal(): void {

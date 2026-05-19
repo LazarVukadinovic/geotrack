@@ -50,25 +50,50 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
-    const navState = history.state as PlaceListItem;
+    const navState = history.state as Partial<PlaceListItem> & { regionId?: number };
 
     if (id) {
       const fromService = this.svc.findById(id);
       if (fromService) {
-        this.item      = { ...fromService };
-        this.isLoading = false;
+        this.setItem(fromService);
+        return;
+      }
+
+      const regionId = navState?.regionId ?? null;
+      if (regionId) {
+        this.loadFromBackend(regionId, id);
         return;
       }
     }
 
-    if (navState?.id) {
-      this.item      = { ...navState };
-      this.isLoading = false;
+    if (navState?.id && navState?.name && navState?.status) {
+      this.setItem(navState as PlaceListItem);
       return;
     }
 
     this.notFound  = true;
     this.isLoading = false;
+  }
+
+  private setItem(item: PlaceListItem): void {
+    this.item      = { ...item };
+    this.region    = this.item.regionDisplayName || this.item.region;
+    this.isLoading = false;
+    this.notFound  = false;
+    this.cdr.markForCheck();
+    setTimeout(() => this.initMiniMap(), 100);
+  }
+
+  private loadFromBackend(regionId: number, id: string): void {
+    this.isLoading = true;
+    this.svc.getPlace(regionId, id).subscribe({
+      next: dto => this.setItem(this.svc.toListItem(dto)),
+      error: () => {
+        this.notFound = true;
+        this.isLoading = false;
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   ngAfterViewInit(): void {
@@ -139,6 +164,18 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   openMapModal(): void {
     this.mapModalOpen = true;
     setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
+  }
+
+  get parentLocationName(): string {
+    return this.item?.locationName || (this.item as any)?.parentLocation || '';
+  }
+
+  goToParentLocation(event?: Event): void {
+    event?.preventDefault();
+    if (!this.item?.locationId || !this.item?.regionId) return;
+    this.router.navigate(['/locations/detail', this.item.locationId], {
+      state: { regionId: this.item.regionId },
+    });
   }
 
   closeMapModal(): void {

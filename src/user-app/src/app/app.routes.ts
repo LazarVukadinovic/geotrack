@@ -271,6 +271,35 @@ export const routes: Routes = [
           import('./features/local-places/pages/local-places-category-page/local-places-category-page.component').then(m => m.LocalPlacesCategoryPageComponent),
         data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
+
+      {
+        path: 'territories/:id',
+        loadComponent: () =>
+          import('./features/hierarchy-detail/pages/entity-hierarchy-detail-page/entity-hierarchy-detail-page.component')
+            .then(m => m.EntityHierarchyDetailPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide', entityType: 'territory' },
+      },
+      {
+        path: 'regions/:id',
+        loadComponent: () =>
+          import('./features/hierarchy-detail/pages/entity-hierarchy-detail-page/entity-hierarchy-detail-page.component')
+            .then(m => m.EntityHierarchyDetailPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide', entityType: 'region' },
+      },
+      {
+        path: 'destinations/:id',
+        loadComponent: () =>
+          import('./features/hierarchy-detail/pages/entity-hierarchy-detail-page/entity-hierarchy-detail-page.component')
+            .then(m => m.EntityHierarchyDetailPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide', entityType: 'destination' },
+      },
+      {
+        path: 'locations/:id',
+        loadComponent: () =>
+          import('./features/hierarchy-detail/pages/entity-hierarchy-detail-page/entity-hierarchy-detail-page.component')
+            .then(m => m.EntityHierarchyDetailPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide', entityType: 'location' },
+      },
       {
         path: 'places/:id',
         loadComponent: () =>

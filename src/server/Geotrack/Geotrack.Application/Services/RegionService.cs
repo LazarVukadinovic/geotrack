@@ -42,6 +42,8 @@ namespace Geotrack.Application.Services
             {
                 Id = region.Id,
                 Name = region.Name,
+                TerritoryId = region.TerritoryId,
+                TerritoryName = region.Territory?.Name,
                 Managers = region.RegionalManagerRegions
                     .Where(ror => ror.IsActive)
                     .Select(ror => new UserItemDto

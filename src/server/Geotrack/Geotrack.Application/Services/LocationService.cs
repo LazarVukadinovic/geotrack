@@ -42,6 +42,7 @@ public class LocationService : ILocationService
             Id = location.Id,
             Name = location.Name,
             DestinationId = location.DestinationId,
+            DestinationName = location.Destination?.Name,
             LocationTypeId = location.LocationTypeId,
             Latitude = location.Latitude,
             Longitude = location.Longitude,

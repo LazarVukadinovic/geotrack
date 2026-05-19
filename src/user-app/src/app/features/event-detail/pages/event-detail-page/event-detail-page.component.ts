@@ -1,5 +1,5 @@
 import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { LocationService } from '../../../../core/services/location.service';
@@ -13,7 +13,7 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
 @Component({
   selector: 'app-event-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ImageFallbackDirective],
+  imports: [SectionHeaderComponent, ImageFallbackDirective, RouterLink],
   templateUrl: './event-detail-page.component.html',
   styleUrl: './event-detail-page.component.scss',
 })

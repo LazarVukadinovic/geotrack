@@ -58,7 +58,7 @@
                   <circle cx="12" cy="10" r="3"/>
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
                 </svg>
-                <span>{{ item.region }}</span>
+                <button type="button" (click)="goToParentDestination($event)" class="text-sm font-semibold text-blue-200 hover:text-white hover:underline bg-transparent border-0 p-0 cursor-pointer">{{ parentDestinationName }}</button>
               </div>
             </div>
 
@@ -81,8 +81,8 @@
                   <span class="text-sm font-medium text-gray-700">{{ item.category }}</span>
                 </div>
                 <div class="flex flex-col gap-1">
-                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Region</span>
-                  <span class="text-sm font-medium text-gray-700">{{ item.region }}</span>
+                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent Destination</span>
+                  <button type="button" (click)="goToParentDestination($event)" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentDestinationName }}</button>
                 </div>
                 <div class="flex flex-col gap-1">
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
@@ -93,12 +93,7 @@
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Last Updated</span>
                   <span class="text-sm font-medium text-gray-700">{{ item.lastUpdated }}</span>
                 </div>
-                <ng-container *ngIf="(item)['parentDestination']">
-                  <div class="flex flex-col gap-1 col-span-2">
-                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent Destination</span>
-                    <span class="text-sm font-medium text-gray-700">{{ (item)['parentDestination'] }}</span>
-                  </div>
-                </ng-container>
+                
                 <ng-container *ngIf="(item)['internalRefId']">
                   <div class="flex flex-col gap-1 col-span-2">
                     <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Internal Reference ID</span>
@@ -276,8 +271,8 @@
                 <span class="text-xs font-medium text-gray-700">{{ item.category }}</span>
               </div>
               <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-400">Region</span>
-                <span class="text-xs font-medium text-gray-700">{{ item.region }}</span>
+                <span class="text-xs text-gray-400">Parent Destination</span>
+                <button type="button" (click)="goToParentDestination($event)" class="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentDestinationName }}</button>
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-xs text-gray-400">Status</span>
@@ -308,7 +303,7 @@
     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
       <div>
         <h4 class="text-sm font-bold text-gray-900">{{ item.name }}</h4>
-        <p class="text-xs text-gray-500 mt-0.5">{{ item.region }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">{{ parentDestinationName }}</p>
       </div>
       <button type="button" (click)="closeMapModal()"
               class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">&times;</button>

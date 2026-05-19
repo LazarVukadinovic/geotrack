@@ -58,7 +58,7 @@
                   <circle cx="12" cy="10" r="3"/>
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
                 </svg>
-                <span>{{ item.region }}</span>
+                <button type="button" (click)="goToParentRegion($event)" class="text-sm font-semibold text-blue-200 hover:text-white hover:underline bg-transparent border-0 p-0 cursor-pointer">{{ parentRegionName }}</button>
               </div>
             </div>
 
@@ -82,7 +82,7 @@
                 </div>
                 <div class="flex flex-col gap-1">
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Region</span>
-                  <span class="text-sm font-medium text-gray-700">{{ item.region }}</span>
+                  <button type="button" (click)="goToParentRegion($event)" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentRegionName }}</button>
                 </div>
                 <div class="flex flex-col gap-1">
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
@@ -255,7 +255,7 @@
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-xs text-gray-400">Region</span>
-                <span class="text-xs font-medium text-gray-700">{{ item.region }}</span>
+                <button type="button" (click)="goToParentRegion($event)" class="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentRegionName }}</button>
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-xs text-gray-400">Status</span>
@@ -286,7 +286,7 @@
     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
       <div>
         <h4 class="text-sm font-bold text-gray-900">{{ item.name }}</h4>
-        <p class="text-xs text-gray-500 mt-0.5">{{ item.region }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">{{ parentRegionName }}</p>
       </div>
       <button type="button" (click)="closeMapModal()"
               class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">&times;</button>

@@ -156,8 +156,11 @@ export const routes: Routes = [
       },
       {
         path: 'regions/:id',
-        canActivate:[nationalManagerGuard],
         loadComponent: () => import('./features/regions/pages/region-detail/region-detail/region-detail.component').then(m=>m.RegionDetailComponent),
+      },
+      {
+        path: 'territories/:id',
+        loadComponent: () => import('./features/territories/pages/territory-detail/territory-detail.component').then(m=>m.TerritoryDetailComponent),
       },
       {
         path: 'user-administration',

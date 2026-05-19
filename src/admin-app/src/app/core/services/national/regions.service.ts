@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { Observable, of, BehaviorSubject } from 'rxjs';
-import { delay, tap } from 'rxjs/operators';
+import { catchError, delay, map, tap } from 'rxjs/operators';
 
 
 export interface RegionListItem {
@@ -45,11 +46,21 @@ export interface RegionTeamMember {
   assignedDate: string;
 }
 
+interface ApiRegionDetail {
+  id: number;
+  name: string;
+  territoryId?: number | null;
+  territoryName?: string | null;
+  managers?: { id: number; email: string }[] | null;
+}
+
 export interface RegionDetail extends RegionListItem {
   fullName: string;
   internalRefId: string;
   shortSummary: string;
   fullDescription: string;
+  territoryId?: string | number | null;
+  territoryName?: string | null;
   team: RegionTeamMember[];
   createdBy: string;
   createdDate: string;
@@ -384,6 +395,8 @@ export function buildDetail(item: RegionListItem): RegionDetail {
     ...item,
     fullName:         ov.fullName         ?? `${item.name}, Srbija`,
     internalRefId:    ov.internalRefId    ?? item.id,
+    territoryId:      ov.territoryId      ?? '1',
+    territoryName:    ov.territoryName    ?? extractTerritoryName(ov.fullName ?? `${item.name}, Srbija`),
     shortSummary:     ov.shortSummary     ?? item.description,
     fullDescription:  ov.fullDescription  ?? item.description,
     team:             ov.team             ?? [],
@@ -398,9 +411,17 @@ export function buildDetail(item: RegionListItem): RegionDetail {
   };
 }
 
+function extractTerritoryName(fullName: string): string {
+  const parts = fullName.split(',').map(part => part.trim()).filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : 'Srbija';
+}
+
 @Injectable({ providedIn: 'root' })
 export class RegionsService {
   readonly lastPage$ = new BehaviorSubject<RegionPage | null>(null);
+
+  constructor(private readonly http: HttpClient) {}
+
   getPage$(req: RegionPageRequest): Observable<RegionPage> {
     let filtered = ALL_REGIONS.filter(r => {
       if (!req.search) return true;
@@ -429,9 +450,57 @@ export class RegionsService {
   }
 
   getDetail$(id: string): Observable<RegionDetail | null> {
+    if (/^\d+$/.test(id)) {
+      return this.http.get<ApiRegionDetail>(`/api/regions/${id}`).pipe(
+        map(dto => this.mapApiDetail(dto)),
+        catchError(() => of(null)),
+      );
+    }
+
     const item = ALL_REGIONS.find(r => r.id === id) ?? null;
     const detail = item ? buildDetail(item) : null;
     return of(detail).pipe(delay(350));
+  }
+
+  private mapApiDetail(dto: ApiRegionDetail): RegionDetail {
+    const territoryName = dto.territoryName?.trim() || 'Territory';
+    return {
+      id: String(dto.id),
+      name: dto.name,
+      description: `${dto.name}${territoryName ? `, ${territoryName}` : ''}`,
+      isTop: false,
+      destinations: 0,
+      places: 0,
+      locations: 0,
+      events: 0,
+      assignedPersons: dto.managers?.length ?? 0,
+      status: 'Active',
+      imageBg: 'linear-gradient(135deg,#dbeafe 0%,#bfdbfe 100%)',
+      fullName: `${dto.name}${territoryName ? `, ${territoryName}` : ''}`,
+      internalRefId: `REG-${dto.id}`,
+      shortSummary: `${dto.name}${territoryName ? ` is part of ${territoryName}.` : ''}`,
+      fullDescription: `${dto.name}${territoryName ? ` is part of ${territoryName}.` : ''}`,
+      territoryId: dto.territoryId ?? null,
+      territoryName,
+      team: (dto.managers ?? []).map(manager => ({
+        id: String(manager.id),
+        name: manager.email,
+        email: manager.email,
+        initials: manager.email.slice(0, 2).toUpperCase(),
+        avatarColor: '#3b82f6',
+        role: 'Regional Manager',
+        status: 'Active',
+        assignedDate: '',
+      })),
+      createdBy: 'System Admin',
+      createdDate: '',
+      lastUpdated: '',
+      activityScore: 0,
+      activityLabel: 'Active',
+      processingLabel: 'Normal',
+      pendingRequests: 0,
+      avgProcessingTime: 0,
+    };
   }
 
   updateDetail$(id: string, patch: Partial<RegionDetail>): Observable<RegionDetail | null> {

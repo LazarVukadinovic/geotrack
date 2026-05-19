@@ -14,6 +14,8 @@ interface ApiPlaceDetail {
   id: number;
   title: string;
   location?: string;
+  locationId?: number | null;
+  locationName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   heroImage?: string;
@@ -82,6 +84,8 @@ export class PlaceDetailService {
           id: String(dto.id),
           title: dto.title,
           location: dto.location ?? '',
+          locationId: dto.locationId != null ? String(dto.locationId) : null,
+          locationName: dto.locationName ?? dto.location ?? null,
           latitude: dto.latitude ?? null,
           longitude: dto.longitude ?? null,
           heroImage: getCoverImageUrl(images, dto.heroImage),

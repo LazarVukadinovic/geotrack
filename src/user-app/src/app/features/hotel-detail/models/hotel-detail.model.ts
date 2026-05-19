@@ -53,6 +53,8 @@ export interface HotelDetail {
   id: string;
   title: string;
   location: string;
+  locationId?: string | null;
+  locationName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   heroImage: string;

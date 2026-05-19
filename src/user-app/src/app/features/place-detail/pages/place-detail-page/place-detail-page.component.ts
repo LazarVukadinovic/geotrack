@@ -1,5 +1,5 @@
 import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { Observable, throwError } from 'rxjs';
@@ -19,7 +19,7 @@ import type { MapEntityMarker, MapEntityType } from '../../../../core/services/m
 @Component({
   selector: 'app-place-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink],
   templateUrl: './place-detail-page.component.html',
   styleUrl: './place-detail-page.component.scss',
 })

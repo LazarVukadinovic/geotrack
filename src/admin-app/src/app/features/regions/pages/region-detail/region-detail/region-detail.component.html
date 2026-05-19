@@ -47,6 +47,14 @@
               ? 'Overview of region information, assigned team, and operational data.'
               : 'Edit region information, assigned team, and operational overview.' }}
           </p>
+          <button
+            *ngIf="parentTerritoryName"
+            type="button"
+            (click)="goToParentTerritory($event)"
+            class="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline bg-transparent border-0 p-0 cursor-pointer"
+          >
+            {{ parentTerritoryName }}
+          </button>
         </div>
       </div>
 
@@ -102,6 +110,20 @@
                     </div>
                   </ng-template>
                 </div>
+              </div>
+
+              <!-- Parent Territory -->
+              <div *ngIf="parentTerritoryName">
+                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  Territory
+                </label>
+                <button
+                  type="button"
+                  (click)="goToParentTerritory($event)"
+                  class="px-3 py-2.5 text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline bg-gray-50 border border-gray-100 rounded-lg cursor-pointer text-left"
+                >
+                  {{ parentTerritoryName }}
+                </button>
               </div>
 
               <!-- Short Summary -->

@@ -1,0 +1,77 @@
+<article class="ehd">
+  <header class="ehd__top-bar">
+    <button type="button" class="ehd__back" aria-label="Go back" (click)="goBack()">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M19 12H5M12 5l-7 7 7 7"/>
+      </svg>
+    </button>
+    <span class="ehd__top-title">Explore</span>
+  </header>
+
+  @if (loadState() === 'loading') {
+    <section class="ehd__panel">
+      <p class="ehd__muted">Loading...</p>
+    </section>
+  } @else if (loadState() === 'notFound') {
+    <section class="ehd__panel">
+      <h1 class="ehd__title">Not found</h1>
+      <p class="ehd__muted">This entity does not exist or is no longer available.</p>
+    </section>
+  } @else if (loadState() === 'error') {
+    <section class="ehd__panel">
+      <h1 class="ehd__title">Could not load details</h1>
+      <p class="ehd__muted">Please try again later.</p>
+    </section>
+  } @else if (detail(); as d) {
+    <section class="ehd__hero-panel">
+      <span class="ehd__badge">{{ d.typeLabel }}</span>
+
+      @if (d.parent) {
+        <a class="ehd__parent" [routerLink]="d.parent.route">
+          <span>{{ d.parent.label }}</span>
+          <strong>{{ d.parent.name }}</strong>
+        </a>
+      }
+
+      <h1 class="ehd__title">{{ d.title }}</h1>
+
+      @if (d.description) {
+        <p class="ehd__description">{{ d.description }}</p>
+      }
+
+      <div class="ehd__meta">
+        @if (d.rating != null) {
+          <span>★ {{ d.rating | number: '1.1-1' }}</span>
+        }
+        @if (d.reviewsCount != null) {
+          <span>{{ d.reviewsCount }} reviews</span>
+        }
+        @if (d.latitude != null && d.longitude != null) {
+          <span>{{ d.latitude | number: '1.4-4' }}, {{ d.longitude | number: '1.4-4' }}</span>
+        }
+      </div>
+    </section>
+
+    @if (d.sections.length > 0) {
+      <section class="ehd__panel">
+        <h2 class="ehd__section-title">Related content</h2>
+        <div class="ehd__section-list">
+          @for (section of d.sections; track $index) {
+            <div class="ehd__section-card">
+              <h3>{{ section.sectionTitle || section.title || section.name || 'Section' }}</h3>
+              @if (section.places) {
+                <span>{{ section.places.length }} places</span>
+              }
+              @if (section.events) {
+                <span>{{ section.events.length }} events</span>
+              }
+              @if (section.locations) {
+                <span>{{ section.locations.length }} locations</span>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
+  }
+</article>

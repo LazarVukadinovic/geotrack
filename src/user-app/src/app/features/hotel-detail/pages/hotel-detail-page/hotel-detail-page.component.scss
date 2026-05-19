@@ -178,6 +178,20 @@
   flex-shrink: 0;
 }
 
+
+.hd__parent-link {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+
+  &:hover,
+  &:focus-visible {
+    color: #ff7a2f;
+  }
+}
+
 // ─── Title ────────────────────────────────────────────────────────────────────
 
 .hd__title {

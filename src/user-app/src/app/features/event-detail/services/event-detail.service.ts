@@ -13,6 +13,10 @@ interface ApiEventDetail {
   id: number;
   title: string;
   location?: string;
+  locationId?: number | null;
+  locationName?: string | null;
+  placeId?: number | null;
+  placeName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   heroImage?: string;
@@ -75,6 +79,10 @@ export class EventDetailService {
           id: String(dto.id),
           title: dto.title,
           location: dto.location ?? '',
+          locationId: dto.locationId != null ? String(dto.locationId) : null,
+          locationName: dto.locationName ?? null,
+          placeId: dto.placeId != null ? String(dto.placeId) : null,
+          placeName: dto.placeName ?? null,
           latitude: dto.latitude ?? null,
           longitude: dto.longitude ?? null,
           heroImage: getCoverImageUrl(images, dto.heroImage),

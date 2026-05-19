@@ -46,6 +46,7 @@ public class DestinationService : IDestinationService
             Longitude = destination.Longitude,
             DestinationTypeId = destination.DestinationTypeId,
             RegionId = destination.RegionId,
+            RegionName = destination.Region?.Name,
             CreatedAt = destination.CreatedAt,
             UpdatedAt = destination.UpdatedAt,
             AverageRating = averageRating,
