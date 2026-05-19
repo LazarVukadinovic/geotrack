@@ -4,6 +4,7 @@ import { delay, tap } from 'rxjs/operators';
 import {
   Country, Territory, TerritoryManager,
   CreateTerritoryRequest, TerritoryPage, TerritoryPageRequest,
+  GeoJsonFeature,
 } from '../../models/administrator/territory.model';
 
 export const ALL_COUNTRIES: Country[] = [
@@ -140,6 +141,7 @@ export const ALL_COUNTRIES: Country[] = [
   { code: 'SC', name: 'Seychelles', continent: 'Africa', flag: '🇸🇨' },
   { code: 'SL', name: 'Sierra Leone', continent: 'Africa', flag: '🇸🇱' },
   { code: 'SO', name: 'Somalia', continent: 'Africa', flag: '🇸🇴' },
+  { code: 'XS', name: 'Somaliland', continent: 'Africa', flag: '🏴' },
   { code: 'ZA', name: 'South Africa', continent: 'Africa', flag: '🇿🇦' },
   { code: 'SS', name: 'South Sudan', continent: 'Africa', flag: '🇸🇸' },
   { code: 'SD', name: 'Sudan', continent: 'Africa', flag: '🇸🇩' },
@@ -218,26 +220,26 @@ const TERRITORY_MANAGERS: TerritoryManager[] = [
 
 let TERRITORIES: Territory[] = [
   {
-    id: 'TERR-001', name: 'Western Europe',
-    countries: ['DE', 'FR', 'IT', 'ES', 'PT', 'NL', 'BE', 'CH', 'AT', 'LU', 'IE'],
+    id: 'TERR-001', name: 'Germany',
+    countries: ['DE'],
     assignedManagerId: 'TM-001', assignedManagerName: 'Marko Stojanović', assignedManagerEmail: 'm.stojanovic@geotrack.com',
     status: 'Active', createdAt: '2024-01-10T09:00:00Z', updatedAt: '2024-03-15T14:30:00Z',
   },
   {
-    id: 'TERR-002', name: 'Balkans & Eastern Europe',
-    countries: ['RS', 'HR', 'BA', 'ME', 'MK', 'SI', 'SK', 'CZ', 'HU', 'RO', 'BG', 'AL'],
+    id: 'TERR-002', name: 'Serbia',
+    countries: ['RS'],
     assignedManagerId: 'TM-002', assignedManagerName: 'Jelena Marković', assignedManagerEmail: 'j.markovic@geotrack.com',
     status: 'Active', createdAt: '2024-01-15T10:00:00Z', updatedAt: '2024-04-20T11:15:00Z',
   },
   {
-    id: 'TERR-003', name: 'Middle East',
-    countries: ['TR', 'SA', 'AE', 'QA', 'KW', 'BH', 'OM', 'JO', 'LB', 'IL'],
+    id: 'TERR-003', name: 'Turkey',
+    countries: ['TR'],
     assignedManagerId: null, assignedManagerName: null, assignedManagerEmail: null,
     status: 'Unassigned', createdAt: '2024-02-01T08:00:00Z', updatedAt: '2024-02-01T08:00:00Z',
   },
   {
-    id: 'TERR-004', name: 'Southeast Asia',
-    countries: ['TH', 'VN', 'ID', 'MY', 'PH', 'SG', 'MM', 'KH', 'LA'],
+    id: 'TERR-004', name: 'Thailand',
+    countries: ['TH'],
     assignedManagerId: 'TM-003', assignedManagerName: 'John Williams', assignedManagerEmail: 'j.williams@geotrack.com',
     status: 'Active', createdAt: '2024-02-20T12:00:00Z', updatedAt: '2024-05-01T09:45:00Z',
   },
@@ -310,10 +312,10 @@ export class TerritoryService {
     );
   }
 
-  updateCountries$(id: string, name: string, countries: string[]): Observable<Territory | null> {
+  updateCountries$(id: string, name: string, countries: string[], zone?: GeoJsonFeature | null): Observable<Territory | null> {
     const idx = TERRITORIES.findIndex(t => t.id === id);
     if (idx === -1) return of(null).pipe(delay(300));
-    TERRITORIES[idx] = { ...TERRITORIES[idx], name, countries, updatedAt: new Date().toISOString() };
+    TERRITORIES[idx] = { ...TERRITORIES[idx], name, countries, zone: zone ?? TERRITORIES[idx].zone, updatedAt: new Date().toISOString() };
     return of({ ...TERRITORIES[idx] }).pipe(delay(400));
   }
 
@@ -330,6 +332,7 @@ export class TerritoryService {
       assignedManagerName: manager?.name ?? null,
       assignedManagerEmail: manager?.email ?? null,
       status: manager ? 'Active' : 'Unassigned',
+      zone: req.zone ?? null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -407,6 +410,52 @@ export class TerritoryService {
         }
       }
       if (idx !== -1) TERRITORY_MANAGERS[idx] = { ...TERRITORY_MANAGERS[idx], assignedTerritoryIds: [] };
+    }
+    return of(undefined).pipe(delay(400));
+  }
+
+  addManager$(user: { id: string; firstName: string; lastName: string; email: string }): Observable<TerritoryManager> {
+    const existing = TERRITORY_MANAGERS.find(m => m.id === `TM-USR-${user.id}`);
+    if (existing) return of(existing).pipe(delay(200));
+
+    const nameParts = [user.firstName, user.lastName].filter(Boolean);
+    const initials = nameParts.map(p => p[0]?.toUpperCase() ?? '').join('').slice(0, 2) || '?';
+    const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
+    const avatarColor = colors[TERRITORY_MANAGERS.length % colors.length];
+
+    const manager: TerritoryManager = {
+      id: `TM-USR-${user.id}`,
+      name: nameParts.join(' ') || user.email,
+      email: user.email,
+      initials,
+      avatarColor,
+      assignedTerritoryIds: [],
+      status: 'Active',
+    };
+    TERRITORY_MANAGERS.push(manager);
+    return of(manager).pipe(delay(400));
+  }
+
+  isAlreadyManager(userId: string): boolean {
+    return TERRITORY_MANAGERS.some(m => m.id === `TM-USR-${userId}`);
+  }
+
+  removeManager$(id: string): Observable<void> {
+    const idx = TERRITORY_MANAGERS.findIndex(m => m.id === id);
+    if (idx !== -1) {
+      for (let i = 0; i < TERRITORIES.length; i++) {
+        if (TERRITORIES[i].assignedManagerId === id) {
+          TERRITORIES[i] = {
+            ...TERRITORIES[i],
+            assignedManagerId: null,
+            assignedManagerName: null,
+            assignedManagerEmail: null,
+            status: 'Unassigned',
+            updatedAt: new Date().toISOString(),
+          };
+        }
+      }
+      TERRITORY_MANAGERS.splice(idx, 1);
     }
     return of(undefined).pipe(delay(400));
   }

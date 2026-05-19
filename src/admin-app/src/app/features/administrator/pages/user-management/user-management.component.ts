@@ -118,6 +118,14 @@ export class UserManagementComponent implements OnInit, OnDestroy {
   suspendTarget: AppUser | null = null;
   isSuspending                  = false;
 
+  // ── Make Territory Manager ────────────────────────────────────────────────
+  makeTerritoryManagerTarget: AppUser | null = null;
+  isMakingManager                            = false;
+
+  // ── Remove Territory Manager role ─────────────────────────────────────────
+  removeTerritoryManagerTarget: TerritoryManager | null = null;
+  isRemovingManagerRole                                 = false;
+
   // ── Manager status change ─────────────────────────────────────────────────
   activateTarget:   TerritoryManager | null = null;
   deactivateTarget: TerritoryManager | null = null;
@@ -265,6 +273,60 @@ export class UserManagementComponent implements OnInit, OnDestroy {
       .subscribe(() => {
         this.isDeleting    = false;
         this.deleteAppUser = null;
+        this.loadAppUsers();
+      });
+  }
+
+  // ── Make Territory Manager ────────────────────────────────────────────────
+  openMakeTerritoryManager(user: AppUser, event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.openDropdownId = null;
+    this.makeTerritoryManagerTarget = { ...user };
+    this.cdr.detectChanges();
+  }
+
+  closeMakeTerritoryManager(): void { this.makeTerritoryManagerTarget = null; this.cdr.detectChanges(); }
+
+  confirmMakeTerritoryManager(): void {
+    if (!this.makeTerritoryManagerTarget) return;
+    this.isMakingManager = true;
+    const user = this.makeTerritoryManagerTarget;
+    this.territorySvc.addManager$({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.managers = this.territorySvc.getAllManagers();
+        this.appUsers = this.appUsers.filter(u => u.id !== user.id);
+        this.totalAppUsers = Math.max(0, this.totalAppUsers - 1);
+        this.isMakingManager = false;
+        this.makeTerritoryManagerTarget = null;
+        this.cdr.detectChanges();
+      });
+  }
+
+  isAlreadyManager(userId: string): boolean {
+    return this.territorySvc.isAlreadyManager(userId);
+  }
+
+  // ── Remove Territory Manager role ─────────────────────────────────────────
+  openRemoveTerritoryManager(mgr: TerritoryManager, event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.openDropdownId = null;
+    this.removeTerritoryManagerTarget = { ...mgr };
+    this.cdr.detectChanges();
+  }
+
+  closeRemoveTerritoryManager(): void { this.removeTerritoryManagerTarget = null; this.cdr.detectChanges(); }
+
+  confirmRemoveTerritoryManager(): void {
+    if (!this.removeTerritoryManagerTarget) return;
+    this.isRemovingManagerRole = true;
+    const id = this.removeTerritoryManagerTarget.id;
+    this.territorySvc.removeManager$(id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.managers = this.territorySvc.getAllManagers();
+        this.isRemovingManagerRole = false;
+        this.removeTerritoryManagerTarget = null;
         this.loadAppUsers();
       });
   }

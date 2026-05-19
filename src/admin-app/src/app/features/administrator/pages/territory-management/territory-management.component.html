@@ -10,7 +10,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <h1 class="text-xl font-bold text-gray-900">Territory Management</h1>
-          <p class="text-sm text-gray-500 mt-0.5">Select countries to create territories and assign them to National Managers</p>
+          <p class="text-sm text-gray-500 mt-0.5">Click a country on the map to assign a Territory Manager</p>
         </div>
         <div class="flex gap-2">
           <button
@@ -23,7 +23,13 @@
             [class.border]="activeTab !== 'map'"
             [class.border-gray-200]="activeTab !== 'map'"
           >
-            Country Selector
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+              </svg>
+              World Map
+            </span>
           </button>
           <button
             (click)="activeTab = 'list'"
@@ -35,186 +41,47 @@
             [class.border]="activeTab !== 'list'"
             [class.border-gray-200]="activeTab !== 'list'"
           >
-            Territory List
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+                <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+                <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+              Territory List
+              @if (totalTerritories > 0) {
+                <span class="ml-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full px-1.5 py-0.5">{{ totalTerritories }}</span>
+              }
+            </span>
           </button>
         </div>
       </div>
 
-      <!-- ── COUNTRY SELECTOR TAB ─────────────────────────────────────────── -->
+      <!-- ── WORLD MAP TAB ───────────────────────────────────────────────── -->
       @if (activeTab === 'map') {
-        <div class="flex gap-4 h-[calc(100vh-200px)]">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col isolate" style="height: calc(100vh - 210px);">
 
-          <!-- Left: continent tabs + country grid -->
-          <div class="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden min-w-0">
-
-            <!-- Continent tabs (wrap, no scroll) -->
-            <div class="flex flex-wrap border-b border-gray-100 flex-shrink-0 px-1 pt-1">
-              @for (cont of continents; track cont) {
-                <button
-                  (click)="activeContinent = cont; countrySearch = ''"
-                  class="px-4 py-2.5 text-xs font-semibold whitespace-nowrap transition-colors border-b-2 -mb-px mr-0.5"
-                  [class.border-blue-600]="activeContinent === cont"
-                  [class.text-blue-600]="activeContinent === cont"
-                  [class.border-transparent]="activeContinent !== cont"
-                  [class.text-gray-500]="activeContinent !== cont"
-                >
-                  {{ cont }}
-                  @if (cont !== 'All') {
-                    <span class="ml-1 text-[10px] text-gray-400">({{ (countriesByContinent[cont] || []).length }})</span>
-                  }
-                </button>
-              }
-            </div>
-
-            <!-- Search within continent -->
-            <div class="px-4 py-3 border-b border-gray-50 flex-shrink-0">
-              <div class="relative">
-                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-                <input
-                  [(ngModel)]="countrySearch"
-                  type="text"
-                  [placeholder]="activeContinent === 'All' ? 'Search all countries…' : 'Search ' + activeContinent + ' countries…'"
-                  class="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-                />
-              </div>
-            </div>
-
-            <!-- Legend -->
-            <div class="px-4 py-2 flex items-center gap-4 text-[10px] text-gray-400 border-b border-gray-50 flex-shrink-0">
-              <span class="flex items-center gap-1.5">
-                <span class="w-3 h-3 rounded border border-gray-200 bg-white inline-block"></span>Available
-              </span>
-              <span class="flex items-center gap-1.5">
-                <span class="w-3 h-3 rounded bg-blue-600 inline-block"></span>Selected
-              </span>
-              <span class="flex items-center gap-1.5">
-                <span class="w-3 h-3 rounded bg-gray-100 border border-dashed border-gray-300 inline-block"></span>Already assigned
-              </span>
-            </div>
-
-            <!-- Country grid -->
-            <div class="flex-1 overflow-y-auto p-4">
-              <div class="flex flex-wrap gap-2">
-                @for (country of filteredCountries; track country.code) {
-                  <button
-                    (click)="!isAlreadyAssigned(country.code) && toggleCountry(country.code)"
-                    [disabled]="isAlreadyAssigned(country.code) && !isSelected(country.code)"
-                    class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all border"
-                    [class.bg-blue-600]="isSelected(country.code)"
-                    [class.text-white]="isSelected(country.code)"
-                    [class.border-blue-600]="isSelected(country.code)"
-                    [class.shadow-sm]="isSelected(country.code)"
-                    [class.bg-gray-50]="isAlreadyAssigned(country.code) && !isSelected(country.code)"
-                    [class.text-gray-400]="isAlreadyAssigned(country.code) && !isSelected(country.code)"
-                    [class.border-dashed]="isAlreadyAssigned(country.code) && !isSelected(country.code)"
-                    [class.border-gray-300]="isAlreadyAssigned(country.code) && !isSelected(country.code)"
-                    [class.cursor-not-allowed]="isAlreadyAssigned(country.code) && !isSelected(country.code)"
-                    [class.bg-white]="!isSelected(country.code) && !isAlreadyAssigned(country.code)"
-                    [class.text-gray-700]="!isSelected(country.code) && !isAlreadyAssigned(country.code)"
-                    [class.border-gray-200]="!isSelected(country.code) && !isAlreadyAssigned(country.code)"
-                    [class.hover:border-blue-400]="!isAlreadyAssigned(country.code)"
-                    [class.hover:bg-blue-50]="!isSelected(country.code) && !isAlreadyAssigned(country.code)"
-                  >
-                    <span class="text-base leading-none">{{ country.flag }}</span>
-                    <span>{{ country.name }}</span>
-                  </button>
-                }
-                @empty {
-                  <p class="text-sm text-gray-400 py-4">No countries match your search.</p>
-                }
-              </div>
-            </div>
+          <!-- Map legend bar -->
+          <div class="flex items-center gap-5 px-5 py-3 border-b border-gray-100 flex-shrink-0">
+            <span class="text-xs font-semibold text-gray-600">Legend</span>
+            <span class="flex items-center gap-1.5 text-xs text-gray-500">
+              <span class="w-3.5 h-3.5 rounded-sm border border-slate-300 bg-slate-200 inline-block"></span>
+              Available
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-gray-500">
+              <span class="w-3.5 h-3.5 rounded-sm bg-blue-400 inline-block"></span>
+              Assigned
+            </span>
+            <span class="ml-auto text-[11px] text-gray-400">Hover over a country for details · Click to assign or view</span>
           </div>
 
-          <!-- Right: selection panel + create form -->
-          <div class="w-96 flex flex-col gap-3 flex-shrink-0">
-
-            <!-- Selected countries -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden flex-1">
-              <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-                <span class="text-sm font-semibold text-gray-900">Selected Countries</span>
-                @if (selectedCodes.size > 0) {
-                  <button (click)="clearSelection()" class="text-xs text-red-500 hover:text-red-700 transition-colors bg-transparent border-0 cursor-pointer">
-                    Clear all
-                  </button>
-                }
-              </div>
-
-              @if (selectedCodes.size === 0) {
-                <div class="flex-1 flex flex-col items-center justify-center px-4 py-8 text-center">
-                  <svg class="w-8 h-8 text-gray-200 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-                    <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
-                  </svg>
-                  <p class="text-xs text-gray-400">Click countries on the left to select them</p>
-                </div>
-              } @else {
-                <div class="flex-1 overflow-y-auto p-3">
-                  <div class="flex flex-wrap gap-1.5">
-                    @for (country of selectedCountries; track country.code) {
-                      <span class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-blue-200">
-                        {{ country.flag }} {{ country.name }}
-                        <button (click)="removeSelected(country.code)" class="ml-0.5 text-blue-400 hover:text-blue-600 bg-transparent border-0 cursor-pointer leading-none text-base">&times;</button>
-                      </span>
-                    }
-                  </div>
-                  <p class="text-[10px] text-gray-400 mt-3 text-center">{{ selectedCodes.size }} countr{{ selectedCodes.size === 1 ? 'y' : 'ies' }} selected</p>
-                </div>
-              }
-            </div>
-
-            <!-- Create territory form -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <p class="text-sm font-semibold text-gray-900 mb-3">Create Territory</p>
-
-              <div class="mb-3">
-                <label class="block text-xs font-medium text-gray-600 mb-1">Territory Name</label>
-                <input
-                  [(ngModel)]="newName"
-                  type="text"
-                  placeholder="e.g. Western Europe"
-                  class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-                />
-              </div>
-
-              <div class="mb-4">
-                <label class="block text-xs font-medium text-gray-600 mb-1">Assign to Manager <span class="text-gray-400 font-normal">(optional)</span></label>
-                <div class="relative">
-                  <select
-                    [(ngModel)]="newManagerId"
-                    class="w-full appearance-none px-3 py-2 pr-8 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white"
-                  >
-                    <option value="">— Unassigned —</option>
-                    @for (mgr of activeManagers; track mgr.id) {
-                      <option [value]="mgr.id">{{ mgr.name }}</option>
-                    }
-                  </select>
-                  <svg class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
-                </div>
-              </div>
-
-              <button
-                (click)="createTerritory()"
-                [disabled]="!canCreate || isCreating"
-                class="w-full py-2 rounded-lg text-sm font-semibold transition-colors"
-                [class.bg-blue-600]="canCreate && !isCreating"
-                [class.text-white]="canCreate && !isCreating"
-                [class.hover:bg-blue-700]="canCreate && !isCreating"
-                [class.bg-gray-100]="!canCreate || isCreating"
-                [class.text-gray-400]="!canCreate || isCreating"
-                [class.cursor-not-allowed]="!canCreate || isCreating"
-              >
-                {{ isCreating ? 'Creating…' : 'Create Territory' }}
-              </button>
-
-              @if (selectedCodes.size === 0) {
-                <p class="text-[10px] text-gray-400 text-center mt-2">Select at least one country first</p>
-              }
-            </div>
+          <!-- Map -->
+          <div class="flex-1 min-h-0">
+            <app-territory-world-map
+              style="height:100%;display:block;"
+              [assignments]="countryAssignments"
+              [highlightCode]="highlightCountryCode"
+              (countryClick)="onMapCountryClick($event)"
+            />
           </div>
         </div>
       }
@@ -227,7 +94,7 @@
           <div class="flex items-center gap-2 px-5 py-4 border-b border-gray-100">
 
             <!-- Search -->
-            <div class="relative w-[20rem]">
+            <div class="relative w-72">
               <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
@@ -235,32 +102,10 @@
                 [(ngModel)]="listSearch"
                 (ngModelChange)="onListSearchChange()"
                 type="text"
-                placeholder="Search territories, managers, countries…"
+                placeholder="Search territories or managers…"
                 class="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
               />
             </div>
-
-            <!-- Country filter button -->
-            <button
-              (click)="openCountryFilter($event)"
-              class="flex items-center gap-2 px-3 py-2 text-sm font-medium border rounded-lg transition-colors"
-              [class.bg-blue-50]="filterCountryCodes.length > 0"
-              [class.text-blue-700]="filterCountryCodes.length > 0"
-              [class.border-blue-300]="filterCountryCodes.length > 0"
-              [class.bg-white]="filterCountryCodes.length === 0"
-              [class.text-gray-600]="filterCountryCodes.length === 0"
-              [class.border-gray-200]="filterCountryCodes.length === 0"
-              [class.hover:bg-gray-50]="filterCountryCodes.length === 0"
-            >
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="3"/><path d="M5 5h2M17 5h2M5 19h2M17 19h2M5 12h2M17 12h2"/>
-                <line x1="8" y1="5" x2="8" y2="19"/><line x1="16" y1="5" x2="16" y2="19"/>
-              </svg>
-              Filter by countries
-              @if (filterCountryCodes.length > 0) {
-                <span class="bg-blue-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{{ filterCountryCodes.length }}</span>
-              }
-            </button>
 
             <!-- Sort button -->
             <button
@@ -279,22 +124,6 @@
             <span class="ml-auto text-sm text-gray-400">{{ totalTerritories }} total</span>
           </div>
 
-          <!-- Active country filter chips -->
-          @if (filterCountryCodes.length > 0) {
-            <div class="flex items-center gap-2 px-5 py-2 bg-blue-50 border-b border-blue-100 text-xs text-blue-700">
-              <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <span class="font-medium">Filtered by:</span>
-              @for (code of filterCountryCodes; track code) {
-                <span class="flex items-center gap-0.5">{{ countryFlag(code) }} {{ countryName(code) }}</span>
-              }
-              <button (click)="clearCountryFilter()" class="ml-auto text-blue-500 hover:text-blue-700 bg-transparent border-0 cursor-pointer font-medium">
-                Clear
-              </button>
-            </div>
-          }
-
           <!-- Table -->
           @if (isLoading) {
             <div class="flex items-center justify-center py-16 text-sm text-gray-400">Loading…</div>
@@ -302,16 +131,16 @@
             <div class="flex flex-col items-center justify-center py-16 text-center">
               <svg class="w-10 h-10 text-gray-200 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
               </svg>
               <p class="text-sm text-gray-500 font-medium">No territories found</p>
-              <p class="text-xs text-gray-400 mt-1">Switch to Country Selector to create one</p>
+              <p class="text-xs text-gray-400 mt-1">Switch to World Map and click a country to create one</p>
             </div>
           } @else {
             <table class="w-full">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-5 py-3">Territory</th>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Countries</th>
+                  <th class="text-left text-xs font-semibold text-gray-500 px-5 py-3">Country</th>
                   <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Assigned Manager</th>
                   <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Status</th>
                   <th class="px-4 py-3 w-10"></th>
@@ -324,19 +153,13 @@
                     (click)="openDetail(t, $event)"
                   >
                     <td class="px-5 py-4">
-                      <p class="text-sm font-semibold text-gray-900">{{ t.name }}</p>
-                      <p class="text-xs text-gray-400 mt-0.5">{{ t.id }}</p>
-                    </td>
-                    <td class="px-4 py-4">
-                      <div class="flex flex-wrap gap-1 max-w-xs">
-                        @for (code of t.countries.slice(0, 5); track code) {
-                          <span class="text-sm" [title]="countryName(code)">{{ countryFlag(code) }}</span>
-                        }
-                        @if (t.countries.length > 5) {
-                          <span class="text-xs text-gray-400 self-center">+{{ t.countries.length - 5 }} more</span>
-                        }
+                      <div class="flex items-center gap-2.5">
+                        <span class="text-2xl leading-none">{{ countryFlag(t.countries[0]) }}</span>
+                        <div>
+                          <p class="text-sm font-semibold text-gray-900">{{ countryName(t.countries[0]) }}</p>
+                          <p class="text-[10px] text-gray-400 mt-0.5">{{ t.id }}</p>
+                        </div>
                       </div>
-                      <p class="text-[10px] text-gray-400 mt-1">{{ t.countries.length }} countr{{ t.countries.length === 1 ? 'y' : 'ies' }}</p>
                     </td>
                     <td class="px-4 py-4">
                       @if (t.assignedManagerId) {
@@ -361,7 +184,7 @@
                         {{ t.status }}
                       </span>
                     </td>
-                    <td class="px-4 py-4 relative">
+                    <td class="px-4 py-4">
                       <button
                         data-action="menu"
                         (click)="toggleDropdown(t.id, $event)"
@@ -383,63 +206,6 @@
     </main>
   </div>
 </div>
-
-<!-- ── Country filter portal ──────────────────────────────────────────────── -->
-@if (showCountryFilter) {
-  <div
-    class="fixed z-40 w-72 bg-white rounded-xl shadow-xl border border-gray-100 p-3"
-    [style.top.px]="filterDropdownPos.top"
-    [style.left.px]="filterDropdownPos.left"
-    (click)="$event.stopPropagation()"
-  >
-    <p class="text-xs font-semibold text-gray-700 mb-2">Filter territories by countries</p>
-    <p class="text-[10px] text-gray-400 mb-2">Shows territories containing ALL selected countries</p>
-
-    @if (filterCountryCodes.length > 0) {
-      <div class="flex flex-wrap gap-1 mb-2">
-        @for (code of filterCountryCodes; track code) {
-          <span class="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 ring-1 ring-blue-200">
-            {{ countryFlag(code) }} {{ countryName(code) }}
-            <button (click)="removeFilterCountry(code)" class="text-blue-400 hover:text-blue-700 bg-transparent border-0 cursor-pointer text-xs leading-none">&times;</button>
-          </span>
-        }
-      </div>
-    }
-
-    <div class="relative mb-2">
-      <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-      <input
-        [(ngModel)]="countryFilterQuery"
-        type="text"
-        placeholder="Type a country name…"
-        class="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-      />
-    </div>
-
-    @if (countryFilterSuggestions.length > 0) {
-      <div class="rounded-lg border border-gray-100 overflow-hidden">
-        @for (c of countryFilterSuggestions; track c.code) {
-          <button
-            (click)="addFilterCountry(c.code)"
-            class="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 bg-transparent border-0 cursor-pointer"
-          >
-            <span>{{ c.flag }}</span><span>{{ c.name }}</span>
-          </button>
-        }
-      </div>
-    } @else if (countryFilterQuery.trim() && countryFilterSuggestions.length === 0) {
-      <p class="text-xs text-gray-400 py-1">No countries found</p>
-    }
-
-    @if (filterCountryCodes.length > 0) {
-      <button (click)="clearCountryFilter()" class="mt-2 text-xs text-red-500 hover:text-red-700 bg-transparent border-0 cursor-pointer">
-        Clear filter
-      </button>
-    }
-  </div>
-}
 
 <!-- ── Sort dropdown portal ───────────────────────────────────────────────── -->
 @if (listSortOpen) {
@@ -463,17 +229,16 @@
   </div>
 }
 
-<!-- ── Dropdown menu (portal-style fixed position) ───────────────────────── -->
+<!-- ── Row dropdown ───────────────────────────────────────────────────────── -->
 @if (openDropdownId) {
   <div
-    class="fixed z-50 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 overflow-hidden"
+    class="fixed z-50 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 overflow-hidden"
     [style.top.px]="dropdownPos.top"
     [style.right.px]="dropdownPos.right"
     (click)="$event.stopPropagation()"
   >
     @for (t of territories; track t.id) {
       @if (t.id === openDropdownId) {
-        <!-- Edit -->
         <button
           (click)="openEdit(t)"
           class="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
@@ -482,33 +247,8 @@
             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
-          Edit Territory
+          Edit
         </button>
-        <div class="my-0.5 border-t border-gray-100"></div>
-        <!-- Active → Unassign Manager; Unassigned → Assign Manager -->
-        @if (t.status === 'Active') {
-          <button
-            (click)="openUnassignConfirm(t)"
-            class="w-full text-left px-4 py-2.5 text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              <line x1="19" y1="8" x2="23" y2="12"/><line x1="23" y1="8" x2="19" y2="12"/>
-            </svg>
-            Unassign Manager
-          </button>
-        } @else {
-          <button
-            (click)="openAssignModal(t)"
-            class="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-          >
-            <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-            </svg>
-            Assign Manager
-          </button>
-        }
         <div class="my-0.5 border-t border-gray-100"></div>
         <button
           (click)="openDeleteConfirm(t)"
@@ -518,27 +258,97 @@
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
             <path d="M9 6V4h6v2"/>
           </svg>
-          Delete Territory
+          Delete
         </button>
       }
     }
   </div>
 }
 
-<!-- ── Assign Manager Modal ───────────────────────────────────────────────── -->
-@if (assignTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeAssignModal()">
+<!-- ── Assign from map modal ──────────────────────────────────────────────── -->
+@if (mapClickedCountry) {
+  <div class="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeMapAssignModal()">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-      <h2 class="text-base font-bold text-gray-900 mb-1">Assign Manager</h2>
-      <p class="text-sm text-gray-500 mb-4">Assign a National Manager to <strong>{{ assignTarget.name }}</strong></p>
 
-      <label class="block text-xs font-medium text-gray-600 mb-1.5">National Manager</label>
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0 text-2xl">
+          {{ countryFlag(mapClickedCountry.code) }}
+        </div>
+        <div>
+          <h2 class="text-base font-bold text-gray-900">Assign Territory Manager</h2>
+          <p class="text-sm text-gray-500">{{ mapClickedCountry.name }}</p>
+        </div>
+      </div>
+
+      <label class="block text-xs font-medium text-gray-600 mb-1.5">Territory Manager <span class="text-red-500">*</span></label>
+      <div class="relative mb-1.5">
+        <select
+          [(ngModel)]="mapAssignManagerId"
+          class="w-full appearance-none px-3 py-2.5 pr-9 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white transition-colors"
+          [class.border-gray-200]="mapAssignManagerId"
+          [class.border-red-300]="!mapAssignManagerId"
+        >
+          <option value="">— Select a manager —</option>
+          @for (mgr of activeManagers; track mgr.id) {
+            <option [value]="mgr.id">{{ mgr.name }} · {{ mgr.email }}</option>
+          }
+        </select>
+        <svg class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+      @if (!mapAssignManagerId) {
+        <p class="text-[11px] text-red-500 mb-5">A Territory Manager must be selected.</p>
+      } @else {
+        <div class="mb-5"></div>
+      }
+
+      <div class="flex gap-3 justify-end">
+        <button (click)="closeMapAssignModal()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
+          Cancel
+        </button>
+        <button
+          (click)="confirmMapAssign()"
+          [disabled]="isCreatingFromMap || !mapAssignManagerId"
+          class="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors border-0 cursor-pointer disabled:opacity-60"
+        >
+          {{ isCreatingFromMap ? 'Saving…' : 'Confirm' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ── Edit Territory Modal (country + manager) ───────────────────────────── -->
+@if (editTarget) {
+  <div class="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeEdit()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
+
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-base font-bold text-gray-900">Edit Territory</h2>
+        <button (click)="closeEdit()" class="p-1.5 text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer rounded-lg hover:bg-gray-100 transition-colors">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Country (read-only) -->
+      <label class="block text-xs font-semibold text-gray-600 mb-2">Country</label>
+      <div class="flex items-center gap-2 mb-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+        <span class="text-xl">{{ countryFlag(editCountryCode) }}</span>
+        <span class="text-sm font-semibold text-gray-800">{{ countryName(editCountryCode) }}</span>
+        <span class="ml-auto text-xs text-gray-400">Cannot be changed</span>
+      </div>
+
+      <!-- Manager select -->
+      <label class="block text-xs font-semibold text-gray-600 mb-1.5">Assigned Manager <span class="text-gray-400 font-normal">(optional)</span></label>
       <div class="relative mb-6">
         <select
-          [(ngModel)]="assignManagerId"
+          [(ngModel)]="editAssignedManagerId"
           class="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white"
         >
-          <option value="" disabled selected>Choose a manager…</option>
+          <option value="">— Unassigned —</option>
           @for (mgr of activeManagers; track mgr.id) {
             <option [value]="mgr.id">{{ mgr.name }} · {{ mgr.email }}</option>
           }
@@ -549,51 +359,15 @@
       </div>
 
       <div class="flex gap-3 justify-end">
-        <button (click)="closeAssignModal()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
+        <button (click)="closeEdit()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
           Cancel
         </button>
         <button
-          (click)="confirmAssign()"
-          [disabled]="isAssigning || !assignManagerId"
+          (click)="saveEdit()"
+          [disabled]="isEditing"
           class="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors border-0 cursor-pointer disabled:opacity-60"
         >
-          {{ isAssigning ? 'Saving…' : 'Confirm' }}
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- ── Unassign Confirm Modal ─────────────────────────────────────────────── -->
-@if (unassignTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeUnassignConfirm()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-            <line x1="19" y1="8" x2="23" y2="12"/><line x1="23" y1="8" x2="19" y2="12"/>
-          </svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-gray-900">Unassign Manager</h2>
-          <p class="text-sm text-gray-500">This will set the territory to Unassigned</p>
-        </div>
-      </div>
-      <p class="text-sm text-gray-700 mb-1">
-        You are about to unassign <strong>{{ unassignTarget.assignedManagerName }}</strong> from <strong>{{ unassignTarget.name }}</strong>.
-      </p>
-      <p class="text-sm text-gray-500 mb-6">The territory will remain with its countries but will have no assigned manager.</p>
-      <div class="flex gap-3 justify-end">
-        <button (click)="closeUnassignConfirm()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
-          Cancel
-        </button>
-        <button
-          (click)="confirmUnassign()"
-          [disabled]="isUnassigning"
-          class="px-5 py-2 text-sm font-semibold text-white bg-amber-500 rounded-xl hover:bg-amber-600 transition-colors border-0 cursor-pointer disabled:opacity-60"
-        >
-          {{ isUnassigning ? 'Unassigning…' : 'Unassign Manager' }}
+          {{ isEditing ? 'Saving…' : 'Save Changes' }}
         </button>
       </div>
     </div>
@@ -602,7 +376,7 @@
 
 <!-- ── Delete Confirm Modal ───────────────────────────────────────────────── -->
 @if (deleteTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeDeleteConfirm()">
+  <div class="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeDeleteConfirm()">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
       <div class="flex items-center gap-3 mb-4">
         <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
@@ -615,9 +389,10 @@
           <p class="text-sm text-gray-500">This action cannot be undone</p>
         </div>
       </div>
-      <p class="text-sm text-gray-700 mb-1">You are about to delete <strong>{{ deleteTarget.name }}</strong>.</p>
-      <p class="text-sm text-gray-500 mb-6">
-        This will remove the territory and unassign its {{ deleteTarget.countries.length }} countries from the manager.
+      <p class="text-sm text-gray-700 mb-6">
+        You are about to delete the territory for
+        <strong>{{ countryName(deleteTarget.countries[0]) }}</strong>.
+        The country will become available on the map again.
       </p>
       <div class="flex gap-3 justify-end">
         <button (click)="closeDeleteConfirm()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
@@ -628,7 +403,7 @@
           [disabled]="isDeleting"
           class="px-5 py-2 text-sm font-semibold text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors border-0 cursor-pointer disabled:opacity-60"
         >
-          {{ isDeleting ? 'Deleting…' : 'Delete Territory' }}
+          {{ isDeleting ? 'Deleting…' : 'Delete' }}
         </button>
       </div>
     </div>
@@ -637,19 +412,22 @@
 
 <!-- ── Territory Detail Modal ─────────────────────────────────────────────── -->
 @if (detailTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeDetail()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col" (click)="$event.stopPropagation()">
+  <div class="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeDetail()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col" (click)="$event.stopPropagation()">
 
       <!-- Header -->
       <div class="flex items-start justify-between px-6 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
-        <div class="flex-1 min-w-0 pr-4">
-          <div class="flex items-center gap-2 mb-1">
-            <h2 class="text-base font-bold text-gray-900 truncate">{{ detailTarget.name }}</h2>
-            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium flex-shrink-0" [class]="statusClass(detailTarget.status)">
-              {{ detailTarget.status }}
-            </span>
+        <div class="flex items-center gap-2.5">
+          <span class="text-3xl leading-none">{{ countryFlag(detailTarget.countries[0]) }}</span>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base font-bold text-gray-900">{{ countryName(detailTarget.countries[0]) }}</h2>
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium flex-shrink-0" [class]="statusClass(detailTarget.status)">
+                {{ detailTarget.status }}
+              </span>
+            </div>
+            <p class="text-xs text-gray-400">{{ detailTarget.id }}</p>
           </div>
-          <p class="text-xs text-gray-400">{{ detailTarget.id }}</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <button
@@ -670,8 +448,16 @@
         </div>
       </div>
 
-      <!-- Body -->
-      <div class="overflow-y-auto flex-1 px-6 py-4 space-y-5">
+      <div class="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+
+        <!-- Mini map -->
+        <div class="h-44 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
+          <app-country-mini-map
+            style="height:100%;display:block;"
+            [countryCode]="detailTarget.countries[0]"
+            [countryName]="countryName(detailTarget.countries[0])"
+          />
+        </div>
 
         <!-- Manager -->
         <div>
@@ -694,23 +480,8 @@
           }
         </div>
 
-        <!-- Countries -->
-        <div>
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            Countries <span class="text-gray-400 font-normal normal-case">({{ detailTarget.countries.length }})</span>
-          </p>
-          <div class="flex flex-wrap gap-1.5">
-            @for (code of detailTarget.countries; track code) {
-              <span class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
-                <span class="text-sm leading-none">{{ countryFlag(code) }}</span>
-                {{ countryName(code) }}
-              </span>
-            }
-          </div>
-        </div>
-
         <!-- Dates -->
-        <div class="grid grid-cols-2 gap-3 pt-1">
+        <div class="grid grid-cols-2 gap-3">
           <div class="p-3 bg-gray-50 rounded-xl">
             <p class="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Created</p>
             <p class="text-xs font-semibold text-gray-700">{{ formatDate(detailTarget.createdAt) }}</p>
@@ -722,179 +493,9 @@
         </div>
       </div>
 
-      <!-- Footer -->
       <div class="px-6 py-4 border-t border-gray-100 flex-shrink-0">
         <button (click)="closeDetail()" class="w-full py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
           Close
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- ── Edit Territory Modal ───────────────────────────────────────────────── -->
-@if (editTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeEdit()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col" (click)="$event.stopPropagation()">
-
-      <!-- Header -->
-      <div class="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
-        <div>
-          <h2 class="text-base font-bold text-gray-900">Edit Territory</h2>
-          <p class="text-sm text-gray-400">{{ editTarget.id }}</p>
-        </div>
-        <button (click)="closeEdit()" class="p-1.5 text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer rounded-lg hover:bg-gray-100 transition-colors">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- Body -->
-      <div class="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-
-        <!-- Name -->
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1.5">Territory Name</label>
-          <input
-            [(ngModel)]="editName"
-            type="text"
-            placeholder="Territory name"
-            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-          />
-        </div>
-        <!-- Manager assignment in edit -->
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1.5">
-            Assigned Manager
-          </label>
-
-          @if (editTarget!.assignedManagerId) {
-            <!-- Currently assigned — show info + unassign button -->
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <div class="flex items-center gap-2">
-                <span
-                  class="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                  [style.background]="managerColor(editTarget!.assignedManagerId)"
-                >
-                  {{ managerInitials(editTarget!.assignedManagerId) }}
-                </span>
-                <div>
-                  <p class="text-xs font-medium text-gray-800">{{ editTarget!.assignedManagerName }}</p>
-                  <p class="text-[10px] text-gray-400">{{ editTarget!.assignedManagerEmail }}</p>
-                </div>
-              </div>
-              <button
-                (click)="editUnassignManager()"
-                class="text-xs text-amber-600 hover:text-amber-700 font-medium bg-transparent border-0 cursor-pointer px-2 py-1 rounded-lg hover:bg-amber-50 transition-colors"
-              >
-                Unassign
-              </button>
-            </div>
-          } @else {
-            <!-- Unassigned — show select -->
-            <div class="relative">
-              <select
-                [(ngModel)]="editManagerId"
-                (ngModelChange)="editAssignManager($event)"
-                class="w-full appearance-none px-3 py-2 pr-8 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white"
-              >
-                <option value="">— Unassigned —</option>
-                @for (mgr of activeManagers; track mgr.id) {
-                  <option [value]="mgr.id">{{ mgr.name }}</option>
-                }
-              </select>
-              <svg class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </div>
-          }
-        </div>
-        <!-- Selected countries chips -->
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1.5">
-            Selected Countries <span class="text-gray-400 font-normal">({{ editCountryCodes.size }})</span>
-          </label>
-          @if (editCountryCodes.size === 0) {
-            <p class="text-xs text-gray-400 italic">No countries selected — add from the list below</p>
-          } @else {
-            <div class="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-xl border border-gray-100">
-              @for (country of editSelectedCountries; track country.code) {
-                <span class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-blue-200">
-                  {{ country.flag }} {{ country.name }}
-                  <button (click)="removeEditCountry(country.code)" class="ml-0.5 text-blue-400 hover:text-blue-600 bg-transparent border-0 cursor-pointer text-base leading-none">&times;</button>
-                </span>
-              }
-            </div>
-          }
-        </div>
-
-        <!-- Country browser -->
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1.5">Add / Remove Countries</label>
-
-          <!-- Continent tabs -->
-          <div class="flex flex-wrap border-b border-gray-100 mb-2">
-            @for (cont of continents; track cont) {
-              <button
-                (click)="editActiveContinent = cont; editCountrySearch = ''"
-                class="px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
-                [class.border-blue-600]="editActiveContinent === cont"
-                [class.text-blue-600]="editActiveContinent === cont"
-                [class.border-transparent]="editActiveContinent !== cont"
-                [class.text-gray-500]="editActiveContinent !== cont"
-              >{{ cont }}</button>
-            }
-          </div>
-
-          <!-- Search -->
-          <div class="relative mb-2">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              [(ngModel)]="editCountrySearch"
-              type="text"
-              placeholder="Search countries…"
-              class="w-full pl-9 pr-4 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-            />
-          </div>
-
-          <!-- Grid -->
-          <div class="max-h-48 overflow-y-auto">
-            <div class="flex flex-wrap gap-1.5">
-              @for (country of editFilteredCountries; track country.code) {
-                <button
-                  (click)="toggleEditCountry(country.code)"
-                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border"
-                  [class.bg-blue-600]="editCountryCodes.has(country.code)"
-                  [class.text-white]="editCountryCodes.has(country.code)"
-                  [class.border-blue-600]="editCountryCodes.has(country.code)"
-                  [class.bg-white]="!editCountryCodes.has(country.code)"
-                  [class.text-gray-700]="!editCountryCodes.has(country.code)"
-                  [class.border-gray-200]="!editCountryCodes.has(country.code)"
-                  [class.hover:border-blue-400]="!editCountryCodes.has(country.code)"
-                  [class.hover:bg-blue-50]="!editCountryCodes.has(country.code)"
-                >
-                  <span>{{ country.flag }}</span><span>{{ country.name }}</span>
-                </button>
-              }
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Footer -->
-      <div class="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end flex-shrink-0">
-        <button (click)="closeEdit()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
-          Cancel
-        </button>
-        <button
-          (click)="saveEdit()"
-          [disabled]="!canSaveEdit || isEditing"
-          class="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors border-0 cursor-pointer disabled:opacity-60"
-        >
-          {{ isEditing ? 'Saving…' : 'Save Changes' }}
         </button>
       </div>
     </div>

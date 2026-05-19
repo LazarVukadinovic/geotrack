@@ -427,7 +427,7 @@ export class SettingsComponent implements OnInit {
       case 'regionalmanager':
         return 'Regional Manager';
       case 'nationalmanager':
-        return 'National Manager';
+        return 'Territory Manager';
       case 'admin':
         return 'Admin';
       default:

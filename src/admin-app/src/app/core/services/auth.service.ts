@@ -34,7 +34,7 @@ export class AuthService {
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
   readonly isAdministrator = computed(() => this._currentUser()?.role === 'Administrator');
-  readonly isNationalManager = computed(() => this._currentUser()?.role === 'National Manager');
+  readonly isNationalManager = computed(() => this._currentUser()?.role === 'Territory Manager');
   readonly isRegionalManager = computed(() => this._currentUser()?.role === 'Regional Manager');
 
   constructor(@Optional() private readonly http: HttpClient | null) {}
@@ -133,7 +133,7 @@ export class AuthService {
     switch (role) {
       case 'Administrator':
         return '/admin-dashboard';
-      case 'National Manager':
+      case 'Territory Manager':
         return '/national-dashboard';
       case 'Regional Manager':
         return '/dashboard';
@@ -190,8 +190,8 @@ export class AuthService {
       return 'Regional Manager';
     }
 
-    if (roles.some(role => ['admin', 'superadmin', 'nationalmanager'].includes(this.normalizeRole(role)))) {
-      return 'National Manager';
+    if (roles.some(role => ['admin', 'superadmin', 'nationalmanager', 'territorymanager'].includes(this.normalizeRole(role)))) {
+      return 'Territory Manager';
     }
 
     throw new Error('This account is not assigned to an admin role.');
