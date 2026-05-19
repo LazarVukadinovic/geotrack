@@ -153,7 +153,7 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  goBack(): void { this.router.navigate(['/regions']); }
+  goBack(): void { this.router.navigate(['/territory/regions']); }
 
   // ── Assign User Modal ────────────────────────────────────────────
 

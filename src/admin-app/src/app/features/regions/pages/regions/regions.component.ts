@@ -147,7 +147,13 @@ export class AllRegionsComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onSearchChange(): void { this.searchSubject.next(this.searchQuery); }
 
-  navigateToAdd(): void { this.router.navigate(['/regions/new']); }
+  onTerritoryChange(territoryId: number): void {
+    this.svc.setActiveTerritoryId(territoryId);
+    this.displayCount = PAGE_SIZE_INITIAL;
+    this.loadItems();
+  }
+
+  navigateToAdd(): void { this.router.navigate(['/territory/regions/new']); }
 
   private saveListState(): void {
     this.svc.saveListState({
@@ -162,13 +168,13 @@ export class AllRegionsComponent implements OnInit, AfterViewInit, OnDestroy {
   editRegion(item: RegionListItem, event?: MouseEvent): void {
     event?.stopPropagation();
     this.saveListState();
-    this.router.navigate(['/regions', item.id], {
+    this.router.navigate(['/territory/regions', item.id], {
       state: { region: item, editMode: true },
     });
   }
   viewRegion(item: RegionListItem): void {
     this.saveListState();
-    this.router.navigate(['/regions', item.id], {
+    this.router.navigate(['/territory/regions', item.id], {
       state: { region: item, editMode: false },
     });
   }

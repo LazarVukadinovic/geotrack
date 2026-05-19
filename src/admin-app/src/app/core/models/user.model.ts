@@ -1,4 +1,4 @@
-export type UserRole = 'National Manager' | 'Regional Manager';
+export type UserRole = 'Territory Manager' | 'Regional Manager';
 
 export interface User {
   id: string;
