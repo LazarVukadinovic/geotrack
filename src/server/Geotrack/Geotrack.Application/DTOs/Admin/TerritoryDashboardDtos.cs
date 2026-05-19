@@ -39,9 +39,11 @@ public class TerritoryRegionHealthDto
     public int DestinationsCount { get; set; }
     public int LocationsCount { get; set; }
     public int PlacesCount { get; set; }
+    public int StaysCount { get; set; }
     public int EventsCount { get; set; }
     public int PendingRequestsCount { get; set; }
     public int ActivityScore { get; set; }
+    public List<TerritoryRegionManagerDto> AssignedManagers { get; set; } = new();
     public List<string> AssignedManagersPreview { get; set; } = new();
 }
 
@@ -86,25 +88,184 @@ public class TerritoryDashboardDto
 public class TerritoryRegionDirectoryItemDto
 {
     public int Id { get; set; }
+    public int RegionId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string RegionName { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public string TerritoryName { get; set; } = string.Empty;
+    public int TerritoryId { get; set; }
+    public string TerritoryDisplayName { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public List<string> ManagerNames { get; set; } = new();
     public int DestinationsCount { get; set; }
     public int LocationsCount { get; set; }
     public int PlacesCount { get; set; }
+    public int StaysCount { get; set; }
     public int EventsCount { get; set; }
     public int PendingRequestsCount { get; set; }
+    public int AssignedPersonsCount { get; set; }
     public int ActiveManagersCount { get; set; }
     public string? ManagerDisplayName { get; set; }
+    public List<TerritoryRegionManagerDto> AssignedManagers { get; set; } = new();
+    public int? HealthScore { get; set; }
+    public int ActivityScore { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? DetailRoute { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
 public class TerritoryRegionDirectoryResponseDto
 {
+    public TerritoryAssignedTerritoryDto? Territory { get; set; }
     public List<TerritoryRegionDirectoryItemDto> Items { get; set; } = new();
     public int TotalCount { get; set; }
     public int Skip { get; set; }
     public int Take { get; set; }
     public bool HasMore { get; set; }
+}
+
+public class TerritoryRegionDetailDto
+{
+    public TerritoryRegionDetailRegionDto Region { get; set; } = new();
+    public List<TerritoryRegionManagerDto> Managers { get; set; } = new();
+    public TerritoryRegionSummaryDto Summary { get; set; } = new();
+    public TerritoryHealthDto Health { get; set; } = new();
+    public TerritoryRegionContentPreviewDto Content { get; set; } = new();
+    public TerritoryRegionAnalyticsDto Analytics { get; set; } = new();
+}
+
+public class TerritoryRegionDetailRegionDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public int TerritoryId { get; set; }
+    public string TerritoryDisplayName { get; set; } = string.Empty;
+    public string? ImageUrl { get; set; }
+    public double? CenterLatitude { get; set; }
+    public double? CenterLongitude { get; set; }
+}
+
+public class TerritoryRegionManagerDto
+{
+    public int UserId { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Initials { get; set; } = string.Empty;
+    public string? AvatarUrl { get; set; }
+    public string Role { get; set; } = string.Empty;
+    public DateTime AssignedAt { get; set; }
+}
+
+public class TerritoryRegionSummaryDto
+{
+    public int DestinationsCount { get; set; }
+    public int LocationsCount { get; set; }
+    public int PlacesCount { get; set; }
+    public int StaysCount { get; set; }
+    public int EventsCount { get; set; }
+    public int PendingRequestsCount { get; set; }
+    public int ActiveUsers { get; set; }
+    public int Visits { get; set; }
+    public int Saves { get; set; }
+    public int Reviews { get; set; }
+    public double AverageRating { get; set; }
+}
+
+public class TerritoryHealthDto
+{
+    public int? Score { get; set; }
+    public string StatusLabel { get; set; } = "Insufficient data";
+    public List<TerritoryHealthInsightDto> Drivers { get; set; } = new();
+    public List<TerritoryHealthInsightDto> Recommendations { get; set; } = new();
+}
+
+public class TerritoryHealthInsightDto
+{
+    public string Label { get; set; } = string.Empty;
+    public string Detail { get; set; } = string.Empty;
+    public string Severity { get; set; } = "info";
+}
+
+public class TerritoryRegionContentPreviewDto
+{
+    public List<TerritoryRegionContentItemDto> Destinations { get; set; } = new();
+    public List<TerritoryRegionContentItemDto> Locations { get; set; } = new();
+    public List<TerritoryRegionContentItemDto> Places { get; set; } = new();
+    public List<TerritoryRegionContentItemDto> Stays { get; set; } = new();
+    public List<TerritoryRegionContentItemDto> Events { get; set; } = new();
+}
+
+public class TerritoryRegionAnalyticsDto
+{
+    public List<TerritoryRegionTopEntityDto> TopEntities { get; set; } = new();
+    public List<TerritoryRegionActivityDto> RecentActivity { get; set; } = new();
+}
+
+public class TerritoryRegionTopEntityDto
+{
+    public string EntityType { get; set; } = string.Empty;
+    public int EntityId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int Views { get; set; }
+    public string? ImageUrl { get; set; }
+}
+
+public class TerritoryRegionActivityDto
+{
+    public string EventType { get; set; } = string.Empty;
+    public string? EntityType { get; set; }
+    public int? EntityId { get; set; }
+    public string? EntityName { get; set; }
+    public DateTime OccurredAt { get; set; }
+}
+
+public class TerritoryRegionContentResponseDto
+{
+    public string EntityType { get; set; } = string.Empty;
+    public List<TerritoryRegionContentItemDto> Items { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int Skip { get; set; }
+    public int Take { get; set; }
+    public bool HasMore { get; set; }
+}
+
+public class TerritoryRegionContentItemDto
+{
+    public int Id { get; set; }
+    public string EntityType { get; set; } = string.Empty;
+    public string? PublicDetailRoute { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Summary { get; set; }
+    public string? Description { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public int RegionId { get; set; }
+    public string RegionName { get; set; } = string.Empty;
+    public int? DestinationId { get; set; }
+    public string? DestinationName { get; set; }
+    public int? LocationId { get; set; }
+    public string? LocationName { get; set; }
+    public int? PlaceId { get; set; }
+    public string? PlaceName { get; set; }
+    public string? ParentName { get; set; }
+    public string? TypeName { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public DateTime? StartsAt { get; set; }
+    public int LocationsCount { get; set; }
+    public int PlacesCount { get; set; }
+    public int StaysCount { get; set; }
+    public int EventsCount { get; set; }
+    public int Views { get; set; }
+    public int Saves { get; set; }
+    public int ExternalClicks { get; set; }
+    public int ReviewsCount { get; set; }
+    public double? AverageRating { get; set; }
+    public string? ImageUrl { get; set; }
+    public TerritoryHealthDto? Health { get; set; }
 }
 
 public class TerritoryContentDirectoryItemDto

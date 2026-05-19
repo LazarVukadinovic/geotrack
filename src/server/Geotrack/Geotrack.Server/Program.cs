@@ -156,6 +156,7 @@ builder.Services.AddScoped<IUserNotificationRepository, UserNotificationReposito
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
 builder.Services.AddScoped<ITerritoryDashboardService, TerritoryDashboardService>();
+builder.Services.AddScoped<ITerritoryUserAdminService, TerritoryUserAdminService>();
 builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
 builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
 builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();

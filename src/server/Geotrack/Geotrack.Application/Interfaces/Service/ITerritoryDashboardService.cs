@@ -14,6 +14,20 @@ public interface ITerritoryDashboardService
         string? sort,
         int skip,
         int take);
+    Task<TerritoryRegionDetailDto> GetRegionDetailAsync(
+        int userId,
+        int regionId,
+        int? territoryId,
+        string? period);
+    Task<TerritoryRegionContentResponseDto> GetRegionContentAsync(
+        int userId,
+        int regionId,
+        int? territoryId,
+        string? entityType,
+        string? search,
+        string? sort,
+        int skip,
+        int take);
     Task<TerritoryContentDirectoryResponseDto> GetContentAsync(
         int userId,
         int? territoryId,
