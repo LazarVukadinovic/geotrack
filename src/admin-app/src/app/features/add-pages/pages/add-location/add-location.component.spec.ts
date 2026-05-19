@@ -109,7 +109,7 @@ describe('NewLocationComponent', () => {
           useValue: {
             fullName: 'Manager User',
             getUser: () => ({ email: 'manager@example.com', role: 'RegionalManager' }),
-            isNationalManager: () => false,
+            isTerritoryManager: () => false,
             logout: vi.fn(),
           },
         },

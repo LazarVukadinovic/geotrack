@@ -102,6 +102,10 @@ export class SettingsComponent implements OnInit {
 
   get currentRole(): string {
     const roles = this.lastProfile?.roles ?? [];
+    if (roles.some(role => this.normalizeRole(role) === 'territorymanager')) {
+      return 'Territory Manager';
+    }
+
     if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {
       return 'Regional Manager';
     }
@@ -416,8 +420,9 @@ export class SettingsComponent implements OnInit {
     switch (this.normalizeRole(role)) {
       case 'regionalmanager':
         return 'Regional Manager';
+      case 'territorymanager':
       case 'nationalmanager':
-        return 'National Manager';
+        return 'Territory Manager';
       case 'admin':
         return 'Admin';
       default:
