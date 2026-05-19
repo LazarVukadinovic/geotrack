@@ -2333,6 +2333,9 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Location")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");

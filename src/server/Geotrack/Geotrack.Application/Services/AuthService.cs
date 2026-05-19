@@ -87,6 +87,7 @@ public class AuthService : IAuthService
             request,
             missingFieldsMessage: "Email and password are required",
             invalidCredentialsMessage: "Invalid credentials");
+        MarkSuccessfulLogin(user);
         return await IssueTokenPairAsync(user.Id, request.RememberMe);
     }
 
@@ -127,6 +128,7 @@ public class AuthService : IAuthService
             invalidCredentialsMessage: InvalidCredentialsMessage);
 
         var adminUser = await GetAdminUserAsync(user.Id);
+        MarkSuccessfulLogin(user);
         var pair = await IssueTokenPairAsync(user.Id, request.RememberMe);
 
         return ToAdminLoginResponse(pair, adminUser);
@@ -140,6 +142,7 @@ public class AuthService : IAuthService
             invalidCredentialsMessage: InvalidCredentialsMessage);
 
         var adminUser = await GetRegionalAdminUserAsync(user.Id);
+        MarkSuccessfulLogin(user);
         var pair = await IssueTokenPairAsync(user.Id, request.RememberMe);
 
         return ToAdminLoginResponse(pair, adminUser);
@@ -337,6 +340,12 @@ public class AuthService : IAuthService
         return string.IsNullOrWhiteSpace(user.Username)
             ? user.Email
             : user.Username;
+    }
+
+    private static void MarkSuccessfulLogin(User user)
+    {
+        user.LastLoginAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTime.UtcNow;
     }
 
     private static bool IsValidEmail(string email)

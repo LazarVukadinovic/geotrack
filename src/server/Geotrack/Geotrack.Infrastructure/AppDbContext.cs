@@ -918,6 +918,8 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Location)
                 .HasMaxLength(200);
 
+            entity.Property(x => x.LastLoginAt);
+
             entity.Property(x => x.InterfaceLanguage)
                 .IsRequired()
                 .HasMaxLength(10)
