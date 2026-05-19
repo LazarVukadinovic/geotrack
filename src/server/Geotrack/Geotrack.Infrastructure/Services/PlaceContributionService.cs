@@ -24,7 +24,7 @@ public class PlaceContributionService : IPlaceContributionService
     private const string ManagedContributionMediaPrefix = "/media/uploads/contributions/";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly HashSet<string> OwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> LegacyOwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "stay",
         "restaurant",
@@ -96,6 +96,22 @@ public class PlaceContributionService : IPlaceContributionService
         var contribution = await query.SingleOrDefaultAsync();
 
         return contribution is null ? null : MapDetail(contribution);
+    }
+
+    public async Task<List<ContributionPlaceTypeDto>> GetPlaceTypesAsync()
+    {
+        return await _db.PlaceTypes
+            .AsNoTracking()
+            .OrderBy(type => type.Name)
+            .ThenBy(type => type.Id)
+            .Select(type => new ContributionPlaceTypeDto
+            {
+                Id = type.Id,
+                Name = type.Name,
+                Description = type.Description,
+                IsOwnable = type.IsOwnable
+            })
+            .ToListAsync();
     }
 
     public async Task<PlaceContributionDetailDto> CreateAsync(
@@ -661,8 +677,7 @@ public class PlaceContributionService : IPlaceContributionService
         if (request.StayTypeId.HasValue || !string.IsNullOrWhiteSpace(request.StayType))
             return true;
 
-        var placeTypeName = await ResolveRequestedPlaceTypeNameAsync(request);
-        return IsOwnershipProofRequiredPlaceType(placeTypeName);
+        return await ResolveRequestedPlaceTypeOwnableAsync(request);
     }
 
     private async Task<string?> ResolveRequestedPlaceTypeNameAsync(UpsertPlaceContributionDto request)
@@ -682,10 +697,30 @@ public class PlaceContributionService : IPlaceContributionService
         return placeTypeName ?? throw new KeyNotFoundException("Place type not found.");
     }
 
-    private static bool IsOwnershipProofRequiredPlaceType(string? placeTypeName)
+    private async Task<bool> ResolveRequestedPlaceTypeOwnableAsync(UpsertPlaceContributionDto request)
     {
-        var normalized = NormalizeOptional(placeTypeName);
-        return normalized is not null && OwnershipProofRequiredPlaceTypes.Contains(normalized);
+        if (request.PlaceTypeId.HasValue)
+        {
+            var isOwnable = await _db.PlaceTypes
+                .AsNoTracking()
+                .Where(placeType => placeType.Id == request.PlaceTypeId.Value)
+                .Select(placeType => (bool?)placeType.IsOwnable)
+                .SingleOrDefaultAsync();
+
+            return isOwnable ?? throw new KeyNotFoundException("Place type not found.");
+        }
+
+        var placeTypeName = NormalizeOptional(request.PlaceType);
+        if (placeTypeName is null)
+            return false;
+
+        var dbIsOwnable = await _db.PlaceTypes
+            .AsNoTracking()
+            .Where(placeType => placeType.Name.ToLower() == placeTypeName)
+            .Select(placeType => (bool?)placeType.IsOwnable)
+            .SingleOrDefaultAsync();
+
+        return dbIsOwnable ?? LegacyOwnershipProofRequiredPlaceTypes.Contains(placeTypeName);
     }
 
     private async Task<bool> UserCanManagePlaceAsync(int userId, int placeId)
@@ -864,6 +899,7 @@ public class PlaceContributionService : IPlaceContributionService
         {
             Name = ToTitle(displayName),
             Description = normalized == "stay" ? "Accommodation and stay listings" : $"{ToTitle(displayName)} listings",
+            IsOwnable = LegacyOwnershipProofRequiredPlaceTypes.Contains(normalized),
             CreatedAt = DateTime.UtcNow
         };
 

@@ -1,5 +1,14 @@
 namespace Geotrack.Application.DTOs.Contributions;
 
+
+public class ContributionPlaceTypeDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool IsOwnable { get; set; }
+}
+
 public class PlaceContributionImageDto
 {
     public int Id { get; set; }

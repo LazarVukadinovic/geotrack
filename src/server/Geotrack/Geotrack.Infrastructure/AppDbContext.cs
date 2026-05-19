@@ -771,6 +771,9 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Description)
                 .HasMaxLength(1000);
 
+            entity.Property(x => x.IsOwnable)
+                .HasDefaultValue(false);
+
             entity.HasIndex(x => x.Name)
                 .IsUnique();
         });

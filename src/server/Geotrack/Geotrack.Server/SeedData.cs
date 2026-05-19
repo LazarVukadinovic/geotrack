@@ -151,11 +151,18 @@ public static class SeedData
             return locationType;
         }
 
-        async Task<PlaceType> EnsurePlaceTypeAsync(string name, string description)
+        async Task<PlaceType> EnsurePlaceTypeAsync(string name, string description, bool isOwnable = false)
         {
             var placeType = await db.PlaceTypes.FirstOrDefaultAsync(x => x.Name == name);
             if (placeType is not null)
             {
+                if (placeType.IsOwnable != isOwnable)
+                {
+                    placeType.IsOwnable = isOwnable;
+                    placeType.UpdatedAt = now;
+                    await db.SaveChangesAsync();
+                }
+
                 return placeType;
             }
 
@@ -163,6 +170,7 @@ public static class SeedData
             {
                 Name = name,
                 Description = description,
+                IsOwnable = isOwnable,
                 CreatedAt = now
             };
 
@@ -345,11 +353,11 @@ public static class SeedData
         await db.SaveChangesAsync();
 
         var ptBeach = await EnsurePlaceTypeAsync("Beach", "Beaches and coastal swimming areas");
-        var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments");
-        var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops");
+        var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments", isOwnable: true);
+        var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops", isOwnable: true);
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
-        var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation");
+        var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation", isOwnable: true);
         var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
         var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
         var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
@@ -2249,11 +2257,18 @@ public static class SeedData
             return locationType;
         }
 
-        async Task<PlaceType> EnsurePlaceTypeAsync(string name, string description)
+        async Task<PlaceType> EnsurePlaceTypeAsync(string name, string description, bool isOwnable = false)
         {
             var placeType = await db.PlaceTypes.FirstOrDefaultAsync(x => x.Name == name);
             if (placeType is not null)
             {
+                if (placeType.IsOwnable != isOwnable)
+                {
+                    placeType.IsOwnable = isOwnable;
+                    placeType.UpdatedAt = now;
+                    await db.SaveChangesAsync();
+                }
+
                 return placeType;
             }
 
@@ -2261,6 +2276,7 @@ public static class SeedData
             {
                 Name = name,
                 Description = description,
+                IsOwnable = isOwnable,
                 CreatedAt = now
             };
 
@@ -2663,12 +2679,12 @@ public static class SeedData
         var waterfrontType = await EnsureLocationTypeAsync("Waterfront Area", "River, lake or waterfront area");
         var mountainAreaType = await EnsureLocationTypeAsync("Mountain Area", "Mountain or outdoor area");
 
-        var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments");
-        var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops");
+        var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments", isOwnable: true);
+        var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops", isOwnable: true);
         var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
-        var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation");
+        var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation", isOwnable: true);
         var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
         var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
         var ptBeach = await EnsurePlaceTypeAsync("Beach", "Beaches and swimming areas");
@@ -2903,11 +2919,18 @@ public static class SeedData
             return location;
         }
 
-        async Task<PlaceType> EnsurePlaceTypeAsync(string name, string description)
+        async Task<PlaceType> EnsurePlaceTypeAsync(string name, string description, bool isOwnable = false)
         {
             var placeType = await db.PlaceTypes.FirstOrDefaultAsync(x => x.Name == name);
             if (placeType is not null)
             {
+                if (placeType.IsOwnable != isOwnable)
+                {
+                    placeType.IsOwnable = isOwnable;
+                    placeType.UpdatedAt = now;
+                    await db.SaveChangesAsync();
+                }
+
                 return placeType;
             }
 
@@ -2915,6 +2938,7 @@ public static class SeedData
             {
                 Name = name,
                 Description = description,
+                IsOwnable = isOwnable,
                 CreatedAt = now
             };
 
@@ -3370,12 +3394,12 @@ public static class SeedData
         await AddLocationTagsIfMissingAsync(trsteno, "relaxed-area", "nature");
 
         var ptBeach = await EnsurePlaceTypeAsync("Beach", "Beaches and coastal swimming areas");
-        var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments");
-        var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops");
+        var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments", isOwnable: true);
+        var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops", isOwnable: true);
         var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
-        var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation");
+        var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation", isOwnable: true);
         var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
         var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
 

@@ -438,7 +438,8 @@ public class RegionalPlaceService : IRegionalPlaceService
             {
                 Id = type.Id,
                 Name = type.Name,
-                Description = type.Description
+                Description = type.Description,
+                IsOwnable = type.IsOwnable
             })
             .ToListAsync();
     }

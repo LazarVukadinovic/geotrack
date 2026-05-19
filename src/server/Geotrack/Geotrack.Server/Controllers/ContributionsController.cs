@@ -71,6 +71,12 @@ public class ContributionsController : ControllerBase
         });
     }
 
+    [HttpGet("place-types")]
+    public async Task<ActionResult<List<ContributionPlaceTypeDto>>> GetPlaceTypes()
+    {
+        return Ok(await _contributions.GetPlaceTypesAsync());
+    }
+
     [HttpPost]
     [HttpPost("places")]
     [HttpPost("stays")]

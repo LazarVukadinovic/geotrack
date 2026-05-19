@@ -32,6 +32,7 @@ export interface ContributionListItem {
 }
 
 export interface ContributionDetail extends ContributionListItem {
+  placeTypeId: number | null;
   address: string;
   city: string;
   region: string;
@@ -90,6 +91,7 @@ interface ApiContributionListItem {
 }
 
 interface ApiContributionDetail extends ApiContributionListItem {
+  placeTypeId?: number | null;
   address: string;
   city: string;
   region: string;
@@ -115,6 +117,7 @@ interface ApiContributionDetail extends ApiContributionListItem {
 interface UpsertPlaceContributionPayload {
   type: 'CreatePlace';
   name: string;
+  placeTypeId?: number | null;
   placeType: string;
   stayType?: string;
   address: string;
@@ -204,6 +207,7 @@ export class ContributionsService {
       basics: {
         name: detail.name,
         placeType: detail.placeType || (detail.stayType ? 'Stay' : 'Place'),
+        placeTypeId: detail.placeTypeId,
         stayType: detail.stayType || 'Hotel',
         address: detail.address,
         city: detail.city,
@@ -242,11 +246,11 @@ export class ContributionsService {
     const features = normalizeFeatures(draft.features);
     const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
-    const requiresOwnershipProof = requiresOwnershipProofPlaceType(basics.placeType);
 
     const payload: UpsertPlaceContributionPayload = {
       type: 'CreatePlace',
       name: basics.name,
+      placeTypeId: basics.placeTypeId,
       placeType: basics.placeType || 'Place',
       ...(isAccommodation ? { stayType: basics.stayType || 'Hotel' } : {}),
       address: basics.address,
@@ -298,7 +302,7 @@ export class ContributionsService {
       formData.append('galleryImages', file);
     }
 
-    if (requiresOwnershipProof && basics.ownershipProofFile) {
+    if (basics.ownershipProofFile) {
       formData.append('ownershipProofDocument', basics.ownershipProofFile);
     }
 
@@ -379,20 +383,10 @@ function isAccommodationPlaceType(placeType: string | null | undefined): boolean
   return (placeType ?? '').trim().toLowerCase() === 'stay';
 }
 
-function requiresOwnershipProofPlaceType(placeType: string | null | undefined): boolean {
-  switch ((placeType ?? '').trim().toLowerCase()) {
-    case 'stay':
-    case 'restaurant':
-    case 'cafe':
-      return true;
-    default:
-      return false;
-  }
-}
-
 function mapDetail(item: ApiContributionDetail): ContributionDetail {
   return {
     ...mapListItem(item),
+    placeTypeId: item.placeTypeId ?? null,
     address: item.address ?? '',
     city: item.city ?? '',
     region: item.region ?? '',

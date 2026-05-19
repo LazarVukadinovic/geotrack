@@ -1,6 +1,7 @@
-import { Component, input, output, signal, OnDestroy, effect, ElementRef, viewChild, inject } from '@angular/core';
+import { Component, input, output, signal, OnDestroy, OnInit, effect, ElementRef, viewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import maplibregl, { Map as MapLibreMap, MapStyleImageMissingEvent } from 'maplibre-gl';
 import { firstValueFrom } from 'rxjs';
 import { MapApiService } from '../../../../../../core/services/map-api.service';
@@ -10,11 +11,19 @@ const MAP_STYLE_URL = '/map-style.json';
 const DEFAULT_PICKER_LAT = 44.82;
 const DEFAULT_PICKER_LNG = 20.46;
 const MAX_OWNERSHIP_PROOF_BYTES = 10 * 1024 * 1024;
-const OWNERSHIP_PROOF_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe']);
+const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe']);
+
+export interface ContributionPlaceTypeOption {
+  id: number;
+  name: string;
+  description?: string | null;
+  isOwnable: boolean;
+}
 
 export interface BasicsData {
   name: string;
   placeType: string;
+  placeTypeId: number | null;
   stayType: string;
   address: string;
   city: string;
@@ -42,12 +51,13 @@ export interface BasicsData {
   templateUrl: './step-basics.component.html',
   styleUrl: './step-basics.component.css',
 })
-export class StepBasicsComponent implements OnDestroy {
+export class StepBasicsComponent implements OnInit, OnDestroy {
   private readonly mapApi = inject(MapApiService);
+  private readonly http = inject(HttpClient);
   data = input<BasicsData | null>(null);
   saved = output<BasicsData>();
 
-  placeTypes = ['Landmark', 'Restaurant', 'Cafe', 'Nature', 'Beach', 'Stay'];
+  placeTypes = signal<ContributionPlaceTypeOption[]>(defaultPlaceTypes());
   stayTypes = ['Hotel', 'Villa', 'Apartment', 'Resort', 'Cabin', 'Glamping', 'Hostel'];
   coverPreviewUrl = signal('');
   cardPreviewUrl = signal('');
@@ -65,14 +75,19 @@ export class StepBasicsComponent implements OnDestroy {
   private pickerMapResizeFrame: number | null = null;
 
   form: BasicsData = {
-    name: '', placeType: 'Landmark', stayType: 'Hotel', address: '', city: '',
+    name: '', placeType: 'Landmark', placeTypeId: null, stayType: 'Hotel', address: '', city: '',
     region: '', country: '', imageUrl: '', cardImageUrl: '', cardImageFile: null, coverImageFile: null, galleryImageUrls: [], galleryImageFiles: [], ownershipProofFile: null,
     ownershipProofDocumentUrl: null, ownershipProofOriginalFileName: null,
     lat: null, lng: null, imgBgPosition: '50% 50%', imgBgSize: 'cover'
   };
 
-  selectPlaceType(type: string): void {
-    this.form.placeType = type;
+  ngOnInit(): void {
+    this.loadPlaceTypes();
+  }
+
+  selectPlaceType(type: ContributionPlaceTypeOption): void {
+    this.form.placeType = type.name;
+    this.form.placeTypeId = type.id;
     this.ownershipProofError.set('');
 
     if (!this.requiresOwnershipProof()) {
@@ -81,6 +96,11 @@ export class StepBasicsComponent implements OnDestroy {
       this.form.ownershipProofOriginalFileName = null;
       this.ownershipProofFileName.set('');
     }
+  }
+
+  isPlaceTypeSelected(type: ContributionPlaceTypeOption): boolean {
+    return (this.form.placeTypeId !== null && this.form.placeTypeId > 0 && this.form.placeTypeId === type.id) ||
+      normalizePlaceType(this.form.placeType) === normalizePlaceType(type.name);
   }
 
   onOwnershipProofSelected(e: Event): void {
@@ -326,7 +346,55 @@ export class StepBasicsComponent implements OnDestroy {
   }
 
   requiresOwnershipProof(): boolean {
-    return OWNERSHIP_PROOF_PLACE_TYPES.has(normalizePlaceType(this.form.placeType));
+    const selectedType = this.selectedPlaceType();
+    return selectedType?.isOwnable ?? FALLBACK_OWNABLE_PLACE_TYPES.has(normalizePlaceType(this.form.placeType));
+  }
+
+  private selectedPlaceType(): ContributionPlaceTypeOption | undefined {
+    const selectedId = this.form.placeTypeId;
+    const selectedName = normalizePlaceType(this.form.placeType);
+
+    return this.placeTypes().find(type =>
+      (selectedId !== null && selectedId > 0 && type.id === selectedId) ||
+      normalizePlaceType(type.name) === selectedName);
+  }
+
+  private loadPlaceTypes(): void {
+    this.http.get<ContributionPlaceTypeOption[]>('/api/contributions/place-types').subscribe({
+      next: (types) => {
+        const normalized = (types ?? [])
+          .filter(type => !!type?.name?.trim())
+          .map(type => ({
+            id: type.id,
+            name: type.name.trim(),
+            description: type.description ?? null,
+            isOwnable: !!type.isOwnable,
+          }));
+
+        if (normalized.length === 0) return;
+
+        this.placeTypes.set(normalized);
+        this.syncSelectedPlaceTypeWithOptions();
+      },
+      error: () => {
+        this.syncSelectedPlaceTypeWithOptions();
+      },
+    });
+  }
+
+  private syncSelectedPlaceTypeWithOptions(): void {
+    const selected = this.selectedPlaceType();
+    if (selected) {
+      this.form.placeType = selected.name;
+      this.form.placeTypeId = selected.id;
+      return;
+    }
+
+    const fallback = this.placeTypes()[0];
+    if (!this.form.placeType && fallback) {
+      this.form.placeType = fallback.name;
+      this.form.placeTypeId = fallback.id;
+    }
   }
 
   ownershipProofHelpText(): string {
@@ -371,6 +439,7 @@ export class StepBasicsComponent implements OnDestroy {
       const d = this.data();
       if (d) {
         Object.assign(this.form, d);
+        this.syncSelectedPlaceTypeWithOptions();
         if (d.imageUrl) this.coverPreviewUrl.set(d.imageUrl);
         if (d.cardImageUrl) this.cardPreviewUrl.set(d.cardImageUrl);
         this.galleryPreviewUrls.set(d.galleryImageUrls ?? []);
@@ -492,6 +561,17 @@ export class StepBasicsComponent implements OnDestroy {
       el.removeEventListener('touchend', this.boundTouchEnd);
     }
   }
+}
+
+function defaultPlaceTypes(): ContributionPlaceTypeOption[] {
+  return [
+    { id: 0, name: 'Landmark', description: null, isOwnable: false },
+    { id: 0, name: 'Restaurant', description: null, isOwnable: true },
+    { id: 0, name: 'Cafe', description: null, isOwnable: true },
+    { id: 0, name: 'Nature', description: null, isOwnable: false },
+    { id: 0, name: 'Beach', description: null, isOwnable: false },
+    { id: 0, name: 'Stay', description: null, isOwnable: true },
+  ];
 }
 
 function normalizePlaceType(value: string | null | undefined): string {

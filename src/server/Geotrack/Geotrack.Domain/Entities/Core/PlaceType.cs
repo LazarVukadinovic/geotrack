@@ -8,6 +8,7 @@ public class PlaceType
 
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public bool IsOwnable { get; set; }
 
     public ICollection<Place> Places { get; set; } = new List<Place>();
 
