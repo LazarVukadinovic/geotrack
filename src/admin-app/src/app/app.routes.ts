@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, nationalManagerGuard, regionalManagerGuard } from './core/guards/auth.guard';
+import { authGuard, regionalManagerGuard, territoryManagerGuard } from './core/guards/auth.guard';
 export const routes: Routes = [
   // Redirect root → login
   { path: '', redirectTo: 'login', pathMatch: 'full' },
@@ -157,29 +157,39 @@ export const routes: Routes = [
           import('./features/analytics/pages/analytics-page/analytics-page/analytics-page.component')
             .then(m => m.AnalyticsPageComponent),
       },
+      { path: 'national-analytics', redirectTo: 'territory/analytics', pathMatch: 'full' },
+      { path: 'national-dashboard', redirectTo: 'territory/overview', pathMatch: 'full' },
+      { path: 'regions', redirectTo: 'territory/regions', pathMatch: 'full' },
+      { path: 'regions/:id', redirectTo: 'territory/regions/:id', pathMatch: 'full' },
+      { path: 'user-administration', redirectTo: 'territory/users', pathMatch: 'full' },
       {
-        path:'national-analytics',
-        canActivate:[nationalManagerGuard],
+        path:'territory/analytics',
+        canActivate:[territoryManagerGuard],
         loadComponent: () => import('./features/analytics/pages/national-analytics/national-analytics/national-analytics.component').then(m=>m.NationalAnalyticsComponent),
       },
       {
-        path: 'national-dashboard',
-        canActivate:[nationalManagerGuard],
+        path: 'territory/overview',
+        canActivate:[territoryManagerGuard],
         loadComponent: () => import('./features/dashboard/pages/national-dashboard/national-dashboard.component').then(m=>m.NationalDashboardComponent),
       },
       {
-        path: 'regions',
-        canActivate:[nationalManagerGuard],
+        path: 'territory/regions',
+        canActivate:[territoryManagerGuard],
         loadComponent: () => import('./features/regions/pages/regions/regions.component').then(m=>m.AllRegionsComponent),
       },
       {
-        path: 'regions/:id',
-        canActivate:[nationalManagerGuard],
+        path: 'territory/content',
+        canActivate:[territoryManagerGuard],
+        loadComponent: () => import('./features/territory/pages/content-directory/content-directory.component').then(m=>m.TerritoryContentDirectoryComponent),
+      },
+      {
+        path: 'territory/regions/:id',
+        canActivate:[territoryManagerGuard],
         loadComponent: () => import('./features/regions/pages/region-detail/region-detail/region-detail.component').then(m=>m.RegionDetailComponent),
       },
       {
-        path: 'user-administration',
-        canActivate: [nationalManagerGuard],
+        path: 'territory/users',
+        canActivate: [territoryManagerGuard],
         loadComponent: () =>
           import('./features/users/pages/user-administration/user-administration/user-administration.component').then(m => m.UserAdministrationComponent),
       },

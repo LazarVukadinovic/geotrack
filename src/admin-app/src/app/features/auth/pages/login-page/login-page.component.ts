@@ -84,22 +84,13 @@ export class LoginComponent implements OnInit {
     this.authService.login(this.email(), this.password(), this.rememberMe()).subscribe({
       next: () => {
         this.isLoading.set(false);
-        this.router.navigateByUrl(this.safeReturnUrl() ?? this.authService.getHomeRoute());
+        this.router.navigateByUrl(this.authService.getHomeRoute());
       },
       error: (err: Error) => {
         this.isLoading.set(false);
         this.authError.set(err.message ?? 'Invalid email or password. Please try again.');
       },
     });
-  }
-
-  private safeReturnUrl(): string | null {
-    const value = this.route.snapshot.queryParamMap.get('returnUrl');
-    if (!value || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/login')) {
-      return null;
-    }
-
-    return value;
   }
 
   setSubmitHover(event: Event, isHover: boolean): void {

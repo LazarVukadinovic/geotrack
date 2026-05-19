@@ -12,6 +12,7 @@ interface AdminAuthUserResponse {
   avatarUrl?: string | null;
   roles: string[];
   canAccessRegionalAdmin: boolean;
+  canAccessTerritoryAdmin?: boolean;
 }
 
 interface LoginResponse {
@@ -26,6 +27,7 @@ interface LoginResponse {
 export class AuthService {
   private static readonly sessionHintKey = 'geotrack_admin_session';
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
+  private static readonly activeTerritoryStorageKey = 'geotrack_admin_active_territory_id';
 
   private accessToken: string | null = null;
   private accessTokenExpiresAtMs: number | null = null;
@@ -34,7 +36,7 @@ export class AuthService {
 
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
-  readonly isNationalManager = computed(() => this._currentUser()?.role === 'National Manager');
+  readonly isTerritoryManager = computed(() => this._currentUser()?.role === 'Territory Manager');
   readonly isRegionalManager = computed(() => this._currentUser()?.role === 'Regional Manager');
 
   constructor(@Optional() private readonly http: HttpClient | null) {}
@@ -137,6 +139,8 @@ export class AuthService {
   getHomeRoute(): string {
     const role: UserRole | undefined = this._currentUser()?.role;
     switch (role) {
+      case 'Territory Manager':
+        return '/territory/overview';
       case 'Regional Manager':
         return '/dashboard';
       default:
@@ -184,12 +188,12 @@ export class AuthService {
   }
 
   private resolveAdminRole(roles: string[]): UserRole {
-    if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {
-      return 'Regional Manager';
+    if (roles.some(role => ['territorymanager', 'nationalmanager'].includes(this.normalizeRole(role)))) {
+      return 'Territory Manager';
     }
 
-    if (roles.some(role => ['admin', 'superadmin', 'nationalmanager'].includes(this.normalizeRole(role)))) {
-      return 'National Manager';
+    if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {
+      return 'Regional Manager';
     }
 
     throw new Error('This account is not assigned to an admin role.');
@@ -256,6 +260,7 @@ export class AuthService {
     try {
       sessionStorage.removeItem(AuthService.sessionHintKey);
       sessionStorage.removeItem(AuthService.activeRegionStorageKey);
+      sessionStorage.removeItem(AuthService.activeTerritoryStorageKey);
     } catch {
       // Session restore is a convenience only.
     }

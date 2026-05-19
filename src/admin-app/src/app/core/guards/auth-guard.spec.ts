@@ -4,7 +4,7 @@ import { provideRouter, Router } from '@angular/router';
 import { lastValueFrom, Observable, of } from 'rxjs';
 import { vi } from 'vitest';
 
-import { authGuard, regionalManagerGuard } from './auth.guard';
+import { authGuard, regionalManagerGuard, territoryManagerGuard } from './auth.guard';
 import { AuthService } from '../services/auth.service';
 
 describe('authGuard', () => {
@@ -12,6 +12,8 @@ describe('authGuard', () => {
     TestBed.runInInjectionContext(() => authGuard(...guardParameters));
   const executeRegionalGuard: CanActivateFn = (...guardParameters) =>
     TestBed.runInInjectionContext(() => regionalManagerGuard(...guardParameters));
+  const executeTerritoryGuard: CanActivateFn = (...guardParameters) =>
+    TestBed.runInInjectionContext(() => territoryManagerGuard(...guardParameters));
 
   const authService = {
     isLoggedIn: vi.fn(),
@@ -19,7 +21,7 @@ describe('authGuard', () => {
     getUser: vi.fn(),
     clearSession: vi.fn(),
     isRegionalManager: vi.fn(),
-    isNationalManager: vi.fn(),
+    isTerritoryManager: vi.fn(),
     restoreSession: vi.fn(),
     getHomeRoute: vi.fn(),
   };
@@ -31,7 +33,7 @@ describe('authGuard', () => {
     authService.getUser.mockReturnValue(null);
     authService.clearSession.mockReturnValue(undefined);
     authService.isRegionalManager.mockReturnValue(false);
-    authService.isNationalManager.mockReturnValue(false);
+    authService.isTerritoryManager.mockReturnValue(false);
     authService.restoreSession.mockReturnValue(of(null));
     authService.getHomeRoute.mockReturnValue('/login');
     TestBed.configureTestingModule({
@@ -89,5 +91,27 @@ describe('authGuard', () => {
     );
 
     expect(router.serializeUrl(result as UrlTree)).toBe('/login');
+  });
+
+  it('allows authenticated territory managers', () => {
+    authService.isTerritoryManager.mockReturnValue(true);
+    authService.hasValidAccessToken.mockReturnValue(true);
+
+    const result = executeTerritoryGuard({} as never, { url: '/territory/overview' } as never);
+
+    expect(result).toBe(true);
+  });
+
+  it('redirects regional users away from territory routes', async () => {
+    authService.isTerritoryManager.mockReturnValue(false);
+    authService.restoreSession.mockReturnValue(of({ role: 'Regional Manager' }));
+    authService.getHomeRoute.mockReturnValue('/dashboard');
+
+    const router = TestBed.inject(Router);
+    const result = await lastValueFrom(
+      executeTerritoryGuard({} as never, { url: '/territory/overview' } as never) as Observable<boolean | UrlTree>,
+    );
+
+    expect(router.serializeUrl(result as UrlTree)).toBe('/dashboard');
   });
 });
