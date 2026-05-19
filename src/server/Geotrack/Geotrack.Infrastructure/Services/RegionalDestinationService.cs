@@ -174,9 +174,7 @@ public class RegionalDestinationService : IRegionalDestinationService
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
         var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
-        var boundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long.");
-        var boundary = BuildBoundary(request.Boundary);
-        var coordinates = ResolveCoordinates(request, boundary?.Geometry);
+        var coordinates = ResolveCoordinates(request);
         var destinationTypeId = await ResolveDestinationTypeIdAsync(request.DestinationTypeId);
         var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
@@ -195,8 +193,8 @@ public class RegionalDestinationService : IRegionalDestinationService
             Longitude = coordinates.Longitude,
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
-            BoundaryNote = boundaryNote,
-            BoundaryShapeType = boundary?.ShapeType,
+            BoundaryNote = null,
+            BoundaryShapeType = null,
             CreatedAt = now,
             DestinationTags = tagIds
                 .Select(tagId => new DestinationTag { TagId = tagId })
@@ -204,12 +202,6 @@ public class RegionalDestinationService : IRegionalDestinationService
         };
 
         _db.Destinations.Add(destination);
-        if (boundary?.Geometry is not null)
-        {
-            _db.Entry(destination)
-                .Property<Geometry?>(BoundaryGeometryPropertyName)
-                .CurrentValue = boundary.Geometry;
-        }
 
         await _db.SaveChangesAsync();
 
@@ -513,27 +505,14 @@ public class RegionalDestinationService : IRegionalDestinationService
         return new BoundaryResult(shapeType, polygon);
     }
 
-    private static DestinationCoordinates ResolveCoordinates(
-        RegionalDestinationCreateRequestDto request,
-        Geometry? boundaryGeometry)
+    private static DestinationCoordinates ResolveCoordinates(RegionalDestinationCreateRequestDto request)
     {
-        if (request.Latitude.HasValue || request.Longitude.HasValue)
-        {
-            if (!request.Latitude.HasValue || !request.Longitude.HasValue)
-                throw new InvalidOperationException("Latitude and longitude must be provided together.");
+        if (!request.Latitude.HasValue || !request.Longitude.HasValue)
+            throw new InvalidOperationException("A destination center point is required.");
 
-            ValidateLatitude(request.Latitude.Value);
-            ValidateLongitude(request.Longitude.Value);
-            return new DestinationCoordinates(request.Latitude.Value, request.Longitude.Value);
-        }
-
-        if (boundaryGeometry is null)
-            throw new InvalidOperationException("A destination boundary or coordinates are required.");
-
-        var centroid = boundaryGeometry.Centroid;
-        ValidateLatitude(centroid.Y);
-        ValidateLongitude(centroid.X);
-        return new DestinationCoordinates(centroid.Y, centroid.X);
+        ValidateLatitude(request.Latitude.Value);
+        ValidateLongitude(request.Longitude.Value);
+        return new DestinationCoordinates(request.Latitude.Value, request.Longitude.Value);
     }
 
     private static string NormalizeCreateStatus(string? value)

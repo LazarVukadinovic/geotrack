@@ -9,7 +9,7 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import { CommonModule, DecimalPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -41,7 +41,7 @@ interface ClassItem {
 @Component({
   selector: 'app-add-destination',
   standalone: true,
-  imports: [CommonModule, FormsModule, DecimalPipe, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
   templateUrl: './add-destination.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
@@ -104,6 +104,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   zoneModalOpen = false;
   zoneConfirmed = false;
   zoneAreaKm2: number | null = null;
+  centerLat: number | null = null;
+  centerLng: number | null = null;
   drawTool: DrawTool = 'polygon';
   confirmedShapeType: BoundaryShapeType | null = null;
 
@@ -171,6 +173,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   get canPublish(): boolean {
     return Boolean(this.activeRegionId) &&
+      this.zoneConfirmed &&
       Boolean(this.cardImageFile) &&
       Boolean(this.coverImageFile) &&
       !this.regionLoading &&
@@ -257,7 +260,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
     this.setActiveRegion(regionId, true);
     this.resetZone();
-    this.feedbackMessage = 'Region changed. Boundary selection was cleared.';
+    this.feedbackMessage = 'Region changed. Center selection was cleared.';
     this.notifyStateChanged();
   }
 
@@ -472,28 +475,21 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   clearZone(): void {
-    if (this.drawnLayer && this.modalMap) {
-      this.modalMap.removeLayer(this.drawnLayer);
-      this.drawnLayer = null;
-    }
-    if (this.drawControl) {
-      this.drawControl.disable();
-      this.drawControl = null;
-    }
-    this.activateDrawTool();
+    this.centerLat = null;
+    this.centerLng = null;
+    this.zoneConfirmed = false;
+    this.showCenterOnModalMap();
+    this.notifyStateChanged();
   }
 
   confirmZone(): void {
-    if (!this.drawnLayer) {
-      this.errorMessage = 'Draw a destination zone before confirming.';
+    if (!this.hasValidCenter()) {
+      this.errorMessage = 'Choose a destination center point before confirming.';
       this.notifyStateChanged();
       return;
     }
 
-    this.zoneAreaKm2 = this.zoneDrawService.calculateAreaKm2(this.drawnLayer);
     this.zoneConfirmed = true;
-    this.confirmedLayer = this.drawnLayer;
-    this.confirmedShapeType = this.shapeTypeFromDrawTool(this.drawTool);
     this.errorMessage = null;
 
     this.showZoneOnMiniMap();
@@ -564,18 +560,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
-    if (!this.zoneConfirmed || !this.confirmedLayer) {
-      this.errorMessage = 'Draw a destination zone before publishing.';
+    if (!this.zoneConfirmed || !this.hasValidCenter()) {
+      this.errorMessage = 'Choose a destination center point before publishing.';
       return null;
     }
 
     const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
-    const { zone, centerLat, centerLng } = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
-    const boundary = this.createBoundaryPayload(zone);
-    if (!boundary) {
-      this.errorMessage = 'Boundary geometry is invalid.';
-      return null;
-    }
+    const centerLat = this.centerLat as number;
+    const centerLng = this.centerLng as number;
 
     return {
       regionId,
@@ -585,8 +577,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       status: 'Published',
       latitude: centerLat,
       longitude: centerLng,
-      boundaryNote: this.boundaryNote.trim() || null,
-      boundary,
       tagIds: [...this.selectedTagIds],
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
@@ -630,27 +620,32 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap || typeof L === 'undefined') return;
 
+    const initialCenter = this.hasValidCenter()
+      ? [this.centerLat as number, this.centerLng as number]
+      : this.loadMapCenter();
+
     this.modalMap = L.map(el, {
       zoomControl: true,
       attributionControl: false,
-    }).setView(this.loadMapCenter(), 9);
+    }).setView(initialCenter, this.hasValidCenter() ? 12 : 9);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.modalMap);
 
+    this.modalMap.on('click', (event: any) => {
+      this.zone.run(() => {
+        this.centerLat = event.latlng.lat;
+        this.centerLng = event.latlng.lng;
+        this.zoneConfirmed = false;
+        this.errorMessage = null;
+        this.showCenterOnModalMap();
+        this.notifyStateChanged();
+      });
+    });
+
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
-
-    if (this.confirmedLayer) {
-      const layerCopy = this.zoneDrawService.cloneLayer(this.confirmedLayer);
-      if (layerCopy) {
-        layerCopy.addTo(this.modalMap);
-        this.drawnLayer = layerCopy;
-        this.modalMap.fitBounds(layerCopy.getBounds(), { padding: [30, 30] });
-      }
-    }
-
-    this.activateDrawTool();
+    this.showCenterOnModalMap();
   }
 
   private destroyModalMap(): void {
@@ -686,34 +681,57 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   private showZoneOnMiniMap(): void {
     if (!this.miniMap) this.initMiniMap();
-    if (!this.miniMap || !this.confirmedLayer) return;
+    if (!this.miniMap || !this.hasValidCenter()) return;
 
     this.miniMap.eachLayer((layer: any) => {
-      if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
+      if (layer._isConfirmedCenter) this.miniMap.removeLayer(layer);
     });
 
-    const clone = this.zoneDrawService.cloneLayer(this.confirmedLayer);
-    if (!clone) return;
+    const lat = this.centerLat as number;
+    const lng = this.centerLng as number;
+    const marker = L.marker([lat, lng]);
+    marker._isConfirmedCenter = true;
+    marker.addTo(this.miniMap);
+    this.miniMap.setView([lat, lng], 12);
+  }
 
-    clone._isConfirmedZone = true;
-    clone.addTo(this.miniMap);
+  private showCenterOnModalMap(): void {
+    if (!this.modalMap || typeof L === 'undefined') return;
 
-    try {
-      this.miniMap.fitBounds(clone.getBounds(), { padding: [10, 10] });
-    } catch {
-      // Fitting can fail while Leaflet is still settling container dimensions.
-    }
+    this.modalMap.eachLayer((layer: any) => {
+      if (layer._isDraftCenter) this.modalMap.removeLayer(layer);
+    });
+
+    if (!this.hasValidCenter()) return;
+
+    const marker = L.marker([this.centerLat as number, this.centerLng as number]);
+    marker._isDraftCenter = true;
+    marker.addTo(this.modalMap);
+  }
+
+  private hasValidCenter(): boolean {
+    return typeof this.centerLat === 'number' &&
+      typeof this.centerLng === 'number' &&
+      Number.isFinite(this.centerLat) &&
+      Number.isFinite(this.centerLng) &&
+      this.centerLat >= -90 &&
+      this.centerLat <= 90 &&
+      this.centerLng >= -180 &&
+      this.centerLng <= 180 &&
+      (this.centerLat !== 0 || this.centerLng !== 0);
   }
 
   private resetZone(): void {
     this.zoneConfirmed = false;
     this.zoneAreaKm2 = null;
+    this.centerLat = null;
+    this.centerLng = null;
     this.confirmedLayer = null;
     this.confirmedShapeType = null;
 
     if (this.miniMap) {
       this.miniMap.eachLayer((layer: any) => {
-        if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
+        if (layer._isConfirmedCenter) this.miniMap.removeLayer(layer);
       });
     }
   }

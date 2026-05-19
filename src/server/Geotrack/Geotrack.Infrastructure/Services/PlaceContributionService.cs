@@ -24,7 +24,7 @@ public class PlaceContributionService : IPlaceContributionService
     private const string ManagedContributionMediaPrefix = "/media/uploads/contributions/";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly HashSet<string> LegacyOwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> OwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "stay",
         "restaurant",
@@ -103,7 +103,6 @@ public class PlaceContributionService : IPlaceContributionService
         return await _db.PlaceTypes
             .AsNoTracking()
             .OrderBy(type => type.Name)
-            .ThenBy(type => type.Id)
             .Select(type => new ContributionPlaceTypeDto
             {
                 Id = type.Id,
@@ -674,10 +673,39 @@ public class PlaceContributionService : IPlaceContributionService
         if (contributionType == PlaceContributionType.ClaimOwnership)
             return true;
 
+        var isOwnable = await ResolveRequestedPlaceTypeOwnableAsync(request);
+        if (isOwnable.HasValue)
+            return isOwnable.Value;
+
         if (request.StayTypeId.HasValue || !string.IsNullOrWhiteSpace(request.StayType))
             return true;
 
-        return await ResolveRequestedPlaceTypeOwnableAsync(request);
+        var placeTypeName = await ResolveRequestedPlaceTypeNameAsync(request);
+        return IsOwnershipProofRequiredPlaceType(placeTypeName);
+    }
+
+    private async Task<bool?> ResolveRequestedPlaceTypeOwnableAsync(UpsertPlaceContributionDto request)
+    {
+        if (request.PlaceTypeId.HasValue)
+        {
+            var isOwnable = await _db.PlaceTypes
+                .AsNoTracking()
+                .Where(placeType => placeType.Id == request.PlaceTypeId.Value)
+                .Select(placeType => (bool?)placeType.IsOwnable)
+                .SingleOrDefaultAsync();
+
+            return isOwnable ?? throw new KeyNotFoundException("Place type not found.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PlaceType))
+            return null;
+
+        var normalized = request.PlaceType.Trim().ToLowerInvariant();
+        return await _db.PlaceTypes
+            .AsNoTracking()
+            .Where(placeType => placeType.Name.ToLower() == normalized)
+            .Select(placeType => (bool?)placeType.IsOwnable)
+            .SingleOrDefaultAsync();
     }
 
     private async Task<string?> ResolveRequestedPlaceTypeNameAsync(UpsertPlaceContributionDto request)
@@ -697,30 +725,10 @@ public class PlaceContributionService : IPlaceContributionService
         return placeTypeName ?? throw new KeyNotFoundException("Place type not found.");
     }
 
-    private async Task<bool> ResolveRequestedPlaceTypeOwnableAsync(UpsertPlaceContributionDto request)
+    private static bool IsOwnershipProofRequiredPlaceType(string? placeTypeName)
     {
-        if (request.PlaceTypeId.HasValue)
-        {
-            var isOwnable = await _db.PlaceTypes
-                .AsNoTracking()
-                .Where(placeType => placeType.Id == request.PlaceTypeId.Value)
-                .Select(placeType => (bool?)placeType.IsOwnable)
-                .SingleOrDefaultAsync();
-
-            return isOwnable ?? throw new KeyNotFoundException("Place type not found.");
-        }
-
-        var placeTypeName = NormalizeOptional(request.PlaceType);
-        if (placeTypeName is null)
-            return false;
-
-        var dbIsOwnable = await _db.PlaceTypes
-            .AsNoTracking()
-            .Where(placeType => placeType.Name.ToLower() == placeTypeName)
-            .Select(placeType => (bool?)placeType.IsOwnable)
-            .SingleOrDefaultAsync();
-
-        return dbIsOwnable ?? LegacyOwnershipProofRequiredPlaceTypes.Contains(placeTypeName);
+        var normalized = NormalizeOptional(placeTypeName);
+        return normalized is not null && OwnershipProofRequiredPlaceTypes.Contains(normalized);
     }
 
     private async Task<bool> UserCanManagePlaceAsync(int userId, int placeId)
@@ -880,7 +888,7 @@ public class PlaceContributionService : IPlaceContributionService
 
         var locationId = await ResolveLegacyLocationIdAsync(request);
         if (!locationId.HasValue || !HasUsableCoordinates(request.Latitude, request.Longitude))
-            throw new InvalidOperationException("Please choose a valid location before submitting.");
+            throw new InvalidOperationException("The selected pin is not close enough to an existing location. Please choose a point near a saved location.");
 
         return new ContributionLocationResolution(locationId.Value, request.Latitude!.Value, request.Longitude!.Value);
     }
@@ -899,7 +907,6 @@ public class PlaceContributionService : IPlaceContributionService
         {
             Name = ToTitle(displayName),
             Description = normalized == "stay" ? "Accommodation and stay listings" : $"{ToTitle(displayName)} listings",
-            IsOwnable = LegacyOwnershipProofRequiredPlaceTypes.Contains(normalized),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -944,29 +951,7 @@ public class PlaceContributionService : IPlaceContributionService
         var latitude = request.Latitude!.Value;
         var longitude = request.Longitude!.Value;
 
-        var nearestLocationId = await ResolveNearestKnownLocationIdAsync(latitude, longitude);
-        if (nearestLocationId.HasValue)
-            return nearestLocationId.Value;
-
-        var nearestDestination = await ResolveNearestKnownDestinationAsync(latitude, longitude);
-        if (nearestDestination is null)
-            return null;
-
-        var locationType = await ResolveLocationTypeAsync();
-        var locationName = NormalizeOptional(request.City, 200) ?? nearestDestination.Name;
-        var location = new Location
-        {
-            Name = locationName,
-            DestinationId = nearestDestination.Id,
-            LocationTypeId = locationType.Id,
-            Latitude = latitude,
-            Longitude = longitude,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _db.Locations.AddAsync(location);
-        await _db.SaveChangesAsync();
-        return location.Id;
+        return await ResolveNearestKnownLocationIdAsync(latitude, longitude);
     }
 
     private async Task<int?> ResolveNearestKnownLocationIdAsync(double latitude, double longitude)
@@ -1778,10 +1763,7 @@ public class PlaceContributionService : IPlaceContributionService
         if (request.LocationId is <= 0)
             throw new InvalidOperationException("Please choose a valid location before submitting.");
 
-        if (!request.LocationId.HasValue &&
-            (!HasUsableCoordinates(request.Latitude, request.Longitude) ||
-             string.IsNullOrWhiteSpace(request.City) ||
-             string.IsNullOrWhiteSpace(request.Country)))
+        if (!request.LocationId.HasValue && !HasUsableCoordinates(request.Latitude, request.Longitude))
         {
             throw new InvalidOperationException("Please choose a valid location before submitting.");
         }

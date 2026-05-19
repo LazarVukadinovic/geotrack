@@ -188,9 +188,7 @@ public class RegionalLocationService : IRegionalLocationService
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
         var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
-        var boundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long.");
-        var boundary = BuildBoundary(request.Boundary);
-        var coordinates = ResolveCoordinates(request, boundary?.Geometry);
+        var coordinates = ResolveCoordinates(request);
         var locationTypeId = await ResolveLocationTypeIdAsync(request.LocationTypeId);
         var tagIds = await ValidateLocationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
@@ -209,8 +207,8 @@ public class RegionalLocationService : IRegionalLocationService
             Longitude = coordinates.Longitude,
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
-            BoundaryNote = boundaryNote,
-            BoundaryShapeType = boundary?.ShapeType,
+            BoundaryNote = null,
+            BoundaryShapeType = null,
             CreatedAt = now,
             LocationTags = tagIds
                 .Select(tagId => new LocationTag { TagId = tagId })
@@ -218,12 +216,6 @@ public class RegionalLocationService : IRegionalLocationService
         };
 
         _db.Locations.Add(location);
-        if (boundary?.Geometry is not null)
-        {
-            _db.Entry(location)
-                .Property<Geometry?>(BoundaryGeometryPropertyName)
-                .CurrentValue = boundary.Geometry;
-        }
 
         await _db.SaveChangesAsync();
 
@@ -588,27 +580,14 @@ public class RegionalLocationService : IRegionalLocationService
         return new BoundaryResult(shapeType, polygon);
     }
 
-    private static LocationCoordinates ResolveCoordinates(
-        RegionalLocationCreateRequestDto request,
-        Geometry? boundaryGeometry)
+    private static LocationCoordinates ResolveCoordinates(RegionalLocationCreateRequestDto request)
     {
-        if (request.Latitude.HasValue || request.Longitude.HasValue)
-        {
-            if (!request.Latitude.HasValue || !request.Longitude.HasValue)
-                throw new InvalidOperationException("Latitude and longitude must be provided together.");
+        if (!request.Latitude.HasValue || !request.Longitude.HasValue)
+            throw new InvalidOperationException("A location center point is required.");
 
-            ValidateLatitude(request.Latitude.Value);
-            ValidateLongitude(request.Longitude.Value);
-            return new LocationCoordinates(request.Latitude.Value, request.Longitude.Value);
-        }
-
-        if (boundaryGeometry is null)
-            throw new InvalidOperationException("A location boundary or coordinates are required.");
-
-        var centroid = boundaryGeometry.Centroid;
-        ValidateLatitude(centroid.Y);
-        ValidateLongitude(centroid.X);
-        return new LocationCoordinates(centroid.Y, centroid.X);
+        ValidateLatitude(request.Latitude.Value);
+        ValidateLongitude(request.Longitude.Value);
+        return new LocationCoordinates(request.Latitude.Value, request.Longitude.Value);
     }
 
     private static string NormalizeCreateStatus(string? value)
