@@ -192,7 +192,7 @@ public class PlaceService : IPlaceService
             Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = images.FirstOrDefault()?.Url,
+            HeroImage = GetCoverImageUrl(place.Images) ?? images.FirstOrDefault()?.Url,
             Images = images,
             Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
@@ -316,7 +316,7 @@ public class PlaceService : IPlaceService
             Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = images.FirstOrDefault()?.Url,
+            HeroImage = GetCoverImageUrl(place.Images) ?? images.FirstOrDefault()?.Url,
             Images = images,
             Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
@@ -694,7 +694,7 @@ public class PlaceService : IPlaceService
                     Description = p.Description,
                     Location = p.Location.Name,
                     Image = p.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -727,7 +727,7 @@ public class PlaceService : IPlaceService
                     Description = p.Description,
                     Location = p.Location.Name,
                     Image = p.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -815,6 +815,17 @@ public class PlaceService : IPlaceService
             term is "stay" or "stays" or "hotel" or "hotels" or "accommodation" or "accommodations");
     }
 
+    private static string? GetCoverImageUrl(IEnumerable<EntityImage> images)
+    {
+        return images
+            .Where(image => image.ImageRole == EntityImageRole.Cover)
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.CreatedAt)
+            .ThenBy(image => image.Id)
+            .Select(image => image.Url)
+            .FirstOrDefault();
+    }
+
     private static string? GetMainImageUrl(IEnumerable<EntityImage> images)
     {
         return OrderImages(images)
@@ -832,6 +843,7 @@ public class PlaceService : IPlaceService
                 AltText = DisplayTextSafety.CleanOptional(image.AltText),
                 Caption = DisplayTextSafety.CleanOptional(image.Caption),
                 IsMain = image.IsMain,
+                ImageRole = EntityImageRole.Normalize(image.ImageRole),
                 SortOrder = image.SortOrder
             })
             .ToList();
@@ -840,7 +852,7 @@ public class PlaceService : IPlaceService
     private static IOrderedEnumerable<EntityImage> OrderImages(IEnumerable<EntityImage> images)
     {
         return images
-            .OrderByDescending(image => image.IsMain)
+            .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
             .ThenBy(image => image.SortOrder)
             .ThenBy(image => image.CreatedAt)
             .ThenBy(image => image.Id);

@@ -14,6 +14,12 @@ namespace Geotrack.Server;
 
 public static class SeedData
 {
+    private const string DemoRegionalManagerEmail = "pera@gmail.com";
+    private const string DemoRegionalManagerPassword = "Proba123!";
+    private const string DemoRegionalManagerUsername = "pera";
+    private const string RegionalManagerRoleName = "RegionalManager";
+    private const string DemoRegionalManagerRegionName = "Dalmatia";
+
     private static readonly SemaphoreSlim InitializationLock = new(1, 1);
 
     private static readonly HashSet<string> ManagedDestinationDiscoveryTagTypeSlugs = new(StringComparer.OrdinalIgnoreCase)
@@ -91,6 +97,7 @@ public static class SeedData
         {
             await EnsureRolesAsync(db);
             await EnsureDemoUsersAsync(db);
+            await EnsureDemoRegionalManagerAsync(db);
             var tagLookup1 = await EnsureSmartTagTaxonomyAsync(db);
             await EnsureInterestTopicsAsync(db, tagLookup1);
             await EnsureExploreDemoPlaceTagsAsync(db, tagLookup1);
@@ -386,6 +393,7 @@ public static class SeedData
         var etMusic = await EnsureEventTypeAsync("Music", "Music and live performance events");
 
         await EnsureRolesAsync(db);
+        await EnsureDemoRegionalManagerAsync(db);
 
         var hasher = new PasswordHasher<User>();
 
@@ -986,6 +994,7 @@ public static class SeedData
                 TerritoryId = territory.Id,
                 Url = url,
                 IsMain = index == 0,
+                ImageRole = index == 0 ? EntityImageRole.Cover : index == 1 ? EntityImageRole.Card : EntityImageRole.Gallery,
                 SortOrder = index,
                 CreatedAt = now.AddMilliseconds(index)
             });
@@ -1006,6 +1015,7 @@ public static class SeedData
                 RegionId = region.Id,
                 Url = url,
                 IsMain = index == 0,
+                ImageRole = index == 0 ? EntityImageRole.Cover : index == 1 ? EntityImageRole.Card : EntityImageRole.Gallery,
                 SortOrder = index,
                 CreatedAt = now.AddMilliseconds(index)
             });
@@ -1026,6 +1036,7 @@ public static class SeedData
                 DestinationId = destination.Id,
                 Url = url,
                 IsMain = index == 0,
+                ImageRole = index == 0 ? EntityImageRole.Cover : index == 1 ? EntityImageRole.Card : EntityImageRole.Gallery,
                 SortOrder = index,
                 CreatedAt = now.AddMilliseconds(index)
             });
@@ -1046,6 +1057,7 @@ public static class SeedData
                 LocationId = location.Id,
                 Url = url,
                 IsMain = index == 0,
+                ImageRole = index == 0 ? EntityImageRole.Cover : index == 1 ? EntityImageRole.Card : EntityImageRole.Gallery,
                 SortOrder = index,
                 CreatedAt = now.AddMilliseconds(index)
             });
@@ -1067,6 +1079,7 @@ public static class SeedData
                 Url = url,
                 AltText = place.Name,
                 IsMain = index == 0,
+                ImageRole = index == 0 ? EntityImageRole.Cover : index == 1 ? EntityImageRole.Card : EntityImageRole.Gallery,
                 SortOrder = index,
                 CreatedAt = now.AddMilliseconds(index)
             });
@@ -1088,6 +1101,7 @@ public static class SeedData
                 Url = url,
                 AltText = eventEntity.Name,
                 IsMain = index == 0,
+                ImageRole = index == 0 ? EntityImageRole.Cover : index == 1 ? EntityImageRole.Card : EntityImageRole.Gallery,
                 SortOrder = index,
                 CreatedAt = now.AddMilliseconds(index)
             });
@@ -2626,6 +2640,7 @@ public static class SeedData
                     Caption = title,
                     AltText = title,
                     IsMain = i == 0,
+                    ImageRole = i == 0 ? EntityImageRole.Cover : i == 1 ? EntityImageRole.Card : EntityImageRole.Gallery,
                     SortOrder = i,
                     CreatedAt = now
                 });
@@ -3276,6 +3291,7 @@ public static class SeedData
                     Caption = images[i].Caption,
                     AltText = place.Name,
                     IsMain = i == 0,
+                    ImageRole = i == 0 ? EntityImageRole.Cover : i == 1 ? EntityImageRole.Card : EntityImageRole.Gallery,
                     SortOrder = i,
                     CreatedAt = now
                 });
@@ -3301,6 +3317,7 @@ public static class SeedData
                     Caption = images[i].Caption,
                     AltText = eventEntity.Name,
                     IsMain = i == 0,
+                    ImageRole = i == 0 ? EntityImageRole.Cover : i == 1 ? EntityImageRole.Card : EntityImageRole.Gallery,
                     SortOrder = i,
                     CreatedAt = now
                 });
@@ -4119,6 +4136,140 @@ public static class SeedData
         }
 
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureDemoRegionalManagerAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+        var normalizedEmail = DemoRegionalManagerEmail.ToLowerInvariant();
+        var hasher = new PasswordHasher<User>();
+
+        var region = await db.Regions
+            .OrderBy(x => x.Id)
+            .FirstOrDefaultAsync(x => x.Name == DemoRegionalManagerRegionName);
+
+        region ??= await db.Regions
+            .OrderBy(x => x.Id)
+            .FirstOrDefaultAsync();
+
+        if (region is null)
+        {
+            return;
+        }
+
+        var role = await db.Roles.FirstOrDefaultAsync(x => x.Name == RegionalManagerRoleName);
+        if (role is null)
+        {
+            role = new Role
+            {
+                Name = RegionalManagerRoleName,
+                Description = "Can review and approve regional user contributions.",
+                CreatedAt = now
+            };
+
+            db.Roles.Add(role);
+            await db.SaveChangesAsync();
+        }
+
+        var user = await db.Users
+            .OrderBy(x => x.Id)
+            .FirstOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail);
+
+        if (user is null)
+        {
+            user = new User
+            {
+                Username = await ResolveSeedUsernameAsync(db, DemoRegionalManagerUsername),
+                Email = normalizedEmail,
+                FirstName = "Pera",
+                LastName = "Regional Manager",
+                PasswordHash = string.Empty,
+                DisplayName = "Pera",
+                PhoneNumber = string.Empty,
+                Location = region.Name,
+                NeedsInterestsOnboarding = false,
+                CreatedAt = now
+            };
+
+            user.PasswordHash = hasher.HashPassword(user, DemoRegionalManagerPassword);
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+        }
+        else if (SeedPasswordNeedsReset(hasher, user, DemoRegionalManagerPassword))
+        {
+            user.PasswordHash = hasher.HashPassword(user, DemoRegionalManagerPassword);
+            user.UpdatedAt = now;
+            await db.SaveChangesAsync();
+        }
+
+        var hasRole = await db.UserRoles.AnyAsync(x => x.UserId == user.Id && x.RoleId == role.Id);
+        if (!hasRole)
+        {
+            db.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = role.Id
+            });
+        }
+
+        var assignment = await db.RegionalManagerRegions.FindAsync(user.Id, region.Id);
+        if (assignment is null)
+        {
+            db.RegionalManagerRegions.Add(new RegionalManagerRegion
+            {
+                UserId = user.Id,
+                RegionId = region.Id,
+                IsActive = true,
+                CreatedAt = now
+            });
+        }
+        else if (!assignment.IsActive)
+        {
+            assignment.IsActive = true;
+            assignment.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<string> ResolveSeedUsernameAsync(AppDbContext db, string username)
+    {
+        if (!await db.Users.AnyAsync(x => x.Username.ToLower() == username.ToLowerInvariant()))
+        {
+            return username;
+        }
+
+        for (var suffix = 2; suffix < 100; suffix++)
+        {
+            var candidate = $"{username}-{suffix}";
+            if (!await db.Users.AnyAsync(x => x.Username.ToLower() == candidate.ToLowerInvariant()))
+            {
+                return candidate;
+            }
+        }
+
+        return $"{username}-{Guid.NewGuid():N}";
+    }
+
+    private static bool SeedPasswordNeedsReset(PasswordHasher<User> hasher, User user, string password)
+    {
+        if (string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            return true;
+        }
+
+        try
+        {
+            return hasher.VerifyHashedPassword(user, user.PasswordHash, password) != PasswordVerificationResult.Success;
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+        catch (FormatException)
+        {
+            return true;
+        }
     }
 
     private static async Task EnsureDefaultModerationTermsAsync(AppDbContext db)

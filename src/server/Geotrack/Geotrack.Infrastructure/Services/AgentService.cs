@@ -1,3 +1,4 @@
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Infrastructure;
@@ -106,7 +107,7 @@ public class AgentService : IAgentService
                 p.Name,
                 p.Description,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -146,7 +147,7 @@ public class AgentService : IAgentService
                 p.Name,
                 p.Description,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -186,7 +187,7 @@ public class AgentService : IAgentService
                 e.Name,
                 e.Description,
                 Image = e.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -228,7 +229,7 @@ public class AgentService : IAgentService
                 p.Description,
                 IsStay = p.Stay != null,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)

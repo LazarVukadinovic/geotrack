@@ -164,31 +164,14 @@
         }
 
         <!-- ── About ──────────────────────────────────────────────────── -->
-        @if (p.images.length > 1) {
-          <section class="pd__gallery" aria-label="Place photos">
-            <div class="pd__gallery-track" role="list">
-              @for (image of p.images; track image.id) {
-                <button
-                  type="button"
-                  class="pd__gallery-thumb"
-                  [class.pd__gallery-thumb--active]="isGalleryImageActive(image.url)"
-                  [attr.aria-label]="'Show photo ' + ($index + 1) + ' of ' + p.images.length"
-                  (click)="selectGalleryImage(image.url)"
-                >
-                  <img
-                    appImageFallback
-                    class="pd__gallery-img"
-                    [src]="image.url"
-                    [alt]="image.altText || p.title"
-                    width="120"
-                    height="84"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </button>
-              }
-            </div>
-          </section>
+        @if (p.images.length > 0) {
+          <button
+            type="button"
+            class="pd__gallery-open"
+            (click)="openGallery()"
+          >
+            Open Gallery ({{ p.images.length }})
+          </button>
         }
 
         <div class="pd__detail-grid">
@@ -337,6 +320,46 @@
 
       </div><!-- /.pd__card -->
     </div><!-- /.pd__scroll -->
+
+    @if (galleryOpen()) {
+      <div class="pd__gallery-modal" role="dialog" aria-modal="true" aria-label="Place gallery">
+        <button
+          type="button"
+          class="pd__gallery-modal-backdrop"
+          aria-label="Close gallery"
+          (click)="closeGallery()"
+        ></button>
+
+        <section class="pd__gallery-modal-panel">
+          <header class="pd__gallery-modal-head">
+            <h2>{{ p.title }} gallery</h2>
+            <button
+              type="button"
+              class="pd__gallery-close"
+              aria-label="Close gallery"
+              (click)="closeGallery()"
+            >×</button>
+          </header>
+
+          <div class="pd__gallery-layout">
+            @for (image of p.images; track image.id) {
+              <figure class="pd__gallery-item">
+                <img
+                  appImageFallback
+                  [src]="image.url"
+                  [alt]="image.altText || p.title"
+                  loading="lazy"
+                  decoding="async"
+                />
+                @if (image.caption) {
+                  <figcaption>{{ image.caption }}</figcaption>
+                }
+              </figure>
+            }
+          </div>
+        </section>
+      </div>
+    }
 
   </article>
 

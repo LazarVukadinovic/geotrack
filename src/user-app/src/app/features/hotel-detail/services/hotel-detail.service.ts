@@ -4,7 +4,7 @@ import { FavoriteStateService } from '../../../core/services/favorite-state.serv
 import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
-import { getMainImageUrl, normalizeEntityImages } from '../../../core/models/entity-image.model';
+import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { HotelDetail } from '../models/hotel-detail.model';
 import type { DetailLoadState } from '../../place-detail/services/place-detail.service';
@@ -84,8 +84,8 @@ export class HotelDetailService {
           location: dto.location ?? '',
           latitude: dto.latitude ?? null,
           longitude: dto.longitude ?? null,
-          heroImage: getMainImageUrl(images, dto.heroImage),
-          images,
+          heroImage: getCoverImageUrl(images, dto.heroImage),
+          images: getGalleryImages(images),
           tags: dto.tags,
           rating: dto.rating,
           reviewCount: dto.reviewCount,

@@ -30,6 +30,8 @@ public class EntityImage
     public string? Caption { get; set; }
 
     public bool IsMain { get; set; }
+
+    public string ImageRole { get; set; } = EntityImageRole.Gallery;
     public int SortOrder { get; set; }
 
     public DateTime CreatedAt { get; set; }

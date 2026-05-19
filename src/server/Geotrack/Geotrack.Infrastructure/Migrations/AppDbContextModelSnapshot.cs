@@ -388,6 +388,13 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int?>("EventId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ImageRole")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("gallery");
+
                     b.Property<bool>("IsMain")
                         .HasColumnType("boolean");
 
@@ -2214,6 +2221,13 @@ namespace Geotrack.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ImageRole")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("gallery");
 
                     b.Property<string>("ImageSize")
                         .IsRequired()

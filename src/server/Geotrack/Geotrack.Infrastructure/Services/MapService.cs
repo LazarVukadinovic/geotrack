@@ -1,3 +1,4 @@
+using Geotrack.Domain.Entities.Core;
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -437,7 +438,7 @@ public class MapService : IMapService
                     Subtitle = place.Location.Name,
                     CategoryLabel = place.PlaceType.Name,
                     ImageUrl = place.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -489,7 +490,7 @@ public class MapService : IMapService
                             : @event.Destination.Name),
                     CategoryLabel = @event.EventType.Name,
                     ImageUrl = @event.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -591,7 +592,7 @@ public class MapService : IMapService
                     Subtitle = null,
                     CategoryLabel = destination.DestinationType != null ? destination.DestinationType.Name : null,
                     ImageUrl = destination.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -638,7 +639,7 @@ public class MapService : IMapService
                     Subtitle = place.Location.Name,
                     CategoryLabel = place.PlaceType.Name,
                     ImageUrl = place.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -690,7 +691,7 @@ public class MapService : IMapService
                             : @event.Destination.Name),
                     CategoryLabel = @event.EventType.Name,
                     ImageUrl = @event.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)

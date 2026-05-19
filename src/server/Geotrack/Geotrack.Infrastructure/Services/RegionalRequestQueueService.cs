@@ -1,3 +1,4 @@
+using Geotrack.Domain.Entities.Core;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Contributions;
@@ -419,7 +420,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
                 Username = contribution.User.Username,
                 SubmittedAt = contribution.SubmittedAt,
                 ThumbnailImageUrl = contribution.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
@@ -780,7 +781,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             SubmittedAt = contribution.SubmittedAt,
             Status = MapContributionStatus(contribution.Status),
             ThumbnailImageUrl = contribution.Images
-                .OrderByDescending(image => image.IsMain)
+                .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                 .ThenBy(image => image.SortOrder)
                 .ThenBy(image => image.Id)
                 .Select(image => image.Url)

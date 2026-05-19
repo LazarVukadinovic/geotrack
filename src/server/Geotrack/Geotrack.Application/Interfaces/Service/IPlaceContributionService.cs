@@ -12,8 +12,9 @@ public interface IPlaceContributionService
     Task<PlaceContributionDetailDto> CreateAsync(
         int userId,
         UpsertPlaceContributionDto request,
-        byte[]? mainImageBytes,
+        byte[]? cardImageBytes,
         byte[]? coverImageBytes,
+        IReadOnlyList<byte[]>? galleryImageBytes,
         byte[]? ownershipProofBytes,
         string? ownershipProofOriginalFileName,
         string? ownershipProofContentType);
@@ -22,8 +23,9 @@ public interface IPlaceContributionService
         int userId,
         int contributionId,
         UpsertPlaceContributionDto request,
-        byte[]? mainImageBytes,
+        byte[]? cardImageBytes,
         byte[]? coverImageBytes,
+        IReadOnlyList<byte[]>? galleryImageBytes,
         byte[]? ownershipProofBytes,
         string? ownershipProofOriginalFileName,
         string? ownershipProofContentType);

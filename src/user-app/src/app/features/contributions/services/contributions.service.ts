@@ -20,7 +20,9 @@ export interface ContributionListItem {
   placeType: string;
   stayType: string;
   location: string;
+  cardImageUrl: string;
   coverImageUrl: string;
+  galleryImageUrls: string[];
   status: ContributionStatus;
   statusLabel: string;
   submittedAt: string;
@@ -77,7 +79,10 @@ interface ApiContributionListItem {
   placeType?: string | null;
   stayType?: string | null;
   location?: string | null;
+  cardImageUrl?: string | null;
+  mainImageUrl?: string | null;
   coverImageUrl?: string | null;
+  galleryImageUrls?: string[] | null;
   status: ContributionStatus;
   submittedAt: string;
   updatedAt?: string | null;
@@ -205,7 +210,11 @@ export class ContributionsService {
         region: detail.region,
         country: detail.country,
         imageUrl: detail.coverImageUrl,
+        cardImageUrl: detail.cardImageUrl,
+        cardImageFile: null,
         coverImageFile: null,
+        galleryImageUrls: detail.galleryImageUrls,
+        galleryImageFiles: [],
         ownershipProofFile: null,
         ownershipProofDocumentUrl: detail.ownershipProofDocumentUrl ?? null,
         ownershipProofOriginalFileName: detail.ownershipProofOriginalFileName ?? null,
@@ -257,11 +266,36 @@ export class ContributionsService {
       bookingPartners: isAccommodation ? details.bookingPartners : [],
     };
 
+    const images: { url: string; imageRole: 'card' | 'cover' | 'gallery'; sortOrder: number }[] = [];
+    if (!basics.cardImageFile && basics.cardImageUrl) {
+      images.push({ url: basics.cardImageUrl, imageRole: 'card', sortOrder: -9 });
+    }
+    if (!basics.coverImageFile && basics.imageUrl) {
+      images.push({ url: basics.imageUrl, imageRole: 'cover', sortOrder: -10 });
+    }
+    (basics.galleryImageUrls ?? []).forEach((url, index) => {
+      if (url && !(basics.galleryImageFiles ?? [])[index]) {
+        images.push({ url, imageRole: 'gallery', sortOrder: index });
+      }
+    });
+
+    if (images.length > 0) {
+      (payload as UpsertPlaceContributionPayload & { images: typeof images }).images = images;
+    }
+
     const formData = new FormData();
     formData.append('payload', JSON.stringify(payload));
 
+    if (basics.cardImageFile) {
+      formData.append('cardImage', basics.cardImageFile);
+    }
+
     if (basics.coverImageFile) {
       formData.append('coverImage', basics.coverImageFile);
+    }
+
+    for (const file of basics.galleryImageFiles ?? []) {
+      formData.append('galleryImages', file);
     }
 
     if (requiresOwnershipProof && basics.ownershipProofFile) {
@@ -319,7 +353,9 @@ function mapListItem(item: ApiContributionListItem): ContributionListItem {
     placeType: item.placeType ?? '',
     stayType: item.stayType ?? '',
     location: item.location ?? '',
+    cardImageUrl: item.cardImageUrl ?? item.mainImageUrl ?? '',
     coverImageUrl: item.coverImageUrl ?? '',
+    galleryImageUrls: item.galleryImageUrls ?? [],
     status: item.status,
     statusLabel: statusLabel(item.status),
     submittedAt: item.submittedAt,

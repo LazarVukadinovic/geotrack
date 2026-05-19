@@ -1,3 +1,4 @@
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
@@ -238,7 +239,7 @@ public class ExploreService : IExploreService
                 e.EndDate,
                 IsHappeningNow = e.StartDate <= nowUtc && e.EndDate >= nowUtc,
                 IsUpcoming = e.StartDate > nowUtc,
-                Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
+                Image = e.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint)
             })
             .OrderBy(e => e.IsHappeningNow ? 0 : e.IsUpcoming ? 1 : 2)
@@ -262,7 +263,7 @@ public class ExploreService : IExploreService
                 p.Description,
                 CategoryLabel = p.Stay != null && p.Stay.StayType != null ? p.Stay.StayType.Name : p.PlaceType.Name,
                 LocationName = p.Location.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
+                Image = p.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 PricePerNight = p.Stay != null ? p.Stay.PricePerNight : null,
@@ -502,7 +503,7 @@ public class ExploreService : IExploreService
                 OperatingHoursEnabled = p.OperatingHoursEnabled,
                 OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -581,7 +582,7 @@ public class ExploreService : IExploreService
                 OperatingHoursEnabled = p.OperatingHoursEnabled,
                 OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -655,7 +656,7 @@ public class ExploreService : IExploreService
                 OperatingHoursEnabled = p.OperatingHoursEnabled,
                 OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -724,7 +725,7 @@ public class ExploreService : IExploreService
                 IsHappeningNow = e.StartDate <= nowUtc && e.EndDate >= nowUtc,
                 IsUpcoming = e.StartDate > nowUtc,
                 Image = e.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -827,7 +828,7 @@ public class ExploreService : IExploreService
                 OperatingHoursEnabled = p.OperatingHoursEnabled,
                 OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -1368,7 +1369,7 @@ public class ExploreService : IExploreService
                 p.OperatingHoursEnabled,
                 p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -1454,7 +1455,7 @@ public class ExploreService : IExploreService
                 p.OperatingHoursEnabled,
                 p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -1546,7 +1547,7 @@ public class ExploreService : IExploreService
                 OperatingHoursEnabled = p.OperatingHoursEnabled,
                 OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -1934,7 +1935,7 @@ public class ExploreService : IExploreService
                 Title = p.Name,
                 Description = p.Description,
                 Location = p.Location.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
+                Image = p.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,

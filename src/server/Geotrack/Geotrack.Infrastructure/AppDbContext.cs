@@ -1953,6 +1953,11 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Caption)
                 .HasMaxLength(500);
 
+            entity.Property(x => x.ImageRole)
+                .HasMaxLength(20)
+                .HasDefaultValue("gallery")
+                .IsRequired();
+
             entity.Property(x => x.ImagePosition)
                 .HasMaxLength(40);
 
@@ -1997,6 +2002,11 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.Caption)
                 .HasMaxLength(500);
+
+            entity.Property(x => x.ImageRole)
+                .HasMaxLength(20)
+                .HasDefaultValue("gallery")
+                .IsRequired();
 
             entity.Property(x => x.CreatedAt)
                 .IsRequired();

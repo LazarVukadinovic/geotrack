@@ -21,7 +21,11 @@ export interface BasicsData {
   region: string;
   country: string;
   imageUrl: string;
+  cardImageUrl: string;
+  cardImageFile?: File | null;
   coverImageFile?: File | null;
+  galleryImageUrls: string[];
+  galleryImageFiles?: File[];
   ownershipProofFile?: File | null;
   ownershipProofDocumentUrl?: string | null;
   ownershipProofOriginalFileName?: string | null;
@@ -45,7 +49,9 @@ export class StepBasicsComponent implements OnDestroy {
 
   placeTypes = ['Landmark', 'Restaurant', 'Cafe', 'Nature', 'Beach', 'Stay'];
   stayTypes = ['Hotel', 'Villa', 'Apartment', 'Resort', 'Cabin', 'Glamping', 'Hostel'];
-  previewUrl = signal('');
+  coverPreviewUrl = signal('');
+  cardPreviewUrl = signal('');
+  galleryPreviewUrls = signal<string[]>([]);
   ownershipProofFileName = signal('');
   ownershipProofError = signal('');
   showMapPicker = signal(false);
@@ -60,7 +66,7 @@ export class StepBasicsComponent implements OnDestroy {
 
   form: BasicsData = {
     name: '', placeType: 'Landmark', stayType: 'Hotel', address: '', city: '',
-    region: '', country: '', imageUrl: '', coverImageFile: null, ownershipProofFile: null,
+    region: '', country: '', imageUrl: '', cardImageUrl: '', cardImageFile: null, coverImageFile: null, galleryImageUrls: [], galleryImageFiles: [], ownershipProofFile: null,
     ownershipProofDocumentUrl: null, ownershipProofOriginalFileName: null,
     lat: null, lng: null, imgBgPosition: '50% 50%', imgBgSize: 'cover'
   };
@@ -96,16 +102,46 @@ export class StepBasicsComponent implements OnDestroy {
     this.ownershipProofFileName.set(file.name);
   }
 
-  onImageSelected(e: Event): void {
+  onCoverImageSelected(e: Event): void {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      this.previewUrl.set(reader.result as string);
-      this.form.imageUrl = this.previewUrl();
+      this.coverPreviewUrl.set(reader.result as string);
+      this.form.imageUrl = this.coverPreviewUrl();
       this.form.coverImageFile = file;
     };
     reader.readAsDataURL(file);
+  }
+
+  onCardImageSelected(e: Event): void {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.cardPreviewUrl.set(reader.result as string);
+      this.form.cardImageUrl = this.cardPreviewUrl();
+      this.form.cardImageFile = file;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  onGalleryImagesSelected(e: Event): void {
+    const files = Array.from((e.target as HTMLInputElement).files ?? []);
+    (e.target as HTMLInputElement).value = '';
+    if (files.length === 0) return;
+
+    this.form.galleryImageFiles = [...(this.form.galleryImageFiles ?? []), ...files];
+
+    for (const file of files) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = reader.result as string;
+        this.galleryPreviewUrls.update(urls => [...urls, url]);
+        this.form.galleryImageUrls = [...this.form.galleryImageUrls, url];
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   openMapPicker(): void {
@@ -275,6 +311,8 @@ export class StepBasicsComponent implements OnDestroy {
       !!this.form.country.trim() &&
       this.hasConfirmedLocation();
     if (!baseValid) return false;
+    if (!this.form.cardImageFile && !this.form.cardImageUrl) return false;
+    if (!this.form.coverImageFile && !this.form.imageUrl) return false;
     if (this.requiresOwnershipProof() && !this.form.ownershipProofFile && !this.form.ownershipProofDocumentUrl) return false;
     return true;
   }
@@ -333,8 +371,12 @@ export class StepBasicsComponent implements OnDestroy {
       const d = this.data();
       if (d) {
         Object.assign(this.form, d);
-        if (d.imageUrl) this.previewUrl.set(d.imageUrl);
+        if (d.imageUrl) this.coverPreviewUrl.set(d.imageUrl);
+        if (d.cardImageUrl) this.cardPreviewUrl.set(d.cardImageUrl);
+        this.galleryPreviewUrls.set(d.galleryImageUrls ?? []);
+        this.form.cardImageFile = d.cardImageFile ?? null;
         this.form.coverImageFile = d.coverImageFile ?? null;
+        this.form.galleryImageFiles = d.galleryImageFiles ?? [];
         this.form.ownershipProofFile = d.ownershipProofFile ?? null;
         this.form.ownershipProofDocumentUrl = d.ownershipProofDocumentUrl ?? null;
         this.form.ownershipProofOriginalFileName = d.ownershipProofOriginalFileName ?? null;
@@ -391,7 +433,7 @@ export class StepBasicsComponent implements OnDestroy {
     if (!el) return;
 
     this.boundTouchStart = (e: TouchEvent) => {
-      if (!this.previewUrl()) return;
+      if (!this.coverPreviewUrl()) return;
       const target = e.target as HTMLElement;
       if (target.closest('.change-label')) return;
       e.preventDefault();
@@ -417,7 +459,7 @@ export class StepBasicsComponent implements OnDestroy {
     };
 
     this.boundTouchMove = (e: TouchEvent) => {
-      if (!this.touchState || !this.previewUrl()) return;
+      if (!this.touchState || !this.coverPreviewUrl()) return;
       e.preventDefault();
 
       if (e.touches.length === 1) {

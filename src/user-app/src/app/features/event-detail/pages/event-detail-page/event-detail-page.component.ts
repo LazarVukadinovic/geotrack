@@ -38,8 +38,8 @@ export class EventDetailPageComponent {
 
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by ed__scroll. */
   protected readonly scrollProgress = signal(0);
-  protected readonly selectedImageUrl = signal<string | null>(null);
-  protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.event()?.heroImage ?? '');
+  protected readonly galleryOpen = signal(false);
+  protected readonly heroImage = computed(() => this.event()?.heroImage ?? '');
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.event()?.latitude ?? null,
@@ -63,7 +63,7 @@ export class EventDetailPageComponent {
     effect(() => {
       this.eventId();
       this.scrollProgress.set(0);
-      this.selectedImageUrl.set(null);
+      this.galleryOpen.set(false);
       const el = this.edScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -93,12 +93,12 @@ export class EventDetailPageComponent {
     this.router.navigate(['/events', id]);
   }
 
-  protected selectGalleryImage(url: string): void {
-    this.selectedImageUrl.set(url);
+  protected openGallery(): void {
+    this.galleryOpen.set(true);
   }
 
-  protected isGalleryImageActive(url: string): boolean {
-    return (this.selectedImageUrl() ?? this.event()?.heroImage ?? '') === url;
+  protected closeGallery(): void {
+    this.galleryOpen.set(false);
   }
 
   protected viewOnMap(): void {

@@ -77,8 +77,9 @@ public class ContributionsController : ControllerBase
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<PlaceContributionResponseDto>> CreatePlaceContribution(
         [FromForm] string payload,
-        IFormFile? mainImage,
+        IFormFile? cardImage,
         IFormFile? coverImage,
+        List<IFormFile>? galleryImages,
         IFormFile? ownershipProofDocument)
     {
         UpsertPlaceContributionDto? request;
@@ -100,21 +101,24 @@ public class ContributionsController : ControllerBase
         if (request is null)
             return BadRequest(new { message = "Contribution payload is required." });
 
-        byte[]? mainImageBytes = null;
+        byte[]? cardImageBytes = null;
         byte[]? coverImageBytes = null;
+        List<byte[]> galleryImageBytes = new();
         byte[]? ownershipProofBytes = null;
 
         try
         {
-            mainImageBytes = await ReadFileBytesAsync(mainImage);
+            cardImageBytes = await ReadFileBytesAsync(cardImage);
             coverImageBytes = await ReadFileBytesAsync(coverImage);
+            galleryImageBytes = await ReadFileBytesAsync(galleryImages);
             ownershipProofBytes = await ReadFileBytesAsync(ownershipProofDocument);
 
             var contribution = await _contributions.CreateAsync(
                 GetCurrentUserId(),
                 request,
-                mainImageBytes,
+                cardImageBytes,
                 coverImageBytes,
+                galleryImageBytes,
                 ownershipProofBytes,
                 ownershipProofDocument?.FileName,
                 ownershipProofDocument?.ContentType);
@@ -140,8 +144,9 @@ public class ContributionsController : ControllerBase
     public async Task<ActionResult<PlaceContributionResponseDto>> UpdatePlaceContribution(
         int id,
         [FromForm] string payload,
-        IFormFile? mainImage,
+        IFormFile? cardImage,
         IFormFile? coverImage,
+        List<IFormFile>? galleryImages,
         IFormFile? ownershipProofDocument)
     {
         UpsertPlaceContributionDto? request;
@@ -169,8 +174,9 @@ public class ContributionsController : ControllerBase
                 GetCurrentUserId(),
                 id,
                 request,
-                await ReadFileBytesAsync(mainImage),
+                await ReadFileBytesAsync(cardImage),
                 await ReadFileBytesAsync(coverImage),
+                await ReadFileBytesAsync(galleryImages),
                 await ReadFileBytesAsync(ownershipProofDocument),
                 ownershipProofDocument?.FileName,
                 ownershipProofDocument?.ContentType);
@@ -272,6 +278,22 @@ public class ContributionsController : ControllerBase
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory);
         return memory.ToArray();
+    }
+
+    private static async Task<List<byte[]>> ReadFileBytesAsync(List<IFormFile>? files)
+    {
+        var result = new List<byte[]>();
+        if (files is null)
+            return result;
+
+        foreach (var file in files.Where(file => file is { Length: > 0 }))
+        {
+            var bytes = await ReadFileBytesAsync(file);
+            if (bytes is { Length: > 0 })
+                result.Add(bytes);
+        }
+
+        return result;
     }
 
     private ActionResult HandleException(Exception ex)
