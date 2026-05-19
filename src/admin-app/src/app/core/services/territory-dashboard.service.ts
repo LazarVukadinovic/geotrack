@@ -5,6 +5,9 @@ import {
   TerritoryAssignedTerritory,
   TerritoryContentDirectoryResponse,
   TerritoryDashboardResponse,
+  TerritoryRegionContentResponse,
+  TerritoryRegionContentType,
+  TerritoryRegionDetail,
   TerritoryRegionDirectoryResponse,
   TerritorySidebarSummary,
 } from '../models/dashboard.model';
@@ -19,6 +22,16 @@ export interface TerritoryDirectoryRequest {
 
 export interface TerritoryContentDirectoryRequest extends TerritoryDirectoryRequest {
   type?: string | null;
+}
+
+export interface TerritoryRegionContentRequest {
+  territoryId?: number | null;
+  regionId: number;
+  entityType?: TerritoryRegionContentType | string | null;
+  search?: string | null;
+  sort?: string | null;
+  skip?: number;
+  take?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -68,6 +81,35 @@ export class TerritoryDashboardService {
     return this.http.get<TerritoryRegionDirectoryResponse>('/api/admin/territory/regions', {
       params,
     });
+  }
+
+  getRegionDetail(
+    regionId: number,
+    territoryId?: number | null,
+    period?: string | null,
+  ): Observable<TerritoryRegionDetail> {
+    let params = this.withTerritoryId(new HttpParams(), territoryId);
+    if (period?.trim()) {
+      params = params.set('period', period.trim());
+    }
+
+    return this.http.get<TerritoryRegionDetail>(`/api/admin/territory/regions/${regionId}/detail`, {
+      params,
+    });
+  }
+
+  getRegionContent(request: TerritoryRegionContentRequest): Observable<TerritoryRegionContentResponse> {
+    let params = this.withTerritoryId(new HttpParams(), request.territoryId);
+    params = this.applyDirectoryParams(params, request);
+
+    if (request.entityType) {
+      params = params.set('entityType', request.entityType);
+    }
+
+    return this.http.get<TerritoryRegionContentResponse>(
+      `/api/admin/territory/regions/${request.regionId}/content`,
+      { params },
+    );
   }
 
   getContent(request: TerritoryContentDirectoryRequest): Observable<TerritoryContentDirectoryResponse> {

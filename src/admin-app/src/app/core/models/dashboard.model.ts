@@ -121,9 +121,11 @@ export interface TerritoryRegionHealth {
   destinationsCount: number;
   locationsCount: number;
   placesCount: number;
+  staysCount: number;
   eventsCount: number;
   pendingRequestsCount: number;
   activityScore: number;
+  assignedManagers: TerritoryRegionManager[];
   assignedManagersPreview: string[];
 }
 
@@ -163,19 +165,35 @@ export interface TerritoryDashboardResponse {
 
 export interface TerritoryRegionDirectoryItem {
   id: number;
+  regionId: number;
   name: string;
+  regionName: string;
+  displayName: string;
+  description?: string | null;
   territoryName: string;
+  territoryId: number;
+  territoryDisplayName: string;
+  status: string;
+  managerNames: string[];
   destinationsCount: number;
   locationsCount: number;
   placesCount: number;
+  staysCount: number;
   eventsCount: number;
   pendingRequestsCount: number;
+  assignedPersonsCount: number;
   activeManagersCount: number;
   managerDisplayName?: string | null;
+  assignedManagers: TerritoryRegionManager[];
+  healthScore?: number | null;
+  activityScore: number;
+  imageUrl?: string | null;
+  detailRoute?: string | null;
   createdAt: string;
 }
 
 export interface TerritoryRegionDirectoryResponse {
+  territory?: TerritoryAssignedTerritory | null;
   items: TerritoryRegionDirectoryItem[];
   totalCount: number;
   skip: number;
@@ -206,4 +224,137 @@ export interface TerritoryContentDirectoryResponse {
   skip: number;
   take: number;
   hasMore: boolean;
+}
+
+export interface TerritoryHealthInsight {
+  label: string;
+  detail: string;
+  severity: 'info' | 'positive' | 'warning' | 'action' | string;
+}
+
+export interface TerritoryHealth {
+  score?: number | null;
+  statusLabel: string;
+  drivers: TerritoryHealthInsight[];
+  recommendations: TerritoryHealthInsight[];
+}
+
+export interface TerritoryRegionDetailRegion {
+  id: number;
+  name: string;
+  displayName: string;
+  description?: string | null;
+  status: string;
+  territoryId: number;
+  territoryDisplayName: string;
+  imageUrl?: string | null;
+  centerLatitude?: number | null;
+  centerLongitude?: number | null;
+}
+
+export interface TerritoryRegionManager {
+  userId: number;
+  displayName: string;
+  email: string;
+  initials: string;
+  avatarUrl?: string | null;
+  role: string;
+  assignedAt: string;
+}
+
+export interface TerritoryRegionSummary {
+  destinationsCount: number;
+  locationsCount: number;
+  placesCount: number;
+  staysCount: number;
+  eventsCount: number;
+  pendingRequestsCount: number;
+  activeUsers: number;
+  visits: number;
+  saves: number;
+  reviews: number;
+  averageRating: number;
+}
+
+export interface TerritoryRegionContentItem {
+  id: number;
+  entityType: TerritoryRegionContentType | string;
+  publicDetailRoute?: string | null;
+  name: string;
+  summary?: string | null;
+  description?: string | null;
+  status: string;
+  regionId: number;
+  regionName: string;
+  destinationId?: number | null;
+  destinationName?: string | null;
+  locationId?: number | null;
+  locationName?: string | null;
+  placeId?: number | null;
+  placeName?: string | null;
+  parentName?: string | null;
+  typeName?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  startsAt?: string | null;
+  locationsCount: number;
+  placesCount: number;
+  staysCount: number;
+  eventsCount: number;
+  views: number;
+  saves: number;
+  externalClicks: number;
+  reviewsCount: number;
+  averageRating?: number | null;
+  imageUrl?: string | null;
+  health?: TerritoryHealth | null;
+}
+
+export type TerritoryRegionContentType = 'destinations' | 'locations' | 'places' | 'stays' | 'events' | 'all';
+
+export interface TerritoryRegionContentResponse {
+  entityType: TerritoryRegionContentType | string;
+  items: TerritoryRegionContentItem[];
+  totalCount: number;
+  skip: number;
+  take: number;
+  hasMore: boolean;
+}
+
+export interface TerritoryRegionContentPreview {
+  destinations: TerritoryRegionContentItem[];
+  locations: TerritoryRegionContentItem[];
+  places: TerritoryRegionContentItem[];
+  stays: TerritoryRegionContentItem[];
+  events: TerritoryRegionContentItem[];
+}
+
+export interface TerritoryRegionTopEntity {
+  entityType: string;
+  entityId: number;
+  name: string;
+  views: number;
+  imageUrl?: string | null;
+}
+
+export interface TerritoryRegionActivity {
+  eventType: string;
+  entityType?: string | null;
+  entityId?: number | null;
+  entityName?: string | null;
+  occurredAt: string;
+}
+
+export interface TerritoryRegionAnalytics {
+  topEntities: TerritoryRegionTopEntity[];
+  recentActivity: TerritoryRegionActivity[];
+}
+
+export interface TerritoryRegionDetail {
+  region: TerritoryRegionDetailRegion;
+  managers: TerritoryRegionManager[];
+  summary: TerritoryRegionSummary;
+  health: TerritoryHealth;
+  content: TerritoryRegionContentPreview;
+  analytics: TerritoryRegionAnalytics;
 }

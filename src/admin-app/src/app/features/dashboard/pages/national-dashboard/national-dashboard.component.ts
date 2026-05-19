@@ -9,6 +9,7 @@ import {
   TerritoryAssignedTerritory,
   TerritoryDashboardResponse,
   TerritoryRegionHealth,
+  TerritoryRegionManager,
   TerritoryTopContentItem,
   TerritoryTopPerformingRegion,
 } from '../../../../core/models/dashboard.model';
@@ -46,6 +47,7 @@ export class NationalDashboardComponent implements OnInit {
   isLoading = false;
   isTerritoryLoading = false;
   errorMessage = '';
+  private failedManagerAvatarKeys = new Set<string>();
 
   get userName(): string { return this.auth.fullName; }
   get userRole(): string { return this.auth.getUser()?.role ?? ''; }
@@ -98,8 +100,60 @@ export class NationalDashboardComponent implements OnInit {
     this.router.navigate(['/territory/regions']);
   }
 
+  openRegion(region: TerritoryRegionHealth): void {
+    if (!Number.isFinite(region.regionId) || region.regionId <= 0) {
+      console.warn('Unable to open region detail: missing region id.');
+      return;
+    }
+
+    this.router.navigate(['/territory/regions', region.regionId], {
+      state: { regionId: region.regionId, territoryId: this.activeTerritoryId },
+    });
+  }
+
   navigateStat(stat: TerritoryStatCard): void {
     this.router.navigate([stat.route], { queryParams: stat.queryParams });
+  }
+
+  visibleManagers(region: TerritoryRegionHealth): TerritoryRegionManager[] {
+    return (region.assignedManagers ?? []).slice(0, 3);
+  }
+
+  hiddenManagerCount(region: TerritoryRegionHealth): number {
+    return Math.max(0, (region.assignedManagers?.length ?? 0) - this.visibleManagers(region).length);
+  }
+
+  managerAvatarUrl(manager: TerritoryRegionManager): string {
+    const avatarUrl = manager.avatarUrl?.trim() ?? '';
+    return avatarUrl && !this.failedManagerAvatarKeys.has(this.managerAvatarKey(manager, avatarUrl))
+      ? avatarUrl
+      : '';
+  }
+
+  managerInitials(manager: TerritoryRegionManager): string {
+    const initials = manager.initials?.trim();
+    if (initials) return initials;
+
+    return this.buildInitials(manager.displayName || manager.email);
+  }
+
+  managerAvatarAlt(manager: TerritoryRegionManager): string {
+    const label = manager.displayName || manager.email || 'Regional Manager';
+    return `${label} profile image`;
+  }
+
+  legacyManagerInitials(region: TerritoryRegionHealth): string[] {
+    return (region.assignedManagers?.length ?? 0) > 0
+      ? []
+      : (region.assignedManagersPreview ?? []).slice(0, 3);
+  }
+
+  onManagerAvatarError(manager: TerritoryRegionManager): void {
+    const avatarUrl = manager.avatarUrl?.trim() ?? '';
+    if (avatarUrl) {
+      this.failedManagerAvatarKeys.add(this.managerAvatarKey(manager, avatarUrl));
+      this.cdr.markForCheck();
+    }
   }
 
   formatCompact(value: number): string {
@@ -163,6 +217,7 @@ export class NationalDashboardComponent implements OnInit {
       .subscribe({
         next: dashboard => {
           this.dashboard = dashboard;
+          this.failedManagerAvatarKeys.clear();
           this.activeTerritory = dashboard.activeTerritory ?? this.activeTerritory;
           this.activeTerritoryId = dashboard.activeTerritory?.id ?? territoryId;
           this.stats = this.buildStats(dashboard);
@@ -237,5 +292,25 @@ export class NationalDashboardComponent implements OnInit {
   private formatCountDelta(value: number): string {
     const prefix = value > 0 ? '+' : '';
     return `${prefix}${value.toLocaleString()} in last 30 days`;
+  }
+
+  private managerAvatarKey(manager: TerritoryRegionManager, avatarUrl: string): string {
+    return `${manager.userId}:${avatarUrl}`;
+  }
+
+  private buildInitials(value: string): string {
+    const parts = value
+      .trim()
+      .split(/[\s._-]+/)
+      .filter(Boolean);
+
+    if (parts.length === 0) {
+      return '?';
+    }
+
+    return parts
+      .slice(0, 2)
+      .map(part => part.charAt(0).toUpperCase())
+      .join('');
   }
 }

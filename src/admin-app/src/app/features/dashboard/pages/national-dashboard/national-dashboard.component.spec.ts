@@ -36,9 +36,48 @@ describe('NationalDashboardComponent', () => {
         destinationsCount: 3,
         locationsCount: 4,
         placesCount: 5,
+        staysCount: 0,
         eventsCount: 6,
         pendingRequestsCount: 1,
         activityScore: 82,
+        assignedManagers: [
+          {
+            userId: 3,
+            displayName: 'Regional Lead',
+            email: 'lead@example.com',
+            initials: 'RL',
+            avatarUrl: '/media/uploads/avatars/lead.png',
+            role: 'RegionalManager',
+            assignedAt: '2026-05-01T00:00:00Z',
+          },
+          {
+            userId: 4,
+            displayName: 'No Avatar',
+            email: 'no-avatar@example.com',
+            initials: 'NA',
+            avatarUrl: null,
+            role: 'RegionalManager',
+            assignedAt: '2026-05-02T00:00:00Z',
+          },
+          {
+            userId: 5,
+            displayName: 'Third Manager',
+            email: 'third@example.com',
+            initials: 'TM',
+            avatarUrl: null,
+            role: 'RegionalManager',
+            assignedAt: '2026-05-03T00:00:00Z',
+          },
+          {
+            userId: 6,
+            displayName: 'Fourth Manager',
+            email: 'fourth@example.com',
+            initials: 'FM',
+            avatarUrl: null,
+            role: 'RegionalManager',
+            assignedAt: '2026-05-04T00:00:00Z',
+          },
+        ],
         assignedManagersPreview: ['RL'],
       },
     ],
@@ -124,6 +163,36 @@ describe('NationalDashboardComponent', () => {
 
     expect(navigate).toHaveBeenCalledWith(['/territory/content'], {
       queryParams: { type: 'destinations' },
+    });
+  });
+
+  it('renders manager avatar images and initials fallback in region cards', () => {
+    const avatar = fixture.nativeElement.querySelector('img[alt="Regional Lead profile image"]') as HTMLImageElement | null;
+    const moreBadge = fixture.nativeElement.querySelector('[aria-label="Additional regional managers"]') as HTMLElement | null;
+
+    expect(avatar?.getAttribute('src')).toBe('/media/uploads/avatars/lead.png');
+    expect(fixture.nativeElement.textContent).toContain('NA');
+    expect(moreBadge?.textContent?.trim()).toBe('+1');
+  });
+
+  it('falls back to initials when an overview manager avatar fails to load', () => {
+    component.onManagerAvatarError(dashboard.regionsHealth[0].assignedManagers[0]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('img[alt="Regional Lead profile image"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('RL');
+  });
+
+  it('uses button semantics and opens a region detail route from the card', () => {
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate');
+    const card = fixture.nativeElement.querySelector('button[aria-label="Open Dalmatia region detail"]') as HTMLButtonElement;
+
+    expect(card.tagName).toBe('BUTTON');
+
+    card.click();
+    expect(navigate).toHaveBeenCalledWith(['/territory/regions', 11], {
+      state: { regionId: 11, territoryId: 10 },
     });
   });
 });

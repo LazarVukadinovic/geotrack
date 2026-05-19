@@ -135,7 +135,13 @@
             } @else {
               <div class="grid grid-cols-2 gap-2.5">
                 @for (r of regions; track r.regionId) {
-                  <div class="bg-white rounded-xl border border-gray-100 p-3.5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+                  <button
+                    type="button"
+                    (click)="openRegion(r)"
+                    [attr.aria-label]="'Open ' + r.regionName + ' region detail'"
+                    class="text-left bg-white rounded-xl border border-gray-100 p-3.5 cursor-pointer hover:border-blue-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 transition-all"
+                    style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);"
+                  >
                     <h3 class="ml-1.9 font-bold text-gray-900 leading-snug">{{ r.regionName }}</h3>
                     <p class="ml-1.9 text-[13px] text-gray-400 mb-3 mt-0.5">
                       {{ r.managerDisplayName || 'No active Regional Manager' }}
@@ -168,7 +174,31 @@
                         <span class="font-semibold text-blue-600">Activity Score: {{ r.activityScore }}/100</span>
                       </div>
                       <div class="flex">
-                        @for (init of r.assignedManagersPreview; track init; let i = $index) {
+                        @for (manager of visibleManagers(r); track manager.userId; let i = $index) {
+                          <div
+                            class="w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold overflow-hidden"
+                            [style.margin-left]="i === 0 ? '0' : '-6px'"
+                            [class]="i === 0 ? 'bg-blue-100 text-blue-700' : i === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'"
+                          >
+                            <ng-container *ngIf="managerAvatarUrl(manager) as avatarUrl; else overviewManagerInitials">
+                              <img
+                                [src]="avatarUrl"
+                                [alt]="managerAvatarAlt(manager)"
+                                class="w-full h-full object-cover"
+                                (error)="onManagerAvatarError(manager)"
+                              />
+                            </ng-container>
+                            <ng-template #overviewManagerInitials>{{ managerInitials(manager) }}</ng-template>
+                          </div>
+                        }
+                        @if (hiddenManagerCount(r) > 0) {
+                          <div
+                            class="w-5 h-5 rounded-full border-2 border-white bg-gray-100 text-gray-600 flex items-center justify-center text-[8px] font-bold"
+                            [style.margin-left]="visibleManagers(r).length === 0 ? '0' : '-6px'"
+                            aria-label="Additional regional managers"
+                          >+{{ hiddenManagerCount(r) }}</div>
+                        }
+                        @for (init of legacyManagerInitials(r); track init; let i = $index) {
                           <div
                             class="w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold"
                             [style.margin-left]="i === 0 ? '0' : '-6px'"
@@ -177,7 +207,7 @@
                         }
                       </div>
                     </div>
-                  </div>
+                  </button>
                 }
               </div>
             }
