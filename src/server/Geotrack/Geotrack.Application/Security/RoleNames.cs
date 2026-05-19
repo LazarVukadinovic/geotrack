@@ -20,6 +20,7 @@ public static class RoleNames
         {
             "admin" => Admin,
             "regionalmanager" => RegionalManager,
+            "nationalmanager" => TerritoryManager,
             "territorymanager" => TerritoryManager,
             "registereduser" => RegisteredUser,
             _ => roleName.Trim()

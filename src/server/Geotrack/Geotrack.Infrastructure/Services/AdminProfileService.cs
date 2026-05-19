@@ -49,7 +49,7 @@ public class AdminProfileService : IAdminProfileService
             ?? throw new KeyNotFoundException("User not found.");
 
         var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
-        EnsureRegionalManagerRole(roles);
+        EnsureAdminRole(roles);
 
         var activeAssignments = user.RegionalManagerRegions
             .Where(assignment => assignment.IsActive)
@@ -111,7 +111,7 @@ public class AdminProfileService : IAdminProfileService
             ?? throw new KeyNotFoundException("User not found.");
 
         var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
-        EnsureRegionalManagerRole(roles);
+        EnsureAdminRole(roles);
 
         user.FirstName = request.FirstName?.Trim() ?? string.Empty;
         user.LastName = request.LastName?.Trim() ?? string.Empty;
@@ -154,10 +154,11 @@ public class AdminProfileService : IAdminProfileService
             .ToList();
     }
 
-    private static void EnsureRegionalManagerRole(IReadOnlyCollection<string> roles)
+    private static void EnsureAdminRole(IReadOnlyCollection<string> roles)
     {
-        if (!roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal))
-            throw new UnauthorizedAccessException("Regional manager role is required.");
+        if (!roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal) &&
+            !roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
+            throw new UnauthorizedAccessException("Admin role is required.");
     }
 
     private static string NormalizeLanguageOrDefault(string? value)

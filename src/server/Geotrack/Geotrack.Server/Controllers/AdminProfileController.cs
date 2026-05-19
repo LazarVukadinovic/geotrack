@@ -9,7 +9,7 @@ namespace Geotrack.Server.Controllers;
 
 [ApiController]
 [Route("api/admin/profile")]
-[Authorize(Policy = "RequireRegionalManager")]
+[Authorize(Policy = "RequireAdminAppUser")]
 public class AdminProfileController : ControllerBase
 {
     private const long MaxAdminAvatarFileSizeBytes = 2 * 1024 * 1024;

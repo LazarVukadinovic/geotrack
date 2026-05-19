@@ -29,7 +29,7 @@ public class AdminAuthController : ControllerBase
     {
         try
         {
-            var response = await _authService.LoginRegionalManagerAsync(request);
+            var response = await _authService.LoginAdminAsync(request);
             WriteRefreshTokenCookie(response.RefreshToken, response.SessionPersistent);
 
             return Ok(response);
@@ -54,7 +54,7 @@ public class AdminAuthController : ControllerBase
     {
         try
         {
-            var response = await _authService.RefreshRegionalManagerAsync(new RefreshRequestDto
+            var response = await _authService.RefreshAdminAsync(new RefreshRequestDto
             {
                 RefreshToken = ResolveRefreshToken(request?.RefreshToken)
             });
@@ -74,13 +74,13 @@ public class AdminAuthController : ControllerBase
         }
     }
 
-    [Authorize(Policy = "RequireRegionalManager")]
+    [Authorize(Policy = "RequireAdminAppUser")]
     [HttpGet("me")]
     public async Task<ActionResult<AdminAuthUserDto>> Me()
     {
         try
         {
-            return Ok(await _authService.GetRegionalAdminUserAsync(GetCurrentUserId()));
+            return Ok(await _authService.GetAdminUserAsync(GetCurrentUserId()));
         }
         catch (ForbiddenAccessException ex)
         {

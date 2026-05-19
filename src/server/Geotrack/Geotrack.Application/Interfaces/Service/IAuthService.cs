@@ -9,6 +9,9 @@ public interface IAuthService
     Task<LoginResponseDto> LoginAsync(LoginRequestDto request);
     Task<RefreshResponseDto> RefreshAsync(RefreshRequestDto request);
     Task LogoutAsync(LogoutRequestDto request);
+    Task<AdminLoginResponseDto> LoginAdminAsync(LoginRequestDto request);
+    Task<AdminLoginResponseDto> RefreshAdminAsync(RefreshRequestDto request);
+    Task<AdminAuthUserDto> GetAdminUserAsync(int userId);
     Task<AdminLoginResponseDto> LoginRegionalManagerAsync(LoginRequestDto request);
     Task<AdminLoginResponseDto> RefreshRegionalManagerAsync(RefreshRequestDto request);
     Task<AdminAuthUserDto> GetRegionalAdminUserAsync(int userId);
