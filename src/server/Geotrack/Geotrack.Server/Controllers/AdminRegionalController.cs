@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
@@ -18,6 +19,7 @@ public class AdminRegionalController : ControllerBase
     private readonly IRegionalPlaceService _places;
     private readonly IRegionalEventService _events;
     private readonly IRegionalMapService _map;
+    private readonly IContributionMediaStorageService _mediaStorage;
 
     public AdminRegionalController(
         IRegionalDashboardService regionalDashboard,
@@ -26,7 +28,8 @@ public class AdminRegionalController : ControllerBase
         IRegionalLocationService locations,
         IRegionalPlaceService places,
         IRegionalEventService events,
-        IRegionalMapService map)
+        IRegionalMapService map,
+        IContributionMediaStorageService mediaStorage)
     {
         _regionalDashboard = regionalDashboard;
         _requestQueue = requestQueue;
@@ -35,6 +38,7 @@ public class AdminRegionalController : ControllerBase
         _places = places;
         _events = events;
         _map = map;
+        _mediaStorage = mediaStorage;
     }
 
     [HttpGet("regions")]
@@ -207,17 +211,17 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("destinations")]
-    public async Task<ActionResult<RegionalDestinationDetailDto>> CreateDestination(
-        [FromBody] RegionalDestinationCreateRequestDto? request)
+    public async Task<ActionResult<RegionalDestinationDetailDto>> CreateDestination()
     {
-        if (request is null)
-            return BadRequest(new { message = "Request body is required." });
-
-        if (request.RegionId <= 0)
-            return BadRequest(new { message = "regionId is required." });
-
         try
         {
+            var request = await ReadCreateRequestAsync<RegionalDestinationCreateRequestDto>();
+            if (request is null)
+                return BadRequest(new { message = "Request body is required." });
+
+            if (request.RegionId <= 0)
+                return BadRequest(new { message = "regionId is required." });
+
             var created = await _destinations.CreateDestinationAsync(GetCurrentUserId(), request);
             return CreatedAtAction(
                 nameof(GetDestination),
@@ -333,17 +337,17 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("locations")]
-    public async Task<ActionResult<RegionalLocationDetailDto>> CreateLocation(
-        [FromBody] RegionalLocationCreateRequestDto? request)
+    public async Task<ActionResult<RegionalLocationDetailDto>> CreateLocation()
     {
-        if (request is null)
-            return BadRequest(new { message = "Request body is required." });
-
-        if (request.RegionId <= 0)
-            return BadRequest(new { message = "regionId is required." });
-
         try
         {
+            var request = await ReadCreateRequestAsync<RegionalLocationCreateRequestDto>();
+            if (request is null)
+                return BadRequest(new { message = "Request body is required." });
+
+            if (request.RegionId <= 0)
+                return BadRequest(new { message = "regionId is required." });
+
             var created = await _locations.CreateLocationAsync(GetCurrentUserId(), request);
             return CreatedAtAction(
                 nameof(GetLocation),
@@ -497,17 +501,17 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("places")]
-    public async Task<ActionResult<RegionalPlaceDetailDto>> CreatePlace(
-        [FromBody] RegionalPlaceCreateRequestDto? request)
+    public async Task<ActionResult<RegionalPlaceDetailDto>> CreatePlace()
     {
-        if (request is null)
-            return BadRequest(new { message = "Request body is required." });
-
-        if (request.RegionId <= 0)
-            return BadRequest(new { message = "regionId is required." });
-
         try
         {
+            var request = await ReadCreateRequestAsync<RegionalPlaceCreateRequestDto>();
+            if (request is null)
+                return BadRequest(new { message = "Request body is required." });
+
+            if (request.RegionId <= 0)
+                return BadRequest(new { message = "regionId is required." });
+
             var created = await _places.CreatePlaceAsync(GetCurrentUserId(), request);
             return CreatedAtAction(
                 nameof(GetPlace),
@@ -661,17 +665,17 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("events")]
-    public async Task<ActionResult<RegionalEventDetailDto>> CreateEvent(
-        [FromBody] RegionalEventCreateRequestDto? request)
+    public async Task<ActionResult<RegionalEventDetailDto>> CreateEvent()
     {
-        if (request is null)
-            return BadRequest(new { message = "Request body is required." });
-
-        if (request.RegionId <= 0)
-            return BadRequest(new { message = "regionId is required." });
-
         try
         {
+            var request = await ReadCreateRequestAsync<RegionalEventCreateRequestDto>();
+            if (request is null)
+                return BadRequest(new { message = "Request body is required." });
+
+            if (request.RegionId <= 0)
+                return BadRequest(new { message = "regionId is required." });
+
             var created = await _events.CreateEventAsync(GetCurrentUserId(), request);
             return CreatedAtAction(
                 nameof(GetEvent),
@@ -963,6 +967,85 @@ public class AdminRegionalController : ControllerBase
             return HandleException(ex);
         }
     }
+
+
+    private async Task<T?> ReadCreateRequestAsync<T>() where T : class
+    {
+        if (!Request.HasFormContentType)
+        {
+            return await JsonSerializer.DeserializeAsync<T>(Request.Body, JsonOptions);
+        }
+
+        var form = await Request.ReadFormAsync();
+        var payload = form["payload"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(payload))
+            return null;
+
+        var request = JsonSerializer.Deserialize<T>(payload, JsonOptions);
+        if (request is null)
+            return null;
+
+        var cardUrl = await StoreRequiredFormImageAsync(form.Files.GetFile("cardImage"), "Card image is required.");
+        var coverUrl = await StoreRequiredFormImageAsync(form.Files.GetFile("coverImage"), "Cover image is required.");
+        var galleryUrls = new List<string>();
+        foreach (var file in form.Files.GetFiles("galleryImages"))
+        {
+            galleryUrls.Add(await StoreOptionalFormImageAsync(file));
+        }
+
+        ApplyImageUrls(request, cardUrl, coverUrl, galleryUrls);
+        return request;
+    }
+
+    private async Task<string> StoreRequiredFormImageAsync(IFormFile? file, string message)
+    {
+        if (file is null || file.Length == 0)
+            throw new InvalidOperationException(message);
+
+        return await StoreOptionalFormImageAsync(file);
+    }
+
+    private async Task<string> StoreOptionalFormImageAsync(IFormFile file)
+    {
+        await using var stream = file.OpenReadStream();
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+
+        var stored = await _mediaStorage.StoreAsync(GetCurrentUserId(), memory.ToArray());
+        return stored.MediaUrl;
+    }
+
+    private static void ApplyImageUrls<T>(T request, string cardUrl, string coverUrl, List<string> galleryUrls)
+    {
+        switch (request)
+        {
+            case RegionalDestinationCreateRequestDto destination:
+                destination.CardImageUrl = cardUrl;
+                destination.CoverImageUrl = coverUrl;
+                destination.GalleryImageUrls = galleryUrls;
+                break;
+            case RegionalLocationCreateRequestDto location:
+                location.CardImageUrl = cardUrl;
+                location.CoverImageUrl = coverUrl;
+                location.GalleryImageUrls = galleryUrls;
+                break;
+            case RegionalPlaceCreateRequestDto place:
+                place.CardImageUrl = cardUrl;
+                place.CoverImageUrl = coverUrl;
+                place.GalleryImageUrls = galleryUrls;
+                break;
+            case RegionalEventCreateRequestDto eventRequest:
+                eventRequest.CardImageUrl = cardUrl;
+                eventRequest.CoverImageUrl = coverUrl;
+                eventRequest.GalleryImageUrls = galleryUrls;
+                break;
+        }
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     private int GetCurrentUserId()
     {

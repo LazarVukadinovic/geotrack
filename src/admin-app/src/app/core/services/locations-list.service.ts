@@ -106,7 +106,7 @@ export class LocationsListService {
   }
 
   createLocation(payload: RegionalLocationCreateRequest): Observable<RegionalLocationDetailDto> {
-    return this.http.post<RegionalLocationDetailDto>(this.endpoint, payload);
+    return this.http.post<RegionalLocationDetailDto>(this.endpoint, this.buildCreateFormData(payload));
   }
 
   getParentDestinations(
@@ -145,6 +145,25 @@ export class LocationsListService {
   deleteLocation(regionId: number, locationId: string | number): Observable<void> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.delete<void>(`${this.endpoint}/${locationId}`, { params });
+  }
+
+
+  private buildCreateFormData(payload: RegionalLocationCreateRequest): FormData {
+    const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
+    if (!cardImageFile || !coverImageFile) {
+      throw new Error('Card and cover images are required.');
+    }
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+    formData.append('cardImage', cardImageFile);
+    formData.append('coverImage', coverImageFile);
+
+    for (const file of galleryImageFiles ?? []) {
+      formData.append('galleryImages', file);
+    }
+
+    return formData;
   }
 
   toListItem(dto: RegionalLocationListItemDto): LocationListItem {

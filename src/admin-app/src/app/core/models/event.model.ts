@@ -92,6 +92,9 @@ export interface RegionalEventCreateRequest {
   attendanceLimit?: number | null;
   ageRestriction?: string | null;
   tagIds: number[];
+  cardImageFile?: File | null;
+  coverImageFile?: File | null;
+  galleryImageFiles?: File[];
 }
 
 export interface RegionalEventTagDto {

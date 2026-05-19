@@ -213,6 +213,8 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         await _db.SaveChangesAsync();
 
+        _db.EntityImages.AddRange(AddRequiredCreateImages(request, destination.Id, destination.Name, now));
+
         destination.InternalReferenceId = BuildInternalReferenceId(destination.Id);
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
@@ -672,6 +674,82 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         var normalized = string.Join(" ", description.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return normalized.Length <= 160 ? normalized : normalized[..157] + "...";
+    }
+
+
+    private static List<EntityImage> AddRequiredCreateImages(RegionalDestinationCreateRequestDto request, int entityId, string entityName, DateTime now)
+    {
+        var cardUrl = NormalizeRequiredImageUrl(request.CardImageUrl, "Card image is required.");
+        var coverUrl = NormalizeRequiredImageUrl(request.CoverImageUrl, "Cover image is required.");
+        var images = new List<EntityImage>
+        {
+            new()
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = entityId,
+                Url = cardUrl,
+                AltText = entityName,
+                IsMain = true,
+                ImageRole = EntityImageRole.Card,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new()
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = entityId,
+                Url = coverUrl,
+                AltText = entityName,
+                IsMain = false,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 1,
+                CreatedAt = now
+            }
+        };
+
+        var galleryUrls = request.GalleryImageUrls
+            .Select(url => NormalizeOptionalImageUrl(url))
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        for (var i = 0; i < galleryUrls.Count; i++)
+        {
+            images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = entityId,
+                Url = galleryUrls[i]!,
+                AltText = entityName,
+                IsMain = false,
+                ImageRole = EntityImageRole.Gallery,
+                SortOrder = i + 2,
+                CreatedAt = now
+            });
+        }
+
+        return images;
+    }
+
+    private static string NormalizeRequiredImageUrl(string? value, string message)
+    {
+        var normalized = NormalizeOptionalImageUrl(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+            throw new InvalidOperationException(message);
+
+        return normalized;
+    }
+
+    private static string? NormalizeOptionalImageUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = value.Trim();
+        if (normalized.Length > 1000)
+            throw new InvalidOperationException("Image URL is too long.");
+
+        return normalized;
     }
 
     private static string BuildInternalReferenceId(int destinationId) => $"DEST-{destinationId:D6}";

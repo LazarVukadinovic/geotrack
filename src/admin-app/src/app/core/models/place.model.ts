@@ -115,4 +115,7 @@ export interface RegionalPlaceCreateRequest {
   operatingHoursEnabled: boolean;
   operatingHours: RegionalPlaceOperatingHourDto[];
   tagIds: number[];
+  cardImageFile?: File | null;
+  coverImageFile?: File | null;
+  galleryImageFiles?: File[];
 }

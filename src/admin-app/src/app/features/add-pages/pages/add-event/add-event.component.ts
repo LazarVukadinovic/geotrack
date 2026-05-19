@@ -108,9 +108,14 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   isUnderline = false;
   editorIsEmpty = true;
 
+  cardImageUrl: string | null = null;
+  cardImageName = '';
   coverImageUrl: string | null = null;
   coverImageName = '';
-  galleryImages: { url: string; name: string }[] = [];
+  galleryImages: { url: string; name: string; file: File }[] = [];
+
+  private cardImageFile: File | null = null;
+  private coverImageFile: File | null = null;
 
   destinations: RegionalEventParentDestinationDto[] = [];
   locations: RegionalEventParentLocationDto[] = [];
@@ -264,6 +269,8 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       Boolean(this.summary.trim()) &&
       Boolean(this.eventTypeId) &&
       Boolean(this.parentDestination) &&
+      Boolean(this.cardImageFile) &&
+      Boolean(this.coverImageFile) &&
       this.hasSelectedParent();
   }
 
@@ -330,6 +337,31 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.syncEmptyState();
   }
 
+  onCardImageSelected(event: Event): void {
+    const input = event.target instanceof HTMLInputElement ? event.target : null;
+    const file = input?.files?.[0];
+    if (!file || !this.validateImageFile(file)) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.zone.run(() => {
+        this.cardImageUrl = reader.result as string;
+        this.cardImageName = file.name;
+        this.cardImageFile = file;
+        this.cdr.markForCheck();
+      });
+    };
+    reader.readAsDataURL(file);
+    if (input) input.value = '';
+  }
+
+  removeCardImage(): void {
+    this.cardImageUrl = null;
+    this.cardImageName = '';
+    this.cardImageFile = null;
+    this.cdr.markForCheck();
+  }
+
   onCoverImageSelected(event: Event): void {
     const input = event.target instanceof HTMLInputElement ? event.target : null;
     const file = input?.files?.[0];
@@ -340,6 +372,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       this.zone.run(() => {
         this.coverImageUrl = reader.result as string;
         this.coverImageName = file.name;
+        this.coverImageFile = file;
         this.cdr.markForCheck();
       });
     };
@@ -350,6 +383,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   removeCoverImage(): void {
     this.coverImageUrl = null;
     this.coverImageName = '';
+    this.coverImageFile = null;
     this.cdr.markForCheck();
   }
 
@@ -360,7 +394,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       const reader = new FileReader();
       reader.onload = () => {
         this.zone.run(() => {
-          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name }];
+          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name, file }];
           this.cdr.markForCheck();
         });
       };
@@ -630,6 +664,16 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
+    if (!this.cardImageFile) {
+      this.errorMessage = 'Card image is required.';
+      return null;
+    }
+
+    if (!this.coverImageFile) {
+      this.errorMessage = 'Cover image is required.';
+      return null;
+    }
+
     if (!this.hasSelectedParent() || !this.parentDestination) {
       this.errorMessage = 'Select a valid event parent in the active region.';
       return null;
@@ -708,6 +752,9 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       attendanceLimit,
       ageRestriction: this.ageRestriction.trim() || null,
       tagIds: [...this.selectedTagIds],
+      cardImageFile: this.cardImageFile,
+      coverImageFile: this.coverImageFile,
+      galleryImageFiles: this.galleryImages.map(image => image.file),
     };
   }
 

@@ -125,9 +125,14 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   isUnderline = false;
   editorIsEmpty = true;
 
+  cardImageUrl: string | null = null;
+  cardImageName = '';
   coverImageUrl: string | null = null;
   coverImageName = '';
-  galleryImages: { url: string; name: string }[] = [];
+  galleryImages: { url: string; name: string; file: File }[] = [];
+
+  private cardImageFile: File | null = null;
+  private coverImageFile: File | null = null;
 
   allHours = Array.from({ length: 24 }, (_, hour) => `${hour.toString().padStart(2, '0')}:00`);
   days: DayHours[] = [
@@ -286,6 +291,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       this.placeName.trim().length > 0 &&
       this.summary.trim().length > 0 &&
       this.pinConfirmed &&
+      Boolean(this.cardImageFile) &&
+      Boolean(this.coverImageFile) &&
       !this.regionLoading &&
       !this.parentLocationsLoading &&
       !this.placeTypesLoading &&
@@ -542,6 +549,34 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.syncEmptyState();
   }
 
+  onCardImageSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !this.isAllowedImage(file)) {
+      input.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.zone.run(() => {
+        this.cardImageUrl = reader.result as string;
+        this.cardImageName = file.name;
+        this.cardImageFile = file;
+        this.notifyStateChanged();
+      });
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  removeCardImage(): void {
+    this.cardImageUrl = null;
+    this.cardImageName = '';
+    this.cardImageFile = null;
+    this.notifyStateChanged();
+  }
+
   onCoverImageSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -555,6 +590,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       this.zone.run(() => {
         this.coverImageUrl = reader.result as string;
         this.coverImageName = file.name;
+        this.coverImageFile = file;
         this.notifyStateChanged();
       });
     };
@@ -565,6 +601,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   removeCoverImage(): void {
     this.coverImageUrl = null;
     this.coverImageName = '';
+    this.coverImageFile = null;
     this.notifyStateChanged();
   }
 
@@ -575,7 +612,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       const reader = new FileReader();
       reader.onload = () => {
         this.zone.run(() => {
-          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name }];
+          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name, file }];
           this.notifyStateChanged();
         });
       };
@@ -738,6 +775,16 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
+    if (!this.cardImageFile) {
+      this.errorMessage = 'Card image is required.';
+      return null;
+    }
+
+    if (!this.coverImageFile) {
+      this.errorMessage = 'Cover image is required.';
+      return null;
+    }
+
     const website = this.normalizeUrl(this.website, 'Website URL is invalid.');
     if (website === false) return null;
 
@@ -774,6 +821,9 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
       tagIds: [...this.selectedTagIds],
+      cardImageFile: this.cardImageFile,
+      coverImageFile: this.coverImageFile,
+      galleryImageFiles: this.galleryImages.map(image => image.file),
     };
   }
 

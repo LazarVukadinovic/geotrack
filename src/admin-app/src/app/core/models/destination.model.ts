@@ -72,4 +72,7 @@ export interface RegionalDestinationCreateRequest {
   boundaryNote?: string | null;
   boundary?: RegionalDestinationBoundaryDto | null;
   tagIds: number[];
+  cardImageFile?: File | null;
+  coverImageFile?: File | null;
+  galleryImageFiles?: File[];
 }

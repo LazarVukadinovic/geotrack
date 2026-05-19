@@ -163,10 +163,63 @@
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
             <div class="flex items-center justify-between mb-3">
               <div>
-                <h3 class="text-sm font-bold text-gray-900 mb-0.5">Hero Media</h3>
-                <p class="text-xs text-gray-500">Main cover image and optional gallery</p>
+                <h3 class="text-sm font-bold text-gray-900 mb-0.5">Media</h3>
+                <p class="text-xs text-gray-500">Required card + cover image and optional gallery</p>
               </div>
             </div>
+
+
+            <p class="text-xs font-semibold text-gray-600 mb-2">
+              Card Image <span class="text-red-500">*</span>
+              <span class="text-gray-400 font-normal">Small thumbnail/card image</span>
+            </p>
+
+            @if (!cardImageUrl) {
+              <label
+                class="border-2 border-dashed border-gray-300 rounded-xl py-6 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors mb-4"
+                for="cardImageInput"
+              >
+                <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                </div>
+                <span>Click to upload Card Image</span>
+                <span class="text-xs text-gray-400">PNG, JPG, WEBP - smaller thumbnail</span>
+              </label>
+            }
+
+            @if (cardImageUrl) {
+              <div class="relative rounded-xl overflow-hidden group mb-2" style="height: 150px; max-width: 360px;">
+                <img
+                  [src]="cardImageUrl"
+                  alt="Card preview"
+                  class="w-full h-full object-cover rounded-xl cursor-zoom-in"
+                  (click)="openLightbox([{ url: cardImageUrl!, name: cardImageName }], 0)"
+                />
+                <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 pointer-events-none">
+                  <label for="cardImageInput"
+                         class="bg-white text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 pointer-events-auto">
+                    Replace
+                  </label>
+                  <button type="button" (click)="removeCardImage()"
+                          class="bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto">
+                    Remove
+                  </button>
+                </div>
+              </div>
+              <p class="text-xs text-gray-400 mt-2 mb-4">{{ cardImageName }}</p>
+            }
+
+            <input id="cardImageInput" type="file" accept=".png,.jpg,.jpeg,.webp" class="hidden"
+                   (change)="onCardImageSelected($event)" />
+
+            <div class="border-t border-gray-100 my-4"></div>
+
+            <p class="text-xs font-semibold text-gray-600 mb-2">
+              Cover Image <span class="text-red-500">*</span>
+              <span class="text-gray-400 font-normal">Large hero image</span>
+            </p>
 
             @if (!coverImageUrl) {
               <label

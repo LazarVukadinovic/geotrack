@@ -127,7 +127,7 @@ export class PlacesListService {
   }
 
   createPlace(payload: RegionalPlaceCreateRequest): Observable<RegionalPlaceDetailDto> {
-    return this.http.post<RegionalPlaceDetailDto>(this.endpoint, payload);
+    return this.http.post<RegionalPlaceDetailDto>(this.endpoint, this.buildCreateFormData(payload));
   }
 
   getParentLocations(
@@ -166,6 +166,25 @@ export class PlacesListService {
   deletePlace(regionId: number, placeId: string | number): Observable<void> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.delete<void>(`${this.endpoint}/${placeId}`, { params });
+  }
+
+
+  private buildCreateFormData(payload: RegionalPlaceCreateRequest): FormData {
+    const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
+    if (!cardImageFile || !coverImageFile) {
+      throw new Error('Card and cover images are required.');
+    }
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+    formData.append('cardImage', cardImageFile);
+    formData.append('coverImage', coverImageFile);
+
+    for (const file of galleryImageFiles ?? []) {
+      formData.append('galleryImages', file);
+    }
+
+    return formData;
   }
 
   toListItem(dto: RegionalPlaceListItemDto): PlaceListItem {
