@@ -155,6 +155,7 @@ builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
+builder.Services.AddScoped<ITerritoryDashboardService, TerritoryDashboardService>();
 builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
 builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
 builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();
@@ -223,6 +224,10 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequireRegionalManager", policy =>
         policy.RequireRole(RoleNames.RegionalManager));
+    options.AddPolicy("RequireTerritoryManager", policy =>
+        policy.RequireRole(RoleNames.TerritoryManager));
+    options.AddPolicy("RequireAdminAppUser", policy =>
+        policy.RequireRole(RoleNames.TerritoryManager, RoleNames.RegionalManager));
 });
 
 builder.Services.AddRateLimiter(options =>
@@ -365,8 +370,10 @@ var shouldSeedDatabase =
     || app.Configuration.GetValue<bool>("SeedData:Enabled");
 var shouldSeedDemoRegionalManager =
     DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
+var shouldSeedDemoTerritoryManager =
+    DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 
-if (shouldSeedDatabase || shouldSeedDemoRegionalManager)
+if (shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -384,6 +391,14 @@ if (shouldSeedDatabase || shouldSeedDemoRegionalManager)
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger(nameof(DemoRegionalManagerSeeder));
         await DemoRegionalManagerSeeder.EnsureAsync(db, app.Configuration, logger);
+    }
+
+    if (shouldSeedDemoTerritoryManager)
+    {
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(nameof(DemoTerritoryManagerSeeder));
+        await DemoTerritoryManagerSeeder.EnsureAsync(db, app.Configuration, logger);
     }
 }
 
