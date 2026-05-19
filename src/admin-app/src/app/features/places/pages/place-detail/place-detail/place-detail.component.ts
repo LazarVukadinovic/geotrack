@@ -42,6 +42,11 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   mapModalOpen  = false;
   deleteTarget: PlaceListItem | null = null;
   isDeleting    = false;
+  ownerFormOpen = false;
+  ownerIdentifier = '';
+  ownerError = '';
+  ownerSuccess = '';
+  isAddingOwner = false;
 
   private miniMap:     any = null;
   private modalMap:    any = null;
@@ -50,23 +55,30 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
+    const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
     const navState = history.state as Partial<PlaceListItem> & { regionId?: number };
 
     if (id) {
       const fromService = this.svc.findById(id);
-      if (fromService) {
-        this.setItem(fromService);
+      const regionId = navState?.regionId ?? fromService?.regionId ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+      if (regionId) {
+        this.loadFromBackend(regionId, id);
         return;
       }
 
-      const regionId = navState?.regionId ?? null;
-      if (regionId) {
-        this.loadFromBackend(regionId, id);
+      if (fromService) {
+        this.setItem(fromService);
         return;
       }
     }
 
     if (navState?.id && navState?.name && navState?.status) {
+      const regionId = navState?.regionId ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+      if (regionId) {
+        this.loadFromBackend(regionId, String(navState.id));
+        return;
+      }
+
       this.setItem(navState as PlaceListItem);
       return;
     }
@@ -175,6 +187,68 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.item?.locationId || !this.item?.regionId) return;
     this.router.navigate(['/locations/detail', this.item.locationId], {
       state: { regionId: this.item.regionId },
+    });
+  }
+
+
+  get isOwnable(): boolean {
+    return Boolean((this.item as any)?.isOwnable);
+  }
+
+  get owners(): { userId: number; username: string; email: string; displayName: string }[] {
+    return ((this.item as any)?.owners ?? []) as { userId: number; username: string; email: string; displayName: string }[];
+  }
+
+  get hasOwner(): boolean {
+    return this.owners.length > 0;
+  }
+
+  get ownerNames(): string {
+    return this.owners
+      .map(owner => owner.displayName || owner.username || owner.email)
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  toggleOwnerForm(): void {
+    this.ownerFormOpen = !this.ownerFormOpen;
+    this.ownerError = '';
+    this.ownerSuccess = '';
+
+    if (!this.ownerFormOpen) {
+      this.ownerIdentifier = '';
+    }
+  }
+
+  addOwner(): void {
+    if (!this.item || this.isAddingOwner) return;
+
+    const emailOrUsername = this.ownerIdentifier.trim();
+    if (!emailOrUsername) {
+      this.ownerError = 'Enter owner email or username.';
+      this.ownerSuccess = '';
+      return;
+    }
+
+    this.isAddingOwner = true;
+    this.ownerError = '';
+    this.ownerSuccess = '';
+
+    this.svc.addOwner(this.item.regionId, this.item.id, { emailOrUsername }).subscribe({
+      next: dto => {
+        this.setItem(this.svc.toListItem(dto));
+        this.ownerIdentifier = '';
+        this.ownerFormOpen = false;
+        this.ownerSuccess = 'Owner added.';
+        this.isAddingOwner = false;
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.ownerError = err?.error?.message || err?.message || 'Could not add owner.';
+        this.ownerSuccess = '';
+        this.isAddingOwner = false;
+        this.cdr.markForCheck();
+      },
     });
   }
 

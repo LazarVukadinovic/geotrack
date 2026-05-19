@@ -16,6 +16,16 @@
   background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
 }
 
+.assigned-region-card--clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.assigned-region-card--clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(29, 78, 216, 0.22);
+}
+
 .activity-status.status-pending {
   background: #fffbeb;
   color: #d97706;

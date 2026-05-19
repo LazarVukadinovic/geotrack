@@ -9,6 +9,7 @@ import {
   RegionalDestinationListParams,
   RegionalDestinationListResponse,
   RegionalDestinationTagDto,
+  RegionalDestinationUpdateRequest,
 } from '../models/destination.model';
 
 export interface DestinationListItem {
@@ -104,6 +105,15 @@ export class DestinationsListService {
     return this.http.post<RegionalDestinationDetailDto>(this.endpoint, this.buildCreateFormData(payload));
   }
 
+  updateDestination(
+    regionId: number,
+    destinationId: string | number,
+    payload: RegionalDestinationUpdateRequest,
+  ): Observable<RegionalDestinationDetailDto> {
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http.put<RegionalDestinationDetailDto>(`${this.endpoint}/${destinationId}`, payload, { params });
+  }
+
   getDestinationTags(): Observable<RegionalDestinationTagDto[]> {
     return this.http.get<RegionalDestinationTagDto[]>('/api/admin/regional/destination-tags');
   }
@@ -160,7 +170,7 @@ export class DestinationsListService {
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
       imageUrl: dto.imageUrl ?? null,
       detailRoute: dto.detailRoute ?? `/destinations/detail/${dto.id}`,
-      editRoute: dto.editRoute ?? '/destinations/new',
+      editRoute: dto.editRoute ?? `/destinations/edit/${dto.id}`,
       tagsDto: dto.tags ?? [],
       tags: (dto.tags ?? []).map(tag => tag.name),
     };

@@ -49,6 +49,13 @@ export class HotelDetailPageComponent {
 
   protected readonly scrollProgress = signal(0);
   protected readonly selectedImageUrl = signal<string | null>(null);
+  protected readonly ownershipClaimOpen = signal(false);
+  protected readonly ownershipProofFile = signal<File | null>(null);
+  protected readonly ownershipProofFileName = signal('');
+  protected readonly ownershipClaimError = signal('');
+  protected readonly ownershipClaimMessage = signal('');
+  protected readonly ownershipClaimSubmitting = signal(false);
+  protected readonly ownershipClaimSubmitted = signal(false);
   protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.hotel()?.heroImage ?? '');
   protected readonly reportMessage = signal('');
   protected readonly reportError = signal('');
@@ -129,6 +136,92 @@ export class HotelDetailPageComponent {
 
   protected isGalleryImageActive(url: string): boolean {
     return (this.selectedImageUrl() ?? this.hotel()?.heroImage ?? '') === url;
+  }
+
+  protected openOwnershipClaim(): void {
+    if (!this.isLoggedIn()) {
+      this.goToLogin();
+      return;
+    }
+
+    this.ownershipClaimError.set('');
+    this.ownershipClaimMessage.set('');
+    this.ownershipProofFile.set(null);
+    this.ownershipProofFileName.set('');
+    this.ownershipClaimOpen.set(true);
+  }
+
+  protected closeOwnershipClaim(): void {
+    if (this.ownershipClaimSubmitting()) return;
+    this.ownershipClaimOpen.set(false);
+  }
+
+  protected onOwnershipProofSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    this.ownershipClaimError.set('');
+
+    if (!file) return;
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      this.ownershipClaimError.set('Upload a PDF document.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      this.ownershipClaimError.set('Document must be 10 MB or smaller.');
+      return;
+    }
+
+    this.ownershipProofFile.set(file);
+    this.ownershipProofFileName.set(file.name);
+  }
+
+  protected submitOwnershipClaim(): void {
+    const hotel = this.hotel();
+    const file = this.ownershipProofFile();
+    if (!hotel || this.ownershipClaimSubmitting()) return;
+
+    if (!file) {
+      this.ownershipClaimError.set('Ownership proof document is required.');
+      return;
+    }
+
+    const numericPlaceId = parseInt(hotel.id, 10);
+    if (isNaN(numericPlaceId)) {
+      this.ownershipClaimError.set('Invalid stay.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify({
+      type: 'ClaimOwnership',
+      placeId: numericPlaceId,
+      placeType: 'Stay',
+      placeTypeId: null,
+      name: hotel.title,
+      description: hotel.about ?? '',
+    }));
+    formData.append('ownershipProofDocument', file);
+
+    this.ownershipClaimSubmitting.set(true);
+    this.ownershipClaimError.set('');
+    this.ownershipClaimMessage.set('');
+
+    this.http.post('/api/contributions/stays', formData).subscribe({
+      next: () => {
+        this.ownershipClaimSubmitting.set(false);
+        this.ownershipClaimSubmitted.set(true);
+        this.ownershipClaimOpen.set(false);
+        this.ownershipClaimMessage.set('Ownership request submitted. A regional manager will review it.');
+      },
+      error: (err) => {
+        this.ownershipClaimSubmitting.set(false);
+        this.ownershipClaimError.set(err?.error?.message || 'Could not submit ownership request.');
+      },
+    });
   }
 
   protected openReviews(): void {

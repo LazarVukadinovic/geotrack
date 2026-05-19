@@ -27,6 +27,9 @@ public class HotelDetailDto
     public List<ReviewDto> Reviews { get; set; } = new();
     public List<SimilarPlaceDto> Similar { get; set; } = new();
     public bool IsSaved { get; set; }
+    public bool IsOwnable { get; set; }
+    public bool IsOwnedByCurrentUser { get; set; }
+    public bool HasPendingOwnershipClaim { get; set; }
 }
 
 public class BookingPartnerDto

@@ -3,12 +3,14 @@ import { Injectable } from '@angular/core';
 import { Observable, map, throwError } from 'rxjs';
 import {
   PlaceSort,
+  RegionalPlaceAddOwnerRequest,
   RegionalPlaceCreateRequest,
   RegionalPlaceDetailDto,
   RegionalPlaceListItemDto,
   RegionalPlaceListParams,
   RegionalPlaceListResponse,
   RegionalPlaceParentLocationDto,
+  RegionalPlaceOwnerDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
 } from '../models/place.model';
@@ -31,6 +33,9 @@ export interface PlaceListItem {
   locationName?: string | null;
   placeTypeId?: number | null;
   placeType?: string | null;
+  isOwnable?: boolean;
+  hasOwner?: boolean;
+  owners?: RegionalPlaceOwnerDto[];
   stayTypeId?: number | null;
   stayType?: string | null;
   createdAt?: string | null;
@@ -126,6 +131,15 @@ export class PlacesListService {
     return this.http.get<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, { params });
   }
 
+  addOwner(
+    regionId: number,
+    placeId: string | number,
+    payload: RegionalPlaceAddOwnerRequest,
+  ): Observable<RegionalPlaceDetailDto> {
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http.post<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}/owners`, payload, { params });
+  }
+
   createPlace(payload: RegionalPlaceCreateRequest): Observable<RegionalPlaceDetailDto> {
     return this.http.post<RegionalPlaceDetailDto>(this.endpoint, this.buildCreateFormData(payload));
   }
@@ -215,6 +229,9 @@ export class PlacesListService {
       locationName,
       placeTypeId: dto.placeTypeId ?? null,
       placeType,
+      isOwnable: Boolean((dto as RegionalPlaceDetailDto).isOwnable),
+      owners: (dto as RegionalPlaceDetailDto).owners ?? [],
+      hasOwner: Boolean((dto as RegionalPlaceDetailDto).hasOwner || ((dto as RegionalPlaceDetailDto).owners ?? []).length),
       stayTypeId: dto.stayTypeId ?? null,
       stayType,
       createdAt: dto.createdAt ?? null,

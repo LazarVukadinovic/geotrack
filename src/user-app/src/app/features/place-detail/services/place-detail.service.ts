@@ -29,6 +29,9 @@ interface ApiPlaceDetail {
   reviews: { id: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean }[];
   similar?: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[] | null;
   isSaved: boolean;
+  isOwnable?: boolean;
+  isOwnedByCurrentUser?: boolean;
+  hasPendingOwnershipClaim?: boolean;
   contentType: string;
   category?: string;
 }
@@ -115,6 +118,9 @@ export class PlaceDetailService {
             isSaved: s.isSaved,
           })),
           isSaved: dto.isSaved,
+          isOwnable: dto.isOwnable ?? false,
+          isOwnedByCurrentUser: dto.isOwnedByCurrentUser ?? false,
+          hasPendingOwnershipClaim: dto.hasPendingOwnershipClaim ?? false,
           contentType: (dto.contentType ?? 'place') as PlaceDetail['contentType'],
           category: (dto.category ?? 'attraction') as PlaceDetail['category'],
         };

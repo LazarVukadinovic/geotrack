@@ -31,6 +31,9 @@ interface ApiHotelDetail {
   reviews: { id: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean }[];
   similar: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[];
   isSaved: boolean;
+  isOwnable?: boolean;
+  isOwnedByCurrentUser?: boolean;
+  hasPendingOwnershipClaim?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -127,6 +130,9 @@ export class HotelDetailService {
             isSaved: s.isSaved,
           })),
           isSaved: dto.isSaved,
+          isOwnable: dto.isOwnable ?? true,
+          isOwnedByCurrentUser: dto.isOwnedByCurrentUser ?? false,
+          hasPendingOwnershipClaim: dto.hasPendingOwnershipClaim ?? false,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');

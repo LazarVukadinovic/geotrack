@@ -5,6 +5,7 @@ using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
+using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
@@ -84,6 +85,18 @@ public class RegionalPlaceService : IRegionalPlaceService
                 AccessibilityNotes = place.AccessibilityNotes,
                 PlaceTypeId = place.PlaceTypeId,
                 PlaceTypeName = place.PlaceType.Name,
+                IsOwnable = place.PlaceType.IsOwnable,
+                Owners = place.UserPlaces
+                    .OrderBy(userPlace => userPlace.User.DisplayName ?? userPlace.User.Username)
+                    .ThenBy(userPlace => userPlace.User.Id)
+                    .Select(userPlace => new RegionalPlaceOwnerDto
+                    {
+                        UserId = userPlace.UserId,
+                        Username = userPlace.User.Username,
+                        Email = userPlace.User.Email,
+                        DisplayName = userPlace.User.DisplayName ?? userPlace.User.Username
+                    })
+                    .ToList(),
                 StayTypeId = place.Stay != null ? place.Stay.StayTypeId : null,
                 StayTypeName = place.Stay != null ? place.Stay.StayType.Name : null,
                 LocationId = place.LocationId,
@@ -158,6 +171,18 @@ public class RegionalPlaceService : IRegionalPlaceService
                 AccessibilityNotes = place.AccessibilityNotes,
                 PlaceTypeId = place.PlaceTypeId,
                 PlaceTypeName = place.PlaceType.Name,
+                IsOwnable = place.PlaceType.IsOwnable,
+                Owners = place.UserPlaces
+                    .OrderBy(userPlace => userPlace.User.DisplayName ?? userPlace.User.Username)
+                    .ThenBy(userPlace => userPlace.User.Id)
+                    .Select(userPlace => new RegionalPlaceOwnerDto
+                    {
+                        UserId = userPlace.UserId,
+                        Username = userPlace.User.Username,
+                        Email = userPlace.User.Email,
+                        DisplayName = userPlace.User.DisplayName ?? userPlace.User.Username
+                    })
+                    .ToList(),
                 StayTypeId = place.Stay != null ? place.Stay.StayTypeId : null,
                 StayTypeName = place.Stay != null ? place.Stay.StayType.Name : null,
                 LocationId = place.LocationId,
@@ -340,6 +365,54 @@ public class RegionalPlaceService : IRegionalPlaceService
         place.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
+        return await GetPlaceAsync(userId, regionId, placeId);
+    }
+
+    public async Task<RegionalPlaceDetailDto> AddOwnerAsync(
+        int userId,
+        int regionId,
+        int placeId,
+        RegionalPlaceAddOwnerRequestDto request)
+    {
+        await EnsureAssignedRegionAsync(userId, regionId);
+
+        var place = await _db.Places
+            .Include(item => item.PlaceType)
+            .Include(item => item.Location)
+                .ThenInclude(location => location.Destination)
+            .Include(item => item.UserPlaces)
+            .SingleOrDefaultAsync(item => item.Id == placeId && item.Location.Destination.RegionId == regionId)
+            ?? throw new KeyNotFoundException("Place not found.");
+
+        if (!place.PlaceType.IsOwnable)
+            throw new InvalidOperationException("Only ownable place types can have owners assigned.");
+
+        var identifier = NormalizeRequiredText(
+            request.EmailOrUsername,
+            "Owner email or username is required.",
+            256,
+            "Owner email or username is too long.");
+        var normalizedIdentifier = identifier.ToLowerInvariant();
+
+        var owner = await _db.Users
+            .SingleOrDefaultAsync(candidate =>
+                candidate.Email.ToLower() == normalizedIdentifier ||
+                candidate.Username.ToLower() == normalizedIdentifier)
+            ?? throw new KeyNotFoundException("User not found.");
+
+        if (!place.UserPlaces.Any(userPlace => userPlace.UserId == owner.Id))
+        {
+            _db.UserPlaces.Add(new UserPlace
+            {
+                UserId = owner.Id,
+                PlaceId = place.Id,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            place.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
         return await GetPlaceAsync(userId, regionId, placeId);
     }
 
@@ -993,6 +1066,8 @@ public class RegionalPlaceService : IRegionalPlaceService
             Address = item.Address,
             PlaceType = item.PlaceType,
             PlaceTypeId = item.PlaceTypeId,
+            IsOwnable = row.IsOwnable,
+            Owners = row.Owners,
             StayType = item.StayType,
             StayTypeId = item.StayTypeId,
             Status = item.Status,
@@ -1205,6 +1280,8 @@ public class RegionalPlaceService : IRegionalPlaceService
         public string? AccessibilityNotes { get; set; }
         public int PlaceTypeId { get; set; }
         public string? PlaceTypeName { get; set; }
+        public bool IsOwnable { get; set; }
+        public List<RegionalPlaceOwnerDto> Owners { get; set; } = new();
         public int? StayTypeId { get; set; }
         public string? StayTypeName { get; set; }
         public int LocationId { get; set; }

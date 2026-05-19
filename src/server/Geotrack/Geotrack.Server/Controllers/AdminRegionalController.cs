@@ -546,6 +546,28 @@ public class AdminRegionalController : ControllerBase
         }
     }
 
+    [HttpPost("places/{id:int}/owners")]
+    public async Task<ActionResult<RegionalPlaceDetailDto>> AddPlaceOwner(
+        [FromRoute] int id,
+        [FromQuery] int regionId,
+        [FromBody] RegionalPlaceAddOwnerRequestDto? request)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _places.AddOwnerAsync(GetCurrentUserId(), regionId, id, request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("place-parent-locations")]
     public async Task<ActionResult<List<RegionalPlaceParentLocationDto>>> GetPlaceParentLocations(
         [FromQuery] int regionId,

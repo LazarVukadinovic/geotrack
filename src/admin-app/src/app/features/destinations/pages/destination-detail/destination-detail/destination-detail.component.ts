@@ -194,8 +194,9 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
 
   editItem(): void {
     const full = this.svc.findById(this.item!.id) ?? this.item!;
-    this.router.navigate(['/destinations/new'], {
-      state: { place: full, returnTo: `/destinations/detail/${full.id}` }
+    this.router.navigate(['/destinations/edit', full.id], {
+      queryParams: { regionId: full.regionId },
+      state: { destination: full, returnTo: `/destinations/detail/${full.id}` }
     });
   }
 

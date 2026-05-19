@@ -71,4 +71,7 @@ export interface HotelDetail {
   reviews: HotelReview[];
   similar: HotelSimilar[];
   isSaved: boolean;
+  isOwnable: boolean;
+  isOwnedByCurrentUser: boolean;
+  hasPendingOwnershipClaim: boolean;
 }

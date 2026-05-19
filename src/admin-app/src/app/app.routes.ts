@@ -79,6 +79,12 @@ export const routes: Routes = [
           import('./features/add-pages/pages/add-destination/add-destination.component').then(m => m.AddDestinationComponent),
       },
       {
+        path: 'destinations/edit/:id',
+        canActivate: [regionalManagerGuard],
+        loadComponent: () =>
+          import('./features/add-pages/pages/add-destination/add-destination.component').then(m => m.AddDestinationComponent),
+      },
+      {
         path: 'locations/new',
         canActivate: [regionalManagerGuard],
         loadComponent: () =>

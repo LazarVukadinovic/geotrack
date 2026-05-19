@@ -58,6 +58,9 @@ export interface PlaceDetail {
   reviews: PlaceReview[];
   similar: PlaceSimilar[];
   isSaved: boolean;
+  isOwnable: boolean;
+  isOwnedByCurrentUser: boolean;
+  hasPendingOwnershipClaim: boolean;
   contentType: PlaceContentType;
   category: PlaceCategory;
 }

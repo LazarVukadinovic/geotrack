@@ -31,6 +31,9 @@ export interface RegionalPlaceListItemDto {
 }
 
 export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
+  isOwnable: boolean;
+  hasOwner?: boolean;
+  owners: RegionalPlaceOwnerDto[];
   latitude: number;
   longitude: number;
   openingHours?: string | null;
@@ -45,6 +48,18 @@ export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
   accessibilityNotes?: string | null;
   operatingHoursEnabled: boolean;
   operatingHours: RegionalPlaceOperatingHourDto[];
+}
+
+
+export interface RegionalPlaceOwnerDto {
+  userId: number;
+  username: string;
+  email: string;
+  displayName: string;
+}
+
+export interface RegionalPlaceAddOwnerRequest {
+  emailOrUsername: string;
 }
 
 export interface RegionalPlaceListResponse {

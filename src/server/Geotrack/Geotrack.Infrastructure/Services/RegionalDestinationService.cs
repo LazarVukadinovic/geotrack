@@ -15,7 +15,7 @@ public class RegionalDestinationService : IRegionalDestinationService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
-    private const string ExistingEditRoute = "/destinations/new";
+    private static string ExistingEditRoute(int destinationId) => $"/destinations/edit/{destinationId}";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
@@ -174,7 +174,9 @@ public class RegionalDestinationService : IRegionalDestinationService
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
         var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
-        var coordinates = ResolveCoordinates(request);
+        var boundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long.");
+        var boundary = BuildBoundary(request.Boundary);
+        var coordinates = ResolveCoordinates(request, boundary?.Geometry);
         var destinationTypeId = await ResolveDestinationTypeIdAsync(request.DestinationTypeId);
         var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
@@ -193,8 +195,8 @@ public class RegionalDestinationService : IRegionalDestinationService
             Longitude = coordinates.Longitude,
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
-            BoundaryNote = null,
-            BoundaryShapeType = null,
+            BoundaryNote = boundaryNote,
+            BoundaryShapeType = boundary?.ShapeType,
             CreatedAt = now,
             DestinationTags = tagIds
                 .Select(tagId => new DestinationTag { TagId = tagId })
@@ -202,6 +204,12 @@ public class RegionalDestinationService : IRegionalDestinationService
         };
 
         _db.Destinations.Add(destination);
+        if (boundary?.Geometry is not null)
+        {
+            _db.Entry(destination)
+                .Property<Geometry?>(BoundaryGeometryPropertyName)
+                .CurrentValue = boundary.Geometry;
+        }
 
         await _db.SaveChangesAsync();
 
@@ -505,14 +513,27 @@ public class RegionalDestinationService : IRegionalDestinationService
         return new BoundaryResult(shapeType, polygon);
     }
 
-    private static DestinationCoordinates ResolveCoordinates(RegionalDestinationCreateRequestDto request)
+    private static DestinationCoordinates ResolveCoordinates(
+        RegionalDestinationCreateRequestDto request,
+        Geometry? boundaryGeometry)
     {
-        if (!request.Latitude.HasValue || !request.Longitude.HasValue)
-            throw new InvalidOperationException("A destination center point is required.");
+        if (request.Latitude.HasValue || request.Longitude.HasValue)
+        {
+            if (!request.Latitude.HasValue || !request.Longitude.HasValue)
+                throw new InvalidOperationException("Latitude and longitude must be provided together.");
 
-        ValidateLatitude(request.Latitude.Value);
-        ValidateLongitude(request.Longitude.Value);
-        return new DestinationCoordinates(request.Latitude.Value, request.Longitude.Value);
+            ValidateLatitude(request.Latitude.Value);
+            ValidateLongitude(request.Longitude.Value);
+            return new DestinationCoordinates(request.Latitude.Value, request.Longitude.Value);
+        }
+
+        if (boundaryGeometry is null)
+            throw new InvalidOperationException("A destination boundary or coordinates are required.");
+
+        var centroid = boundaryGeometry.Centroid;
+        ValidateLatitude(centroid.Y);
+        ValidateLongitude(centroid.X);
+        return new DestinationCoordinates(centroid.Y, centroid.X);
     }
 
     private static string NormalizeCreateStatus(string? value)
@@ -605,7 +626,7 @@ public class RegionalDestinationService : IRegionalDestinationService
             LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
             DetailRoute = "/destinations/detail/" + row.Id,
-            EditRoute = ExistingEditRoute
+            EditRoute = ExistingEditRoute(row.Id)
         };
     }
 

@@ -23,6 +23,9 @@ public class PlaceDetailDto
     public List<ReviewDto> Reviews { get; set; } = new();
     public List<SimilarPlaceDto> Similar { get; set; } = new();
     public bool IsSaved { get; set; }
+    public bool IsOwnable { get; set; }
+    public bool IsOwnedByCurrentUser { get; set; }
+    public bool HasPendingOwnershipClaim { get; set; }
     public string ContentType { get; set; } = "place";
     public string? Category { get; set; }
 }

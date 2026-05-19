@@ -6,6 +6,7 @@ using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -150,6 +151,14 @@ public class PlaceService : IPlaceService
 
         var isSaved = userId.HasValue &&
             await _favoriteService.IsFavoriteAsync(userId.Value, "place", id);
+        var isOwnedByCurrentUser = userId.HasValue &&
+            await _db.UserPlaces.AsNoTracking().AnyAsync(item => item.PlaceId == id && item.UserId == userId.Value);
+        var hasPendingOwnershipClaim = userId.HasValue &&
+            await _db.PlaceContributions.AsNoTracking().AnyAsync(item =>
+                item.PlaceId == id &&
+                item.UserId == userId.Value &&
+                item.Type == PlaceContributionType.ClaimOwnership &&
+                item.Status == PlaceContributionStatus.PendingReview);
 
         var similar = await _db.Places
             .AsNoTracking()
@@ -233,6 +242,9 @@ public class PlaceService : IPlaceService
                 })
                 .ToList(),
             IsSaved = isSaved,
+            IsOwnable = place.PlaceType?.IsOwnable ?? false,
+            IsOwnedByCurrentUser = isOwnedByCurrentUser,
+            HasPendingOwnershipClaim = hasPendingOwnershipClaim,
             ContentType = "place",
             Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant()
         };
@@ -269,6 +281,14 @@ public class PlaceService : IPlaceService
 
         var isSaved = userId.HasValue &&
             await _favoriteService.IsFavoriteAsync(userId.Value, "place", id);
+        var isOwnedByCurrentUser = userId.HasValue &&
+            await _db.UserPlaces.AsNoTracking().AnyAsync(item => item.PlaceId == id && item.UserId == userId.Value);
+        var hasPendingOwnershipClaim = userId.HasValue &&
+            await _db.PlaceContributions.AsNoTracking().AnyAsync(item =>
+                item.PlaceId == id &&
+                item.UserId == userId.Value &&
+                item.Type == PlaceContributionType.ClaimOwnership &&
+                item.Status == PlaceContributionStatus.PendingReview);
 
         var similar = await _db.Places
             .AsNoTracking()
@@ -373,7 +393,10 @@ public class PlaceService : IPlaceService
                     IsSaved = favoriteIds.Contains(s.Id)
                 })
                 .ToList(),
-            IsSaved = isSaved
+            IsSaved = isSaved,
+            IsOwnable = place.PlaceType?.IsOwnable ?? false,
+            IsOwnedByCurrentUser = isOwnedByCurrentUser,
+            HasPendingOwnershipClaim = hasPendingOwnershipClaim
         };
     }
 

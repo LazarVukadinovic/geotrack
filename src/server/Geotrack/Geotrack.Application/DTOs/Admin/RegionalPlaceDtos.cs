@@ -32,6 +32,10 @@ public class RegionalPlaceListItemDto
 
 public class RegionalPlaceDetailDto : RegionalPlaceListItemDto
 {
+    public bool IsOwnable { get; set; }
+    public bool HasOwner => Owners.Count > 0;
+    public List<RegionalPlaceOwnerDto> Owners { get; set; } = new();
+
     public double Latitude { get; set; }
     public double Longitude { get; set; }
     public string? OpeningHours { get; set; }
@@ -46,6 +50,20 @@ public class RegionalPlaceDetailDto : RegionalPlaceListItemDto
     public string? AccessibilityNotes { get; set; }
     public bool OperatingHoursEnabled { get; set; }
     public List<RegionalPlaceOperatingHourDto> OperatingHours { get; set; } = new();
+}
+
+
+public class RegionalPlaceOwnerDto
+{
+    public int UserId { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+}
+
+public class RegionalPlaceAddOwnerRequestDto
+{
+    public string? EmailOrUsername { get; set; }
 }
 
 public class RegionalPlaceListResponseDto

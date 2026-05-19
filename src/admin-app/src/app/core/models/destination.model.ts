@@ -76,3 +76,12 @@ export interface RegionalDestinationCreateRequest {
   coverImageFile?: File | null;
   galleryImageFiles?: File[];
 }
+
+
+export interface RegionalDestinationUpdateRequest {
+  name?: string | null;
+  description?: string | null;
+  destinationTypeId?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
