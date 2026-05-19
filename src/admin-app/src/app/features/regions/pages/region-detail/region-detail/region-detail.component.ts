@@ -1,14 +1,40 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  HostListener,
+  OnDestroy,
+  OnInit,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, ActivatedRoute } from '@angular/router';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription, finalize } from 'rxjs';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
-import { RegionsService, RegionDetail, RegionTeamMember, buildDetail, RegionListItem } from '../../../../../core/services/national/regions.service';
-import { UsersService } from '../../../../../core/services/national/users.service';
-import { PlatformUser } from '../../../../../core/models/platform-user.model';
+import { RegionsService } from '../../../../../core/services/national/regions.service';
+import { AuthService } from '../../../../../core/services/auth.service';
+import { UserAppLinkService } from '../../../../../core/services/user-app-link.service';
+import {
+  TerritoryHealthInsight,
+  TerritoryRegionContentItem,
+  TerritoryRegionContentType,
+  TerritoryRegionDetail,
+  TerritoryRegionManager,
+} from '../../../../../core/models/dashboard.model';
+
+const CONTENT_PAGE_SIZE = 25;
+
+interface DetailTab {
+  label: string;
+  value: TerritoryRegionContentType;
+}
+
+interface ContentSortOption {
+  label: string;
+  value: string;
+}
 
 @Component({
   selector: 'app-region-detail',
@@ -18,399 +44,436 @@ import { PlatformUser } from '../../../../../core/models/platform-user.model';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RegionDetailComponent implements OnInit, OnDestroy {
+  detail: TerritoryRegionDetail | null = null;
+  isLoading = false;
+  errorMessage: string | null = null;
+
+  activeTab: TerritoryRegionContentType = 'destinations';
+  contentItems: TerritoryRegionContentItem[] = [];
+  contentTotal = 0;
+  isContentLoading = false;
+  isContentLoadingMore = false;
+  contentErrorMessage: string | null = null;
+  contentSearch = '';
+  contentSort = 'name';
+  contentSortOpen = false;
+  showAllHealthDetails = false;
+
+  readonly tabs: DetailTab[] = [
+    { label: 'Destinations', value: 'destinations' },
+    { label: 'Locations', value: 'locations' },
+    { label: 'Places', value: 'places' },
+    { label: 'Stays', value: 'stays' },
+    { label: 'Events', value: 'events' },
+    { label: 'All', value: 'all' },
+  ];
+
+  readonly contentSortOptions: ContentSortOption[] = [
+    { label: 'Name', value: 'name' },
+    { label: 'Newest', value: 'newest' },
+    { label: 'Upcoming', value: 'upcoming' },
+    { label: 'Most Views', value: 'views' },
+    { label: 'Most Saves', value: 'saves' },
+    { label: 'Highest Rating', value: 'rating' },
+    { label: 'Health High', value: 'health-high' },
+    { label: 'Health Low', value: 'health-low' },
+  ];
+
+  private contentSearchHandle: ReturnType<typeof setTimeout> | null = null;
+  private detailSubscription: Subscription | null = null;
+  private contentSubscription: Subscription | null = null;
+  private contentRequestSequence = 0;
+  private expandedDestinationIds = new Set<number>();
+  private failedManagerAvatarKeys = new Set<string>();
 
   constructor(
-    private route: ActivatedRoute,
-    private router: Router,
-    private svc: RegionsService,
-    private usersSvc: UsersService,
-    private cdr: ChangeDetectorRef,
+    private readonly route: ActivatedRoute,
+    private readonly router: Router,
+    private readonly svc: RegionsService,
+    private readonly auth: AuthService,
+    private readonly userAppLinks: UserAppLinkService,
+    private readonly cdr: ChangeDetectorRef,
   ) {}
 
-  private destroy$ = new Subject<void>();
-  private emailDropdownTimer: ReturnType<typeof setTimeout> | null = null;
-  private nameDropdownTimer:  ReturnType<typeof setTimeout> | null = null;
-
-  userName = '';
-  userRole = '';
-  isViewMode = true;
-
-  region: RegionDetail | null = null;
-  isLoading = true;
-  isSaving  = false;
-
-  editName        = '';
-  editRefId       = '';
-  editSummary     = '';
-  editDescription = '';
-
-  // Assign user modal
-  showAssignModal   = false;
-  newUserName       = '';
-  newUserEmail      = '';
-  newUserRole       = 'Viewer';
-  allUsers:          PlatformUser[] = [];
-  filteredByEmail:   PlatformUser[] = [];
-  filteredByName:    PlatformUser[] = [];
-  showEmailDropdown = false;
-  showNameDropdown  = false;
-
-  // Remove member
-  removeTarget: RegionTeamMember | null = null;
-  isRemoving = false;
-
-  // Edit / view member modal
-  editMember:       PlatformUser | null = null;
-  isMemberReadOnly  = false;
-  isTogglingRole    = false;
-
   ngOnInit(): void {
-    const state = history.state as { region?: RegionListItem; editMode?: boolean } | undefined;
-    this.isViewMode = !(state?.editMode === true);
-
-    if (state?.region) {
-      this.region = buildDetail(state.region);
-      this.isLoading = false;
-      this.syncEditFields();
-      this.cdr.markForCheck();
-    }
-
-    const id = this.route.snapshot.paramMap.get('id') ?? '';
-
-    this.svc.getDetail$(id)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(detail => {
-        if (detail) {
-          this.region = detail;
-          this.syncEditFields();
-          this.cdr.markForCheck();
-        }
-        this.isLoading = false;
-        this.cdr.markForCheck();
-      });
-
-    this.usersSvc.getPage$({ pageSize: 1000, search: '' })
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(page => {
-        this.allUsers        = page.items;
-        this.filteredByEmail = [...this.allUsers];
-        this.filteredByName  = [...this.allUsers];
-        this.cdr.markForCheck();
-      });
+    this.loadDetail();
   }
 
-  ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
+  ngOnDestroy(): void {
+    this.contentRequestSequence++;
+    this.detailSubscription?.unsubscribe();
+    this.contentSubscription?.unsubscribe();
 
-  private syncEditFields(): void {
-    if (!this.region) return;
-    this.editName        = this.region.name;
-    this.editRefId       = this.region.internalRefId;
-    this.editSummary     = this.region.shortSummary;
-    this.editDescription = this.region.fullDescription;
-  }
-
-  formatDate(dateStr: string): string {
-    if (!dateStr) return '—';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-  }
-
-  switchToEdit(): void {
-    this.isViewMode = false;
-    this.syncEditFields();
-    this.cdr.markForCheck();
-  }
-
-  discardChanges(): void {
-    this.syncEditFields();
-    this.isViewMode = true;
-    this.cdr.markForCheck();
-  }
-
-  saveChanges(): void {
-    if (!this.region) return;
-
-    const patch: Partial<RegionDetail> = {
-      name:            this.editName,
-      internalRefId:   this.editRefId,
-      shortSummary:    this.editSummary,
-      fullDescription: this.editDescription,
-      lastUpdated: new Date().toLocaleDateString('en-GB', {
-        day: '2-digit', month: 'long', year: 'numeric',
-      }),
-    };
-
-    Object.assign(this.region, patch);
-    this.isViewMode = true;
-    this.cdr.markForCheck();
-
-    this.svc.updateDetail$(this.region.id, patch).pipe(takeUntil(this.destroy$)).subscribe();
-  }
-
-  cancelEdit(): void {
-    this.isViewMode = true;
-    this.cdr.markForCheck();
-  }
-
-  goBack(): void { this.router.navigate(['/territory/regions']); }
-
-  // ── Assign User Modal ────────────────────────────────────────────
-
-  openAssignModal(): void {
-    this.newUserName       = '';
-    this.newUserEmail      = '';
-    this.newUserRole       = 'Viewer';
-    this.filteredByEmail   = [...this.allUsers];
-    this.filteredByName    = [...this.allUsers];
-    this.showEmailDropdown = false;
-    this.showNameDropdown  = false;
-    this.showAssignModal   = true;
-    this.cdr.markForCheck();
-  }
-
-  closeAssignModal(): void {
-    this.showAssignModal   = false;
-    this.newUserName       = '';
-    this.newUserEmail      = '';
-    this.newUserRole       = 'Viewer';
-    this.showEmailDropdown = false;
-    this.showNameDropdown  = false;
-    this.cdr.markForCheck();
-  }
-
-  onEmailFocus(): void {
-    if (this.emailDropdownTimer) clearTimeout(this.emailDropdownTimer);
-    this.filteredByEmail  = this.newUserEmail.trim()
-      ? this.allUsers.filter(u => u.email.toLowerCase().includes(this.newUserEmail.toLowerCase())
-          || `${u.firstName} ${u.lastName}`.toLowerCase().includes(this.newUserEmail.toLowerCase()))
-      : [...this.allUsers];
-    this.showEmailDropdown = true;
-    this.showNameDropdown  = false;
-    this.cdr.markForCheck();
-  }
-
-  onEmailInput(): void {
-    this.filteredByEmail = this.newUserEmail.trim()
-      ? this.allUsers.filter(u => u.email.toLowerCase().includes(this.newUserEmail.toLowerCase())
-          || `${u.firstName} ${u.lastName}`.toLowerCase().includes(this.newUserEmail.toLowerCase()))
-      : [...this.allUsers];
-    this.showEmailDropdown = true;
-    this.cdr.markForCheck();
-  }
-
-  scheduleCloseEmailDropdown(): void {
-    this.emailDropdownTimer = setTimeout(() => {
-      this.showEmailDropdown = false;
-      this.cdr.markForCheck();
-    }, 200);
-  }
-
-  onNameFocus(): void {
-    if (this.nameDropdownTimer) clearTimeout(this.nameDropdownTimer);
-    this.filteredByName = this.newUserName.trim()
-      ? this.allUsers.filter(u => `${u.firstName} ${u.lastName}`.toLowerCase().includes(this.newUserName.toLowerCase())
-          || u.email.toLowerCase().includes(this.newUserName.toLowerCase()))
-      : [...this.allUsers];
-    this.showNameDropdown  = true;
-    this.showEmailDropdown = false;
-    this.cdr.markForCheck();
-  }
-
-  onNameInput(): void {
-    this.filteredByName = this.newUserName.trim()
-      ? this.allUsers.filter(u => `${u.firstName} ${u.lastName}`.toLowerCase().includes(this.newUserName.toLowerCase())
-          || u.email.toLowerCase().includes(this.newUserName.toLowerCase()))
-      : [...this.allUsers];
-    this.showNameDropdown = true;
-    this.cdr.markForCheck();
-  }
-
-  scheduleCloseNameDropdown(): void {
-    this.nameDropdownTimer = setTimeout(() => {
-      this.showNameDropdown = false;
-      this.cdr.markForCheck();
-    }, 200);
-  }
-
-  selectUserForAssign(user: PlatformUser): void {
-    if (this.emailDropdownTimer) clearTimeout(this.emailDropdownTimer);
-    if (this.nameDropdownTimer)  clearTimeout(this.nameDropdownTimer);
-    this.newUserEmail      = user.email;
-    this.newUserName       = `${user.firstName} ${user.lastName}`;
-    this.showEmailDropdown = false;
-    this.showNameDropdown  = false;
-    this.cdr.markForCheck();
-  }
-
-  assignUser(): void {
-    if (!this.region || !this.newUserName || !this.newUserEmail) return;
-
-    const matched     = this.allUsers.find(u => u.email === this.newUserEmail);
-    const initials    = matched ? matched.avatarInitials
-      : this.newUserName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    const colors      = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
-    const avatarColor = matched ? matched.avatarColor : colors[this.region.team.length % colors.length];
-
-    const newMember: RegionTeamMember = {
-      id:           matched?.id ?? 'u' + Date.now(),
-      name:         this.newUserName,
-      email:        this.newUserEmail,
-      initials,
-      avatarColor,
-      role:         this.newUserRole,
-      status:       'Active',
-      assignedDate: new Date().toLocaleDateString('en-GB', {
-        day: '2-digit', month: 'long', year: 'numeric',
-      }),
-    };
-
-    const updatedTeam = [...this.region.team, newMember];
-    const regionName  = this.region.name;
-
-    this.region.team = updatedTeam;
-    this.closeAssignModal();
-    this.cdr.markForCheck();
-
-    this.svc.updateTeam$(this.region.id, updatedTeam).pipe(takeUntil(this.destroy$)).subscribe();
-
-    if (matched) {
-      this.usersSvc.addRegion$(matched.id, regionName).pipe(takeUntil(this.destroy$)).subscribe();
+    if (this.contentSearchHandle) {
+      clearTimeout(this.contentSearchHandle);
     }
   }
 
-  // ── Remove Member ────────────────────────────────────────────────
-
-  promptRemove(member: RegionTeamMember): void {
-    this.removeTarget = member;
-    this.cdr.markForCheck();
+  get userName(): string {
+    return this.auth.fullName;
   }
 
-  cancelRemove(): void { this.removeTarget = null; this.cdr.markForCheck(); }
-
-  confirmRemove(): void {
-    if (!this.region || !this.removeTarget) return;
-
-    const updatedTeam = this.region.team.filter(m => m.id !== this.removeTarget!.id);
-    const regionId    = this.region.id;
-    const regionName  = this.region.name;
-    const removedId   = this.removeTarget.id;
-
-    this.region.team  = updatedTeam;
-    this.removeTarget = null;
-    this.cdr.markForCheck();
-
-    this.svc.updateTeam$(regionId, updatedTeam).pipe(takeUntil(this.destroy$)).subscribe();
-    this.usersSvc.removeRegion$(removedId, regionName).pipe(takeUntil(this.destroy$)).subscribe();
+  get userRole(): string {
+    return this.auth.getUser()?.role ?? '';
   }
 
-  // ── Edit Member Modal ────────────────────────────────────────────
-
-  openViewMember(member: RegionTeamMember): void {
-    this.isMemberReadOnly = true;
-    this._loadMember(member);
+  get regionDisplayName(): string {
+    return this.detail?.region.territoryDisplayName ?? '';
   }
 
-  openEditMember(member: RegionTeamMember): void {
-    this.isMemberReadOnly = false;
-    this._loadMember(member);
+  get healthInsights(): TerritoryHealthInsight[] {
+    const drivers = this.detail?.health.drivers ?? [];
+    const recommendations = this.detail?.health.recommendations ?? [];
+    const all = [...drivers, ...recommendations];
+    return this.showAllHealthDetails ? all : all.slice(0, 5);
   }
 
-  private _loadMember(member: RegionTeamMember): void {
-    const found = this.allUsers.find(u => u.email === member.email || u.id === member.id);
-    const currentRegion = this.region?.name ?? '';
+  get hiddenHealthInsightCount(): number {
+    const all = (this.detail?.health.drivers.length ?? 0) + (this.detail?.health.recommendations.length ?? 0);
+    return Math.max(0, all - this.healthInsights.length);
+  }
 
-    if (found) {
-      const assignedRegions = currentRegion && !found.assignedRegions.includes(currentRegion)
-        ? [...found.assignedRegions, currentRegion]
-        : found.assignedRegions;
+  get hasMoreContent(): boolean {
+    return this.contentItems.length < this.contentTotal;
+  }
 
-      this.editMember = { ...found, assignedRegions };
+  get nextContentPageCount(): number {
+    return Math.min(CONTENT_PAGE_SIZE, Math.max(0, this.contentTotal - this.contentItems.length));
+  }
+
+  get currentContentSortLabel(): string {
+    return this.contentSortOptions.find(option => option.value === this.contentSort)?.label ?? 'Name';
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    if (this.contentSortOpen) {
+      this.contentSortOpen = false;
+      this.notifyStateChanged();
+    }
+  }
+
+  goBack(): void {
+    this.router.navigate(['/territory/regions']);
+  }
+
+  onTerritoryChange(territoryId: number): void {
+    this.svc.setActiveTerritoryId(territoryId);
+    this.router.navigate(['/territory/regions']);
+  }
+
+  setActiveTab(tab: TerritoryRegionContentType): void {
+    if (tab === this.activeTab) return;
+
+    this.activeTab = tab;
+    this.contentSearch = '';
+    this.contentSort = tab === 'events' ? 'upcoming' : 'name';
+    this.expandedDestinationIds.clear();
+    this.resetContent();
+    this.loadContent(true);
+    this.notifyStateChanged();
+  }
+
+  onContentSearchChange(): void {
+    if (this.contentSearchHandle) {
+      clearTimeout(this.contentSearchHandle);
+    }
+
+    this.contentSearchHandle = setTimeout(() => {
+      this.resetContent();
+      this.loadContent(true);
+      this.notifyStateChanged();
+    }, 300);
+  }
+
+  clearContentSearch(): void {
+    this.contentSearch = '';
+    this.onContentSearchChange();
+  }
+
+  applyContentSort(option: ContentSortOption): void {
+    if (option.value === this.contentSort) {
+      this.contentSortOpen = false;
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.contentSort = option.value;
+    this.contentSortOpen = false;
+    this.resetContent();
+    this.loadContent(true);
+    this.notifyStateChanged();
+  }
+
+  loadMoreContent(): void {
+    if (!this.hasMoreContent || this.isContentLoadingMore) return;
+    this.loadContent(false);
+  }
+
+  toggleDestinationHealth(item: TerritoryRegionContentItem, event: MouseEvent): void {
+    event.stopPropagation();
+
+    if (this.expandedDestinationIds.has(item.id)) {
+      this.expandedDestinationIds.delete(item.id);
     } else {
-      const parts = member.name.split(' ');
-      const effectiveRole: 'Regional Manager' | 'Viewer' =
-        member.role === 'Regional Manager' ? 'Regional Manager' : 'Viewer';
-      this.editMember = {
-        id:              member.id,
-        firstName:       parts[0] ?? member.name,
-        lastName:        parts.slice(1).join(' '),
-        email:           member.email,
-        avatarInitials:  member.initials,
-        avatarColor:     member.avatarColor,
-        role:            effectiveRole,
-        status:          effectiveRole === 'Regional Manager' ? 'Active' : 'Inactive',
-        assignedRegions: currentRegion ? [currentRegion] : [],
-        lastLogin:       '—',
-        createdAt:       member.assignedDate,
-      };
+      this.expandedDestinationIds.add(item.id);
     }
-    this.cdr.markForCheck();
+
+    this.notifyStateChanged();
   }
 
-  closeEditMember(): void {
-    this.editMember       = null;
-    this.isMemberReadOnly = false;
-    this.isTogglingRole   = false;
-    this.cdr.markForCheck();
+  isDestinationExpanded(item: TerritoryRegionContentItem): boolean {
+    return this.expandedDestinationIds.has(item.id);
   }
 
-  toggleMemberRole(): void {
-    if (!this.editMember) return;
-    this.isTogglingRole = true;
-
-    const obs = this.editMember.role === 'Regional Manager'
-      ? this.usersSvc.removeManagerRole$(this.editMember.id)
-      : this.usersSvc.promoteToManager$(this.editMember.id);
-
-    obs.pipe(takeUntil(this.destroy$)).subscribe(updated => {
-      if (updated && this.editMember) {
-        this.editMember = { ...this.editMember, role: updated.role, status: updated.status };
-
-        if (this.region) {
-          const updatedTeam = this.region.team.map(m =>
-            m.id === updated.id ? { ...m, role: updated.role, status: updated.status } : m
-          );
-          this.region.team = updatedTeam;
-          this.svc.updateTeam$(this.region.id, updatedTeam).pipe(takeUntil(this.destroy$)).subscribe();
-        }
-      }
-      this.isTogglingRole = false;
-      this.cdr.markForCheck();
-    });
+  hasDestinationHealth(item: TerritoryRegionContentItem): boolean {
+    return item.entityType === 'destination' || item.entityType === 'destinations';
   }
 
-  removeRegionFromMember(region: string): void {
-    if (!this.editMember) return;
-    this.usersSvc.removeRegion$(this.editMember.id, region)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(updated => {
-        if (updated && this.editMember) {
-          this.editMember = { ...this.editMember, assignedRegions: updated.assignedRegions };
-        }
-        this.cdr.markForCheck();
+  publicPreviewUrl(item: TerritoryRegionContentItem): string | null {
+    return this.userAppLinks.toUserAppUrl(item.publicDetailRoute);
+  }
+
+  formatDate(value?: string | null): string {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  formatRating(value?: number | null): string {
+    return value === null || value === undefined ? '-' : value.toFixed(1);
+  }
+
+  managerAvatarUrl(manager: TerritoryRegionManager): string {
+    const avatarUrl = manager.avatarUrl?.trim() ?? '';
+    return avatarUrl && !this.failedManagerAvatarKeys.has(this.managerAvatarKey(manager, avatarUrl))
+      ? avatarUrl
+      : '';
+  }
+
+  managerInitials(manager: TerritoryRegionManager): string {
+    const initials = manager.initials?.trim();
+    if (initials) return initials;
+
+    return this.buildInitials(manager.displayName || manager.email);
+  }
+
+  managerAvatarAlt(manager: TerritoryRegionManager): string {
+    const label = manager.displayName || manager.email || 'Regional Manager';
+    return `${label} profile image`;
+  }
+
+  onManagerAvatarError(manager: TerritoryRegionManager): void {
+    const avatarUrl = manager.avatarUrl?.trim() ?? '';
+    if (avatarUrl) {
+      this.failedManagerAvatarKeys.add(this.managerAvatarKey(manager, avatarUrl));
+      this.notifyStateChanged();
+    }
+  }
+
+  scoreClass(score?: number | null): string {
+    if (score === null || score === undefined) {
+      return 'bg-gray-100 text-gray-500 ring-1 ring-gray-200';
+    }
+
+    if (score >= 75) {
+      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
+    }
+
+    if (score >= 50) {
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+    }
+
+    return 'bg-red-50 text-red-700 ring-1 ring-red-200';
+  }
+
+  statusClass(status?: string | null): string {
+    switch ((status ?? '').toLowerCase()) {
+      case 'active':
+      case 'published':
+        return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
+      case 'draft':
+        return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+      case 'archived':
+      case 'inactive':
+        return 'bg-gray-100 text-gray-500 ring-1 ring-gray-200';
+      default:
+        return 'bg-gray-100 text-gray-600 ring-1 ring-gray-200';
+    }
+  }
+
+  insightClass(severity?: string | null): string {
+    switch ((severity ?? '').toLowerCase()) {
+      case 'positive':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+      case 'warning':
+        return 'bg-amber-50 text-amber-700 border-amber-100';
+      case 'action':
+        return 'bg-red-50 text-red-700 border-red-100';
+      default:
+        return 'bg-blue-50 text-blue-700 border-blue-100';
+    }
+  }
+
+  trackByContentId(_: number, item: TerritoryRegionContentItem): string {
+    return `${item.entityType}-${item.id}`;
+  }
+
+  private loadDetail(): void {
+    const regionId = this.route.snapshot.paramMap.get('id') ?? '';
+    const state = history.state as { territoryId?: number } | undefined;
+
+    this.isLoading = true;
+    this.errorMessage = null;
+    this.notifyStateChanged();
+
+    this.detailSubscription = this.svc
+      .getDetail$(regionId, state?.territoryId ?? this.svc.getActiveTerritoryId())
+      .pipe(
+        finalize(() => {
+          this.isLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: detail => {
+          this.detail = detail;
+          this.failedManagerAvatarKeys.clear();
+          this.svc.setActiveTerritoryId(detail.region.territoryId);
+          this.resetContent();
+          this.loadContent(true);
+        },
+        error: error => this.handleDetailError(error),
       });
   }
 
-  formatLastLogin(iso: string): string {
-    return this.usersSvc.formatLastLogin(iso);
+  private loadContent(reset: boolean): void {
+    if (!this.detail) return;
+
+    const requestId = ++this.contentRequestSequence;
+    const skip = reset ? 0 : this.contentItems.length;
+    this.contentSubscription?.unsubscribe();
+
+    if (reset) {
+      this.isContentLoading = true;
+      this.contentItems = [];
+      this.contentTotal = 0;
+      this.expandedDestinationIds.clear();
+    } else {
+      this.isContentLoadingMore = true;
+    }
+
+    this.contentErrorMessage = null;
+    this.notifyStateChanged();
+
+    this.contentSubscription = this.svc
+      .getContent$({
+        regionId: this.detail.region.id,
+        territoryId: this.detail.region.territoryId,
+        entityType: this.activeTab,
+        search: this.contentSearch,
+        sort: this.contentSort,
+        skip,
+        take: CONTENT_PAGE_SIZE,
+      })
+      .pipe(
+        finalize(() => {
+          if (this.contentRequestSequence === requestId) {
+            this.isContentLoading = false;
+            this.isContentLoadingMore = false;
+            this.notifyStateChanged();
+          }
+        }),
+      )
+      .subscribe({
+        next: response => {
+          if (this.contentRequestSequence !== requestId) return;
+          this.contentItems = reset ? response.items : [...this.contentItems, ...response.items];
+          this.contentTotal = this.toSafeCount(response.totalCount);
+        },
+        error: error => {
+          if (this.contentRequestSequence === requestId) {
+            this.handleContentError(error);
+          }
+        },
+      });
   }
 
-  statusClass(s: string): string {
-    return s === 'Active'
-      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-      : 'bg-gray-100 text-gray-500 ring-1 ring-gray-200';
+  private resetContent(): void {
+    this.contentItems = [];
+    this.contentTotal = 0;
+    this.contentErrorMessage = null;
+    this.expandedDestinationIds.clear();
   }
 
-  roleClass(role: string): string {
-    return role === 'Regional Manager'
-      ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
-      : 'bg-gray-50 text-gray-500 ring-1 ring-gray-200';
+  private handleDetailError(error: unknown): void {
+    this.detail = null;
+
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 401) {
+        this.errorMessage = 'Sign in with a Territory Manager account to view region details.';
+        this.notifyStateChanged();
+        return;
+      }
+
+      if (error.status === 403) {
+        this.errorMessage = 'This account is not authorized to view that region.';
+        this.notifyStateChanged();
+        return;
+      }
+
+      if (error.status === 404) {
+        this.errorMessage = 'Region not found.';
+        this.notifyStateChanged();
+        return;
+      }
+    }
+
+    this.errorMessage = 'Unable to load region details.';
+    this.notifyStateChanged();
   }
 
-  get scoreColor(): string {
-    const s = this.region?.activityScore ?? 0;
-    if (s >= 85) return '#10b981';
-    if (s >= 60) return '#f59e0b';
-    return '#ef4444';
+  private handleContentError(error: unknown): void {
+    this.isContentLoading = false;
+    this.isContentLoadingMore = false;
+    this.resetContent();
+
+    if (error instanceof HttpErrorResponse && error.status === 403) {
+      this.contentErrorMessage = 'This account is not authorized to view this content.';
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.contentErrorMessage = 'Unable to load region content.';
+    this.notifyStateChanged();
+  }
+
+  private toSafeCount(value: unknown): number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+  }
+
+  private managerAvatarKey(manager: TerritoryRegionManager, avatarUrl: string): string {
+    return `${manager.userId}:${avatarUrl}`;
+  }
+
+  private buildInitials(value: string): string {
+    const parts = value
+      .trim()
+      .split(/[\s._-]+/)
+      .filter(Boolean);
+
+    if (parts.length === 0) {
+      return '?';
+    }
+
+    return parts
+      .slice(0, 2)
+      .map(part => part.charAt(0).toUpperCase())
+      .join('');
+  }
+
+  private notifyStateChanged(): void {
+    this.cdr.markForCheck();
   }
 }

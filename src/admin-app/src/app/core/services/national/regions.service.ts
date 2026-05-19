@@ -1,189 +1,224 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, map, of, throwError } from 'rxjs';
-import { TerritoryDashboardService } from '../territory-dashboard.service';
-import { TerritoryRegionDirectoryItem } from '../../models/dashboard.model';
+import { BehaviorSubject, Observable, map, throwError } from 'rxjs';
+import {
+  TerritoryAssignedTerritory,
+  TerritoryRegionContentResponse,
+  TerritoryRegionDetail,
+  TerritoryRegionDirectoryItem,
+} from '../../models/dashboard.model';
+import { TerritoryDashboardService, TerritoryRegionContentRequest } from '../territory-dashboard.service';
+
+export type RegionSortValue =
+  | 'status'
+  | 'name'
+  | 'nameDesc'
+  | 'mostDestinations'
+  | 'mostLocations'
+  | 'mostPlaces'
+  | 'mostEvents'
+  | 'mostPending'
+  | 'healthHigh'
+  | 'healthLow';
 
 export interface RegionListItem {
   id: string;
+  regionId: number;
   name: string;
   description: string;
-  isTop: boolean;
+  territoryId: number;
+  territoryDisplayName: string;
   destinations: number;
-  places: number;
   locations: number;
+  places: number;
+  stays: number;
   events: number;
   assignedPersons: number;
-  status: 'Active' | 'Inactive';
-  imageBg: string;
+  managerNames: string[];
   managerDisplayName?: string | null;
+  assignedManagers: TerritoryRegionDirectoryItem['assignedManagers'];
+  status: 'Active' | 'Inactive';
+  imageUrl?: string | null;
+  imageBg: string;
   pendingRequests: number;
+  healthScore?: number | null;
+  activityScore: number;
+  detailRoute?: string | null;
 }
 
-export type RegionSortField = 'name' | 'status' | 'assignedPersons' | 'destinations';
-export type RegionSortDir = 'asc' | 'desc';
-
 export interface RegionPage {
+  territory?: TerritoryAssignedTerritory | null;
   items: RegionListItem[];
   total: number;
+  skip: number;
+  take: number;
+  hasMore: boolean;
 }
 
 export interface RegionPageRequest {
-  page: number;
-  pageSize: number;
+  territoryId?: number | null;
+  skip: number;
+  take: number;
   search: string;
-  sortField: RegionSortField;
-  sortDir: RegionSortDir;
+  sort: RegionSortValue;
 }
 
-export interface RegionTeamMember {
-  id: string;
-  name: string;
-  email: string;
-  initials: string;
-  avatarColor: string;
-  role: string;
-  status: 'Active' | 'Inactive';
-  assignedDate: string;
-}
-
-export interface RegionDetail extends RegionListItem {
-  fullName: string;
-  internalRefId: string;
-  shortSummary: string;
-  fullDescription: string;
-  team: RegionTeamMember[];
-  createdBy: string;
-  createdDate: string;
-  lastUpdated: string;
-  activityScore: number;
-  activityLabel: string;
-  processingLabel: string;
-  avgProcessingTime: number;
-}
-
-export function buildDetail(item: RegionListItem): RegionDetail {
-  return {
-    ...item,
-    fullName: item.name,
-    internalRefId: item.id,
-    shortSummary: item.description,
-    fullDescription: item.description,
-    team: [],
-    createdBy: 'System',
-    createdDate: '',
-    lastUpdated: '',
-    activityScore: 0,
-    activityLabel: 'Read-only',
-    processingLabel: 'Read-only',
-    avgProcessingTime: 0,
-  };
+export interface RegionListState {
+  searchQuery: string;
+  sort: RegionSortValue;
+  loadedCount: number;
+  scrollTop: number;
 }
 
 @Injectable({ providedIn: 'root' })
 export class RegionsService {
   readonly lastPage$ = new BehaviorSubject<RegionPage | null>(null);
 
-  private _listState: {
-    searchQuery: string;
-    sortField: string;
-    sortDir: string;
-    displayCount: number;
-    scrollTop: number;
-  } | null = null;
+  private listState: RegionListState | null = null;
 
   constructor(private readonly territoryDashboard: TerritoryDashboardService) {}
 
-  setActiveTerritoryId(territoryId: number): void {
+  getActiveTerritoryId(): number | null {
+    return this.territoryDashboard.getActiveTerritoryId();
+  }
+
+  setActiveTerritoryId(territoryId: number | null): void {
     this.territoryDashboard.setActiveTerritoryId(territoryId);
   }
 
   getPage$(req: RegionPageRequest): Observable<RegionPage> {
-    return this.territoryDashboard.getRegions({
-      territoryId: this.territoryDashboard.getActiveTerritoryId(),
-      search: req.search,
-      sort: this.mapSort(req.sortField, req.sortDir),
-      skip: 0,
-      take: req.pageSize,
-    }).pipe(
-      map(response => ({
-        items: response.items.map(item => this.mapRegion(item)),
-        total: response.totalCount,
-      })),
-      map(page => {
-        this.lastPage$.next(page);
-        return page;
-      }),
-    );
+    return this.territoryDashboard
+      .getRegions({
+        territoryId: req.territoryId ?? this.territoryDashboard.getActiveTerritoryId(),
+        search: req.search,
+        sort: this.mapSort(req.sort),
+        skip: req.skip,
+        take: req.take,
+      })
+      .pipe(
+        map(response => ({
+          territory: response.territory,
+          items: response.items.map(item => this.mapRegion(item)),
+          total: response.totalCount,
+          skip: response.skip,
+          take: response.take,
+          hasMore: response.hasMore,
+        })),
+        map(page => {
+          this.lastPage$.next(page);
+          return page;
+        }),
+      );
+  }
+
+  getDetail$(id: string, territoryId?: number | null): Observable<TerritoryRegionDetail> {
+    const regionId = Number(id);
+    return this.territoryDashboard.getRegionDetail(regionId, territoryId ?? this.getActiveTerritoryId());
+  }
+
+  getContent$(request: TerritoryRegionContentRequest): Observable<TerritoryRegionContentResponse> {
+    return this.territoryDashboard.getRegionContent({
+      ...request,
+      territoryId: request.territoryId ?? this.getActiveTerritoryId(),
+    });
   }
 
   delete$(_id?: string): Observable<void> {
     return throwError(() => new Error('Territory Manager can view regions but cannot delete them.'));
   }
 
-  getDetail$(id: string): Observable<RegionDetail | null> {
-    const item = this.lastPage$.value?.items.find(region => region.id === id) ?? null;
-    return of(item ? buildDetail(item) : null);
-  }
-
-  updateDetail$(_id?: string, _patch?: Partial<RegionDetail>): Observable<RegionDetail | null> {
+  updateDetail$(): Observable<never> {
     return throwError(() => new Error('Territory Manager region pages are read-only.'));
   }
 
-  updateTeam$(_id?: string, _team?: RegionTeamMember[]): Observable<void> {
+  updateTeam$(): Observable<never> {
     return throwError(() => new Error('Territory Manager region pages are read-only.'));
   }
 
-  saveListState(s: {
-    searchQuery: string;
-    sortField: string;
-    sortDir: string;
-    displayCount: number;
-    scrollTop: number;
-  }): void {
-    this._listState = s;
+  saveListState(state: RegionListState): void {
+    this.listState = state;
   }
 
-  getListState() {
-    return this._listState;
+  getListState(): RegionListState | null {
+    return this.listState;
   }
 
   clearListState(): void {
-    this._listState = null;
+    this.listState = null;
   }
 
   private mapRegion(item: TerritoryRegionDirectoryItem): RegionListItem {
-    const status: 'Active' | 'Inactive' = item.activeManagersCount > 0 ? 'Active' : 'Inactive';
-    const description = item.managerDisplayName
-      ? `Regional Manager: ${item.managerDisplayName}`
-      : 'No active Regional Manager assigned';
+    const managerNames = item.managerNames?.length
+      ? item.managerNames
+      : item.managerDisplayName
+        ? [item.managerDisplayName]
+        : [];
+    const assignedPersons = item.assignedPersonsCount ?? item.activeManagersCount ?? managerNames.length;
+    const status = (item.status || (assignedPersons > 0 ? 'Active' : 'Inactive')).toLowerCase() === 'active'
+      ? 'Active'
+      : 'Inactive';
 
     return {
-      id: String(item.id),
-      name: item.name,
-      description,
-      isTop: false,
+      id: String(item.regionId ?? item.id),
+      regionId: item.regionId ?? item.id,
+      name: item.displayName || item.regionName || item.name,
+      description: item.description?.trim() || this.managerSummary(managerNames),
+      territoryId: item.territoryId,
+      territoryDisplayName: item.territoryDisplayName || item.territoryName,
       destinations: item.destinationsCount,
       locations: item.locationsCount,
       places: item.placesCount,
+      stays: item.staysCount,
       events: item.eventsCount,
-      assignedPersons: item.activeManagersCount,
-      status,
-      imageBg: this.imageBackground(item.id),
+      assignedPersons,
+      managerNames,
       managerDisplayName: item.managerDisplayName,
+      assignedManagers: item.assignedManagers ?? [],
+      status,
+      imageUrl: item.imageUrl,
+      imageBg: this.imageBackground(item.regionId ?? item.id),
       pendingRequests: item.pendingRequestsCount,
+      healthScore: item.healthScore,
+      activityScore: item.activityScore,
+      detailRoute: item.detailRoute,
     };
   }
 
-  private mapSort(field: RegionSortField, dir: RegionSortDir): string {
-    if (field === 'assignedPersons') {
-      return dir === 'asc' ? 'name' : 'content';
+  private managerSummary(managerNames: string[]): string {
+    if (managerNames.length === 0) {
+      return 'No active Regional Manager assigned';
     }
 
-    if (field === 'destinations') {
-      return 'content';
+    if (managerNames.length === 1) {
+      return `Regional Manager: ${managerNames[0]}`;
     }
 
-    return dir === 'desc' ? 'name-desc' : 'name';
+    return `Regional Managers: ${managerNames[0]} +${managerNames.length - 1}`;
+  }
+
+  private mapSort(sort: RegionSortValue): string {
+    switch (sort) {
+      case 'name':
+        return 'name';
+      case 'nameDesc':
+        return 'name-desc';
+      case 'mostDestinations':
+        return 'most-destinations';
+      case 'mostLocations':
+        return 'most-locations';
+      case 'mostPlaces':
+        return 'most-places';
+      case 'mostEvents':
+        return 'most-events';
+      case 'mostPending':
+        return 'most-pending-requests';
+      case 'healthHigh':
+        return 'health-high';
+      case 'healthLow':
+        return 'health-low';
+      case 'status':
+      default:
+        return 'status-active-first';
+    }
   }
 
   private imageBackground(id: number): string {
@@ -191,7 +226,7 @@ export class RegionsService {
       'linear-gradient(135deg,#dbeafe 0%,#bfdbfe 100%)',
       'linear-gradient(135deg,#d1fae5 0%,#a7f3d0 100%)',
       'linear-gradient(135deg,#fef9c3 0%,#fde68a 100%)',
-      'linear-gradient(135deg,#ede9fe 0%,#ddd6fe 100%)',
+      'linear-gradient(135deg,#fce7f3 0%,#fbcfe8 100%)',
     ];
     return variants[Math.abs(id) % variants.length];
   }
