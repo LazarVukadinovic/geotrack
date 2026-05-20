@@ -39,11 +39,37 @@ describe('SettingsComponent', () => {
     expect(component.email()).toBe('elena@example.com');
     expect(component.bio()).toBe('Regional manager bio');
     expect(component.currentRole).toBe('Regional Manager');
+    expect(component.assignmentSectionTitle).toBe('Regional Manager Assignment');
+    expect(component.assignmentLabel).toBe('Assigned Region');
     expect(component.assignedRegion).toBe('Coastal Test Region, Testland, Profile Test Region, Testland');
     expect(component.memberSince).not.toBe('-');
 
     const emailInput = fixture.nativeElement.querySelector('input[type="email"]') as HTMLInputElement;
     expect(emailInput.disabled).toBe(true);
+
+    const assignmentSection = fixture.nativeElement.querySelector('[data-testid="assignment-section"]') as HTMLElement;
+    expect(assignmentSection.textContent).toContain('Regional Manager Assignment');
+    expect(assignmentSection.textContent).toContain('Assigned Region');
+  });
+
+  it('renders territory manager assignment labels and values from the backend DTO', () => {
+    flushProfile(territoryProfileResponse());
+    fixture.detectChanges();
+
+    expect(component.currentRole).toBe('Territory Manager');
+    expect(component.assignmentSectionTitle).toBe('Territory Manager Assignment');
+    expect(component.assignmentLabel).toBe('Assigned Territory');
+    expect(component.assignmentDisplayValue).toBe('Croatia');
+    expect(component.memberSince).not.toBe('-');
+
+    const assignmentSection = fixture.nativeElement.querySelector('[data-testid="assignment-section"]') as HTMLElement;
+    const assignmentText = assignmentSection.textContent ?? '';
+    expect(assignmentText).toContain('Territory Manager Assignment');
+    expect(assignmentText).toContain('Assigned Territory');
+    expect(assignmentText).toContain('Croatia');
+    expect(assignmentText).not.toContain('Regional Manager Assignment');
+    expect(assignmentText).not.toContain('Assigned Region');
+    expect(assignmentText).not.toContain('No assigned regions');
   });
 
   it('submits editable fields only and includes notification preferences', () => {
@@ -157,6 +183,31 @@ describe('SettingsComponent', () => {
         updatedAt: null,
       },
       roles: ['RegionalManager'],
+      role: {
+        roleCode: 'RegionalManager',
+        roleDisplayName: 'Regional Manager',
+      },
+      assignment: {
+        assignmentType: 'Region',
+        sectionTitle: 'Regional Manager Assignment',
+        label: 'Assigned Region',
+        displayValue: 'Coastal Test Region, Testland, Profile Test Region, Testland',
+        memberSince: '2024-01-05T09:30:00Z',
+        assignedItems: [
+          {
+            id: 10,
+            name: 'Coastal Test Region',
+            displayName: 'Coastal Test Region, Testland',
+            assignedAt: '2024-01-05T09:30:00Z',
+          },
+          {
+            id: 11,
+            name: 'Profile Test Region',
+            displayName: 'Profile Test Region, Testland',
+            assignedAt: '2024-02-10T12:00:00Z',
+          },
+        ],
+      },
       regionalManager: {
         memberSince: '2024-01-05T09:30:00Z',
         assignedRegions: [
@@ -181,6 +232,52 @@ describe('SettingsComponent', () => {
         timezone: 'UTC',
         emailRequestsEnabled: true,
         emailNewReviewEnabled: false,
+      },
+    };
+  }
+
+  function territoryProfileResponse(): AdminProfile {
+    return {
+      user: {
+        id: 9,
+        firstName: 'Mika',
+        lastName: 'Mikic',
+        displayName: 'Mika Mikic',
+        email: 'mika@gmail.com',
+        shortBio: 'Territory manager bio',
+        avatarUrl: '/media/uploads/avatars/mika.png',
+        createdAt: '2024-03-01T00:00:00Z',
+        updatedAt: null,
+      },
+      roles: ['TerritoryManager'],
+      role: {
+        roleCode: 'TerritoryManager',
+        roleDisplayName: 'Territory Manager',
+      },
+      assignment: {
+        assignmentType: 'Territory',
+        sectionTitle: 'Territory Manager Assignment',
+        label: 'Assigned Territory',
+        displayValue: 'Croatia',
+        memberSince: '2024-03-15T08:00:00Z',
+        assignedItems: [
+          {
+            id: 1,
+            name: 'Croatia',
+            displayName: 'Croatia',
+            assignedAt: '2024-03-15T08:00:00Z',
+          },
+        ],
+      },
+      regionalManager: {
+        memberSince: null,
+        assignedRegions: [],
+      },
+      preferences: {
+        interfaceLanguage: 'en-US',
+        timezone: 'UTC',
+        emailRequestsEnabled: true,
+        emailNewReviewEnabled: true,
       },
     };
   }

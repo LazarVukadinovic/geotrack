@@ -46,7 +46,7 @@ export class SidebarComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    if (!this.auth.isTerritoryManager() || this.regions.length > 0) {
+    if (!this.auth.canAccessTerritoryAdmin() || this.regions.length > 0) {
       return;
     }
 
@@ -85,7 +85,7 @@ export class SidebarComponent implements OnInit {
   }
 
   get pickerLabel(): string {
-    return this.auth.isTerritoryManager() ? 'TERRITORY' : 'REGION';
+    return this.auth.canAccessTerritoryAdmin() ? 'TERRITORY' : 'REGION';
   }
 
   get pickerValue(): string {
@@ -102,7 +102,7 @@ export class SidebarComponent implements OnInit {
   }
 
   get isTerritory(): boolean {
-    return this.auth.isTerritoryManager();
+    return this.auth.canAccessTerritoryAdmin();
   }
 
   get territoryMainNav(): SidebarNavItem[] {

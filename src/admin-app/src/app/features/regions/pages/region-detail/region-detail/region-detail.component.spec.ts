@@ -22,6 +22,7 @@ describe('RegionDetailComponent', () => {
     fullName: 'Mika Mikic',
     getUser: vi.fn(() => ({ role: 'Territory Manager', region: '' })),
     isTerritoryManager: vi.fn(() => true),
+    canAccessTerritoryAdmin: vi.fn(() => true),
     logout: vi.fn(),
   };
 
