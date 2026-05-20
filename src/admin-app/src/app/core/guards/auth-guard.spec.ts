@@ -22,6 +22,7 @@ describe('authGuard', () => {
     clearSession: vi.fn(),
     isRegionalManager: vi.fn(),
     isTerritoryManager: vi.fn(),
+    canAccessTerritoryAdmin: vi.fn(),
     restoreSession: vi.fn(),
     getHomeRoute: vi.fn(),
   };
@@ -34,6 +35,7 @@ describe('authGuard', () => {
     authService.clearSession.mockReturnValue(undefined);
     authService.isRegionalManager.mockReturnValue(false);
     authService.isTerritoryManager.mockReturnValue(false);
+    authService.canAccessTerritoryAdmin.mockReturnValue(false);
     authService.restoreSession.mockReturnValue(of(null));
     authService.getHomeRoute.mockReturnValue('/login');
     TestBed.configureTestingModule({
@@ -94,7 +96,7 @@ describe('authGuard', () => {
   });
 
   it('allows authenticated territory managers', () => {
-    authService.isTerritoryManager.mockReturnValue(true);
+    authService.canAccessTerritoryAdmin.mockReturnValue(true);
     authService.hasValidAccessToken.mockReturnValue(true);
 
     const result = executeTerritoryGuard({} as never, { url: '/territory/overview' } as never);
@@ -102,8 +104,17 @@ describe('authGuard', () => {
     expect(result).toBe(true);
   });
 
+  it('allows authenticated territory associates', () => {
+    authService.canAccessTerritoryAdmin.mockReturnValue(true);
+    authService.hasValidAccessToken.mockReturnValue(true);
+
+    const result = executeTerritoryGuard({} as never, { url: '/territory/users' } as never);
+
+    expect(result).toBe(true);
+  });
+
   it('redirects regional users away from territory routes', async () => {
-    authService.isTerritoryManager.mockReturnValue(false);
+    authService.canAccessTerritoryAdmin.mockReturnValue(false);
     authService.restoreSession.mockReturnValue(of({ role: 'Regional Manager' }));
     authService.getHomeRoute.mockReturnValue('/dashboard');
 

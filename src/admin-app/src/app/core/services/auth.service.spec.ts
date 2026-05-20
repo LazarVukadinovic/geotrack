@@ -77,6 +77,33 @@ describe('AuthService', () => {
     expect(service.getHomeRoute()).toBe('/territory/overview');
   });
 
+  it('maps territory associate roles to territory admin access without territory manager identity', () => {
+    service.login('associate@example.com', 'Proba123!').subscribe(user => {
+      expect(user.email).toBe('associate@example.com');
+      expect(user.role).toBe('Territory Associate');
+    });
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'associate-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 43,
+        email: 'associate@example.com',
+        displayName: 'Associate User',
+        roles: ['TerritoryAssociate'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: true,
+      },
+    });
+
+    expect(service.isTerritoryAssociate()).toBe(true);
+    expect(service.isTerritoryManager()).toBe(false);
+    expect(service.canAccessTerritoryAdmin()).toBe(true);
+    expect(service.getHomeRoute()).toBe('/territory/overview');
+  });
+
   it('uses a safe message for invalid credentials', () => {
     let message = '';
 

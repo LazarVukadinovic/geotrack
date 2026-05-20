@@ -37,6 +37,10 @@ export class AuthService {
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
   readonly isTerritoryManager = computed(() => this._currentUser()?.role === 'Territory Manager');
+  readonly isTerritoryAssociate = computed(() => this._currentUser()?.role === 'Territory Associate');
+  readonly canAccessTerritoryAdmin = computed(() =>
+    this._currentUser()?.role === 'Territory Manager' ||
+    this._currentUser()?.role === 'Territory Associate');
   readonly isRegionalManager = computed(() => this._currentUser()?.role === 'Regional Manager');
 
   constructor(@Optional() private readonly http: HttpClient | null) {}
@@ -140,6 +144,7 @@ export class AuthService {
     const role: UserRole | undefined = this._currentUser()?.role;
     switch (role) {
       case 'Territory Manager':
+      case 'Territory Associate':
         return '/territory/overview';
       case 'Regional Manager':
         return '/dashboard';
@@ -190,6 +195,10 @@ export class AuthService {
   private resolveAdminRole(roles: string[]): UserRole {
     if (roles.some(role => ['territorymanager', 'nationalmanager'].includes(this.normalizeRole(role)))) {
       return 'Territory Manager';
+    }
+
+    if (roles.some(role => this.normalizeRole(role) === 'territoryassociate')) {
+      return 'Territory Associate';
     }
 
     if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {

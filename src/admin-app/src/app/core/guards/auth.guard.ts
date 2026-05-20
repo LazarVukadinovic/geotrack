@@ -22,7 +22,7 @@ export const territoryManagerGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isTerritoryManager() && auth.hasValidAccessToken()) return true;
+  if (auth.canAccessTerritoryAdmin() && auth.hasValidAccessToken()) return true;
   if (auth.getUser() && !auth.hasValidAccessToken()) {
     auth.clearSession();
     return loginTree(router, state, true);
@@ -31,7 +31,7 @@ export const territoryManagerGuard: CanActivateFn = (_route, state) => {
   return auth.restoreSession().pipe(
     map(user => {
       if (!user) return loginTree(router, state);
-      return auth.isTerritoryManager() ? true : router.parseUrl(auth.getHomeRoute());
+      return auth.canAccessTerritoryAdmin() ? true : router.parseUrl(auth.getHomeRoute());
     }),
   );
 };
