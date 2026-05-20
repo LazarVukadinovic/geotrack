@@ -226,9 +226,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("RequireRegionalManager", policy =>
         policy.RequireRole(RoleNames.RegionalManager));
     options.AddPolicy("RequireTerritoryManager", policy =>
-        policy.RequireRole(RoleNames.TerritoryManager));
+        policy.RequireRole(RoleNames.TerritoryManager, RoleNames.TerritoryAssociate));
     options.AddPolicy("RequireAdminAppUser", policy =>
-        policy.RequireRole(RoleNames.TerritoryManager, RoleNames.RegionalManager));
+        policy.RequireRole(RoleNames.TerritoryManager, RoleNames.TerritoryAssociate, RoleNames.RegionalManager));
 });
 
 builder.Services.AddRateLimiter(options =>

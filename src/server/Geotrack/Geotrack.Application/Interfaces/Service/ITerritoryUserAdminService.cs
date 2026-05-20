@@ -24,13 +24,36 @@ public interface ITerritoryUserAdminService
         string? search,
         int take);
 
+    Task<TerritoryAssignableUserSearchResponseDto> SearchAssignableUsersAsync(
+        int currentUserId,
+        int? territoryId,
+        string? query,
+        int take,
+        bool excludeAlreadyRegionalManager,
+        bool excludeAlreadyTerritoryAssociate);
+
     Task<TerritoryUserListItemDto> AddRegionAsync(
         int currentUserId,
         int targetUserId,
         TerritoryUserAssignRegionRequestDto request);
 
+    Task<TerritoryUserListItemDto> AddRegionalManagerAsync(
+        int currentUserId,
+        int targetUserId,
+        TerritoryUserAddRegionalManagerRequestDto request);
+
+    Task<TerritoryUserListItemDto> AddTerritoryAssociateAsync(
+        int currentUserId,
+        int targetUserId,
+        TerritoryUserAddTerritoryAssociateRequestDto request);
+
     Task<TerritoryUserListItemDto> RemoveManagerRoleAsync(
         int currentUserId,
         int targetUserId,
         TerritoryUserRemoveManagerRoleRequestDto request);
+
+    Task<TerritoryUserListItemDto> RemoveTerritoryAssociateAsync(
+        int currentUserId,
+        int targetUserId,
+        TerritoryUserRemoveTerritoryAssociateRequestDto request);
 }

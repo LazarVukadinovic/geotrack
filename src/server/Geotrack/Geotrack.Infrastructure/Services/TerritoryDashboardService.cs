@@ -2653,8 +2653,12 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             .Select(userRole => userRole.Role.Name)
             .ToListAsync();
 
-        if (!roles.Any(role => RoleNames.Normalize(role) == RoleNames.TerritoryManager))
-            throw new UnauthorizedAccessException("Territory manager role is required.");
+        var normalizedRoles = roles.Select(RoleNames.Normalize).ToList();
+        if (!normalizedRoles.Contains(RoleNames.TerritoryManager) &&
+            !normalizedRoles.Contains(RoleNames.TerritoryAssociate))
+        {
+            throw new UnauthorizedAccessException("Territory administrator role is required.");
+        }
     }
 
     private static string? BuildManagerDisplayName(List<ManagerRow> managers)

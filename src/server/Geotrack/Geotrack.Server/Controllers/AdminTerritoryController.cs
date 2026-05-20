@@ -268,6 +268,33 @@ public sealed class AdminTerritoryController : ControllerBase
         }
     }
 
+    [HttpGet("users/search")]
+    public async Task<ActionResult<TerritoryAssignableUserSearchResponseDto>> SearchAssignableUsers(
+        [FromQuery] int? territoryId = null,
+        [FromQuery] string? query = null,
+        [FromQuery] int take = 10,
+        [FromQuery] bool excludeAlreadyRegionalManager = false,
+        [FromQuery] bool excludeAlreadyTerritoryAssociate = false)
+    {
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryUsers.SearchAssignableUsersAsync(
+                GetCurrentUserId(),
+                territoryId,
+                query,
+                take,
+                excludeAlreadyRegionalManager,
+                excludeAlreadyTerritoryAssociate));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpPost("users/{userId:int}/regions")]
     public async Task<ActionResult<TerritoryUserListItemDto>> AddRegion(
         [FromRoute] int userId,
@@ -295,6 +322,63 @@ public sealed class AdminTerritoryController : ControllerBase
         }
     }
 
+    [HttpPost("users/{userId:int}/regional-manager")]
+    public async Task<ActionResult<TerritoryUserListItemDto>> AddRegionalManager(
+        [FromRoute] int userId,
+        [FromBody] TerritoryUserAddRegionalManagerRequestDto? request)
+    {
+        if (userId <= 0)
+            return BadRequest(new { message = "userId must be positive." });
+
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        if (request.TerritoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        if (request.RegionIds.Count == 0)
+            return BadRequest(new { message = "At least one region is required." });
+
+        try
+        {
+            return Ok(await _territoryUsers.AddRegionalManagerAsync(
+                GetCurrentUserId(),
+                userId,
+                request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("users/{userId:int}/territory-associate")]
+    public async Task<ActionResult<TerritoryUserListItemDto>> AddTerritoryAssociate(
+        [FromRoute] int userId,
+        [FromBody] TerritoryUserAddTerritoryAssociateRequestDto? request)
+    {
+        if (userId <= 0)
+            return BadRequest(new { message = "userId must be positive." });
+
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        if (request.TerritoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryUsers.AddTerritoryAssociateAsync(
+                GetCurrentUserId(),
+                userId,
+                request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpPost("users/{userId:int}/remove-manager-role")]
     public async Task<ActionResult<TerritoryUserListItemDto>> RemoveManagerRole(
         [FromRoute] int userId,
@@ -312,6 +396,33 @@ public sealed class AdminTerritoryController : ControllerBase
         try
         {
             return Ok(await _territoryUsers.RemoveManagerRoleAsync(
+                GetCurrentUserId(),
+                userId,
+                request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("users/{userId:int}/territory-associate/remove")]
+    public async Task<ActionResult<TerritoryUserListItemDto>> RemoveTerritoryAssociate(
+        [FromRoute] int userId,
+        [FromBody] TerritoryUserRemoveTerritoryAssociateRequestDto? request)
+    {
+        if (userId <= 0)
+            return BadRequest(new { message = "userId must be positive." });
+
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        if (request.TerritoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryUsers.RemoveTerritoryAssociateAsync(
                 GetCurrentUserId(),
                 userId,
                 request));
