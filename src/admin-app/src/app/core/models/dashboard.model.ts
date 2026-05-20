@@ -288,6 +288,7 @@ export interface TerritoryContentDirectoryItem {
   viewsLast30Days: number;
   imageUrl?: string | null;
   detailRoute?: string | null;
+  publicDetailRoute?: string | null;
 }
 
 export interface TerritoryContentDirectoryResponse {

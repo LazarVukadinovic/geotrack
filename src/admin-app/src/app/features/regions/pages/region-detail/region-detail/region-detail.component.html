@@ -295,7 +295,14 @@
           <ng-container *ngIf="!isContentLoading">
             <div *ngFor="let item of contentItems; trackBy: trackByContentId">
               <div
-                class="grid items-center gap-4 px-5 py-4 border-b border-gray-50"
+                class="grid items-center gap-4 px-5 py-4 border-b border-gray-50 transition-colors"
+                [ngClass]="publicPreviewUrl(item) ? 'cursor-pointer hover:bg-blue-50/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-blue-600' : ''"
+                [attr.tabindex]="publicPreviewUrl(item) ? 0 : null"
+                [attr.role]="publicPreviewUrl(item) ? 'link' : null"
+                [attr.aria-label]="publicPreviewUrl(item) ? 'Open ' + item.name + ' in user app' : null"
+                (click)="openPublicPreview(item, $event)"
+                (keydown.enter)="openPublicPreviewFromKeyboard(item, $event)"
+                (keydown.space)="openPublicPreviewFromKeyboard(item, $event)"
                 style="grid-template-columns: minmax(260px,1.4fr) minmax(180px,1fr) 170px 150px 130px;"
               >
                 <div class="min-w-0">

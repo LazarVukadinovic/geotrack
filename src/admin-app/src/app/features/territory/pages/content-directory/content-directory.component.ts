@@ -11,6 +11,7 @@ import {
   TerritoryContentDirectoryItem,
 } from '../../../../core/models/dashboard.model';
 import { TerritoryDashboardService } from '../../../../core/services/territory-dashboard.service';
+import { UserAppLinkService } from '../../../../core/services/user-app-link.service';
 
 type TerritoryContentType = 'destinations' | 'locations' | 'places' | 'events';
 
@@ -24,6 +25,7 @@ type TerritoryContentType = 'destinations' | 'locations' | 'places' | 'events';
 export class TerritoryContentDirectoryComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly territoryDashboard = inject(TerritoryDashboardService);
+  private readonly userAppLinks = inject(UserAppLinkService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -97,6 +99,10 @@ export class TerritoryContentDirectoryComponent implements OnInit, OnDestroy {
 
   formatViews(value: number): string {
     return value.toLocaleString();
+  }
+
+  publicPreviewUrl(item: TerritoryContentDirectoryItem): string | null {
+    return this.userAppLinks.toUserAppUrl(item.publicDetailRoute);
   }
 
   private loadTerritories(): void {

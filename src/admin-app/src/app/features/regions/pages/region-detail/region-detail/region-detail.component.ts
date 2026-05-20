@@ -234,6 +234,33 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
     return this.userAppLinks.toUserAppUrl(item.publicDetailRoute);
   }
 
+  openPublicPreview(item: TerritoryRegionContentItem, event?: MouseEvent): void {
+    if (event?.defaultPrevented || this.isInteractivePreviewTarget(event?.target)) {
+      return;
+    }
+
+    const publicUrl = this.publicPreviewUrl(item);
+    if (!publicUrl) {
+      return;
+    }
+
+    globalThis.open?.(publicUrl, '_blank', 'noopener,noreferrer');
+  }
+
+  openPublicPreviewFromKeyboard(item: TerritoryRegionContentItem, event: Event): void {
+    if (event.defaultPrevented || this.isInteractivePreviewTarget(event.target)) {
+      return;
+    }
+
+    const publicUrl = this.publicPreviewUrl(item);
+    if (!publicUrl) {
+      return;
+    }
+
+    event.preventDefault();
+    globalThis.open?.(publicUrl, '_blank', 'noopener,noreferrer');
+  }
+
   formatDate(value?: string | null): string {
     if (!value) return '-';
     const date = new Date(value);
@@ -318,6 +345,11 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
 
   trackByContentId(_: number, item: TerritoryRegionContentItem): string {
     return `${item.entityType}-${item.id}`;
+  }
+
+  private isInteractivePreviewTarget(target?: EventTarget | null): boolean {
+    return target instanceof HTMLElement
+      && Boolean(target.closest('a, button, input, select, textarea, [role="button"]'));
   }
 
   private loadDetail(): void {

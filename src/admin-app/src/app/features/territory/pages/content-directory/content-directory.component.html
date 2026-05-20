@@ -98,26 +98,26 @@
           }
         } @else {
           @for (item of items; track item.entityType + '-' + item.id) {
-            <div
-              class="grid items-center gap-4 px-5 py-4 border-b border-gray-50 hover:bg-blue-50/30 transition-colors"
-              style="grid-template-columns: 1.4fr 1fr 1fr 120px 120px 120px;"
-            >
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-gray-900 truncate">{{ item.name }}</p>
-                <p class="text-[11px] text-gray-400">ID: {{ item.id }}</p>
+            @if (publicPreviewUrl(item); as publicUrl) {
+              <a
+                [href]="publicUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                [attr.aria-label]="'Open ' + item.name + ' in user app'"
+                class="group grid items-center gap-4 px-5 py-4 border-b border-gray-50 hover:bg-blue-50/40 transition-colors cursor-pointer no-underline text-inherit focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-blue-600"
+                style="grid-template-columns: 1.4fr 1fr 1fr 120px 120px 120px;"
+              >
+                <ng-container *ngTemplateOutlet="contentDirectoryRowCells; context: { $implicit: item, linked: true }"></ng-container>
+              </a>
+            } @else {
+              <div
+                class="grid items-center gap-4 px-5 py-4 border-b border-gray-50 transition-colors"
+                style="grid-template-columns: 1.4fr 1fr 1fr 120px 120px 120px;"
+                title="No public preview route"
+              >
+                <ng-container *ngTemplateOutlet="contentDirectoryRowCells; context: { $implicit: item, linked: false }"></ng-container>
               </div>
-              <span class="text-sm text-gray-700 truncate">{{ item.regionName }}</span>
-              <span class="text-sm text-gray-500 truncate">{{ item.parentName || '-' }}</span>
-              <span class="text-sm text-gray-500 truncate">{{ item.typeName || item.entityType }}</span>
-              <span class="text-sm font-semibold text-blue-700">{{ formatViews(item.viewsLast30Days) }}</span>
-              <span class="text-sm text-gray-500">
-                @if (contentType === 'events') {
-                  {{ item.startsAt | date:'d MMM yyyy' }}
-                } @else {
-                  {{ item.createdAt | date:'d MMM yyyy' }}
-                }
-              </span>
-            </div>
+            }
           } @empty {
             <div class="flex flex-col items-center justify-center py-16 text-gray-400">
               <svg class="w-12 h-12 mb-3 text-gray-200" viewBox="0 0 24 24" fill="none"
@@ -142,3 +142,26 @@
     </div>
   </div>
 </div>
+
+<ng-template #contentDirectoryRowCells let-item let-linked="linked">
+  <div class="min-w-0">
+    <p
+      class="text-sm font-semibold truncate"
+      [ngClass]="linked ? 'text-blue-700 group-hover:text-blue-900 group-hover:underline' : 'text-gray-900'"
+    >
+      {{ item.name }}
+    </p>
+    <p class="text-[11px] text-gray-400">ID: {{ item.id }}</p>
+  </div>
+  <span class="text-sm text-gray-700 truncate">{{ item.regionName }}</span>
+  <span class="text-sm text-gray-500 truncate">{{ item.parentName || '-' }}</span>
+  <span class="text-sm text-gray-500 truncate">{{ item.typeName || item.entityType }}</span>
+  <span class="text-sm font-semibold text-blue-700">{{ formatViews(item.viewsLast30Days) }}</span>
+  <span class="text-sm text-gray-500">
+    @if (contentType === 'events') {
+      {{ item.startsAt | date:'d MMM yyyy' }}
+    } @else {
+      {{ item.createdAt | date:'d MMM yyyy' }}
+    }
+  </span>
+</ng-template>
