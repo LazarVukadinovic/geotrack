@@ -175,6 +175,21 @@ describe('AllRegionsComponent', () => {
     });
   });
 
+  it('renders Add Region for Territory Managers and navigates with the active territory', () => {
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate');
+    const text = fixture.nativeElement.textContent;
+
+    expect(text).toContain('Add Region');
+
+    component.goToAddRegion();
+
+    expect(navigate).toHaveBeenCalledWith(['/territory/regions/new'], {
+      queryParams: { territoryId: 10 },
+      state: { territoryId: 10 },
+    });
+  });
+
   it('renders read-only rows without edit or delete actions', () => {
     const text = fixture.nativeElement.textContent;
 

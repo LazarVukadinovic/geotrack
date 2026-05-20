@@ -29,7 +29,12 @@
         {{ errorMessage }}
       </div>
 
-      <div class="flex items-center gap-3 mb-5">
+      <div *ngIf="feedbackMessage"
+           class="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        {{ feedbackMessage }}
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3 mb-5">
         <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 w-80 shadow-sm">
           <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2">
@@ -84,6 +89,21 @@
         </div>
 
         <div class="flex-1"></div>
+
+        <button
+          *ngIf="canAddRegion"
+          type="button"
+          (click)="goToAddRegion()"
+          [disabled]="!activeTerritoryId || territoryLoading"
+          class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold
+                 border-none cursor-pointer shadow-sm hover:bg-blue-800 transition-colors
+                 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Region
+        </button>
 
         <span *ngIf="!isLoading && !territoryLoading" class="text-sm text-gray-500">
           Showing <span class="font-semibold text-gray-700">{{ items.length }}</span>

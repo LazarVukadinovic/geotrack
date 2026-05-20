@@ -201,6 +201,79 @@ export interface TerritoryRegionDirectoryResponse {
   hasMore: boolean;
 }
 
+export interface TerritoryRegionBoundaryCoordinate {
+  latitude: number;
+  longitude: number;
+}
+
+export interface TerritoryRegionBoundary {
+  shapeType?: 'Polygon' | 'Rectangle' | string | null;
+  coordinates: TerritoryRegionBoundaryCoordinate[];
+}
+
+export interface TerritoryRegionCreateRequest {
+  territoryId: number;
+  name: string;
+  boundarySource?: 'ManualDraw' | 'OsmBoundary' | string | null;
+  osmRelationId?: number | null;
+  osmAdminLevel?: number | null;
+  boundary?: TerritoryRegionBoundary | null;
+}
+
+export interface TerritoryRegionCreateResponse {
+  id: number;
+  regionId: number;
+  name: string;
+  displayName: string;
+  territoryId: number;
+  territoryDisplayName: string;
+  status: string;
+  boundarySource?: string | null;
+  boundaryShapeType?: string | null;
+  boundaryGeometryGeoJson?: TerritoryRegionGeometry | null;
+  createdAt: string;
+  detailRoute?: string | null;
+}
+
+export interface TerritoryRegionCreateContext {
+  territory?: TerritoryAssignedTerritory | null;
+  territoryBoundaryGeoJson?: TerritoryRegionGeometry | null;
+  existingRegions: TerritoryRegionMapItem[];
+  viewport: TerritoryRegionMapViewport;
+  canCreate: boolean;
+  boundaryRequiredMessage?: string | null;
+}
+
+export interface TerritoryRegionMapItem {
+  id: number;
+  regionId: number;
+  name: string;
+  displayName: string;
+  geometryGeoJson?: TerritoryRegionGeometry | null;
+  centerLatitude?: number | null;
+  centerLongitude?: number | null;
+}
+
+export interface TerritoryRegionGeometry {
+  type: 'Polygon' | 'MultiPolygon' | string;
+  coordinates: unknown;
+}
+
+export interface TerritoryRegionMapBounds {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
+
+export interface TerritoryRegionMapViewport {
+  centerLatitude?: number | null;
+  centerLongitude?: number | null;
+  zoom?: number | null;
+  bounds?: TerritoryRegionMapBounds | null;
+  isEmpty: boolean;
+}
+
 export interface TerritoryContentDirectoryItem {
   id: number;
   entityType: string;

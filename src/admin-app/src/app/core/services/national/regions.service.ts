@@ -2,6 +2,9 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, map, throwError } from 'rxjs';
 import {
   TerritoryAssignedTerritory,
+  TerritoryRegionCreateContext,
+  TerritoryRegionCreateRequest,
+  TerritoryRegionCreateResponse,
   TerritoryRegionContentResponse,
   TerritoryRegionDetail,
   TerritoryRegionDirectoryItem,
@@ -120,6 +123,14 @@ export class RegionsService {
       ...request,
       territoryId: request.territoryId ?? this.getActiveTerritoryId(),
     });
+  }
+
+  getCreateContext$(territoryId?: number | null): Observable<TerritoryRegionCreateContext> {
+    return this.territoryDashboard.getRegionCreateContext(territoryId ?? this.getActiveTerritoryId());
+  }
+
+  create$(request: TerritoryRegionCreateRequest): Observable<TerritoryRegionCreateResponse> {
+    return this.territoryDashboard.createRegion(request);
   }
 
   delete$(_id?: string): Observable<void> {

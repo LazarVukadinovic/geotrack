@@ -178,6 +178,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/regions/pages/regions/regions.component').then(m=>m.AllRegionsComponent),
       },
       {
+        path: 'territory/regions/new',
+        canActivate:[territoryManagerGuard],
+        loadComponent: () => import('./features/regions/pages/add-region/add-region.component').then(m=>m.AddRegionComponent),
+      },
+      {
         path: 'territory/content',
         canActivate:[territoryManagerGuard],
         loadComponent: () => import('./features/territory/pages/content-directory/content-directory.component').then(m=>m.TerritoryContentDirectoryComponent),

@@ -50,6 +50,7 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   isLoading = false;
   isLoadingMore = false;
   errorMessage: string | null = null;
+  feedbackMessage: string | null = null;
 
   searchQuery = '';
   currentSort: RegionSortValue = 'status';
@@ -83,6 +84,16 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    const navigationState = history.state as {
+      feedbackMessage?: string | null;
+      createdRegionName?: string | null;
+      territoryId?: number | null;
+    };
+    const createdRegionName = navigationState?.createdRegionName?.trim();
+    if (navigationState?.feedbackMessage?.trim()) {
+      this.feedbackMessage = navigationState.feedbackMessage.trim();
+    }
+
     const saved = this.svc.getListState();
     if (saved) {
       this.searchQuery = saved.searchQuery;
@@ -90,6 +101,16 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
       this.initialTake = Math.max(PAGE_SIZE, saved.loadedCount);
       this.pendingScrollTop = saved.scrollTop;
       this.svc.clearListState();
+    }
+
+    if (createdRegionName) {
+      this.searchQuery = createdRegionName;
+      this.currentSort = 'name';
+      this.initialTake = PAGE_SIZE;
+    }
+
+    if (navigationState?.territoryId && navigationState.territoryId > 0) {
+      this.svc.setActiveTerritoryId(navigationState.territoryId);
     }
 
     this.loadAssignedTerritories();
@@ -123,6 +144,10 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
 
   get hasMore(): boolean {
     return this.items.length < this.totalItems;
+  }
+
+  get canAddRegion(): boolean {
+    return this.auth.isTerritoryManager();
   }
 
   get nextPageCount(): number {
@@ -204,6 +229,17 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
     this.saveListState();
     this.router.navigate([item.detailRoute ?? `/territory/regions/${item.regionId}`], {
       state: { regionId: item.regionId, territoryId: item.territoryId },
+    });
+  }
+
+  goToAddRegion(): void {
+    if (!this.activeTerritoryId || !this.canAddRegion) return;
+
+    this.saveListState();
+    this.svc.setActiveTerritoryId(this.activeTerritoryId);
+    this.router.navigate(['/territory/regions/new'], {
+      queryParams: { territoryId: this.activeTerritoryId },
+      state: { territoryId: this.activeTerritoryId },
     });
   }
 

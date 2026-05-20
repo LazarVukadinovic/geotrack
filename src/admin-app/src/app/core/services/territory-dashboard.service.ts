@@ -5,6 +5,9 @@ import {
   TerritoryAssignedTerritory,
   TerritoryContentDirectoryResponse,
   TerritoryDashboardResponse,
+  TerritoryRegionCreateContext,
+  TerritoryRegionCreateRequest,
+  TerritoryRegionCreateResponse,
   TerritoryRegionContentResponse,
   TerritoryRegionContentType,
   TerritoryRegionDetail,
@@ -81,6 +84,16 @@ export class TerritoryDashboardService {
     return this.http.get<TerritoryRegionDirectoryResponse>('/api/admin/territory/regions', {
       params,
     });
+  }
+
+  getRegionCreateContext(territoryId?: number | null): Observable<TerritoryRegionCreateContext> {
+    return this.http.get<TerritoryRegionCreateContext>('/api/admin/territory/regions/create-context', {
+      params: this.withTerritoryId(new HttpParams(), territoryId),
+    });
+  }
+
+  createRegion(request: TerritoryRegionCreateRequest): Observable<TerritoryRegionCreateResponse> {
+    return this.http.post<TerritoryRegionCreateResponse>('/api/admin/territory/regions', request);
   }
 
   getRegionDetail(
