@@ -1,5 +1,3 @@
-import { RegionalEntityImageDto, RegionalEntityImageInput } from './regional-image.model';
-
 export type EventSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc' | 'eventDateAsc' | 'eventDateDesc';
 export type EventStatusFilter = 'all' | 'published' | 'draft' | 'archived';
 
@@ -45,7 +43,6 @@ export interface RegionalEventListItemDto {
   accessibility?: string | null;
   tags?: RegionalEventTagDto[];
   imageUrl?: string | null;
-  images?: RegionalEntityImageDto[];
   detailRoute?: string | null;
   editRoute?: string | null;
   latitude?: number | null;
@@ -95,34 +92,34 @@ export interface RegionalEventCreateRequest {
   attendanceLimit?: number | null;
   ageRestriction?: string | null;
   tagIds: number[];
-  images?: RegionalEntityImageInput[];
+  cardImageFile?: File | null;
+  coverImageFile?: File | null;
+  galleryImageFiles?: File[];
 }
 
 export interface RegionalEventUpdateRequest {
-  regionId?: number;
-  parentEntityType: 'Destination' | 'Location' | 'Place';
+  parentEntityType?: 'Destination' | 'Location' | 'Place' | null;
   destinationId?: number | null;
   locationId?: number | null;
   placeId?: number | null;
-  eventTypeId: number;
-  name: string;
-  summary: string;
+  eventTypeId?: number | null;
+  name?: string | null;
+  summary?: string | null;
   description?: string | null;
-  status?: 'Published' | 'Draft' | 'Archived';
+  status?: 'Published' | 'Draft' | 'Archived' | null;
   venueName?: string | null;
-  isAllDay: boolean;
-  startsAt: string;
-  endsAt: string;
-  isRecurring: boolean;
-  isFree: boolean;
+  isAllDay?: boolean | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  isRecurring?: boolean | null;
+  isFree?: boolean | null;
   ticketPrice?: string | null;
   externalTicketLink?: string | null;
   organizerName?: string | null;
   contactEmail?: string | null;
   attendanceLimit?: number | null;
   ageRestriction?: string | null;
-  tagIds?: number[];
-  images?: RegionalEntityImageInput[];
+  tagIds?: number[] | null;
 }
 
 export interface RegionalEventTagDto {

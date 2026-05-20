@@ -39,12 +39,30 @@ export class SubmitContributionComponent implements OnInit {
     return this.editId() ? 'Edit Place' : 'Add New Place';
   });
   protected readonly isAccommodationDraft = computed(() => this.draft().basics?.placeType === 'Stay');
-  protected readonly desktopSteps = [
-    { number: 1, label: 'Basic Info' },
-    { number: 2, label: 'Amenities' },
-    { number: 3, label: 'Details' },
-    { number: 4, label: 'Review' },
-  ] as const;
+  protected readonly totalVisibleSteps = computed(() => this.isAccommodationDraft() ? 4 : 3);
+  protected readonly visibleStepNumber = computed(() => {
+    const step = this.currentStep();
+    if (this.isAccommodationDraft() || step <= 1 || step >= 5) return step;
+    if (step === 3) return 2;
+    if (step === 4) return 3;
+    return step;
+  });
+  protected readonly desktopSteps = computed(() => {
+    if (this.isAccommodationDraft()) {
+      return [
+        { number: 1, actualStep: 1, label: 'Basic Info' },
+        { number: 2, actualStep: 2, label: 'Amenities' },
+        { number: 3, actualStep: 3, label: 'Details' },
+        { number: 4, actualStep: 4, label: 'Review' },
+      ];
+    }
+
+    return [
+      { number: 1, actualStep: 1, label: 'Basic Info' },
+      { number: 2, actualStep: 3, label: 'Details' },
+      { number: 3, actualStep: 4, label: 'Review' },
+    ];
+  });
 
   protected readonly draft = signal<ContributionDraft>({
     basics: null,
@@ -76,8 +94,13 @@ export class SubmitContributionComponent implements OnInit {
   }
 
   protected onBasicsSaved(data: BasicsData): void {
-    this.draft.update(d => ({ ...d, basics: data }));
-    this.currentStep.set(2);
+    const isStay = data.placeType === 'Stay';
+    this.draft.update(d => ({
+      ...d,
+      basics: data,
+      features: isStay ? (d.features ?? { tags: [], amenities: [] }) : { tags: d.features?.tags ?? [], amenities: [] },
+    }));
+    this.currentStep.set(isStay ? 2 : 3);
   }
 
   protected onFeaturesSaved(data: FeaturesData): void {
@@ -126,7 +149,18 @@ export class SubmitContributionComponent implements OnInit {
   }
 
   protected prevStep(): void {
-    if (this.currentStep() > 1) this.currentStep.update(s => s - 1);
+    const step = this.currentStep();
+    if (step <= 1) return;
+    if (!this.isAccommodationDraft() && step === 3) {
+      this.currentStep.set(1);
+      return;
+    }
+    if (!this.isAccommodationDraft() && step === 4) {
+      this.currentStep.set(3);
+      return;
+    }
+
+    this.currentStep.update(s => s - 1);
   }
 
   protected handleBack(): void {
@@ -183,7 +217,5 @@ function hasValidContributionLocation(basics: BasicsData): boolean {
     basics.lat <= 90 &&
     basics.lng >= -180 &&
     basics.lng <= 180 &&
-    (basics.lat !== 0 || basics.lng !== 0) &&
-    !!basics.city.trim() &&
-    !!basics.country.trim();
+    (basics.lat !== 0 || basics.lng !== 0);
 }

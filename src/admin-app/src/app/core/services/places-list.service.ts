@@ -3,12 +3,14 @@ import { Injectable } from '@angular/core';
 import { Observable, map, throwError } from 'rxjs';
 import {
   PlaceSort,
+  RegionalPlaceAddOwnerRequest,
   RegionalPlaceCreateRequest,
   RegionalPlaceDetailDto,
   RegionalPlaceListItemDto,
   RegionalPlaceListParams,
   RegionalPlaceListResponse,
   RegionalPlaceParentLocationDto,
+  RegionalPlaceOwnerDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
   RegionalPlaceUpdateRequest,
@@ -32,6 +34,9 @@ export interface PlaceListItem {
   locationName?: string | null;
   placeTypeId?: number | null;
   placeType?: string | null;
+  isOwnable?: boolean;
+  hasOwner?: boolean;
+  owners?: RegionalPlaceOwnerDto[];
   stayTypeId?: number | null;
   stayType?: string | null;
   createdAt?: string | null;
@@ -124,11 +129,30 @@ export class PlacesListService {
 
   getPlace(regionId: number, placeId: string | number): Observable<RegionalPlaceDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.get<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, { params });
+    return this.http.get<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, { params }).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
+  }
+
+  addOwner(
+    regionId: number,
+    placeId: string | number,
+    payload: RegionalPlaceAddOwnerRequest,
+  ): Observable<RegionalPlaceDetailDto> {
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http.post<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}/owners`, payload, { params });
   }
 
   createPlace(payload: RegionalPlaceCreateRequest): Observable<RegionalPlaceDetailDto> {
-    return this.http.post<RegionalPlaceDetailDto>(this.endpoint, payload);
+    return this.http.post<RegionalPlaceDetailDto>(this.endpoint, this.buildCreateFormData(payload)).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
   }
 
   updatePlace(
@@ -137,7 +161,12 @@ export class PlacesListService {
     payload: RegionalPlaceUpdateRequest,
   ): Observable<RegionalPlaceDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, payload, { params });
+    return this.http.put<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, payload, { params }).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
   }
 
   getParentLocations(
@@ -178,6 +207,25 @@ export class PlacesListService {
     return this.http.delete<void>(`${this.endpoint}/${placeId}`, { params });
   }
 
+
+  private buildCreateFormData(payload: RegionalPlaceCreateRequest): FormData {
+    const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
+    if (!cardImageFile || !coverImageFile) {
+      throw new Error('Card and cover images are required.');
+    }
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+    formData.append('cardImage', cardImageFile);
+    formData.append('coverImage', coverImageFile);
+
+    for (const file of galleryImageFiles ?? []) {
+      formData.append('galleryImages', file);
+    }
+
+    return formData;
+  }
+
   toListItem(dto: RegionalPlaceListItemDto): PlaceListItem {
     const id = String(dto.id);
     const lastUpdatedIso = dto.lastUpdatedAt ?? dto.createdAt ?? null;
@@ -185,6 +233,7 @@ export class PlacesListService {
     const destinationName = dto.destinationName ?? null;
     const placeType = dto.placeType ?? null;
     const stayType = dto.stayType ?? null;
+    const detail = dto as Partial<RegionalPlaceDetailDto>;
     const item: PlaceListItem = {
       id,
       name: dto.name,
@@ -196,7 +245,7 @@ export class PlacesListService {
       internalRefId: dto.internalReferenceId ?? undefined,
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
-      imageBg: dto.imageUrl ? `url("${dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
+      imageBg: (dto.coverImageUrl ?? dto.imageUrl) ? `url("${dto.coverImageUrl ?? dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
       category: placeType ?? 'Place',
       regionId: dto.regionId,
       regionDisplayName: dto.regionDisplayName,
@@ -206,16 +255,35 @@ export class PlacesListService {
       locationName,
       placeTypeId: dto.placeTypeId ?? null,
       placeType,
+      isOwnable: Boolean((dto as RegionalPlaceDetailDto).isOwnable),
+      owners: (dto as RegionalPlaceDetailDto).owners ?? [],
+      hasOwner: Boolean((dto as RegionalPlaceDetailDto).hasOwner || ((dto as RegionalPlaceDetailDto).owners ?? []).length),
       stayTypeId: dto.stayTypeId ?? null,
       stayType,
       createdAt: dto.createdAt ?? null,
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
       tagsDto: dto.tags ?? [],
       tags: (dto.tags ?? []).map(tag => tag.name),
-      imageUrl: dto.imageUrl ?? null,
+      imageUrl: dto.imageUrl ?? dto.cardImageUrl ?? null,
+      coverImageUrl: dto.coverImageUrl ?? dto.imageUrl ?? undefined,
+      coverImageName: dto.coverImageUrl ? 'Cover image' : undefined,
+      galleryImages: (dto.galleryImageUrls ?? []).map((url, index) => ({ url, name: `Gallery image ${index + 1}` })),
       detailRoute: dto.detailRoute ?? `/places/detail/${dto.id}`,
       editRoute: dto.editRoute ?? `/places/edit/${dto.id}`,
       address: dto.address ?? undefined,
+      lat: typeof detail.latitude === 'number' ? detail.latitude : undefined,
+      lng: typeof detail.longitude === 'number' ? detail.longitude : undefined,
+      openingHours: detail.openingHours ?? undefined,
+      contactEmail: detail.contactEmail ?? undefined,
+      phoneNumber: detail.phoneNumber ?? undefined,
+      contactPhone: detail.contactPhone ?? detail.phoneNumber ?? undefined,
+      website: detail.website ?? undefined,
+      admissionPrice: detail.admissionPriceRange ?? undefined,
+      bookingLink: detail.bookingExternalLink ?? undefined,
+      bestTimeToVisit: detail.bestTimeToVisit ?? undefined,
+      visitorTips: detail.visitorTips ?? undefined,
+      accessNotes: detail.accessNotes ?? undefined,
+      accessibilityNotes: detail.accessibilityNotes ?? undefined,
     };
 
     this.cache.set(id, item);

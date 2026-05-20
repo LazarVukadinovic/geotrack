@@ -14,6 +14,7 @@ public class GetDestinationDetailsResponseDto
     public double Longitude { get; set; }
     public int DestinationTypeId { get; set; }
     public int RegionId { get; set; }
+    public string? RegionName { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public double AverageRating { get; set; }

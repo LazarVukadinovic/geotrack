@@ -37,6 +37,23 @@ export class MyInterestsComponent {
     const inferredIds = new Set(this.visibleInferredTags().map(tag => tag.tagId));
     return this.tags().filter(tag => !selectedIds.has(tag.id) && !inferredIds.has(tag.id));
   });
+  readonly availableTagGroups = computed(() => {
+    const groups = new Map<string, Tag[]>();
+
+    for (const tag of this.availableTags()) {
+      const groupName = tag.group?.trim() || 'More interests';
+      const groupItems = groups.get(groupName) ?? [];
+      groupItems.push(tag);
+      groups.set(groupName, groupItems);
+    }
+
+    return Array.from(groups.entries()).map(([group, items]) => ({
+      group,
+      items: [...items].sort((a, b) =>
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name),
+      ),
+    }));
+  });
 
   constructor(
     private router: Router,

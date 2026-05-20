@@ -7,5 +7,6 @@ public class EntityImageDto
     public string? AltText { get; set; }
     public string? Caption { get; set; }
     public bool IsMain { get; set; }
+    public string ImageRole { get; set; } = "gallery";
     public int SortOrder { get; set; }
 }

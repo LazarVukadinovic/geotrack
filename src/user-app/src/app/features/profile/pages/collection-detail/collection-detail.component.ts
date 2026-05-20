@@ -1,5 +1,4 @@
 import { Component, computed, inject, signal, NgZone, OnDestroy } from '@angular/core';
-import { Location } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CollectionPlace, CollectionsService } from '../../services/collections';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
@@ -14,7 +13,6 @@ const DISMISS_THRESHOLD = 120;
   styleUrl: './collection-detail.component.css',
 })
 export class CollectionDetailComponent {
-  private readonly location    = inject(Location);
   private readonly route       = inject(ActivatedRoute);
   private readonly router      = inject(Router);
   private readonly collService = inject(CollectionsService);
@@ -36,14 +34,17 @@ export class CollectionDetailComponent {
   protected readonly menuOpen   = signal(false);
   protected readonly renameOpen = signal(false);
   protected readonly renameValue = signal('');
-  
+  protected readonly confirmDeleteOpen = signal(false);
+
   protected readonly menuDragOffset  = signal(0);
   protected readonly menuIsDragging  = signal(false);
   protected readonly renameDragOffset  = signal(0);
   protected readonly renameIsDragging  = signal(false);
+  protected readonly confirmDeleteDragOffset = signal(0);
+  protected readonly confirmDeleteIsDragging = signal(false);
 
   private touchStartY = 0;
-  private activeDrag: 'menu' | 'rename' | null = null;
+  private activeDrag: 'menu' | 'rename' | 'confirmDelete' | null = null;
     private readonly boundMove = this.onDocTouchMove.bind(this);
   private readonly boundEnd  = this.onDocTouchEnd.bind(this);
     private attachDocListeners(): void {
@@ -60,7 +61,7 @@ export class CollectionDetailComponent {
   ngOnDestroy(): void {
     this.detachDocListeners();
   }
-  protected goBack(): void { this.location.back(); }
+  protected goBack(): void { globalThis.history.back(); }
 
   protected onRemovePlace(itemId: number): void {
     this.collService.removePlace(this.id, itemId);
@@ -100,9 +101,18 @@ export class CollectionDetailComponent {
     this.closeRename();
   }
   protected onDelete(): void {
-    this.collService.deleteCollection(this.id);
+    this.menuDragOffset.set(0);
     this.menuOpen.set(false);
-    this.location.back();
+    this.confirmDeleteOpen.set(true);
+  }
+  protected closeConfirmDelete(): void {
+    this.confirmDeleteDragOffset.set(0);
+    this.confirmDeleteOpen.set(false);
+  }
+  protected confirmDelete(): void {
+    this.collService.deleteCollection(this.id);
+    this.confirmDeleteOpen.set(false);
+    globalThis.history.back();
   }
 
   protected reloadCollection(): void {
@@ -124,13 +134,21 @@ export class CollectionDetailComponent {
     this.attachDocListeners();
   }
 
+  protected onConfirmDeleteTouchStart(e: TouchEvent): void {
+    this.activeDrag = 'confirmDelete';
+    this.touchStartY = e.touches[0].clientY;
+    this.confirmDeleteIsDragging.set(true);
+    this.attachDocListeners();
+  }
+
   protected onDocTouchMove(e: TouchEvent): void {
     const delta = e.touches[0].clientY - this.touchStartY;
     if (delta <= 0) return;
     e.preventDefault();
     this.ngZone.run(() => {
-      if (this.activeDrag === 'menu')   this.menuDragOffset.set(delta);
-      if (this.activeDrag === 'rename') this.renameDragOffset.set(delta);
+      if (this.activeDrag === 'menu')          this.menuDragOffset.set(delta);
+      if (this.activeDrag === 'rename')        this.renameDragOffset.set(delta);
+      if (this.activeDrag === 'confirmDelete') this.confirmDeleteDragOffset.set(delta);
     });
   }
 
@@ -151,6 +169,13 @@ export class CollectionDetailComponent {
           this.closeRename();
         } else {
           this.renameDragOffset.set(0);
+        }
+      } else if (this.activeDrag === 'confirmDelete') {
+        this.confirmDeleteIsDragging.set(false);
+        if (this.confirmDeleteDragOffset() >= DISMISS_THRESHOLD) {
+          this.closeConfirmDelete();
+        } else {
+          this.confirmDeleteDragOffset.set(0);
         }
       }
       this.activeDrag = null;

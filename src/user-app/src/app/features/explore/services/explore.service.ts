@@ -53,12 +53,14 @@ interface ApiExploreSectionItem {
   subtitle?: string;
   description?: string;
   categoryLabel?: string;
+  locationName?: string;
   image?: string;
   rating?: number;
   reviewCount?: string;
   distance?: string;
   dateLabel?: string;
   openingHours?: string;
+  statusBadge?: { label?: string; tone?: string };
   pricePerNight?: number;
   isSaved?: boolean;
   tags?: { tagId: number; name: string; slug: string }[];
@@ -584,12 +586,19 @@ export class ExploreService {
       subtitle: item.subtitle,
       description: item.description,
       categoryLabel: item.categoryLabel,
+      locationName: item.locationName ?? undefined,
       image: item.image ?? '',
       rating: item.rating,
       reviewCount: item.reviewCount,
       distance: item.distance,
       dateLabel: item.dateLabel,
       openingHours: item.openingHours,
+      statusBadge: item.statusBadge?.label
+        ? {
+            label: item.statusBadge.label,
+            tone: item.statusBadge.tone ?? 'neutral',
+          }
+        : undefined,
       pricePerNight: item.pricePerNight,
       isSaved: item.isSaved ?? false,
       tags: (item.tags ?? []).map(tag => ({

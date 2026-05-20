@@ -1,4 +1,4 @@
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import {
@@ -23,7 +23,6 @@ const MIN_SEARCH_LENGTH = 2;
 export class DestinationDiscoveryPageComponent implements OnDestroy {
   private readonly discovery = inject(DestinationDiscoveryService);
   private readonly router = inject(Router);
-  private readonly location = inject(Location);
 
   protected readonly imageFallback = EXPLORE_IMAGE_FALLBACK;
   protected readonly query = signal('');
@@ -138,7 +137,7 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
   protected goBack(): void {
     const navigationId = Number(globalThis.history?.state?.navigationId ?? 0);
     if (navigationId > 1) {
-      this.location.back();
+      globalThis.history.back();
       return;
     }
 

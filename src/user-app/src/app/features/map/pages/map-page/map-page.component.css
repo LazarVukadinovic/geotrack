@@ -46,8 +46,55 @@
   z-index: var(--map-layer-floating-control);
 }
 
+.map-page__legend-button {
+  top: 240px;
+  z-index: var(--map-layer-floating-control);
+}
+
+.map-page__legend-overlay {
+  z-index: var(--map-layer-preview);
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: map-legend-fade-in 140ms ease-out both;
+}
+
+.map-page__legend-card {
+  width: min(300px, calc(100% - 3rem));
+  animation: map-bottom-card-enter 160ms ease-out both;
+}
+
+.map-page__legend-dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.map-page__legend-dot--lg {
+  width: 18px;
+  height: 18px;
+}
+
+@keyframes map-legend-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 .map-page__loading-pill {
   z-index: var(--map-layer-info);
+}
+
+.map-page__no-data-overlay {
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.map-page__no-data-card {
+  animation: map-bottom-card-enter 200ms ease-out both;
 }
 
 .map-page__more-panel {
@@ -258,5 +305,10 @@
 
   .map-page__locate-button {
     right: var(--space-6, 1.5rem);
+  }
+
+  .map-page__legend-button {
+    right: var(--space-6, 1.5rem);
+    top: 250px;
   }
 }

@@ -118,7 +118,8 @@ public class ExploreController : ControllerBase
         [FromRoute] string sectionKey,
         [FromQuery] int destinationId,
         [FromQuery] int skip = 0,
-        [FromQuery] int take = 20)
+        [FromQuery] int take = 20,
+        [FromQuery] int[]? tagIds = null)
     {
         if (string.IsNullOrWhiteSpace(sectionKey))
         {
@@ -150,7 +151,8 @@ public class ExploreController : ControllerBase
             destinationId,
             GetUserId(),
             skip,
-            take);
+            take,
+            tagIds);
 
         if (result.SelectedDestination is null)
         {

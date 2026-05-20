@@ -391,6 +391,13 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int?>("EventId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ImageRole")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("gallery");
+
                     b.Property<bool>("IsMain")
                         .HasColumnType("boolean");
 
@@ -949,6 +956,11 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<bool>("IsOwnable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1244,6 +1256,167 @@ namespace Geotrack.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Territories", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Interests.InterestTopic", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("IconKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<bool>("ShowOnOnboarding")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("IsActive", "ShowOnOnboarding", "SortOrder");
+
+                    b.ToTable("InterestTopics", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Interests.InterestTopicTag", b =>
+                {
+                    b.Property<int>("InterestTopicId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("Weight")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(1.0);
+
+                    b.HasKey("InterestTopicId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("InterestTopicTags", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Interests.UserInterestTopic", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("InterestTopicId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "InterestTopicId");
+
+                    b.HasIndex("InterestTopicId");
+
+                    b.ToTable("UserInterestTopics", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Interests.UserInterestTopicSignal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("DismissedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("DismissedAtScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("EvidenceSinceDismissal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(0.0);
+
+                    b.Property<int>("InterestTopicId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDismissed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime>("LastInteractionAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastReason")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<double>("Score")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("inferred");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InterestTopicId");
+
+                    b.HasIndex("UserId", "InterestTopicId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Score");
+
+                    b.ToTable("UserInterestTopicSignals", (string)null);
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Reviews.DestinationReview", b =>
@@ -2104,6 +2277,13 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<string>("ImageRole")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("gallery");
+
                     b.Property<string>("ImageSize")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -2877,6 +3057,63 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("StayAmenity");
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Interests.InterestTopicTag", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Interests.InterestTopic", "InterestTopic")
+                        .WithMany("TopicTags")
+                        .HasForeignKey("InterestTopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Geotrack.Domain.Entities.Tags.Tag", "Tag")
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InterestTopic");
+
+                    b.Navigation("Tag");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Interests.UserInterestTopic", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Interests.InterestTopic", "InterestTopic")
+                        .WithMany("UserInterests")
+                        .HasForeignKey("InterestTopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
+                        .WithMany("UserInterestTopics")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InterestTopic");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Interests.UserInterestTopicSignal", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Interests.InterestTopic", "InterestTopic")
+                        .WithMany("UserSignals")
+                        .HasForeignKey("InterestTopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InterestTopic");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Reviews.DestinationReview", b =>
                 {
                     b.HasOne("Geotrack.Domain.Entities.Core.Destination", "Destination")
@@ -3503,6 +3740,15 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("TerritoryManagerTerritories");
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Interests.InterestTopic", b =>
+                {
+                    b.Navigation("TopicTags");
+
+                    b.Navigation("UserInterests");
+
+                    b.Navigation("UserSignals");
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Tags.Tag", b =>
                 {
                     b.Navigation("DestinationTags");
@@ -3558,6 +3804,8 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("SupportRequests");
 
                     b.Navigation("TerritoryManager");
+
+                    b.Navigation("UserInterestTopics");
 
                     b.Navigation("UserPlaces");
 

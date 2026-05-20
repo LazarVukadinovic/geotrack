@@ -9,39 +9,25 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import { CommonModule, DecimalPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, of, Subscription, switchMap } from 'rxjs';
+import { finalize, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
-import { ZoneDrawService } from '../../../../core/services/zone-draw.service';
 import { DestinationsListService } from '../../../../core/services/destinations-list.service';
-import { AdminMapService } from '../../../../core/services/admin-map.service';
-import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
-import { AdminMapGeometry, AdminMapViewport, AdminMapZone } from '../../../../core/models/admin-map.model';
 import {
-  RegionalDestinationBoundaryDto,
   RegionalDestinationCreateRequest,
-  RegionalDestinationDetailDto,
   RegionalDestinationTagDto,
   RegionalDestinationUpdateRequest,
 } from '../../../../core/models/destination.model';
-import {
-  RegionalEntityImageDto,
-  RegionalEntityImageInput,
-  RegionalImageUploadResult,
-} from '../../../../core/models/regional-image.model';
 
 declare const L: any;
-
-type DrawTool = 'polygon' | 'rectangle' | 'circle';
-type BoundaryShapeType = 'Polygon' | 'Rectangle' | 'Circle';
 
 interface ClassItem {
   tag: RegionalDestinationTagDto;
@@ -51,22 +37,28 @@ interface ClassItem {
 @Component({
   selector: 'app-add-destination',
   standalone: true,
-  imports: [CommonModule, FormsModule, DecimalPipe, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
   templateUrl: './add-destination.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  styles: [`
-    .rte-field { position: relative; }
-    .rte-ph {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      padding: 0.5rem 0.75rem;
-      color: #9ca3af;
-      font-size: 0.875rem;
-      pointer-events: none;
-      user-select: none;
-      line-height: 1.5rem;
-    }
-  `]
+  styles: [
+    `
+      .rte-field {
+        position: relative;
+      }
+      .rte-ph {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 0.5rem 0.75rem;
+        color: #9ca3af;
+        font-size: 0.875rem;
+        pointer-events: none;
+        user-select: none;
+        line-height: 1.5rem;
+      }
+    `,
+  ],
 })
 export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
@@ -82,17 +74,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   regionLoading = false;
   tagsLoading = false;
   tagSearchLoading = false;
-  detailLoading = false;
   isSaving = false;
+  isEditMode = false;
   errorMessage: string | null = null;
   feedbackMessage: string | null = null;
 
   destinationName = '';
   summary = '';
-  boundaryNote = '';
   tagInput = '';
-  internalReferenceId = '';
-  destinationStatus: 'Published' | 'Draft' | 'Archived' = 'Published';
 
   classItems: ClassItem[] = [];
   destinationTags: RegionalDestinationTagDto[] = [];
@@ -105,36 +94,32 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   isUnderline = false;
   editorIsEmpty = true;
 
+  cardImageUrl: string | null = null;
+  cardImageName = '';
   coverImageUrl: string | null = null;
   coverImageName = '';
-  coverImageFile: File | null = null;
-  galleryImages: { url: string; name: string; file?: File }[] = [];
+  galleryImages: { url: string; name: string; file: File }[] = [];
+
+  private cardImageFile: File | null = null;
+  private coverImageFile: File | null = null;
 
   zoneModalOpen = false;
   zoneConfirmed = false;
-  zoneAreaKm2: number | null = null;
-  drawTool: DrawTool = 'polygon';
-  confirmedShapeType: BoundaryShapeType | null = null;
-  isEditMode = false;
+  centerLat: number | null = null;
+  centerLng: number | null = null;
 
   private miniMap: any = null;
   private modalMap: any = null;
-  private drawnLayer: any = null;
-  private confirmedLayer: any = null;
-  private drawControl: any = null;
-  private regionViewport: AdminMapViewport | null = null;
-  private mapZones: AdminMapZone[] = [];
+  private miniMapCenterMarker: any = null;
+  private modalCenterMarker: any = null;
   private assignedRegionsSubscription: Subscription | null = null;
   private tagsSubscription: Subscription | null = null;
   private tagSearchSubscription: Subscription | null = null;
   private createSubscription: Subscription | null = null;
-  private viewportSubscription: Subscription | null = null;
-  private zonesSubscription: Subscription | null = null;
-  private detailSubscription: Subscription | null = null;
+  private editDestinationId: number | null = null;
+  private originalLatitude: number | null = null;
+  private originalLongitude: number | null = null;
   private tagSearchHandle: ReturnType<typeof setTimeout> | null = null;
-  private editDestinationId: string | null = null;
-  private pendingDescriptionHtml: string | null = null;
-  private imagesTouched = false;
 
   constructor(
     private readonly zone: NgZone,
@@ -143,25 +128,21 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     private readonly route: ActivatedRoute,
     private readonly dashboardService: DashboardService,
     private readonly lightboxService: LightboxService,
-    private readonly zoneDrawService: ZoneDrawService,
     private readonly destinationsService: DestinationsListService,
-    private readonly adminMapService: AdminMapService,
-    private readonly regionalMediaService: RegionalMediaService,
     private readonly auth: AuthService,
   ) {}
 
   ngOnInit(): void {
-    this.editDestinationId = this.route.snapshot.paramMap.get('id');
-    this.isEditMode = Boolean(this.editDestinationId);
+    const editId = Number(this.route.snapshot.paramMap.get('id'));
+    this.isEditMode = Number.isFinite(editId) && editId > 0;
+    this.editDestinationId = this.isEditMode ? editId : null;
+
     this.loadAssignedRegions();
     this.loadDestinationTags();
   }
 
   ngAfterViewInit(): void {
-    setTimeout(() => {
-      this.initMiniMap();
-      this.applyPendingDescription();
-    }, 0);
+    setTimeout(() => this.initMiniMap(), 0);
   }
 
   ngOnDestroy(): void {
@@ -169,9 +150,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.tagsSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
-    this.viewportSubscription?.unsubscribe();
-    this.zonesSubscription?.unsubscribe();
-    this.detailSubscription?.unsubscribe();
 
     if (this.tagSearchHandle) {
       clearTimeout(this.tagSearchHandle);
@@ -190,7 +168,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   get activeRegion(): RegionalAssignedRegion | null {
-    return this.assignedRegions.find(region => region.id === this.activeRegionId) ?? null;
+    return this.assignedRegions.find((region) => region.id === this.activeRegionId) ?? null;
   }
 
   get regionDisplayName(): string {
@@ -198,13 +176,23 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   get canPublish(): boolean {
-    return Boolean(this.activeRegionId) && !this.regionLoading && !this.tagsLoading && !this.detailLoading && !this.isSaving;
+    const mediaReady =
+      this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
+    return (
+      Boolean(this.activeRegionId) &&
+      this.destinationName.trim().length > 0 &&
+      this.hasValidCenter() &&
+      mediaReady &&
+      !this.regionLoading &&
+      !this.tagsLoading &&
+      !this.isSaving
+    );
   }
 
   get selectedAdditionalTags(): RegionalDestinationTagDto[] {
-    const primaryIds = new Set(this.classItems.map(item => item.tag.id));
+    const primaryIds = new Set(this.classItems.map((item) => item.tag.id));
     return this.destinationTags
-      .filter(tag => this.selectedTagIds.has(tag.id) && !primaryIds.has(tag.id))
+      .filter((tag) => this.selectedTagIds.has(tag.id) && !primaryIds.has(tag.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -231,7 +219,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   get drawHint(): string {
-    return this.zoneDrawService.drawHints[this.drawTool];
+    return this.hasValidCenter()
+      ? `Selected center: ${this.centerLat!.toFixed(5)}, ${this.centerLng!.toFixed(5)}`
+      : 'Click the map to place the destination center point. No polygon is drawn.';
   }
 
   loadAssignedRegions(): void {
@@ -249,7 +239,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         }),
       )
       .subscribe({
-        next: regions => {
+        next: (regions) => {
           this.assignedRegions = regions ?? [];
 
           if (this.assignedRegions.length === 0) {
@@ -264,31 +254,24 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
           const persistedRegionId = this.readPersistedRegionId();
           const stateRegionId = Number((history.state as { regionId?: number | null })?.regionId);
           const selectedRegion =
-            this.assignedRegions.find(region => region.id === queryRegionId) ??
-            this.assignedRegions.find(region => region.id === stateRegionId) ??
-            this.assignedRegions.find(region => region.id === persistedRegionId) ??
+            this.assignedRegions.find((region) => region.id === queryRegionId) ??
+            this.assignedRegions.find((region) => region.id === stateRegionId) ??
+            this.assignedRegions.find((region) => region.id === persistedRegionId) ??
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
-          if (this.isEditMode) {
-            this.loadDestinationForEdit(selectedRegion.id);
-          }
+          this.loadDestinationForEditIfNeeded();
         },
-        error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
+        error: (error) => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
   }
 
   onRegionSelected(regionId: number): void {
     if (regionId === this.activeRegionId) return;
-    if (this.isEditMode) {
-      this.feedbackMessage = 'The region is locked while editing this destination.';
-      this.notifyStateChanged();
-      return;
-    }
 
     this.setActiveRegion(regionId, true);
     this.resetZone();
-    this.feedbackMessage = 'Region changed. Boundary selection was cleared.';
+    this.feedbackMessage = 'Region changed. Destination center was cleared.';
     this.notifyStateChanged();
   }
 
@@ -306,13 +289,63 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         }),
       )
       .subscribe({
-        next: tags => {
+        next: (tags) => {
           this.destinationTags = this.normalizeTags(tags);
-          this.classItems = this.destinationTags
-            .map(tag => ({ tag, checked: this.selectedTagIds.has(tag.id) }));
+          this.classItems = this.destinationTags.map((tag) => ({
+            tag,
+            checked: this.selectedTagIds.has(tag.id),
+          }));
         },
-        error: error => this.handleLoadError(error, 'Unable to load destination tags.'),
+        error: (error) => this.handleLoadError(error, 'Unable to load destination tags.'),
       });
+  }
+
+  private loadDestinationForEditIfNeeded(): void {
+    if (!this.isEditMode || !this.editDestinationId || !this.activeRegionId) {
+      return;
+    }
+
+    this.destinationsService.getDestination(this.activeRegionId, this.editDestinationId).subscribe({
+      next: (dto) => {
+        this.destinationName = dto.name ?? '';
+        this.summary = dto.summary ?? '';
+        this.originalLatitude = dto.latitude ?? null;
+        this.originalLongitude = dto.longitude ?? null;
+        if (this.hasValidCoordinatePair(dto.latitude, dto.longitude)) {
+          this.centerLat = dto.latitude;
+          this.centerLng = dto.longitude;
+          this.zoneConfirmed = true;
+          setTimeout(() => this.showZoneOnMiniMap(), 0);
+        }
+
+        this.cardImageUrl = dto.cardImageUrl ?? dto.imageUrl ?? this.cardImageUrl;
+        this.cardImageName = this.cardImageUrl ? 'Existing card image' : this.cardImageName;
+        this.coverImageUrl = dto.coverImageUrl ?? dto.imageUrl ?? this.coverImageUrl;
+        this.coverImageName = this.coverImageUrl ? 'Existing cover image' : this.coverImageName;
+        this.galleryImages = (dto.galleryImageUrls ?? []).map((url, index) => ({
+          url,
+          name: `Existing gallery image ${index + 1}`,
+          file: null as unknown as File,
+        }));
+
+        this.selectedTagIds = new Set((dto.tags ?? []).map((tag) => tag.id));
+        this.classItems = this.classItems.map((item) => ({
+          ...item,
+          checked: this.selectedTagIds.has(item.tag.id),
+        }));
+
+        setTimeout(() => {
+          if (this.editorRef?.nativeElement) {
+            this.editorRef.nativeElement.innerHTML = dto.description ?? '';
+            this.syncEmptyState();
+            this.notifyStateChanged();
+          }
+        }, 0);
+
+        this.notifyStateChanged();
+      },
+      error: (error) => this.handleLoadError(error, 'Unable to load destination for editing.'),
+    });
   }
 
   onClassItemChange(item: ClassItem): void {
@@ -347,7 +380,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   addTag(event: Event): void {
     event.preventDefault();
-    const firstAvailable = this.additionalTagResults.find(tag => !this.selectedTagIds.has(tag.id));
+    const firstAvailable = this.additionalTagResults.find(
+      (tag) => !this.selectedTagIds.has(tag.id),
+    );
     if (firstAvailable) {
       this.selectAdditionalTag(firstAvailable);
     }
@@ -364,7 +399,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   removeTag(tag: RegionalDestinationTagDto): void {
     this.selectedTagIds.delete(tag.id);
-    const classItem = this.classItems.find(item => item.tag.id === tag.id);
+    const classItem = this.classItems.find((item) => item.tag.id === tag.id);
     if (classItem) {
       classItem.checked = false;
     }
@@ -390,10 +425,41 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   onEditorBlur(): void {
     this.syncToolbarState();
     const el = this.editorRef?.nativeElement;
-    if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
+    if (
+      el &&
+      (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')
+    ) {
       el.innerHTML = '';
     }
     this.syncEmptyState();
+  }
+
+  onCardImageSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !this.isAllowedImage(file)) {
+      input.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.zone.run(() => {
+        this.cardImageUrl = reader.result as string;
+        this.cardImageName = file.name;
+        this.cardImageFile = file;
+        this.notifyStateChanged();
+      });
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  removeCardImage(): void {
+    this.cardImageUrl = null;
+    this.cardImageName = '';
+    this.cardImageFile = null;
+    this.notifyStateChanged();
   }
 
   onCoverImageSelected(event: Event): void {
@@ -410,7 +476,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         this.coverImageUrl = reader.result as string;
         this.coverImageName = file.name;
         this.coverImageFile = file;
-        this.imagesTouched = true;
         this.notifyStateChanged();
       });
     };
@@ -422,19 +487,20 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.coverImageUrl = null;
     this.coverImageName = '';
     this.coverImageFile = null;
-    this.imagesTouched = true;
     this.notifyStateChanged();
   }
 
   onGalleryImagesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const files = Array.from(input.files ?? []).filter(file => this.isAllowedImage(file));
+    const files = Array.from(input.files ?? []).filter((file) => this.isAllowedImage(file));
     for (const file of files) {
       const reader = new FileReader();
       reader.onload = () => {
         this.zone.run(() => {
-          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name, file }];
-          this.imagesTouched = true;
+          this.galleryImages = [
+            ...this.galleryImages,
+            { url: reader.result as string, name: file.name, file },
+          ];
           this.notifyStateChanged();
         });
       };
@@ -445,7 +511,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   removeGalleryImage(index: number): void {
     this.galleryImages = this.galleryImages.filter((_, currentIndex) => currentIndex !== index);
-    this.imagesTouched = true;
     this.notifyStateChanged();
   }
 
@@ -469,40 +534,25 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.closeZoneModal();
   }
 
-  setDrawTool(tool: DrawTool): void {
-    this.drawTool = tool;
-    if (this.modalMap) {
-      this.clearZone();
-      this.activateDrawTool();
-    }
+  clearZone(): void {
+    this.centerLat = null;
+    this.centerLng = null;
+    this.zoneConfirmed = false;
+    this.errorMessage = null;
+    this.showCenterOnModalMap();
+    this.removeMiniMapCenterMarker();
     this.notifyStateChanged();
   }
 
-  clearZone(): void {
-    if (this.drawnLayer && this.modalMap) {
-      this.modalMap.removeLayer(this.drawnLayer);
-      this.drawnLayer = null;
-    }
-    if (this.drawControl) {
-      this.drawControl.disable();
-      this.drawControl = null;
-    }
-    this.activateDrawTool();
-  }
-
   confirmZone(): void {
-    if (!this.drawnLayer) {
-      this.errorMessage = 'Draw a destination zone before confirming.';
+    if (!this.hasValidCenter()) {
+      this.errorMessage = 'Choose a destination center point before confirming.';
       this.notifyStateChanged();
       return;
     }
 
-    this.zoneAreaKm2 = this.zoneDrawService.calculateAreaKm2(this.drawnLayer);
     this.zoneConfirmed = true;
-    this.confirmedLayer = this.drawnLayer;
-    this.confirmedShapeType = this.shapeTypeFromDrawTool(this.drawTool);
     this.errorMessage = null;
-
     this.showZoneOnMiniMap();
     this.closeZoneModal();
   }
@@ -510,7 +560,12 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   publish(): void {
     if (this.isSaving) return;
 
-    const payload = this.buildPayload();
+    if (this.isEditMode) {
+      this.updateExistingDestination();
+      return;
+    }
+
+    const payload = this.buildCreatePayload();
     if (!payload) {
       this.notifyStateChanged();
       return;
@@ -522,52 +577,62 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.notifyStateChanged();
 
     this.createSubscription?.unsubscribe();
-    const saveRegionId = this.activeRegionId;
-    const saveDestinationId = this.editDestinationId;
-    this.createSubscription = of(payload)
+    this.createSubscription = this.destinationsService
+      .createDestination(payload)
       .pipe(
-        switchMap(payloadWithoutImages => {
-          const files = this.selectedImageFiles();
-          if (files.length === 0) {
-            const request = this.shouldSendImages(files)
-              ? { ...payloadWithoutImages, images: this.buildImageInputs([]) }
-              : payloadWithoutImages;
-            return this.isEditMode && saveRegionId && saveDestinationId
-              ? this.destinationsService.updateDestination(saveRegionId, saveDestinationId, request)
-              : this.destinationsService.createDestination(request as RegionalDestinationCreateRequest);
-          }
-
-          return this.regionalMediaService.uploadImages(this.activeRegionId!, files).pipe(
-            switchMap(uploaded => {
-              const request = {
-              ...payloadWithoutImages,
-                images: this.buildImageInputs(uploaded.images),
-              };
-              return this.isEditMode && saveRegionId && saveDestinationId
-                ? this.destinationsService.updateDestination(saveRegionId, saveDestinationId, request)
-                : this.destinationsService.createDestination(request as RegionalDestinationCreateRequest);
-            }),
-          );
-        }),
         finalize(() => {
           this.isSaving = false;
           this.notifyStateChanged();
         }),
       )
       .subscribe({
-        next: saved => {
-          const message = this.isEditMode ? 'Destination saved.' : 'Destination published.';
-          this.feedbackMessage = message;
+        next: (created) => {
+          this.feedbackMessage = 'Destination published.';
           this.router.navigate(['/destinations'], {
-            queryParams: { regionId: saved.regionId },
-            state: { feedbackMessage: message },
+            queryParams: { regionId: created.regionId },
+            state: { feedbackMessage: 'Destination published.' },
           });
         },
-        error: error => this.handleActionError(error),
+        error: (error) => this.handleActionError(error),
       });
   }
 
-  private buildPayload(): (RegionalDestinationCreateRequest | RegionalDestinationUpdateRequest) | null {
+  private updateExistingDestination(): void {
+    const regionId = this.activeRegionId;
+    const destinationId = this.editDestinationId;
+    const payload = this.buildUpdatePayload();
+    if (!regionId || !destinationId || !payload) {
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.isSaving = true;
+    this.errorMessage = null;
+    this.feedbackMessage = null;
+    this.notifyStateChanged();
+
+    this.createSubscription?.unsubscribe();
+    this.createSubscription = this.destinationsService
+      .updateDestination(regionId, destinationId, payload)
+      .pipe(
+        finalize(() => {
+          this.isSaving = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: (updated) => {
+          this.feedbackMessage = 'Destination updated.';
+          this.router.navigate(['/destinations/detail', updated.id], {
+            queryParams: { regionId: updated.regionId },
+            state: { regionId: updated.regionId, feedbackMessage: 'Destination updated.' },
+          });
+        },
+        error: (error) => this.handleActionError(error),
+      });
+  }
+
+  private buildCreatePayload(): RegionalDestinationCreateRequest | null {
     const regionId = this.activeRegionId;
     if (!regionId) {
       this.errorMessage = 'Select an assigned region before publishing.';
@@ -586,83 +651,70 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
-    if (!this.zoneConfirmed || !this.confirmedLayer) {
-      this.errorMessage = 'Draw a destination zone before publishing.';
+    if (!this.cardImageFile) {
+      this.errorMessage = 'Card image is required.';
+      return null;
+    }
+
+    if (!this.coverImageFile) {
+      this.errorMessage = 'Cover image is required.';
+      return null;
+    }
+
+    if (!this.hasValidCenter()) {
+      this.errorMessage = 'Choose a destination center point before publishing.';
       return null;
     }
 
     const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
-    const { zone, centerLat, centerLng } = this.zoneDrawService.extractZoneResult(this.confirmedLayer);
-    const boundary = this.createBoundaryPayload(zone);
-    if (!boundary) {
-      this.errorMessage = 'Boundary geometry is invalid.';
-      return null;
-    }
 
     return {
-      ...(this.isEditMode ? {} : { regionId }),
+      regionId,
       name,
       summary: normalizedSummary || null,
       description: descriptionHtml || null,
-      status: this.isEditMode ? this.destinationStatus : 'Published',
-      latitude: centerLat,
-      longitude: centerLng,
-      boundaryNote: this.boundaryNote.trim() || null,
-      boundary,
+      status: 'Published',
+      latitude: this.centerLat,
+      longitude: this.centerLng,
+      tagIds: [...this.selectedTagIds],
+      cardImageFile: this.cardImageFile,
+      coverImageFile: this.coverImageFile,
+      galleryImageFiles: this.galleryImages.map((image) => image.file),
+    };
+  }
+
+  private buildUpdatePayload(): RegionalDestinationUpdateRequest | null {
+    const name = this.destinationName.trim();
+    if (!name) {
+      this.errorMessage = 'Destination name is required.';
+      return null;
+    }
+
+    const normalizedSummary = this.summary.trim();
+    if (normalizedSummary.length > 160) {
+      this.errorMessage = 'Summary must be 160 characters or less.';
+      return null;
+    }
+
+    if (!this.hasValidCenter()) {
+      this.errorMessage = 'Choose a destination center point before updating.';
+      return null;
+    }
+
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+
+    return {
+      name,
+      summary: normalizedSummary || null,
+      description: descriptionHtml || null,
+      latitude: this.centerLat,
+      longitude: this.centerLng,
       tagIds: [...this.selectedTagIds],
     };
   }
 
-  private loadDestinationForEdit(regionId: number): void {
-    const destinationId = this.editDestinationId;
-    if (!destinationId) return;
-
-    this.detailLoading = true;
-    this.errorMessage = null;
-    this.notifyStateChanged();
-
-    this.detailSubscription?.unsubscribe();
-    this.detailSubscription = this.destinationsService
-      .getDestination(regionId, destinationId)
-      .pipe(
-        finalize(() => {
-          this.detailLoading = false;
-          this.notifyStateChanged();
-        }),
-      )
-      .subscribe({
-        next: destination => this.applyDestinationDetail(destination),
-        error: error => this.handleLoadError(error, 'Unable to load destination details.'),
-      });
-  }
-
-  private applyDestinationDetail(destination: RegionalDestinationDetailDto): void {
-    this.destinationName = destination.name ?? '';
-    this.summary = destination.summary ?? '';
-    this.boundaryNote = destination.boundaryNote ?? '';
-    this.internalReferenceId = destination.internalReferenceId ?? '';
-    this.destinationStatus = this.normalizeEditableStatus(destination.status);
-    this.confirmedShapeType = this.normalizeShapeType(destination.boundaryShapeType);
-    this.selectedTagIds = new Set((destination.tags ?? []).map(tag => tag.id));
-    (destination.tags ?? []).forEach(tag => this.upsertDestinationTag(tag));
-    this.classItems = this.destinationTags.map(tag => ({
-      tag,
-      checked: this.selectedTagIds.has(tag.id),
-    }));
-    this.applyEntityImages(destination.images ?? [], destination.imageUrl ?? null, destination.name);
-    this.setDescriptionHtml(destination.description ?? '');
-    this.applyEditBoundaryFromZones(destination);
-    this.notifyStateChanged();
-  }
-
-  private createBoundaryPayload(zone: [number, number][]): RegionalDestinationBoundaryDto | null {
-    const shapeType = this.confirmedShapeType;
-    if (!shapeType || zone.length < 3) return null;
-
-    return {
-      shapeType,
-      coordinates: zone.map(([latitude, longitude]) => ({ latitude, longitude })),
-    };
+  private loadMapCenter(): [number, number] {
+    return [44.0, 20.9];
   }
 
   private initMiniMap(): void {
@@ -677,107 +729,110 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       doubleClickZoom: false,
       touchZoom: false,
       attributionControl: false,
-    });
+    }).setView(this.loadMapCenter(), 8);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.miniMap);
-
-    this.applyViewportToMap(this.miniMap, [10, 10]);
   }
 
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap || typeof L === 'undefined') return;
 
+    const initialCenter = this.hasValidCenter()
+      ? [this.centerLat as number, this.centerLng as number]
+      : this.loadMapCenter();
+
     this.modalMap = L.map(el, {
       zoomControl: true,
       attributionControl: false,
-    });
+    }).setView(initialCenter, this.hasValidCenter() ? 12 : 9);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.modalMap);
 
+    this.modalMap.on('click', (event: any) => {
+      this.zone.run(() => {
+        this.centerLat = event.latlng.lat;
+        this.centerLng = event.latlng.lng;
+        this.zoneConfirmed = false;
+        this.errorMessage = null;
+        this.showCenterOnModalMap();
+        this.notifyStateChanged();
+      });
+    });
+
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
-
-    if (this.confirmedLayer) {
-      const layerCopy = this.zoneDrawService.cloneLayer(this.confirmedLayer);
-      if (layerCopy) {
-        layerCopy.addTo(this.modalMap);
-        this.drawnLayer = layerCopy;
-        this.modalMap.fitBounds(layerCopy.getBounds(), { padding: [30, 30] });
-      }
-    } else {
-      this.applyViewportToMap(this.modalMap, [30, 30]);
-    }
-
-    this.activateDrawTool();
+    this.showCenterOnModalMap();
   }
 
   private destroyModalMap(): void {
     if (this.modalMap) {
       this.modalMap.remove();
       this.modalMap = null;
-      this.drawnLayer = null;
-      this.drawControl = null;
+      this.modalCenterMarker = null;
     }
-  }
-
-  private activateDrawTool(): void {
-    if (!this.modalMap || typeof L === 'undefined') return;
-
-    if (this.drawControl) {
-      this.drawControl.disable();
-      this.drawControl = null;
-    }
-
-    this.drawControl = this.zoneDrawService.activateDrawTool(
-      this.modalMap,
-      this.drawTool,
-      layer => {
-        if (this.drawnLayer) {
-          this.modalMap.removeLayer(this.drawnLayer);
-        }
-        this.drawnLayer = layer;
-        this.modalMap.addLayer(this.drawnLayer);
-        this.notifyStateChanged();
-      },
-    );
   }
 
   private showZoneOnMiniMap(): void {
     if (!this.miniMap) this.initMiniMap();
-    if (!this.miniMap || !this.confirmedLayer) return;
+    if (!this.miniMap || !this.hasValidCenter()) return;
 
-    this.miniMap.eachLayer((layer: any) => {
-      if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
-    });
+    this.removeMiniMapCenterMarker();
 
-    const clone = this.zoneDrawService.cloneLayer(this.confirmedLayer);
-    if (!clone) return;
+    this.miniMapCenterMarker = L.marker([this.centerLat as number, this.centerLng as number]);
+    this.miniMapCenterMarker.addTo(this.miniMap);
+    this.miniMap.setView([this.centerLat as number, this.centerLng as number], 12);
+  }
 
-    clone._isConfirmedZone = true;
-    clone.addTo(this.miniMap);
+  private showCenterOnModalMap(): void {
+    if (!this.modalMap || typeof L === 'undefined') return;
 
-    try {
-      this.miniMap.fitBounds(clone.getBounds(), { padding: [10, 10] });
-    } catch {
-      // Fitting can fail while Leaflet is still settling container dimensions.
+    if (this.modalCenterMarker) {
+      this.modalMap.removeLayer(this.modalCenterMarker);
+      this.modalCenterMarker = null;
     }
+
+    if (!this.hasValidCenter()) return;
+
+    this.modalCenterMarker = L.marker([this.centerLat as number, this.centerLng as number]);
+    this.modalCenterMarker.addTo(this.modalMap);
+  }
+
+  private removeMiniMapCenterMarker(): void {
+    if (this.miniMapCenterMarker && this.miniMap) {
+      this.miniMap.removeLayer(this.miniMapCenterMarker);
+      this.miniMapCenterMarker = null;
+    }
+  }
+
+  private hasValidCenter(): boolean {
+    return this.hasValidCoordinatePair(this.centerLat, this.centerLng);
+  }
+
+  private hasValidCoordinatePair(
+    latitude: number | null | undefined,
+    longitude: number | null | undefined,
+  ): boolean {
+    return (
+      typeof latitude === 'number' &&
+      typeof longitude === 'number' &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      (latitude !== 0 || longitude !== 0)
+    );
   }
 
   private resetZone(): void {
     this.zoneConfirmed = false;
-    this.zoneAreaKm2 = null;
-    this.confirmedLayer = null;
-    this.confirmedShapeType = null;
-
-    if (this.miniMap) {
-      this.miniMap.eachLayer((layer: any) => {
-        if (layer._isConfirmedZone) this.miniMap.removeLayer(layer);
-      });
-      this.applyViewportToMap(this.miniMap, [10, 10]);
-    }
+    this.centerLat = null;
+    this.centerLng = null;
+    this.removeMiniMapCenterMarker();
   }
 
   private searchTags(query: string): void {
@@ -794,20 +849,23 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         }),
       )
       .subscribe({
-        next: tags => {
-          const normalized = this.normalizeTags(tags)
-            .filter(tag => !this.selectedTagIds.has(tag.id));
-          normalized.forEach(tag => this.upsertDestinationTag(tag));
+        next: (tags) => {
+          const normalized = this.normalizeTags(tags).filter(
+            (tag) => !this.selectedTagIds.has(tag.id),
+          );
+          normalized.forEach((tag) => this.upsertDestinationTag(tag));
           this.additionalTagResults = normalized;
         },
-        error: error => this.handleLoadError(error, 'Unable to search destination tags.'),
+        error: (error) => this.handleLoadError(error, 'Unable to search destination tags.'),
       });
   }
 
-  private normalizeTags(tags: RegionalDestinationTagDto[] | null | undefined): RegionalDestinationTagDto[] {
+  private normalizeTags(
+    tags: RegionalDestinationTagDto[] | null | undefined,
+  ): RegionalDestinationTagDto[] {
     const seen = new Set<number>();
     return (tags ?? [])
-      .filter(tag => {
+      .filter((tag) => {
         if (!tag || seen.has(tag.id)) return false;
         seen.add(tag.id);
         return true;
@@ -816,26 +874,27 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   private upsertDestinationTag(tag: RegionalDestinationTagDto): void {
-    if (this.destinationTags.some(existing => existing.id === tag.id)) return;
-    this.destinationTags = [...this.destinationTags, tag].sort((a, b) => a.name.localeCompare(b.name));
+    if (this.destinationTags.some((existing) => existing.id === tag.id)) return;
+    this.destinationTags = [...this.destinationTags, tag].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
   }
 
   private upsertClassItem(tag: RegionalDestinationTagDto, checked: boolean): void {
-    const existing = this.classItems.find(item => item.tag.id === tag.id);
+    const existing = this.classItems.find((item) => item.tag.id === tag.id);
     if (existing) {
       existing.checked = checked || existing.checked;
       return;
     }
 
-    this.classItems = [...this.classItems, { tag, checked }]
-      .sort((a, b) => a.tag.name.localeCompare(b.tag.name));
+    this.classItems = [...this.classItems, { tag, checked }].sort((a, b) =>
+      a.tag.name.localeCompare(b.tag.name),
+    );
   }
 
   private setActiveRegion(regionId: number, updateUrl: boolean): void {
     this.activeRegionId = regionId;
     this.persistRegion(regionId);
-    this.loadRegionViewport(regionId);
-    this.loadMapZones(regionId);
 
     if (updateUrl) {
       this.router.navigate([], {
@@ -845,214 +904,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         replaceUrl: true,
       });
     }
-  }
-
-  private loadRegionViewport(regionId: number): void {
-    this.viewportSubscription?.unsubscribe();
-    this.viewportSubscription = this.adminMapService.getViewport(regionId)
-      .subscribe({
-        next: viewport => {
-          this.regionViewport = viewport;
-          this.applyViewportToMap(this.miniMap, [10, 10]);
-          if (this.modalMap && !this.drawnLayer) {
-            this.applyViewportToMap(this.modalMap, [30, 30]);
-          }
-          this.notifyStateChanged();
-        },
-        error: () => {
-          this.regionViewport = null;
-          this.applyViewportToMap(this.miniMap, [10, 10]);
-          this.notifyStateChanged();
-        },
-      });
-  }
-
-  private loadMapZones(regionId: number): void {
-    this.zonesSubscription?.unsubscribe();
-    this.zonesSubscription = this.adminMapService.getZones(regionId)
-      .subscribe({
-        next: zones => {
-          this.mapZones = zones ?? [];
-          if (this.isEditMode) {
-            this.applyEditBoundaryFromZones();
-          }
-          this.notifyStateChanged();
-        },
-        error: () => {
-          this.mapZones = [];
-          this.notifyStateChanged();
-        },
-      });
-  }
-
-  private applyViewportToMap(map: any, padding: [number, number]): void {
-    if (!map || typeof L === 'undefined') return;
-
-    const viewport = this.regionViewport;
-    try {
-      if (viewport?.bounds) {
-        map.fitBounds(
-          [
-            [viewport.bounds.south, viewport.bounds.west],
-            [viewport.bounds.north, viewport.bounds.east],
-          ],
-          { padding, animate: false },
-        );
-        return;
-      }
-
-      if (
-        typeof viewport?.centerLatitude === 'number' &&
-        typeof viewport.centerLongitude === 'number' &&
-        typeof viewport.zoom === 'number'
-      ) {
-        map.setView([viewport.centerLatitude, viewport.centerLongitude], viewport.zoom, { animate: false });
-        return;
-      }
-
-      map.fitWorld({ animate: false });
-    } catch {
-      // Leaflet can throw while the container is hidden; a later invalidateSize will settle the view.
-    }
-  }
-
-  private selectedImageFiles(): File[] {
-    const files: File[] = [];
-    if (this.coverImageFile) {
-      files.push(this.coverImageFile);
-    }
-
-    files.push(...this.galleryImages
-      .map(image => image.file)
-      .filter((file): file is File => !!file));
-    return files;
-  }
-
-  private shouldSendImages(files: File[]): boolean {
-    return !this.isEditMode || this.imagesTouched || files.length > 0;
-  }
-
-  private buildImageInputs(uploaded: RegionalImageUploadResult[]): RegionalEntityImageInput[] {
-    const images: RegionalEntityImageInput[] = [];
-    let uploadIndex = 0;
-    const fallbackName = this.destinationName.trim() || 'Destination image';
-
-    if (this.coverImageUrl) {
-      const uploadedCover = this.coverImageFile ? uploaded[uploadIndex++] : null;
-      images.push({
-        url: uploadedCover?.url ?? this.coverImageUrl,
-        altText: `${fallbackName} cover`,
-        caption: null,
-        isMain: true,
-        sortOrder: 0,
-      });
-    }
-
-    for (const image of this.galleryImages) {
-      const uploadedGalleryImage = image.file ? uploaded[uploadIndex++] : null;
-      images.push({
-        url: uploadedGalleryImage?.url ?? image.url,
-        altText: image.name || fallbackName,
-        caption: null,
-        isMain: false,
-        sortOrder: images.length,
-      });
-    }
-
-    return images.map((image, index) => ({
-      ...image,
-      isMain: index === 0,
-      sortOrder: index,
-    }));
-  }
-
-  private applyEntityImages(images: RegionalEntityImageDto[], fallbackImageUrl: string | null, fallbackName: string): void {
-    const orderedImages = [...images]
-      .sort((a, b) => Number(b.isMain) - Number(a.isMain) || a.sortOrder - b.sortOrder || a.id - b.id);
-
-    if (orderedImages.length === 0 && fallbackImageUrl) {
-      this.coverImageUrl = fallbackImageUrl;
-      this.coverImageName = fallbackName;
-      this.coverImageFile = null;
-      this.galleryImages = [];
-      this.imagesTouched = false;
-      return;
-    }
-
-    const [cover, ...gallery] = orderedImages;
-    this.coverImageUrl = cover?.url ?? null;
-    this.coverImageName = cover?.altText ?? fallbackName;
-    this.coverImageFile = null;
-    this.galleryImages = gallery.map(image => ({
-      url: image.url,
-      name: image.altText ?? fallbackName,
-    }));
-    this.imagesTouched = false;
-  }
-
-  private setDescriptionHtml(html: string): void {
-    this.pendingDescriptionHtml = html;
-    this.applyPendingDescription();
-  }
-
-  private applyPendingDescription(): void {
-    if (this.pendingDescriptionHtml === null || !this.editorRef?.nativeElement) return;
-    this.editorRef.nativeElement.innerHTML = this.pendingDescriptionHtml;
-    this.pendingDescriptionHtml = null;
-    this.syncEmptyState();
-  }
-
-  private applyEditBoundaryFromZones(destination?: RegionalDestinationDetailDto): void {
-    const id = Number(destination?.id ?? this.editDestinationId);
-    if (!Number.isFinite(id) || id <= 0) return;
-
-    const zone = this.mapZones.find(item => item.entityType === 'Destination' && item.id === id);
-    const layer = this.layerFromGeometry(zone?.geometryGeoJson ?? null);
-    if (!layer) return;
-
-    this.confirmedLayer = layer;
-    this.drawnLayer = layer;
-    this.zoneConfirmed = true;
-    if (destination?.boundaryShapeType) {
-      this.confirmedShapeType = this.normalizeShapeType(destination.boundaryShapeType);
-    } else if (!this.confirmedShapeType) {
-      this.confirmedShapeType = 'Polygon';
-    }
-    this.zoneAreaKm2 = this.zoneDrawService.calculateAreaKm2(layer);
-    this.showZoneOnMiniMap();
-  }
-
-  private layerFromGeometry(geometry: AdminMapGeometry | null): any {
-    if (!geometry || typeof L === 'undefined') return null;
-
-    const exteriorRing = geometry.type === 'Polygon'
-      ? (geometry.coordinates as [number, number][][])[0]
-      : ((geometry.coordinates as [number, number][][][])[0]?.[0] ?? []);
-
-    const points = exteriorRing
-      .map(([longitude, latitude]) => [latitude, longitude] as [number, number])
-      .filter(([latitude, longitude]) => Number.isFinite(latitude) && Number.isFinite(longitude));
-
-    if (points.length > 1) {
-      const first = points[0];
-      const last = points[points.length - 1];
-      if (Math.abs(first[0] - last[0]) < 1e-9 && Math.abs(first[1] - last[1]) < 1e-9) {
-        points.pop();
-      }
-    }
-
-    return points.length >= 3 ? L.polygon(points, this.zoneDrawService.cloneStyle) : null;
-  }
-
-  private normalizeShapeType(value?: string | null): BoundaryShapeType {
-    return value === 'Rectangle' || value === 'Circle' ? value : 'Polygon';
-  }
-
-  private normalizeEditableStatus(value?: string | null): 'Published' | 'Draft' | 'Archived' {
-    const normalized = (value ?? '').toLowerCase();
-    if (normalized === 'draft') return 'Draft';
-    if (normalized === 'archived') return 'Archived';
-    return 'Published';
   }
 
   private readPersistedRegionId(): number | null {
@@ -1078,17 +929,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       sessionStorage.removeItem(AddDestinationComponent.activeRegionStorageKey);
     } catch {
       // Session persistence is a convenience only.
-    }
-  }
-
-  private shapeTypeFromDrawTool(tool: DrawTool): BoundaryShapeType {
-    switch (tool) {
-      case 'rectangle':
-        return 'Rectangle';
-      case 'circle':
-        return 'Circle';
-      default:
-        return 'Polygon';
     }
   }
 
@@ -1129,7 +969,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private handleLoadError(error: unknown, fallback: string): void {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 401) {
-        this.errorMessage = 'Sign in with an authenticated Regional Manager account to create destinations.';
+        this.errorMessage =
+          'Sign in with an authenticated Regional Manager account to create destinations.';
         this.notifyStateChanged();
         return;
       }

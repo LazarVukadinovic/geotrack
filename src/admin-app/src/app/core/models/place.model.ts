@@ -1,4 +1,4 @@
-import { RegionalEntityImageDto, RegionalEntityImageInput } from './regional-image.model';
+import { RegionalEntityImageDto } from './regional-image.model';
 
 export type PlaceSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type PlaceStatusFilter = 'all' | 'published' | 'draft' | 'archived';
@@ -28,17 +28,24 @@ export interface RegionalPlaceListItemDto {
   createdAt?: string | null;
   publishedAt?: string | null;
   imageUrl?: string | null;
+  cardImageUrl?: string | null;
+  coverImageUrl?: string | null;
+  galleryImageUrls?: string[];
   images?: RegionalEntityImageDto[];
   detailRoute?: string | null;
   editRoute?: string | null;
 }
 
 export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
+  isOwnable: boolean;
+  hasOwner?: boolean;
+  owners: RegionalPlaceOwnerDto[];
   latitude: number;
   longitude: number;
   openingHours?: string | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
+  contactPhone?: string | null;
   website?: string | null;
   admissionPriceRange?: string | null;
   bookingExternalLink?: string | null;
@@ -48,6 +55,18 @@ export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
   accessibilityNotes?: string | null;
   operatingHoursEnabled: boolean;
   operatingHours: RegionalPlaceOperatingHourDto[];
+}
+
+
+export interface RegionalPlaceOwnerDto {
+  userId: number;
+  username: string;
+  email: string;
+  displayName: string;
+}
+
+export interface RegionalPlaceAddOwnerRequest {
+  emailOrUsername: string;
 }
 
 export interface RegionalPlaceListResponse {
@@ -118,30 +137,33 @@ export interface RegionalPlaceCreateRequest {
   operatingHoursEnabled: boolean;
   operatingHours: RegionalPlaceOperatingHourDto[];
   tagIds: number[];
-  images?: RegionalEntityImageInput[];
+  cardImageFile?: File | null;
+  coverImageFile?: File | null;
+  galleryImageFiles?: File[];
 }
 
 export interface RegionalPlaceUpdateRequest {
-  locationId: number;
-  placeTypeId: number;
+  locationId?: number | null;
+  placeTypeId?: number | null;
   stayTypeId?: number | null;
-  name: string;
-  summary: string;
+  name?: string | null;
+  subtitle?: string | null;
   description?: string | null;
-  status?: 'Published' | 'Draft' | 'Archived';
-  latitude: number;
-  longitude: number;
-  streetAddress?: string | null;
+  address?: string | null;
+  openingHours?: string | null;
+  contactEmail?: string | null;
+  phoneNumber?: string | null;
+  contactPhone?: string | null;
+  website?: string | null;
+  admissionPriceRange?: string | null;
+  bookingExternalLink?: string | null;
   bestTimeToVisit?: string | null;
   visitorTips?: string | null;
   accessNotes?: string | null;
   accessibilityNotes?: string | null;
-  website?: string | null;
-  contactPhone?: string | null;
-  admissionPriceRange?: string | null;
-  bookingExternalLink?: string | null;
-  operatingHoursEnabled: boolean;
-  operatingHours: RegionalPlaceOperatingHourDto[];
-  tagIds?: number[];
-  images?: RegionalEntityImageInput[];
+  operatingHoursEnabled?: boolean | null;
+  operatingHours?: RegionalPlaceOperatingHourDto[] | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  tagIds?: number[] | null;
 }

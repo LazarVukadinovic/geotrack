@@ -175,6 +175,38 @@
   </div>
 }
 
+<!-- ── Delete confirmation sheet ─────────────────────────────────────────── -->
+@if (confirmDeleteOpen()) {
+  <div class="collection-detail-page__menu-backdrop fixed inset-0 bg-black/40 z-[60]" (click)="closeConfirmDelete()"></div>
+  <div class="collection-detail-page__menu-sheet fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-[2rem] px-5 pt-2 shadow-2xl"
+       style="padding-bottom: max(2.5rem, env(safe-area-inset-bottom))"
+       (touchstart)="onConfirmDeleteTouchStart($event)"
+       [style.transform]="confirmDeleteDragOffset() > 0 ? 'translateY(' + confirmDeleteDragOffset() + 'px)' : null"
+       [style.transition]="confirmDeleteIsDragging() ? 'none' : 'transform 0.28s cubic-bezier(0.32,0.72,0,1)'">
+
+    <div class="collection-detail-page__menu-handle w-9 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-6 cursor-grab"></div>
+
+    <div class="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-4">
+      <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round"
+          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+      </svg>
+    </div>
+
+    <h2 class="text-xl font-bold text-slate-800 mb-1">Delete Collection?</h2>
+    <p class="text-sm text-slate-500 mb-6">This will permanently delete <strong class="text-slate-700">{{ collection()?.title }}</strong> and cannot be undone.</p>
+
+    <button type="button" (click)="confirmDelete()"
+      class="w-full py-4 bg-red-500 rounded-3xl text-white font-bold text-base tracking-wide transition-all duration-200 mb-3 active:scale-[0.98]">
+      Delete Collection
+    </button>
+    <button type="button" (click)="closeConfirmDelete()"
+      class="w-full py-3 text-base font-bold text-[#1a2b4a] text-center active:opacity-60 transition-opacity">
+      Cancel
+    </button>
+  </div>
+}
+
 <!-- ── Rename sheet ────────────────────────────────────────────────────────── -->
 @if (renameOpen()) {
   <div class="collection-detail-page__rename-backdrop fixed inset-0 bg-black/40 z-[60]" (click)="closeRename()"></div>

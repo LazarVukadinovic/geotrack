@@ -1,4 +1,4 @@
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
 import { Router } from '@angular/router';
 
@@ -16,15 +16,13 @@ export class SettingsSubpageShellComponent {
   readonly fallbackRoute = input('/settings');
 
   protected readonly resolvedHeaderDescription = computed(() => this.headerDescription() ?? this.description());
-
-  private readonly location = inject(Location);
   private readonly router = inject(Router);
 
   protected goBack(): void {
     const navigationId = Number(globalThis.history?.state?.navigationId ?? 0);
 
     if (navigationId > 1) {
-      this.location.back();
+      globalThis.history.back();
       return;
     }
 

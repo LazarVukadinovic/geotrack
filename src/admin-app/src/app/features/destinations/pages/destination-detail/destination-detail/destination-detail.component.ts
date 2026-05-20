@@ -50,25 +50,57 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
-    const navState = history.state as DestinationListItem;
+    const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
+    const navState = history.state as Partial<DestinationListItem> & { regionId?: number };
 
     if (id) {
       const fromService = this.svc.findById(id);
+      const regionId = navState?.regionId ?? fromService?.regionId ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+      if (regionId) {
+        this.loadFromBackend(regionId, id);
+        return;
+      }
+
       if (fromService) {
-        this.item      = { ...fromService };
-        this.isLoading = false;
+        this.setItem(fromService);
         return;
       }
     }
 
-    if (navState?.id) {
-      this.item      = { ...navState };
-      this.isLoading = false;
+    if (navState?.id && navState?.name && navState?.status) {
+      const regionId = navState?.regionId ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+      if (regionId) {
+        this.loadFromBackend(regionId, String(navState.id));
+        return;
+      }
+
+      this.setItem(navState as DestinationListItem);
       return;
     }
 
     this.notFound  = true;
     this.isLoading = false;
+  }
+
+  private setItem(item: DestinationListItem): void {
+    this.item      = { ...item };
+    this.region    = this.item.regionDisplayName || this.item.region;
+    this.isLoading = false;
+    this.notFound  = false;
+    this.cdr.markForCheck();
+    setTimeout(() => this.initMiniMap(), 100);
+  }
+
+  private loadFromBackend(regionId: number, id: string): void {
+    this.isLoading = true;
+    this.svc.getDestination(regionId, id).subscribe({
+      next: dto => this.setItem(this.svc.toListItem(dto)),
+      error: () => {
+        this.notFound = true;
+        this.isLoading = false;
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   ngAfterViewInit(): void {
@@ -94,46 +126,42 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
   private initMiniMap(): void {
     if (this.miniMap || !this.miniMapContainer?.nativeElement) return;
     const el = this.miniMapContainer.nativeElement;
-    const zone = (this.item as any)?.zone as [number,number][] | undefined;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.miniMap = L.map(el, {
       zoomControl: true, dragging: true, scrollWheelZoom: false,
       doubleClickZoom: false, touchZoom: false, attributionControl: false,
-    }).setView([lat, lng], zone ? 12 : 8);
+    }).setView([lat, lng], hasCoords ? 12 : 8);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.miniMap);
 
-    if (zone && zone.length > 0) {
-      this.miniMarker = L.polygon(zone, {
-        color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
-      }).addTo(this.miniMap);
-      try { this.miniMap.fitBounds(this.miniMarker.getBounds(), { padding: [10, 10] }); } catch {}
+    if (hasCoords) {
+      this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
+        .addTo(this.miniMap);
     }
     setTimeout(() => this.miniMap?.invalidateSize(), 200);
   }
 
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap) return;
-    const zone = (this.item as any)?.zone as [number,number][] | undefined;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false })
-      .setView([lat, lng], zone ? 13 : 9);
+      .setView([lat, lng], hasCoords ? 13 : 9);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.modalMap);
 
-    if (zone && zone.length > 0) {
-      this.modalMarker = L.polygon(zone, {
-        color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
-      }).addTo(this.modalMap);
-      try { this.modalMap.fitBounds(this.modalMarker.getBounds(), { padding: [30, 30] }); } catch {}
+    if (hasCoords) {
+      this.modalMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
+        .addTo(this.modalMap);
     }
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
   }
@@ -147,6 +175,21 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
     setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
   }
 
+  get parentRegionName(): string {
+    return this.item?.regionDisplayName || this.item?.region || '';
+  }
+
+  goToParentRegion(event?: Event): void {
+    event?.preventDefault();
+    if (!this.item?.regionId) return;
+    this.router.navigate(['/regions', this.item.regionId], {
+      state: {
+        regionId: this.item.regionId,
+        regionName: this.parentRegionName,
+      },
+    });
+  }
+
   closeMapModal(): void {
     this.mapModalOpen = false;
     this.destroyModalMap();
@@ -154,8 +197,9 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
 
   editItem(): void {
     const full = this.svc.findById(this.item!.id) ?? this.item!;
-    this.router.navigate(['/destinations/new'], {
-      state: { place: full, returnTo: `/destinations/detail/${full.id}` }
+    this.router.navigate(['/destinations/edit', full.id], {
+      queryParams: { regionId: full.regionId },
+      state: { destination: full, returnTo: `/destinations/detail/${full.id}` }
     });
   }
 

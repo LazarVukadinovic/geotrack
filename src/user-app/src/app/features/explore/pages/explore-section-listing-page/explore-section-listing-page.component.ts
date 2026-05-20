@@ -33,6 +33,8 @@ export class ExploreSectionListingPageComponent {
   protected readonly loadMoreError = this.listing.loadMoreError;
   protected readonly hasMore = this.listing.hasMore;
   protected readonly emptyReason = this.listing.emptyReason;
+  protected readonly filters = this.listing.filters;
+  protected readonly hasActiveFilters = this.listing.hasActiveFilters;
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -62,6 +64,18 @@ export class ExploreSectionListingPageComponent {
 
   protected loadMore(): void {
     this.listing.loadMore();
+  }
+
+  protected toggleFilter(tagId: number): void {
+    this.listing.toggleTagFilter(tagId);
+  }
+
+  protected clearFilters(): void {
+    this.listing.clearFilters();
+  }
+
+  protected isFilterSelected(tagId: number): boolean {
+    return this.listing.isTagSelected(tagId);
   }
 
   protected saveItem(item: ExploreSectionItem): void {

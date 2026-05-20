@@ -33,6 +33,12 @@ public class ExploreFeedSectionDto
     public List<ExploreFeedSectionItemDto> Items { get; set; } = new();
 }
 
+public class ExploreFeedItemStatusBadgeDto
+{
+    public string Label { get; set; } = string.Empty;
+    public string Tone { get; set; } = "neutral";
+}
+
 public class ExploreFeedSectionItemDto
 {
     public int Id { get; set; }
@@ -43,6 +49,7 @@ public class ExploreFeedSectionItemDto
     public string? Subtitle { get; set; }
     public string? Description { get; set; }
     public string? CategoryLabel { get; set; }
+    public string? LocationName { get; set; }
     public string? Image { get; set; }
 
     public double? Rating { get; set; }
@@ -50,6 +57,7 @@ public class ExploreFeedSectionItemDto
     public string? Distance { get; set; }
     public string? DateLabel { get; set; }
     public string? OpeningHours { get; set; }
+    public ExploreFeedItemStatusBadgeDto? StatusBadge { get; set; }
     public decimal? PricePerNight { get; set; }
 
     public bool IsSaved { get; set; }
@@ -72,6 +80,7 @@ public class ExploreSectionPageDto
     public string Title { get; set; } = string.Empty;
     public string? Subtitle { get; set; }
     public string CardType { get; set; } = "place-card";
+    public List<ExploreSectionFilterGroupDto> Filters { get; set; } = new();
     public List<ExploreFeedSectionItemDto> Items { get; set; } = new();
     public int Skip { get; set; }
     public int Take { get; set; }
@@ -79,6 +88,25 @@ public class ExploreSectionPageDto
     public bool HasMore { get; set; }
     public int TotalCount { get; set; }
     public string? EmptyReason { get; set; }
+}
+
+
+public class ExploreSectionFilterGroupDto
+{
+    public int TagTypeId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public int Order { get; set; }
+    public List<ExploreSectionFilterOptionDto> Options { get; set; } = new();
+}
+
+public class ExploreSectionFilterOptionDto
+{
+    public int TagId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public int Count { get; set; }
 }
 
 public class ExploreRecommendationsPageDto

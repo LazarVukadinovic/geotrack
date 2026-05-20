@@ -4,7 +4,7 @@ import { FavoriteStateService } from '../../../core/services/favorite-state.serv
 import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
-import { getMainImageUrl, normalizeEntityImages } from '../../../core/models/entity-image.model';
+import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { HotelDetail } from '../models/hotel-detail.model';
 import type { DetailLoadState } from '../../place-detail/services/place-detail.service';
@@ -13,6 +13,8 @@ interface ApiHotelDetail {
   id: number;
   title: string;
   location?: string;
+  locationId?: number | null;
+  locationName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   heroImage?: string;
@@ -26,9 +28,12 @@ interface ApiHotelDetail {
   about?: string;
   bookingPartners: { id: number; name: string; variant: string; url?: string | null }[];
   amenities: { id: number; label: string; icon: string }[];
-  reviews: { id: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean }[];
+  reviews: { id: number; authorUserId?: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean; isOwnReview?: boolean }[];
   similar: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[];
   isSaved: boolean;
+  isOwnable?: boolean;
+  isOwnedByCurrentUser?: boolean;
+  hasPendingOwnershipClaim?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -82,10 +87,12 @@ export class HotelDetailService {
           id: String(dto.id),
           title: dto.title,
           location: dto.location ?? '',
+          locationId: dto.locationId != null ? String(dto.locationId) : null,
+          locationName: dto.locationName ?? dto.location ?? null,
           latitude: dto.latitude ?? null,
           longitude: dto.longitude ?? null,
-          heroImage: getMainImageUrl(images, dto.heroImage),
-          images,
+          heroImage: getCoverImageUrl(images, dto.heroImage),
+          images: getGalleryImages(images),
           tags: dto.tags,
           rating: dto.rating,
           reviewCount: dto.reviewCount,
@@ -106,6 +113,7 @@ export class HotelDetailService {
           })),
           reviews: dto.reviews.map(r => ({
             id: String(r.id),
+            authorUserId: r.authorUserId ?? 0,
             authorName: r.authorName,
             avatarUrl: r.avatarUrl ?? '',
             rating: r.rating,
@@ -113,6 +121,7 @@ export class HotelDetailService {
             body: r.body,
             helpfulCount: r.helpfulCount,
             reportedByCurrentUser: r.reportedByCurrentUser ?? false,
+            isOwnReview: r.isOwnReview ?? false,
           })),
           similar: dto.similar.map(s => ({
             id: String(s.id),
@@ -123,6 +132,9 @@ export class HotelDetailService {
             isSaved: s.isSaved,
           })),
           isSaved: dto.isSaved,
+          isOwnable: dto.isOwnable ?? true,
+          isOwnedByCurrentUser: dto.isOwnedByCurrentUser ?? false,
+          hasPendingOwnershipClaim: dto.hasPendingOwnershipClaim ?? false,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');

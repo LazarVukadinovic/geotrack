@@ -1,6 +1,5 @@
 import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
-import { Location } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { LocationService } from '../../../../core/services/location.service';
@@ -14,14 +13,13 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
 @Component({
   selector: 'app-event-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ImageFallbackDirective],
+  imports: [SectionHeaderComponent, ImageFallbackDirective, RouterLink],
   templateUrl: './event-detail-page.component.html',
   styleUrl: './event-detail-page.component.scss',
 })
 export class EventDetailPageComponent {
   private readonly route    = inject(ActivatedRoute);
   private readonly router   = inject(Router);
-  private readonly location = inject(Location);
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly service  = inject(EventDetailService);
@@ -40,8 +38,8 @@ export class EventDetailPageComponent {
 
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by ed__scroll. */
   protected readonly scrollProgress = signal(0);
-  protected readonly selectedImageUrl = signal<string | null>(null);
-  protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.event()?.heroImage ?? '');
+  protected readonly galleryOpen = signal(false);
+  protected readonly heroImage = computed(() => this.event()?.heroImage ?? '');
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.event()?.latitude ?? null,
@@ -65,7 +63,7 @@ export class EventDetailPageComponent {
     effect(() => {
       this.eventId();
       this.scrollProgress.set(0);
-      this.selectedImageUrl.set(null);
+      this.galleryOpen.set(false);
       const el = this.edScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -83,7 +81,7 @@ export class EventDetailPageComponent {
   }
 
   protected goBack(): void {
-    this.location.back();
+    globalThis.history.back();
   }
 
   protected toggleSaved(): void {
@@ -95,12 +93,12 @@ export class EventDetailPageComponent {
     this.router.navigate(['/events', id]);
   }
 
-  protected selectGalleryImage(url: string): void {
-    this.selectedImageUrl.set(url);
+  protected openGallery(): void {
+    this.galleryOpen.set(true);
   }
 
-  protected isGalleryImageActive(url: string): boolean {
-    return (this.selectedImageUrl() ?? this.event()?.heroImage ?? '') === url;
+  protected closeGallery(): void {
+    this.galleryOpen.set(false);
   }
 
   protected viewOnMap(): void {

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
@@ -12,7 +12,7 @@ namespace Geotrack.Infrastructure.Services;
 
 public class PlaceContributionService : IPlaceContributionService
 {
-    private const string MainImageCaption = "__contribution_main__";
+    private const string CardImageCaption = "__contribution_card__";
     private const string CoverImageCaption = "__contribution_cover__";
     private const int MaxContributionImages = 20;
     private const int MaxWebsiteUrlLength = 500;
@@ -24,7 +24,7 @@ public class PlaceContributionService : IPlaceContributionService
     private const string ManagedContributionMediaPrefix = "/media/uploads/contributions/";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly HashSet<string> OwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> LegacyOwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "stay",
         "restaurant",
@@ -98,11 +98,28 @@ public class PlaceContributionService : IPlaceContributionService
         return contribution is null ? null : MapDetail(contribution);
     }
 
+    public async Task<List<ContributionPlaceTypeDto>> GetPlaceTypesAsync()
+    {
+        return await _db.PlaceTypes
+            .AsNoTracking()
+            .OrderBy(type => type.Name)
+            .ThenBy(type => type.Id)
+            .Select(type => new ContributionPlaceTypeDto
+            {
+                Id = type.Id,
+                Name = type.Name,
+                Description = type.Description,
+                IsOwnable = type.IsOwnable
+            })
+            .ToListAsync();
+    }
+
     public async Task<PlaceContributionDetailDto> CreateAsync(
         int userId,
         UpsertPlaceContributionDto request,
-        byte[]? mainImageBytes,
+        byte[]? cardImageBytes,
         byte[]? coverImageBytes,
+        IReadOnlyList<byte[]>? galleryImageBytes,
         byte[]? ownershipProofBytes,
         string? ownershipProofOriginalFileName,
         string? ownershipProofContentType)
@@ -128,10 +145,14 @@ public class PlaceContributionService : IPlaceContributionService
             targetPlace = await _db.Places
                 .AsNoTracking()
                 .Include(p => p.Stay)
+                .Include(p => p.PlaceType)
                 .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
 
             if (targetPlace is null)
                 throw new KeyNotFoundException("Target place not found.");
+
+            if (targetPlace.PlaceType is null || !targetPlace.PlaceType.IsOwnable)
+                throw new InvalidOperationException("Ownership can only be requested for ownable place types.");
 
             var alreadyOwner = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
             if (alreadyOwner)
@@ -143,18 +164,27 @@ public class PlaceContributionService : IPlaceContributionService
             references = await ResolveContributionReferencesAsync(request);
         }
 
-        string? storedMainImageUrl = null;
+        string? storedCardImageUrl = null;
         string? storedCoverImageUrl = null;
+        var storedGalleryImageUrls = new List<string>();
         string? storedOwnershipProofUrl = null;
 
-        if (mainImageBytes is { Length: > 0 })
+        if (cardImageBytes is { Length: > 0 })
         {
-            storedMainImageUrl = (await _mediaStorage.StoreAsync(userId, mainImageBytes)).MediaUrl;
+            storedCardImageUrl = (await _mediaStorage.StoreAsync(userId, cardImageBytes)).MediaUrl;
         }
 
         if (coverImageBytes is { Length: > 0 })
         {
             storedCoverImageUrl = (await _mediaStorage.StoreAsync(userId, coverImageBytes)).MediaUrl;
+        }
+
+        if (galleryImageBytes is not null)
+        {
+            foreach (var galleryBytes in galleryImageBytes.Where(bytes => bytes is { Length: > 0 }))
+            {
+                storedGalleryImageUrls.Add((await _mediaStorage.StoreAsync(userId, galleryBytes)).MediaUrl);
+            }
         }
 
         if (ownershipProofBytes is { Length: > 0 })
@@ -231,7 +261,7 @@ public class PlaceContributionService : IPlaceContributionService
             UpdatedAt = now
         };
 
-        SyncContributionImages(contribution, request.Images, storedMainImageUrl, storedCoverImageUrl, now);
+        SyncContributionImages(contribution, request.Images, storedCardImageUrl, storedCoverImageUrl, storedGalleryImageUrls, now, type != PlaceContributionType.ClaimOwnership);
 
         _db.PlaceContributions.Add(contribution);
         await _db.SaveChangesAsync();
@@ -244,8 +274,9 @@ public class PlaceContributionService : IPlaceContributionService
         int userId,
         int contributionId,
         UpsertPlaceContributionDto request,
-        byte[]? mainImageBytes,
+        byte[]? cardImageBytes,
         byte[]? coverImageBytes,
+        IReadOnlyList<byte[]>? galleryImageBytes,
         byte[]? ownershipProofBytes,
         string? ownershipProofOriginalFileName,
         string? ownershipProofContentType)
@@ -282,10 +313,14 @@ public class PlaceContributionService : IPlaceContributionService
             targetPlace = await _db.Places
                 .AsNoTracking()
                 .Include(p => p.Stay)
+                .Include(p => p.PlaceType)
                 .SingleOrDefaultAsync(p => p.Id == request.PlaceId.Value);
 
             if (targetPlace is null)
                 throw new KeyNotFoundException("Target place not found.");
+
+            if (targetPlace.PlaceType is null || !targetPlace.PlaceType.IsOwnable)
+                throw new InvalidOperationException("Ownership can only be requested for ownable place types.");
 
             var alreadyOwner = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
             if (alreadyOwner)
@@ -297,17 +332,26 @@ public class PlaceContributionService : IPlaceContributionService
             references = await ResolveContributionReferencesAsync(request);
         }
 
-        string? storedMainImageUrl = null;
+        string? storedCardImageUrl = null;
         string? storedCoverImageUrl = null;
+        var storedGalleryImageUrls = new List<string>();
 
-        if (mainImageBytes is { Length: > 0 })
+        if (cardImageBytes is { Length: > 0 })
         {
-            storedMainImageUrl = (await _mediaStorage.StoreAsync(userId, mainImageBytes)).MediaUrl;
+            storedCardImageUrl = (await _mediaStorage.StoreAsync(userId, cardImageBytes)).MediaUrl;
         }
 
         if (coverImageBytes is { Length: > 0 })
         {
             storedCoverImageUrl = (await _mediaStorage.StoreAsync(userId, coverImageBytes)).MediaUrl;
+        }
+
+        if (galleryImageBytes is not null)
+        {
+            foreach (var galleryBytes in galleryImageBytes.Where(bytes => bytes is { Length: > 0 }))
+            {
+                storedGalleryImageUrls.Add((await _mediaStorage.StoreAsync(userId, galleryBytes)).MediaUrl);
+            }
         }
 
         if (ownershipProofBytes is { Length: > 0 })
@@ -385,7 +429,7 @@ public class PlaceContributionService : IPlaceContributionService
         contribution.BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners));
         contribution.UpdatedAt = now;
 
-        SyncContributionImages(contribution, request.Images, storedMainImageUrl, storedCoverImageUrl, now);
+        SyncContributionImages(contribution, request.Images, storedCardImageUrl, storedCoverImageUrl, storedGalleryImageUrls, now, type != PlaceContributionType.ClaimOwnership);
 
         await _db.SaveChangesAsync();
 
@@ -641,8 +685,7 @@ public class PlaceContributionService : IPlaceContributionService
         if (request.StayTypeId.HasValue || !string.IsNullOrWhiteSpace(request.StayType))
             return true;
 
-        var placeTypeName = await ResolveRequestedPlaceTypeNameAsync(request);
-        return IsOwnershipProofRequiredPlaceType(placeTypeName);
+        return await ResolveRequestedPlaceTypeOwnableAsync(request);
     }
 
     private async Task<string?> ResolveRequestedPlaceTypeNameAsync(UpsertPlaceContributionDto request)
@@ -662,10 +705,30 @@ public class PlaceContributionService : IPlaceContributionService
         return placeTypeName ?? throw new KeyNotFoundException("Place type not found.");
     }
 
-    private static bool IsOwnershipProofRequiredPlaceType(string? placeTypeName)
+    private async Task<bool> ResolveRequestedPlaceTypeOwnableAsync(UpsertPlaceContributionDto request)
     {
-        var normalized = NormalizeOptional(placeTypeName);
-        return normalized is not null && OwnershipProofRequiredPlaceTypes.Contains(normalized);
+        if (request.PlaceTypeId.HasValue)
+        {
+            var isOwnable = await _db.PlaceTypes
+                .AsNoTracking()
+                .Where(placeType => placeType.Id == request.PlaceTypeId.Value)
+                .Select(placeType => (bool?)placeType.IsOwnable)
+                .SingleOrDefaultAsync();
+
+            return isOwnable ?? throw new KeyNotFoundException("Place type not found.");
+        }
+
+        var placeTypeName = NormalizeOptional(request.PlaceType);
+        if (placeTypeName is null)
+            return false;
+
+        var dbIsOwnable = await _db.PlaceTypes
+            .AsNoTracking()
+            .Where(placeType => placeType.Name.ToLower() == placeTypeName)
+            .Select(placeType => (bool?)placeType.IsOwnable)
+            .SingleOrDefaultAsync();
+
+        return dbIsOwnable ?? LegacyOwnershipProofRequiredPlaceTypes.Contains(placeTypeName);
     }
 
     private async Task<bool> UserCanManagePlaceAsync(int userId, int placeId)
@@ -844,6 +907,7 @@ public class PlaceContributionService : IPlaceContributionService
         {
             Name = ToTitle(displayName),
             Description = normalized == "stay" ? "Accommodation and stay listings" : $"{ToTitle(displayName)} listings",
+            IsOwnable = LegacyOwnershipProofRequiredPlaceTypes.Contains(normalized),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -1214,7 +1278,8 @@ public class PlaceContributionService : IPlaceContributionService
                 Url = image.Url,
                 AltText = image.AltText,
                 Caption = image.Caption,
-                IsMain = image.IsMain,
+                IsMain = image.ImageRole == EntityImageRole.Cover,
+                ImageRole = EntityImageRole.Normalize(image.ImageRole),
                 SortOrder = image.SortOrder,
                 CreatedAt = now,
                 UpdatedAt = now
@@ -1225,9 +1290,11 @@ public class PlaceContributionService : IPlaceContributionService
     private void SyncContributionImages(
         PlaceContribution contribution,
         List<UpsertPlaceContributionImageDto>? requestImages,
-        string? storedMainImageUrl,
+        string? storedCardImageUrl,
         string? storedCoverImageUrl,
-        DateTime now)
+        IReadOnlyList<string> storedGalleryImageUrls,
+        DateTime now,
+        bool requireCardAndCover)
     {
         var oldManagedUrls = contribution.Images
             .Where(image => _mediaStorage.IsManagedContributionMediaUrl(image.Url))
@@ -1249,25 +1316,40 @@ public class PlaceContributionService : IPlaceContributionService
             {
                 Url = storedCoverImageUrl,
                 Caption = CoverImageCaption,
-                IsMain = false,
-                SortOrder = -1,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = -10,
                 ImagePosition = "50% 50%",
                 ImageSize = "cover"
             });
         }
 
-        if (!string.IsNullOrWhiteSpace(storedMainImageUrl))
+        if (!string.IsNullOrWhiteSpace(storedCardImageUrl))
         {
             imageDtos.Add(new UpsertPlaceContributionImageDto
             {
-                Url = storedMainImageUrl,
-                Caption = MainImageCaption,
-                IsMain = true,
-                SortOrder = 0,
+                Url = storedCardImageUrl,
+                Caption = CardImageCaption,
+                IsMain = false,
+                ImageRole = EntityImageRole.Card,
+                SortOrder = -9,
                 ImagePosition = "50% 50%",
                 ImageSize = "cover"
             });
         }
+
+        imageDtos.AddRange(storedGalleryImageUrls.Select((url, index) => new UpsertPlaceContributionImageDto
+        {
+            Url = url,
+            ImageRole = EntityImageRole.Gallery,
+            IsMain = false,
+            SortOrder = index,
+            ImagePosition = "50% 50%",
+            ImageSize = "cover"
+        }));
+
+        if (requireCardAndCover)
+            RequireCardAndCoverImages(imageDtos);
 
         if (imageDtos.Count == 0)
             return;
@@ -1275,27 +1357,32 @@ public class PlaceContributionService : IPlaceContributionService
         if (imageDtos.Count > MaxContributionImages)
             throw new InvalidOperationException($"A contribution can include at most {MaxContributionImages} images.");
 
-        var hasMain = imageDtos.Any(image => image.IsMain);
-        if (!hasMain)
-        {
-            imageDtos[0].IsMain = true;
-        }
-
-        var mainSeen = false;
+        var coverSeen = false;
+        var cardSeen = false;
         foreach (var image in imageDtos
-                     .OrderBy(image => image.SortOrder)
+                     .OrderBy(image => ImageRoleSort(EntityImageRole.Normalize(image.ImageRole)))
+                     .ThenBy(image => image.SortOrder)
                      .ThenBy(image => image.Url, StringComparer.OrdinalIgnoreCase))
         {
-            var isMain = image.IsMain && !mainSeen;
-            if (isMain)
-                mainSeen = true;
+            var imageRole = EntityImageRole.Normalize(image.ImageRole);
+            if (imageRole == EntityImageRole.Cover)
+            {
+                if (coverSeen) imageRole = EntityImageRole.Gallery;
+                coverSeen = true;
+            }
+            else if (imageRole == EntityImageRole.Card)
+            {
+                if (cardSeen) imageRole = EntityImageRole.Gallery;
+                cardSeen = true;
+            }
 
             contribution.Images.Add(new PlaceContributionImage
             {
                 Url = NormalizeImageUrl(image.Url),
                 AltText = NormalizeOptional(image.AltText),
                 Caption = NormalizeOptional(image.Caption),
-                IsMain = isMain,
+                IsMain = imageRole == EntityImageRole.Cover,
+                ImageRole = imageRole,
                 SortOrder = image.SortOrder,
                 ImagePosition = NormalizeImagePosition(image.ImagePosition),
                 ImageSize = NormalizeImageSize(image.ImageSize),
@@ -1311,6 +1398,41 @@ public class PlaceContributionService : IPlaceContributionService
                 _ = _mediaStorage.DeleteAsync(oldManagedUrl);
             }
         }
+    }
+
+
+    private static void RequireCardAndCoverImages(IEnumerable<UpsertPlaceContributionImageDto> images)
+    {
+        var hasCard = false;
+        var hasCover = false;
+
+        foreach (var image in images)
+        {
+            var role = EntityImageRole.Normalize(image.ImageRole);
+            if (role == EntityImageRole.Card && !string.IsNullOrWhiteSpace(image.Url))
+            {
+                hasCard = true;
+            }
+            else if (role == EntityImageRole.Cover && !string.IsNullOrWhiteSpace(image.Url))
+            {
+                hasCover = true;
+            }
+        }
+
+        if (!hasCard || !hasCover)
+        {
+            throw new InvalidOperationException("Card and cover images are required.");
+        }
+    }
+
+    private static int ImageRoleSort(string? imageRole)
+    {
+        return EntityImageRole.Normalize(imageRole) switch
+        {
+            EntityImageRole.Cover => 0,
+            EntityImageRole.Card => 1,
+            _ => 2
+        };
     }
 
     private async Task<List<Tag>> ResolveTagsAsync(List<string> tagNames)
@@ -1399,7 +1521,7 @@ public class PlaceContributionService : IPlaceContributionService
 
     private static PlaceContributionListItemDto MapListItem(PlaceContribution contribution)
     {
-        var mainImage = GetMainImage(contribution);
+        var cardImage = GetCardImage(contribution);
         var coverImage = GetCoverImage(contribution);
 
         return new PlaceContributionListItemDto
@@ -1412,8 +1534,15 @@ public class PlaceContributionService : IPlaceContributionService
             PlaceType = contribution.PlaceType?.Name,
             StayType = contribution.StayType?.Name,
             Location = BuildLocationLabel(contribution),
-            MainImageUrl = mainImage?.Url,
+            CardImageUrl = cardImage?.Url,
+            MainImageUrl = cardImage?.Url,
             CoverImageUrl = coverImage?.Url,
+            GalleryImageUrls = contribution.Images
+                .Where(image => image.ImageRole == EntityImageRole.Gallery)
+                .OrderBy(image => image.SortOrder)
+                .ThenBy(image => image.Id)
+                .Select(image => image.Url)
+                .ToList(),
             Status = contribution.Status.ToString(),
             SubmittedAt = contribution.SubmittedAt,
             UpdatedAt = contribution.UpdatedAt,
@@ -1437,8 +1566,10 @@ public class PlaceContributionService : IPlaceContributionService
             PlaceType = listItem.PlaceType,
             StayType = listItem.StayType,
             Location = listItem.Location,
+            CardImageUrl = listItem.CardImageUrl,
             MainImageUrl = listItem.MainImageUrl,
             CoverImageUrl = listItem.CoverImageUrl,
+            GalleryImageUrls = listItem.GalleryImageUrls,
             Status = listItem.Status,
             SubmittedAt = listItem.SubmittedAt,
             UpdatedAt = listItem.UpdatedAt,
@@ -1464,8 +1595,8 @@ public class PlaceContributionService : IPlaceContributionService
             City = contribution.Location?.Name,
             Region = contribution.Location?.Destination?.Region?.Name,
             Country = contribution.Location?.Destination?.Name,
-            ImagePosition = GetMainImage(contribution)?.ImagePosition ?? "50% 50%",
-            ImageSize = GetMainImage(contribution)?.ImageSize ?? "cover",
+            ImagePosition = GetCoverImage(contribution)?.ImagePosition ?? "50% 50%",
+            ImageSize = GetCoverImage(contribution)?.ImageSize ?? "cover",
             Tags = DeserializeStringList(contribution.TagsJson),
             Amenities = DeserializeStringList(contribution.AmenitiesJson),
             StayAmenities = DeserializeStringList(contribution.StayAmenitiesJson),
@@ -1480,6 +1611,7 @@ public class PlaceContributionService : IPlaceContributionService
                     AltText = image.AltText,
                     Caption = image.Caption,
                     IsMain = image.IsMain,
+                    ImageRole = EntityImageRole.Normalize(image.ImageRole),
                     SortOrder = image.SortOrder,
                     ImagePosition = image.ImagePosition,
                     ImageSize = image.ImageSize
@@ -1494,13 +1626,12 @@ public class PlaceContributionService : IPlaceContributionService
         };
     }
 
-    private static PlaceContributionImage? GetMainImage(PlaceContribution contribution)
+    private static PlaceContributionImage? GetCardImage(PlaceContribution contribution)
     {
         return contribution.Images
-            .OrderByDescending(image => image.IsMain)
-            .ThenBy(image => image.SortOrder)
+            .OrderBy(image => image.SortOrder)
             .ThenBy(image => image.Id)
-            .FirstOrDefault(image => !string.Equals(image.Caption, CoverImageCaption, StringComparison.Ordinal));
+            .FirstOrDefault(image => image.ImageRole == EntityImageRole.Card);
     }
 
     private static PlaceContributionImage? GetCoverImage(PlaceContribution contribution)
@@ -1508,7 +1639,7 @@ public class PlaceContributionService : IPlaceContributionService
         return contribution.Images
             .OrderBy(image => image.SortOrder)
             .ThenBy(image => image.Id)
-            .FirstOrDefault(image => string.Equals(image.Caption, CoverImageCaption, StringComparison.Ordinal));
+            .FirstOrDefault(image => image.ImageRole == EntityImageRole.Cover);
     }
 
     private static string? BuildLocationLabel(PlaceContribution contribution)
@@ -1813,7 +1944,8 @@ public class PlaceContributionService : IPlaceContributionService
                 AltText = image.AltText,
                 Caption = image.Caption,
                 IsMain = image.IsMain,
-                SortOrder = image.SortOrder < 0 ? index : image.SortOrder,
+                ImageRole = EntityImageRole.Normalize(image.ImageRole),
+                SortOrder = image.SortOrder,
                 ImagePosition = image.ImagePosition,
                 ImageSize = image.ImageSize
             })

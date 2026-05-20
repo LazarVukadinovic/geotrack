@@ -1,3 +1,4 @@
+using Geotrack.Domain.Entities.Core;
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -248,6 +249,35 @@ public class MapService : IMapService
             .ToList();
     }
 
+    public async Task<List<MapSearchResultDto>> GetAllDestinationsAsync(CancellationToken cancellationToken = default)
+    {
+        const string cacheKey = "map:destinations:v1";
+        if (_cache.TryGetValue<List<MapSearchResultDto>>(cacheKey, out var cached))
+            return cached ?? new List<MapSearchResultDto>();
+
+        var destinations = await _db.Destinations
+            .AsNoTracking()
+            .OrderBy(d => d.Name)
+            .Select(d => new MapSearchResultDto
+            {
+                Id = d.Id,
+                Type = "destination",
+                Name = d.Name,
+                Subtitle = d.Region.Name,
+                Latitude = d.Latitude,
+                Longitude = d.Longitude,
+                ParentName = d.Region.Name,
+            })
+            .ToListAsync(cancellationToken);
+
+        _cache.Set(cacheKey, destinations, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+        });
+
+        return destinations;
+    }
+
     public async Task<MapReverseGeocodeDto?> ReverseGeocodeAsync(
         double latitude,
         double longitude,
@@ -299,13 +329,14 @@ public class MapService : IMapService
         var region = FirstNonEmpty(address.State, address.County);
         var country = address.Country ?? string.Empty;
 
+        var displayLabel = BuildDisplayLabel(city, region, country);
         var reverseGeocode = new MapReverseGeocodeDto
         {
-            Address = string.Join(" ", new[] { address.Road, address.HouseNumber }.Where(x => !string.IsNullOrWhiteSpace(x))),
+            Address = BuildStreetAddress(address, result.DisplayName, displayLabel),
             City = city,
             Region = region,
             Country = country,
-            DisplayLabel = BuildDisplayLabel(city, region, country),
+            DisplayLabel = displayLabel,
         };
 
         _cache.Set(
@@ -437,7 +468,7 @@ public class MapService : IMapService
                     Subtitle = place.Location.Name,
                     CategoryLabel = place.PlaceType.Name,
                     ImageUrl = place.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -489,7 +520,7 @@ public class MapService : IMapService
                             : @event.Destination.Name),
                     CategoryLabel = @event.EventType.Name,
                     ImageUrl = @event.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -591,7 +622,7 @@ public class MapService : IMapService
                     Subtitle = null,
                     CategoryLabel = destination.DestinationType != null ? destination.DestinationType.Name : null,
                     ImageUrl = destination.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -638,7 +669,7 @@ public class MapService : IMapService
                     Subtitle = place.Location.Name,
                     CategoryLabel = place.PlaceType.Name,
                     ImageUrl = place.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -690,7 +721,7 @@ public class MapService : IMapService
                             : @event.Destination.Name),
                     CategoryLabel = @event.EventType.Name,
                     ImageUrl = @event.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -811,6 +842,28 @@ public class MapService : IMapService
         return parts.Length <= 1 ? null : string.Join(", ", parts.Skip(1).Take(2));
     }
 
+    private static string BuildStreetAddress(NominatimAddress address, string? providerDisplayName, string fallbackDisplayLabel)
+    {
+        var streetLine = string.Join(" ", new[] { address.Road, address.HouseNumber }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
+        if (!string.IsNullOrWhiteSpace(streetLine))
+            return streetLine;
+
+        return FirstNonEmpty(
+            address.Pedestrian,
+            address.Footway,
+            address.Path,
+            address.Neighbourhood,
+            address.Suburb,
+            address.Quarter,
+            address.Municipality,
+            address.City,
+            address.Town,
+            address.Village,
+            providerDisplayName,
+            fallbackDisplayLabel);
+    }
+
     private static string BuildDisplayLabel(string city, string region, string country)
     {
         if (!string.IsNullOrWhiteSpace(city) && !string.IsNullOrWhiteSpace(country))
@@ -908,6 +961,9 @@ public class MapService : IMapService
 
     private sealed class NominatimReverseResult
     {
+        [JsonPropertyName("display_name")]
+        public string? DisplayName { get; set; }
+
         public NominatimAddress? Address { get; set; }
     }
 
@@ -917,6 +973,18 @@ public class MapService : IMapService
         public string? HouseNumber { get; set; }
 
         public string? Road { get; set; }
+
+        public string? Pedestrian { get; set; }
+
+        public string? Footway { get; set; }
+
+        public string? Path { get; set; }
+
+        public string? Neighbourhood { get; set; }
+
+        public string? Suburb { get; set; }
+
+        public string? Quarter { get; set; }
 
         public string? City { get; set; }
 

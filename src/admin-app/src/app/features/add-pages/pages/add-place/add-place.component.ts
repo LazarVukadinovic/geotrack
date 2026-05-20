@@ -13,7 +13,7 @@ import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, of, Subscription, switchMap } from 'rxjs';
+import { finalize, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
@@ -21,23 +21,16 @@ import { LightboxService } from '../../../../core/services/lightbox.service';
 import { PlacesListService } from '../../../../core/services/places-list.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
-import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { AdminMapViewport } from '../../../../core/models/admin-map.model';
 import {
   RegionalPlaceCreateRequest,
-  RegionalPlaceDetailDto,
   RegionalPlaceOperatingHourDto,
   RegionalPlaceParentLocationDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
   RegionalPlaceUpdateRequest,
 } from '../../../../core/models/place.model';
-import {
-  RegionalEntityImageDto,
-  RegionalEntityImageInput,
-  RegionalImageUploadResult,
-} from '../../../../core/models/regional-image.model';
 
 declare const L: any;
 
@@ -97,7 +90,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   placeTypesLoading = false;
   tagsLoading = false;
   tagSearchLoading = false;
-  detailLoading = false;
   isSaving = false;
   isGeocodingAddress = false;
   errorMessage: string | null = null;
@@ -120,8 +112,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   bookingLink = '';
   opsEnabled = false;
   tagInput = '';
-  internalReferenceId = '';
-  placeStatus: 'Published' | 'Draft' | 'Archived' = 'Published';
 
   parentLocations: RegionalPlaceParentLocationDto[] = [];
   placeTypes: RegionalPlaceTypeDto[] = [];
@@ -136,10 +126,14 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   isUnderline = false;
   editorIsEmpty = true;
 
+  cardImageUrl: string | null = null;
+  cardImageName = '';
   coverImageUrl: string | null = null;
   coverImageName = '';
-  coverImageFile: File | null = null;
-  galleryImages: { url: string; name: string; file?: File }[] = [];
+  galleryImages: { url: string; name: string; file: File }[] = [];
+
+  private cardImageFile: File | null = null;
+  private coverImageFile: File | null = null;
 
   allHours = Array.from({ length: 24 }, (_, hour) => `${hour.toString().padStart(2, '0')}:00`);
   days: DayHours[] = [
@@ -170,14 +164,11 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private tagsSubscription: Subscription | null = null;
   private tagSearchSubscription: Subscription | null = null;
   private createSubscription: Subscription | null = null;
-  private detailSubscription: Subscription | null = null;
   private reverseGeocodeSubscription: Subscription | null = null;
   private viewportSubscription: Subscription | null = null;
   private tagSearchHandle: ReturnType<typeof setTimeout> | null = null;
   private geocodeDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private regionViewport: AdminMapViewport | null = null;
-  private pendingDescriptionHtml: string | null = null;
-  private imagesTouched = false;
 
   constructor(
     private readonly zone: NgZone,
@@ -190,7 +181,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly auth: AuthService,
     private readonly http: HttpClient,
     private readonly adminMapService: AdminMapService,
-    private readonly regionalMediaService: RegionalMediaService,
   ) {}
 
   ngOnInit(): void {
@@ -198,9 +188,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isEditMode = Boolean(this.editPlaceId);
 
     this.loadAssignedRegions();
-    if (!this.isEditMode) {
-      this.applyInitialCoordinatesFromRoute();
-    }
+    this.applyInitialCoordinatesFromRoute();
     this.loadPlaceTypes();
     this.loadPlaceTags();
   }
@@ -212,7 +200,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       if (coordinates && this.pinConfirmed) {
         this.updateMiniMapPin(coordinates.latitude, coordinates.longitude);
       }
-      this.applyPendingDescription();
     }, 0);
   }
 
@@ -223,7 +210,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.tagsSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
-    this.detailSubscription?.unsubscribe();
     this.reverseGeocodeSubscription?.unsubscribe();
     this.viewportSubscription?.unsubscribe();
 
@@ -296,23 +282,26 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get canPublish(): boolean {
+    const mediaReady = this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
     return Boolean(this.activeRegionId) &&
       Boolean(this.parentLocationId) &&
       Boolean(this.placeTypeId) &&
       this.placeName.trim().length > 0 &&
       this.summary.trim().length > 0 &&
       this.pinConfirmed &&
+      mediaReady &&
       !this.regionLoading &&
       !this.parentLocationsLoading &&
       !this.placeTypesLoading &&
       !this.tagsLoading &&
-      !this.detailLoading &&
       !this.isSaving;
   }
 
   loadAssignedRegions(): void {
     this.regionLoading = true;
-    this.errorMessage = null;
+    if (!this.isEditMode) {
+      this.errorMessage = null;
+    }
     this.notifyStateChanged();
 
     this.assignedRegionsSubscription?.unsubscribe();
@@ -350,9 +339,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
           this.setActiveRegion(selectedRegion.id, false);
           this.loadParentLocations();
           this.loadRegionViewport(selectedRegion.id);
-          if (this.isEditMode) {
-            this.loadPlaceForEdit(selectedRegion.id);
-          }
+          this.loadPlaceForEditIfNeeded();
         },
         error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
@@ -360,11 +347,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onRegionSelected(regionId: number): void {
     if (regionId === this.activeRegionId) return;
-    if (this.isEditMode) {
-      this.feedbackMessage = 'The region is locked while editing this place.';
-      this.notifyStateChanged();
-      return;
-    }
 
     this.setActiveRegion(regionId, true);
     this.parentLocationId = null;
@@ -480,6 +462,72 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
+  private loadPlaceForEditIfNeeded(): void {
+    if (!this.isEditMode || !this.editPlaceId || !this.activeRegionId) {
+      return;
+    }
+
+    this.placesService.getPlace(this.activeRegionId, this.editPlaceId).subscribe({
+      next: dto => {
+        this.placeName = dto.name ?? '';
+        this.summary = dto.summary ?? dto.subtitle ?? '';
+        this.parentLocationId = dto.locationId ?? null;
+        this.placeTypeId = dto.placeTypeId ?? null;
+        this.bestTimeToVisit = dto.bestTimeToVisit ?? '';
+        this.visitorTips = dto.visitorTips ?? '';
+        this.accessNotes = dto.accessNotes ?? '';
+        this.accessibilityNotes = dto.accessibilityNotes ?? '';
+        this.website = dto.website ?? '';
+        this.contactPhone = dto.phoneNumber ?? dto.contactPhone ?? '';
+        this.admissionPrice = dto.admissionPriceRange ?? '';
+        this.bookingLink = dto.bookingExternalLink ?? '';
+        this.streetAddress = dto.address ?? '';
+        this.opsEnabled = Boolean(dto.operatingHoursEnabled);
+        this.applyOperatingHours(dto.operatingHours ?? []);
+
+        if (typeof dto.latitude === 'number' && typeof dto.longitude === 'number') {
+          this.pinLat = dto.latitude.toFixed(6);
+          this.pinLng = dto.longitude.toFixed(6);
+          this.modalPinLat = dto.latitude;
+          this.modalPinLng = dto.longitude;
+          this.pinConfirmed = this.hasValidCoordinates(dto.latitude, dto.longitude);
+          setTimeout(() => this.updateMiniMapPin(dto.latitude, dto.longitude), 0);
+        }
+
+        this.cardImageUrl = dto.cardImageUrl ?? dto.imageUrl ?? null;
+        this.cardImageName = this.cardImageUrl ? 'Existing card image' : '';
+        this.coverImageUrl = dto.coverImageUrl ?? dto.imageUrl ?? null;
+        this.coverImageName = this.coverImageUrl ? 'Existing cover image' : '';
+        this.galleryImages = (dto.galleryImageUrls ?? []).map((url, index) => ({
+          url,
+          name: `Existing gallery image ${index + 1}`,
+          file: null as unknown as File,
+        }));
+
+        this.selectedTagIds = new Set((dto.tags ?? []).map(tag => tag.id));
+        for (const tag of dto.tags ?? []) {
+          this.upsertPlaceTag(tag);
+          this.upsertClassItem(tag, true);
+        }
+        this.classItems = this.classItems.map(item => ({
+          ...item,
+          checked: this.selectedTagIds.has(item.tag.id),
+        }));
+
+        setTimeout(() => {
+          if (this.editorRef?.nativeElement) {
+            this.editorRef.nativeElement.innerHTML = dto.description ?? '';
+            this.syncEmptyState();
+            this.notifyStateChanged();
+          }
+        }, 0);
+
+        this.notifyStateChanged();
+      },
+      error: error => this.handleLoadError(error, 'Unable to load place for editing.'),
+    });
+  }
+
   onParentLocationChanged(): void {
     this.notifyStateChanged();
   }
@@ -565,6 +613,34 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.syncEmptyState();
   }
 
+  onCardImageSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !this.isAllowedImage(file)) {
+      input.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.zone.run(() => {
+        this.cardImageUrl = reader.result as string;
+        this.cardImageName = file.name;
+        this.cardImageFile = file;
+        this.notifyStateChanged();
+      });
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  removeCardImage(): void {
+    this.cardImageUrl = null;
+    this.cardImageName = '';
+    this.cardImageFile = null;
+    this.notifyStateChanged();
+  }
+
   onCoverImageSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -579,7 +655,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         this.coverImageUrl = reader.result as string;
         this.coverImageName = file.name;
         this.coverImageFile = file;
-        this.imagesTouched = true;
         this.notifyStateChanged();
       });
     };
@@ -591,7 +666,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.coverImageUrl = null;
     this.coverImageName = '';
     this.coverImageFile = null;
-    this.imagesTouched = true;
     this.notifyStateChanged();
   }
 
@@ -603,7 +677,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       reader.onload = () => {
         this.zone.run(() => {
           this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name, file }];
-          this.imagesTouched = true;
           this.notifyStateChanged();
         });
       };
@@ -614,7 +687,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   removeGalleryImage(index: number): void {
     this.galleryImages = this.galleryImages.filter((_, currentIndex) => currentIndex !== index);
-    this.imagesTouched = true;
     this.notifyStateChanged();
   }
 
@@ -689,7 +761,12 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   publish(): void {
     if (this.isSaving) return;
 
-    const payload = this.buildPayload();
+    if (this.isEditMode) {
+      this.updateExistingPlace();
+      return;
+    }
+
+    const payload = this.buildCreatePayload();
     if (!payload) {
       this.notifyStateChanged();
       return;
@@ -701,52 +778,67 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.notifyStateChanged();
 
     this.createSubscription?.unsubscribe();
-    const saveRegionId = this.activeRegionId;
-    const savePlaceId = this.editPlaceId;
-    this.createSubscription = of(payload)
+    this.createSubscription = this.placesService
+      .createPlace(payload)
       .pipe(
-        switchMap(payloadWithoutImages => {
-          const files = this.selectedImageFiles();
-          if (files.length === 0) {
-            const request = this.shouldSendImages(files)
-              ? { ...payloadWithoutImages, images: this.buildImageInputs([]) }
-              : payloadWithoutImages;
-            return this.isEditMode && saveRegionId && savePlaceId
-              ? this.placesService.updatePlace(saveRegionId, savePlaceId, request)
-              : this.placesService.createPlace(request as RegionalPlaceCreateRequest);
-          }
-
-          return this.regionalMediaService.uploadImages(this.activeRegionId!, files).pipe(
-            switchMap(uploaded => {
-              const request = {
-                ...payloadWithoutImages,
-                images: this.buildImageInputs(uploaded.images),
-              };
-              return this.isEditMode && saveRegionId && savePlaceId
-                ? this.placesService.updatePlace(saveRegionId, savePlaceId, request)
-                : this.placesService.createPlace(request as RegionalPlaceCreateRequest);
-            }),
-          );
-        }),
         finalize(() => {
           this.isSaving = false;
           this.notifyStateChanged();
         }),
       )
       .subscribe({
-        next: saved => {
-          const message = this.isEditMode ? 'Place saved.' : 'Place published.';
-          this.feedbackMessage = message;
+        next: created => {
+          this.feedbackMessage = 'Place published.';
           this.router.navigate(['/places'], {
-            queryParams: { regionId: saved.regionId },
-            state: { feedbackMessage: message },
+            queryParams: { regionId: created.regionId },
+            state: { feedbackMessage: 'Place published.' },
           });
         },
         error: error => this.handleActionError(error),
       });
   }
 
-  private buildPayload(): (RegionalPlaceCreateRequest | RegionalPlaceUpdateRequest) | null {
+  private updateExistingPlace(): void {
+    const regionId = this.activeRegionId;
+    const placeId = this.editPlaceId;
+    const payload = this.buildUpdatePayload();
+    if (!regionId || !placeId || !payload) {
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.isSaving = true;
+    this.errorMessage = null;
+    this.feedbackMessage = null;
+    this.notifyStateChanged();
+
+    this.createSubscription?.unsubscribe();
+    this.createSubscription = this.placesService
+      .updatePlace(regionId, placeId, payload)
+      .pipe(
+        finalize(() => {
+          this.isSaving = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: updated => {
+          this.feedbackMessage = 'Place updated.';
+          this.router.navigate(['/places/detail', updated.id], {
+            queryParams: { regionId: updated.regionId },
+            state: { regionId: updated.regionId, feedbackMessage: 'Place updated.' },
+          });
+        },
+        error: error => this.handleActionError(error),
+      });
+  }
+
+  private buildCreatePayload(): RegionalPlaceCreateRequest | null {
+    if (this.isEditMode) {
+      this.errorMessage = 'Place editing is not available from this create form.';
+      return null;
+    }
+
     const regionId = this.activeRegionId;
     if (!regionId) {
       this.errorMessage = 'Select an assigned region before publishing.';
@@ -787,6 +879,16 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
+    if (!this.cardImageFile) {
+      this.errorMessage = 'Card image is required.';
+      return null;
+    }
+
+    if (!this.coverImageFile) {
+      this.errorMessage = 'Cover image is required.';
+      return null;
+    }
+
     const website = this.normalizeUrl(this.website, 'Website URL is invalid.');
     if (website === false) return null;
 
@@ -802,13 +904,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
 
     return {
-      ...(this.isEditMode ? {} : { regionId }),
+      regionId,
       locationId,
       placeTypeId,
       name,
       summary: normalizedSummary,
       description: descriptionHtml || null,
-      status: this.isEditMode ? this.placeStatus : 'Published',
+      status: 'Published',
       latitude: coordinates.latitude,
       longitude: coordinates.longitude,
       streetAddress: this.streetAddress.trim() || null,
@@ -823,70 +925,82 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
       tagIds: [...this.selectedTagIds],
+      cardImageFile: this.cardImageFile,
+      coverImageFile: this.coverImageFile,
+      galleryImageFiles: this.galleryImages.map(image => image.file),
     };
   }
 
-  private loadPlaceForEdit(regionId: number): void {
-    const placeId = this.editPlaceId;
-    if (!placeId) return;
-
-    this.detailLoading = true;
-    this.errorMessage = null;
-    this.notifyStateChanged();
-
-    this.detailSubscription?.unsubscribe();
-    this.detailSubscription = this.placesService
-      .getPlace(regionId, placeId)
-      .pipe(
-        finalize(() => {
-          this.detailLoading = false;
-          this.notifyStateChanged();
-        }),
-      )
-      .subscribe({
-        next: place => this.applyPlaceDetail(place),
-        error: error => this.handleLoadError(error, 'Unable to load place details.'),
-      });
-  }
-
-  private applyPlaceDetail(place: RegionalPlaceDetailDto): void {
-    this.placeName = place.name ?? '';
-    this.summary = place.summary ?? place.subtitle ?? '';
-    this.parentLocationId = place.locationId ?? null;
-    this.placeTypeId = place.placeTypeId ?? null;
-    this.bestTimeToVisit = place.bestTimeToVisit ?? '';
-    this.visitorTips = place.visitorTips ?? '';
-    this.accessNotes = place.accessNotes ?? '';
-    this.accessibilityNotes = place.accessibilityNotes ?? '';
-    this.website = place.website ?? '';
-    this.contactPhone = place.phoneNumber ?? '';
-    this.admissionPrice = place.admissionPriceRange ?? '';
-    this.bookingLink = place.bookingExternalLink ?? '';
-    this.streetAddress = place.address ?? '';
-    this.internalReferenceId = place.internalReferenceId ?? '';
-    this.placeStatus = this.normalizeEditableStatus(place.status);
-    this.opsEnabled = Boolean(place.operatingHoursEnabled);
-    this.applyOperatingHours(place.operatingHours ?? []);
-
-    this.pinLat = Number.isFinite(place.latitude) ? place.latitude.toFixed(6) : '';
-    this.pinLng = Number.isFinite(place.longitude) ? place.longitude.toFixed(6) : '';
-    this.modalPinLat = Number.isFinite(place.latitude) ? place.latitude : null;
-    this.modalPinLng = Number.isFinite(place.longitude) ? place.longitude : null;
-    this.pinConfirmed = Boolean(this.readPinnedCoordinates());
-    const coordinates = this.readPinnedCoordinates();
-    if (coordinates) {
-      this.updateMiniMapPin(coordinates.latitude, coordinates.longitude);
+  private buildUpdatePayload(): RegionalPlaceUpdateRequest | null {
+    const locationId = this.parentLocationId;
+    if (!locationId) {
+      this.errorMessage = 'Parent location is required.';
+      return null;
     }
 
-    this.selectedTagIds = new Set((place.tags ?? []).map(tag => tag.id));
-    (place.tags ?? []).forEach(tag => this.upsertPlaceTag(tag));
-    this.classItems = this.placeTags.map(tag => ({
-      tag,
-      checked: this.selectedTagIds.has(tag.id),
-    }));
-    this.applyEntityImages(place.images ?? [], place.imageUrl ?? null, place.name);
-    this.setDescriptionHtml(place.description ?? '');
-    this.notifyStateChanged();
+    const placeTypeId = this.placeTypeId;
+    if (!placeTypeId) {
+      this.errorMessage = 'Place type is required.';
+      return null;
+    }
+
+    const name = this.placeName.trim();
+    if (!name) {
+      this.errorMessage = 'Place name is required.';
+      return null;
+    }
+
+    const normalizedSummary = this.summary.trim();
+    if (!normalizedSummary) {
+      this.errorMessage = 'Summary is required.';
+      return null;
+    }
+    if (normalizedSummary.length > 160) {
+      this.errorMessage = 'Summary must be 160 characters or less.';
+      return null;
+    }
+
+    const coordinates = this.readPinnedCoordinates();
+    if (!coordinates || !this.pinConfirmed) {
+      this.errorMessage = 'Pin the place on the map before updating.';
+      return null;
+    }
+
+    const website = this.normalizeUrl(this.website, 'Website URL is invalid.');
+    if (website === false) return null;
+
+    const bookingLink = this.normalizeUrl(this.bookingLink, 'Booking / external link is invalid.');
+    if (bookingLink === false) return null;
+
+    const contactPhone = this.normalizePhone(this.contactPhone);
+    if (contactPhone === false) return null;
+
+    const operatingHours = this.buildOperatingHoursPayload();
+    if (!operatingHours) return null;
+
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+
+    return {
+      locationId,
+      placeTypeId,
+      name,
+      subtitle: normalizedSummary,
+      description: descriptionHtml || null,
+      address: this.streetAddress.trim() || null,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      bestTimeToVisit: this.bestTimeToVisit.trim() || null,
+      visitorTips: this.visitorTips.trim() || null,
+      accessNotes: this.accessNotes.trim() || null,
+      accessibilityNotes: this.accessibilityNotes.trim() || null,
+      website,
+      phoneNumber: contactPhone,
+      admissionPriceRange: this.admissionPrice.trim() || null,
+      bookingExternalLink: bookingLink,
+      operatingHoursEnabled: this.opsEnabled,
+      operatingHours,
+      tagIds: [...this.selectedTagIds],
+    };
   }
 
   private buildOperatingHoursPayload(): RegionalPlaceOperatingHourDto[] | null {
@@ -916,112 +1030,22 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private applyOperatingHours(hours: RegionalPlaceOperatingHourDto[]): void {
-    if (!hours.length) return;
-
-    this.days = this.days.map(day => {
-      const source = hours.find(hour => hour.dayOfWeek.toLowerCase() === day.name.toLowerCase());
-      if (!source) return day;
-
-      return {
-        name: day.name,
-        open: source.isOpen,
-        openTime: source.openTime ?? day.openTime,
-        closeTime: source.closeTime ?? day.closeTime,
-      };
-    });
-  }
-
-  private selectedImageFiles(): File[] {
-    const files: File[] = [];
-    if (this.coverImageFile) {
-      files.push(this.coverImageFile);
-    }
-
-    files.push(...this.galleryImages
-      .map(image => image.file)
-      .filter((file): file is File => !!file));
-    return files;
-  }
-
-  private shouldSendImages(files: File[]): boolean {
-    return !this.isEditMode || this.imagesTouched || files.length > 0;
-  }
-
-  private buildImageInputs(uploaded: RegionalImageUploadResult[]): RegionalEntityImageInput[] {
-    const images: RegionalEntityImageInput[] = [];
-    let uploadIndex = 0;
-    const fallbackName = this.placeName.trim() || 'Place image';
-
-    if (this.coverImageUrl) {
-      const uploadedCover = this.coverImageFile ? uploaded[uploadIndex++] : null;
-      images.push({
-        url: uploadedCover?.url ?? this.coverImageUrl,
-        altText: `${fallbackName} cover`,
-        caption: null,
-        isMain: true,
-        sortOrder: 0,
-      });
-    }
-
-    for (const image of this.galleryImages) {
-      const uploadedGalleryImage = image.file ? uploaded[uploadIndex++] : null;
-      images.push({
-        url: uploadedGalleryImage?.url ?? image.url,
-        altText: image.name || fallbackName,
-        caption: null,
-        isMain: false,
-        sortOrder: images.length,
-      });
-    }
-
-    return images.map((image, index) => ({
-      ...image,
-      isMain: index === 0,
-      sortOrder: index,
-    }));
-  }
-
-  private applyEntityImages(images: RegionalEntityImageDto[], fallbackImageUrl: string | null, fallbackName: string): void {
-    const orderedImages = [...images]
-      .sort((a, b) => Number(b.isMain) - Number(a.isMain) || a.sortOrder - b.sortOrder || a.id - b.id);
-
-    if (orderedImages.length === 0 && fallbackImageUrl) {
-      this.coverImageUrl = fallbackImageUrl;
-      this.coverImageName = fallbackName;
-      this.coverImageFile = null;
-      this.galleryImages = [];
-      this.imagesTouched = false;
+    if (!hours.length) {
       return;
     }
 
-    const [cover, ...gallery] = orderedImages;
-    this.coverImageUrl = cover?.url ?? null;
-    this.coverImageName = cover?.altText ?? fallbackName;
-    this.coverImageFile = null;
-    this.galleryImages = gallery.map(image => ({
-      url: image.url,
-      name: image.altText ?? fallbackName,
-    }));
-    this.imagesTouched = false;
-  }
+    const byDay = new Map(hours.map(hour => [hour.dayOfWeek.toLowerCase(), hour]));
+    this.days = this.days.map(day => {
+      const incoming = byDay.get(day.name.toLowerCase());
+      if (!incoming) return day;
 
-  private setDescriptionHtml(html: string): void {
-    this.pendingDescriptionHtml = html;
-    this.applyPendingDescription();
-  }
-
-  private applyPendingDescription(): void {
-    if (this.pendingDescriptionHtml === null || !this.editorRef?.nativeElement) return;
-    this.editorRef.nativeElement.innerHTML = this.pendingDescriptionHtml;
-    this.pendingDescriptionHtml = null;
-    this.syncEmptyState();
-  }
-
-  private normalizeEditableStatus(value?: string | null): 'Published' | 'Draft' | 'Archived' {
-    const normalized = (value ?? '').toLowerCase();
-    if (normalized === 'draft') return 'Draft';
-    if (normalized === 'archived') return 'Archived';
-    return 'Published';
+      return {
+        ...day,
+        open: incoming.isOpen,
+        openTime: incoming.openTime ?? day.openTime,
+        closeTime: incoming.closeTime ?? day.closeTime,
+      };
+    });
   }
 
   private initMiniMap(): void {
@@ -1501,12 +1525,12 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private handleActionError(error: unknown): void {
     if (error instanceof HttpErrorResponse) {
-      this.errorMessage = error.error?.message ?? 'Unable to publish place.';
+      this.errorMessage = error.error?.message ?? (this.isEditMode ? 'Unable to update place.' : 'Unable to publish place.');
       this.notifyStateChanged();
       return;
     }
 
-    this.errorMessage = 'Unable to publish place.';
+    this.errorMessage = this.isEditMode ? 'Unable to update place.' : 'Unable to publish place.';
     this.notifyStateChanged();
   }
 

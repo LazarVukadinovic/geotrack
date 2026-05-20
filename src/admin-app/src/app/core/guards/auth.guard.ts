@@ -18,6 +18,25 @@ export const authGuard: CanActivateFn = (_route, state) => {
   );
 };
 
+//ADMINISTRATOR GUARD
+export const administratorGuard: CanActivateFn = (_route, state) => {
+  const auth   = inject(AuthService);
+  const router = inject(Router);
+
+  if (auth.isAdministrator() && auth.hasValidAccessToken()) return true;
+  if (auth.getUser() && !auth.hasValidAccessToken()) {
+    auth.clearSession();
+    return loginTree(router, state, true);
+  }
+
+  return auth.restoreSession().pipe(
+    map(user => {
+      if (!user) return loginTree(router, state);
+      return auth.isAdministrator() ? true : router.parseUrl(auth.getHomeRoute());
+    }),
+  );
+};
+
 export const territoryManagerGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);
@@ -35,6 +54,8 @@ export const territoryManagerGuard: CanActivateFn = (_route, state) => {
     }),
   );
 };
+
+export const nationalManagerGuard = territoryManagerGuard;
 
 //REGIONAL MANAGER GUARD
  

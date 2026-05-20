@@ -26,6 +26,12 @@ public interface IRegionalPlaceService
         int placeId,
         RegionalPlaceUpdateRequestDto request);
 
+    Task<RegionalPlaceDetailDto> AddOwnerAsync(
+        int userId,
+        int regionId,
+        int placeId,
+        RegionalPlaceAddOwnerRequestDto request);
+
     Task DeletePlaceAsync(int userId, int regionId, int placeId);
 
     Task<List<RegionalPlaceParentLocationDto>> GetParentLocationsAsync(

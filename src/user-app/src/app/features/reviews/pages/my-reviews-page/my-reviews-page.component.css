@@ -1,0 +1,11 @@
+.my-reviews-page__subtitle {
+  display: block;
+  margin-top: 2px;
+}
+
+.my-review-card__body-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

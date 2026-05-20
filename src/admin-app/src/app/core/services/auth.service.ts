@@ -36,8 +36,10 @@ export class AuthService {
 
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
+  readonly isAdministrator = computed(() => this._currentUser()?.role === 'Administrator');
   readonly isTerritoryManager = computed(() => this._currentUser()?.role === 'Territory Manager');
   readonly isTerritoryAssociate = computed(() => this._currentUser()?.role === 'Territory Associate');
+  readonly isNationalManager = computed(() => this._currentUser()?.role === 'Territory Manager');
   readonly canAccessTerritoryAdmin = computed(() =>
     this._currentUser()?.role === 'Territory Manager' ||
     this._currentUser()?.role === 'Territory Associate');
@@ -143,6 +145,8 @@ export class AuthService {
   getHomeRoute(): string {
     const role: UserRole | undefined = this._currentUser()?.role;
     switch (role) {
+      case 'Administrator':
+        return '/admin-dashboard';
       case 'Territory Manager':
       case 'Territory Associate':
         return '/territory/overview';
@@ -193,6 +197,10 @@ export class AuthService {
   }
 
   private resolveAdminRole(roles: string[]): UserRole {
+    if (roles.some(role => ['admin', 'administrator', 'superadmin', 'sysadmin'].includes(this.normalizeRole(role)))) {
+      return 'Administrator';
+    }
+
     if (roles.some(role => ['territorymanager', 'nationalmanager'].includes(this.normalizeRole(role)))) {
       return 'Territory Manager';
     }

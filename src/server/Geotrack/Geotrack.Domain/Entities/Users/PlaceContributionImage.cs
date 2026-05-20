@@ -1,4 +1,6 @@
-﻿namespace Geotrack.Domain.Entities.Users;
+﻿using Geotrack.Domain.Entities.Core;
+
+namespace Geotrack.Domain.Entities.Users;
 
 public class PlaceContributionImage
 {
@@ -13,6 +15,8 @@ public class PlaceContributionImage
     public string? Caption { get; set; }
 
     public bool IsMain { get; set; }
+
+    public string ImageRole { get; set; } = EntityImageRole.Gallery;
     public int SortOrder { get; set; }
 
     public string ImagePosition { get; set; } = "50% 50%";

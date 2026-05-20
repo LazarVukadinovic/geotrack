@@ -137,7 +137,7 @@ export class EventsListService {
   }
 
   createEvent(payload: RegionalEventCreateRequest): Observable<RegionalEventDetailDto> {
-    return this.http.post<RegionalEventDetailDto>(this.endpoint, payload);
+    return this.http.post<RegionalEventDetailDto>(this.endpoint, this.buildCreateFormData(payload));
   }
 
   updateEvent(
@@ -196,6 +196,25 @@ export class EventsListService {
 
   getEventTypes(): Observable<RegionalEventTypeDto[]> {
     return this.http.get<RegionalEventTypeDto[]>('/api/admin/regional/event-types');
+  }
+
+
+  private buildCreateFormData(payload: RegionalEventCreateRequest): FormData {
+    const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
+    if (!cardImageFile || !coverImageFile) {
+      throw new Error('Card and cover images are required.');
+    }
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+    formData.append('cardImage', cardImageFile);
+    formData.append('coverImage', coverImageFile);
+
+    for (const file of galleryImageFiles ?? []) {
+      formData.append('galleryImages', file);
+    }
+
+    return formData;
   }
 
   toListItem(dto: RegionalEventListItemDto): EventListItem {

@@ -1,6 +1,5 @@
 import { Component, computed, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
-import { Location } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { Observable, throwError } from 'rxjs';
@@ -12,7 +11,7 @@ import { ReviewEntryComponent } from '../../../../shared/components/review-entry
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { HttpClient } from '@angular/common/http';
 import { HotelDetailService } from '../../services/hotel-detail.service';
-import { ReviewsService } from '../../../reviews/services/reviews.service';
+import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { HotelAmenityIcon, HotelBookingPartner, HotelDetail } from '../../models/hotel-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
@@ -20,21 +19,21 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
 @Component({
   selector: 'app-hotel-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink],
+  providers: [ReviewInteractionsService],
   templateUrl: './hotel-detail-page.component.html',
   styleUrl: './hotel-detail-page.component.scss',
 })
 export class HotelDetailPageComponent {
   private readonly route    = inject(ActivatedRoute);
   private readonly router   = inject(Router);
-  private readonly location = inject(Location);
   private readonly service  = inject(HotelDetailService);
   private readonly auth     = inject(AuthService);
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly http     = inject(HttpClient);
-  private readonly reviewsService = inject(ReviewsService);
 
+  protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
   protected readonly hotelId = toSignal(
@@ -51,11 +50,14 @@ export class HotelDetailPageComponent {
 
   protected readonly scrollProgress = signal(0);
   protected readonly selectedImageUrl = signal<string | null>(null);
+  protected readonly ownershipClaimOpen = signal(false);
+  protected readonly ownershipProofFile = signal<File | null>(null);
+  protected readonly ownershipProofFileName = signal('');
+  protected readonly ownershipClaimError = signal('');
+  protected readonly ownershipClaimMessage = signal('');
+  protected readonly ownershipClaimSubmitting = signal(false);
+  protected readonly ownershipClaimSubmitted = signal(false);
   protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.hotel()?.heroImage ?? '');
-  protected readonly reportMessage = signal('');
-  protected readonly reportError = signal('');
-  private readonly reportedReviewIds = signal<Record<string, boolean>>({});
-  private readonly reportingReviewIds = signal<Record<string, boolean>>({});
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.hotel()?.latitude ?? null,
@@ -88,6 +90,18 @@ export class HotelDetailPageComponent {
   private readonly hdScroll = viewChild<ElementRef<HTMLElement>>('hdScroll');
 
   constructor() {
+    this.ri.configure({
+      targetType: 'place',
+      onEditSuccess: () => {
+        const id = this.hotelId();
+        if (id) this.service.loadHotelDetail(id);
+      },
+      onDeleteSuccess: () => {
+        const id = this.hotelId();
+        if (id) this.service.loadHotelDetail(id);
+      },
+    });
+
     effect(() => {
       this.hotelId();
       this.scrollProgress.set(0);
@@ -109,7 +123,7 @@ export class HotelDetailPageComponent {
   }
 
   protected goBack(): void {
-    this.location.back();
+    globalThis.history.back();
   }
 
   protected goToLogin(): void {
@@ -133,6 +147,92 @@ export class HotelDetailPageComponent {
     return (this.selectedImageUrl() ?? this.hotel()?.heroImage ?? '') === url;
   }
 
+  protected openOwnershipClaim(): void {
+    if (!this.isLoggedIn()) {
+      this.goToLogin();
+      return;
+    }
+
+    this.ownershipClaimError.set('');
+    this.ownershipClaimMessage.set('');
+    this.ownershipProofFile.set(null);
+    this.ownershipProofFileName.set('');
+    this.ownershipClaimOpen.set(true);
+  }
+
+  protected closeOwnershipClaim(): void {
+    if (this.ownershipClaimSubmitting()) return;
+    this.ownershipClaimOpen.set(false);
+  }
+
+  protected onOwnershipProofSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    this.ownershipClaimError.set('');
+
+    if (!file) return;
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      this.ownershipClaimError.set('Upload a PDF document.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      this.ownershipClaimError.set('Document must be 10 MB or smaller.');
+      return;
+    }
+
+    this.ownershipProofFile.set(file);
+    this.ownershipProofFileName.set(file.name);
+  }
+
+  protected submitOwnershipClaim(): void {
+    const hotel = this.hotel();
+    const file = this.ownershipProofFile();
+    if (!hotel || this.ownershipClaimSubmitting()) return;
+
+    if (!file) {
+      this.ownershipClaimError.set('Ownership proof document is required.');
+      return;
+    }
+
+    const numericPlaceId = parseInt(hotel.id, 10);
+    if (isNaN(numericPlaceId)) {
+      this.ownershipClaimError.set('Invalid stay.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify({
+      type: 'ClaimOwnership',
+      placeId: numericPlaceId,
+      placeType: 'Stay',
+      placeTypeId: null,
+      name: hotel.title,
+      description: hotel.about ?? '',
+    }));
+    formData.append('ownershipProofDocument', file);
+
+    this.ownershipClaimSubmitting.set(true);
+    this.ownershipClaimError.set('');
+    this.ownershipClaimMessage.set('');
+
+    this.http.post('/api/contributions/stays', formData).subscribe({
+      next: () => {
+        this.ownershipClaimSubmitting.set(false);
+        this.ownershipClaimSubmitted.set(true);
+        this.ownershipClaimOpen.set(false);
+        this.ownershipClaimMessage.set('Ownership request submitted. A regional manager will review it.');
+      },
+      error: (err) => {
+        this.ownershipClaimSubmitting.set(false);
+        this.ownershipClaimError.set(err?.error?.message || 'Could not submit ownership request.');
+      },
+    });
+  }
+
   protected openReviews(): void {
     const hotel = this.hotel();
     if (!hotel) return;
@@ -150,9 +250,7 @@ export class HotelDetailPageComponent {
     const mapFocus = this.buildMapFocus(hotel);
     if (!mapFocus) return;
 
-    void this.router.navigate(['/map'], {
-      state: { mapFocus },
-    });
+    void this.router.navigate(['/map'], { state: { mapFocus } });
   }
 
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
@@ -172,43 +270,6 @@ export class HotelDetailPageComponent {
       this.analytics.track('review_created', { entityType: 'hotel', entityId: numId });
     }
     this.service.loadHotelDetail(id);
-  }
-
-  protected isReviewReported(review: { id: string; reportedByCurrentUser: boolean }): boolean {
-    return review.reportedByCurrentUser || !!this.reportedReviewIds()[review.id];
-  }
-
-  protected isReviewReporting(reviewId: string): boolean {
-    return !!this.reportingReviewIds()[reviewId];
-  }
-
-  protected reportReview(reviewId: string): void {
-    if (!this.isLoggedIn()) {
-      this.reportMessage.set('');
-      this.reportError.set('Log in to report a review.');
-      return;
-    }
-
-    const numericReviewId = parseInt(reviewId, 10);
-    if (isNaN(numericReviewId) || this.isReviewReporting(reviewId)) return;
-
-    this.reportMessage.set('');
-    this.reportError.set('');
-    this.setReviewReporting(reviewId, true);
-
-    this.reviewsService.reportReview('place', numericReviewId).subscribe({
-      next: (response) => {
-        this.setReviewReporting(reviewId, false);
-        this.markReviewReported(reviewId);
-        this.reportMessage.set(response.alreadyReported
-          ? 'You have already reported this review.'
-          : 'Thanks. A regional manager will review this report.');
-      },
-      error: (err) => {
-        this.setReviewReporting(reviewId, false);
-        this.reportError.set(err?.error?.message || 'Could not report this review. Please try again.');
-      },
-    });
   }
 
   protected onDirectionsClick(): void {
@@ -284,21 +345,5 @@ export class HotelDetailPageComponent {
       distance: hotel.distance || null,
       isSaved: hotel.isSaved,
     };
-  }
-
-  private markReviewReported(reviewId: string): void {
-    this.reportedReviewIds.update(current => ({ ...current, [reviewId]: true }));
-  }
-
-  private setReviewReporting(reviewId: string, isReporting: boolean): void {
-    this.reportingReviewIds.update(current => {
-      const next = { ...current };
-      if (isReporting) {
-        next[reviewId] = true;
-      } else {
-        delete next[reviewId];
-      }
-      return next;
-    });
   }
 }

@@ -1,3 +1,4 @@
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.DTOs.GeoTrackTools;
 using Geotrack.Application.Interfaces.Service;
@@ -72,7 +73,7 @@ public class GeoTrackToolService : IGeoTrackToolService
                 Category = place.PlaceType.Name,
                 DetailRoute = "/places/" + place.Id,
                 ImageUrl = place.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -114,7 +115,7 @@ public class GeoTrackToolService : IGeoTrackToolService
                 Category = place.PlaceType.Name,
                 DetailRoute = "/places/" + place.Id,
                 ImageUrl = place.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -182,7 +183,7 @@ public class GeoTrackToolService : IGeoTrackToolService
                 Category = place.Stay != null ? place.Stay.StayType.Name : "Stay",
                 DetailRoute = "/stays/" + place.Id,
                 ImageUrl = place.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -224,7 +225,7 @@ public class GeoTrackToolService : IGeoTrackToolService
                 Category = place.Stay != null ? place.Stay.StayType.Name : "Stay",
                 DetailRoute = "/stays/" + place.Id,
                 ImageUrl = place.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -293,7 +294,7 @@ public class GeoTrackToolService : IGeoTrackToolService
                 Category = evt.EventType.Name,
                 DetailRoute = "/events/" + evt.Id,
                 ImageUrl = evt.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -339,7 +340,7 @@ public class GeoTrackToolService : IGeoTrackToolService
                 Category = evt.EventType.Name,
                 DetailRoute = "/events/" + evt.Id,
                 ImageUrl = evt.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)

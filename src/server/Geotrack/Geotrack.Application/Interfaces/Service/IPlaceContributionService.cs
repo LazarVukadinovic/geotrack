@@ -8,12 +8,14 @@ public interface IPlaceContributionService
     Task<PlaceContributionDetailDto?> GetByIdForUserAsync(int userId, int contributionId);
     Task<GetPlaceContributionsResponseDto> GetPendingReviewAsync(int? reviewerUserId = null);
     Task<PlaceContributionDetailDto?> GetPendingReviewByIdAsync(int contributionId, int? reviewerUserId = null);
+    Task<List<ContributionPlaceTypeDto>> GetPlaceTypesAsync();
 
     Task<PlaceContributionDetailDto> CreateAsync(
         int userId,
         UpsertPlaceContributionDto request,
-        byte[]? mainImageBytes,
+        byte[]? cardImageBytes,
         byte[]? coverImageBytes,
+        IReadOnlyList<byte[]>? galleryImageBytes,
         byte[]? ownershipProofBytes,
         string? ownershipProofOriginalFileName,
         string? ownershipProofContentType);
@@ -22,8 +24,9 @@ public interface IPlaceContributionService
         int userId,
         int contributionId,
         UpsertPlaceContributionDto request,
-        byte[]? mainImageBytes,
+        byte[]? cardImageBytes,
         byte[]? coverImageBytes,
+        IReadOnlyList<byte[]>? galleryImageBytes,
         byte[]? ownershipProofBytes,
         string? ownershipProofOriginalFileName,
         string? ownershipProofContentType);

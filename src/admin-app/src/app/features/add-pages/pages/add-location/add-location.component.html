@@ -44,7 +44,6 @@
                   class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none disabled:bg-gray-100 disabled:text-gray-400"
                   style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
                   [(ngModel)]="parentDestinationId"
-                  (ngModelChange)="onParentDestinationChanged()"
                   [disabled]="!activeRegionId || parentDestinationsLoading || parentDestinations.length === 0"
                 >
                   <option [ngValue]="null">
@@ -56,9 +55,6 @@
                 </select>
                 @if (!parentDestinationsLoading && activeRegionId && parentDestinations.length === 0) {
                   <p class="text-[11px] text-amber-600 mt-1">Create a destination in this region before publishing a location.</p>
-                }
-                @if (parentDestinationId && !selectedParentDestinationZone) {
-                  <p class="text-[11px] text-red-600 mt-1">Select a parent destination with a defined boundary before drawing this location.</p>
                 }
               </div>
               <div>
@@ -94,7 +90,7 @@
               <input
                 class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-400 bg-gray-100 outline-none"
                 style="max-width: 320px; width: 100%;"
-                [value]="internalReferenceId || 'Generated automatically after publish'"
+                value="Generated automatically after publish"
                 readonly
               />
             </div>
@@ -167,10 +163,63 @@
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
             <div class="flex items-center justify-between mb-3">
               <div>
-                <h3 class="text-sm font-bold text-gray-900 mb-0.5">Hero Media</h3>
-                <p class="text-xs text-gray-500">Main cover image and optional gallery</p>
+                <h3 class="text-sm font-bold text-gray-900 mb-0.5">Media</h3>
+                <p class="text-xs text-gray-500">Required card + cover image and optional gallery</p>
               </div>
             </div>
+
+
+            <p class="text-xs font-semibold text-gray-600 mb-2">
+              Card Image <span class="text-red-500">*</span>
+              <span class="text-gray-400 font-normal">Small thumbnail/card image</span>
+            </p>
+
+            @if (!cardImageUrl) {
+              <label
+                class="border-2 border-dashed border-gray-300 rounded-xl py-6 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors mb-4"
+                for="cardImageInput"
+              >
+                <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                </div>
+                <span>Click to upload Card Image</span>
+                <span class="text-xs text-gray-400">PNG, JPG, WEBP - smaller thumbnail</span>
+              </label>
+            }
+
+            @if (cardImageUrl) {
+              <div class="relative rounded-xl overflow-hidden group mb-2" style="height: 150px; max-width: 360px;">
+                <img
+                  [src]="cardImageUrl"
+                  alt="Card preview"
+                  class="w-full h-full object-cover rounded-xl cursor-zoom-in"
+                  (click)="openLightbox([{ url: cardImageUrl!, name: cardImageName }], 0)"
+                />
+                <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 pointer-events-none">
+                  <label for="cardImageInput"
+                         class="bg-white text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 pointer-events-auto">
+                    Replace
+                  </label>
+                  <button type="button" (click)="removeCardImage()"
+                          class="bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto">
+                    Remove
+                  </button>
+                </div>
+              </div>
+              <p class="text-xs text-gray-400 mt-2 mb-4">{{ cardImageName }}</p>
+            }
+
+            <input id="cardImageInput" type="file" accept=".png,.jpg,.jpeg,.webp" class="hidden"
+                   (change)="onCardImageSelected($event)" />
+
+            <div class="border-t border-gray-100 my-4"></div>
+
+            <p class="text-xs font-semibold text-gray-600 mb-2">
+              Cover Image <span class="text-red-500">*</span>
+              <span class="text-gray-400 font-normal">Large hero image</span>
+            </p>
 
             @if (!coverImageUrl) {
               <label
@@ -275,68 +324,49 @@
 
         <div class="w-90 min-w-[350px]">
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
-            <h4 class="text-sm font-bold text-gray-900 mb-3">{{ isEditMode ? 'Save Changes' : 'Publishing' }}</h4>
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Publishing</h4>
             <button type="button" (click)="publish()"
                     [disabled]="!canPublish"
                     class="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-lg py-2 border-none cursor-pointer transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
-              {{ isSaving ? (isEditMode ? 'Saving...' : 'Publishing...') : (isEditMode ? 'Save Changes' : 'Publish') }}
+              {{ isSaving ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update' : 'Publish') }}
             </button>
           </div>
 
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
             <div class="flex items-center justify-between mb-2">
-              <h4 class="text-sm font-bold text-gray-900">Geographic Context</h4>
+              <h4 class="text-sm font-bold text-gray-900">Geographic Center</h4>
               <button type="button" (click)="openZoneModal()"
-                      [disabled]="!parentDestinationId || !selectedParentDestinationZone"
-                      class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2 py-1 cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed">
-                Draw zone
+                      class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2 py-1 cursor-pointer">
+                Set center
               </button>
             </div>
             <p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3">
-              <strong>Note:</strong> A Location represents a broader geographical area or zone, not a single business pin.
+              <strong>Note:</strong> Choose the Location center point on the map. Polygon drawing is no longer used.
             </p>
 
             <div
               class="relative rounded-lg overflow-hidden mb-2 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
               style="height: 200px;"
               (click)="openZoneModal()"
-              title="Click to draw zone"
+              title="Click to set center"
             >
               <div #miniMapContainer class="w-full h-full"></div>
               @if (!zoneConfirmed) {
                 <div class="absolute inset-0 flex items-center justify-center bg-blue-50/60">
                   <span class="text-xs text-blue-600 font-medium bg-white/80 px-2 py-1 rounded-md">
-                    {{ selectedParentDestinationZone ? 'Click to draw zone' : 'Select a bounded destination' }}
+                    Click to set center
                   </span>
                 </div>
               }
             </div>
 
-            @if (zoneValidationMessage) {
-              <div class="bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
-                <p class="text-xs text-red-700">{{ zoneValidationMessage }}</p>
-              </div>
-            }
-
-            @if (zoneConfirmed && zoneAreaKm2 !== null) {
+            @if (zoneConfirmed && centerLat !== null && centerLng !== null) {
               <div class="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3">
                 <p class="text-xs text-blue-700">
-                  Area: <strong>{{ zoneAreaKm2 | number:'1.2-2' }} km2</strong>
+                  Center: <strong>{{ $any(centerLat).toFixed(5) }}, {{ $any(centerLng).toFixed(5) }}</strong>
                 </p>
               </div>
             }
-
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">
-                Boundary / Area Note <span class="text-gray-400 font-normal">(Optional)</span>
-              </label>
-              <textarea
-                class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 resize-y outline-none font-sans focus:border-blue-500"
-                placeholder="Describe boundaries..."
-                rows="2"
-                [(ngModel)]="boundaryNote"
-              ></textarea>
-            </div>
           </div>
 
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
@@ -449,7 +479,7 @@
        (click)="$event.stopPropagation()">
 
     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-      <h4 class="text-sm font-bold text-gray-900">Mark Geographic Zone</h4>
+      <h4 class="text-sm font-bold text-gray-900">Set Location Center</h4>
       <button type="button" (click)="closeZoneModal()"
               class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">
         &times;
@@ -457,25 +487,7 @@
     </div>
 
     <div class="flex items-center gap-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
-      <span class="text-xs text-gray-500 font-medium mr-1">Tool:</span>
-      <button type="button"
-        class="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors cursor-pointer"
-        [class.bg-blue-600]="drawTool === 'polygon'" [class.text-white]="drawTool === 'polygon'"
-        [class.border-blue-600]="drawTool === 'polygon'" [class.bg-white]="drawTool !== 'polygon'"
-        [class.text-gray-700]="drawTool !== 'polygon'" [class.border-gray-300]="drawTool !== 'polygon'"
-        (click)="setDrawTool('polygon')">Polygon</button>
-      <button type="button"
-        class="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors cursor-pointer"
-        [class.bg-blue-600]="drawTool === 'rectangle'" [class.text-white]="drawTool === 'rectangle'"
-        [class.border-blue-600]="drawTool === 'rectangle'" [class.bg-white]="drawTool !== 'rectangle'"
-        [class.text-gray-700]="drawTool !== 'rectangle'" [class.border-gray-300]="drawTool !== 'rectangle'"
-        (click)="setDrawTool('rectangle')">Rectangle</button>
-      <button type="button"
-        class="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors cursor-pointer"
-        [class.bg-blue-600]="drawTool === 'circle'" [class.text-white]="drawTool === 'circle'"
-        [class.border-blue-600]="drawTool === 'circle'" [class.bg-white]="drawTool !== 'circle'"
-        [class.text-gray-700]="drawTool !== 'circle'" [class.border-gray-300]="drawTool !== 'circle'"
-        (click)="setDrawTool('circle')">Circle</button>
+      <p class="text-xs text-gray-500">Click the map to place the location center point. No polygon is drawn.</p>
       <button type="button" (click)="clearZone()"
               class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 cursor-pointer ml-auto">
         Clear
@@ -485,9 +497,10 @@
     <div #modalMapContainer style="height: 420px; width: 100%;"></div>
 
     <div class="px-5 py-2 bg-gray-50 border-t border-gray-100">
-      <p class="text-xs text-gray-500">{{ drawHint }}</p>
-      @if (zoneValidationMessage) {
-        <p class="text-xs text-red-600 mt-1">{{ zoneValidationMessage }}</p>
+      @if (centerLat !== null && centerLng !== null) {
+        <p class="text-xs text-gray-500">Selected center: {{ $any(centerLat).toFixed(5) }}, {{ $any(centerLng).toFixed(5) }}</p>
+      } @else {
+        <p class="text-xs text-gray-500">No center selected yet.</p>
       }
     </div>
 
@@ -497,9 +510,8 @@
         Cancel
       </button>
       <button type="button" (click)="confirmZone()"
-              [disabled]="!!zoneValidationMessage"
-              class="text-sm text-white font-semibold px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer disabled:bg-gray-300 disabled:cursor-not-allowed">
-        Confirm Zone
+              class="text-sm text-white font-semibold px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer">
+        Confirm Center
       </button>
     </div>
   </div>

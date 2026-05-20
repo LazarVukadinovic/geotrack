@@ -1,7 +1,9 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked, NgZone, OnDestroy } from '@angular/core';
 import { finalize, map, switchMap } from 'rxjs';
 import { SaveToCollectionService, SaveToCollectionTarget } from '../../../core/services/save-to-collection.service';
 import { Collection, CollectionPlace, CollectionsService } from '../../../features/profile/services/collections';
+
+const DISMISS_THRESHOLD = 120;
 
 @Component({
   selector: 'app-save-to-collection-sheet',
@@ -9,9 +11,10 @@ import { Collection, CollectionPlace, CollectionsService } from '../../../featur
   templateUrl: './save-to-collection-sheet.component.html',
   styleUrl: './save-to-collection-sheet.component.scss',
 })
-export class SaveToCollectionSheetComponent {
+export class SaveToCollectionSheetComponent implements OnDestroy {
   private readonly flow = inject(SaveToCollectionService);
   private readonly collectionsService = inject(CollectionsService);
+  private readonly ngZone = inject(NgZone);
 
   protected readonly target = this.flow.target;
   protected readonly collections = this.collectionsService.collections;
@@ -23,6 +26,12 @@ export class SaveToCollectionSheetComponent {
   protected readonly busyCollectionId = signal<number | null>(null);
   protected readonly feedback = signal('');
   protected readonly error = signal('');
+
+  protected readonly dragOffset = signal(0);
+  protected readonly isDragging = signal(false);
+  private touchStartY = 0;
+  private readonly boundMove = this.onDocTouchMove.bind(this);
+  private readonly boundEnd  = this.onDocTouchEnd.bind(this);
 
   private hydratedKey = '';
 
@@ -77,9 +86,47 @@ export class SaveToCollectionSheetComponent {
     });
   }
 
+  ngOnDestroy(): void {
+    this.detachDocListeners();
+  }
+
   protected close(): void {
     if (this.isBusy()) return;
     this.flow.close();
+  }
+
+  protected onSheetTouchStart(e: TouchEvent): void {
+    this.touchStartY = e.touches[0].clientY;
+    this.isDragging.set(true);
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('touchmove', this.boundMove, { passive: false });
+      document.addEventListener('touchend',  this.boundEnd,  { passive: false });
+    });
+  }
+
+  private onDocTouchMove(e: TouchEvent): void {
+    const delta = e.touches[0].clientY - this.touchStartY;
+    if (delta <= 0) return;
+    e.preventDefault();
+    this.ngZone.run(() => this.dragOffset.set(delta));
+  }
+
+  private onDocTouchEnd(): void {
+    this.detachDocListeners();
+    this.ngZone.run(() => {
+      this.isDragging.set(false);
+      if (this.dragOffset() >= DISMISS_THRESHOLD) {
+        this.dragOffset.set(0);
+        if (!this.isBusy()) this.flow.close();
+      } else {
+        this.dragOffset.set(0);
+      }
+    });
+  }
+
+  private detachDocListeners(): void {
+    document.removeEventListener('touchmove', this.boundMove);
+    document.removeEventListener('touchend',  this.boundEnd);
   }
 
   protected startCreate(): void {

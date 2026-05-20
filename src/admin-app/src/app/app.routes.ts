@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, regionalManagerGuard, territoryManagerGuard } from './core/guards/auth.guard';
+import { authGuard, administratorGuard, regionalManagerGuard, territoryManagerGuard } from './core/guards/auth.guard';
 export const routes: Routes = [
   // Redirect root → login
   { path: '', redirectTo: 'login', pathMatch: 'full' },
@@ -18,6 +18,37 @@ export const routes: Routes = [
       import('./core/layout/app-shell/app-shell.component').then(m => m.AppShellComponent),
     canActivate:[authGuard],
     children: [
+      // ── Administrator routes ───────────────────────────────────────────
+      {
+        path: 'admin-dashboard',
+        canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/admin-dashboard/admin-dashboard.component')
+            .then(m => m.AdminDashboardComponent),
+      },
+      {
+        path: 'admin-territories',
+        canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/territory-management/territory-management.component')
+            .then(m => m.TerritoryManagementComponent),
+      },
+      {
+        path: 'admin-users',
+        canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/user-management/user-management.component')
+            .then(m => m.UserManagementComponent),
+      },
+      {
+        path: 'admin-reviews',
+        canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/review-management/review-management.component')
+            .then(m => m.ReviewManagementComponent),
+      },
+
+      // ── Regional Manager routes ────────────────────────────────────────
       {
         path: 'dashboard',
         canActivate: [regionalManagerGuard],
@@ -115,12 +146,6 @@ export const routes: Routes = [
           import('./features/add-pages/pages/add-event/add-event.component').then(m => m.NewEventComponent),
       },
       {
-        path: 'events/edit/:id',
-        canActivate: [regionalManagerGuard],
-        loadComponent: () =>
-          import('./features/add-pages/pages/add-event/add-event.component').then(m => m.NewEventComponent),
-      },
-      {
         path: 'requests',
         canActivate: [regionalManagerGuard],
         loadComponent: () =>
@@ -191,6 +216,11 @@ export const routes: Routes = [
         path: 'territory/regions/:id',
         canActivate:[territoryManagerGuard],
         loadComponent: () => import('./features/regions/pages/region-detail/region-detail/region-detail.component').then(m=>m.RegionDetailComponent),
+      },
+      {
+        path: 'territories/:id',
+        canActivate:[administratorGuard],
+        loadComponent: () => import('./features/territories/pages/territory-detail/territory-detail.component').then(m=>m.TerritoryDetailComponent),
       },
       {
         path: 'territory/users',

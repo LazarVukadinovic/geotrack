@@ -16,7 +16,7 @@
     </div>
     @if (currentStep() < 5) {
       <p class="submit-contribution__progress text-white/50 text-xs text-center absolute left-0 right-0 bottom-2">
-        Step {{ currentStep() }} of 4
+        Step {{ visibleStepNumber() }} of {{ totalVisibleSteps() }}
       </p>
     }
   </div>
@@ -25,15 +25,15 @@
   <div class="submit-contribution__body flex-1 min-h-0 overflow-y-auto flex flex-col">
     @if (currentStep() < 5) {
       <ol class="submit-contribution__step-indicator" aria-label="Contribution progress">
-        @for (step of desktopSteps; track step.number) {
+        @for (step of desktopSteps(); track step.number) {
           <li
             class="submit-contribution__step"
-            [class.submit-contribution__step--active]="currentStep() === step.number"
-            [class.submit-contribution__step--completed]="currentStep() > step.number"
+            [class.submit-contribution__step--active]="currentStep() === step.actualStep"
+            [class.submit-contribution__step--completed]="visibleStepNumber() > step.number"
           >
             <span
               class="submit-contribution__step-circle"
-              [attr.aria-current]="currentStep() === step.number ? 'step' : null"
+              [attr.aria-current]="currentStep() === step.actualStep ? 'step' : null"
             >
               {{ step.number }}
             </span>

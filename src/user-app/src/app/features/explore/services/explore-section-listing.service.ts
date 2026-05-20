@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { FavoriteEntityType, FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import type { ExploreSectionItem } from '../models/explore-extras.model';
-import type { ExploreSectionListingResponse } from '../models/explore-section-listing.model';
+import type { ExploreSectionFilterGroup, ExploreSectionListingResponse } from '../models/explore-section-listing.model';
 
 const FIRST_PAGE_SIZE = 20;
 const NEXT_PAGE_SIZE = 20;
@@ -28,6 +28,23 @@ interface ApiExploreSectionListingResponse {
   hasMore: boolean;
   totalCount: number;
   emptyReason?: string;
+  filters?: ApiExploreSectionFilterGroup[];
+}
+
+interface ApiExploreSectionFilterGroup {
+  tagTypeId: number;
+  name: string;
+  slug: string;
+  label: string;
+  order: number;
+  options: ApiExploreSectionFilterOption[];
+}
+
+interface ApiExploreSectionFilterOption {
+  tagId: number;
+  name: string;
+  slug: string;
+  count: number;
 }
 
 interface ApiExploreSectionItem {
@@ -38,12 +55,14 @@ interface ApiExploreSectionItem {
   subtitle?: string;
   description?: string;
   categoryLabel?: string;
+  locationName?: string;
   image?: string;
   rating?: number;
   reviewCount?: string;
   distance?: string;
   dateLabel?: string;
   openingHours?: string;
+  statusBadge?: { label?: string; tone?: string };
   pricePerNight?: number;
   isSaved?: boolean;
   tags?: { tagId: number; name: string; slug: string }[];
@@ -63,6 +82,8 @@ export class ExploreSectionListingService {
   private readonly _loadMoreError = signal<string | null>(null);
   private readonly _hasMore = signal(false);
   private readonly _nextSkip = signal(0);
+  private readonly _filters = signal<ExploreSectionFilterGroup[]>([]);
+  private readonly _selectedTagIds = signal<number[]>([]);
 
   private currentSectionKey: string | null = null;
   private currentDestinationId: number | null = null;
@@ -78,6 +99,9 @@ export class ExploreSectionListingService {
   readonly loadError = computed(() => this._loadError());
   readonly loadMoreError = computed(() => this._loadMoreError());
   readonly hasMore = computed(() => this._hasMore());
+  readonly filters = computed(() => this._filters());
+  readonly selectedTagIds = computed(() => this._selectedTagIds());
+  readonly hasActiveFilters = computed(() => this._selectedTagIds().length > 0);
 
   readonly items = computed(() => this._items().map(item => this.resolveSavedState(item)));
 
@@ -96,6 +120,8 @@ export class ExploreSectionListingService {
     this.currentDestinationId = destinationId;
     this._page.set(null);
     this._items.set([]);
+    this._filters.set([]);
+    this._selectedTagIds.set([]);
     this._hasMore.set(false);
     this._nextSkip.set(0);
     this.loadPage(normalizedKey, destinationId, 0, FIRST_PAGE_SIZE, false);
@@ -112,6 +138,37 @@ export class ExploreSectionListingService {
       NEXT_PAGE_SIZE,
       true,
     );
+  }
+
+  toggleTagFilter(tagId: number): void {
+    if (!Number.isFinite(tagId) || tagId <= 0) return;
+    if (!this.currentSectionKey || !this.currentDestinationId) return;
+
+    const current = this._selectedTagIds();
+    const next = current.includes(tagId)
+      ? current.filter(id => id !== tagId)
+      : [...current, tagId];
+
+    this._selectedTagIds.set(next);
+    this._items.set([]);
+    this._hasMore.set(false);
+    this._nextSkip.set(0);
+    this.loadPage(this.currentSectionKey, this.currentDestinationId, 0, FIRST_PAGE_SIZE, false);
+  }
+
+  clearFilters(): void {
+    if (!this.currentSectionKey || !this.currentDestinationId) return;
+    if (this._selectedTagIds().length === 0) return;
+
+    this._selectedTagIds.set([]);
+    this._items.set([]);
+    this._hasMore.set(false);
+    this._nextSkip.set(0);
+    this.loadPage(this.currentSectionKey, this.currentDestinationId, 0, FIRST_PAGE_SIZE, false);
+  }
+
+  isTagSelected(tagId: number): boolean {
+    return this._selectedTagIds().includes(tagId);
   }
 
   toggleSaved(item: ExploreSectionItem): void {
@@ -144,11 +201,17 @@ export class ExploreSectionListingService {
       this._loadMoreError.set(null);
     }
 
+    let params = new HttpParams()
+      .set('destinationId', destinationId)
+      .set('skip', skip)
+      .set('take', take);
+
+    for (const tagId of this._selectedTagIds()) {
+      params = params.append('tagIds', tagId);
+    }
+
     this.http.get<ApiExploreSectionListingResponse>(`/api/explore/${encodeURIComponent(sectionKey)}`, {
-      params: new HttpParams()
-        .set('destinationId', destinationId)
-        .set('skip', skip)
-        .set('take', take),
+      params,
     }).subscribe({
       next: (res) => {
         if (requestId !== this.requestVersion) return;
@@ -160,6 +223,7 @@ export class ExploreSectionListingService {
           title: res.title,
           subtitle: res.subtitle ?? '',
           cardType: res.cardType ?? 'place-card',
+          filters: this.mapApiFilters(res.filters ?? []),
           items: [],
           skip: res.skip,
           take: res.take,
@@ -175,6 +239,7 @@ export class ExploreSectionListingService {
         mappedPage.items = nextItems;
         this._page.set(mappedPage);
         this._items.set(nextItems);
+        this._filters.set(mappedPage.filters);
         this._hasMore.set(res.hasMore);
         this._nextSkip.set(res.nextSkip);
         this._loadError.set(null);
@@ -188,6 +253,7 @@ export class ExploreSectionListingService {
         } else {
           this._page.set(null);
           this._items.set([]);
+          this._filters.set([]);
           this._hasMore.set(false);
           this._nextSkip.set(0);
           this._loadError.set('Could not load this explore section. Check your connection and try again.');
@@ -205,6 +271,22 @@ export class ExploreSectionListingService {
     }
   }
 
+  private mapApiFilters(filters: ApiExploreSectionFilterGroup[]): ExploreSectionFilterGroup[] {
+    return filters.map(group => ({
+      tagTypeId: group.tagTypeId,
+      name: group.name,
+      slug: group.slug,
+      label: group.label || group.name,
+      order: group.order,
+      options: (group.options ?? []).map(option => ({
+        tagId: option.tagId,
+        name: option.name,
+        slug: option.slug,
+        count: option.count,
+      })),
+    }));
+  }
+
   private mapApiItem(dto: ApiExploreSectionItem, cardType: string): ExploreSectionItem {
     const entityType = dto.entityType ?? (cardType === 'stay-card' ? 'stay' : cardType === 'event-card' ? 'event' : 'place');
 
@@ -216,12 +298,19 @@ export class ExploreSectionListingService {
       subtitle: dto.subtitle,
       description: dto.description,
       categoryLabel: dto.categoryLabel,
+      locationName: dto.locationName ?? undefined,
       image: dto.image ?? '',
       rating: dto.rating,
       reviewCount: dto.reviewCount,
       distance: dto.distance,
       dateLabel: dto.dateLabel,
       openingHours: dto.openingHours,
+      statusBadge: dto.statusBadge?.label
+        ? {
+            label: dto.statusBadge.label,
+            tone: dto.statusBadge.tone ?? 'neutral',
+          }
+        : undefined,
       pricePerNight: dto.pricePerNight,
       isSaved: dto.isSaved === true,
       tags: (dto.tags ?? []).map(tag => ({

@@ -8,6 +8,8 @@ public class HotelDetailDto
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Location { get; set; }
+    public int? LocationId { get; set; }
+    public string? LocationName { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public string? HeroImage { get; set; }
@@ -25,6 +27,9 @@ public class HotelDetailDto
     public List<ReviewDto> Reviews { get; set; } = new();
     public List<SimilarPlaceDto> Similar { get; set; } = new();
     public bool IsSaved { get; set; }
+    public bool IsOwnable { get; set; }
+    public bool IsOwnedByCurrentUser { get; set; }
+    public bool HasPendingOwnershipClaim { get; set; }
 }
 
 public class BookingPartnerDto

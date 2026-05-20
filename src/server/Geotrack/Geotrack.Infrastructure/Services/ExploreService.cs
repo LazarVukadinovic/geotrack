@@ -1,7 +1,9 @@
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Spatial;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
@@ -106,11 +108,13 @@ public class ExploreService : IExploreService
         int destinationId,
         int? userId = null,
         int skip = 0,
-        int take = SectionPageDefaultTake)
+        int take = SectionPageDefaultTake,
+        IReadOnlyCollection<int>? tagIds = null)
     {
         var normalizedKey = ToCategoryKey(sectionKey ?? string.Empty);
         var normalizedSkip = Math.Max(0, skip);
         var normalizedTake = Math.Clamp(take, 1, SectionPageMaxTake);
+        var selectedTagIds = NormalizeSelectedTagIds(tagIds);
 
         var destination = await ResolveDestinationForSectionPageAsync(destinationId);
         if (destination is null)
@@ -133,53 +137,62 @@ public class ExploreService : IExploreService
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "event")
             : new HashSet<int>();
 
-        return normalizedKey switch
+        var candidateTake = Math.Max(SectionPageCandidateLimit, normalizedSkip + normalizedTake);
+
+        var page = normalizedKey switch
         {
             "curated-for-you" => await BuildCuratedForYouPageAsync(
                 destination,
                 destinationPoint,
                 userId,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             "top-stays" or "stays" or "hotels" => await BuildTopStaysPageAsync(
                 destination,
                 destinationPoint,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             "where-to-eat" or "food" or "food-and-music" => await BuildWhereToEatPageAsync(
                 destination,
                 destinationPoint,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             "drinks" or "cafes" or "bars" or "coffee" => await BuildDrinksPageAsync(
                 destination,
                 destinationPoint,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             "events" => await BuildEventsPageAsync(
                 destination,
                 destinationPoint,
                 eventFavoriteIds,
-                normalizedSkip,
-                normalizedTake),
+                0,
+                candidateTake),
 
             _ => await BuildDynamicSectionPageAsync(
                 normalizedKey,
                 destination,
                 destinationPoint,
                 placeFavoriteIds,
-                normalizedSkip,
-                normalizedTake)
+                0,
+                candidateTake)
         };
+
+        return await ApplySectionFiltersAndPagingAsync(
+            page,
+            selectedTagIds,
+            normalizedSkip,
+            normalizedTake);
     }
+
 
 
     private async Task<ExplorePageDto> GetExplorePageCoreAsync(
@@ -209,24 +222,30 @@ public class ExploreService : IExploreService
             ? await LoadCurationSignalsAsync(userId.Value)
             : new List<CuratedInterestSignal>();
 
+        var nowUtc = DateTime.UtcNow;
+
         var events = await _db.Events
             .AsNoTracking()
             .Where(e =>
                 e.DestinationId == resolvedDestination.Id &&
-                EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null &&
-                e.EndDate >= DateTime.UtcNow)
+                EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(e => new
             {
                 e.Id,
                 e.Name,
                 EventTypeName = e.EventType.Name,
+                LocationName = e.Location != null ? e.Location.Name : e.Place != null ? e.Place.Location.Name : null,
                 e.StartDate,
                 e.EndDate,
-                Image = e.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
+                IsHappeningNow = e.StartDate <= nowUtc && e.EndDate >= nowUtc,
+                IsUpcoming = e.StartDate > nowUtc,
+                Image = e.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 DistanceMeters = EF.Property<Point>(e, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint)
             })
-            .OrderBy(e => e.DistanceMeters)
-            .ThenBy(e => e.StartDate)
+            .OrderBy(e => e.IsHappeningNow ? 0 : e.IsUpcoming ? 1 : 2)
+            .ThenBy(e => e.IsUpcoming || e.IsHappeningNow ? e.StartDate : DateTime.MaxValue)
+            .ThenByDescending(e => !e.IsUpcoming && !e.IsHappeningNow ? e.EndDate : DateTime.MinValue)
+            .ThenBy(e => e.DistanceMeters)
             .Take(ExploreSectionItemLimit)
             .ToListAsync();
 
@@ -240,7 +259,11 @@ public class ExploreService : IExploreService
             {
                 p.Id,
                 p.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
+                p.Subtitle,
+                p.Description,
+                CategoryLabel = p.Stay != null && p.Stay.StayType != null ? p.Stay.StayType.Name : p.PlaceType.Name,
+                LocationName = p.Location.Name,
+                Image = p.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
                 PricePerNight = p.Stay != null ? p.Stay.PricePerNight : null,
@@ -303,13 +326,17 @@ public class ExploreService : IExploreService
             Layout = "horizontal-cards",
             CardType = "stay-card",
             MoreRoute = $"/explore/top-stays?destinationId={resolvedDestination.Id}",
-            Priority = 20,
+            Priority = 30,
             Items = topStays.Select(s => new ExploreFeedSectionItemDto
             {
                 Id = s.Id,
                 EntityType = "stay",
                 DetailRoute = $"/stays/{s.Id}",
                 Title = DisplayTextSafety.CleanRequired(s.Name, "Stay"),
+                Subtitle = DisplayTextSafety.CleanOptional(s.Subtitle),
+                Description = TrimDescription(s.Description, 170),
+                CategoryLabel = DisplayTextSafety.CleanOptional(s.CategoryLabel),
+                LocationName = DisplayTextSafety.CleanOptional(s.LocationName),
                 Image = s.Image,
                 Rating = s.AverageRating.HasValue ? Math.Round(s.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(s.ReviewCount),
@@ -341,14 +368,17 @@ public class ExploreService : IExploreService
             Layout = "horizontal-cards",
             CardType = "event-card",
             MoreRoute = $"/explore/events?destinationId={resolvedDestination.Id}",
-            Priority = 40,
+            Priority = 20,
             Items = events.Select(e => new ExploreFeedSectionItemDto
             {
                 Id = e.Id,
                 EntityType = "event",
                 DetailRoute = $"/events/{e.Id}",
                 Title = DisplayTextSafety.CleanRequired(e.Name, "Event"),
-                Subtitle = DisplayTextSafety.CleanOptional(e.EventTypeName),
+                CategoryLabel = DisplayTextSafety.CleanOptional(e.EventTypeName),
+                LocationName = DisplayTextSafety.CleanOptional(e.LocationName),
+                Subtitle = null,
+                StatusBadge = BuildEventStatusBadge(e.IsHappeningNow, e.IsUpcoming),
                 DateLabel = FormatDateLabel(e.StartDate, e.EndDate),
                 Image = e.Image,
                 Distance = FormatDistanceLabel(e.DistanceMeters, useCurrentLocationDistance)
@@ -468,9 +498,12 @@ public class ExploreService : IExploreService
                 Subtitle = p.Subtitle,
                 Description = p.Description,
                 CategoryLabel = p.Stay != null && p.Stay.StayType != null ? p.Stay.StayType.Name : p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -544,9 +577,12 @@ public class ExploreService : IExploreService
                 Subtitle = p.Subtitle,
                 Description = p.Description,
                 CategoryLabel = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -615,9 +651,12 @@ public class ExploreService : IExploreService
                 Subtitle = p.Subtitle,
                 Description = p.Description,
                 CategoryLabel = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -667,22 +706,26 @@ public class ExploreService : IExploreService
         int skip,
         int take)
     {
+        var nowUtc = DateTime.UtcNow;
+
         var query = _db.Events
             .AsNoTracking()
             .Where(e =>
                 e.DestinationId == destination.Id &&
-                e.EndDate >= DateTime.UtcNow &&
                 EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(e => new SectionEventProjection
             {
                 Id = e.Id,
                 Title = e.Name,
                 Subtitle = e.EventType.Name,
+                LocationName = e.Location != null ? e.Location.Name : e.Place != null ? e.Place.Location.Name : null,
                 Description = e.Description,
                 StartDate = e.StartDate,
                 EndDate = e.EndDate,
+                IsHappeningNow = e.StartDate <= nowUtc && e.EndDate >= nowUtc,
+                IsUpcoming = e.StartDate > nowUtc,
                 Image = e.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -702,7 +745,9 @@ public class ExploreService : IExploreService
 
         var totalCount = await query.CountAsync();
         var items = await query
-            .OrderBy(e => e.StartDate)
+            .OrderBy(e => e.IsHappeningNow ? 0 : e.IsUpcoming ? 1 : 2)
+            .ThenBy(e => e.IsUpcoming || e.IsHappeningNow ? e.StartDate : DateTime.MaxValue)
+            .ThenByDescending(e => !e.IsUpcoming && !e.IsHappeningNow ? e.EndDate : DateTime.MinValue)
             .ThenBy(e => e.DistanceMeters)
             .ThenBy(e => e.Title)
             .Skip(skip)
@@ -778,9 +823,12 @@ public class ExploreService : IExploreService
                 Subtitle = p.Subtitle,
                 Description = p.Description,
                 CategoryLabel = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -820,6 +868,174 @@ public class ExploreService : IExploreService
             totalCount,
             skip,
             take);
+    }
+
+    private async Task<ExploreSectionPageDto> ApplySectionFiltersAndPagingAsync(
+        ExploreSectionPageDto page,
+        IReadOnlyCollection<int> selectedTagIds,
+        int skip,
+        int take)
+    {
+        var allItems = page.Items;
+        var filters = await BuildSectionFilterGroupsAsync(allItems);
+        var filteredItems = ApplySelectedSectionTagFilters(allItems, selectedTagIds, filters);
+        var filteredTotalCount = selectedTagIds.Count > 0 ? filteredItems.Count : page.TotalCount;
+        var pageItems = filteredItems
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+
+        page.Filters = filters;
+        page.Items = pageItems;
+        page.Skip = skip;
+        page.Take = take;
+        page.NextSkip = skip + pageItems.Count;
+        page.TotalCount = filteredTotalCount;
+        page.HasMore = skip + pageItems.Count < filteredTotalCount;
+
+        return page;
+    }
+
+    private async Task<List<ExploreSectionFilterGroupDto>> BuildSectionFilterGroupsAsync(
+        IReadOnlyCollection<ExploreFeedSectionItemDto> items)
+    {
+        if (items.Count == 0)
+        {
+            return [];
+        }
+
+        var tagIds = items
+            .SelectMany(item => item.Tags)
+            .Select(tag => tag.TagId)
+            .Distinct()
+            .ToList();
+
+        if (tagIds.Count == 0)
+        {
+            return [];
+        }
+
+        var tagMetadata = await _db.Tags
+            .AsNoTracking()
+            .Where(tag => tagIds.Contains(tag.Id) && tag.TagType != null)
+            .Select(tag => new SectionTagMetadata
+            {
+                TagId = tag.Id,
+                TagName = tag.Name,
+                TagSlug = tag.Slug,
+                TagTypeId = tag.TagTypeId ?? 0,
+                TagTypeName = tag.TagType != null ? tag.TagType.Name : "Tags",
+                TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : "tags",
+                TagTypeLabel = tag.TagType != null && tag.TagType.FilterLabel != null
+                    ? tag.TagType.FilterLabel
+                    : tag.TagType != null
+                        ? tag.TagType.Name
+                        : "Tags",
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 0
+            })
+            .Where(tag => tag.TagTypeId > 0)
+            .ToListAsync();
+
+        if (tagMetadata.Count == 0)
+        {
+            return [];
+        }
+
+        var tagLookup = tagMetadata.ToDictionary(tag => tag.TagId);
+        var itemTags = items
+            .Select((item, index) => new
+            {
+                ItemKey = $"{item.EntityType}:{item.Id}:{index}",
+                TagIds = item.Tags
+                    .Select(tag => tag.TagId)
+                    .Where(tagLookup.ContainsKey)
+                    .Distinct()
+                    .ToList()
+            })
+            .Where(item => item.TagIds.Count > 0)
+            .ToList();
+
+        return tagMetadata
+            .GroupBy(tag => new
+            {
+                tag.TagTypeId,
+                tag.TagTypeName,
+                tag.TagTypeSlug,
+                tag.TagTypeLabel,
+                tag.TagTypeOrder
+            })
+            .Select(group => new ExploreSectionFilterGroupDto
+            {
+                TagTypeId = group.Key.TagTypeId,
+                Name = group.Key.TagTypeName,
+                Slug = group.Key.TagTypeSlug,
+                Label = group.Key.TagTypeLabel,
+                Order = group.Key.TagTypeOrder,
+                Options = group
+                    .GroupBy(tag => new { tag.TagId, tag.TagName, tag.TagSlug })
+                    .Select(option => new ExploreSectionFilterOptionDto
+                    {
+                        TagId = option.Key.TagId,
+                        Name = option.Key.TagName,
+                        Slug = option.Key.TagSlug,
+                        Count = itemTags.Count(item => item.TagIds.Contains(option.Key.TagId))
+                    })
+                    .Where(option => option.Count > 0)
+                    .OrderByDescending(option => option.Count)
+                    .ThenBy(option => option.Name)
+                    .ToList()
+            })
+            .Where(group => group.Options.Count > 0)
+            .OrderBy(group => group.Order == 0 ? int.MaxValue : group.Order)
+            .ThenBy(group => group.Label)
+            .ToList();
+    }
+
+    private static List<ExploreFeedSectionItemDto> ApplySelectedSectionTagFilters(
+        IReadOnlyCollection<ExploreFeedSectionItemDto> items,
+        IReadOnlyCollection<int> selectedTagIds,
+        IReadOnlyCollection<ExploreSectionFilterGroupDto> filters)
+    {
+        if (selectedTagIds.Count == 0)
+        {
+            return items.ToList();
+        }
+
+        var selectedTagSet = selectedTagIds.ToHashSet();
+        var selectedGroups = filters
+            .Select(group => new
+            {
+                Group = group,
+                TagIds = group.Options
+                    .Select(option => option.TagId)
+                    .Where(selectedTagSet.Contains)
+                    .ToHashSet()
+            })
+            .Where(group => group.TagIds.Count > 0)
+            .ToList();
+
+        if (selectedGroups.Count == 0)
+        {
+            return [];
+        }
+
+        return items
+            .Where(item =>
+            {
+                var itemTagIds = item.Tags.Select(tag => tag.TagId).ToHashSet();
+                return selectedGroups.All(group => itemTagIds.Overlaps(group.TagIds));
+            })
+            .ToList();
+    }
+
+    private static IReadOnlyCollection<int> NormalizeSelectedTagIds(IReadOnlyCollection<int>? tagIds)
+    {
+        return tagIds is null
+            ? []
+            : tagIds
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
     }
 
     private async Task<ResolvedDestinationCandidate?> ResolveDestinationForSectionPageAsync(int destinationId)
@@ -908,11 +1124,13 @@ public class ExploreService : IExploreService
             Subtitle = DisplayTextSafety.CleanOptional(item.Subtitle),
             Description = TrimDescription(item.Description, 170),
             CategoryLabel = DisplayTextSafety.CleanOptional(item.CategoryLabel),
+            LocationName = DisplayTextSafety.CleanOptional(item.LocationName),
             Image = item.Image,
             Rating = item.AverageRating.HasValue ? Math.Round(item.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(item.ReviewCount),
             Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
             OpeningHours = item.OpeningHours,
+            StatusBadge = cardType == "stay-card" ? null : BuildPlaceStatusBadge(item.OperatingHoursEnabled, item.OperatingHoursJson),
             PricePerNight = cardType == "stay-card" ? item.PricePerNight : null,
             IsSaved = placeFavoriteIds.Contains(item.Id),
             Tags = item.Tags
@@ -929,7 +1147,10 @@ public class ExploreService : IExploreService
             EntityType = "event",
             DetailRoute = $"/events/{item.Id}",
             Title = DisplayTextSafety.CleanRequired(item.Title, "Event"),
-            Subtitle = DisplayTextSafety.CleanOptional(item.Subtitle),
+            CategoryLabel = DisplayTextSafety.CleanOptional(item.Subtitle),
+            LocationName = DisplayTextSafety.CleanOptional(item.LocationName),
+            Subtitle = null,
+            StatusBadge = BuildEventStatusBadge(item.IsHappeningNow, item.IsUpcoming),
             Description = TrimDescription(item.Description, 170),
             Image = item.Image,
             Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
@@ -952,11 +1173,13 @@ public class ExploreService : IExploreService
             Subtitle = place.Reason,
             Description = TrimDescription(place.Description, 170),
             CategoryLabel = place.CategoryLabel,
+            LocationName = place.Location,
             Image = place.Image,
             Rating = place.AverageRating.HasValue ? Math.Round(place.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(place.ReviewCount),
             Distance = FormatDistanceLabel(place.DistanceMeters, useCurrentLocationDistance: false),
             OpeningHours = place.OpeningHours,
+            StatusBadge = BuildPlaceStatusBadge(place.OperatingHoursEnabled, place.OperatingHoursJson),
             IsSaved = placeFavoriteIds.Contains(place.Id),
             Tags = place.MatchedTags.Select(tag => new ExploreFeedSectionTagDto
             {
@@ -965,6 +1188,95 @@ public class ExploreService : IExploreService
                 Slug = ToCategoryKey(tag.Name)
             }).ToList()
         };
+    }
+
+    private static ExploreFeedItemStatusBadgeDto? BuildEventStatusBadge(bool isHappeningNow, bool isUpcoming)
+    {
+        if (isHappeningNow)
+        {
+            return new ExploreFeedItemStatusBadgeDto
+            {
+                Label = "Happening now",
+                Tone = "success"
+            };
+        }
+
+        if (isUpcoming)
+        {
+            return new ExploreFeedItemStatusBadgeDto
+            {
+                Label = "Upcoming",
+                Tone = "warning"
+            };
+        }
+
+        return new ExploreFeedItemStatusBadgeDto
+        {
+            Label = "Past",
+            Tone = "muted"
+        };
+    }
+
+    private static ExploreFeedItemStatusBadgeDto? BuildPlaceStatusBadge(
+        bool operatingHoursEnabled,
+        string? operatingHoursJson)
+    {
+        if (!operatingHoursEnabled || string.IsNullOrWhiteSpace(operatingHoursJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            var hours = JsonSerializer.Deserialize<List<OperatingHourEntry>>(
+                operatingHoursJson,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+            if (hours is null || hours.Count == 0)
+            {
+                return null;
+            }
+
+            var today = DateTime.UtcNow.DayOfWeek.ToString();
+            var todayHours = hours.FirstOrDefault(hour =>
+                string.Equals(hour.DayOfWeek, today, StringComparison.OrdinalIgnoreCase));
+
+            if (todayHours is null)
+            {
+                return null;
+            }
+
+            if (!todayHours.IsOpen)
+            {
+                return new ExploreFeedItemStatusBadgeDto
+                {
+                    Label = "Closed",
+                    Tone = "muted"
+                };
+            }
+
+            if (!TimeSpan.TryParse(todayHours.OpenTime, out var openTime) ||
+                !TimeSpan.TryParse(todayHours.CloseTime, out var closeTime))
+            {
+                return null;
+            }
+
+            var now = DateTime.UtcNow.TimeOfDay;
+            var isOpen = now >= openTime && now < closeTime;
+
+            return new ExploreFeedItemStatusBadgeDto
+            {
+                Label = isOpen ? "Open" : "Closed",
+                Tone = isOpen ? "success" : "muted"
+            };
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static string HumanizeSectionKey(string key)
@@ -1003,11 +1315,13 @@ public class ExploreService : IExploreService
                 Subtitle = p.Reason,
                 Description = TrimDescription(p.Description, 130),
                 CategoryLabel = p.CategoryLabel,
+                LocationName = p.Location,
                 Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
                 Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
                 OpeningHours = p.OpeningHours,
+                StatusBadge = BuildPlaceStatusBadge(p.OperatingHoursEnabled, p.OperatingHoursJson),
                 IsSaved = placeFavoriteIds.Contains(p.Id),
                 Tags = p.MatchedTags.Select(tag => new ExploreFeedSectionTagDto
                 {
@@ -1050,9 +1364,12 @@ public class ExploreService : IExploreService
                 p.Subtitle,
                 p.Description,
                 PlaceTypeName = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 p.OpeningHours,
+                p.OperatingHoursEnabled,
+                p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -1085,7 +1402,7 @@ public class ExploreService : IExploreService
             Layout = "horizontal-cards",
             CardType = "place-card",
             MoreRoute = $"/explore/where-to-eat?destinationId={destinationId}",
-            Priority = 30,
+            Priority = 40,
             Items = items.Select(p => new ExploreFeedSectionItemDto
             {
                 Id = p.Id,
@@ -1095,11 +1412,13 @@ public class ExploreService : IExploreService
                 Subtitle = DisplayTextSafety.CleanOptional(p.Subtitle),
                 Description = TrimDescription(p.Description, 130),
                 CategoryLabel = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
+                LocationName = DisplayTextSafety.CleanOptional(p.LocationName),
                 Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
                 Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
                 OpeningHours = p.OpeningHours,
+                StatusBadge = BuildPlaceStatusBadge(p.OperatingHoursEnabled, p.OperatingHoursJson),
                 IsSaved = placeFavoriteIds.Contains(p.Id),
                 Tags = p.Tags
             }).ToList()
@@ -1131,9 +1450,12 @@ public class ExploreService : IExploreService
                 p.Subtitle,
                 p.Description,
                 PlaceTypeName = p.PlaceType.Name,
+                LocationName = p.Location.Name,
                 p.OpeningHours,
+                p.OperatingHoursEnabled,
+                p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -1166,7 +1488,7 @@ public class ExploreService : IExploreService
             Layout = "horizontal-cards",
             CardType = "place-card",
             MoreRoute = $"/explore/drinks?destinationId={destinationId}",
-            Priority = 35,
+            Priority = 50,
             Items = items.Select(p => new ExploreFeedSectionItemDto
             {
                 Id = p.Id,
@@ -1176,11 +1498,13 @@ public class ExploreService : IExploreService
                 Subtitle = DisplayTextSafety.CleanOptional(p.Subtitle),
                 Description = TrimDescription(p.Description, 130),
                 CategoryLabel = DisplayTextSafety.CleanOptional(p.PlaceTypeName),
+                LocationName = DisplayTextSafety.CleanOptional(p.LocationName),
                 Image = p.Image,
                 Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
                 ReviewCount = FormatReviewCountLabel(p.ReviewCount),
                 Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
                 OpeningHours = p.OpeningHours,
+                StatusBadge = BuildPlaceStatusBadge(p.OperatingHoursEnabled, p.OperatingHoursJson),
                 IsSaved = placeFavoriteIds.Contains(p.Id),
                 Tags = p.Tags
             }).ToList()
@@ -1220,8 +1544,10 @@ public class ExploreService : IExploreService
                 PlaceTypeId = p.PlaceTypeId,
                 PlaceTypeName = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 Image = p.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -1298,15 +1624,14 @@ public class ExploreService : IExploreService
                         Title = DisplayTextSafety.CleanRequired(candidate.Title, "Place"),
                         Subtitle = DisplayTextSafety.CleanOptional(candidate.Subtitle),
                         Description = TrimDescription(candidate.Description, 130),
-                        CategoryLabel = DisplayTextSafety.CleanLabelOrHumanizedKey(
-                            relevantTags.FirstOrDefault()?.Name,
-                            candidate.PlaceTypeName,
-                            "Place"),
+                        CategoryLabel = DisplayTextSafety.CleanOptional(candidate.PlaceTypeName) ?? "Place",
+                        LocationName = DisplayTextSafety.CleanOptional(candidate.Location),
                         Image = candidate.Image,
                         Rating = candidate.AverageRating.HasValue ? Math.Round(candidate.AverageRating.Value, 1) : null,
                         ReviewCount = FormatReviewCountLabel(candidate.ReviewCount),
                         Distance = FormatDistanceLabel(candidate.DistanceMeters, useCurrentLocationDistance),
                         OpeningHours = candidate.OpeningHours,
+                        StatusBadge = BuildPlaceStatusBadge(candidate.OperatingHoursEnabled, candidate.OperatingHoursJson),
                         IsSaved = placeFavoriteIds.Contains(candidate.Id),
                         DistanceMeters = candidate.DistanceMeters,
                         ReviewCountRaw = candidate.ReviewCount,
@@ -1355,12 +1680,14 @@ public class ExploreService : IExploreService
                         Title = item.Title,
                         Subtitle = item.Subtitle,
                         Description = item.Description,
-                        CategoryLabel = null,
+                        CategoryLabel = item.CategoryLabel,
+                        LocationName = item.LocationName,
                         Image = item.Image,
                         Rating = item.Rating,
                         ReviewCount = item.ReviewCount,
                         Distance = item.Distance,
                         OpeningHours = item.OpeningHours,
+                        StatusBadge = item.StatusBadge,
                         IsSaved = item.IsSaved,
                         Tags = item.Tags
                     })
@@ -1496,49 +1823,58 @@ public class ExploreService : IExploreService
 
     private async Task<List<CuratedInterestSignal>> LoadCurationSignalsAsync(int userId)
     {
-        var explicitInterests = await _db.UserTags
+        var explicitTopics = await _db.UserInterestTopics
             .AsNoTracking()
-            .Where(ut => ut.UserId == userId)
-            .Select(ut => new CuratedInterestSignal
-            {
-                TagId = ut.TagId,
-                IsExplicit = true,
-                Weight = ExplicitInterestWeight
-            })
+            .Include(uit => uit.InterestTopic)
+                .ThenInclude(topic => topic.TopicTags)
+                    .ThenInclude(link => link.Tag)
+            .Where(uit => uit.UserId == userId && uit.InterestTopic.IsActive)
             .ToListAsync();
 
-        var explicitTagIds = explicitInterests
-            .Select(interest => interest.TagId)
+        var explicitTopicIds = explicitTopics
+            .Select(interest => interest.InterestTopicId)
+            .ToHashSet();
+
+        var explicitSignals = explicitTopics
+            .SelectMany(interest => interest.InterestTopic.TopicTags.Select(link => new CuratedInterestSignal
+            {
+                TagId = link.TagId,
+                InterestTopicId = interest.InterestTopicId,
+                InterestTopicName = interest.InterestTopic.Name,
+                IsExplicit = true,
+                Weight = ExplicitInterestWeight * Math.Max(0.1, link.Weight)
+            }))
             .ToList();
 
-        var inferredSignals = await _db.UserInterestSignals
+        var inferredTopicSignals = await _db.UserInterestTopicSignals
             .AsNoTracking()
+            .Include(signal => signal.InterestTopic)
+                .ThenInclude(topic => topic.TopicTags)
+                    .ThenInclude(link => link.Tag)
             .Where(signal =>
                 signal.UserId == userId &&
                 signal.Source == "inferred" &&
                 !signal.IsDismissed &&
                 signal.Score >= MinimumInferredInterestScore &&
-                !explicitTagIds.Contains(signal.TagId))
+                signal.InterestTopic.IsActive &&
+                !explicitTopicIds.Contains(signal.InterestTopicId))
             .OrderByDescending(signal => signal.Score)
             .ThenByDescending(signal => signal.LastInteractionAt)
-            .Select(signal => new
-            {
-                TagId = signal.TagId,
-                signal.Score,
-                LastInteractionAt = signal.LastInteractionAt
-            })
             .Take(20)
             .ToListAsync();
 
-        explicitInterests.AddRange(inferredSignals.Select(signal => new CuratedInterestSignal
-        {
-            TagId = signal.TagId,
-            IsExplicit = false,
-            Weight = Math.Min(signal.Score, MaximumInferredInterestWeight),
-            LastInteractionAt = signal.LastInteractionAt
-        }));
+        explicitSignals.AddRange(inferredTopicSignals.SelectMany(signal =>
+            signal.InterestTopic.TopicTags.Select(link => new CuratedInterestSignal
+            {
+                TagId = link.TagId,
+                InterestTopicId = signal.InterestTopicId,
+                InterestTopicName = signal.InterestTopic.Name,
+                IsExplicit = false,
+                Weight = Math.Min(signal.Score, MaximumInferredInterestWeight) * Math.Max(0.1, link.Weight),
+                LastInteractionAt = signal.LastInteractionAt
+            })));
 
-        return explicitInterests;
+        return explicitSignals;
     }
 
     private async Task<List<RankedCuratedPlace>> BuildCuratedPlacesAsync(
@@ -1599,10 +1935,12 @@ public class ExploreService : IExploreService
                 Title = p.Name,
                 Description = p.Description,
                 Location = p.Location.Name,
-                Image = p.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
+                Image = p.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault(),
                 DestinationId = p.Location.DestinationId,
                 PlaceTypeName = p.PlaceType.Name,
                 OpeningHours = p.OpeningHours,
+                OperatingHoursEnabled = p.OperatingHoursEnabled,
+                OperatingHoursJson = p.OperatingHoursJson,
                 DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint),
                 AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
                 ReviewCount = p.PlaceReviews.Count(),
@@ -1671,12 +2009,16 @@ public class ExploreService : IExploreService
         }
 
         var categoryLabel = DisplayTextSafety.CleanLabelOrHumanizedKey(
-            bestTag?.Name,
             candidate.PlaceTypeName,
+            bestTag?.Name,
             "Local place");
+        var topicLabel = DisplayTextSafety.CleanLabelOrHumanizedKey(
+            bestSignal?.InterestTopicName,
+            bestTag?.Name,
+            categoryLabel);
         var reason = bestSignal?.IsExplicit == true
-            ? $"Matches your saved interest: {categoryLabel}"
-            : $"Based on recent activity: {categoryLabel}";
+            ? $"Matches your interest: {topicLabel}"
+            : $"Based on recent activity: {topicLabel}";
 
         return new RankedCuratedPlace
         {
@@ -1693,6 +2035,8 @@ public class ExploreService : IExploreService
             AverageRating = candidate.AverageRating,
             ReviewCount = candidate.ReviewCount,
             OpeningHours = candidate.OpeningHours,
+            OperatingHoursEnabled = candidate.OperatingHoursEnabled,
+            OperatingHoursJson = candidate.OperatingHoursJson,
             MatchedTags = candidate.MatchedTags
                 .Select(tag => new CuratedTagMatch
                 {
@@ -1858,6 +2202,18 @@ public class ExploreService : IExploreService
     }
 
 
+    private sealed class SectionTagMetadata
+    {
+        public int TagId { get; set; }
+        public string TagName { get; set; } = string.Empty;
+        public string TagSlug { get; set; } = string.Empty;
+        public int TagTypeId { get; set; }
+        public string TagTypeName { get; set; } = string.Empty;
+        public string TagTypeSlug { get; set; } = string.Empty;
+        public string TagTypeLabel { get; set; } = string.Empty;
+        public int TagTypeOrder { get; set; }
+    }
+
     private sealed class SectionPlaceProjection
     {
         public int Id { get; set; }
@@ -1865,7 +2221,10 @@ public class ExploreService : IExploreService
         public string? Subtitle { get; set; }
         public string? Description { get; set; }
         public string? CategoryLabel { get; set; }
+        public string? LocationName { get; set; }
         public string? OpeningHours { get; set; }
+        public bool OperatingHoursEnabled { get; set; }
+        public string? OperatingHoursJson { get; set; }
         public string? Image { get; set; }
         public double? AverageRating { get; set; }
         public int ReviewCount { get; set; }
@@ -1879,9 +2238,12 @@ public class ExploreService : IExploreService
         public int Id { get; set; }
         public string Title { get; set; } = string.Empty;
         public string? Subtitle { get; set; }
+        public string? LocationName { get; set; }
         public string? Description { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
+        public bool IsHappeningNow { get; set; }
+        public bool IsUpcoming { get; set; }
         public string? Image { get; set; }
         public double DistanceMeters { get; set; }
         public List<ExploreFeedSectionTagDto> Tags { get; set; } = new();
@@ -1899,6 +2261,8 @@ public class ExploreService : IExploreService
         public int PlaceTypeId { get; set; }
         public string PlaceTypeName { get; set; } = string.Empty;
         public string? OpeningHours { get; set; }
+        public bool OperatingHoursEnabled { get; set; }
+        public string? OperatingHoursJson { get; set; }
         public double DistanceMeters { get; set; }
         public double? AverageRating { get; set; }
         public int ReviewCount { get; set; }
@@ -1947,13 +2311,23 @@ public class ExploreService : IExploreService
         public string? Subtitle { get; set; }
         public string? Description { get; set; }
         public string? CategoryLabel { get; set; }
+        public string? LocationName { get; set; }
         public string? Image { get; set; }
         public double? Rating { get; set; }
         public string? ReviewCount { get; set; }
         public string? Distance { get; set; }
         public string? OpeningHours { get; set; }
+        public ExploreFeedItemStatusBadgeDto? StatusBadge { get; set; }
         public bool IsSaved { get; set; }
         public List<ExploreFeedSectionTagDto> Tags { get; set; } = new();
+    }
+
+    private sealed class OperatingHourEntry
+    {
+        public string? DayOfWeek { get; set; }
+        public bool IsOpen { get; set; }
+        public string? OpenTime { get; set; }
+        public string? CloseTime { get; set; }
     }
 
     private sealed class ResolvedDestinationCandidate
@@ -1970,6 +2344,8 @@ public class ExploreService : IExploreService
     private sealed class CuratedInterestSignal
     {
         public int TagId { get; set; }
+        public int InterestTopicId { get; set; }
+        public string InterestTopicName { get; set; } = string.Empty;
         public bool IsExplicit { get; set; }
         public double Weight { get; set; }
         public DateTime? LastInteractionAt { get; set; }
@@ -1994,6 +2370,8 @@ public class ExploreService : IExploreService
         public int DestinationId { get; set; }
         public string PlaceTypeName { get; set; } = string.Empty;
         public string? OpeningHours { get; set; }
+        public bool OperatingHoursEnabled { get; set; }
+        public string? OperatingHoursJson { get; set; }
         public double DistanceMeters { get; set; }
         public double? AverageRating { get; set; }
         public int ReviewCount { get; set; }
@@ -2023,12 +2401,10 @@ public class ExploreService : IExploreService
         public double? AverageRating { get; set; }
         public int ReviewCount { get; set; }
         public string? OpeningHours { get; set; }
+        public bool OperatingHoursEnabled { get; set; }
+        public string? OperatingHoursJson { get; set; }
         public List<CuratedTagMatch> MatchedTags { get; set; } = new();
         public bool IsDuplicateWithOtherSection { get; set; }
         public bool IsOutsideCurrentDestination { get; set; }
     }
 }
-
-
-
-

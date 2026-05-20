@@ -69,7 +69,3 @@ input:disabled, textarea:disabled {
 .toast-success {
   animation: fadeInUp 0.25s ease both;
 }
-
-.assignment-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}

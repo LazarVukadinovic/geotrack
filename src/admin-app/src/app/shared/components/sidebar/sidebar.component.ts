@@ -26,6 +26,7 @@ export class SidebarComponent implements OnInit {
   @Input() regions: RegionalAssignedRegion[] = [];
   @Input() activeRegionId: number | null = null;
   @Input() pendingRequestsCount: number | null = null;
+  @Input() reportedReviewsCount: number | null = null;
   @Input() regionLoading = false;
   @Output() regionChange = new EventEmitter<number>();
 
@@ -101,8 +102,26 @@ export class SidebarComponent implements OnInit {
     return this.pickerItems.length > 1;
   }
 
+  get isAdministrator(): boolean {
+    return this.auth.isAdministrator();
+  }
+
   get isTerritory(): boolean {
     return this.auth.canAccessTerritoryAdmin();
+  }
+
+  get administratorMainNav(): SidebarNavItem[] {
+    return [
+      { label: 'Admin Dashboard', path: '/admin-dashboard', icon: 'dashboard', exact: true },
+      { label: 'Territory Management', path: '/admin-territories', icon: 'globe' },
+      { label: 'User Management', path: '/admin-users', icon: 'users' },
+      {
+        label: 'Review Management',
+        path: '/admin-reviews',
+        icon: 'review',
+        badge: this.reportedReviewsCount || undefined,
+      },
+    ];
   }
 
   get territoryMainNav(): SidebarNavItem[] {

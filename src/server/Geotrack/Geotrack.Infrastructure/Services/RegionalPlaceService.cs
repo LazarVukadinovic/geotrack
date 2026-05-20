@@ -5,6 +5,7 @@ using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
+using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
@@ -16,6 +17,7 @@ public class RegionalPlaceService : IRegionalPlaceService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
+    private static string ExistingEditRoute(int placeId) => $"/places/edit/{placeId}";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
 
     private readonly AppDbContext _db;
@@ -83,6 +85,18 @@ public class RegionalPlaceService : IRegionalPlaceService
                 AccessibilityNotes = place.AccessibilityNotes,
                 PlaceTypeId = place.PlaceTypeId,
                 PlaceTypeName = place.PlaceType.Name,
+                IsOwnable = place.PlaceType.IsOwnable,
+                Owners = place.UserPlaces
+                    .OrderBy(userPlace => userPlace.User.DisplayName ?? userPlace.User.Username)
+                    .ThenBy(userPlace => userPlace.User.Id)
+                    .Select(userPlace => new RegionalPlaceOwnerDto
+                    {
+                        UserId = userPlace.UserId,
+                        Username = userPlace.User.Username,
+                        Email = userPlace.User.Email,
+                        DisplayName = userPlace.User.DisplayName ?? userPlace.User.Username
+                    })
+                    .ToList(),
                 StayTypeId = place.Stay != null ? place.Stay.StayTypeId : null,
                 StayTypeName = place.Stay != null ? place.Stay.StayType.Name : null,
                 LocationId = place.LocationId,
@@ -100,27 +114,32 @@ public class RegionalPlaceService : IRegionalPlaceService
                 Longitude = place.Longitude,
                 ImageUrl = place.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Place)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
-                Images = place.Images
-                    .Where(image => image.TargetType == EntityImageTargetType.Place)
-                    .OrderByDescending(image => image.IsMain)
-                    .ThenBy(image => image.SortOrder)
+                CardImageUrl = place.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Place && image.ImageRole == EntityImageRole.Card)
+                    .OrderBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
-                    .Select(image => new RegionalEntityImageDto
-                    {
-                        Id = image.Id,
-                        Url = image.Url,
-                        AltText = image.AltText,
-                        Caption = image.Caption,
-                        IsMain = image.IsMain,
-                        SortOrder = image.SortOrder
-                    })
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                CoverImageUrl = place.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Place && image.ImageRole == EntityImageRole.Cover)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                GalleryImageUrls = place.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Place && image.ImageRole == EntityImageRole.Gallery)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
                     .ToList(),
                 Tags = place.PlaceTags
                     .OrderBy(placeTag => placeTag.Tag.Name)
@@ -173,6 +192,18 @@ public class RegionalPlaceService : IRegionalPlaceService
                 AccessibilityNotes = place.AccessibilityNotes,
                 PlaceTypeId = place.PlaceTypeId,
                 PlaceTypeName = place.PlaceType.Name,
+                IsOwnable = place.PlaceType.IsOwnable,
+                Owners = place.UserPlaces
+                    .OrderBy(userPlace => userPlace.User.DisplayName ?? userPlace.User.Username)
+                    .ThenBy(userPlace => userPlace.User.Id)
+                    .Select(userPlace => new RegionalPlaceOwnerDto
+                    {
+                        UserId = userPlace.UserId,
+                        Username = userPlace.User.Username,
+                        Email = userPlace.User.Email,
+                        DisplayName = userPlace.User.DisplayName ?? userPlace.User.Username
+                    })
+                    .ToList(),
                 StayTypeId = place.Stay != null ? place.Stay.StayTypeId : null,
                 StayTypeName = place.Stay != null ? place.Stay.StayType.Name : null,
                 LocationId = place.LocationId,
@@ -190,27 +221,32 @@ public class RegionalPlaceService : IRegionalPlaceService
                 Longitude = place.Longitude,
                 ImageUrl = place.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Place)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
-                Images = place.Images
-                    .Where(image => image.TargetType == EntityImageTargetType.Place)
-                    .OrderByDescending(image => image.IsMain)
-                    .ThenBy(image => image.SortOrder)
+                CardImageUrl = place.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Place && image.ImageRole == EntityImageRole.Card)
+                    .OrderBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
-                    .Select(image => new RegionalEntityImageDto
-                    {
-                        Id = image.Id,
-                        Url = image.Url,
-                        AltText = image.AltText,
-                        Caption = image.Caption,
-                        IsMain = image.IsMain,
-                        SortOrder = image.SortOrder
-                    })
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                CoverImageUrl = place.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Place && image.ImageRole == EntityImageRole.Cover)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                GalleryImageUrls = place.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Place && image.ImageRole == EntityImageRole.Gallery)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
                     .ToList(),
                 Tags = place.PlaceTags
                     .OrderBy(placeTag => placeTag.Tag.Name)
@@ -270,7 +306,6 @@ public class RegionalPlaceService : IRegionalPlaceService
         ValidateCoordinatesWithinBoundaries(coordinates, location.LocationBoundaryGeometry, location.DestinationBoundaryGeometry);
         var tagIds = await ValidatePlaceTagIdsAsync(request.TagIds);
         var operatingHours = NormalizeOperatingHours(request.OperatingHoursEnabled, request.OperatingHours);
-        var images = RegionalEntityImageRequestNormalizer.Normalize(request.Images, name);
         var now = DateTime.UtcNow;
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -300,18 +335,6 @@ public class RegionalPlaceService : IRegionalPlaceService
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
             CreatedAt = now,
-            Images = images
-                .Select(image => new EntityImage
-                {
-                    TargetType = EntityImageTargetType.Place,
-                    Url = image.Url,
-                    AltText = image.AltText,
-                    Caption = image.Caption,
-                    IsMain = image.IsMain,
-                    SortOrder = image.SortOrder,
-                    CreatedAt = now
-                })
-                .ToList(),
             PlaceTags = tagIds
                 .Select(tagId => new PlaceTag { TagId = tagId })
                 .ToList()
@@ -327,6 +350,8 @@ public class RegionalPlaceService : IRegionalPlaceService
 
         _db.Places.Add(place);
         await _db.SaveChangesAsync();
+
+        _db.EntityImages.AddRange(AddRequiredCreateImages(request, place.Id, place.Name, now));
 
         place.InternalReferenceId = BuildInternalReferenceId(place.Id);
         await _db.SaveChangesAsync();
@@ -348,7 +373,6 @@ public class RegionalPlaceService : IRegionalPlaceService
                 .ThenInclude(location => location.Destination)
             .Include(item => item.Stay)
             .Include(item => item.PlaceTags)
-            .Include(item => item.Images)
             .SingleOrDefaultAsync(item => item.Id == placeId && item.Location.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Place not found.");
 
@@ -380,22 +404,77 @@ public class RegionalPlaceService : IRegionalPlaceService
             place.Stay.StayTypeId = request.StayTypeId.Value;
         }
 
+        ApplyUpdate(place, request);
+
+        if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
+        {
+            var operatingHours = NormalizeOperatingHours(
+                request.OperatingHoursEnabled ?? place.OperatingHoursEnabled,
+                request.OperatingHours ?? DeserializeOperatingHours(place.OperatingHoursJson));
+            place.OperatingHoursEnabled = operatingHours.Enabled;
+            place.OperatingHoursJson = operatingHours.Json;
+            place.OpeningHours = operatingHours.Enabled ? BuildOpeningHoursSummary(operatingHours.Hours) : null;
+        }
+
         if (request.TagIds is not null)
         {
             var tagIds = await ValidatePlaceTagIdsAsync(request.TagIds);
-            ReplaceTags(place, tagIds);
+            place.PlaceTags.Clear();
+            foreach (var tagId in tagIds)
+                place.PlaceTags.Add(new PlaceTag { PlaceId = place.Id, TagId = tagId });
         }
 
-        if (request.Images is not null)
-        {
-            var fallbackAltText = request.Name ?? place.Name;
-            ReplaceImages(place, request.Images, fallbackAltText);
-        }
-
-        ApplyUpdate(place, request);
         place.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
+        return await GetPlaceAsync(userId, regionId, placeId);
+    }
+
+    public async Task<RegionalPlaceDetailDto> AddOwnerAsync(
+        int userId,
+        int regionId,
+        int placeId,
+        RegionalPlaceAddOwnerRequestDto request)
+    {
+        await EnsureAssignedRegionAsync(userId, regionId);
+
+        var place = await _db.Places
+            .Include(item => item.PlaceType)
+            .Include(item => item.Location)
+                .ThenInclude(location => location.Destination)
+            .Include(item => item.UserPlaces)
+            .SingleOrDefaultAsync(item => item.Id == placeId && item.Location.Destination.RegionId == regionId)
+            ?? throw new KeyNotFoundException("Place not found.");
+
+        if (!place.PlaceType.IsOwnable)
+            throw new InvalidOperationException("Only ownable place types can have owners assigned.");
+
+        var identifier = NormalizeRequiredText(
+            request.EmailOrUsername,
+            "Owner email or username is required.",
+            256,
+            "Owner email or username is too long.");
+        var normalizedIdentifier = identifier.ToLowerInvariant();
+
+        var owner = await _db.Users
+            .SingleOrDefaultAsync(candidate =>
+                candidate.Email.ToLower() == normalizedIdentifier ||
+                candidate.Username.ToLower() == normalizedIdentifier)
+            ?? throw new KeyNotFoundException("User not found.");
+
+        if (!place.UserPlaces.Any(userPlace => userPlace.UserId == owner.Id))
+        {
+            _db.UserPlaces.Add(new UserPlace
+            {
+                UserId = owner.Id,
+                PlaceId = place.Id,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            place.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
         return await GetPlaceAsync(userId, regionId, placeId);
     }
 
@@ -494,7 +573,8 @@ public class RegionalPlaceService : IRegionalPlaceService
             {
                 Id = type.Id,
                 Name = type.Name,
-                Description = type.Description
+                Description = type.Description,
+                IsOwnable = type.IsOwnable
             })
             .ToListAsync();
     }
@@ -637,22 +717,13 @@ public class RegionalPlaceService : IRegionalPlaceService
             place.Name = name;
         }
 
-        if (request.Summary is not null)
+        if (request.Summary is not null || request.Subtitle is not null)
         {
-            place.Subtitle = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
-        }
-        else if (request.Subtitle is not null)
-        {
-            var subtitle = request.Subtitle.Trim();
+            var subtitle = (request.Summary ?? request.Subtitle ?? string.Empty).Trim();
             if (subtitle.Length > 500)
                 throw new InvalidOperationException("Subtitle is too long.");
 
             place.Subtitle = subtitle.Length == 0 ? null : subtitle;
-        }
-
-        if (request.Status is not null)
-        {
-            place.Status = NormalizeUpdateStatus(request.Status);
         }
 
         if (request.Description is not null)
@@ -664,10 +735,9 @@ public class RegionalPlaceService : IRegionalPlaceService
             place.Description = description;
         }
 
-        var requestedAddress = request.StreetAddress ?? request.Address;
-        if (requestedAddress is not null)
+        if (request.Address is not null)
         {
-            var address = requestedAddress.Trim();
+            var address = request.Address.Trim();
             if (address.Length > 500)
                 throw new InvalidOperationException("Address is too long.");
 
@@ -692,10 +762,9 @@ public class RegionalPlaceService : IRegionalPlaceService
             place.ContactEmail = contactEmail.Length == 0 ? null : contactEmail;
         }
 
-        var requestedPhoneNumber = request.ContactPhone ?? request.PhoneNumber;
-        if (requestedPhoneNumber is not null)
+        if (request.PhoneNumber is not null)
         {
-            var phoneNumber = requestedPhoneNumber.Trim();
+            var phoneNumber = request.PhoneNumber.Trim();
             if (phoneNumber.Length > 50)
                 throw new InvalidOperationException("Phone number is too long.");
 
@@ -717,7 +786,9 @@ public class RegionalPlaceService : IRegionalPlaceService
 
         if (request.BookingExternalLink is not null)
         {
-            place.BookingExternalLink = NormalizeUrl(request.BookingExternalLink, "Booking / external link is invalid.");
+            place.BookingExternalLink = NormalizeUrl(
+                request.BookingExternalLink,
+                "Booking / external link is invalid.");
         }
 
         if (request.BestTimeToVisit is not null)
@@ -730,12 +801,18 @@ public class RegionalPlaceService : IRegionalPlaceService
 
         if (request.VisitorTips is not null)
         {
-            place.VisitorTips = NormalizeOptionalText(request.VisitorTips, 1000, "Visitor tips are too long.");
+            place.VisitorTips = NormalizeOptionalText(
+                request.VisitorTips,
+                1000,
+                "Visitor tips are too long.");
         }
 
         if (request.AccessNotes is not null)
         {
-            place.AccessNotes = NormalizeOptionalText(request.AccessNotes, 1000, "Access notes are too long.");
+            place.AccessNotes = NormalizeOptionalText(
+                request.AccessNotes,
+                1000,
+                "Access notes are too long.");
         }
 
         if (request.AccessibilityNotes is not null)
@@ -744,17 +821,6 @@ public class RegionalPlaceService : IRegionalPlaceService
                 request.AccessibilityNotes,
                 1000,
                 "Accessibility notes are too long.");
-        }
-
-        if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
-        {
-            var operatingHours = NormalizeOperatingHours(
-                request.OperatingHoursEnabled ?? place.OperatingHoursEnabled,
-                request.OperatingHours ?? DeserializeOperatingHours(place.OperatingHoursJson));
-
-            place.OperatingHoursEnabled = operatingHours.Enabled;
-            place.OperatingHoursJson = operatingHours.Json;
-            place.OpeningHours = operatingHours.Enabled ? BuildOpeningHoursSummary(operatingHours.Hours) : null;
         }
 
         if (request.PlaceTypeId.HasValue)
@@ -779,45 +845,6 @@ public class RegionalPlaceService : IRegionalPlaceService
                 throw new InvalidOperationException("Longitude is invalid.");
 
             place.Longitude = request.Longitude.Value;
-        }
-    }
-
-    private void ReplaceImages(
-        Place place,
-        IEnumerable<RegionalEntityImageInputDto> imageRequests,
-        string fallbackAltText)
-    {
-        var images = RegionalEntityImageRequestNormalizer.Normalize(imageRequests, fallbackAltText);
-        var now = DateTime.UtcNow;
-
-        _db.EntityImages.RemoveRange(place.Images.Where(image => image.TargetType == EntityImageTargetType.Place));
-
-        foreach (var image in images)
-        {
-            place.Images.Add(new EntityImage
-            {
-                TargetType = EntityImageTargetType.Place,
-                PlaceId = place.Id,
-                Url = image.Url,
-                AltText = image.AltText,
-                Caption = image.Caption,
-                IsMain = image.IsMain,
-                SortOrder = image.SortOrder,
-                CreatedAt = now
-            });
-        }
-    }
-
-    private static void ReplaceTags(Place place, IEnumerable<int> tagIds)
-    {
-        place.PlaceTags.Clear();
-        foreach (var tagId in tagIds)
-        {
-            place.PlaceTags.Add(new PlaceTag
-            {
-                PlaceId = place.Id,
-                TagId = tagId
-            });
         }
     }
 
@@ -1134,9 +1161,11 @@ public class RegionalPlaceService : IRegionalPlaceService
             PublishedAt = row.PublishedAt,
             LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
-            Images = row.Images,
+            CardImageUrl = row.CardImageUrl,
+            CoverImageUrl = row.CoverImageUrl,
+            GalleryImageUrls = row.GalleryImageUrls,
             DetailRoute = "/places/detail/" + row.Id,
-            EditRoute = "/places/edit/" + row.Id
+            EditRoute = ExistingEditRoute(row.Id)
         };
     }
 
@@ -1154,6 +1183,8 @@ public class RegionalPlaceService : IRegionalPlaceService
             Address = item.Address,
             PlaceType = item.PlaceType,
             PlaceTypeId = item.PlaceTypeId,
+            IsOwnable = row.IsOwnable,
+            Owners = row.Owners,
             StayType = item.StayType,
             StayTypeId = item.StayTypeId,
             Status = item.Status,
@@ -1169,7 +1200,9 @@ public class RegionalPlaceService : IRegionalPlaceService
             PublishedAt = item.PublishedAt,
             LastUpdatedAt = item.LastUpdatedAt,
             ImageUrl = item.ImageUrl,
-            Images = item.Images,
+            CardImageUrl = item.CardImageUrl,
+            CoverImageUrl = item.CoverImageUrl,
+            GalleryImageUrls = item.GalleryImageUrls,
             DetailRoute = item.DetailRoute,
             EditRoute = item.EditRoute,
             Latitude = row.Latitude,
@@ -1241,19 +1274,6 @@ public class RegionalPlaceService : IRegionalPlaceService
             _ => PublishedStatus
         };
 
-    private static string NormalizeUpdateStatus(string value)
-    {
-        var normalized = NormalizeToken(value);
-        if (normalized is "published" or "publish")
-            return PublishedStatus;
-        if (normalized == "draft")
-            return DraftStatus;
-        if (normalized == "archived")
-            return ArchivedStatus;
-
-        throw new InvalidOperationException("Place status is invalid.");
-    }
-
     private static string NormalizeSort(string? sort)
     {
         var normalized = NormalizeToken(sort ?? "newest");
@@ -1271,6 +1291,82 @@ public class RegionalPlaceService : IRegionalPlaceService
             .Replace("-", string.Empty, StringComparison.Ordinal)
             .Replace("_", string.Empty, StringComparison.Ordinal)
             .ToLowerInvariant();
+
+
+    private static List<EntityImage> AddRequiredCreateImages(RegionalPlaceCreateRequestDto request, int entityId, string entityName, DateTime now)
+    {
+        var cardUrl = NormalizeRequiredImageUrl(request.CardImageUrl, "Card image is required.");
+        var coverUrl = NormalizeRequiredImageUrl(request.CoverImageUrl, "Cover image is required.");
+        var images = new List<EntityImage>
+        {
+            new()
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = entityId,
+                Url = cardUrl,
+                AltText = entityName,
+                IsMain = true,
+                ImageRole = EntityImageRole.Card,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new()
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = entityId,
+                Url = coverUrl,
+                AltText = entityName,
+                IsMain = false,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 1,
+                CreatedAt = now
+            }
+        };
+
+        var galleryUrls = request.GalleryImageUrls
+            .Select(url => NormalizeOptionalImageUrl(url))
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        for (var i = 0; i < galleryUrls.Count; i++)
+        {
+            images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = entityId,
+                Url = galleryUrls[i]!,
+                AltText = entityName,
+                IsMain = false,
+                ImageRole = EntityImageRole.Gallery,
+                SortOrder = i + 2,
+                CreatedAt = now
+            });
+        }
+
+        return images;
+    }
+
+    private static string NormalizeRequiredImageUrl(string? value, string message)
+    {
+        var normalized = NormalizeOptionalImageUrl(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+            throw new InvalidOperationException(message);
+
+        return normalized;
+    }
+
+    private static string? NormalizeOptionalImageUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = value.Trim();
+        if (normalized.Length > 1000)
+            throw new InvalidOperationException("Image URL is too long.");
+
+        return normalized;
+    }
 
     private static string BuildInternalReferenceId(int placeId) => $"PLC-{placeId:D6}";
 
@@ -1304,6 +1400,8 @@ public class RegionalPlaceService : IRegionalPlaceService
         public string? AccessibilityNotes { get; set; }
         public int PlaceTypeId { get; set; }
         public string? PlaceTypeName { get; set; }
+        public bool IsOwnable { get; set; }
+        public List<RegionalPlaceOwnerDto> Owners { get; set; } = new();
         public int? StayTypeId { get; set; }
         public string? StayTypeName { get; set; }
         public int LocationId { get; set; }
@@ -1320,7 +1418,9 @@ public class RegionalPlaceService : IRegionalPlaceService
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public string? ImageUrl { get; set; }
-        public List<RegionalEntityImageDto> Images { get; set; } = new();
+        public string? CardImageUrl { get; set; }
+        public string? CoverImageUrl { get; set; }
+        public List<string> GalleryImageUrls { get; set; } = new();
         public List<RegionalPlaceTagDto> Tags { get; set; } = new();
     }
 }

@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal, NgZone, OnDestroy } from '@angular/core';
 import { Observable } from 'rxjs';
 import { UserService } from '../../../core/services/user.service';
 
@@ -9,13 +9,15 @@ export interface ReviewDraft {
 
 let nextReviewBodyId = 0;
 
+const DISMISS_THRESHOLD = 120;
+
 @Component({
   selector: 'app-review-entry',
   standalone: true,
   templateUrl: './review-entry.component.html',
   styleUrl: './review-entry.component.scss',
 })
-export class ReviewEntryComponent {
+export class ReviewEntryComponent implements OnDestroy {
   readonly isLoggedIn  = input.required<boolean>();
   readonly entityName  = input.required<string>();
 
@@ -31,6 +33,7 @@ export class ReviewEntryComponent {
   /** Emitted only after a successful submit. */
   readonly reviewSubmitted  = output<ReviewDraft>();
   protected readonly avatarUrl = inject(UserService).avatarUrl;
+  private  readonly ngZone    = inject(NgZone);
 
   // ─── Popup state ────────────────────────────────────────────────────────────
   protected readonly popupOpen   = signal(false);
@@ -41,6 +44,13 @@ export class ReviewEntryComponent {
   protected readonly isSubmitting = signal(false);
   protected readonly submitError  = signal('');
   protected readonly reviewBodyId = `review-body-${++nextReviewBodyId}`;
+
+  // ─── Swipe-to-dismiss ───────────────────────────────────────────────────────
+  protected readonly dragOffset = signal(0);
+  protected readonly isDragging = signal(false);
+  private touchStartY = 0;
+  private readonly boundMove = this.onDocTouchMove.bind(this);
+  private readonly boundEnd  = this.onDocTouchEnd.bind(this);
 
   protected readonly effectiveRating = computed(() =>
     this.hoverRating() || this.draftRating(),
@@ -58,13 +68,51 @@ export class ReviewEntryComponent {
     this.popupOpen.set(true);
   }
 
+  ngOnDestroy(): void {
+    this.detachDocListeners();
+  }
+
   protected closePopup(): void {
     if (this.isSubmitting()) return;
+    this.dragOffset.set(0);
     this.popupOpen.set(false);
     this.draftRating.set(0);
     this.hoverRating.set(0);
     this.draftBody.set('');
     this.submitError.set('');
+  }
+
+  protected onModalTouchStart(e: TouchEvent): void {
+    this.touchStartY = e.touches[0].clientY;
+    this.isDragging.set(true);
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('touchmove', this.boundMove, { passive: false });
+      document.addEventListener('touchend',  this.boundEnd,  { passive: false });
+    });
+  }
+
+  private onDocTouchMove(e: TouchEvent): void {
+    const delta = e.touches[0].clientY - this.touchStartY;
+    if (delta <= 0) return;
+    e.preventDefault();
+    this.ngZone.run(() => this.dragOffset.set(delta));
+  }
+
+  private onDocTouchEnd(): void {
+    this.detachDocListeners();
+    this.ngZone.run(() => {
+      this.isDragging.set(false);
+      if (this.dragOffset() >= DISMISS_THRESHOLD) {
+        this.closePopup();
+      } else {
+        this.dragOffset.set(0);
+      }
+    });
+  }
+
+  private detachDocListeners(): void {
+    document.removeEventListener('touchmove', this.boundMove);
+    document.removeEventListener('touchend',  this.boundEnd);
   }
 
   protected onStarClick(n: number): void {

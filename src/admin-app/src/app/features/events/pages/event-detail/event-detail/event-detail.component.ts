@@ -52,27 +52,50 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
-    const navState = history.state as EventListItem;
+    const navState = history.state as Partial<EventListItem> & { regionId?: number };
 
     if (id) {
       const fromService = this.svc.findById(id);
       if (fromService) {
-        this.item      = { ...fromService };
-        this.region    = this.item.region;
-        this.isLoading = false;
+        this.setItem(fromService);
+        return;
+      }
+
+      const regionId = navState?.regionId ?? null;
+      if (regionId) {
+        this.loadFromBackend(regionId, id);
         return;
       }
     }
 
-    if (navState?.id) {
-      this.item      = { ...navState };
-      this.region    = this.item.region;
-      this.isLoading = false;
+    if (navState?.id && navState?.name && navState?.status) {
+      this.setItem(navState as EventListItem);
       return;
     }
 
     this.notFound  = true;
     this.isLoading = false;
+  }
+
+  private setItem(item: EventListItem): void {
+    this.item      = { ...item };
+    this.region    = this.item.regionDisplayName || this.item.region;
+    this.isLoading = false;
+    this.notFound  = false;
+    this.cdr.markForCheck();
+    setTimeout(() => this.initMiniMap(), 100);
+  }
+
+  private loadFromBackend(regionId: number, id: string): void {
+    this.isLoading = true;
+    this.svc.getEvent(regionId, id).subscribe({
+      next: dto => this.setItem(this.svc.toListItem(dto)),
+      error: () => {
+        this.notFound = true;
+        this.isLoading = false;
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   ngAfterViewInit(): void {
@@ -172,6 +195,42 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   openMapModal(): void {
     this.mapModalOpen = true;
     setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
+  }
+
+  get parentLocationName(): string {
+    return this.item?.locationName || '';
+  }
+
+  get parentPlaceName(): string {
+    return this.item?.placeName || '';
+  }
+
+  get parentDestinationName(): string {
+    return this.item?.destinationName || '';
+  }
+
+  goToParentLocation(event?: Event): void {
+    event?.preventDefault();
+    if (!this.item?.locationId || !this.item?.regionId) return;
+    this.router.navigate(['/locations/detail', this.item.locationId], {
+      state: { regionId: this.item.regionId },
+    });
+  }
+
+  goToParentPlace(event?: Event): void {
+    event?.preventDefault();
+    if (!this.item?.placeId || !this.item?.regionId) return;
+    this.router.navigate(['/places/detail', this.item.placeId], {
+      state: { regionId: this.item.regionId },
+    });
+  }
+
+  goToParentDestination(event?: Event): void {
+    event?.preventDefault();
+    if (!this.item?.destinationId || !this.item?.regionId) return;
+    this.router.navigate(['/destinations/detail', this.item.destinationId], {
+      state: { regionId: this.item.regionId },
+    });
   }
 
   closeMapModal(): void {

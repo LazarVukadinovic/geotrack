@@ -38,6 +38,7 @@ namespace Geotrack.Infrastructure.Repositories
         public async Task<Region?> GetByIdWithManagersAsync(int regionId)
         {
             return await _context.Regions
+                .Include(r => r.Territory)
                 .Include(r => r.RegionalManagerRegions)
                     .ThenInclude(ror => ror.User)
                 .FirstOrDefaultAsync(r => r.Id == regionId);

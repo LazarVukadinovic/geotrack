@@ -13,32 +13,22 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, of, Subscription, switchMap } from 'rxjs';
+import { finalize, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
-import { AdminMapService } from '../../../../core/services/admin-map.service';
-import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
-import { AdminMapViewport } from '../../../../core/models/admin-map.model';
 import {
   RegionalEventCreateRequest,
-  RegionalEventDetailDto,
   RegionalEventParentDestinationDto,
   RegionalEventParentLocationDto,
   RegionalEventParentPlaceDto,
   RegionalEventTagDto,
   RegionalEventTypeDto,
-  RegionalEventUpdateRequest,
 } from '../../../../core/models/event.model';
 import { EventsListService } from '../../../../core/services/events-list.service';
-import {
-  RegionalEntityImageDto,
-  RegionalEntityImageInput,
-  RegionalImageUploadResult,
-} from '../../../../core/models/regional-image.model';
 
 declare const L: any;
 
@@ -85,7 +75,8 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   eventTypesLoading = false;
   tagsLoading = false;
   tagSearchLoading = false;
-  detailLoading = false;
+  readonly isEditMode = false;
+  readonly internalReferenceId = '';
   isSaving = false;
   errorMessage: string | null = null;
   feedbackMessage: string | null = null;
@@ -113,19 +104,20 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   contactEmail = '';
   attendanceLimit = '';
   ageRestriction = '';
-  internalReferenceId = '';
-  eventStatus: 'Published' | 'Draft' | 'Archived' = 'Published';
-  isEditMode = false;
 
   isBold = false;
   isItalic = false;
   isUnderline = false;
   editorIsEmpty = true;
 
+  cardImageUrl: string | null = null;
+  cardImageName = '';
   coverImageUrl: string | null = null;
   coverImageName = '';
-  coverImageFile: File | null = null;
-  galleryImages: { url: string; name: string; file?: File }[] = [];
+  galleryImages: { url: string; name: string; file: File }[] = [];
+
+  private cardImageFile: File | null = null;
+  private coverImageFile: File | null = null;
 
   destinations: RegionalEventParentDestinationDto[] = [];
   locations: RegionalEventParentLocationDto[] = [];
@@ -140,17 +132,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private miniMap: any = null;
   private miniMarker: any = null;
-  private regionViewport: AdminMapViewport | null = null;
   private subscriptions: Subscription[] = [];
   private parentSubscription: Subscription | null = null;
   private tagSearchSubscription: Subscription | null = null;
   private createSubscription: Subscription | null = null;
-  private detailSubscription: Subscription | null = null;
   private tagSearchHandle: ReturnType<typeof setTimeout> | null = null;
   private readonly knownTags = new Map<number, RegionalEventTagDto>();
-  private editEventId: string | null = null;
-  private pendingDescriptionHtml: string | null = null;
-  private imagesTouched = false;
 
   constructor(
     private readonly zone: NgZone,
@@ -160,24 +147,17 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly dashboardService: DashboardService,
     private readonly auth: AuthService,
     private readonly lightboxService: LightboxService,
-    private readonly adminMapService: AdminMapService,
     private readonly eventsService: EventsListService,
-    private readonly regionalMediaService: RegionalMediaService,
   ) {}
 
   ngOnInit(): void {
-    this.editEventId = this.route.snapshot.paramMap.get('id');
-    this.isEditMode = Boolean(this.editEventId);
     this.loadAssignedRegions();
     this.loadEventTypes();
     this.loadEventTags();
   }
 
   ngAfterViewInit(): void {
-    setTimeout(() => {
-      this.initMiniMap();
-      this.applyPendingDescription();
-    }, 0);
+    setTimeout(() => this.initMiniMap(), 0);
   }
 
   ngOnDestroy(): void {
@@ -185,7 +165,6 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.parentSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
-    this.detailSubscription?.unsubscribe();
     if (this.tagSearchHandle) clearTimeout(this.tagSearchHandle);
     this.lightboxService.close();
     if (this.miniMap) {
@@ -287,12 +266,13 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
   get canPublish(): boolean {
     return !this.isSaving &&
-      !this.detailLoading &&
       Boolean(this.activeRegionId) &&
       Boolean(this.eventTitle.trim()) &&
       Boolean(this.summary.trim()) &&
       Boolean(this.eventTypeId) &&
       Boolean(this.parentDestination) &&
+      Boolean(this.cardImageFile) &&
+      Boolean(this.coverImageFile) &&
       this.hasSelectedParent();
   }
 
@@ -304,14 +284,8 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onRegionSelected(regionId: number): void {
     if (regionId === this.activeRegionId) return;
-    if (this.isEditMode) {
-      this.feedbackMessage = 'The region is locked while editing this event.';
-      this.cdr.markForCheck();
-      return;
-    }
     this.activeRegionId = regionId;
     sessionStorage.setItem(NewEventComponent.activeRegionStorageKey, String(regionId));
-    this.loadRegionViewport(regionId);
     this.resetParentSelection();
     this.loadParentOptions();
     this.cdr.markForCheck();
@@ -365,6 +339,31 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.syncEmptyState();
   }
 
+  onCardImageSelected(event: Event): void {
+    const input = event.target instanceof HTMLInputElement ? event.target : null;
+    const file = input?.files?.[0];
+    if (!file || !this.validateImageFile(file)) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.zone.run(() => {
+        this.cardImageUrl = reader.result as string;
+        this.cardImageName = file.name;
+        this.cardImageFile = file;
+        this.cdr.markForCheck();
+      });
+    };
+    reader.readAsDataURL(file);
+    if (input) input.value = '';
+  }
+
+  removeCardImage(): void {
+    this.cardImageUrl = null;
+    this.cardImageName = '';
+    this.cardImageFile = null;
+    this.cdr.markForCheck();
+  }
+
   onCoverImageSelected(event: Event): void {
     const input = event.target instanceof HTMLInputElement ? event.target : null;
     const file = input?.files?.[0];
@@ -376,7 +375,6 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
         this.coverImageUrl = reader.result as string;
         this.coverImageName = file.name;
         this.coverImageFile = file;
-        this.imagesTouched = true;
         this.cdr.markForCheck();
       });
     };
@@ -388,7 +386,6 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.coverImageUrl = null;
     this.coverImageName = '';
     this.coverImageFile = null;
-    this.imagesTouched = true;
     this.cdr.markForCheck();
   }
 
@@ -400,7 +397,6 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       reader.onload = () => {
         this.zone.run(() => {
           this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name, file }];
-          this.imagesTouched = true;
           this.cdr.markForCheck();
         });
       };
@@ -411,7 +407,6 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
   removeGalleryImage(index: number): void {
     this.galleryImages = this.galleryImages.filter((_, currentIndex) => currentIndex !== index);
-    this.imagesTouched = true;
     this.cdr.markForCheck();
   }
 
@@ -473,52 +468,18 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.errorMessage = null;
     this.feedbackMessage = null;
     this.createSubscription?.unsubscribe();
-    const saveRegionId = this.activeRegionId;
-    const saveEventId = this.editEventId;
-    this.createSubscription = of(payload)
-      .pipe(
-        switchMap(payloadWithoutImages => {
-          const files = this.selectedImageFiles();
-          if (files.length === 0) {
-            const request = this.shouldSendImages(files)
-              ? { ...payloadWithoutImages, images: this.buildImageInputs([]) }
-              : payloadWithoutImages;
-            return this.isEditMode && saveRegionId && saveEventId
-              ? this.eventsService.updateEvent(saveRegionId, saveEventId, request)
-              : this.eventsService.createEvent(request as RegionalEventCreateRequest);
-          }
-
-          return this.regionalMediaService.uploadImages(this.activeRegionId!, files).pipe(
-            switchMap(uploaded => {
-              const request = {
-                ...payloadWithoutImages,
-                images: this.buildImageInputs(uploaded.images),
-              };
-              return this.isEditMode && saveRegionId && saveEventId
-                ? this.eventsService.updateEvent(saveRegionId, saveEventId, request)
-                : this.eventsService.createEvent(request as RegionalEventCreateRequest);
-            }),
-          );
-        }),
-        finalize(() => {
-          this.isSaving = false;
-          this.cdr.markForCheck();
-        }),
-      )
+    this.createSubscription = this.eventsService.createEvent(payload)
+      .pipe(finalize(() => {
+        this.isSaving = false;
+        this.cdr.markForCheck();
+      }))
       .subscribe({
-        next: saved => {
-          const message = this.isEditMode ? 'Event saved.' : 'Event published.';
-          this.feedbackMessage = message;
-          this.router.navigate(['/events'], {
-            queryParams: { regionId: saved.regionId },
-            state: { feedbackMessage: message },
-          });
+        next: created => {
+          this.feedbackMessage = 'Event published.';
+          this.router.navigate(['/events'], { queryParams: { regionId: created.regionId } });
         },
         error: error => {
-          this.errorMessage = this.extractErrorMessage(
-            error,
-            this.isEditMode ? 'Event could not be saved.' : 'Event could not be published.',
-          );
+          this.errorMessage = this.extractErrorMessage(error, 'Event could not be published.');
           this.cdr.markForCheck();
         },
       });
@@ -537,11 +498,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
           this.activeRegionId = this.resolveInitialRegionId(this.assignedRegions);
           if (this.activeRegionId) {
             sessionStorage.setItem(NewEventComponent.activeRegionStorageKey, String(this.activeRegionId));
-            this.loadRegionViewport(this.activeRegionId);
             this.loadParentOptions();
-            if (this.isEditMode) {
-              this.loadEventForEdit(this.activeRegionId);
-            }
           } else {
             this.errorMessage = 'No assigned region is available for this account.';
           }
@@ -567,9 +524,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe({
         next: eventTypes => {
           this.eventTypes = Array.isArray(eventTypes) ? eventTypes : [];
-          if (!this.eventTypeId) {
-            this.eventTypeId = this.eventTypes[0]?.id ?? null;
-          }
+          this.eventTypeId = this.eventTypes[0]?.id ?? null;
           this.cdr.markForCheck();
         },
         error: error => {
@@ -681,7 +636,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
-  private buildPayload(): (RegionalEventCreateRequest | RegionalEventUpdateRequest) | null {
+  private buildPayload(): RegionalEventCreateRequest | null {
     this.errorMessage = null;
 
     if (!this.activeRegionId) {
@@ -708,6 +663,16 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (!this.eventTypeId) {
       this.errorMessage = 'Event category/type is required.';
+      return null;
+    }
+
+    if (!this.cardImageFile) {
+      this.errorMessage = 'Card image is required.';
+      return null;
+    }
+
+    if (!this.coverImageFile) {
+      this.errorMessage = 'Cover image is required.';
       return null;
     }
 
@@ -762,7 +727,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     return {
-      ...(this.isEditMode ? {} : { regionId: this.activeRegionId }),
+      regionId: this.activeRegionId,
       parentEntityType: this.toBackendParentType(this.venueType),
       destinationId: this.parentDestination.id,
       locationId: this.venueType === 'location'
@@ -775,7 +740,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       name,
       summary,
       description: this.editorRef?.nativeElement?.innerHTML?.trim() || null,
-      status: this.isEditMode ? this.eventStatus : 'Published',
+      status: 'Published',
       venueName: this.customVenueName.trim() || null,
       isAllDay: this.allDay,
       startsAt,
@@ -789,66 +754,10 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       attendanceLimit,
       ageRestriction: this.ageRestriction.trim() || null,
       tagIds: [...this.selectedTagIds],
+      cardImageFile: this.cardImageFile,
+      coverImageFile: this.coverImageFile,
+      galleryImageFiles: this.galleryImages.map(image => image.file),
     };
-  }
-
-  private loadEventForEdit(regionId: number): void {
-    const eventId = this.editEventId;
-    if (!eventId) return;
-
-    this.detailLoading = true;
-    this.errorMessage = null;
-    this.cdr.markForCheck();
-
-    this.detailSubscription?.unsubscribe();
-    this.detailSubscription = this.eventsService
-      .getEvent(regionId, eventId)
-      .pipe(finalize(() => {
-        this.detailLoading = false;
-        this.cdr.markForCheck();
-      }))
-      .subscribe({
-        next: event => this.applyEventDetail(event),
-        error: error => {
-          this.errorMessage = this.extractErrorMessage(error, 'Event details could not be loaded.');
-          this.cdr.markForCheck();
-        },
-      });
-  }
-
-  private applyEventDetail(event: RegionalEventDetailDto): void {
-    this.eventTitle = event.name ?? '';
-    this.summary = event.summary ?? '';
-    this.eventTypeId = event.eventTypeId ?? null;
-    this.customVenueName = event.venueName ?? '';
-    this.allDay = Boolean(event.isAllDay);
-    this.recurring = Boolean(event.isRecurring);
-    this.freeEvent = event.isFree ?? true;
-    this.ticketPrice = event.ticketPrice ?? '';
-    this.externalTicketLink = event.externalTicketLink ?? '';
-    this.organizerName = event.hostedBy ?? '';
-    this.contactEmail = event.contactEmail ?? '';
-    this.attendanceLimit = event.attendanceLimit ? String(event.attendanceLimit) : '';
-    this.ageRestriction = event.ageRestriction ?? '';
-    this.internalReferenceId = event.internalReferenceId ?? '';
-    this.eventStatus = this.normalizeEditableStatus(event.status);
-    this.venueType = this.normalizeParentType(event.parentEntityType);
-    this.selectedDestinationId = event.destinationId ?? null;
-    this.selectedLocationId = event.locationId ?? null;
-    this.selectedPlaceId = event.placeId ?? null;
-    this.applyDateTimeRange(event.startsAt, event.endsAt, this.allDay);
-
-    this.selectedTagIds = new Set((event.tags ?? []).map(tag => tag.id));
-    (event.tags ?? []).forEach(tag => this.knownTags.set(tag.id, tag));
-    this.classItems = this.eventTags.map(tag => ({
-      tag,
-      checked: this.selectedTagIds.has(tag.id),
-    }));
-    this.applyEntityImages(event.images ?? [], event.imageUrl ?? null, event.name);
-    this.setDescriptionHtml(event.description ?? '');
-    this.loadParentOptions();
-    this.updateMiniMapFromSelection();
-    this.cdr.markForCheck();
   }
 
   private resolveInitialRegionId(regions: RegionalAssignedRegion[]): number | null {
@@ -872,127 +781,6 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedLocationId = null;
     this.selectedPlaceId = null;
     this.updateMiniMapFromSelection();
-  }
-
-  private selectedImageFiles(): File[] {
-    const files: File[] = [];
-    if (this.coverImageFile) {
-      files.push(this.coverImageFile);
-    }
-
-    files.push(...this.galleryImages
-      .map(image => image.file)
-      .filter((file): file is File => !!file));
-    return files;
-  }
-
-  private shouldSendImages(files: File[]): boolean {
-    return !this.isEditMode || this.imagesTouched || files.length > 0;
-  }
-
-  private buildImageInputs(uploaded: RegionalImageUploadResult[]): RegionalEntityImageInput[] {
-    const images: RegionalEntityImageInput[] = [];
-    let uploadIndex = 0;
-    const fallbackName = this.eventTitle.trim() || 'Event image';
-
-    if (this.coverImageUrl) {
-      const uploadedCover = this.coverImageFile ? uploaded[uploadIndex++] : null;
-      images.push({
-        url: uploadedCover?.url ?? this.coverImageUrl,
-        altText: `${fallbackName} cover`,
-        caption: null,
-        isMain: true,
-        sortOrder: 0,
-      });
-    }
-
-    for (const image of this.galleryImages) {
-      const uploadedGalleryImage = image.file ? uploaded[uploadIndex++] : null;
-      images.push({
-        url: uploadedGalleryImage?.url ?? image.url,
-        altText: image.name || fallbackName,
-        caption: null,
-        isMain: false,
-        sortOrder: images.length,
-      });
-    }
-
-    return images.map((image, index) => ({
-      ...image,
-      isMain: index === 0,
-      sortOrder: index,
-    }));
-  }
-
-  private applyEntityImages(images: RegionalEntityImageDto[], fallbackImageUrl: string | null, fallbackName: string): void {
-    const orderedImages = [...images]
-      .sort((a, b) => Number(b.isMain) - Number(a.isMain) || a.sortOrder - b.sortOrder || a.id - b.id);
-
-    if (orderedImages.length === 0 && fallbackImageUrl) {
-      this.coverImageUrl = fallbackImageUrl;
-      this.coverImageName = fallbackName;
-      this.coverImageFile = null;
-      this.galleryImages = [];
-      this.imagesTouched = false;
-      return;
-    }
-
-    const [cover, ...gallery] = orderedImages;
-    this.coverImageUrl = cover?.url ?? null;
-    this.coverImageName = cover?.altText ?? fallbackName;
-    this.coverImageFile = null;
-    this.galleryImages = gallery.map(image => ({
-      url: image.url,
-      name: image.altText ?? fallbackName,
-    }));
-    this.imagesTouched = false;
-  }
-
-  private setDescriptionHtml(html: string): void {
-    this.pendingDescriptionHtml = html;
-    this.applyPendingDescription();
-  }
-
-  private applyPendingDescription(): void {
-    if (this.pendingDescriptionHtml === null || !this.editorRef?.nativeElement) return;
-    this.editorRef.nativeElement.innerHTML = this.pendingDescriptionHtml;
-    this.pendingDescriptionHtml = null;
-    this.syncEmptyState();
-  }
-
-  private applyDateTimeRange(startsAt?: string | null, endsAt?: string | null, isAllDay = false): void {
-    const start = startsAt ? new Date(startsAt) : null;
-    const end = endsAt ? new Date(endsAt) : null;
-    if (start && !Number.isNaN(start.getTime())) {
-      this.startDate = this.toDateInput(start);
-      this.startTime = this.toTimeInput(start);
-    }
-    if (end && !Number.isNaN(end.getTime())) {
-      this.endDate = this.toDateInput(end);
-      this.endTime = isAllDay ? this.endTime : this.toTimeInput(end);
-    }
-  }
-
-  private toDateInput(date: Date): string {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  }
-
-  private toTimeInput(date: Date): string {
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  }
-
-  private normalizeParentType(value?: string | null): EventParentType {
-    const normalized = (value ?? '').toLowerCase();
-    if (normalized === 'place') return 'place';
-    if (normalized === 'destination') return 'destination';
-    return 'location';
-  }
-
-  private normalizeEditableStatus(value?: string | null): 'Published' | 'Draft' | 'Archived' {
-    const normalized = (value ?? '').toLowerCase();
-    if (normalized === 'draft') return 'Draft';
-    if (normalized === 'archived') return 'Archived';
-    return 'Published';
   }
 
   private hasSelectedParent(): boolean {
@@ -1069,7 +857,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       doubleClickZoom: false,
       touchZoom: false,
       attributionControl: false,
-    });
+    }).setView([44.0, 20.9], 7);
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.miniMap);
     this.updateMiniMapFromSelection();
   }
@@ -1085,62 +873,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     const latitude = this.selectedParentLatitude;
     const longitude = this.selectedParentLongitude;
     if (latitude === null || longitude === null) {
-      this.applyRegionViewportToMiniMap();
+      this.miniMap.setView([44.0, 20.9], 7);
       return;
     }
 
     this.miniMarker = L.marker([latitude, longitude], { draggable: false }).addTo(this.miniMap);
-    this.miniMap.setView([latitude, longitude], this.miniMap.getZoom(), { animate: false });
-  }
-
-  private loadRegionViewport(regionId: number): void {
-    const subscription = this.adminMapService.getViewport(regionId)
-      .subscribe({
-        next: viewport => {
-          this.regionViewport = viewport;
-          if (this.selectedParentLatitude === null || this.selectedParentLongitude === null) {
-            this.applyRegionViewportToMiniMap();
-          }
-          this.cdr.markForCheck();
-        },
-        error: () => {
-          this.regionViewport = null;
-          this.applyRegionViewportToMiniMap();
-          this.cdr.markForCheck();
-        },
-      });
-    this.subscriptions.push(subscription);
-  }
-
-  private applyRegionViewportToMiniMap(): void {
-    if (!this.miniMap || typeof L === 'undefined') return;
-
-    const viewport = this.regionViewport;
-    try {
-      if (viewport?.bounds) {
-        this.miniMap.fitBounds(
-          [
-            [viewport.bounds.south, viewport.bounds.west],
-            [viewport.bounds.north, viewport.bounds.east],
-          ],
-          { padding: [10, 10], animate: false },
-        );
-        return;
-      }
-
-      if (
-        typeof viewport?.centerLatitude === 'number' &&
-        typeof viewport.centerLongitude === 'number' &&
-        typeof viewport.zoom === 'number'
-      ) {
-        this.miniMap.setView([viewport.centerLatitude, viewport.centerLongitude], viewport.zoom, { animate: false });
-        return;
-      }
-
-      this.miniMap.fitWorld({ animate: false });
-    } catch {
-      // Leaflet can throw while hidden; the next render/update will retry.
-    }
+    this.miniMap.setView([latitude, longitude], this.venueType === 'destination' ? 10 : 13);
   }
 
   private extractErrorMessage(error: unknown, fallback: string): string {

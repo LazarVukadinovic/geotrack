@@ -6,6 +6,7 @@ export interface HotelTag {
 
 export interface HotelReview {
   id: string;
+  authorUserId: number;
   authorName: string;
   avatarUrl: string;
   rating: number;
@@ -13,6 +14,7 @@ export interface HotelReview {
   body: string;
   helpfulCount: number;
   reportedByCurrentUser: boolean;
+  isOwnReview: boolean;
 }
 
 export interface HotelSimilar {
@@ -53,6 +55,8 @@ export interface HotelDetail {
   id: string;
   title: string;
   location: string;
+  locationId?: string | null;
+  locationName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   heroImage: string;
@@ -69,4 +73,7 @@ export interface HotelDetail {
   reviews: HotelReview[];
   similar: HotelSimilar[];
   isSaved: boolean;
+  isOwnable: boolean;
+  isOwnedByCurrentUser: boolean;
+  hasPendingOwnershipClaim: boolean;
 }

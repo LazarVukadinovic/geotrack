@@ -1,6 +1,8 @@
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
+using Geotrack.Domain.Entities.Interests;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +44,16 @@ namespace Geotrack.Infrastructure.Repositories
             return await _context.Users
                 .Include(u => u.UserTags)
                     .ThenInclude(ut => ut.Tag)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task<User?> GetByIdWithUserInterestTopicsAsync(int userId)
+        {
+            return await _context.Users
+                .Include(u => u.UserInterestTopics)
+                    .ThenInclude(uit => uit.InterestTopic)
+                        .ThenInclude(topic => topic.TopicTags)
+                            .ThenInclude(link => link.Tag)
                 .FirstOrDefaultAsync(u => u.Id == userId);
         }
 
@@ -103,10 +115,10 @@ namespace Geotrack.Infrastructure.Repositories
                 .Where(ci => ci.CollectionId == collectionId)
                 .OrderByDescending(ci => ci.CreatedAt)
                 .Select(ci =>
-                    ci.Place != null ? ci.Place.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
-                    ci.Event != null ? ci.Event.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
-                    ci.Destination != null ? ci.Destination.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
-                    ci.Location != null ? ci.Location.Images.OrderByDescending(image => image.IsMain).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() : null)
+                    ci.Place != null ? ci.Place.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
+                    ci.Event != null ? ci.Event.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
+                    ci.Destination != null ? ci.Destination.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() :
+                    ci.Location != null ? ci.Location.Images.OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2).ThenBy(image => image.SortOrder).ThenBy(image => image.CreatedAt).ThenBy(image => image.Id).Select(image => image.Url).FirstOrDefault() : null)
                 .ToListAsync();
 
             return urls
@@ -122,6 +134,17 @@ namespace Geotrack.Infrastructure.Repositories
 
             return await _context.Tags
                 .Where(t => ids.Contains(t.Id))
+                .ToListAsync();
+        }
+
+        public async Task<List<InterestTopic>> GetInterestTopicsByIdsAsync(IEnumerable<int> interestTopicIds)
+        {
+            var ids = interestTopicIds.Distinct().ToList();
+
+            return await _context.InterestTopics
+                .Include(topic => topic.TopicTags)
+                    .ThenInclude(link => link.Tag)
+                .Where(topic => ids.Contains(topic.Id) && topic.IsActive)
                 .ToListAsync();
         }
 
@@ -213,6 +236,17 @@ namespace Geotrack.Infrastructure.Repositories
             return Task.CompletedTask;
         }
 
+        public async Task AddUserInterestTopicAsync(UserInterestTopic userInterestTopic)
+        {
+            await _context.UserInterestTopics.AddAsync(userInterestTopic);
+        }
+
+        public Task DeleteUserInterestTopicsAsync(IEnumerable<UserInterestTopic> userInterestTopics)
+        {
+            _context.UserInterestTopics.RemoveRange(userInterestTopics);
+            return Task.CompletedTask;
+        }
+
         public async Task<List<UserInterestSignal>> GetVisibleInferredInterestSignalsAsync(int userId, double minimumScore)
         {
             var explicitTagIds = _context.UserTags
@@ -239,6 +273,38 @@ namespace Geotrack.Infrastructure.Repositories
                 .FirstOrDefaultAsync(signal =>
                     signal.UserId == userId &&
                     signal.TagId == tagId &&
+                    signal.Source == "inferred");
+        }
+
+        public async Task<List<UserInterestTopicSignal>> GetVisibleInferredInterestTopicSignalsAsync(int userId, double minimumScore)
+        {
+            var explicitTopicIds = _context.UserInterestTopics
+                .Where(ut => ut.UserId == userId)
+                .Select(ut => ut.InterestTopicId);
+
+            return await _context.UserInterestTopicSignals
+                .Include(signal => signal.InterestTopic)
+                    .ThenInclude(topic => topic.TopicTags)
+                        .ThenInclude(link => link.Tag)
+                .Where(signal =>
+                    signal.UserId == userId &&
+                    signal.Source == "inferred" &&
+                    !signal.IsDismissed &&
+                    signal.Score >= minimumScore &&
+                    signal.InterestTopic.IsActive &&
+                    !explicitTopicIds.Contains(signal.InterestTopicId))
+                .OrderByDescending(signal => signal.Score)
+                .ThenBy(signal => signal.InterestTopic.Name)
+                .ToListAsync();
+        }
+
+        public async Task<UserInterestTopicSignal?> GetUserInterestTopicSignalAsync(int userId, int interestTopicId)
+        {
+            return await _context.UserInterestTopicSignals
+                .Include(signal => signal.InterestTopic)
+                .FirstOrDefaultAsync(signal =>
+                    signal.UserId == userId &&
+                    signal.InterestTopicId == interestTopicId &&
                     signal.Source == "inferred");
         }
 
@@ -303,4 +369,3 @@ namespace Geotrack.Infrastructure.Repositories
         }
     }
 }
-

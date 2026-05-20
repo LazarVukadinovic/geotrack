@@ -227,16 +227,8 @@ public sealed class RegionalDestinationsTests
         var upload = await UploadOneImageAsync(manager, fixture.AssignedRegionId);
 
         var request = BuildCreateRequest(fixture.AssignedRegionId, name: "Destination With Image");
-        request.Images =
-        [
-            new()
-            {
-                Url = upload.Url,
-                AltText = "Destination cover",
-                IsMain = true,
-                SortOrder = 0
-            }
-        ];
+        request.CardImageUrl = upload.Url;
+        request.CoverImageUrl = upload.Url;
 
         var response = await manager.PostAsJsonAsync("/api/admin/regional/destinations", request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -244,7 +236,9 @@ public sealed class RegionalDestinationsTests
         var created = await response.Content.ReadFromJsonAsync<RegionalDestinationDetailDto>();
         Assert.NotNull(created);
         Assert.Equal(upload.Url, created!.ImageUrl);
-        Assert.Single(created.Images);
+        Assert.Equal(upload.Url, created.CardImageUrl);
+        Assert.Equal(upload.Url, created.CoverImageUrl);
+        Assert.Empty(created.GalleryImageUrls);
 
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -252,10 +246,17 @@ public sealed class RegionalDestinationsTests
             .Where(image => image.DestinationId == created.Id)
             .OrderBy(image => image.Id)
             .ToListAsync();
-        var image = Assert.Single(storedImages);
-        Assert.Equal(EntityImageTargetType.Destination, image.TargetType);
-        Assert.Equal(upload.Url, image.Url);
-        Assert.True(image.IsMain);
+        Assert.Equal(2, storedImages.Count);
+        Assert.Contains(storedImages, image =>
+            image.TargetType == EntityImageTargetType.Destination &&
+            image.ImageRole == EntityImageRole.Card &&
+            image.Url == upload.Url &&
+            image.IsMain);
+        Assert.Contains(storedImages, image =>
+            image.TargetType == EntityImageTargetType.Destination &&
+            image.ImageRole == EntityImageRole.Cover &&
+            image.Url == upload.Url &&
+            !image.IsMain);
     }
 
     [Fact]
@@ -269,19 +270,19 @@ public sealed class RegionalDestinationsTests
         var secondUpload = await UploadOneImageAsync(manager, fixture.AssignedRegionId);
 
         var request = BuildCreateRequest(fixture.AssignedRegionId, name: "Destination With Ordered Images");
-        request.Images =
-        [
-            new() { Url = firstUpload.Url, IsMain = true, SortOrder = 20 },
-            new() { Url = secondUpload.Url, IsMain = true, SortOrder = 10 }
-        ];
+        request.CardImageUrl = secondUpload.Url;
+        request.CoverImageUrl = firstUpload.Url;
+        request.GalleryImageUrls = [firstUpload.Url];
 
         var response = await manager.PostAsJsonAsync("/api/admin/regional/destinations", request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var created = await response.Content.ReadFromJsonAsync<RegionalDestinationDetailDto>();
         Assert.NotNull(created);
-        Assert.Equal(firstUpload.Url, created!.ImageUrl);
-        Assert.Equal(firstUpload.Url, Assert.Single(created.Images, image => image.IsMain).Url);
+        Assert.Equal(secondUpload.Url, created!.ImageUrl);
+        Assert.Equal(secondUpload.Url, created.CardImageUrl);
+        Assert.Equal(firstUpload.Url, created.CoverImageUrl);
+        Assert.Equal(firstUpload.Url, Assert.Single(created.GalleryImageUrls));
     }
 
     [Fact]
@@ -470,6 +471,8 @@ public sealed class RegionalDestinationsTests
             Description = "Full destination description.",
             Status = "Published",
             BoundaryNote = "North boundary note.",
+            CardImageUrl = "/media/uploads/regional/default-card.png",
+            CoverImageUrl = "/media/uploads/regional/default-cover.png",
             Boundary = new RegionalDestinationBoundaryDto
             {
                 ShapeType = "Polygon",

@@ -107,7 +107,12 @@ export class LocationsListService {
   }
 
   createLocation(payload: RegionalLocationCreateRequest): Observable<RegionalLocationDetailDto> {
-    return this.http.post<RegionalLocationDetailDto>(this.endpoint, payload);
+    return this.http.post<RegionalLocationDetailDto>(this.endpoint, this.buildCreateFormData(payload)).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
   }
 
   updateLocation(
@@ -116,7 +121,12 @@ export class LocationsListService {
     payload: RegionalLocationUpdateRequest,
   ): Observable<RegionalLocationDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalLocationDetailDto>(`${this.endpoint}/${locationId}`, payload, { params });
+    return this.http.put<RegionalLocationDetailDto>(`${this.endpoint}/${locationId}`, payload, { params }).pipe(
+      map(dto => {
+        this.toListItem(dto);
+        return dto;
+      }),
+    );
   }
 
   getParentDestinations(
@@ -157,10 +167,30 @@ export class LocationsListService {
     return this.http.delete<void>(`${this.endpoint}/${locationId}`, { params });
   }
 
+
+  private buildCreateFormData(payload: RegionalLocationCreateRequest): FormData {
+    const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
+    if (!cardImageFile || !coverImageFile) {
+      throw new Error('Card and cover images are required.');
+    }
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+    formData.append('cardImage', cardImageFile);
+    formData.append('coverImage', coverImageFile);
+
+    for (const file of galleryImageFiles ?? []) {
+      formData.append('galleryImages', file);
+    }
+
+    return formData;
+  }
+
   toListItem(dto: RegionalLocationListItemDto): LocationListItem {
     const id = String(dto.id);
     const lastUpdatedIso = dto.lastUpdatedAt ?? dto.createdAt ?? null;
     const destinationName = dto.destinationName ?? null;
+    const detail = dto as Partial<RegionalLocationDetailDto>;
     const item: LocationListItem = {
       id,
       name: dto.name,
@@ -171,13 +201,18 @@ export class LocationsListService {
       internalRefId: dto.internalReferenceId ?? undefined,
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
-      imageUrl: dto.imageUrl ?? null,
-      imageBg: dto.imageUrl ? `url("${dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
+      imageUrl: dto.imageUrl ?? dto.cardImageUrl ?? null,
+      imageBg: (dto.coverImageUrl ?? dto.imageUrl) ? `url("${dto.coverImageUrl ?? dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
+      coverImageUrl: dto.coverImageUrl ?? dto.imageUrl ?? undefined,
+      coverImageName: dto.coverImageUrl ? 'Cover image' : undefined,
+      galleryImages: (dto.galleryImageUrls ?? []).map((url, index) => ({ url, name: `Gallery image ${index + 1}` })),
       category: dto.locationType ?? 'Location',
       regionId: dto.regionId,
       regionDisplayName: dto.regionDisplayName,
       destinationId: dto.destinationId ?? null,
       destinationName,
+      lat: typeof detail.latitude === 'number' ? detail.latitude : undefined,
+      lng: typeof detail.longitude === 'number' ? detail.longitude : undefined,
       locationTypeId: dto.locationTypeId ?? null,
       locationType: dto.locationType ?? null,
       parentDestination: destinationName ?? undefined,

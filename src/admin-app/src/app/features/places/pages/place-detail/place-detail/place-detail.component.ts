@@ -42,6 +42,11 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   mapModalOpen  = false;
   deleteTarget: PlaceListItem | null = null;
   isDeleting    = false;
+  ownerFormOpen = false;
+  ownerIdentifier = '';
+  ownerError = '';
+  ownerSuccess = '';
+  isAddingOwner = false;
 
   private miniMap:     any = null;
   private modalMap:    any = null;
@@ -50,25 +55,57 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
-    const navState = history.state as PlaceListItem;
+    const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
+    const navState = history.state as Partial<PlaceListItem> & { regionId?: number };
 
     if (id) {
       const fromService = this.svc.findById(id);
+      const regionId = navState?.regionId ?? fromService?.regionId ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+      if (regionId) {
+        this.loadFromBackend(regionId, id);
+        return;
+      }
+
       if (fromService) {
-        this.item      = { ...fromService };
-        this.isLoading = false;
+        this.setItem(fromService);
         return;
       }
     }
 
-    if (navState?.id) {
-      this.item      = { ...navState };
-      this.isLoading = false;
+    if (navState?.id && navState?.name && navState?.status) {
+      const regionId = navState?.regionId ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+      if (regionId) {
+        this.loadFromBackend(regionId, String(navState.id));
+        return;
+      }
+
+      this.setItem(navState as PlaceListItem);
       return;
     }
 
     this.notFound  = true;
     this.isLoading = false;
+  }
+
+  private setItem(item: PlaceListItem): void {
+    this.item      = { ...item };
+    this.region    = this.item.regionDisplayName || this.item.region;
+    this.isLoading = false;
+    this.notFound  = false;
+    this.cdr.markForCheck();
+    setTimeout(() => this.initMiniMap(), 100);
+  }
+
+  private loadFromBackend(regionId: number, id: string): void {
+    this.isLoading = true;
+    this.svc.getPlace(regionId, id).subscribe({
+      next: dto => this.setItem(this.svc.toListItem(dto)),
+      error: () => {
+        this.notFound = true;
+        this.isLoading = false;
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   ngAfterViewInit(): void {
@@ -96,7 +133,7 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     const el = this.miniMapContainer.nativeElement;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
-    const hasCoords = (this.item as any)?.lat != null;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.miniMap = L.map(el, {
       zoomControl: true, dragging: true, scrollWheelZoom: false,
@@ -117,7 +154,7 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.modalMap) return;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
-    const hasCoords = (this.item as any)?.lat != null;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false })
       .setView([lat, lng], hasCoords ? 15 : 9);
@@ -141,6 +178,80 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
   }
 
+  get parentLocationName(): string {
+    return this.item?.locationName || (this.item as any)?.parentLocation || '';
+  }
+
+  goToParentLocation(event?: Event): void {
+    event?.preventDefault();
+    if (!this.item?.locationId || !this.item?.regionId) return;
+    this.router.navigate(['/locations/detail', this.item.locationId], {
+      state: { regionId: this.item.regionId },
+    });
+  }
+
+
+  get isOwnable(): boolean {
+    return Boolean((this.item as any)?.isOwnable);
+  }
+
+  get owners(): { userId: number; username: string; email: string; displayName: string }[] {
+    return ((this.item as any)?.owners ?? []) as { userId: number; username: string; email: string; displayName: string }[];
+  }
+
+  get hasOwner(): boolean {
+    return this.owners.length > 0;
+  }
+
+  get ownerNames(): string {
+    return this.owners
+      .map(owner => owner.displayName || owner.username || owner.email)
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  toggleOwnerForm(): void {
+    this.ownerFormOpen = !this.ownerFormOpen;
+    this.ownerError = '';
+    this.ownerSuccess = '';
+
+    if (!this.ownerFormOpen) {
+      this.ownerIdentifier = '';
+    }
+  }
+
+  addOwner(): void {
+    if (!this.item || this.isAddingOwner) return;
+
+    const emailOrUsername = this.ownerIdentifier.trim();
+    if (!emailOrUsername) {
+      this.ownerError = 'Enter owner email or username.';
+      this.ownerSuccess = '';
+      return;
+    }
+
+    this.isAddingOwner = true;
+    this.ownerError = '';
+    this.ownerSuccess = '';
+
+    this.svc.addOwner(this.item.regionId, this.item.id, { emailOrUsername }).subscribe({
+      next: dto => {
+        this.setItem(this.svc.toListItem(dto));
+        this.ownerIdentifier = '';
+        this.ownerFormOpen = false;
+        this.ownerSuccess = 'Owner added.';
+        this.isAddingOwner = false;
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.ownerError = err?.error?.message || err?.message || 'Could not add owner.';
+        this.ownerSuccess = '';
+        this.isAddingOwner = false;
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
   closeMapModal(): void {
     this.mapModalOpen = false;
     this.destroyModalMap();
@@ -148,8 +259,9 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   editItem(): void {
     const full = this.svc.findById(this.item!.id) ?? this.item!;
-    this.router.navigate(['/places/new'], {
-      state: { place: full, returnTo: `/places/detail/${full.id}` }
+    this.router.navigate(['/places/edit', full.id], {
+      queryParams: { regionId: full.regionId },
+      state: { place: full, returnTo: `/places/detail/${full.id}`, regionId: full.regionId }
     });
   }
 

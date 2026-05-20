@@ -26,13 +26,19 @@ public class RegionalPlaceListItemDto
     public DateTime CreatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
     public string? ImageUrl { get; set; }
-    public List<RegionalEntityImageDto> Images { get; set; } = new();
+    public string? CardImageUrl { get; set; }
+    public string? CoverImageUrl { get; set; }
+    public List<string> GalleryImageUrls { get; set; } = new();
     public string? DetailRoute { get; set; }
     public string? EditRoute { get; set; }
 }
 
 public class RegionalPlaceDetailDto : RegionalPlaceListItemDto
 {
+    public bool IsOwnable { get; set; }
+    public bool HasOwner => Owners.Count > 0;
+    public List<RegionalPlaceOwnerDto> Owners { get; set; } = new();
+
     public double Latitude { get; set; }
     public double Longitude { get; set; }
     public string? OpeningHours { get; set; }
@@ -49,6 +55,20 @@ public class RegionalPlaceDetailDto : RegionalPlaceListItemDto
     public List<RegionalPlaceOperatingHourDto> OperatingHours { get; set; } = new();
 }
 
+
+public class RegionalPlaceOwnerDto
+{
+    public int UserId { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+}
+
+public class RegionalPlaceAddOwnerRequestDto
+{
+    public string? EmailOrUsername { get; set; }
+}
+
 public class RegionalPlaceListResponseDto
 {
     public List<RegionalPlaceListItemDto> Items { get; set; } = new();
@@ -63,13 +83,10 @@ public class RegionalPlaceUpdateRequestDto
     public string? Summary { get; set; }
     public string? Subtitle { get; set; }
     public string? Description { get; set; }
-    public string? Status { get; set; }
     public string? Address { get; set; }
-    public string? StreetAddress { get; set; }
     public string? OpeningHours { get; set; }
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
-    public string? ContactPhone { get; set; }
     public string? Website { get; set; }
     public string? AdmissionPriceRange { get; set; }
     public string? BookingExternalLink { get; set; }
@@ -85,7 +102,6 @@ public class RegionalPlaceUpdateRequestDto
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public List<int>? TagIds { get; set; }
-    public List<RegionalEntityImageInputDto>? Images { get; set; }
 }
 
 public class RegionalPlaceCreateRequestDto
@@ -112,7 +128,10 @@ public class RegionalPlaceCreateRequestDto
     public bool OperatingHoursEnabled { get; set; }
     public List<RegionalPlaceOperatingHourDto> OperatingHours { get; set; } = new();
     public List<int> TagIds { get; set; } = new();
-    public List<RegionalEntityImageInputDto> Images { get; set; } = new();
+
+    public string? CardImageUrl { get; set; }
+    public string? CoverImageUrl { get; set; }
+    public List<string> GalleryImageUrls { get; set; } = new();
 
     // Present only so accidental/tampered clients can be rejected explicitly.
     public string? InternalReferenceId { get; set; }
@@ -148,4 +167,5 @@ public class RegionalPlaceTypeDto
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public bool IsOwnable { get; set; }
 }

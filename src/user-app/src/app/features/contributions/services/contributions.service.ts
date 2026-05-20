@@ -20,7 +20,9 @@ export interface ContributionListItem {
   placeType: string;
   stayType: string;
   location: string;
+  cardImageUrl: string;
   coverImageUrl: string;
+  galleryImageUrls: string[];
   status: ContributionStatus;
   statusLabel: string;
   submittedAt: string;
@@ -30,6 +32,7 @@ export interface ContributionListItem {
 }
 
 export interface ContributionDetail extends ContributionListItem {
+  placeTypeId: number | null;
   address: string;
   city: string;
   region: string;
@@ -77,7 +80,10 @@ interface ApiContributionListItem {
   placeType?: string | null;
   stayType?: string | null;
   location?: string | null;
+  cardImageUrl?: string | null;
+  mainImageUrl?: string | null;
   coverImageUrl?: string | null;
+  galleryImageUrls?: string[] | null;
   status: ContributionStatus;
   submittedAt: string;
   updatedAt?: string | null;
@@ -85,6 +91,7 @@ interface ApiContributionListItem {
 }
 
 interface ApiContributionDetail extends ApiContributionListItem {
+  placeTypeId?: number | null;
   address: string;
   city: string;
   region: string;
@@ -110,6 +117,7 @@ interface ApiContributionDetail extends ApiContributionListItem {
 interface UpsertPlaceContributionPayload {
   type: 'CreatePlace';
   name: string;
+  placeTypeId?: number | null;
   placeType: string;
   stayType?: string;
   address: string;
@@ -199,13 +207,18 @@ export class ContributionsService {
       basics: {
         name: detail.name,
         placeType: detail.placeType || (detail.stayType ? 'Stay' : 'Place'),
+        placeTypeId: detail.placeTypeId,
         stayType: detail.stayType || 'Hotel',
         address: detail.address,
         city: detail.city,
         region: detail.region,
         country: detail.country,
         imageUrl: detail.coverImageUrl,
+        cardImageUrl: detail.cardImageUrl,
+        cardImageFile: null,
         coverImageFile: null,
+        galleryImageUrls: detail.galleryImageUrls,
+        galleryImageFiles: [],
         ownershipProofFile: null,
         ownershipProofDocumentUrl: detail.ownershipProofDocumentUrl ?? null,
         ownershipProofOriginalFileName: detail.ownershipProofOriginalFileName ?? null,
@@ -233,11 +246,11 @@ export class ContributionsService {
     const features = normalizeFeatures(draft.features);
     const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
-    const requiresOwnershipProof = requiresOwnershipProofPlaceType(basics.placeType);
 
     const payload: UpsertPlaceContributionPayload = {
       type: 'CreatePlace',
       name: basics.name,
+      placeTypeId: basics.placeTypeId,
       placeType: basics.placeType || 'Place',
       ...(isAccommodation ? { stayType: basics.stayType || 'Hotel' } : {}),
       address: basics.address,
@@ -257,14 +270,39 @@ export class ContributionsService {
       bookingPartners: isAccommodation ? details.bookingPartners : [],
     };
 
+    const images: { url: string; imageRole: 'card' | 'cover' | 'gallery'; sortOrder: number }[] = [];
+    if (!basics.cardImageFile && basics.cardImageUrl) {
+      images.push({ url: basics.cardImageUrl, imageRole: 'card', sortOrder: -9 });
+    }
+    if (!basics.coverImageFile && basics.imageUrl) {
+      images.push({ url: basics.imageUrl, imageRole: 'cover', sortOrder: -10 });
+    }
+    (basics.galleryImageUrls ?? []).forEach((url, index) => {
+      if (url && !(basics.galleryImageFiles ?? [])[index]) {
+        images.push({ url, imageRole: 'gallery', sortOrder: index });
+      }
+    });
+
+    if (images.length > 0) {
+      (payload as UpsertPlaceContributionPayload & { images: typeof images }).images = images;
+    }
+
     const formData = new FormData();
     formData.append('payload', JSON.stringify(payload));
+
+    if (basics.cardImageFile) {
+      formData.append('cardImage', basics.cardImageFile);
+    }
 
     if (basics.coverImageFile) {
       formData.append('coverImage', basics.coverImageFile);
     }
 
-    if (requiresOwnershipProof && basics.ownershipProofFile) {
+    for (const file of basics.galleryImageFiles ?? []) {
+      formData.append('galleryImages', file);
+    }
+
+    if (basics.ownershipProofFile) {
       formData.append('ownershipProofDocument', basics.ownershipProofFile);
     }
 
@@ -319,7 +357,9 @@ function mapListItem(item: ApiContributionListItem): ContributionListItem {
     placeType: item.placeType ?? '',
     stayType: item.stayType ?? '',
     location: item.location ?? '',
+    cardImageUrl: item.cardImageUrl ?? item.mainImageUrl ?? '',
     coverImageUrl: item.coverImageUrl ?? '',
+    galleryImageUrls: item.galleryImageUrls ?? [],
     status: item.status,
     statusLabel: statusLabel(item.status),
     submittedAt: item.submittedAt,
@@ -343,20 +383,10 @@ function isAccommodationPlaceType(placeType: string | null | undefined): boolean
   return (placeType ?? '').trim().toLowerCase() === 'stay';
 }
 
-function requiresOwnershipProofPlaceType(placeType: string | null | undefined): boolean {
-  switch ((placeType ?? '').trim().toLowerCase()) {
-    case 'stay':
-    case 'restaurant':
-    case 'cafe':
-      return true;
-    default:
-      return false;
-  }
-}
-
 function mapDetail(item: ApiContributionDetail): ContributionDetail {
   return {
     ...mapListItem(item),
+    placeTypeId: item.placeTypeId ?? null,
     address: item.address ?? '',
     city: item.city ?? '',
     region: item.region ?? '',

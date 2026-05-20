@@ -121,6 +121,10 @@ public record class RegionalEventCreateRequestDto
     public List<int> TagIds { get; set; } = new();
     public List<RegionalEntityImageInputDto> Images { get; set; } = new();
 
+    public string? CardImageUrl { get; set; }
+    public string? CoverImageUrl { get; set; }
+    public List<string> GalleryImageUrls { get; set; } = new();
+
     // Present only so accidental/tampered clients can be rejected explicitly.
     public string? InternalReferenceId { get; set; }
 }

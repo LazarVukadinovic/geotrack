@@ -17,6 +17,7 @@ public class LocationRepository : Repository<Location>, ILocationRepository
     public async Task<Location?> GetWithDetailsAsync(int locationId)
     {
         return await _context.Locations
+            .Include(l => l.Destination)
             .Include(l => l.Places)
                 .ThenInclude(p => p.PlaceTags)
                     .ThenInclude(pt => pt.Tag)

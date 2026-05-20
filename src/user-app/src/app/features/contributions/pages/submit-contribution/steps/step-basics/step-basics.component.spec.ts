@@ -72,12 +72,12 @@ describe('StepBasicsComponent', () => {
 
   it('allows valid Restaurant proof and clears it when switching to an unrelated type', () => {
     fillValidLocation();
-    component.selectPlaceType('Restaurant');
+    component.selectPlaceType({ id: 2, name: 'Restaurant', description: null, isOwnable: true });
     component.form.ownershipProofFile = makePdfFile();
 
     expect(component.isValid()).toBe(true);
 
-    component.selectPlaceType('Landmark');
+    component.selectPlaceType({ id: 1, name: 'Landmark', description: null, isOwnable: false });
 
     expect(component.requiresOwnershipProof()).toBe(false);
     expect(component.form.ownershipProofFile).toBeNull();

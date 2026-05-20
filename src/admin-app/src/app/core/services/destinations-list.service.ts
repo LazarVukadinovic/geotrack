@@ -102,7 +102,7 @@ export class DestinationsListService {
   }
 
   createDestination(payload: RegionalDestinationCreateRequest): Observable<RegionalDestinationDetailDto> {
-    return this.http.post<RegionalDestinationDetailDto>(this.endpoint, payload);
+    return this.http.post<RegionalDestinationDetailDto>(this.endpoint, this.buildCreateFormData(payload));
   }
 
   updateDestination(
@@ -128,6 +128,25 @@ export class DestinationsListService {
     return this.http.delete<void>(`${this.endpoint}/${destinationId}`, { params });
   }
 
+
+  private buildCreateFormData(payload: RegionalDestinationCreateRequest): FormData {
+    const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
+    if (!cardImageFile || !coverImageFile) {
+      throw new Error('Card and cover images are required.');
+    }
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+    formData.append('cardImage', cardImageFile);
+    formData.append('coverImage', coverImageFile);
+
+    for (const file of galleryImageFiles ?? []) {
+      formData.append('galleryImages', file);
+    }
+
+    return formData;
+  }
+
   toListItem(dto: RegionalDestinationListItemDto): DestinationListItem {
     const id = String(dto.id);
     const lastUpdatedIso = dto.lastUpdatedAt ?? dto.createdAt ?? null;
@@ -141,7 +160,7 @@ export class DestinationsListService {
       internalRefId: dto.internalReferenceId ?? undefined,
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
-      imageBg: dto.imageUrl ? `url("${dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
+      imageBg: (dto.coverImageUrl ?? dto.imageUrl) ? `url("${dto.coverImageUrl ?? dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
       category: dto.destinationTypeName ?? 'Destination',
       regionId: dto.regionId,
       regionDisplayName: dto.regionDisplayName,
@@ -149,10 +168,15 @@ export class DestinationsListService {
       destinationTypeName: dto.destinationTypeName,
       createdAt: dto.createdAt ?? null,
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
-      imageUrl: dto.imageUrl ?? null,
+      imageUrl: dto.imageUrl ?? dto.cardImageUrl ?? null,
+      coverImageUrl: dto.coverImageUrl ?? dto.imageUrl ?? undefined,
+      coverImageName: dto.coverImageUrl ? 'Cover image' : undefined,
+      galleryImages: (dto.galleryImageUrls ?? []).map((url, index) => ({ url, name: `Gallery image ${index + 1}` })),
       detailRoute: dto.detailRoute ?? `/destinations/detail/${dto.id}`,
       editRoute: dto.editRoute ?? `/destinations/edit/${dto.id}`,
       tagsDto: dto.tags ?? [],
+      lat: (dto as RegionalDestinationDetailDto).latitude,
+      lng: (dto as RegionalDestinationDetailDto).longitude,
       tags: (dto.tags ?? []).map(tag => tag.name),
     };
 

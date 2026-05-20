@@ -1,4 +1,4 @@
-import { Component, inject, signal, Output, EventEmitter } from '@angular/core';
+import { Component, inject, signal, Output, EventEmitter, NgZone, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CollectionsService } from '../../services/collections';
 
@@ -11,8 +11,9 @@ const DISMISS_THRESHOLD = 120;
   templateUrl: './new-collection-sheet.component.html',
   styleUrl: './new-collection-sheet.component.css',
 })
-export class NewCollectionSheetComponent {
+export class NewCollectionSheetComponent implements OnDestroy {
   private readonly collService = inject(CollectionsService);
+  private readonly ngZone = inject(NgZone);
 
   protected readonly isOpen = signal(false);
   protected readonly name   = signal('');
@@ -20,6 +21,8 @@ export class NewCollectionSheetComponent {
   protected readonly isDragging = signal(false);
 
   private touchStartY = 0;
+  private readonly boundMove = this.onDocTouchMove.bind(this);
+  private readonly boundEnd  = this.onDocTouchEnd.bind(this);
 
   @Output() created = new EventEmitter<number>();
 
@@ -30,28 +33,45 @@ export class NewCollectionSheetComponent {
   }
 
   close(): void {
-     this.dragOffset.set(0);
+    this.dragOffset.set(0);
     this.isOpen.set(false);
   }
-  protected onTouchStart(e: TouchEvent): void {
+
+  ngOnDestroy(): void {
+    this.detachDocListeners();
+  }
+
+  protected onSheetTouchStart(e: TouchEvent): void {
     this.touchStartY = e.touches[0].clientY;
     this.isDragging.set(true);
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('touchmove', this.boundMove, { passive: false });
+      document.addEventListener('touchend',  this.boundEnd,  { passive: false });
+    });
   }
 
-  protected onTouchMove(e: TouchEvent): void {
+  private onDocTouchMove(e: TouchEvent): void {
     const delta = e.touches[0].clientY - this.touchStartY;
-    if (delta > 0) {
-      this.dragOffset.set(delta);
-    }
+    if (delta <= 0) return;
+    e.preventDefault();
+    this.ngZone.run(() => this.dragOffset.set(delta));
   }
 
-  protected onTouchEnd(): void {
-    this.isDragging.set(false);
-    if (this.dragOffset() >= DISMISS_THRESHOLD) {
-      this.close();
-    } else {
-      this.dragOffset.set(0);
-    }
+  private onDocTouchEnd(): void {
+    this.detachDocListeners();
+    this.ngZone.run(() => {
+      this.isDragging.set(false);
+      if (this.dragOffset() >= DISMISS_THRESHOLD) {
+        this.close();
+      } else {
+        this.dragOffset.set(0);
+      }
+    });
+  }
+
+  private detachDocListeners(): void {
+    document.removeEventListener('touchmove', this.boundMove);
+    document.removeEventListener('touchend',  this.boundEnd);
   }
 
   protected onInput(e: Event): void {

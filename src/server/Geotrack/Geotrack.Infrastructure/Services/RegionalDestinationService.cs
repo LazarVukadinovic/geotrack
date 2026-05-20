@@ -15,6 +15,7 @@ public class RegionalDestinationService : IRegionalDestinationService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
+    private static string ExistingEditRoute(int destinationId) => $"/destinations/edit/{destinationId}";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
@@ -79,30 +80,35 @@ public class RegionalDestinationService : IRegionalDestinationService
                 PublishedAt = destination.PublishedAt,
                 Latitude = destination.Latitude,
                 Longitude = destination.Longitude,
+                CardImageUrl = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Card)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                CoverImageUrl = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Cover)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                GalleryImageUrls = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Gallery)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
                 ImageUrl = destination.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Destination)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
-                Images = destination.Images
-                    .Where(image => image.TargetType == EntityImageTargetType.Destination)
-                    .OrderByDescending(image => image.IsMain)
-                    .ThenBy(image => image.SortOrder)
-                    .ThenBy(image => image.CreatedAt)
-                    .ThenBy(image => image.Id)
-                    .Select(image => new RegionalEntityImageDto
-                    {
-                        Id = image.Id,
-                        Url = image.Url,
-                        AltText = image.AltText,
-                        Caption = image.Caption,
-                        IsMain = image.IsMain,
-                        SortOrder = image.SortOrder
-                    })
-                    .ToList(),
                 Tags = destination.DestinationTags
                     .OrderBy(destinationTag => destinationTag.Tag.Name)
                     .Select(destinationTag => new RegionalDestinationTagDto
@@ -152,30 +158,35 @@ public class RegionalDestinationService : IRegionalDestinationService
                 PublishedAt = destination.PublishedAt,
                 Latitude = destination.Latitude,
                 Longitude = destination.Longitude,
+                CardImageUrl = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Card)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                CoverImageUrl = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Cover)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                GalleryImageUrls = destination.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Destination && image.ImageRole == EntityImageRole.Gallery)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
                 ImageUrl = destination.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Destination)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
-                Images = destination.Images
-                    .Where(image => image.TargetType == EntityImageTargetType.Destination)
-                    .OrderByDescending(image => image.IsMain)
-                    .ThenBy(image => image.SortOrder)
-                    .ThenBy(image => image.CreatedAt)
-                    .ThenBy(image => image.Id)
-                    .Select(image => new RegionalEntityImageDto
-                    {
-                        Id = image.Id,
-                        Url = image.Url,
-                        AltText = image.AltText,
-                        Caption = image.Caption,
-                        IsMain = image.IsMain,
-                        SortOrder = image.SortOrder
-                    })
-                    .ToList(),
                 Tags = destination.DestinationTags
                     .OrderBy(destinationTag => destinationTag.Tag.Name)
                     .Select(destinationTag => new RegionalDestinationTagDto
@@ -205,12 +216,9 @@ public class RegionalDestinationService : IRegionalDestinationService
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
         var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
-        var boundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long.");
-        var boundary = BuildBoundary(request.Boundary);
-        var coordinates = ResolveCoordinates(request, boundary?.Geometry);
+        var coordinates = ResolveCoordinates(request);
         var destinationTypeId = await ResolveDestinationTypeIdAsync(request.DestinationTypeId);
         var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
-        var images = RegionalEntityImageRequestNormalizer.Normalize(request.Images, name);
         var now = DateTime.UtcNow;
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -227,35 +235,19 @@ public class RegionalDestinationService : IRegionalDestinationService
             Longitude = coordinates.Longitude,
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
-            BoundaryNote = boundaryNote,
-            BoundaryShapeType = boundary?.ShapeType,
+            BoundaryNote = null,
+            BoundaryShapeType = null,
             CreatedAt = now,
-            Images = images
-                .Select(image => new EntityImage
-                {
-                    TargetType = EntityImageTargetType.Destination,
-                    Url = image.Url,
-                    AltText = image.AltText,
-                    Caption = image.Caption,
-                    IsMain = image.IsMain,
-                    SortOrder = image.SortOrder,
-                    CreatedAt = now
-                })
-                .ToList(),
             DestinationTags = tagIds
                 .Select(tagId => new DestinationTag { TagId = tagId })
                 .ToList()
         };
 
         _db.Destinations.Add(destination);
-        if (boundary?.Geometry is not null)
-        {
-            _db.Entry(destination)
-                .Property<Geometry?>(BoundaryGeometryPropertyName)
-                .CurrentValue = boundary.Geometry;
-        }
 
         await _db.SaveChangesAsync();
+
+        _db.EntityImages.AddRange(AddRequiredCreateImages(request, destination.Id, destination.Name, now));
 
         destination.InternalReferenceId = BuildInternalReferenceId(destination.Id);
         await _db.SaveChangesAsync();
@@ -273,7 +265,6 @@ public class RegionalDestinationService : IRegionalDestinationService
         await EnsureAssignedRegionAsync(userId, regionId);
 
         var destination = await _db.Destinations
-            .Include(item => item.Images)
             .Include(item => item.DestinationTags)
             .SingleOrDefaultAsync(item => item.Id == destinationId && item.RegionId == regionId)
             ?? throw new KeyNotFoundException("Destination not found.");
@@ -286,30 +277,13 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         ApplyUpdate(destination, request);
 
-        if (request.Boundary is not null)
-        {
-            var boundary = BuildBoundary(request.Boundary)
-                ?? throw new InvalidOperationException("Boundary geometry is invalid.");
-            _db.Entry(destination)
-                .Property<Geometry?>(BoundaryGeometryPropertyName)
-                .CurrentValue = boundary.Geometry;
-            destination.BoundaryShapeType = boundary.ShapeType;
-        }
-
-        if (request.BoundaryNote is not null)
-        {
-            destination.BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long.");
-        }
-
-        if (request.Images is not null)
-        {
-            ReplaceImages(destination, request.Images, destination.Name);
-        }
-
         if (request.TagIds is not null)
         {
             var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
-            ReplaceTags(destination, tagIds);
+            destination.DestinationTags.Clear();
+            destination.DestinationTags = tagIds
+                .Select(tagId => new DestinationTag { DestinationId = destination.Id, TagId = tagId })
+                .ToList();
         }
 
         destination.UpdatedAt = DateTime.UtcNow;
@@ -323,6 +297,7 @@ public class RegionalDestinationService : IRegionalDestinationService
         await EnsureAssignedRegionAsync(userId, regionId);
 
         var destination = await _db.Destinations
+            .Include(item => item.DestinationTags)
             .SingleOrDefaultAsync(item => item.Id == destinationId && item.RegionId == regionId)
             ?? throw new KeyNotFoundException("Destination not found.");
 
@@ -418,45 +393,6 @@ public class RegionalDestinationService : IRegionalDestinationService
             .AnyAsync(item => item.DestinationId == destinationId);
     }
 
-    private void ReplaceImages(
-        Destination destination,
-        IEnumerable<RegionalEntityImageInputDto> imageRequests,
-        string fallbackAltText)
-    {
-        var images = RegionalEntityImageRequestNormalizer.Normalize(imageRequests, fallbackAltText);
-        var now = DateTime.UtcNow;
-
-        _db.EntityImages.RemoveRange(destination.Images.Where(image => image.TargetType == EntityImageTargetType.Destination));
-
-        foreach (var image in images)
-        {
-            destination.Images.Add(new EntityImage
-            {
-                TargetType = EntityImageTargetType.Destination,
-                DestinationId = destination.Id,
-                Url = image.Url,
-                AltText = image.AltText,
-                Caption = image.Caption,
-                IsMain = image.IsMain,
-                SortOrder = image.SortOrder,
-                CreatedAt = now
-            });
-        }
-    }
-
-    private static void ReplaceTags(Destination destination, IEnumerable<int> tagIds)
-    {
-        destination.DestinationTags.Clear();
-        foreach (var tagId in tagIds)
-        {
-            destination.DestinationTags.Add(new DestinationTag
-            {
-                DestinationId = destination.Id,
-                TagId = tagId
-            });
-        }
-    }
-
     private static IQueryable<Destination> ApplySearch(IQueryable<Destination> query, string? search)
     {
         if (string.IsNullOrWhiteSpace(search))
@@ -511,11 +447,6 @@ public class RegionalDestinationService : IRegionalDestinationService
         if (request.Description is not null)
         {
             destination.Description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
-        }
-
-        if (request.Status is not null)
-        {
-            destination.Status = NormalizeUpdateStatus(request.Status);
         }
 
         if (request.DestinationTypeId.HasValue)
@@ -633,27 +564,14 @@ public class RegionalDestinationService : IRegionalDestinationService
         return new BoundaryResult(shapeType, polygon);
     }
 
-    private static DestinationCoordinates ResolveCoordinates(
-        RegionalDestinationCreateRequestDto request,
-        Geometry? boundaryGeometry)
+    private static DestinationCoordinates ResolveCoordinates(RegionalDestinationCreateRequestDto request)
     {
-        if (request.Latitude.HasValue || request.Longitude.HasValue)
-        {
-            if (!request.Latitude.HasValue || !request.Longitude.HasValue)
-                throw new InvalidOperationException("Latitude and longitude must be provided together.");
+        if (!request.Latitude.HasValue || !request.Longitude.HasValue)
+            throw new InvalidOperationException("Destination center coordinates are required.");
 
-            ValidateLatitude(request.Latitude.Value);
-            ValidateLongitude(request.Longitude.Value);
-            return new DestinationCoordinates(request.Latitude.Value, request.Longitude.Value);
-        }
-
-        if (boundaryGeometry is null)
-            throw new InvalidOperationException("A destination boundary or coordinates are required.");
-
-        var centroid = boundaryGeometry.Centroid;
-        ValidateLatitude(centroid.Y);
-        ValidateLongitude(centroid.X);
-        return new DestinationCoordinates(centroid.Y, centroid.X);
+        ValidateLatitude(request.Latitude.Value);
+        ValidateLongitude(request.Longitude.Value);
+        return new DestinationCoordinates(request.Latitude.Value, request.Longitude.Value);
     }
 
     private static string NormalizeCreateStatus(string? value)
@@ -745,9 +663,11 @@ public class RegionalDestinationService : IRegionalDestinationService
             PublishedAt = row.PublishedAt,
             LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
-            Images = row.Images,
+            CardImageUrl = row.CardImageUrl,
+            CoverImageUrl = row.CoverImageUrl,
+            GalleryImageUrls = row.GalleryImageUrls,
             DetailRoute = "/destinations/detail/" + row.Id,
-            EditRoute = "/destinations/edit/" + row.Id
+            EditRoute = ExistingEditRoute(row.Id)
         };
     }
 
@@ -774,7 +694,9 @@ public class RegionalDestinationService : IRegionalDestinationService
             PublishedAt = item.PublishedAt,
             LastUpdatedAt = item.LastUpdatedAt,
             ImageUrl = item.ImageUrl,
-            Images = item.Images,
+            CardImageUrl = item.CardImageUrl,
+            CoverImageUrl = item.CoverImageUrl,
+            GalleryImageUrls = item.GalleryImageUrls,
             DetailRoute = item.DetailRoute,
             EditRoute = item.EditRoute,
             Latitude = row.Latitude,
@@ -796,6 +718,82 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         var normalized = string.Join(" ", description.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return normalized.Length <= 160 ? normalized : normalized[..157] + "...";
+    }
+
+
+    private static List<EntityImage> AddRequiredCreateImages(RegionalDestinationCreateRequestDto request, int entityId, string entityName, DateTime now)
+    {
+        var cardUrl = NormalizeRequiredImageUrl(request.CardImageUrl, "Card image is required.");
+        var coverUrl = NormalizeRequiredImageUrl(request.CoverImageUrl, "Cover image is required.");
+        var images = new List<EntityImage>
+        {
+            new()
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = entityId,
+                Url = cardUrl,
+                AltText = entityName,
+                IsMain = true,
+                ImageRole = EntityImageRole.Card,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new()
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = entityId,
+                Url = coverUrl,
+                AltText = entityName,
+                IsMain = false,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 1,
+                CreatedAt = now
+            }
+        };
+
+        var galleryUrls = request.GalleryImageUrls
+            .Select(url => NormalizeOptionalImageUrl(url))
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        for (var i = 0; i < galleryUrls.Count; i++)
+        {
+            images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = entityId,
+                Url = galleryUrls[i]!,
+                AltText = entityName,
+                IsMain = false,
+                ImageRole = EntityImageRole.Gallery,
+                SortOrder = i + 2,
+                CreatedAt = now
+            });
+        }
+
+        return images;
+    }
+
+    private static string NormalizeRequiredImageUrl(string? value, string message)
+    {
+        var normalized = NormalizeOptionalImageUrl(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+            throw new InvalidOperationException(message);
+
+        return normalized;
+    }
+
+    private static string? NormalizeOptionalImageUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = value.Trim();
+        if (normalized.Length > 1000)
+            throw new InvalidOperationException("Image URL is too long.");
+
+        return normalized;
     }
 
     private static string BuildInternalReferenceId(int destinationId) => $"DEST-{destinationId:D6}";
@@ -880,18 +878,8 @@ public class RegionalDestinationService : IRegionalDestinationService
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public string? ImageUrl { get; set; }
-        public List<RegionalEntityImageDto> Images { get; set; } = new();
-    }
-
-    private static string NormalizeUpdateStatus(string value)
-    {
-        var normalized = NormalizeToken(value);
-        return normalized switch
-        {
-            "published" or "publish" => PublishedStatus,
-            "draft" => DraftStatus,
-            "archived" => ArchivedStatus,
-            _ => throw new InvalidOperationException("Destination status is invalid.")
-        };
+        public string? CardImageUrl { get; set; }
+        public string? CoverImageUrl { get; set; }
+        public List<string> GalleryImageUrls { get; set; } = new();
     }
 }

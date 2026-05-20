@@ -99,7 +99,7 @@ public class EventService : IEventService
                             ? e.Location.Name
                             : e.Destination.Name),
                     Image = e.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -131,7 +131,7 @@ public class EventService : IEventService
                             ? e.Location.Name
                             : e.Destination.Name),
                     Image = e.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -250,9 +250,13 @@ public class EventService : IEventService
             Id = evt.Id,
             Title = evt.Name,
             Location = evt.VenueName ?? evt.Place?.Name ?? evt.Location?.Name ?? evt.Destination.Name,
+            LocationId = evt.LocationId,
+            LocationName = evt.Location?.Name,
+            PlaceId = evt.PlaceId,
+            PlaceName = evt.Place?.Name,
             Latitude = eventLatitude,
             Longitude = eventLongitude,
-            HeroImage = images.FirstOrDefault()?.Url,
+            HeroImage = GetCoverImageUrl(evt.Images) ?? images.FirstOrDefault()?.Url,
             Images = images,
             Tags = evt.EventTags.Select(et => new TagLabelDto { Label = et.Tag.Name }).ToList(),
             Distance = SpatialDistanceFormatter.FormatBetween(
@@ -552,6 +556,17 @@ public class EventService : IEventService
             .FirstOrDefault();
     }
 
+    private static string? GetCoverImageUrl(IEnumerable<EntityImage> images)
+    {
+        return images
+            .Where(image => image.ImageRole == EntityImageRole.Cover)
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.CreatedAt)
+            .ThenBy(image => image.Id)
+            .Select(image => image.Url)
+            .FirstOrDefault();
+    }
+
     private static List<EntityImageDto> ToImageDtos(IEnumerable<EntityImage> images)
     {
         return OrderImages(images)
@@ -562,6 +577,7 @@ public class EventService : IEventService
                 AltText = DisplayTextSafety.CleanOptional(image.AltText),
                 Caption = DisplayTextSafety.CleanOptional(image.Caption),
                 IsMain = image.IsMain,
+                ImageRole = EntityImageRole.Normalize(image.ImageRole),
                 SortOrder = image.SortOrder
             })
             .ToList();
@@ -570,7 +586,7 @@ public class EventService : IEventService
     private static IOrderedEnumerable<EntityImage> OrderImages(IEnumerable<EntityImage> images)
     {
         return images
-            .OrderByDescending(image => image.IsMain)
+            .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
             .ThenBy(image => image.SortOrder)
             .ThenBy(image => image.CreatedAt)
             .ThenBy(image => image.Id);

@@ -33,6 +33,7 @@ export class DashboardComponent implements OnInit {
   dashboardLoading = false;
   errorMessage: string | null = null;
   authRequired = false;
+  regionPickerOpen = false;
 
   constructor(
     private readonly router: Router,
@@ -143,10 +144,24 @@ export class DashboardComponent implements OnInit {
 
   onRegionSelected(regionId: number): void {
     if (regionId === this.activeRegionId) {
+      this.regionPickerOpen = false;
       return;
     }
 
+    this.regionPickerOpen = false;
     this.setActiveRegion(regionId, true);
+  }
+
+  toggleRegionPicker(): void {
+    if (this.assignedRegions.length <= 1) {
+      return;
+    }
+
+    this.regionPickerOpen = !this.regionPickerOpen;
+  }
+
+  closeRegionPicker(): void {
+    this.regionPickerOpen = false;
   }
 
   statusClass(status: string | null | undefined): string {

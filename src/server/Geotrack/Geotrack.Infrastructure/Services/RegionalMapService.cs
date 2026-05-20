@@ -108,7 +108,7 @@ public class RegionalMapService : IRegionalMapService
                 Longitude = destination.Longitude,
                 ImageUrl = destination.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Destination)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -138,7 +138,7 @@ public class RegionalMapService : IRegionalMapService
                 Longitude = location.Longitude,
                 ImageUrl = location.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Location)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -169,7 +169,7 @@ public class RegionalMapService : IRegionalMapService
                 Longitude = place.Longitude,
                 ImageUrl = place.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Place)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -217,7 +217,7 @@ public class RegionalMapService : IRegionalMapService
                 BoundaryGeometry = EF.Property<Geometry?>(destination, BoundaryGeometryPropertyName),
                 ImageUrl = destination.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Destination)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -246,7 +246,7 @@ public class RegionalMapService : IRegionalMapService
                 BoundaryGeometry = EF.Property<Geometry?>(location, BoundaryGeometryPropertyName),
                 ImageUrl = location.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Location)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -275,7 +275,7 @@ public class RegionalMapService : IRegionalMapService
                 DestinationId = place.Location.DestinationId,
                 ImageUrl = place.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Place)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -414,53 +414,9 @@ public class RegionalMapService : IRegionalMapService
         List<DestinationMapProjection> destinations,
         List<LocationMapProjection> locations)
     {
-        var zones = new List<RegionalMapZoneDto>();
-
-        var regionGeometry = BuildRegionGeometry(destinations, locations);
-        var regionGeoJson = ToGeoJson(regionGeometry);
-        if (regionGeoJson is not null)
-        {
-            var centroid = regionGeometry!.Centroid;
-            zones.Add(new RegionalMapZoneDto
-            {
-                Id = region.Id,
-                EntityType = "Region",
-                Name = region.Name,
-                DisplayName = BuildRegionDisplayName(region.Name, region.TerritoryName),
-                Status = "Assigned",
-                GeometryGeoJson = regionGeoJson,
-                CenterLatitude = centroid.Y,
-                CenterLongitude = centroid.X
-            });
-        }
-
-        zones.AddRange(destinations
-            .Select(destination => BuildZone(
-                destination.Id,
-                "Destination",
-                destination.Name,
-                destination.Name,
-                destination.Status,
-                destination.BoundaryGeometry,
-                $"/destinations/detail/{destination.Id}",
-                $"/destinations/edit/{destination.Id}"))
-            .Where(zone => zone is not null)
-            .Select(zone => zone!));
-
-        zones.AddRange(locations
-            .Select(location => BuildZone(
-                location.Id,
-                "Location",
-                location.Name,
-                location.Name,
-                location.Status,
-                location.BoundaryGeometry,
-                $"/locations/detail/{location.Id}",
-                $"/locations/edit/{location.Id}"))
-            .Where(zone => zone is not null)
-            .Select(zone => zone!));
-
-        return zones;
+        // Destinations and locations are managed by center points only.
+        // Do not expose old polygon/boundary zones on the regional map.
+        return new List<RegionalMapZoneDto>();
     }
 
     private static RegionalMapZoneDto? BuildZone(

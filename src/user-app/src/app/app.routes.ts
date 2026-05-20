@@ -84,6 +84,21 @@ export const routes: Routes = [
         data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
+        path: 'profile/reviews',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/reviews/pages/my-reviews-page/my-reviews-page.component')
+            .then(m => m.MyReviewsPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
+        path: 'users/:userId/reviews',
+        loadComponent: () =>
+          import('./features/reviews/pages/user-reviews-page/user-reviews-page.component')
+            .then(m => m.UserReviewsPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
         path: 'contributions',
         canActivate: [authGuard],
         loadComponent: () =>
@@ -210,7 +225,7 @@ export const routes: Routes = [
         canActivate: [guestGuard],
         loadComponent: () =>
           import('./features/auth/pages/login-page/login-page.component').then(m => m.LoginPageComponent),
-        data: { desktopLayout: 'wide' },
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'register',
@@ -270,6 +285,35 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/local-places/pages/local-places-category-page/local-places-category-page.component').then(m => m.LocalPlacesCategoryPageComponent),
         data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+
+      {
+        path: 'territories/:id',
+        loadComponent: () =>
+          import('./features/hierarchy-detail/pages/entity-hierarchy-detail-page/entity-hierarchy-detail-page.component')
+            .then(m => m.EntityHierarchyDetailPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide', entityType: 'territory' },
+      },
+      {
+        path: 'regions/:id',
+        loadComponent: () =>
+          import('./features/hierarchy-detail/pages/entity-hierarchy-detail-page/entity-hierarchy-detail-page.component')
+            .then(m => m.EntityHierarchyDetailPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide', entityType: 'region' },
+      },
+      {
+        path: 'destinations/:id',
+        loadComponent: () =>
+          import('./features/hierarchy-detail/pages/entity-hierarchy-detail-page/entity-hierarchy-detail-page.component')
+            .then(m => m.EntityHierarchyDetailPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide', entityType: 'destination' },
+      },
+      {
+        path: 'locations/:id',
+        loadComponent: () =>
+          import('./features/hierarchy-detail/pages/entity-hierarchy-detail-page/entity-hierarchy-detail-page.component')
+            .then(m => m.EntityHierarchyDetailPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide', entityType: 'location' },
       },
       {
         path: 'places/:id',

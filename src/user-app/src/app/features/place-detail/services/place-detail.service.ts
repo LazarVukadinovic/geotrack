@@ -4,7 +4,7 @@ import { FavoriteStateService } from '../../../core/services/favorite-state.serv
 import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
-import { getMainImageUrl, normalizeEntityImages } from '../../../core/models/entity-image.model';
+import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { PlaceDetail } from '../../../core/models/place.model';
 
@@ -14,6 +14,8 @@ interface ApiPlaceDetail {
   id: number;
   title: string;
   location?: string;
+  locationId?: number | null;
+  locationName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   heroImage?: string;
@@ -24,9 +26,12 @@ interface ApiPlaceDetail {
   distance?: string;
   openStatus?: string;
   about?: string;
-  reviews: { id: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean }[];
+  reviews: { id: number; authorUserId?: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean; isOwnReview?: boolean }[];
   similar?: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[] | null;
   isSaved: boolean;
+  isOwnable?: boolean;
+  isOwnedByCurrentUser?: boolean;
+  hasPendingOwnershipClaim?: boolean;
   contentType: string;
   category?: string;
 }
@@ -82,10 +87,12 @@ export class PlaceDetailService {
           id: String(dto.id),
           title: dto.title,
           location: dto.location ?? '',
+          locationId: dto.locationId != null ? String(dto.locationId) : null,
+          locationName: dto.locationName ?? dto.location ?? null,
           latitude: dto.latitude ?? null,
           longitude: dto.longitude ?? null,
-          heroImage: getMainImageUrl(images, dto.heroImage),
-          images,
+          heroImage: getCoverImageUrl(images, dto.heroImage),
+          images: getGalleryImages(images),
           tags: dto.tags,
           rating: dto.rating,
           reviewCount: dto.reviewCount,
@@ -94,6 +101,7 @@ export class PlaceDetailService {
           about: dto.about ?? '',
           reviews: dto.reviews.map(r => ({
             id: String(r.id),
+            authorUserId: r.authorUserId ?? 0,
             authorName: r.authorName,
             avatarUrl: r.avatarUrl ?? '',
             rating: r.rating,
@@ -101,6 +109,7 @@ export class PlaceDetailService {
             body: r.body,
             helpfulCount: r.helpfulCount,
             reportedByCurrentUser: r.reportedByCurrentUser ?? false,
+            isOwnReview: r.isOwnReview ?? false,
           })),
           similar: (dto.similar ?? []).map(s => ({
             id: String(s.id),
@@ -111,6 +120,9 @@ export class PlaceDetailService {
             isSaved: s.isSaved,
           })),
           isSaved: dto.isSaved,
+          isOwnable: dto.isOwnable ?? false,
+          isOwnedByCurrentUser: dto.isOwnedByCurrentUser ?? false,
+          hasPendingOwnershipClaim: dto.hasPendingOwnershipClaim ?? false,
           contentType: (dto.contentType ?? 'place') as PlaceDetail['contentType'],
           category: (dto.category ?? 'attraction') as PlaceDetail['category'],
         };

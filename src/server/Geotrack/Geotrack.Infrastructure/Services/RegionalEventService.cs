@@ -112,7 +112,7 @@ public class RegionalEventService : IRegionalEventService
                     .ToList(),
                 ImageUrl = @event.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Event)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -207,7 +207,7 @@ public class RegionalEventService : IRegionalEventService
                     .ToList(),
                 ImageUrl = @event.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Event)
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -309,6 +309,8 @@ public class RegionalEventService : IRegionalEventService
 
         _db.Events.Add(@event);
         await _db.SaveChangesAsync();
+
+        _db.EntityImages.AddRange(AddRequiredCreateImages(request, @event.Id, @event.Name, now));
 
         @event.InternalReferenceId = BuildInternalReferenceId(@event.Id);
         await _db.SaveChangesAsync();
@@ -1187,6 +1189,82 @@ public class RegionalEventService : IRegionalEventService
             throw new InvalidOperationException("Attendance limit must be greater than zero.");
 
         return attendanceLimit.Value;
+    }
+
+
+    private static List<EntityImage> AddRequiredCreateImages(RegionalEventCreateRequestDto request, int entityId, string entityName, DateTime now)
+    {
+        var cardUrl = NormalizeRequiredImageUrl(request.CardImageUrl, "Card image is required.");
+        var coverUrl = NormalizeRequiredImageUrl(request.CoverImageUrl, "Cover image is required.");
+        var images = new List<EntityImage>
+        {
+            new()
+            {
+                TargetType = EntityImageTargetType.Event,
+                EventId = entityId,
+                Url = cardUrl,
+                AltText = entityName,
+                IsMain = true,
+                ImageRole = EntityImageRole.Card,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new()
+            {
+                TargetType = EntityImageTargetType.Event,
+                EventId = entityId,
+                Url = coverUrl,
+                AltText = entityName,
+                IsMain = false,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 1,
+                CreatedAt = now
+            }
+        };
+
+        var galleryUrls = request.GalleryImageUrls
+            .Select(url => NormalizeOptionalImageUrl(url))
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        for (var i = 0; i < galleryUrls.Count; i++)
+        {
+            images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Event,
+                EventId = entityId,
+                Url = galleryUrls[i]!,
+                AltText = entityName,
+                IsMain = false,
+                ImageRole = EntityImageRole.Gallery,
+                SortOrder = i + 2,
+                CreatedAt = now
+            });
+        }
+
+        return images;
+    }
+
+    private static string NormalizeRequiredImageUrl(string? value, string message)
+    {
+        var normalized = NormalizeOptionalImageUrl(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+            throw new InvalidOperationException(message);
+
+        return normalized;
+    }
+
+    private static string? NormalizeOptionalImageUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = value.Trim();
+        if (normalized.Length > 1000)
+            throw new InvalidOperationException("Image URL is too long.");
+
+        return normalized;
     }
 
     private static string BuildInternalReferenceId(int eventId) => $"EVT-{eventId:D6}";

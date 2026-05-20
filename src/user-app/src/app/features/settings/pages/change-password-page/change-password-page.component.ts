@@ -1,4 +1,4 @@
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -16,7 +16,6 @@ export class ChangePasswordPageComponent {
   private readonly settingsService = inject(UserSettingsService);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
-  private readonly location = inject(Location);
 
   protected readonly currentPassword = signal('');
   protected readonly newPassword = signal('');
@@ -122,7 +121,7 @@ export class ChangePasswordPageComponent {
     const navigationId = Number(globalThis.history?.state?.navigationId ?? 0);
 
     if (navigationId > 1) {
-      this.location.back();
+      globalThis.history.back();
       return;
     }
 

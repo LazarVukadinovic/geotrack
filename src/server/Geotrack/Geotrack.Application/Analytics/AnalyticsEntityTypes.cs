@@ -2,7 +2,7 @@ namespace Geotrack.Application.Analytics;
 
 /// <summary>
 /// Allowed values for AnalyticsEvent.EntityType. Hotel is intentionally distinct
-/// from Place even though both back onto the Place table — the surfaces
+/// from Place even though both back onto the Place table â€” the surfaces
 /// (/stays/:id vs /places/:id) are analytically meaningful.
 /// </summary>
 public static class AnalyticsEntityTypes

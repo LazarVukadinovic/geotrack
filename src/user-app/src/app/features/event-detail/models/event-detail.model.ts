@@ -31,6 +31,10 @@ export interface EventDetail {
   id: string;
   title: string;
   location: string;
+  locationId?: string | null;
+  locationName?: string | null;
+  placeId?: string | null;
+  placeName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   heroImage: string;

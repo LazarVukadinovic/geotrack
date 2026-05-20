@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, map, throwError } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { BehaviorSubject, Observable, map, switchMap, throwError } from 'rxjs';
 import {
   TerritoryAssignedTerritory,
   TerritoryRegionCreateContext,
@@ -78,7 +79,10 @@ export class RegionsService {
 
   private listState: RegionListState | null = null;
 
-  constructor(private readonly territoryDashboard: TerritoryDashboardService) {}
+  constructor(
+    private readonly territoryDashboard: TerritoryDashboardService,
+    private readonly http: HttpClient,
+  ) {}
 
   getActiveTerritoryId(): number | null {
     return this.territoryDashboard.getActiveTerritoryId();
@@ -137,8 +141,20 @@ export class RegionsService {
     return throwError(() => new Error('Territory Manager can view regions but cannot delete them.'));
   }
 
-  updateDetail$(): Observable<never> {
-    return throwError(() => new Error('Territory Manager region pages are read-only.'));
+  updateDetail$(
+    id: string | number,
+    patch: { name?: string | null; description?: string | null; summary?: string | null } = {},
+  ): Observable<TerritoryRegionDetail> {
+    const regionId = Number(id);
+    if (!Number.isFinite(regionId) || regionId <= 0) {
+      return throwError(() => new Error('A valid region id is required.'));
+    }
+
+    return this.http
+      .put(`/api/regions/${regionId}`, {
+        name: patch.name ?? undefined,
+      })
+      .pipe(switchMap(() => this.getDetail$(String(regionId))));
   }
 
   updateTeam$(): Observable<never> {

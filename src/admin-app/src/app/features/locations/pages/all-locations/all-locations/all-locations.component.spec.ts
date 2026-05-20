@@ -203,7 +203,7 @@ describe('AllLocationsComponent', () => {
     expect(navigateSpy).toHaveBeenCalledWith(['/locations/edit/21'], {
       queryParams: { regionId: 7 },
       state: {
-        place: expect.objectContaining({ id: '21', name: 'Editable Location' }),
+        location: expect.objectContaining({ id: '21', name: 'Editable Location' }),
         editMode: true,
         returnTo: '/locations',
         regionId: 7,

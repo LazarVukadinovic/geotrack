@@ -33,6 +33,25 @@ public class TagRepository : ITagRepository
             .ToListAsync();
     }
 
+    public async Task<List<Tag>> GetTagsForActiveInterestTopicsAsync()
+    {
+        var tagIds = await _db.InterestTopicTags
+            .AsNoTracking()
+            .Where(link => link.InterestTopic.IsActive && link.InterestTopic.ShowOnOnboarding)
+            .Select(link => link.TagId)
+            .Distinct()
+            .ToListAsync();
+
+        return await _db.Tags
+            .AsNoTracking()
+            .Include(tag => tag.TagType)
+                .ThenInclude(tagType => tagType!.PlaceTypes)
+            .Where(tag => tagIds.Contains(tag.Id))
+            .OrderBy(tag => tag.TagType != null ? tag.TagType.Name : string.Empty)
+            .ThenBy(tag => tag.Name)
+            .ToListAsync();
+    }
+
     public async Task ReplaceUserTagsAsync(int userId, IEnumerable<int> tagIds)
     {
         var existing = await _db.UserTags

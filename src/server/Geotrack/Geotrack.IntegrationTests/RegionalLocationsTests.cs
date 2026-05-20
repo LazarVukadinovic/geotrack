@@ -278,16 +278,8 @@ public sealed class RegionalLocationsTests
         var upload = await UploadOneImageAsync(manager, fixture.AssignedRegionId);
 
         var request = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
-        request.Images =
-        [
-            new()
-            {
-                Url = upload.Url,
-                AltText = "Location cover",
-                IsMain = true,
-                SortOrder = 0
-            }
-        ];
+        request.CardImageUrl = upload.Url;
+        request.CoverImageUrl = upload.Url;
 
         var response = await manager.PostAsJsonAsync("/api/admin/regional/locations", request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -295,16 +287,25 @@ public sealed class RegionalLocationsTests
         var created = await response.Content.ReadFromJsonAsync<RegionalLocationDetailDto>();
         Assert.NotNull(created);
         Assert.Equal(upload.Url, created!.ImageUrl);
-        Assert.Single(created.Images);
+        Assert.Equal(upload.Url, created.CardImageUrl);
+        Assert.Equal(upload.Url, created.CoverImageUrl);
+        Assert.Empty(created.GalleryImageUrls);
 
         var storedImages = await db.EntityImages
             .Where(image => image.LocationId == created.Id)
             .OrderBy(image => image.Id)
             .ToListAsync();
-        var image = Assert.Single(storedImages);
-        Assert.Equal(EntityImageTargetType.Location, image.TargetType);
-        Assert.Equal(upload.Url, image.Url);
-        Assert.True(image.IsMain);
+        Assert.Equal(2, storedImages.Count);
+        Assert.Contains(storedImages, image =>
+            image.TargetType == EntityImageTargetType.Location &&
+            image.ImageRole == EntityImageRole.Card &&
+            image.Url == upload.Url &&
+            image.IsMain);
+        Assert.Contains(storedImages, image =>
+            image.TargetType == EntityImageTargetType.Location &&
+            image.ImageRole == EntityImageRole.Cover &&
+            image.Url == upload.Url &&
+            !image.IsMain);
     }
 
     [Fact]
@@ -543,6 +544,8 @@ public sealed class RegionalLocationsTests
             Description = "Full location description.",
             Status = "Published",
             BoundaryNote = "North edge boundary note.",
+            CardImageUrl = "/media/uploads/regional/default-location-card.png",
+            CoverImageUrl = "/media/uploads/regional/default-location-cover.png",
             Boundary = new RegionalLocationBoundaryDto
             {
                 ShapeType = "Polygon",

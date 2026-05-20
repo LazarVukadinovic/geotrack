@@ -72,7 +72,20 @@
             <path fill="currentColor"
                   d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
           </svg>
-          <span>{{ ev.location }}</span>
+          <span class="ed__parent-links">
+            @if (ev.locationId && ev.locationName) {
+              <a class="ed__parent-link" [routerLink]="['/locations', ev.locationId]">{{ ev.locationName }}</a>
+            }
+            @if (ev.placeId && ev.placeName) {
+              @if (ev.locationId && ev.locationName) {
+                <span class="ed__parent-separator">·</span>
+              }
+              <a class="ed__parent-link" [routerLink]="['/places', ev.placeId]">{{ ev.placeName }}</a>
+            }
+            @if (!(ev.locationId && ev.locationName) && !(ev.placeId && ev.placeName)) {
+              <span>{{ ev.location }}</span>
+            }
+          </span>
         </div>
 
         <!-- Title -->
@@ -131,31 +144,10 @@
         }
 
         <!-- ── About the Event ─────────────────────────────────────────── -->
-        @if (ev.images.length > 1) {
-          <section class="ed__gallery" aria-label="Event photos">
-            <div class="ed__gallery-track" role="list">
-              @for (image of ev.images; track image.id) {
-                <button
-                  type="button"
-                  class="ed__gallery-thumb"
-                  [class.ed__gallery-thumb--active]="isGalleryImageActive(image.url)"
-                  [attr.aria-label]="'Show photo ' + ($index + 1) + ' of ' + ev.images.length"
-                  (click)="selectGalleryImage(image.url)"
-                >
-                  <img
-                    appImageFallback
-                    class="ed__gallery-img"
-                    [src]="image.url"
-                    [alt]="image.altText || ev.title"
-                    width="120"
-                    height="84"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </button>
-              }
-            </div>
-          </section>
+        @if (ev.images.length > 0) {
+          <button type="button" class="ed__gallery-open" (click)="openGallery()">
+            Open Gallery ({{ ev.images.length }})
+          </button>
         }
 
         <div class="ed__detail-grid">
@@ -259,7 +251,11 @@
                   </span>
                   <div class="ed__info-text">
                     <span class="ed__info-label">Venue</span>
-                    <span class="ed__info-value">{{ ev.info.venue }}</span>
+                    @if (ev.placeId && ev.placeName) {
+                      <a class="ed__info-value ed__info-link" [routerLink]="['/places', ev.placeId]">{{ ev.placeName }}</a>
+                    } @else {
+                      <span class="ed__info-value">{{ ev.info.venue }}</span>
+                    }
                   </div>
                 </div>
 
@@ -354,6 +350,46 @@
 
       </div><!-- /.ed__card -->
     </div><!-- /.ed__scroll -->
+
+    @if (galleryOpen()) {
+      <div class="ed__gallery-modal" role="dialog" aria-modal="true" aria-label="Event gallery">
+        <button
+          type="button"
+          class="ed__gallery-modal-backdrop"
+          aria-label="Close gallery"
+          (click)="closeGallery()"
+        ></button>
+
+        <section class="ed__gallery-modal-panel">
+          <header class="ed__gallery-modal-head">
+            <h2>{{ ev.title }} gallery</h2>
+            <button
+              type="button"
+              class="ed__gallery-close"
+              aria-label="Close gallery"
+              (click)="closeGallery()"
+            >×</button>
+          </header>
+
+          <div class="ed__gallery-layout">
+            @for (image of ev.images; track image.id) {
+              <figure class="ed__gallery-item">
+                <img
+                  appImageFallback
+                  [src]="image.url"
+                  [alt]="image.altText || ev.title"
+                  loading="lazy"
+                  decoding="async"
+                />
+                @if (image.caption) {
+                  <figcaption>{{ image.caption }}</figcaption>
+                }
+              </figure>
+            }
+          </div>
+        </section>
+      </div>
+    }
 
   </article>
 

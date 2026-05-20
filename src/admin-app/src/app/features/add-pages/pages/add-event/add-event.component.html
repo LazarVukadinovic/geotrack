@@ -262,10 +262,40 @@
           <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
             <div class="flex items-center justify-between mb-4">
               <div>
-                <h3 class="text-sm font-bold text-gray-900">Hero Media</h3>
-                <p class="text-xs text-gray-500">Main cover image and optional gallery</p>
+                <h3 class="text-sm font-bold text-gray-900">Media</h3>
+                <p class="text-xs text-gray-500">Required card + cover image and optional gallery</p>
               </div>
             </div>
+
+
+            <p class="text-xs font-semibold text-gray-600 mb-2">
+              Card Image <span class="text-red-500">*</span>
+              <span class="text-gray-400 font-normal">Small thumbnail/card image</span>
+            </p>
+
+            @if (cardImageUrl) {
+              <div class="mb-4">
+                <div class="relative rounded-xl overflow-hidden" style="height: 130px; max-width: 320px;">
+                  <img [src]="cardImageUrl" [alt]="cardImageName" class="w-full h-full object-cover cursor-zoom-in" (click)="openLightbox([{ url: cardImageUrl!, name: cardImageName }], 0)" />
+                  <button type="button" (click)="removeCardImage()" class="absolute top-3 right-3 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-700">Remove</button>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">{{ cardImageName }}</p>
+              </div>
+            } @else {
+              <label for="cardInput" class="border-2 border-dashed border-gray-300 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-500 text-sm cursor-pointer hover:border-blue-400 transition-colors mb-5">
+                <span class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-700 font-bold">+</span>
+                <span>Click to upload Card Image</span>
+                <span class="text-xs text-gray-400">PNG, JPG, WEBP - smaller thumbnail</span>
+              </label>
+            }
+            <input id="cardInput" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" (change)="onCardImageSelected($event)" />
+
+            <div class="border-t border-gray-100 my-4"></div>
+
+            <p class="text-xs font-semibold text-gray-600 mb-2">
+              Cover Image <span class="text-red-500">*</span>
+              <span class="text-gray-400 font-normal">Large hero image</span>
+            </p>
 
             @if (coverImageUrl) {
               <div class="mb-4">

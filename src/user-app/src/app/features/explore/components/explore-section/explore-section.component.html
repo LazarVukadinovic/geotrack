@@ -49,40 +49,67 @@
           </div>
 
           <div class="explore-section__body">
-            @if (item.categoryLabel) {
-              <p class="explore-section__category">{{ item.categoryLabel }}</p>
-            }
+            <div class="explore-section__label-row">
+              @if (item.categoryLabel || item.locationName) {
+                <p class="explore-section__category">
+                  @if (item.categoryLabel) {
+                    <span>{{ item.categoryLabel }}</span>
+                  }
+                  @if (item.categoryLabel && item.locationName) {
+                    <span> · </span>
+                  }
+                  @if (item.locationName) {
+                    <span>{{ item.locationName }}</span>
+                  }
+                </p>
+              }
+
+              @if (item.statusBadge) {
+                <span
+                  class="explore-section__status-badge"
+                  [class.explore-section__status-badge--success]="item.statusBadge.tone === 'success'"
+                  [class.explore-section__status-badge--warning]="item.statusBadge.tone === 'warning'"
+                  [class.explore-section__status-badge--muted]="item.statusBadge.tone === 'muted'"
+                >
+                  {{ item.statusBadge.label }}
+                </span>
+              }
+            </div>
 
             <h3 class="explore-section__title">{{ item.title }}</h3>
 
-            @if (item.subtitle) {
+            @if (item.subtitle && !item.subtitle.startsWith('Matches your saved interest')) {
               <p class="explore-section__subtitle">{{ item.subtitle }}</p>
             } @else if (item.description) {
               <p class="explore-section__subtitle">{{ item.description }}</p>
             }
 
             <div class="explore-section__meta">
-              @if (item.rating != null) {
-                <span class="explore-section__rating">
-                  ★ {{ item.rating.toFixed(1) }}
-                </span>
-              }
-
-              @if (item.reviewCount) {
-                <span>{{ item.reviewCount }}</span>
-              }
-
               @if (item.distance) {
-                <span>{{ item.distance }}</span>
+                <div class="explore-section__meta-row explore-section__meta-row--distance">
+                  <span>{{ item.distance }}</span>
+                </div>
               }
 
-              @if (item.dateLabel) {
-                <span>{{ item.dateLabel }}</span>
-              }
+              <div class="explore-section__meta-row explore-section__meta-row--reviews">
+                @if (item.rating != null) {
+                  <span class="explore-section__rating">
+                    ★ {{ item.rating.toFixed(1) }}
+                  </span>
 
-              @if (item.pricePerNight != null) {
-                <span>€{{ item.pricePerNight }}/night</span>
-              }
+                  @if (item.reviewCount) {
+                    <span>{{ item.reviewCount }}</span>
+                  }
+                } @else if (item.entityType !== 'event') {
+                  <span class="explore-section__rating explore-section__rating--empty">
+                    ☆ No Reviews
+                  </span>
+                }
+
+                @if (item.dateLabel) {
+                  <span>{{ item.dateLabel }}</span>
+                }
+              </div>
             </div>
           </div>
         </article>

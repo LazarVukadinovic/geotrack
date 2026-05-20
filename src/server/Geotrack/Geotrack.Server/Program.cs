@@ -123,6 +123,7 @@ builder.Services.AddScoped<IReviewContentModerationService, ReviewContentModerat
 builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
 
 builder.Services.AddScoped<ITagService, TagService>();
+builder.Services.AddScoped<IInterestTopicService, InterestTopicService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IApiKeyEncryptionService, ApiKeyEncryptionService>();
 builder.Services.AddScoped<IAiProviderKeyService, AiProviderKeyService>();
@@ -187,6 +188,7 @@ builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IFavoriteRepository, FavoriteRepository>();
 builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 builder.Services.AddScoped<ITagRepository, TagRepository>();
+builder.Services.AddScoped<IInterestTopicRepository, InterestTopicRepository>();
 
 var forwardedHeadersEnabled = ConfigureForwardedHeaders(builder);
 
@@ -228,7 +230,11 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("RequireTerritoryManager", policy =>
         policy.RequireRole(RoleNames.TerritoryManager, RoleNames.TerritoryAssociate));
     options.AddPolicy("RequireAdminAppUser", policy =>
-        policy.RequireRole(RoleNames.TerritoryManager, RoleNames.TerritoryAssociate, RoleNames.RegionalManager));
+        policy.RequireRole(
+            RoleNames.Admin,
+            RoleNames.TerritoryManager,
+            RoleNames.TerritoryAssociate,
+            RoleNames.RegionalManager));
 });
 
 builder.Services.AddRateLimiter(options =>
@@ -351,11 +357,32 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
+var allowedCorsOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()
+    ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? Array.Empty<string>();
+
+if (allowedCorsOrigins.Length == 0)
+{
+    allowedCorsOrigins = new[]
+    {
+        "http://localhost:4200",
+        "http://127.0.0.1:4200",
+        "http://localhost:4300",
+        "http://127.0.0.1:4300",
+        "https://softeng.pmf.kg.ac.rs:10131"
+    };
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAllOrigins", policy =>
+    options.AddPolicy("ConfiguredOrigins", policy =>
     {
-        policy.SetIsOriginAllowed(_ => true)
+        policy.WithOrigins(allowedCorsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -422,7 +449,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowAllOrigins");
+app.UseCors("ConfiguredOrigins");
 
 if (forwardedHeadersEnabled)
 {

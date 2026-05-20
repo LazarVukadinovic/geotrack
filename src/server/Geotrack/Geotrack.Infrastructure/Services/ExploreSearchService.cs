@@ -1,3 +1,4 @@
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Infrastructure;
@@ -145,7 +146,7 @@ public class ExploreSearchService : IExploreSearchService
                             .FirstOrDefault() ?? "Place")
                         : place.PlaceType.Name,
                 Image = place.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -206,7 +207,7 @@ public class ExploreSearchService : IExploreSearchService
                 Description = TrimDescription(location.Description, 150),
                 CategoryLabel = "Area",
                 Image = location.Images
-                    .OrderByDescending(image => image.IsMain)
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)

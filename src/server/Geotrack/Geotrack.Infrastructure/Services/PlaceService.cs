@@ -6,6 +6,7 @@ using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -150,6 +151,14 @@ public class PlaceService : IPlaceService
 
         var isSaved = userId.HasValue &&
             await _favoriteService.IsFavoriteAsync(userId.Value, "place", id);
+        var isOwnedByCurrentUser = userId.HasValue &&
+            await _db.UserPlaces.AsNoTracking().AnyAsync(item => item.PlaceId == id && item.UserId == userId.Value);
+        var hasPendingOwnershipClaim = userId.HasValue &&
+            await _db.PlaceContributions.AsNoTracking().AnyAsync(item =>
+                item.PlaceId == id &&
+                item.UserId == userId.Value &&
+                item.Type == PlaceContributionType.ClaimOwnership &&
+                item.Status == PlaceContributionStatus.PendingReview);
 
         var similar = await _db.Places
             .AsNoTracking()
@@ -190,9 +199,11 @@ public class PlaceService : IPlaceService
             Id = place.Id,
             Title = DisplayTextSafety.CleanRequired(place.Name, "Place"),
             Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
+            LocationId = place.LocationId,
+            LocationName = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = images.FirstOrDefault()?.Url,
+            HeroImage = GetCoverImageUrl(place.Images) ?? images.FirstOrDefault()?.Url,
             Images = images,
             Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
@@ -206,13 +217,15 @@ public class PlaceService : IPlaceService
                 .Select(r => new ReviewDto
                 {
                     Id = r.Id,
+                    AuthorUserId = r.UserId,
                     AuthorName = GetAuthorName(r.User),
                     AvatarUrl = r.User.AvatarUrl,
                     Rating = (int)r.Rating,
                     TimeAgo = FormatTimeAgo(r.CreatedAt),
                     Body = r.Comment,
                     HelpfulCount = 0,
-                    ReportedByCurrentUser = reportedReviewIds.Contains(r.Id)
+                    ReportedByCurrentUser = reportedReviewIds.Contains(r.Id),
+                    IsOwnReview = userId.HasValue && r.UserId == userId.Value
                 })
                 .ToList(),
             Similar = similar
@@ -231,6 +244,9 @@ public class PlaceService : IPlaceService
                 })
                 .ToList(),
             IsSaved = isSaved,
+            IsOwnable = place.PlaceType?.IsOwnable ?? false,
+            IsOwnedByCurrentUser = isOwnedByCurrentUser,
+            HasPendingOwnershipClaim = hasPendingOwnershipClaim,
             ContentType = "place",
             Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant()
         };
@@ -267,6 +283,14 @@ public class PlaceService : IPlaceService
 
         var isSaved = userId.HasValue &&
             await _favoriteService.IsFavoriteAsync(userId.Value, "place", id);
+        var isOwnedByCurrentUser = userId.HasValue &&
+            await _db.UserPlaces.AsNoTracking().AnyAsync(item => item.PlaceId == id && item.UserId == userId.Value);
+        var hasPendingOwnershipClaim = userId.HasValue &&
+            await _db.PlaceContributions.AsNoTracking().AnyAsync(item =>
+                item.PlaceId == id &&
+                item.UserId == userId.Value &&
+                item.Type == PlaceContributionType.ClaimOwnership &&
+                item.Status == PlaceContributionStatus.PendingReview);
 
         var similar = await _db.Places
             .AsNoTracking()
@@ -314,9 +338,11 @@ public class PlaceService : IPlaceService
             Id = place.Id,
             Title = DisplayTextSafety.CleanRequired(place.Name, "Stay"),
             Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
+            LocationId = place.LocationId,
+            LocationName = DisplayTextSafety.CleanOptional(place.Location?.Name),
             Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
             Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = images.FirstOrDefault()?.Url,
+            HeroImage = GetCoverImageUrl(place.Images) ?? images.FirstOrDefault()?.Url,
             Images = images,
             Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
@@ -345,13 +371,15 @@ public class PlaceService : IPlaceService
                 .Select(r => new ReviewDto
                 {
                     Id = r.Id,
+                    AuthorUserId = r.UserId,
                     AuthorName = GetAuthorName(r.User),
                     AvatarUrl = r.User.AvatarUrl,
                     Rating = (int)r.Rating,
                     TimeAgo = FormatTimeAgo(r.CreatedAt),
                     Body = r.Comment,
                     HelpfulCount = 0,
-                    ReportedByCurrentUser = reportedReviewIds.Contains(r.Id)
+                    ReportedByCurrentUser = reportedReviewIds.Contains(r.Id),
+                    IsOwnReview = userId.HasValue && r.UserId == userId.Value
                 })
                 .ToList(),
             Similar = similar
@@ -369,7 +397,10 @@ public class PlaceService : IPlaceService
                     IsSaved = favoriteIds.Contains(s.Id)
                 })
                 .ToList(),
-            IsSaved = isSaved
+            IsSaved = isSaved,
+            IsOwnable = place.PlaceType?.IsOwnable ?? false,
+            IsOwnedByCurrentUser = isOwnedByCurrentUser,
+            HasPendingOwnershipClaim = hasPendingOwnershipClaim
         };
     }
 
@@ -694,7 +725,7 @@ public class PlaceService : IPlaceService
                     Description = p.Description,
                     Location = p.Location.Name,
                     Image = p.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -727,7 +758,7 @@ public class PlaceService : IPlaceService
                     Description = p.Description,
                     Location = p.Location.Name,
                     Image = p.Images
-                        .OrderByDescending(image => image.IsMain)
+                        .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
                         .ThenBy(image => image.SortOrder)
                         .ThenBy(image => image.CreatedAt)
                         .ThenBy(image => image.Id)
@@ -815,6 +846,17 @@ public class PlaceService : IPlaceService
             term is "stay" or "stays" or "hotel" or "hotels" or "accommodation" or "accommodations");
     }
 
+    private static string? GetCoverImageUrl(IEnumerable<EntityImage> images)
+    {
+        return images
+            .Where(image => image.ImageRole == EntityImageRole.Cover)
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.CreatedAt)
+            .ThenBy(image => image.Id)
+            .Select(image => image.Url)
+            .FirstOrDefault();
+    }
+
     private static string? GetMainImageUrl(IEnumerable<EntityImage> images)
     {
         return OrderImages(images)
@@ -832,6 +874,7 @@ public class PlaceService : IPlaceService
                 AltText = DisplayTextSafety.CleanOptional(image.AltText),
                 Caption = DisplayTextSafety.CleanOptional(image.Caption),
                 IsMain = image.IsMain,
+                ImageRole = EntityImageRole.Normalize(image.ImageRole),
                 SortOrder = image.SortOrder
             })
             .ToList();
@@ -840,7 +883,7 @@ public class PlaceService : IPlaceService
     private static IOrderedEnumerable<EntityImage> OrderImages(IEnumerable<EntityImage> images)
     {
         return images
-            .OrderByDescending(image => image.IsMain)
+            .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
             .ThenBy(image => image.SortOrder)
             .ThenBy(image => image.CreatedAt)
             .ThenBy(image => image.Id);

@@ -19,6 +19,11 @@ export interface ExploreSectionTag {
   slug: string;
 }
 
+export interface ExploreItemStatusBadge {
+  label: string;
+  tone: 'success' | 'warning' | 'muted' | 'neutral' | string;
+}
+
 export interface ExploreSectionItem {
   id: string;
   entityType: ExploreEntityType;
@@ -28,6 +33,7 @@ export interface ExploreSectionItem {
   subtitle?: string;
   description?: string;
   categoryLabel?: string;
+  locationName?: string;
   image: string;
 
   rating?: number;
@@ -35,6 +41,7 @@ export interface ExploreSectionItem {
   distance?: string;
   dateLabel?: string;
   openingHours?: string;
+  statusBadge?: ExploreItemStatusBadge;
   pricePerNight?: number;
 
   isSaved: boolean;

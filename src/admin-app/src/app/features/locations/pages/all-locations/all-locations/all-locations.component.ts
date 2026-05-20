@@ -261,7 +261,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     const full = this.locationsService.findById(item.id) ?? item;
     this.router.navigate([full.editRoute ?? `/locations/edit/${full.id}`], {
       queryParams: this.activeRegionId ? { regionId: this.activeRegionId } : undefined,
-      state: { place: full, editMode: true, returnTo: '/locations', regionId: this.activeRegionId },
+      state: { location: full, editMode: true, returnTo: '/locations', regionId: this.activeRegionId },
     });
   }
 

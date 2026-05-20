@@ -20,6 +20,7 @@ export interface PlaceTag {
 
 export interface PlaceReview {
   id: string;
+  authorUserId: number;
   authorName: string;
   avatarUrl: string;
   rating: number;
@@ -27,6 +28,7 @@ export interface PlaceReview {
   body: string;
   helpfulCount: number;
   reportedByCurrentUser: boolean;
+  isOwnReview: boolean;
 }
 
 export interface PlaceSimilar {
@@ -43,6 +45,8 @@ export interface PlaceDetail {
   id: string;
   title: string;
   location: string;
+  locationId?: string | null;
+  locationName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   heroImage: string;
@@ -56,6 +60,9 @@ export interface PlaceDetail {
   reviews: PlaceReview[];
   similar: PlaceSimilar[];
   isSaved: boolean;
+  isOwnable: boolean;
+  isOwnedByCurrentUser: boolean;
+  hasPendingOwnershipClaim: boolean;
   contentType: PlaceContentType;
   category: PlaceCategory;
 }

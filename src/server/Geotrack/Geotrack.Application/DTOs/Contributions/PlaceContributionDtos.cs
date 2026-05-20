@@ -1,5 +1,14 @@
 namespace Geotrack.Application.DTOs.Contributions;
 
+
+public class ContributionPlaceTypeDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool IsOwnable { get; set; }
+}
+
 public class PlaceContributionImageDto
 {
     public int Id { get; set; }
@@ -7,6 +16,7 @@ public class PlaceContributionImageDto
     public string? AltText { get; set; }
     public string? Caption { get; set; }
     public bool IsMain { get; set; }
+    public string ImageRole { get; set; } = "gallery";
     public int SortOrder { get; set; }
     public string ImagePosition { get; set; } = "50% 50%";
     public string ImageSize { get; set; } = "cover";
@@ -18,6 +28,7 @@ public class UpsertPlaceContributionImageDto
     public string? AltText { get; set; }
     public string? Caption { get; set; }
     public bool IsMain { get; set; }
+    public string ImageRole { get; set; } = "gallery";
     public int SortOrder { get; set; }
     public string ImagePosition { get; set; } = "50% 50%";
     public string ImageSize { get; set; } = "cover";
@@ -33,8 +44,10 @@ public class PlaceContributionListItemDto
     public string? PlaceType { get; set; }
     public string? StayType { get; set; }
     public string? Location { get; set; }
+    public string? CardImageUrl { get; set; }
     public string? MainImageUrl { get; set; }
     public string? CoverImageUrl { get; set; }
+    public List<string> GalleryImageUrls { get; set; } = new();
     public string Status { get; set; } = string.Empty;
     public DateTime SubmittedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
