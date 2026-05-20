@@ -97,6 +97,47 @@ public sealed class AdminTerritoryController : ControllerBase
         }
     }
 
+    [HttpGet("regions/create-context")]
+    public async Task<ActionResult<TerritoryRegionCreateContextDto>> GetRegionCreateContext(
+        [FromQuery] int? territoryId = null)
+    {
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryDashboard.GetRegionCreateContextAsync(GetCurrentUserId(), territoryId));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("regions")]
+    public async Task<ActionResult<TerritoryRegionCreateResponseDto>> CreateRegion(
+        [FromBody] TerritoryRegionCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        if (request.TerritoryId <= 0)
+            return BadRequest(new { message = "territoryId is required." });
+
+        try
+        {
+            var created = await _territoryDashboard.CreateRegionAsync(GetCurrentUserId(), request);
+            return CreatedAtAction(
+                nameof(GetRegionDetail),
+                new { regionId = created.RegionId, territoryId = created.TerritoryId },
+                created);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("regions/{regionId:int}/detail")]
     public async Task<ActionResult<TerritoryRegionDetailDto>> GetRegionDetail(
         [FromRoute] int regionId,

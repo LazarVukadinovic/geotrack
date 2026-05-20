@@ -125,6 +125,88 @@ public class TerritoryRegionDirectoryResponseDto
     public bool HasMore { get; set; }
 }
 
+public class TerritoryRegionBoundaryCoordinateDto
+{
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+}
+
+public class TerritoryRegionBoundaryDto
+{
+    public string? ShapeType { get; set; }
+    public List<TerritoryRegionBoundaryCoordinateDto> Coordinates { get; set; } = new();
+}
+
+public class TerritoryRegionCreateRequestDto
+{
+    public int TerritoryId { get; set; }
+    public string? Name { get; set; }
+    public string? BoundarySource { get; set; }
+    public long? OsmRelationId { get; set; }
+    public int? OsmAdminLevel { get; set; }
+    public TerritoryRegionBoundaryDto? Boundary { get; set; }
+}
+
+public class TerritoryRegionCreateResponseDto
+{
+    public int Id { get; set; }
+    public int RegionId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public int TerritoryId { get; set; }
+    public string TerritoryDisplayName { get; set; } = string.Empty;
+    public string Status { get; set; } = "Inactive";
+    public string? BoundarySource { get; set; }
+    public string? BoundaryShapeType { get; set; }
+    public TerritoryRegionGeometryDto? BoundaryGeometryGeoJson { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string? DetailRoute { get; set; }
+}
+
+public class TerritoryRegionCreateContextDto
+{
+    public TerritoryAssignedTerritoryDto? Territory { get; set; }
+    public TerritoryRegionGeometryDto? TerritoryBoundaryGeoJson { get; set; }
+    public List<TerritoryRegionMapItemDto> ExistingRegions { get; set; } = new();
+    public TerritoryRegionMapViewportDto Viewport { get; set; } = new();
+    public bool CanCreate { get; set; }
+    public string? BoundaryRequiredMessage { get; set; }
+}
+
+public class TerritoryRegionMapItemDto
+{
+    public int Id { get; set; }
+    public int RegionId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public TerritoryRegionGeometryDto? GeometryGeoJson { get; set; }
+    public double? CenterLatitude { get; set; }
+    public double? CenterLongitude { get; set; }
+}
+
+public class TerritoryRegionGeometryDto
+{
+    public string Type { get; set; } = string.Empty;
+    public object Coordinates { get; set; } = Array.Empty<double>();
+}
+
+public class TerritoryRegionMapBoundsDto
+{
+    public double North { get; set; }
+    public double South { get; set; }
+    public double East { get; set; }
+    public double West { get; set; }
+}
+
+public class TerritoryRegionMapViewportDto
+{
+    public double? CenterLatitude { get; set; }
+    public double? CenterLongitude { get; set; }
+    public double? Zoom { get; set; }
+    public TerritoryRegionMapBoundsDto? Bounds { get; set; }
+    public bool IsEmpty { get; set; }
+}
+
 public class TerritoryRegionDetailDto
 {
     public TerritoryRegionDetailRegionDto Region { get; set; } = new();

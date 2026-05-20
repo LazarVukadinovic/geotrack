@@ -6,6 +6,9 @@ using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
+using NetTopologySuite.Geometries;
+using NetTopologySuite.Operation.Union;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -15,6 +18,13 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
     private const int DetailPreviewTake = 5;
     private const int DirectoryMaxTake = 100;
     private const string PublishedStatus = "Published";
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string ManualDrawBoundarySource = "ManualDraw";
+    private const string OsmBoundarySource = "OsmBoundary";
+    private const string MissingTerritoryBoundaryMessage =
+        "Assigned country/territory must have a boundary before adding regions.";
+
+    private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
     private static readonly string[] VisitEventTypes =
     {
@@ -300,6 +310,138 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             Skip = skip,
             Take = take,
             HasMore = skip + take < ordered.Count
+        };
+    }
+
+    public async Task<TerritoryRegionCreateContextDto> GetRegionCreateContextAsync(int userId, int? territoryId)
+    {
+        await EnsureTerritoryManagerOnlyRoleAsync(userId);
+
+        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, territoryId);
+        if (activeTerritory is null)
+        {
+            return new TerritoryRegionCreateContextDto
+            {
+                CanCreate = false,
+                BoundaryRequiredMessage = "No assigned country/territory is available for this account.",
+                Viewport = new TerritoryRegionMapViewportDto { IsEmpty = true }
+            };
+        }
+
+        var territoryGeometry = ToPolygonalGeometry(activeTerritory.BoundaryGeometry);
+        var regionRows = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.TerritoryId == activeTerritory.Id)
+            .OrderBy(region => region.Name)
+            .ThenBy(region => region.Id)
+            .Select(region => new RegionBoundaryRow
+            {
+                Id = region.Id,
+                Name = region.Name,
+                BoundaryGeometry = EF.Property<Geometry?>(region, BoundaryGeometryPropertyName)
+            })
+            .ToListAsync();
+
+        var existingRegions = regionRows
+            .Select(BuildRegionMapItem)
+            .ToList();
+
+        var viewportGeometries = new List<Geometry>();
+        if (territoryGeometry is not null)
+        {
+            viewportGeometries.Add(territoryGeometry);
+        }
+
+        viewportGeometries.AddRange(regionRows
+            .Select(row => ToPolygonalGeometry(row.BoundaryGeometry))
+            .Where(geometry => geometry is not null)
+            .Select(geometry => geometry!));
+
+        return new TerritoryRegionCreateContextDto
+        {
+            Territory = new TerritoryAssignedTerritoryDto
+            {
+                Id = activeTerritory.Id,
+                Name = activeTerritory.Name,
+                DisplayName = activeTerritory.Name,
+                StatusLabel = "Assigned"
+            },
+            TerritoryBoundaryGeoJson = ToGeoJson(territoryGeometry),
+            ExistingRegions = existingRegions,
+            Viewport = BuildRegionMapViewport(viewportGeometries),
+            CanCreate = territoryGeometry is not null,
+            BoundaryRequiredMessage = territoryGeometry is null
+                ? MissingTerritoryBoundaryMessage
+                : null
+        };
+    }
+
+    public async Task<TerritoryRegionCreateResponseDto> CreateRegionAsync(
+        int userId,
+        TerritoryRegionCreateRequestDto request)
+    {
+        await EnsureTerritoryManagerOnlyRoleAsync(userId);
+
+        if (request.TerritoryId <= 0)
+            throw new InvalidOperationException("territoryId is required.");
+
+        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, request.TerritoryId)
+            ?? throw new UnauthorizedAccessException("Territory is not assigned to the current territory manager.");
+
+        var territoryGeometry = ToPolygonalGeometry(activeTerritory.BoundaryGeometry);
+        if (territoryGeometry is null)
+            throw new InvalidOperationException(MissingTerritoryBoundaryMessage);
+
+        var name = NormalizeRequiredRegionName(request.Name);
+        var normalizedName = name.ToLowerInvariant();
+        var duplicateExists = await _db.Regions
+            .AsNoTracking()
+            .AnyAsync(region =>
+                region.TerritoryId == activeTerritory.Id &&
+                region.Name.ToLower() == normalizedName);
+
+        if (duplicateExists)
+            throw new InvalidOperationException($"Region with name '{name}' already exists in this territory.");
+
+        var boundary = BuildRegionBoundary(request.Boundary);
+        if (!territoryGeometry.Covers(boundary.Geometry))
+            throw new InvalidOperationException("Region boundary must be inside the assigned country/territory.");
+
+        var now = DateTime.UtcNow;
+        var source = NormalizeBoundarySource(request.BoundarySource);
+        var region = new Region
+        {
+            Name = name,
+            TerritoryId = activeTerritory.Id,
+            CreatedAt = now,
+            CreatedByUserId = userId,
+            BoundaryShapeType = boundary.ShapeType,
+            BoundarySource = source,
+            OsmRelationId = request.OsmRelationId,
+            OsmAdminLevel = request.OsmAdminLevel
+        };
+
+        _db.Regions.Add(region);
+        _db.Entry(region)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = boundary.Geometry;
+
+        await _db.SaveChangesAsync();
+
+        return new TerritoryRegionCreateResponseDto
+        {
+            Id = region.Id,
+            RegionId = region.Id,
+            Name = region.Name,
+            DisplayName = region.Name,
+            TerritoryId = region.TerritoryId,
+            TerritoryDisplayName = activeTerritory.Name,
+            Status = "Inactive",
+            BoundarySource = source,
+            BoundaryShapeType = region.BoundaryShapeType,
+            BoundaryGeometryGeoJson = ToGeoJson(boundary.Geometry),
+            CreatedAt = region.CreatedAt,
+            DetailRoute = $"/territory/regions/{region.Id}"
         };
     }
 
@@ -2619,6 +2761,341 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         return map;
     }
 
+    private async Task<TerritoryBoundaryRow?> GetAuthorizedTerritoryBoundaryAsync(int userId, int? territoryId)
+    {
+        if (territoryId is <= 0)
+            throw new InvalidOperationException("territoryId must be positive.");
+
+        var query = _db.TerritoryManagerTerritories
+            .AsNoTracking()
+            .Where(assignment => assignment.UserId == userId);
+
+        if (territoryId.HasValue)
+        {
+            query = query.Where(assignment => assignment.TerritoryId == territoryId.Value);
+        }
+
+        var territory = await query
+            .OrderBy(assignment => assignment.Territory.Name)
+            .ThenBy(assignment => assignment.TerritoryId)
+            .Select(assignment => new TerritoryBoundaryRow
+            {
+                Id = assignment.TerritoryId,
+                Name = assignment.Territory.Name,
+                BoundaryShapeType = assignment.Territory.BoundaryShapeType,
+                BoundarySource = assignment.Territory.BoundarySource,
+                BoundaryGeometry = EF.Property<Geometry?>(
+                    assignment.Territory,
+                    BoundaryGeometryPropertyName)
+            })
+            .FirstOrDefaultAsync();
+
+        if (territoryId.HasValue && territory is null)
+            throw new UnauthorizedAccessException("Territory is not assigned to the current territory manager.");
+
+        return territory;
+    }
+
+    private static TerritoryRegionMapItemDto BuildRegionMapItem(RegionBoundaryRow row)
+    {
+        var geometry = ToPolygonalGeometry(row.BoundaryGeometry);
+        var centroid = geometry?.Centroid;
+
+        return new TerritoryRegionMapItemDto
+        {
+            Id = row.Id,
+            RegionId = row.Id,
+            Name = row.Name,
+            DisplayName = row.Name,
+            GeometryGeoJson = ToGeoJson(geometry),
+            CenterLatitude = centroid?.Y,
+            CenterLongitude = centroid?.X
+        };
+    }
+
+    private static BoundaryResult BuildRegionBoundary(TerritoryRegionBoundaryDto? boundary)
+    {
+        if (boundary is null)
+            throw new InvalidOperationException("Region boundary is required.");
+
+        var shapeType = NormalizeRegionShapeType(boundary.ShapeType);
+        var coordinates = boundary.Coordinates ?? new List<TerritoryRegionBoundaryCoordinateDto>();
+
+        if (coordinates.Count < 3)
+            throw new InvalidOperationException("Boundary geometry must contain at least three points.");
+
+        var ringCoordinates = coordinates
+            .Select(point =>
+            {
+                ValidateLatitude(point.Latitude);
+                ValidateLongitude(point.Longitude);
+                return new Coordinate(point.Longitude, point.Latitude);
+            })
+            .ToList();
+
+        var first = ringCoordinates[0];
+        var last = ringCoordinates[^1];
+        if (!CoordinatesEqual(first, last))
+        {
+            ringCoordinates.Add(new Coordinate(first.X, first.Y));
+        }
+
+        var uniquePointCount = ringCoordinates
+            .Take(ringCoordinates.Count - 1)
+            .Select(coordinate => $"{Math.Round(coordinate.X, 7)}:{Math.Round(coordinate.Y, 7)}")
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+
+        if (uniquePointCount < 3 || ringCoordinates.Count < 4)
+            throw new InvalidOperationException("Boundary geometry must contain at least three distinct points.");
+
+        var polygon = Wgs84GeometryFactory.CreatePolygon(ringCoordinates.ToArray());
+        polygon.SRID = 4326;
+
+        EnsureWgs84(polygon, "Boundary geometry is invalid.");
+        if (polygon.Area <= 0)
+            throw new InvalidOperationException("Boundary geometry is invalid.");
+
+        return new BoundaryResult(shapeType, polygon);
+    }
+
+    private static string NormalizeRequiredRegionName(string? value)
+    {
+        var name = value?.Trim() ?? string.Empty;
+        if (name.Length == 0)
+            throw new InvalidOperationException("Region name is required.");
+
+        if (name.Length > 200)
+            throw new InvalidOperationException("Region name is too long.");
+
+        return name;
+    }
+
+    private static string NormalizeBoundarySource(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return ManualDrawBoundarySource;
+
+        var normalized = value.Trim().Replace(" ", string.Empty).Replace("-", string.Empty).ToLowerInvariant();
+        return normalized switch
+        {
+            "manual" or "manualdraw" => ManualDrawBoundarySource,
+            "osm" or "osmboundary" => OsmBoundarySource,
+            _ => throw new InvalidOperationException("Boundary source is invalid.")
+        };
+    }
+
+    private static string NormalizeRegionShapeType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Polygon";
+
+        var normalized = value.Trim().Replace(" ", string.Empty).Replace("-", string.Empty).ToLowerInvariant();
+        return normalized switch
+        {
+            "polygon" => "Polygon",
+            "rectangle" => "Rectangle",
+            _ => throw new InvalidOperationException("Region boundary shape type is invalid.")
+        };
+    }
+
+    private static void ValidateLatitude(double latitude)
+    {
+        if (double.IsNaN(latitude) || double.IsInfinity(latitude) || latitude < -90d || latitude > 90d)
+            throw new InvalidOperationException("Boundary geometry is invalid.");
+    }
+
+    private static void ValidateLongitude(double longitude)
+    {
+        if (double.IsNaN(longitude) || double.IsInfinity(longitude) || longitude < -180d || longitude > 180d)
+            throw new InvalidOperationException("Boundary geometry is invalid.");
+    }
+
+    private static bool CoordinatesEqual(Coordinate left, Coordinate right) =>
+        Math.Abs(left.X - right.X) < 1e-10 && Math.Abs(left.Y - right.Y) < 1e-10;
+
+    private static void EnsureWgs84(Geometry geometry, string errorMessage)
+    {
+        if (geometry.IsEmpty || !geometry.IsValid)
+            throw new InvalidOperationException(errorMessage);
+
+        if (geometry.SRID == 0)
+        {
+            geometry.SRID = 4326;
+            return;
+        }
+
+        if (geometry.SRID != 4326)
+            throw new InvalidOperationException(errorMessage);
+    }
+
+    private static Geometry? ToPolygonalGeometry(Geometry? geometry)
+    {
+        if (geometry is null || geometry.IsEmpty)
+            return null;
+
+        var copy = geometry.Copy();
+        copy.SRID = copy.SRID > 0 ? copy.SRID : 4326;
+
+        if (!copy.IsValid)
+            return null;
+
+        if (copy is Polygon or MultiPolygon)
+            return copy;
+
+        if (copy is GeometryCollection collection)
+        {
+            var polygons = Enumerable.Range(0, collection.NumGeometries)
+                .Select(collection.GetGeometryN)
+                .Where(item => item is Polygon or MultiPolygon)
+                .ToList();
+
+            if (polygons.Count == 0)
+                return null;
+
+            return polygons.Count == 1
+                ? polygons[0]
+                : ToPolygonalGeometry(UnaryUnionOp.Union(polygons));
+        }
+
+        return null;
+    }
+
+    private static TerritoryRegionGeometryDto? ToGeoJson(Geometry? geometry)
+    {
+        var polygonalGeometry = ToPolygonalGeometry(geometry);
+        if (polygonalGeometry is null)
+            return null;
+
+        return polygonalGeometry switch
+        {
+            Polygon polygon => new TerritoryRegionGeometryDto
+            {
+                Type = "Polygon",
+                Coordinates = ToPolygonCoordinates(polygon)
+            },
+            MultiPolygon multiPolygon => new TerritoryRegionGeometryDto
+            {
+                Type = "MultiPolygon",
+                Coordinates = Enumerable.Range(0, multiPolygon.NumGeometries)
+                    .Select(index => ToPolygonCoordinates((Polygon)multiPolygon.GetGeometryN(index)))
+                    .ToArray()
+            },
+            _ => null
+        };
+    }
+
+    private static double[][][] ToPolygonCoordinates(Polygon polygon)
+    {
+        var rings = new List<double[][]>
+        {
+            ToRingCoordinates(polygon.ExteriorRing)
+        };
+
+        for (var index = 0; index < polygon.NumInteriorRings; index++)
+        {
+            rings.Add(ToRingCoordinates(polygon.GetInteriorRingN(index)));
+        }
+
+        return rings.ToArray();
+    }
+
+    private static double[][] ToRingCoordinates(LineString ring) =>
+        ring.Coordinates
+            .Select(coordinate => new[]
+            {
+                RoundCoordinate(coordinate.X),
+                RoundCoordinate(coordinate.Y)
+            })
+            .ToArray();
+
+    private static TerritoryRegionMapViewportDto BuildRegionMapViewport(IEnumerable<Geometry> geometries)
+    {
+        var accumulator = new BoundsAccumulator();
+
+        foreach (var geometry in geometries)
+        {
+            IncludeGeometry(accumulator, ToGeoJson(geometry));
+        }
+
+        if (!accumulator.HasValue)
+        {
+            return new TerritoryRegionMapViewportDto { IsEmpty = true };
+        }
+
+        var centerLatitude = (accumulator.North + accumulator.South) / 2d;
+        var centerLongitude = (accumulator.East + accumulator.West) / 2d;
+        var latitudeSpan = Math.Abs(accumulator.North - accumulator.South);
+        var longitudeSpan = Math.Abs(accumulator.East - accumulator.West);
+        var isSinglePoint = latitudeSpan < 0.00001d && longitudeSpan < 0.00001d;
+
+        return new TerritoryRegionMapViewportDto
+        {
+            CenterLatitude = centerLatitude,
+            CenterLongitude = centerLongitude,
+            Zoom = isSinglePoint ? 13d : EstimateMapZoom(Math.Max(latitudeSpan, longitudeSpan)),
+            Bounds = isSinglePoint
+                ? null
+                : new TerritoryRegionMapBoundsDto
+                {
+                    North = accumulator.North,
+                    South = accumulator.South,
+                    East = accumulator.East,
+                    West = accumulator.West
+                },
+            IsEmpty = false
+        };
+    }
+
+    private static void IncludeGeometry(BoundsAccumulator accumulator, TerritoryRegionGeometryDto? geometry)
+    {
+        if (geometry?.Coordinates is null)
+            return;
+
+        if (geometry.Type.Equals("Polygon", StringComparison.OrdinalIgnoreCase) &&
+            geometry.Coordinates is double[][][] polygon)
+        {
+            foreach (var ring in polygon)
+            {
+                foreach (var coordinate in ring)
+                {
+                    if (coordinate.Length >= 2)
+                        accumulator.Include(coordinate[1], coordinate[0]);
+                }
+            }
+        }
+        else if (geometry.Type.Equals("MultiPolygon", StringComparison.OrdinalIgnoreCase) &&
+                 geometry.Coordinates is double[][][][] multiPolygon)
+        {
+            foreach (var polygonCoordinates in multiPolygon)
+            {
+                foreach (var ring in polygonCoordinates)
+                {
+                    foreach (var coordinate in ring)
+                    {
+                        if (coordinate.Length >= 2)
+                            accumulator.Include(coordinate[1], coordinate[0]);
+                    }
+                }
+            }
+        }
+    }
+
+    private static double EstimateMapZoom(double span)
+    {
+        if (span >= 8d) return 6d;
+        if (span >= 4d) return 7d;
+        if (span >= 2d) return 8d;
+        if (span >= 1d) return 9d;
+        if (span >= 0.5d) return 10d;
+        if (span >= 0.2d) return 11d;
+        if (span >= 0.08d) return 12d;
+        return 13d;
+    }
+
+    private static double RoundCoordinate(double coordinate) =>
+        Math.Round(coordinate, 7, MidpointRounding.AwayFromZero);
+
     private async Task<TerritoryAssignedTerritoryDto?> GetAuthorizedTerritoryAsync(int userId, int? territoryId)
     {
         var assignedTerritories = await GetAssignedTerritoriesAsync(userId);
@@ -2658,6 +3135,21 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             !normalizedRoles.Contains(RoleNames.TerritoryAssociate))
         {
             throw new UnauthorizedAccessException("Territory administrator role is required.");
+        }
+    }
+
+    private async Task EnsureTerritoryManagerOnlyRoleAsync(int userId)
+    {
+        var roles = await _db.UserRoles
+            .AsNoTracking()
+            .Where(userRole => userRole.UserId == userId)
+            .Select(userRole => userRole.Role.Name)
+            .ToListAsync();
+
+        var normalizedRoles = roles.Select(RoleNames.Normalize).ToList();
+        if (!normalizedRoles.Contains(RoleNames.TerritoryManager))
+        {
+            throw new UnauthorizedAccessException("Territory Manager role is required.");
         }
     }
 
@@ -2927,5 +3419,63 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public int EventsCount { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
+    }
+
+    private sealed record BoundaryResult(string ShapeType, Geometry Geometry);
+
+    private sealed class TerritoryBoundaryRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? BoundaryShapeType { get; set; }
+        public string? BoundarySource { get; set; }
+        public Geometry? BoundaryGeometry { get; set; }
+    }
+
+    private sealed class RegionBoundaryRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public Geometry? BoundaryGeometry { get; set; }
+    }
+
+    private sealed class BoundsAccumulator
+    {
+        public bool HasValue { get; private set; }
+        public double North { get; private set; }
+        public double South { get; private set; }
+        public double East { get; private set; }
+        public double West { get; private set; }
+
+        public void Include(double latitude, double longitude)
+        {
+            if (!IsValidCoordinate(latitude, longitude))
+                return;
+
+            if (!HasValue)
+            {
+                North = latitude;
+                South = latitude;
+                East = longitude;
+                West = longitude;
+                HasValue = true;
+                return;
+            }
+
+            North = Math.Max(North, latitude);
+            South = Math.Min(South, latitude);
+            East = Math.Max(East, longitude);
+            West = Math.Min(West, longitude);
+        }
+
+        private static bool IsValidCoordinate(double latitude, double longitude) =>
+            !double.IsNaN(latitude) &&
+            !double.IsNaN(longitude) &&
+            !double.IsInfinity(latitude) &&
+            !double.IsInfinity(longitude) &&
+            latitude >= -90d &&
+            latitude <= 90d &&
+            longitude >= -180d &&
+            longitude <= 180d;
     }
 }
