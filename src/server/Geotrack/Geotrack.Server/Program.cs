@@ -399,7 +399,7 @@ var shouldSeedDatabase =
 var shouldSeedDemoRegionalManager =
     DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 var shouldSeedDemoTerritoryManager =
-    DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
+    shouldSeedDatabase || DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 
 if (shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager)
 {
