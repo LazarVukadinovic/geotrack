@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Services;
@@ -45,17 +46,44 @@ public class AdminProfileService : IAdminProfileService
             .Include(existingUser => existingUser.RegionalManagerRegions)
                 .ThenInclude(assignment => assignment.Region)
                     .ThenInclude(region => region.Territory)
+            .Include(existingUser => existingUser.TerritoryManager)
+                .ThenInclude(territoryManager => territoryManager!.TerritoryManagerTerritories)
+                    .ThenInclude(assignment => assignment.Territory)
             .SingleOrDefaultAsync(existingUser => existingUser.Id == userId)
             ?? throw new KeyNotFoundException("User not found.");
 
         var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
         EnsureAdminRole(roles);
+        var roleCode = ResolvePrimaryAdminRole(roles);
 
         var activeAssignments = user.RegionalManagerRegions
             .Where(assignment => assignment.IsActive)
             .OrderBy(assignment => assignment.Region.Name)
             .ThenBy(assignment => assignment.RegionId)
             .ToList();
+
+        var activeTerritoryAssignments = (user.TerritoryManager?.TerritoryManagerTerritories
+                ?? Enumerable.Empty<TerritoryManagerTerritory>())
+            .OrderBy(assignment => assignment.Territory.Name)
+            .ThenBy(assignment => assignment.TerritoryId)
+            .ToList();
+
+        var regionalManager = new AdminProfileRegionalManagerDto
+        {
+            AssignedRegions = activeAssignments
+                .Select(assignment => new AdminProfileRegionDto
+                {
+                    Id = assignment.RegionId,
+                    Name = assignment.Region.Name,
+                    TerritoryName = assignment.Region.Territory.Name,
+                    DisplayName = BuildRegionDisplayName(
+                        assignment.Region.Name,
+                        assignment.Region.Territory.Name),
+                    AssignedAt = assignment.CreatedAt,
+                })
+                .ToList(),
+            MemberSince = ResolveRegionalMemberSince(activeAssignments, user.CreatedAt),
+        };
 
         return new AdminProfileResponseDto
         {
@@ -72,22 +100,17 @@ public class AdminProfileService : IAdminProfileService
                 UpdatedAt = user.UpdatedAt,
             },
             Roles = roles,
-            RegionalManager = new AdminProfileRegionalManagerDto
+            Role = new AdminProfileRoleDto
             {
-                AssignedRegions = activeAssignments
-                    .Select(assignment => new AdminProfileRegionDto
-                    {
-                        Id = assignment.RegionId,
-                        Name = assignment.Region.Name,
-                        TerritoryName = assignment.Region.Territory.Name,
-                        DisplayName = BuildRegionDisplayName(
-                            assignment.Region.Name,
-                            assignment.Region.Territory.Name),
-                        AssignedAt = assignment.CreatedAt,
-                    })
-                    .ToList(),
-                MemberSince = ResolveMemberSince(activeAssignments, user.CreatedAt),
+                RoleCode = roleCode,
+                RoleDisplayName = FormatRoleDisplayName(roleCode),
             },
+            Assignment = BuildAssignment(
+                roleCode,
+                activeAssignments,
+                activeTerritoryAssignments,
+                user.CreatedAt),
+            RegionalManager = regionalManager,
             Preferences = new AdminProfilePreferencesDto
             {
                 InterfaceLanguage = NormalizeLanguageOrDefault(user.InterfaceLanguage),
@@ -157,8 +180,32 @@ public class AdminProfileService : IAdminProfileService
     private static void EnsureAdminRole(IReadOnlyCollection<string> roles)
     {
         if (!roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal) &&
-            !roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
+            !roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal) &&
+            !roles.Contains(RoleNames.TerritoryAssociate, StringComparer.Ordinal))
             throw new UnauthorizedAccessException("Admin role is required.");
+    }
+
+    private static string ResolvePrimaryAdminRole(IReadOnlyCollection<string> roles)
+    {
+        if (roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
+            return RoleNames.TerritoryManager;
+
+        if (roles.Contains(RoleNames.TerritoryAssociate, StringComparer.Ordinal))
+            return RoleNames.TerritoryAssociate;
+
+        return RoleNames.RegionalManager;
+    }
+
+    private static string FormatRoleDisplayName(string roleCode)
+    {
+        return roleCode switch
+        {
+            RoleNames.TerritoryManager => "Territory Manager",
+            RoleNames.TerritoryAssociate => "Territory Associate",
+            RoleNames.RegionalManager => "Regional Manager",
+            RoleNames.Admin => "Admin",
+            _ => roleCode
+        };
     }
 
     private static string NormalizeLanguageOrDefault(string? value)
@@ -186,12 +233,85 @@ public class AdminProfileService : IAdminProfileService
             : regionName + ", " + territoryName.Trim();
     }
 
-    private static DateTime? ResolveMemberSince(
-        IReadOnlyCollection<Geotrack.Domain.Entities.Users.RegionalManagerRegion> activeAssignments,
+    private static AdminProfileAssignmentDto BuildAssignment(
+        string roleCode,
+        IReadOnlyCollection<RegionalManagerRegion> regionalAssignments,
+        IReadOnlyCollection<TerritoryManagerTerritory> territoryAssignments,
+        DateTime userCreatedAt)
+    {
+        if (roleCode is RoleNames.TerritoryManager or RoleNames.TerritoryAssociate)
+        {
+            var items = territoryAssignments
+                .Select(assignment => new AdminProfileAssignmentItemDto
+                {
+                    Id = assignment.TerritoryId,
+                    Name = assignment.Territory.Name,
+                    DisplayName = assignment.Territory.Name,
+                    AssignedAt = assignment.CreatedAt,
+                })
+                .ToList();
+
+            return new AdminProfileAssignmentDto
+            {
+                AssignmentType = "Territory",
+                SectionTitle = roleCode == RoleNames.TerritoryAssociate
+                    ? "Territory Associate Assignment"
+                    : "Territory Manager Assignment",
+                Label = "Assigned Territory",
+                DisplayValue = ResolveAssignmentDisplayValue(items, "No assigned territories"),
+                AssignedItems = items,
+                MemberSince = ResolveTerritoryMemberSince(territoryAssignments, userCreatedAt),
+            };
+        }
+
+        var regionalItems = regionalAssignments
+            .Select(assignment => new AdminProfileAssignmentItemDto
+            {
+                Id = assignment.RegionId,
+                Name = assignment.Region.Name,
+                DisplayName = BuildRegionDisplayName(
+                    assignment.Region.Name,
+                    assignment.Region.Territory.Name),
+                AssignedAt = assignment.CreatedAt,
+            })
+            .ToList();
+
+        return new AdminProfileAssignmentDto
+        {
+            AssignmentType = "Region",
+            SectionTitle = "Regional Manager Assignment",
+            Label = "Assigned Region",
+            DisplayValue = ResolveAssignmentDisplayValue(regionalItems, "No assigned regions"),
+            AssignedItems = regionalItems,
+            MemberSince = ResolveRegionalMemberSince(regionalAssignments, userCreatedAt),
+        };
+    }
+
+    private static string ResolveAssignmentDisplayValue(
+        IReadOnlyCollection<AdminProfileAssignmentItemDto> items,
+        string emptyValue)
+    {
+        return items.Count == 0
+            ? emptyValue
+            : string.Join(", ", items.Select(item => item.DisplayName));
+    }
+
+    private static DateTime? ResolveRegionalMemberSince(
+        IReadOnlyCollection<RegionalManagerRegion> activeAssignments,
         DateTime userCreatedAt)
     {
         if (activeAssignments.Count > 0)
             return activeAssignments.Min(assignment => assignment.CreatedAt);
+
+        return userCreatedAt == default ? null : userCreatedAt;
+    }
+
+    private static DateTime? ResolveTerritoryMemberSince(
+        IReadOnlyCollection<TerritoryManagerTerritory> territoryAssignments,
+        DateTime userCreatedAt)
+    {
+        if (territoryAssignments.Count > 0)
+            return territoryAssignments.Min(assignment => assignment.CreatedAt);
 
         return userCreatedAt == default ? null : userCreatedAt;
     }

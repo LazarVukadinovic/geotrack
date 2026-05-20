@@ -28,6 +28,30 @@ public class AdminProfileRegionalManagerDto
     public DateTime? MemberSince { get; set; }
 }
 
+public class AdminProfileRoleDto
+{
+    public string RoleCode { get; set; } = string.Empty;
+    public string RoleDisplayName { get; set; } = string.Empty;
+}
+
+public class AdminProfileAssignmentItemDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public DateTime AssignedAt { get; set; }
+}
+
+public class AdminProfileAssignmentDto
+{
+    public string AssignmentType { get; set; } = string.Empty;
+    public string SectionTitle { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string DisplayValue { get; set; } = string.Empty;
+    public List<AdminProfileAssignmentItemDto> AssignedItems { get; set; } = new();
+    public DateTime? MemberSince { get; set; }
+}
+
 public class AdminProfilePreferencesDto
 {
     public string InterfaceLanguage { get; set; } = "en-US";
@@ -40,6 +64,8 @@ public class AdminProfileResponseDto
 {
     public AdminProfileUserDto User { get; set; } = new();
     public List<string> Roles { get; set; } = new();
+    public AdminProfileRoleDto Role { get; set; } = new();
+    public AdminProfileAssignmentDto Assignment { get; set; } = new();
     public AdminProfileRegionalManagerDto RegionalManager { get; set; } = new();
     public AdminProfilePreferencesDto Preferences { get; set; } = new();
 }

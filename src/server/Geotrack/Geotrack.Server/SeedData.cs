@@ -3471,6 +3471,7 @@ public static class SeedData
         await EnsureRoleAsync(db, "Admin", "Can manage users and administrative configuration.");
         await EnsureRoleAsync(db, "RegionalManager", "Can review and approve regional user contributions.");
         await EnsureRoleAsync(db, "TerritoryManager", "Can manage territories and assigned regions.");
+        await EnsureRoleAsync(db, "TerritoryAssociate", "Can manage assigned territories except associate assignment and protected role removal.");
         await EnsureRoleAsync(db, "Publisher", "Can publish and manage assigned places.");
         await EnsureRoleAsync(db, "RegisteredUser", "Regular authenticated user.");
     }
