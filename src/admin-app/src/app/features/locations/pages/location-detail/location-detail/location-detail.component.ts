@@ -134,11 +134,12 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
     const zone = (this.item as any)?.zone as [number,number][] | undefined;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.miniMap = L.map(el, {
       zoomControl: true, dragging: true, scrollWheelZoom: false,
       doubleClickZoom: false, touchZoom: false, attributionControl: false,
-    }).setView([lat, lng], zone ? 12 : 8);
+    }).setView([lat, lng], hasCoords ? 13 : 8);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
@@ -149,6 +150,9 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
         color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
       }).addTo(this.miniMap);
       try { this.miniMap.fitBounds(this.miniMarker.getBounds(), { padding: [10, 10] }); } catch {}
+    } else if (hasCoords) {
+      this.miniMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
+        .addTo(this.miniMap);
     }
     setTimeout(() => this.miniMap?.invalidateSize(), 200);
   }
@@ -158,9 +162,10 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
     const zone = (this.item as any)?.zone as [number,number][] | undefined;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false })
-      .setView([lat, lng], zone ? 13 : 9);
+      .setView([lat, lng], hasCoords ? 14 : 9);
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
@@ -171,6 +176,9 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
         color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.2, weight: 2,
       }).addTo(this.modalMap);
       try { this.modalMap.fitBounds(this.modalMarker.getBounds(), { padding: [30, 30] }); } catch {}
+    } else if (hasCoords) {
+      this.modalMarker = L.marker([lat, lng], { icon: this.makePinIcon(), draggable: false })
+        .addTo(this.modalMap);
     }
     setTimeout(() => this.modalMap?.invalidateSize(), 200);
   }

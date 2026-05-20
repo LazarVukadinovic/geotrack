@@ -133,7 +133,7 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     const el = this.miniMapContainer.nativeElement;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
-    const hasCoords = (this.item as any)?.lat != null;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.miniMap = L.map(el, {
       zoomControl: true, dragging: true, scrollWheelZoom: false,
@@ -154,7 +154,7 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.modalMap) return;
     const lat = (this.item as any)?.lat ?? 44.0;
     const lng = (this.item as any)?.lng ?? 20.9;
-    const hasCoords = (this.item as any)?.lat != null;
+    const hasCoords = (this.item as any)?.lat != null && (this.item as any)?.lng != null;
 
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false })
       .setView([lat, lng], hasCoords ? 15 : 9);
