@@ -11,6 +11,11 @@ public class Region
 {
     public int Id { get; set; } // PRIMARY KEY
     public string Name { get; set; } = string.Empty;
+    public string? BoundaryShapeType { get; set; }
+    public string? BoundarySource { get; set; }
+    public long? OsmRelationId { get; set; }
+    public int? OsmAdminLevel { get; set; }
+    public int? CreatedByUserId { get; set; }
 
     public ICollection<Destination> Destinations { get; set; } = new List<Destination>(); // NAVIGATIONAL
     public ICollection<RegionalManagerRegion> RegionalManagerRegions { get; set; } = new List<RegionalManagerRegion>(); // NAVIGATIONAL
