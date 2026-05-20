@@ -57,12 +57,14 @@ describe('UsersService', () => {
       territoryId: 7,
       firstName: 'Mila',
       lastName: 'Markovic',
-      displayName: 'Mila Markovic',
+      regionIdsToAdd: [3, 4],
     }).subscribe();
 
     const update = http.expectOne('/api/admin/territory/users/42');
     expect(update.request.method).toBe('PUT');
     expect(update.request.body.territoryId).toBe(7);
+    expect(update.request.body.displayName).toBeUndefined();
+    expect(update.request.body.regionIdsToAdd).toEqual([3, 4]);
     update.flush({ userId: 42, assignedRegions: [] });
 
     service.addRegion$(42, 7, 3).subscribe();
@@ -76,6 +78,62 @@ describe('UsersService', () => {
     expect(remove.request.method).toBe('POST');
     expect(remove.request.body).toEqual({ territoryId: 7 });
     remove.flush({ userId: 42, assignedRegions: [] });
+  });
+
+  it('searches assignable users for role assignment modals', () => {
+    let resultCount = 0;
+
+    service.searchAssignableUsers$(7, 'mila', 5, {
+      excludeAlreadyRegionalManager: true,
+      excludeAlreadyTerritoryAssociate: true,
+    }).subscribe(users => {
+      resultCount = users.length;
+    });
+
+    const request = http.expectOne(req =>
+      req.url === '/api/admin/territory/users/search' &&
+      req.params.get('territoryId') === '7' &&
+      req.params.get('query') === 'mila' &&
+      req.params.get('take') === '5' &&
+      req.params.get('excludeAlreadyRegionalManager') === 'true' &&
+      req.params.get('excludeAlreadyTerritoryAssociate') === 'true');
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      items: [{
+        userId: 42,
+        displayName: 'Mila Markovic',
+        firstName: 'Mila',
+        lastName: 'Markovic',
+        email: 'mila@example.com',
+        initials: 'MM',
+        roles: ['RegisteredUser'],
+        assignedRegions: [],
+        assignedTerritories: [],
+        isActive: true,
+      }],
+    });
+
+    expect(resultCount).toBe(1);
+  });
+
+  it('posts regional manager and territory associate assignment requests', () => {
+    service.addRegionalManager$(42, 7, [3, 4]).subscribe();
+    const addRegionalManager = http.expectOne('/api/admin/territory/users/42/regional-manager');
+    expect(addRegionalManager.request.method).toBe('POST');
+    expect(addRegionalManager.request.body).toEqual({ territoryId: 7, regionIds: [3, 4] });
+    addRegionalManager.flush({ userId: 42, assignedRegions: [] });
+
+    service.addTerritoryAssociate$(42, 7).subscribe();
+    const addAssociate = http.expectOne('/api/admin/territory/users/42/territory-associate');
+    expect(addAssociate.request.method).toBe('POST');
+    expect(addAssociate.request.body).toEqual({ territoryId: 7 });
+    addAssociate.flush({ userId: 42, assignedRegions: [] });
+
+    service.removeTerritoryAssociate$(42, 7).subscribe();
+    const removeAssociate = http.expectOne('/api/admin/territory/users/42/territory-associate/remove');
+    expect(removeAssociate.request.method).toBe('POST');
+    expect(removeAssociate.request.body).toEqual({ territoryId: 7 });
+    removeAssociate.flush({ userId: 42, assignedRegions: [] });
   });
 
   it('loads only available regions for a user in the active territory', () => {

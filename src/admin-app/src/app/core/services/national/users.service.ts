@@ -18,6 +18,12 @@ export interface TerritoryUserAssignedRegion {
   displayName: string;
 }
 
+export interface TerritoryUserAssignedTerritory {
+  territoryId: number;
+  territoryName: string;
+  displayName: string;
+}
+
 export interface TerritoryUser {
   userId: number;
   displayName: string;
@@ -28,14 +34,23 @@ export interface TerritoryUser {
   initials: string;
   roleCode: string;
   roleDisplayName: string;
+  roles: string[];
   assignedRegions: TerritoryUserAssignedRegion[];
+  assignedTerritories: TerritoryUserAssignedTerritory[];
   status: 'Active' | 'Inactive' | string;
   isActive: boolean;
+  isInTerritoryScope?: boolean;
   lastLoginAt?: string | null;
   lastLoginDisplay: string;
   canEdit: boolean;
+  canEditUser?: boolean;
+  canAddRegionalManagerRole?: boolean;
   canAddRegion: boolean;
   canRemoveManagerRole: boolean;
+  canRemoveRegionalManagerRole?: boolean;
+  canAddTerritoryAssociate?: boolean;
+  canAddTerritoryAssociateRole?: boolean;
+  canRemoveTerritoryAssociateRole?: boolean;
   createdAt: string;
 }
 
@@ -70,7 +85,7 @@ export interface TerritoryUserUpdateRequest {
   territoryId: number;
   firstName?: string | null;
   lastName?: string | null;
-  displayName?: string | null;
+  regionIdsToAdd?: number[] | null;
 }
 
 export interface TerritoryUserAvailableRegion {
@@ -79,8 +94,26 @@ export interface TerritoryUserAvailableRegion {
   displayName: string;
 }
 
+export interface TerritoryAssignableUser {
+  userId: number;
+  displayName: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  avatarUrl?: string | null;
+  initials: string;
+  roles: string[];
+  assignedRegions: TerritoryUserAssignedRegion[];
+  assignedTerritories: TerritoryUserAssignedTerritory[];
+  isActive: boolean;
+}
+
 interface AvailableRegionsResponse {
   items: TerritoryUserAvailableRegion[];
+}
+
+interface AssignableUsersResponse {
+  items: TerritoryAssignableUser[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -110,6 +143,36 @@ export class UsersService {
     return this.http.put<TerritoryUser>(`/api/admin/territory/users/${userId}`, request);
   }
 
+  searchAssignableUsers$(
+    territoryId: number,
+    query?: string | null,
+    take = 10,
+    options: {
+      excludeAlreadyRegionalManager?: boolean;
+      excludeAlreadyTerritoryAssociate?: boolean;
+    } = {},
+  ): Observable<TerritoryAssignableUser[]> {
+    let params = new HttpParams()
+      .set('territoryId', String(territoryId))
+      .set('take', String(Math.max(1, take)));
+
+    if (query?.trim()) {
+      params = params.set('query', query.trim());
+    }
+
+    if (options.excludeAlreadyRegionalManager) {
+      params = params.set('excludeAlreadyRegionalManager', 'true');
+    }
+
+    if (options.excludeAlreadyTerritoryAssociate) {
+      params = params.set('excludeAlreadyTerritoryAssociate', 'true');
+    }
+
+    return this.http
+      .get<AssignableUsersResponse>('/api/admin/territory/users/search', { params })
+      .pipe(map(response => response.items ?? []));
+  }
+
   getAvailableRegions$(
     userId: number,
     territoryId: number,
@@ -136,8 +199,27 @@ export class UsersService {
     });
   }
 
+  addRegionalManager$(userId: number, territoryId: number, regionIds: number[]): Observable<TerritoryUser> {
+    return this.http.post<TerritoryUser>(`/api/admin/territory/users/${userId}/regional-manager`, {
+      territoryId,
+      regionIds,
+    });
+  }
+
+  addTerritoryAssociate$(userId: number, territoryId: number): Observable<TerritoryUser> {
+    return this.http.post<TerritoryUser>(`/api/admin/territory/users/${userId}/territory-associate`, {
+      territoryId,
+    });
+  }
+
   removeManagerRole$(userId: number, territoryId: number): Observable<TerritoryUser> {
     return this.http.post<TerritoryUser>(`/api/admin/territory/users/${userId}/remove-manager-role`, {
+      territoryId,
+    });
+  }
+
+  removeTerritoryAssociate$(userId: number, territoryId: number): Observable<TerritoryUser> {
+    return this.http.post<TerritoryUser>(`/api/admin/territory/users/${userId}/territory-associate/remove`, {
       territoryId,
     });
   }
