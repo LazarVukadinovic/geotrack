@@ -7,9 +7,7 @@
   <div 
     class="fixed bottom-0 left-0 right-0 z-70 bg-white rounded-t-[2rem] px-5 pt-2 shadow-2xl animate-slide-up"
     style="padding-bottom: max(2.5rem, env(safe-area-inset-bottom))"
-    (touchstart)="onTouchStart($event)"
-    (touchmove)="onTouchMove($event)"
-    (touchend)="onTouchEnd()"
+    (touchstart)="onSheetTouchStart($event)"
     [style.transform]="dragOffset() > 0 ? 'translateY(' + dragOffset() + 'px)' : null"
     [style.transition]="isDragging() ? 'none' : 'transform 0.28s cubic-bezier(0.32,0.72,0,1)'"
   >

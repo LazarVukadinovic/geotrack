@@ -36,6 +36,7 @@ export class ProfileComponent {
   editProfile():       void { this.router.navigate(['/profile/edit']); }
   goToInterests():     void { this.router.navigate(['/settings/interests'], { queryParams: { from: 'profile' } }); }
   goToContributions(): void { this.router.navigate(['/contributions']); }
+  goToMyReviews():     void { this.router.navigate(['/profile/reviews']); }
   goToCollection(id: number): void { this.router.navigate(['/profile/collections', id]); }
   seeAllCollections(): void { this.router.navigate(['/profile/collections']); }
 }

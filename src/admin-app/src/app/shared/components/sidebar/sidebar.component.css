@@ -3,3 +3,75 @@
   font-weight: 600;
   background: rgba(255, 255, 255, 0.2);
 }
+
+.region-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 34px;
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.65rem;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  color: #1a2d8f;
+  box-shadow: 0 8px 18px rgba(5, 18, 82, 0.18);
+}
+
+.region-picker--selectable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.region-picker--selectable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(5, 18, 82, 0.24);
+}
+
+.region-picker:focus-within {
+  border-color: #dce5ff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22), 0 10px 22px rgba(5, 18, 82, 0.24);
+}
+
+.region-picker__icon {
+  width: 1rem;
+  height: 1rem;
+  color: #1a2d8f;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.region-picker__select {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #1a2d8f;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.region-picker__select:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.region-picker__select option {
+  color: #1a2d8f;
+  background: #ffffff;
+  font-weight: 600;
+}
+
+.region-picker__value {
+  min-width: 0;
+  flex: 1;
+  color: #1a2d8f;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

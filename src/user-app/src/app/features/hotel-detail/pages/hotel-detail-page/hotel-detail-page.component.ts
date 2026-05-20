@@ -11,7 +11,7 @@ import { ReviewEntryComponent } from '../../../../shared/components/review-entry
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { HttpClient } from '@angular/common/http';
 import { HotelDetailService } from '../../services/hotel-detail.service';
-import { ReviewsService } from '../../../reviews/services/reviews.service';
+import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { HotelAmenityIcon, HotelBookingPartner, HotelDetail } from '../../models/hotel-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
@@ -20,6 +20,7 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
   selector: 'app-hotel-detail-page',
   standalone: true,
   imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink],
+  providers: [ReviewInteractionsService],
   templateUrl: './hotel-detail-page.component.html',
   styleUrl: './hotel-detail-page.component.scss',
 })
@@ -31,8 +32,8 @@ export class HotelDetailPageComponent {
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly http     = inject(HttpClient);
-  private readonly reviewsService = inject(ReviewsService);
 
+  protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
   protected readonly hotelId = toSignal(
@@ -57,10 +58,6 @@ export class HotelDetailPageComponent {
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly ownershipClaimSubmitted = signal(false);
   protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.hotel()?.heroImage ?? '');
-  protected readonly reportMessage = signal('');
-  protected readonly reportError = signal('');
-  private readonly reportedReviewIds = signal<Record<string, boolean>>({});
-  private readonly reportingReviewIds = signal<Record<string, boolean>>({});
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.hotel()?.latitude ?? null,
@@ -93,6 +90,18 @@ export class HotelDetailPageComponent {
   private readonly hdScroll = viewChild<ElementRef<HTMLElement>>('hdScroll');
 
   constructor() {
+    this.ri.configure({
+      targetType: 'place',
+      onEditSuccess: () => {
+        const id = this.hotelId();
+        if (id) this.service.loadHotelDetail(id);
+      },
+      onDeleteSuccess: () => {
+        const id = this.hotelId();
+        if (id) this.service.loadHotelDetail(id);
+      },
+    });
+
     effect(() => {
       this.hotelId();
       this.scrollProgress.set(0);
@@ -241,9 +250,7 @@ export class HotelDetailPageComponent {
     const mapFocus = this.buildMapFocus(hotel);
     if (!mapFocus) return;
 
-    void this.router.navigate(['/map'], {
-      state: { mapFocus },
-    });
+    void this.router.navigate(['/map'], { state: { mapFocus } });
   }
 
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
@@ -263,43 +270,6 @@ export class HotelDetailPageComponent {
       this.analytics.track('review_created', { entityType: 'hotel', entityId: numId });
     }
     this.service.loadHotelDetail(id);
-  }
-
-  protected isReviewReported(review: { id: string; reportedByCurrentUser: boolean }): boolean {
-    return review.reportedByCurrentUser || !!this.reportedReviewIds()[review.id];
-  }
-
-  protected isReviewReporting(reviewId: string): boolean {
-    return !!this.reportingReviewIds()[reviewId];
-  }
-
-  protected reportReview(reviewId: string): void {
-    if (!this.isLoggedIn()) {
-      this.reportMessage.set('');
-      this.reportError.set('Log in to report a review.');
-      return;
-    }
-
-    const numericReviewId = parseInt(reviewId, 10);
-    if (isNaN(numericReviewId) || this.isReviewReporting(reviewId)) return;
-
-    this.reportMessage.set('');
-    this.reportError.set('');
-    this.setReviewReporting(reviewId, true);
-
-    this.reviewsService.reportReview('place', numericReviewId).subscribe({
-      next: (response) => {
-        this.setReviewReporting(reviewId, false);
-        this.markReviewReported(reviewId);
-        this.reportMessage.set(response.alreadyReported
-          ? 'You have already reported this review.'
-          : 'Thanks. A regional manager will review this report.');
-      },
-      error: (err) => {
-        this.setReviewReporting(reviewId, false);
-        this.reportError.set(err?.error?.message || 'Could not report this review. Please try again.');
-      },
-    });
   }
 
   protected onDirectionsClick(): void {
@@ -375,21 +345,5 @@ export class HotelDetailPageComponent {
       distance: hotel.distance || null,
       isSaved: hotel.isSaved,
     };
-  }
-
-  private markReviewReported(reviewId: string): void {
-    this.reportedReviewIds.update(current => ({ ...current, [reviewId]: true }));
-  }
-
-  private setReviewReporting(reviewId: string, isReporting: boolean): void {
-    this.reportingReviewIds.update(current => {
-      const next = { ...current };
-      if (isReporting) {
-        next[reviewId] = true;
-      } else {
-        delete next[reviewId];
-      }
-      return next;
-    });
   }
 }

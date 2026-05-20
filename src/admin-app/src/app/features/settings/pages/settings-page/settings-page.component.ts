@@ -8,6 +8,7 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminProfileService } from '../../../../core/services/admin-profile.service';
+import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
 import { AdminProfile, AdminProfileRegion } from '../../../../core/models/admin-profile.model';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 
@@ -77,8 +78,17 @@ export class SettingsComponent implements OnInit {
     private readonly router: Router,
     private readonly auth: AuthService,
     private readonly adminProfileService: AdminProfileService,
+    private readonly adminReviewsService: AdminReviewsService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
+
+  get isAdmin(): boolean {
+    return this.auth.isAdministrator();
+  }
+
+  get reportedReviewsCount(): number {
+    return this.adminReviewsService.getReportedCount();
+  }
 
   ngOnInit(): void {
     this.loadProfile();
@@ -417,7 +427,7 @@ export class SettingsComponent implements OnInit {
       case 'regionalmanager':
         return 'Regional Manager';
       case 'nationalmanager':
-        return 'National Manager';
+        return 'Territory Manager';
       case 'admin':
         return 'Admin';
       default:

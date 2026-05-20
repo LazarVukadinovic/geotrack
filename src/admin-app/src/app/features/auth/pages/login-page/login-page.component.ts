@@ -95,7 +95,6 @@ export class LoginComponent {
 
     return value;
   }
-
   setSubmitHover(event: Event, isHover: boolean): void {
     const btn = event.target as HTMLButtonElement;
     if (this.isLoading()) return;

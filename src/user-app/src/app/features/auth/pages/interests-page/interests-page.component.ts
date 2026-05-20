@@ -88,11 +88,11 @@ export class InterestsPageComponent implements OnInit {
         this.userService.load().subscribe({
           next: () => {
             this.isSaving.set(false);
-            this.router.navigate(['/']);
+            this.router.navigate(['/explore']);
           },
           error: () => {
             this.isSaving.set(false);
-            this.router.navigate(['/']);
+            this.router.navigate(['/explore']);
           },
         });
       },

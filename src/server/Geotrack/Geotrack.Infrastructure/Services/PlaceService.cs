@@ -217,13 +217,15 @@ public class PlaceService : IPlaceService
                 .Select(r => new ReviewDto
                 {
                     Id = r.Id,
+                    AuthorUserId = r.UserId,
                     AuthorName = GetAuthorName(r.User),
                     AvatarUrl = r.User.AvatarUrl,
                     Rating = (int)r.Rating,
                     TimeAgo = FormatTimeAgo(r.CreatedAt),
                     Body = r.Comment,
                     HelpfulCount = 0,
-                    ReportedByCurrentUser = reportedReviewIds.Contains(r.Id)
+                    ReportedByCurrentUser = reportedReviewIds.Contains(r.Id),
+                    IsOwnReview = userId.HasValue && r.UserId == userId.Value
                 })
                 .ToList(),
             Similar = similar
@@ -369,13 +371,15 @@ public class PlaceService : IPlaceService
                 .Select(r => new ReviewDto
                 {
                     Id = r.Id,
+                    AuthorUserId = r.UserId,
                     AuthorName = GetAuthorName(r.User),
                     AvatarUrl = r.User.AvatarUrl,
                     Rating = (int)r.Rating,
                     TimeAgo = FormatTimeAgo(r.CreatedAt),
                     Body = r.Comment,
                     HelpfulCount = 0,
-                    ReportedByCurrentUser = reportedReviewIds.Contains(r.Id)
+                    ReportedByCurrentUser = reportedReviewIds.Contains(r.Id),
+                    IsOwnReview = userId.HasValue && r.UserId == userId.Value
                 })
                 .ToList(),
             Similar = similar

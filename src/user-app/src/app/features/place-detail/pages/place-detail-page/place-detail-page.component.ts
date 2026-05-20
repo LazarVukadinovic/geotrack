@@ -11,7 +11,7 @@ import { ReviewEntryComponent } from '../../../../shared/components/review-entry
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { HttpClient } from '@angular/common/http';
 import { PlaceDetailService } from '../../services/place-detail.service';
-import { ReviewsService } from '../../../reviews/services/reviews.service';
+import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { PlaceDetail } from '../../../../core/models/place.model';
 import type { MapEntityMarker, MapEntityType } from '../../../../core/services/map-api.service';
@@ -20,6 +20,7 @@ import type { MapEntityMarker, MapEntityType } from '../../../../core/services/m
   selector: 'app-place-detail-page',
   standalone: true,
   imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink],
+  providers: [ReviewInteractionsService],
   templateUrl: './place-detail-page.component.html',
   styleUrl: './place-detail-page.component.scss',
 })
@@ -31,8 +32,8 @@ export class PlaceDetailPageComponent {
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly http     = inject(HttpClient);
-  private readonly reviewsService = inject(ReviewsService);
 
+  protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
   protected readonly placeId = toSignal(
@@ -40,7 +41,6 @@ export class PlaceDetailPageComponent {
     { initialValue: '' },
   );
 
-  /** Re-derives whenever placeId or saved-state changes in the service. */
   protected readonly place = computed(() =>
     this.service.getPlaceDetailPageData(this.placeId()),
   );
@@ -48,9 +48,9 @@ export class PlaceDetailPageComponent {
     this.service.getLoadState(this.placeId()),
   );
 
-  /** 0 = transparent top bar, 1 = full navy + visible title. Driven by pd__scroll. */
   protected readonly scrollProgress = signal(0);
   protected readonly galleryOpen = signal(false);
+  protected readonly selectedImageUrl = signal<string | null>(null);
   protected readonly ownershipClaimOpen = signal(false);
   protected readonly ownershipProofFile = signal<File | null>(null);
   protected readonly ownershipProofFileName = signal('');
@@ -58,11 +58,7 @@ export class PlaceDetailPageComponent {
   protected readonly ownershipClaimMessage = signal('');
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly ownershipClaimSubmitted = signal(false);
-  protected readonly heroImage = computed(() => this.place()?.heroImage ?? '');
-  protected readonly reportMessage = signal('');
-  protected readonly reportError = signal('');
-  private readonly reportedReviewIds = signal<Record<string, boolean>>({});
-  private readonly reportingReviewIds = signal<Record<string, boolean>>({});
+  protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.place()?.heroImage ?? '');
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.place()?.latitude ?? null,
@@ -83,10 +79,23 @@ export class PlaceDetailPageComponent {
   private readonly pdScroll = viewChild<ElementRef<HTMLElement>>('pdScroll');
 
   constructor() {
+    this.ri.configure({
+      targetType: 'place',
+      onEditSuccess: () => {
+        const id = this.placeId();
+        if (id) this.service.loadPlaceDetail(id);
+      },
+      onDeleteSuccess: () => {
+        const id = this.placeId();
+        if (id) this.service.loadPlaceDetail(id);
+      },
+    });
+
     effect(() => {
       this.placeId();
       this.scrollProgress.set(0);
       this.galleryOpen.set(false);
+      this.selectedImageUrl.set(null);
       const el = this.pdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -98,7 +107,6 @@ export class PlaceDetailPageComponent {
     });
   }
 
-  /** Called by (scroll) on .pd__scroll - the page's own scroll container. */
   protected onScroll(event: Event): void {
     const scrollTop = (event.currentTarget as Element).scrollTop;
     this.scrollProgress.set(Math.min(scrollTop / 200, 1));
@@ -119,6 +127,14 @@ export class PlaceDetailPageComponent {
 
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/places', id]);
+  }
+
+  protected selectGalleryImage(url: string): void {
+    this.selectedImageUrl.set(url);
+  }
+
+  protected isGalleryImageActive(url: string): boolean {
+    return (this.selectedImageUrl() ?? this.place()?.heroImage ?? '') === url;
   }
 
   protected openGallery(): void {
@@ -232,9 +248,7 @@ export class PlaceDetailPageComponent {
     const mapFocus = this.buildMapFocus(place);
     if (!mapFocus) return;
 
-    void this.router.navigate(['/map'], {
-      state: { mapFocus },
-    });
+    void this.router.navigate(['/map'], { state: { mapFocus } });
   }
 
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
@@ -254,43 +268,6 @@ export class PlaceDetailPageComponent {
       this.analytics.track('review_created', { entityType: 'place', entityId: numId });
     }
     this.service.loadPlaceDetail(id);
-  }
-
-  protected isReviewReported(review: { id: string; reportedByCurrentUser: boolean }): boolean {
-    return review.reportedByCurrentUser || !!this.reportedReviewIds()[review.id];
-  }
-
-  protected isReviewReporting(reviewId: string): boolean {
-    return !!this.reportingReviewIds()[reviewId];
-  }
-
-  protected reportReview(reviewId: string): void {
-    if (!this.isLoggedIn()) {
-      this.reportMessage.set('');
-      this.reportError.set('Log in to report a review.');
-      return;
-    }
-
-    const numericReviewId = parseInt(reviewId, 10);
-    if (isNaN(numericReviewId) || this.isReviewReporting(reviewId)) return;
-
-    this.reportMessage.set('');
-    this.reportError.set('');
-    this.setReviewReporting(reviewId, true);
-
-    this.reviewsService.reportReview('place', numericReviewId).subscribe({
-      next: (response) => {
-        this.setReviewReporting(reviewId, false);
-        this.markReviewReported(reviewId);
-        this.reportMessage.set(response.alreadyReported
-          ? 'You have already reported this review.'
-          : 'Thanks. A regional manager will review this report.');
-      },
-      error: (err) => {
-        this.setReviewReporting(reviewId, false);
-        this.reportError.set(err?.error?.message || 'Could not report this review. Please try again.');
-      },
-    });
   }
 
   protected onDirectionsClick(): void {
@@ -344,21 +321,5 @@ export class PlaceDetailPageComponent {
 
   private getReviewEntityType(place: PlaceDetail): 'place' | 'stay' {
     return place.contentType === 'hotel' ? 'stay' : 'place';
-  }
-
-  private markReviewReported(reviewId: string): void {
-    this.reportedReviewIds.update(current => ({ ...current, [reviewId]: true }));
-  }
-
-  private setReviewReporting(reviewId: string, isReporting: boolean): void {
-    this.reportingReviewIds.update(current => {
-      const next = { ...current };
-      if (isReporting) {
-        next[reviewId] = true;
-      } else {
-        delete next[reviewId];
-      }
-      return next;
-    });
   }
 }

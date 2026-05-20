@@ -25,10 +25,7 @@ public class ReviewsController : ControllerBase
         [FromQuery] int take = 10)
     {
         var pagingError = ValidatePaging(skip, take);
-        if (pagingError is not null)
-        {
-            return pagingError;
-        }
+        if (pagingError is not null) return pagingError;
 
         var reviews = await _reviewService.GetPlaceReviewsAsync(placeId, skip, take, GetOptionalUserId());
         return Ok(reviews);
@@ -41,10 +38,7 @@ public class ReviewsController : ControllerBase
         [FromQuery] int take = 10)
     {
         var pagingError = ValidatePaging(skip, take);
-        if (pagingError is not null)
-        {
-            return pagingError;
-        }
+        if (pagingError is not null) return pagingError;
 
         var reviews = await _reviewService.GetEventReviewsAsync(eventId, skip, take, GetOptionalUserId());
         return Ok(reviews);
@@ -86,6 +80,139 @@ public class ReviewsController : ControllerBase
         }
     }
 
+    // --- Current user's own reviews ---
+
+    [Authorize]
+    [HttpGet("my")]
+    public async Task<IActionResult> GetMyReviews(
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null) return pagingError;
+
+        try
+        {
+            var result = await _reviewService.GetMyReviewsAsync(userId.Value, skip, take);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    // --- Public: any user's reviews ---
+
+    [HttpGet("users/{userId:int}")]
+    public async Task<IActionResult> GetUserReviews(
+        int userId,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
+    {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null) return pagingError;
+
+        try
+        {
+            var result = await _reviewService.GetUserReviewsAsync(userId, skip, take);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    // --- Delete own review ---
+
+    [Authorize]
+    [HttpDelete("places/{reviewId:int}")]
+    public async Task<IActionResult> DeletePlaceReview([FromRoute] int reviewId)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            await _reviewService.DeletePlaceReviewAsync(reviewId, userId.Value);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    [Authorize]
+    [HttpDelete("events/{reviewId:int}")]
+    public async Task<IActionResult> DeleteEventReview([FromRoute] int reviewId)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            await _reviewService.DeleteEventReviewAsync(reviewId, userId.Value);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    // --- Edit own review ---
+
+    [Authorize]
+    [HttpPut("places/{reviewId:int}")]
+    public async Task<IActionResult> UpdatePlaceReview([FromRoute] int reviewId, [FromBody] CreateReviewDto dto)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            var result = await _reviewService.UpdatePlaceReviewAsync(reviewId, userId.Value, dto);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    [Authorize]
+    [HttpPut("events/{reviewId:int}")]
+    public async Task<IActionResult> UpdateEventReview([FromRoute] int reviewId, [FromBody] CreateReviewDto dto)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            var result = await _reviewService.UpdateEventReviewAsync(reviewId, userId.Value, dto);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    // --- Report reasons ---
+
+    [HttpGet("report-reasons")]
+    public IActionResult GetReportReasons()
+    {
+        return Ok(_reviewService.GetReportReasons());
+    }
+
+    // --- Reporting ---
+
     [Authorize]
     [HttpPost("reports/{targetType}/{reviewId:int}")]
     public async Task<IActionResult> ReportReview(
@@ -106,6 +233,8 @@ public class ReviewsController : ControllerBase
             return MapException(ex);
         }
     }
+
+    // --- Regional Manager moderation ---
 
     [Authorize(Roles = "RegionalManager")]
     [HttpGet("reports")]
@@ -171,23 +300,15 @@ public class ReviewsController : ControllerBase
         return int.TryParse(claim, out var id) ? id : null;
     }
 
-    private int? GetRequiredUserId()
-    {
-        var claim = User.FindFirst("userId")?.Value;
-        return int.TryParse(claim, out var id) ? id : null;
-    }
+    private int? GetRequiredUserId() => GetOptionalUserId();
 
     private ActionResult? ValidatePaging(int skip, int take)
     {
         if (skip < 0)
-        {
             return BadRequest(new { error = "skip must be zero or greater." });
-        }
 
         if (take <= 0)
-        {
             return BadRequest(new { error = "take must be greater than zero." });
-        }
 
         return null;
     }

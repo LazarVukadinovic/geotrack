@@ -42,6 +42,13 @@ public class MapController : ControllerBase
         _mapService = mapService;
     }
 
+    [HttpGet("destinations")]
+    [EnableRateLimiting("map")]
+    public async Task<IActionResult> GetDestinations(CancellationToken cancellationToken)
+    {
+        return Ok(await _mapService.GetAllDestinationsAsync(cancellationToken));
+    }
+
     [HttpGet("search")]
     [EnableRateLimiting("mapSearch")]
     public async Task<IActionResult> Search(

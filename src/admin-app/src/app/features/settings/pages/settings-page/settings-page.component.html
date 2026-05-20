@@ -4,6 +4,7 @@
     [region]="regionDisplayName"
     [activeRegionId]="activeRegionId"
     [regionLoading]="regionLoading"
+    [reportedReviewsCount]="reportedReviewsCount"
     (regionChange)="onRegionSelected($event)"
   />
 
@@ -162,13 +163,13 @@
           <div class="bg-white rounded-xl border border-gray-100 mb-4 overflow-hidden"
                style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
             <div class="px-6 py-4 border-b border-gray-50">
-              <h2 class="text-base font-semibold text-gray-900">Regional Manager Assignment</h2>
+              <h2 class="text-base font-semibold text-gray-900">{{ isAdmin ? 'Administrator Assignment' : 'Regional Manager Assignment' }}</h2>
               <p class="text-xs text-gray-500 mt-0.5">Details regarding your official role and responsibilities within the portal.</p>
             </div>
 
             <div class="px-6 py-5">
-              <div class="grid grid-cols-3 gap-3 assignment-grid">
-                <div class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50 min-w-0">
+              <div class="grid gap-3" [class.grid-cols-3]="!isAdmin" [class.grid-cols-2]="isAdmin">
+                <div class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50 min-w-0" [class.col-span-1]="isAdmin">
                   <div class="flex items-center gap-1.5 mb-1.5">
                     <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <circle cx="12" cy="8" r="4"/>
@@ -178,7 +179,7 @@
                   </div>
                   <p class="text-sm font-semibold text-gray-800 break-words">{{ currentRole }}</p>
                 </div>
-                <div class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50 min-w-0">
+                <div *ngIf="!isAdmin" class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50 min-w-0">
                   <div class="flex items-center gap-1.5 mb-1.5">
                     <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <circle cx="12" cy="10" r="3"/>
@@ -265,7 +266,7 @@
                   <h3 class="text-sm font-semibold text-gray-800">Email Notifications</h3>
                 </div>
 
-                <div class="flex items-center justify-between py-3 border-b border-gray-50">
+                <div *ngIf="!isAdmin" class="flex items-center justify-between py-3 border-b border-gray-50">
                   <div>
                     <p class="text-sm font-medium text-gray-800">Requests</p>
                     <p class="text-xs text-gray-500 mt-0.5">Receive an email when someone submits a request.</p>
@@ -286,7 +287,7 @@
                 <div class="flex items-center justify-between py-3">
                   <div>
                     <p class="text-sm font-medium text-gray-800">New Review</p>
-                    <p class="text-xs text-gray-500 mt-0.5">Get notified when someone leaves a review on your content.</p>
+                    <p class="text-xs text-gray-500 mt-0.5">Get notified when someone leaves a review.</p>
                   </div>
                   <button
                     type="button"

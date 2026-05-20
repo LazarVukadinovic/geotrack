@@ -17,57 +17,111 @@
     <span class="text-white font-bold text-base tracking-wide">GeoTrack</span>
   </div>
 
-  <!-- Country / Region picker -->
-  <div class="px-4 mb-2">
-    <span class="block text-white/40 text-[10px] font-semibold tracking-widest mb-1.5">
-      {{ pickerLabel }}
-    </span>
-    @if (canSelectRegion) {
-      <label
-        class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-white/90 text-xs font-medium border border-white/20 hover:bg-white/15 cursor-pointer transition-colors"
-        style="background: rgba(255, 255, 255, 0.1)"
-      >
-        <svg
-          class="w-4 h-4 text-white/50 flex-shrink-0"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <circle cx="12" cy="10" r="3" />
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-        </svg>
-        <select
-          class="min-w-0 flex-1 bg-transparent border-0 text-white text-xs font-medium outline-none cursor-pointer"
-          [value]="activeRegionId ?? ''"
-          [disabled]="regionLoading"
-          (change)="onRegionSelectChange($event)"
-          aria-label="Active region"
-        >
-          @for (item of regions; track item.id) {
-            <option class="text-gray-900" [value]="item.id">{{ item.displayName }}</option>
-          }
-        </select>
-      </label>
-    } @else {
-      <div
-        class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-white/90 text-xs font-medium border border-white/20"
-        style="background: rgba(255, 255, 255, 0.1)"
-      >
-        <svg
-          class="w-4 h-4 text-white/50 flex-shrink-0"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <circle cx="12" cy="10" r="3" />
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-        </svg>
-        <span class="truncate flex-1 text-left">{{ pickerDisplayValue }}</span>
+  <!-- Country / Region picker — hidden for Administrator -->
+  @if (!isAdministrator) {
+    <div class="px-4 mb-2">
+      <span class="block text-white/40 text-[10px] font-semibold tracking-widest mb-1.5">
+        {{ pickerLabel }}
+      </span>
+      @if (canSelectRegion) {
+        <label class="region-picker region-picker--selectable">
+          <svg
+            class="region-picker__icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="10" r="3" />
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+          </svg>
+          <select
+            class="region-picker__select"
+            [value]="activeRegionId ?? ''"
+            [disabled]="regionLoading"
+            (change)="onRegionSelectChange($event)"
+            aria-label="Active region"
+          >
+            @for (item of regions; track item.id) {
+              <option [value]="item.id">{{ item.displayName }}</option>
+            }
+          </select>
+        </label>
+      } @else {
+        <div class="region-picker">
+          <svg
+            class="region-picker__icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="10" r="3" />
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+          </svg>
+          <span class="region-picker__value">{{ pickerDisplayValue }}</span>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ══ ADMINISTRATOR navigation ══ -->
+  @if (isAdministrator) {
+    <nav class="flex-1 px-3 mt-1" aria-label="Main">
+      <div class="text-white/35 text-[9px] font-bold tracking-widest px-2 mb-1.5">
+        SYSTEM ADMINISTRATION
       </div>
-    }
-  </div>
+
+      @for (item of administratorMainNav; track item.path) {
+        <a
+          [routerLink]="item.path"
+          [class.sidebar-link-active]="isActive(item.path, item.exact)"
+          class="sidebar-link flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-white/70 text-xs font-medium mb-0.5 no-underline transition-colors hover:text-white hover:bg-white/10"
+        >
+          <svg
+            class="w-4 h-4 flex-shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            @switch (item.icon) {
+              @case ('dashboard') {
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+              }
+              @case ('globe') {
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+              }
+              @case ('users') {
+                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 00-3-3.87" />
+                <path d="M16 3.13a4 4 0 010 7.75" />
+              }
+              @case ('review') {
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+              }
+            }
+          </svg>
+          <span>{{ item.label }}</span>
+          @if (item.badge) {
+            <span
+              class="ml-auto rounded-full text-[10px] font-bold text-white px-1.5 py-px"
+              style="background: #ef4444"
+            >
+              {{ item.badge }}
+            </span>
+          }
+        </a>
+      }
+    </nav>
+  }
 
   <!-- ══ NATIONAL MANAGER navigation ══ -->
   @if (isNational) {
@@ -160,7 +214,7 @@
   }
 
   <!-- ══ REGIONAL MANAGER navigation ══ -->
-  @if (!isNational) {
+  @if (!isNational && !isAdministrator) {
     <nav class="flex-1 px-3 mt-1" aria-label="Main">
       @for (item of mainNav; track item.path) {
         <a

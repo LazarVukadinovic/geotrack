@@ -166,8 +166,10 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
   openMapPicker(): void {
     const hasCoordinates = this.hasUsableCoordinates(this.form.lat, this.form.lng);
-    this.pickerLat.set(hasCoordinates ? this.form.lat : DEFAULT_PICKER_LAT);
-    this.pickerLng.set(hasCoordinates ? this.form.lng : DEFAULT_PICKER_LNG);
+    // Only pre-set coords if we already have confirmed ones — otherwise wait
+    // for the map 'load' event to sync them once the container has real dimensions.
+    this.pickerLat.set(hasCoordinates ? this.form.lat : null);
+    this.pickerLng.set(hasCoordinates ? this.form.lng : null);
     this.destroyPickerMap();
     this.showMapPicker.set(true);
     this.schedulePickerMapInit();
@@ -314,10 +316,10 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
     try {
       const data = await firstValueFrom(this.mapApi.reverseGeocode(confirmedLat, confirmedLng));
-      this.form.address = data.address ?? '';
-      this.form.city = data.city ?? '';
-      this.form.region = data.region ?? '';
-      this.form.country = data.country ?? '';
+      if (data.address) this.form.address = data.address;
+      if (data.city) this.form.city = data.city;
+      if (data.region) this.form.region = data.region;
+      if (data.country) this.form.country = data.country;
     } catch {
     } finally {
       this.isGeocoding.set(false);
@@ -438,6 +440,13 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     effect(() => {
       const d = this.data();
       if (d) {
+        // Preserve coordinates the user already confirmed via the map picker —
+        // the parent may re-pass data without lat/lng (e.g. during change detection)
+        // and we must not let that overwrite a confirmed location.
+        const prevLat = this.form.lat;
+        const prevLng = this.form.lng;
+        const hadConfirmedLocation = this.hasUsableCoordinates(prevLat, prevLng);
+
         Object.assign(this.form, d);
         this.syncSelectedPlaceTypeWithOptions();
         if (d.imageUrl) this.coverPreviewUrl.set(d.imageUrl);
@@ -459,6 +468,12 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
         if (this.hasUsableCoordinates(d.lat, d.lng)) {
           this.pickerLat.set(d.lat);
           this.pickerLng.set(d.lng);
+        } else if (hadConfirmedLocation) {
+          // Restore previously confirmed location that the incoming data doesn't carry
+          this.form.lat = prevLat;
+          this.form.lng = prevLng;
+          this.pickerLat.set(prevLat);
+          this.pickerLng.set(prevLng);
         } else {
           this.form.lat = null;
           this.form.lng = null;

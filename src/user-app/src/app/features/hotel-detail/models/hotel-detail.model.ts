@@ -6,6 +6,7 @@ export interface HotelTag {
 
 export interface HotelReview {
   id: string;
+  authorUserId: number;
   authorName: string;
   avatarUrl: string;
   rating: number;
@@ -13,6 +14,7 @@ export interface HotelReview {
   body: string;
   helpfulCount: number;
   reportedByCurrentUser: boolean;
+  isOwnReview: boolean;
 }
 
 export interface HotelSimilar {

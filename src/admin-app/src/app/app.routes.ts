@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, nationalManagerGuard, regionalManagerGuard } from './core/guards/auth.guard';
+import { authGuard, administratorGuard, nationalManagerGuard, regionalManagerGuard } from './core/guards/auth.guard';
 export const routes: Routes = [
   // Redirect root → login
   { path: '', redirectTo: 'login', pathMatch: 'full' },
@@ -18,6 +18,37 @@ export const routes: Routes = [
       import('./core/layout/app-shell/app-shell.component').then(m => m.AppShellComponent),
     canActivate:[authGuard],
     children: [
+      // ── Administrator routes ───────────────────────────────────────────
+      {
+        path: 'admin-dashboard',
+        canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/admin-dashboard/admin-dashboard.component')
+            .then(m => m.AdminDashboardComponent),
+      },
+      {
+        path: 'admin-territories',
+        canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/territory-management/territory-management.component')
+            .then(m => m.TerritoryManagementComponent),
+      },
+      {
+        path: 'admin-users',
+        canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/user-management/user-management.component')
+            .then(m => m.UserManagementComponent),
+      },
+      {
+        path: 'admin-reviews',
+        canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/review-management/review-management.component')
+            .then(m => m.ReviewManagementComponent),
+      },
+
+      // ── Regional Manager routes ────────────────────────────────────────
       {
         path: 'dashboard',
         canActivate: [regionalManagerGuard],

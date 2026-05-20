@@ -46,6 +46,7 @@ export class SidebarComponent {
   }
 
   get pickerLabel(): string {
+    if (this.auth.isAdministrator()) return 'SYSTEM';
     return this.auth.isNationalManager() ? 'COUNTRY' : 'REGION';
   }
 
@@ -62,8 +63,28 @@ export class SidebarComponent {
     return this.regions.length > 0;
   }
 
+  get isAdministrator(): boolean {
+    return this.auth.isAdministrator();
+  }
+
   get isNational(): boolean {
     return this.auth.isNationalManager();
+  }
+
+  @Input() reportedReviewsCount: number | null = null;
+
+  get administratorMainNav(): SidebarNavItem[] {
+    return [
+      { label: 'Admin Dashboard', path: '/admin-dashboard', icon: 'dashboard', exact: true },
+      { label: 'Territory Management', path: '/admin-territories', icon: 'globe' },
+      { label: 'User Management', path: '/admin-users', icon: 'users' },
+      {
+        label: 'Review Management',
+        path: '/admin-reviews',
+        icon: 'review',
+        badge: this.reportedReviewsCount || undefined,
+      },
+    ];
   }
 
   get nationalMainNav(): SidebarNavItem[] {

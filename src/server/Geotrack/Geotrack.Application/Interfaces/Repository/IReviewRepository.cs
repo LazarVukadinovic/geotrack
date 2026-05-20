@@ -30,5 +30,19 @@ public interface IReviewRepository
 
     Task<User?> GetUserByIdAsync(int userId);
 
+    // User review history
+    Task<int> CountPlaceReviewsByUserAsync(int userId);
+    Task<List<PlaceReview>> GetPlaceReviewsByUserPageAsync(int userId, int skip, int take);
+    Task<int> CountEventReviewsByUserAsync(int userId);
+    Task<List<EventReview>> GetEventReviewsByUserPageAsync(int userId, int skip, int take);
+
+    // Single review lookup
+    Task<PlaceReview?> GetPlaceReviewByIdAsync(int reviewId);
+    Task<EventReview?> GetEventReviewByIdAsync(int reviewId);
+
+    // Delete
+    void RemovePlaceReview(PlaceReview review);
+    void RemoveEventReview(EventReview review);
+
     Task SaveChangesAsync();
 }

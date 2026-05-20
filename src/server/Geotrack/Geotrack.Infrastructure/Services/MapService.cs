@@ -249,6 +249,35 @@ public class MapService : IMapService
             .ToList();
     }
 
+    public async Task<List<MapSearchResultDto>> GetAllDestinationsAsync(CancellationToken cancellationToken = default)
+    {
+        const string cacheKey = "map:destinations:v1";
+        if (_cache.TryGetValue<List<MapSearchResultDto>>(cacheKey, out var cached))
+            return cached ?? new List<MapSearchResultDto>();
+
+        var destinations = await _db.Destinations
+            .AsNoTracking()
+            .OrderBy(d => d.Name)
+            .Select(d => new MapSearchResultDto
+            {
+                Id = d.Id,
+                Type = "destination",
+                Name = d.Name,
+                Subtitle = d.Region.Name,
+                Latitude = d.Latitude,
+                Longitude = d.Longitude,
+                ParentName = d.Region.Name,
+            })
+            .ToListAsync(cancellationToken);
+
+        _cache.Set(cacheKey, destinations, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+        });
+
+        return destinations;
+    }
+
     public async Task<MapReverseGeocodeDto?> ReverseGeocodeAsync(
         double latitude,
         double longitude,

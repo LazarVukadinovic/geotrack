@@ -372,6 +372,20 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected openMap(): void {
     this.searchQuery.set('');
     this.resetSearchResults();
+
+    const destination = this.selectedDestination();
+    if (destination?.name && typeof destination.latitude === 'number' && typeof destination.longitude === 'number') {
+      void this.router.navigate(['/map'], {
+        state: {
+          name: destination.name,
+          lat: destination.latitude,
+          lon: destination.longitude,
+          fromExplore: true,
+        },
+      });
+      return;
+    }
+
     void this.router.navigate(['/map']);
   }
 

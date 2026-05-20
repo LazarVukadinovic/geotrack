@@ -6,6 +6,13 @@
   background: #fafaf9;
 }
 
+/* Chips area is scrollable on mobile so buttons are always accessible */
+.auth-interests__chips {
+  max-height: 40vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .auth-interests__form-panel {
   display: contents;
 }

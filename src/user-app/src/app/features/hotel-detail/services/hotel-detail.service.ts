@@ -28,7 +28,7 @@ interface ApiHotelDetail {
   about?: string;
   bookingPartners: { id: number; name: string; variant: string; url?: string | null }[];
   amenities: { id: number; label: string; icon: string }[];
-  reviews: { id: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean }[];
+  reviews: { id: number; authorUserId?: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean; isOwnReview?: boolean }[];
   similar: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[];
   isSaved: boolean;
   isOwnable?: boolean;
@@ -113,6 +113,7 @@ export class HotelDetailService {
           })),
           reviews: dto.reviews.map(r => ({
             id: String(r.id),
+            authorUserId: r.authorUserId ?? 0,
             authorName: r.authorName,
             avatarUrl: r.avatarUrl ?? '',
             rating: r.rating,
@@ -120,6 +121,7 @@ export class HotelDetailService {
             body: r.body,
             helpfulCount: r.helpfulCount,
             reportedByCurrentUser: r.reportedByCurrentUser ?? false,
+            isOwnReview: r.isOwnReview ?? false,
           })),
           similar: dto.similar.map(s => ({
             id: String(s.id),

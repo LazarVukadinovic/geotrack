@@ -277,11 +277,11 @@
             (reviewSubmitted)="onReviewSubmitted($event)"
           />
 
-          @if (reportMessage()) {
-            <p class="pd__review-notice pd__review-notice--success" role="status">{{ reportMessage() }}</p>
+          @if (ri.reportMessage()) {
+            <p class="pd__review-notice pd__review-notice--success" role="status">{{ ri.reportMessage() }}</p>
           }
-          @if (reportError()) {
-            <p class="pd__review-notice pd__review-notice--error" role="alert">{{ reportError() }}</p>
+          @if (ri.reportError()) {
+            <p class="pd__review-notice pd__review-notice--error" role="alert">{{ ri.reportError() }}</p>
           }
 
           <!-- Review cards -->
@@ -289,17 +289,28 @@
             @for (review of p.reviews; track review.id) {
               <div class="pd__review">
                 <div class="pd__review-top">
-                  <img
-                    class="pd__review-avatar"
-                    [src]="review.avatarUrl"
-                    [alt]="review.authorName"
-                    width="44"
-                    height="44"
-                    loading="lazy"
-                    decoding="async"
-                  />
+                  <button
+                    type="button"
+                    class="pd__review-author-btn"
+                    [attr.aria-label]="'View ' + review.authorName + ' reviews'"
+                    (click)="ri.goToAuthorReviews(review)"
+                  >
+                    <img
+                      class="pd__review-avatar"
+                      [src]="review.avatarUrl"
+                      [alt]="review.authorName"
+                      width="44"
+                      height="44"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </button>
                   <div class="pd__review-meta">
-                    <span class="pd__review-name">{{ review.authorName }}</span>
+                    <button
+                      type="button"
+                      class="pd__review-name pd__review-name--link"
+                      (click)="ri.goToAuthorReviews(review)"
+                    >{{ review.authorName }}</button>
                     <span class="pd__review-time">{{ review.timeAgo }}</span>
                   </div>
                   <div class="pd__review-rating">
@@ -313,25 +324,45 @@
 
                 <p class="pd__review-body">{{ review.body }}</p>
 
-                <button
-                  type="button"
-                  class="pd__review-report"
-                  [class.pd__review-report--reported]="isReviewReported(review)"
-                  [disabled]="isReviewReported(review) || isReviewReporting(review.id)"
-                  (click)="reportReview(review.id)"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
-                          d="M5 21V4.6c0-.9.74-1.6 1.65-1.6h9.7c.83 0 1.5.67 1.5 1.5v7.2c0 .83-.67 1.5-1.5 1.5H6"/>
-                  </svg>
-                  @if (isReviewReporting(review.id)) {
-                    Reporting...
-                  } @else if (isReviewReported(review)) {
-                    Reported
-                  } @else {
-                    Report
-                  }
-                </button>
+                @if (review.isOwnReview) {
+                  <div class="pd__review-actions">
+                    <button type="button" class="pd__review-action-btn pd__review-action-btn--edit" (click)="ri.openEditModal(review)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                      Edit
+                    </button>
+                    <button type="button" class="pd__review-action-btn pd__review-action-btn--delete" (click)="ri.openDeleteConfirm(review)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                      </svg>
+                      Delete
+                    </button>
+                  </div>
+                } @else {
+                  <button
+                    type="button"
+                    class="pd__review-report"
+                    [class.pd__review-report--reported]="ri.isReviewReported(review)"
+                    [disabled]="ri.isReviewReported(review) || ri.isReviewReporting(review.id)"
+                    (click)="ri.openReportModal(review, isLoggedIn())"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                            d="M5 21V4.6c0-.9.74-1.6 1.65-1.6h9.7c.83 0 1.5.67 1.5 1.5v7.2c0 .83-.67 1.5-1.5 1.5H6"/>
+                    </svg>
+                    @if (ri.isReviewReporting(review.id)) {
+                      Reporting...
+                    } @else if (ri.isReviewReported(review)) {
+                      Reported
+                    } @else {
+                      Report
+                    }
+                  </button>
+                }
               </div>
             }
           </div>
@@ -412,6 +443,137 @@
     }
 
   </article>
+
+<!-- ── Report modal ─────────────────────────────────────────── -->
+@if (ri.reportingReview(); as review) {
+  <div class="pd__overlay" (click)="ri.closeReportModal()"></div>
+  <div class="pd__sheet" role="dialog" aria-modal="true" aria-label="Report review"
+    [style.transform]="ri.reportSheetDragOffset() > 0 ? 'translateY(' + ri.reportSheetDragOffset() + 'px)' : ''"
+    [style.transition]="'transform 0.25s ease'">
+    <div class="pd__sheet-handle"
+      (pointerdown)="ri.onReportSheetHandlePointerDown($event)"
+      (pointermove)="ri.onReportSheetHandlePointerMove($event)"
+      (pointerup)="ri.onReportSheetHandlePointerUp()"
+    ></div>
+    <h2 class="pd__sheet-title">Report Review</h2>
+    <p class="pd__sheet-sub">Why are you reporting this review?</p>
+
+    <div class="pd__reasons">
+      @for (reason of ri.reportReasons(); track reason.value) {
+        <button
+          type="button"
+          class="pd__reason-btn"
+          [class.pd__reason-btn--selected]="ri.selectedReason() === reason.value"
+          (click)="ri.selectedReason.set(reason.value)"
+        >
+          {{ reason.label }}
+        </button>
+      }
+    </div>
+
+    @if (ri.isReportReasonOther()) {
+      <textarea
+        class="pd__reason-text"
+        placeholder="Please describe the issue..."
+        rows="3"
+        [value]="ri.customReason()"
+        (input)="ri.customReason.set($any($event.target).value)"
+      ></textarea>
+    }
+
+    <div class="pd__sheet-actions">
+      <button type="button" class="pd__sheet-cancel" (click)="ri.closeReportModal()">Cancel</button>
+      <button
+        type="button"
+        class="pd__sheet-submit"
+        [disabled]="!ri.selectedReason() || ri.isReviewReporting(review.id) || (ri.isReportReasonOther() && !ri.customReason().trim())"
+        (click)="ri.submitReport()"
+      >
+        @if (ri.isReviewReporting(review.id)) { Submitting... } @else { Submit Report }
+      </button>
+    </div>
+  </div>
+}
+
+<!-- ── Edit modal ──────────────────────────────────────────── -->
+@if (ri.editingReview(); as review) {
+  <div class="pd__overlay" (click)="ri.closeEditModal()"></div>
+  <div class="pd__sheet" role="dialog" aria-modal="true" aria-label="Edit review"
+    [style.transform]="ri.editSheetDragOffset() > 0 ? 'translateY(' + ri.editSheetDragOffset() + 'px)' : ''"
+    [style.transition]="'transform 0.25s ease'">
+    <div class="pd__sheet-handle"
+      (pointerdown)="ri.onEditSheetHandlePointerDown($event)"
+      (pointermove)="ri.onEditSheetHandlePointerMove($event)"
+      (pointerup)="ri.onEditSheetHandlePointerUp()"
+    ></div>
+    <h2 class="pd__sheet-title">Edit Review</h2>
+
+    <div class="pd__edit-stars">
+      @for (star of [1,2,3,4,5]; track star) {
+        <button
+          type="button"
+          class="pd__edit-star-btn"
+          [class.pd__edit-star-btn--active]="star <= ri.editRating()"
+          (click)="ri.setEditRating(star)"
+          [attr.aria-label]="star + ' star' + (star > 1 ? 's' : '')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+          </svg>
+        </button>
+      }
+    </div>
+
+    <textarea
+      class="pd__reason-text"
+      placeholder="Share your experience..."
+      rows="4"
+      [value]="ri.editBody()"
+      (input)="ri.editBody.set($any($event.target).value)"
+    ></textarea>
+
+    @if (ri.editError()) {
+      <p class="pd__review-notice pd__review-notice--error">{{ ri.editError() }}</p>
+    }
+
+    <div class="pd__sheet-actions">
+      <button type="button" class="pd__sheet-cancel" [disabled]="ri.isSavingEdit()" (click)="ri.closeEditModal()">Cancel</button>
+      <button
+        type="button"
+        class="pd__sheet-submit"
+        [disabled]="ri.isSavingEdit() || ri.editRating() === 0"
+        (click)="ri.saveEdit()"
+      >
+        {{ ri.isSavingEdit() ? 'Saving...' : 'Save' }}
+      </button>
+    </div>
+  </div>
+}
+
+<!-- ── Delete confirm ──────────────────────────────────────── -->
+@if (ri.deletingReview(); as review) {
+  <div class="pd__overlay" (click)="ri.cancelDelete()"></div>
+  <div class="pd__sheet" role="dialog" aria-modal="true" aria-label="Delete review">
+    <h2 class="pd__sheet-title">Delete Review?</h2>
+    <p class="pd__sheet-sub">This will permanently remove your review. This action cannot be undone.</p>
+
+    @if (ri.deleteError()) {
+      <p class="pd__review-notice pd__review-notice--error">{{ ri.deleteError() }}</p>
+    }
+
+    <div class="pd__sheet-actions">
+      <button type="button" class="pd__sheet-cancel" [disabled]="ri.isDeleting()" (click)="ri.cancelDelete()">Cancel</button>
+      <button
+        type="button"
+        class="pd__sheet-submit pd__sheet-submit--danger"
+        [disabled]="ri.isDeleting()"
+        (click)="ri.confirmDelete()"
+      >
+        {{ ri.isDeleting() ? 'Deleting...' : 'Delete' }}
+      </button>
+    </div>
+  </div>
+}
 
 } @else if (placeId() && loadState() === 'loading') {
   <div class="pd__not-found">
