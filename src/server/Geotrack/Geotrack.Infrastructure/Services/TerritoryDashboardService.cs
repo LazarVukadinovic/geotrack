@@ -1381,7 +1381,10 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
-                DetailRoute = "/territory/content?type=destinations"
+                DetailRoute = "/territory/content?type=destinations",
+                PublicDetailRoute = destination.Status == PublishedStatus
+                    ? $"/explore?destinationId={destination.Id}"
+                    : null
             })
             .ToListAsync();
 
@@ -1435,7 +1438,8 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
-                DetailRoute = "/territory/content?type=locations"
+                DetailRoute = "/territory/content?type=locations",
+                PublicDetailRoute = null
             })
             .ToListAsync();
 
@@ -1489,7 +1493,12 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
-                DetailRoute = "/territory/content?type=places"
+                DetailRoute = "/territory/content?type=places",
+                PublicDetailRoute = place.Status == PublishedStatus
+                    ? place.Stay != null
+                        ? $"/stays/{place.Id}"
+                        : $"/places/{place.Id}"
+                    : null
             })
             .ToListAsync();
 
@@ -1545,7 +1554,10 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
-                DetailRoute = "/territory/content?type=events"
+                DetailRoute = "/territory/content?type=events",
+                PublicDetailRoute = evt.Status == PublishedStatus
+                    ? $"/events/{evt.Id}"
+                    : null
             })
             .ToListAsync();
 

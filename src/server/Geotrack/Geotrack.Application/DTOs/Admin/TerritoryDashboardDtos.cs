@@ -365,6 +365,7 @@ public class TerritoryContentDirectoryItemDto
     public int ViewsLast30Days { get; set; }
     public string? ImageUrl { get; set; }
     public string? DetailRoute { get; set; }
+    public string? PublicDetailRoute { get; set; }
 }
 
 public class TerritoryContentDirectoryResponseDto
