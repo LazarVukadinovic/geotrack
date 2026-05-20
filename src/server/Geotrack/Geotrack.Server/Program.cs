@@ -405,19 +405,24 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowAllOrigins");
-
 if (forwardedHeadersEnabled)
 {
     app.UseForwardedHeaders();
 }
 
-// Local dev and PMF deployment run over plain HTTP. Enable this explicitly
-// only for hosts where the ASP.NET app terminates HTTPS itself.
+// HTTPS can be terminated either by Kestrel itself or by a reverse proxy.
+// Keep it config-driven so local HTTP development still works unchanged.
+if (!app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Hsts:Enabled"))
+{
+    app.UseHsts();
+}
+
 if (app.Configuration.GetValue<bool>("HttpsRedirection:Enabled"))
 {
     app.UseHttpsRedirection();
 }
+
+app.UseCors("AllowAllOrigins");
 
 app.Use(async (context, next) =>
 {
