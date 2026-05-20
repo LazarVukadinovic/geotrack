@@ -554,6 +554,49 @@ public sealed class AnalyticsTests
     }
 
     [Fact]
+    public async Task Page_duration_events_validate_duration_without_breaking_ingest()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var sessionId = Guid.NewGuid();
+        var batch = new
+        {
+            anonymousSessionId = sessionId,
+            events = new object[]
+            {
+                new
+                {
+                    eventType = AnalyticsEventTypes.PageDuration,
+                    entityType = AnalyticsEntityTypes.Place,
+                    entityId = 1,
+                    route = "/places/1",
+                    durationMs = 500,
+                },
+                new
+                {
+                    eventType = AnalyticsEventTypes.PageDuration,
+                    entityType = AnalyticsEntityTypes.Place,
+                    entityId = 1,
+                    route = "/places/1",
+                    durationMs = 3_600_000,
+                },
+            },
+        };
+
+        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var row = await db.AnalyticsEvents.SingleAsync(e => e.AnonymousSessionId == sessionId);
+
+        Assert.Equal(AnalyticsEventTypes.PageDuration, row.EventType);
+        Assert.Equal(30 * 60 * 1000, row.DurationMs);
+        Assert.Equal("/places/:id", row.Route);
+    }
+
+    [Fact]
     public async Task Outbound_partner_link_click_updates_inferred_signals_for_authenticated_users()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();

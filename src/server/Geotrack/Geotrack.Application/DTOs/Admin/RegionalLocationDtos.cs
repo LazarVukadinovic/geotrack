@@ -22,6 +22,9 @@ public class RegionalLocationListItemDto
     public DateTime CreatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
     public string? ImageUrl { get; set; }
+    public string? CardImageUrl { get; set; }
+    public string? CoverImageUrl { get; set; }
+    public List<string> GalleryImageUrls { get; set; } = new();
     public string? DetailRoute { get; set; }
     public string? EditRoute { get; set; }
 }

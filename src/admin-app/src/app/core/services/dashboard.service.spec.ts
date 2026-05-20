@@ -87,6 +87,25 @@ describe('DashboardService', () => {
     });
   });
 
+  it('loads sidebar summary for a selected region', () => {
+    service.getSidebarSummary(12).subscribe((summary) => {
+      expect(summary.activeRegion?.displayName).toBe('Backend Region, Croatia');
+      expect(summary.pendingRequestsCount).toBe(4);
+    });
+
+    const request = http.expectOne(
+      (req) => req.url === '/api/admin/regional/sidebar-summary' && req.params.get('regionId') === '12',
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      assignedRegions: [
+        { id: 12, name: 'Backend Region', displayName: 'Backend Region, Croatia' },
+      ],
+      activeRegion: { id: 12, name: 'Backend Region', displayName: 'Backend Region, Croatia' },
+      pendingRequestsCount: 4,
+    });
+  });
+
   it('builds stat cards from backend counts', () => {
     const stats = service.buildStats({
       pendingRequests: 3,

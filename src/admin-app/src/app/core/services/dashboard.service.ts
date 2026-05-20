@@ -7,6 +7,7 @@ import {
   RegionalDashboardResponse,
   RegionalDashboardActivityResponse,
   RegionalDashboardStats,
+  RegionalSidebarSummary,
 } from '../models/dashboard.model';
 
 @Injectable({ providedIn: 'root' })
@@ -15,6 +16,17 @@ export class DashboardService {
 
   getAssignedRegions() {
     return this.http.get<RegionalAssignedRegion[]>('/api/admin/regional/regions');
+  }
+
+  getSidebarSummary(regionId?: number | null) {
+    let params = new HttpParams();
+    if (regionId) {
+      params = params.set('regionId', String(regionId));
+    }
+
+    return this.http.get<RegionalSidebarSummary>('/api/admin/regional/sidebar-summary', {
+      params,
+    });
   }
 
   getDashboard(regionId: number) {

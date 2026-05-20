@@ -10,12 +10,18 @@ using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
 using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using Polygon = NetTopologySuite.Geometries.Polygon;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.IntegrationTests;
 
 public sealed class RegionalLocationsTests
 {
+    private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 4326);
+
     [Fact]
     public async Task Regional_manager_creates_location_in_assigned_region_with_tags_reference_and_boundary()
     {
@@ -163,6 +169,143 @@ public sealed class RegionalLocationsTests
         };
         var invalidGeometryResponse = await manager.PostAsJsonAsync("/api/admin/regional/locations", invalidGeometry);
         Assert.Equal(HttpStatusCode.BadRequest, invalidGeometryResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_location_rejects_boundary_outside_or_partially_outside_parent_destination()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateLocationsFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var locationTypeId = await db.LocationTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var outside = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
+        outside.Boundary!.Coordinates =
+        [
+            new() { Latitude = 43.4, Longitude = 19.4 },
+            new() { Latitude = 43.4, Longitude = 19.5 },
+            new() { Latitude = 43.5, Longitude = 19.5 },
+            new() { Latitude = 43.5, Longitude = 19.4 }
+        ];
+        var outsideResponse = await manager.PostAsJsonAsync("/api/admin/regional/locations", outside);
+        Assert.Equal(HttpStatusCode.BadRequest, outsideResponse.StatusCode);
+
+        var partiallyOutside = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
+        partiallyOutside.Boundary!.Coordinates =
+        [
+            new() { Latitude = 43.1, Longitude = 19.1 },
+            new() { Latitude = 43.1, Longitude = 19.4 },
+            new() { Latitude = 43.2, Longitude = 19.4 },
+            new() { Latitude = 43.2, Longitude = 19.1 }
+        ];
+        var partiallyOutsideResponse = await manager.PostAsJsonAsync("/api/admin/regional/locations", partiallyOutside);
+        Assert.Equal(HttpStatusCode.BadRequest, partiallyOutsideResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_location_allows_boundary_touching_parent_destination_boundary()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateLocationsFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var locationTypeId = await db.LocationTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        var touching = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
+        touching.Boundary!.Coordinates =
+        [
+            new() { Latitude = 42.9, Longitude = 18.9 },
+            new() { Latitude = 42.9, Longitude = 19.1 },
+            new() { Latitude = 43.1, Longitude = 19.1 },
+            new() { Latitude = 43.1, Longitude = 18.9 }
+        ];
+
+        var response = await manager.PostAsJsonAsync("/api/admin/regional/locations", touching);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_location_with_zone_requires_parent_destination_boundary()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateLocationsFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var destinationTypeId = await db.DestinationTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+        var locationTypeId = await db.LocationTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+
+        var noBoundaryDestination = new Destination
+        {
+            Name = "Destination Without Boundary",
+            DestinationTypeId = destinationTypeId,
+            RegionId = fixture.AssignedRegionId,
+            Description = "No boundary destination.",
+            Latitude = 43,
+            Longitude = 19,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Destinations.Add(noBoundaryDestination);
+        await db.SaveChangesAsync();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var request = BuildCreateRequest(fixture.AssignedRegionId, noBoundaryDestination.Id, locationTypeId);
+        var response = await manager.PostAsJsonAsync("/api/admin/regional/locations", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.Equal("Parent destination must have a boundary before adding location zones.", body?["message"]);
+    }
+
+    [Fact]
+    public async Task Location_image_upload_and_create_persist_entity_images()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateLocationsFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var locationTypeId = await db.LocationTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var upload = await UploadOneImageAsync(manager, fixture.AssignedRegionId);
+
+        var request = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedDestinationId, locationTypeId);
+        request.CardImageUrl = upload.Url;
+        request.CoverImageUrl = upload.Url;
+
+        var response = await manager.PostAsJsonAsync("/api/admin/regional/locations", request);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var created = await response.Content.ReadFromJsonAsync<RegionalLocationDetailDto>();
+        Assert.NotNull(created);
+        Assert.Equal(upload.Url, created!.ImageUrl);
+        Assert.Equal(upload.Url, created.CardImageUrl);
+        Assert.Equal(upload.Url, created.CoverImageUrl);
+        Assert.Empty(created.GalleryImageUrls);
+
+        var storedImages = await db.EntityImages
+            .Where(image => image.LocationId == created.Id)
+            .OrderBy(image => image.Id)
+            .ToListAsync();
+        Assert.Equal(2, storedImages.Count);
+        Assert.Contains(storedImages, image =>
+            image.TargetType == EntityImageTargetType.Location &&
+            image.ImageRole == EntityImageRole.Card &&
+            image.Url == upload.Url &&
+            image.IsMain);
+        Assert.Contains(storedImages, image =>
+            image.TargetType == EntityImageTargetType.Location &&
+            image.ImageRole == EntityImageRole.Cover &&
+            image.Url == upload.Url &&
+            !image.IsMain);
     }
 
     [Fact]
@@ -401,6 +544,8 @@ public sealed class RegionalLocationsTests
             Description = "Full location description.",
             Status = "Published",
             BoundaryNote = "North edge boundary note.",
+            CardImageUrl = "/media/uploads/regional/default-location-card.png",
+            CoverImageUrl = "/media/uploads/regional/default-location-cover.png",
             Boundary = new RegionalLocationBoundaryDto
             {
                 ShapeType = "Polygon",
@@ -473,6 +618,15 @@ public sealed class RegionalLocationsTests
 
         db.Destinations.AddRange(assignedDestinations);
         db.Destinations.Add(unassignedDestination);
+        await db.SaveChangesAsync();
+
+        db.Entry(assignedDestinations[0])
+            .Property<Geometry?>("BoundaryGeometry")
+            .CurrentValue = Polygon(
+                (42.9, 18.9),
+                (43.3, 18.9),
+                (43.3, 19.3),
+                (42.9, 19.3));
         await db.SaveChangesAsync();
 
         var locations = Enumerable.Range(0, 30)
@@ -551,6 +705,43 @@ public sealed class RegionalLocationsTests
 
         await db.SaveChangesAsync();
     }
+
+    private static async Task<RegionalImageUploadResultDto> UploadOneImageAsync(HttpClient client, int regionId)
+    {
+        using var form = new MultipartFormDataContent();
+        using var content = new ByteArrayContent(TestPngBytes());
+        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(content, "files", "cover.png");
+
+        var response = await client.PostAsync($"/api/admin/regional/media/images?regionId={regionId}", form);
+        response.EnsureSuccessStatusCode();
+
+        var uploaded = await response.Content.ReadFromJsonAsync<RegionalImageUploadResponseDto>();
+        Assert.NotNull(uploaded);
+        var image = Assert.Single(uploaded!.Images);
+        Assert.StartsWith("/media/uploads/regional/", image.Url);
+        return image;
+    }
+
+    private static Polygon Polygon(params (double Latitude, double Longitude)[] points)
+    {
+        var coordinates = points
+            .Select(point => new Coordinate(point.Longitude, point.Latitude))
+            .ToList();
+
+        if (!coordinates[0].Equals2D(coordinates[^1]))
+        {
+            coordinates.Add(new Coordinate(coordinates[0].X, coordinates[0].Y));
+        }
+
+        var polygon = GeometryFactory.CreatePolygon(coordinates.ToArray());
+        polygon.SRID = 4326;
+        return polygon;
+    }
+
+    private static byte[] TestPngBytes() =>
+        Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=");
 
     private sealed record LocationsFixture(
         int AssignedRegionId,

@@ -97,6 +97,31 @@ export interface RegionalEventCreateRequest {
   galleryImageFiles?: File[];
 }
 
+export interface RegionalEventUpdateRequest {
+  parentEntityType?: 'Destination' | 'Location' | 'Place' | null;
+  destinationId?: number | null;
+  locationId?: number | null;
+  placeId?: number | null;
+  eventTypeId?: number | null;
+  name?: string | null;
+  summary?: string | null;
+  description?: string | null;
+  status?: 'Published' | 'Draft' | 'Archived' | null;
+  venueName?: string | null;
+  isAllDay?: boolean | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  isRecurring?: boolean | null;
+  isFree?: boolean | null;
+  ticketPrice?: string | null;
+  externalTicketLink?: string | null;
+  organizerName?: string | null;
+  contactEmail?: string | null;
+  attendanceLimit?: number | null;
+  ageRestriction?: string | null;
+  tagIds?: number[] | null;
+}
+
 export interface RegionalEventTagDto {
   id: number;
   name: string;

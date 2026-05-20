@@ -1,19 +1,42 @@
 import {
-  Component, OnInit, OnDestroy, HostListener,
-  ChangeDetectionStrategy, ChangeDetectorRef,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  HostListener,
+  OnDestroy,
+  OnInit,
+  ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
+import { Subscription, finalize } from 'rxjs';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
-import { UsersService, UserSortField, UserSortDir } from '../../../../../core/services/national/users.service';
-import { PlatformUser } from '../../../../../core/models/platform-user.model';
+import { AuthService } from '../../../../../core/services/auth.service';
+import {
+  TerritoryAssignableUser,
+  TerritoryUser,
+  TerritoryUserAvailableRegion,
+  UserSortValue,
+  UsersService,
+} from '../../../../../core/services/national/users.service';
+import { TerritoryDashboardService } from '../../../../../core/services/territory-dashboard.service';
+import { TerritoryAssignedTerritory } from '../../../../../core/models/dashboard.model';
 
-const PAGE_SIZE_INITIAL = 8;
-const PAGE_SIZE_STEP    = 5;
+const PAGE_SIZE = 8;
+
+interface SortOption {
+  label: string;
+  value: UserSortValue;
+}
+
+interface EditUserForm {
+  firstName: string;
+  lastName: string;
+}
 
 @Component({
   selector: 'app-user-administration',
@@ -23,307 +46,773 @@ const PAGE_SIZE_STEP    = 5;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UserAdministrationComponent implements OnInit, OnDestroy {
+  @ViewChild('scrollContainer') scrollContainer?: ElementRef<HTMLDivElement>;
 
-  constructor(
-    private router: Router,
-    private svc: UsersService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  assignedTerritories: TerritoryAssignedTerritory[] = [];
+  activeTerritoryId: number | null = null;
+  territoryLoading = false;
 
-  private destroy$      = new Subject<void>();
-  private searchSubject = new Subject<string>();
-
-  userName = '';
-  userRole = '';
-
-  items:        PlatformUser[] = [];
-  totalItems    = 0;
-  isLoading     = false;
+  items: TerritoryUser[] = [];
+  totalItems = 0;
+  isLoading = false;
   isLoadingMore = false;
-  displayCount  = PAGE_SIZE_INITIAL;
+  errorMessage: string | null = null;
 
   searchQuery = '';
-
-  sortField: UserSortField = 'status';
-  sortDir:   UserSortDir   = 'asc';
-  sortOpen   = false;
-
-  sortOptions: { label: string; field: UserSortField; dir: UserSortDir }[] = [
-    { label: 'Status: Active First',   field: 'status', dir: 'asc'  },
-    { label: 'Status: Inactive First', field: 'status', dir: 'desc' },
-    { label: 'A–Z',                    field: 'name',   dir: 'asc'  },
-    { label: 'Z–A',                    field: 'name',   dir: 'desc' },
-    { label: 'Role: Viewer First',     field: 'role',   dir: 'asc'  },
-    { label: 'Role: Manager First',    field: 'role',   dir: 'desc' },
+  currentSort: UserSortValue = 'status_active_first';
+  sortOpen = false;
+  readonly sortOptions: SortOption[] = [
+    { label: 'Status: Active First', value: 'status_active_first' },
+    { label: 'Name: A-Z', value: 'name_asc' },
+    { label: 'Name: Z-A', value: 'name_desc' },
+    { label: 'Last Login: Newest', value: 'last_login_desc' },
+    { label: 'Last Login: Oldest', value: 'last_login_asc' },
+    { label: 'Role', value: 'role' },
+    { label: 'Most Regions', value: 'regions_count_desc' },
   ];
 
-  get currentSortLabel(): string {
-    return this.sortOptions.find(
-      o => o.field === this.sortField && o.dir === this.sortDir
-    )?.label ?? 'Status: Active First';
-  }
-
-  applySortOption(opt: { label: string; field: UserSortField; dir: UserSortDir }): void {
-    this.sortField = opt.field;
-    this.sortDir   = opt.dir;
-    this.loadItems();
-  }
-
-  // Dropdown per row
-  openDropdownId: string | null = null;
+  openDropdownUserId: number | null = null;
   dropdownPos = { top: 0, right: 0 };
 
-  // View modal (read-only)
-  viewUser: PlatformUser | null = null;
+  viewUser: TerritoryUser | null = null;
+  editUser: TerritoryUser | null = null;
+  editForm: EditUserForm = { firstName: '', lastName: '' };
+  editError: string | null = null;
+  isSavingEdit = false;
 
-  openViewModal(user: PlatformUser): void {
-    this.openDropdownId = null;
-    this.viewUser = { ...user };
-    this.cdr.detectChanges();
-  }
+  availableRegions: TerritoryUserAvailableRegion[] = [];
+  selectedRegionId: number | null = null;
+  pendingRegions: TerritoryUserAvailableRegion[] = [];
+  regionSearch = '';
+  isLoadingRegions = false;
+  regionsError: string | null = null;
 
-  closeViewModal(): void {
-    this.viewUser = null;
-    this.cdr.detectChanges();
-  }
+  removeTarget: TerritoryUser | null = null;
+  isRemovingManagerRole = false;
+  removeError: string | null = null;
 
-  // Edit modal
-  editUser:      PlatformUser | null = null;
-  isSaving       = false;
-  isTogglingRole = false;
+  addRegionalManagerOpen = false;
+  regionalManagerUserSearch = '';
+  regionalManagerUsers: TerritoryAssignableUser[] = [];
+  selectedRegionalManagerUser: TerritoryAssignableUser | null = null;
+  regionalManagerPreselectedUser: TerritoryAssignableUser | null = null;
+  regionalManagerRegions: TerritoryUserAvailableRegion[] = [];
+  selectedRegionalManagerRegions: TerritoryUserAvailableRegion[] = [];
+  regionalManagerRegionSearch = '';
+  isLoadingRegionalManagerUsers = false;
+  isLoadingRegionalManagerRegions = false;
+  isSavingRegionalManager = false;
+  addRegionalManagerError: string | null = null;
+  addRegionalManagerSubmitted = false;
 
-  // Add region modal
-  showAddRegionModal = false;
-  addRegionTarget:   PlatformUser | null = null;
-  allRegions:        string[] = [];
-  isAddingRegion     = false;
+  addTerritoryAssociateOpen = false;
+  associateUserSearch = '';
+  associateUsers: TerritoryAssignableUser[] = [];
+  selectedAssociateUser: TerritoryAssignableUser | null = null;
+  associatePreselectedUser: TerritoryAssignableUser | null = null;
+  isLoadingAssociateUsers = false;
+  isSavingAssociate = false;
+  addAssociateError: string | null = null;
+  addAssociateSubmitted = false;
 
-  // Create user modal
-  showCreateModal = false;
-  newFirstName    = '';
-  newLastName     = '';
-  newEmail        = '';
-  newRole: 'Regional Manager' | 'Viewer' = 'Viewer';
-  isCreating      = false;
+  removeAssociateTarget: TerritoryUser | null = null;
+  isRemovingAssociate = false;
+  removeAssociateError: string | null = null;
+
+  successMessage: string | null = null;
+
+  private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private regionSearchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private regionalManagerUserSearchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private regionalManagerRegionSearchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private associateUserSearchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private listRequestSequence = 0;
+  private listSubscription: Subscription | null = null;
+  private territoriesSubscription: Subscription | null = null;
+  private regionsSubscription: Subscription | null = null;
+  private regionalManagerUsersSubscription: Subscription | null = null;
+  private regionalManagerRegionsSubscription: Subscription | null = null;
+  private associateUsersSubscription: Subscription | null = null;
+  private failedAvatarIds = new Set<number>();
+
+  constructor(
+    private readonly router: Router,
+    private readonly auth: AuthService,
+    private readonly svc: UsersService,
+    private readonly territoryDashboard: TerritoryDashboardService,
+    private readonly cdr: ChangeDetectorRef,
+  ) {}
 
   ngOnInit(): void {
-    this.allRegions = this.svc.getAllRegions();
-
-    this.searchSubject.pipe(
-      debounceTime(300),
-      distinctUntilChanged(),
-      takeUntil(this.destroy$),
-    ).subscribe(() => {
-      this.displayCount = PAGE_SIZE_INITIAL;
-      this.loadItems();
-    });
-
-    const cached = this.svc.lastPage$.getValue();
-    if (cached) {
-      this.items      = cached.items;
-      this.totalItems = cached.total;
-      this.isLoading  = false;
-      this.cdr.detectChanges();
-    }
-
-    this.loadItems();
+    this.loadAssignedTerritories();
   }
 
-  ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
+  ngOnDestroy(): void {
+    this.listRequestSequence++;
+    this.listSubscription?.unsubscribe();
+    this.territoriesSubscription?.unsubscribe();
+    this.regionsSubscription?.unsubscribe();
+    this.regionalManagerUsersSubscription?.unsubscribe();
+    this.regionalManagerRegionsSubscription?.unsubscribe();
+    this.associateUsersSubscription?.unsubscribe();
+
+    if (this.searchDebounceHandle) {
+      clearTimeout(this.searchDebounceHandle);
+    }
+
+    if (this.regionSearchDebounceHandle) {
+      clearTimeout(this.regionSearchDebounceHandle);
+    }
+
+    if (this.regionalManagerUserSearchDebounceHandle) {
+      clearTimeout(this.regionalManagerUserSearchDebounceHandle);
+    }
+
+    if (this.regionalManagerRegionSearchDebounceHandle) {
+      clearTimeout(this.regionalManagerRegionSearchDebounceHandle);
+    }
+
+    if (this.associateUserSearchDebounceHandle) {
+      clearTimeout(this.associateUserSearchDebounceHandle);
+    }
+  }
+
+  get userName(): string {
+    return this.auth.fullName;
+  }
+
+  get userRole(): string {
+    return this.auth.getUser()?.role ?? '';
+  }
+
+  get activeTerritoryName(): string {
+    return this.assignedTerritories.find(item => item.id === this.activeTerritoryId)?.displayName ?? '';
+  }
+
+  get currentSortLabel(): string {
+    return this.sortOptions.find(option => option.value === this.currentSort)?.label ?? 'Status: Active First';
+  }
+
+  get hasMore(): boolean {
+    return this.items.length < this.totalItems;
+  }
+
+  get nextPageCount(): number {
+    return Math.min(PAGE_SIZE, Math.max(0, this.totalItems - this.items.length));
+  }
+
+  get emptyMessage(): string {
+    if (!this.activeTerritoryId) {
+      return 'No assigned territory is active.';
+    }
+
+    if (this.searchQuery.trim()) {
+      return 'No users match this search.';
+    }
+
+    return 'No regional users found in this territory.';
+  }
+
+  get selectableRegions(): TerritoryUserAvailableRegion[] {
+    const assignedIds = new Set(this.editUser?.assignedRegions.map(region => region.regionId) ?? []);
+    const pendingIds = new Set(this.pendingRegions.map(region => region.regionId));
+
+    return this.availableRegions.filter(region =>
+      !assignedIds.has(region.regionId) &&
+      !pendingIds.has(region.regionId));
+  }
+
+  get canAddSelectedRegion(): boolean {
+    return !!this.selectedRegionId &&
+      this.selectableRegions.some(region => region.regionId === this.selectedRegionId);
+  }
+
+  get canOpenAddRegionalManager(): boolean {
+    const role = this.auth.getUser()?.role;
+    return !!this.activeTerritoryId &&
+      (role === 'Territory Manager' || role === 'Territory Associate');
+  }
+
+  get canOpenAddTerritoryAssociate(): boolean {
+    return !!this.activeTerritoryId && this.auth.getUser()?.role === 'Territory Manager';
+  }
+
+  get regionalManagerSelectableRegions(): TerritoryUserAvailableRegion[] {
+    const selectedIds = new Set(this.selectedRegionalManagerRegions.map(region => region.regionId));
+    return this.regionalManagerRegions.filter(region => !selectedIds.has(region.regionId));
+  }
+
+  get canSaveRegionalManager(): boolean {
+    return !!this.selectedRegionalManagerUser &&
+      this.selectedRegionalManagerRegions.length > 0 &&
+      !this.isSavingRegionalManager;
+  }
+
+  get selectedAssociateAlreadyAssigned(): boolean {
+    return !!this.selectedAssociateUser &&
+      !!this.activeTerritoryId &&
+      this.selectedAssociateUser.assignedTerritories
+        .some(territory => territory.territoryId === this.activeTerritoryId);
+  }
+
+  get canSaveAssociate(): boolean {
+    return !!this.selectedAssociateUser &&
+      !this.selectedAssociateAlreadyAssigned &&
+      !this.isSavingAssociate;
+  }
+
+  get isRowActionRunning(): boolean {
+    return this.isSavingEdit ||
+      this.isSavingRegionalManager ||
+      this.isSavingAssociate ||
+      this.isRemovingManagerRole ||
+      this.isRemovingAssociate;
+  }
 
   @HostListener('document:click')
   onDocumentClick(): void {
     let changed = false;
-    if (this.openDropdownId) { this.openDropdownId = null; changed = true; }
-    if (this.sortOpen)       { this.sortOpen = false;       changed = true; }
-    if (changed) this.cdr.detectChanges();
+
+    if (this.openDropdownUserId !== null) {
+      this.openDropdownUserId = null;
+      changed = true;
+    }
+
+    if (this.sortOpen) {
+      this.sortOpen = false;
+      changed = true;
+    }
+
+    if (changed) {
+      this.notifyStateChanged();
+    }
   }
 
-  loadItems(): void {
-    this.isLoading = true;
-    this.svc.getPage$({
-      pageSize:  this.displayCount,
-      search:    this.searchQuery,
-      sortField: this.sortField,
-      sortDir:   this.sortDir,
-    }).pipe(takeUntil(this.destroy$)).subscribe(page => {
-      this.items      = page.items;
-      this.totalItems = page.total;
-      this.isLoading  = false;
-      this.cdr.detectChanges();
-    });
+  onTerritoryChange(territoryId: number): void {
+    if (territoryId === this.activeTerritoryId) return;
+
+    this.activeTerritoryId = territoryId;
+    this.territoryDashboard.setActiveTerritoryId(territoryId);
+    this.searchQuery = '';
+    this.currentSort = 'status_active_first';
+    this.closeAddRegionalManagerModal();
+    this.closeAddTerritoryAssociateModal();
+    this.resetList();
+    this.loadUsers(true);
+    this.notifyStateChanged();
+  }
+
+  onSearchChange(): void {
+    if (this.searchDebounceHandle) {
+      clearTimeout(this.searchDebounceHandle);
+    }
+
+    this.searchDebounceHandle = setTimeout(() => {
+      this.resetList();
+      this.loadUsers(true);
+    }, 300);
+  }
+
+  clearSearch(): void {
+    this.searchQuery = '';
+    this.onSearchChange();
+  }
+
+  applySortOption(option: SortOption): void {
+    if (option.value === this.currentSort) {
+      this.sortOpen = false;
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.currentSort = option.value;
+    this.sortOpen = false;
+    this.resetList();
+    this.loadUsers(true);
+    this.notifyStateChanged();
   }
 
   loadMore(): void {
-    this.isLoadingMore = true;
-    this.displayCount += PAGE_SIZE_STEP;
-    this.svc.getPage$({
-      pageSize:  this.displayCount,
-      search:    this.searchQuery,
-      sortField: this.sortField,
-      sortDir:   this.sortDir,
-    }).pipe(takeUntil(this.destroy$)).subscribe(page => {
-      this.items         = page.items;
-      this.totalItems    = page.total;
-      this.isLoadingMore = false;
-      this.cdr.detectChanges();
-    });
+    if (!this.hasMore || this.isLoadingMore) return;
+    this.loadUsers(false);
   }
 
-  get hasMore(): boolean { return this.items.length < this.totalItems; }
+  goBack(): void {
+    this.router.navigate(['/territory/overview']);
+  }
 
-  onSearchChange(): void { this.searchSubject.next(this.searchQuery); }
+  openViewModal(user: TerritoryUser): void {
+    this.openDropdownUserId = null;
+    this.viewUser = user;
+    this.notifyStateChanged();
+  }
 
-  formatLastLogin(iso: string): string { return this.svc.formatLastLogin(iso); }
+  closeViewModal(): void {
+    this.viewUser = null;
+    this.notifyStateChanged();
+  }
 
-  // ── Dropdown ────────────────────────────────────────────────────────────────
-
-  toggleDropdown(id: string, event: MouseEvent): void {
+  toggleDropdown(user: TerritoryUser, event: MouseEvent): void {
     event.stopPropagation();
-    if (this.openDropdownId === id) {
-      this.openDropdownId = null;
-    } else {
-      const rect           = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      const dropdownHeight = 170;
-      const spaceBelow     = window.innerHeight - rect.bottom;
-      const top = spaceBelow < dropdownHeight
-        ? rect.top - dropdownHeight - 4
-        : rect.bottom + 4;
-      this.dropdownPos = { top, right: window.innerWidth - rect.right };
-      this.openDropdownId = id;
+
+    if (this.openDropdownUserId === user.userId) {
+      this.openDropdownUserId = null;
+      this.notifyStateChanged();
+      return;
     }
-    this.cdr.detectChanges();
+
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const dropdownHeight = 292;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow < dropdownHeight
+      ? Math.max(8, rect.top - dropdownHeight - 4)
+      : rect.bottom + 4;
+
+    this.dropdownPos = { top, right: window.innerWidth - rect.right };
+    this.openDropdownUserId = user.userId;
+    this.notifyStateChanged();
   }
 
-  // ── Edit modal (full-screen) ──────────────────────────────────────────────
+  hasRowActions(user: TerritoryUser): boolean {
+    return this.canEditUser(user) ||
+      this.canAddRegionalManagerRole(user) ||
+      this.canAddTerritoryAssociateRole(user) ||
+      user.canAddRegion ||
+      this.canRemoveRegionalManagerRole(user) ||
+      !!user.canRemoveTerritoryAssociateRole;
+  }
 
-  openEditModal(user: PlatformUser, event?: MouseEvent): void {
+  canEditUser(user: TerritoryUser): boolean {
+    return user.canEditUser ?? user.canEdit;
+  }
+
+  canAddRegionalManagerRole(user: TerritoryUser): boolean {
+    return !!user.canAddRegionalManagerRole;
+  }
+
+  canAddTerritoryAssociateRole(user: TerritoryUser): boolean {
+    return user.canAddTerritoryAssociateRole ?? !!user.canAddTerritoryAssociate;
+  }
+
+  canRemoveRegionalManagerRole(user: TerritoryUser): boolean {
+    return user.canRemoveRegionalManagerRole ?? user.canRemoveManagerRole;
+  }
+
+  openEditModal(user: TerritoryUser, event?: MouseEvent): void {
     event?.stopPropagation();
-    this.openDropdownId = null;
-    this.editUser = { ...user };
-    this.cdr.detectChanges();
+    if (!this.canEditUser(user)) return;
+
+    this.openDropdownUserId = null;
+    this.editUser = user;
+    this.editForm = {
+      firstName: user.firstName,
+      lastName: user.lastName,
+    };
+    this.editError = null;
+    this.resetEditRegionState();
+    if (user.canAddRegion) {
+      this.loadAvailableRegions();
+    }
+    this.notifyStateChanged();
   }
 
   closeEditModal(): void {
+    if (this.isSavingEdit) return;
     this.editUser = null;
-    this.cdr.detectChanges();
+    this.editError = null;
+    this.resetEditRegionState();
+    this.notifyStateChanged();
   }
 
-  toggleRole(): void {
-    if (!this.editUser) return;
-    this.isTogglingRole = true;
+  saveEdit(): void {
+    if (!this.editUser || !this.activeTerritoryId || this.isSavingEdit) return;
 
-    const obs = this.editUser.role === 'Regional Manager'
-      ? this.svc.removeManagerRole$(this.editUser.id)
-      : this.svc.promoteToManager$(this.editUser.id);
+    this.isSavingEdit = true;
+    this.editError = null;
+    this.notifyStateChanged();
 
-    obs.pipe(takeUntil(this.destroy$)).subscribe(updated => {
-      if (updated) {
-        this.editUser = { ...updated };
+    this.svc.updateUser$(this.editUser.userId, {
+      territoryId: this.activeTerritoryId,
+      firstName: this.editForm.firstName,
+      lastName: this.editForm.lastName,
+      regionIdsToAdd: this.pendingRegions.map(region => region.regionId),
+    }).pipe(
+      finalize(() => {
+        this.isSavingEdit = false;
+        this.notifyStateChanged();
+      }),
+    ).subscribe({
+      next: updated => {
         this.syncItemInList(updated);
-      }
-      this.isTogglingRole = false;
-      this.cdr.detectChanges();
+        this.editUser = null;
+        this.viewUser = this.viewUser?.userId === updated.userId ? updated : this.viewUser;
+        this.resetEditRegionState();
+      },
+      error: error => {
+        this.editError = this.toSafeMessage(error, 'Unable to update this user.');
+      },
     });
   }
 
-  removeRegionFromEdit(region: string): void {
-    if (!this.editUser) return;
-    this.svc.removeRegion$(this.editUser.id, region)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(updated => {
-        if (updated) {
-          this.editUser = { ...updated };
-          this.syncItemInList(updated);
-        }
-        this.cdr.detectChanges();
-      });
-  }
-
-  // ── Add region modal ─────────────────────────────────────────────────────
-
-  openAddRegionModal(user: PlatformUser, event?: MouseEvent): void {
+  openAddRegionModal(user: TerritoryUser, event?: MouseEvent): void {
     event?.stopPropagation();
-    this.openDropdownId    = null;
-    this.addRegionTarget   = { ...user };
-    this.showAddRegionModal = true;
-    this.cdr.detectChanges();
+    if (!user.canAddRegion || !this.activeTerritoryId) return;
+
+    this.openEditModal(user);
   }
 
-  closeAddRegionModal(): void {
-    this.showAddRegionModal = false;
-    this.addRegionTarget    = null;
-    this.cdr.detectChanges();
+  onRegionSearchChange(): void {
+    if (this.regionSearchDebounceHandle) {
+      clearTimeout(this.regionSearchDebounceHandle);
+    }
+
+    this.regionSearchDebounceHandle = setTimeout(() => this.loadAvailableRegions(), 250);
   }
 
-  availableRegionsFor(user: PlatformUser): string[] {
-    return this.allRegions.filter(r => !user.assignedRegions.includes(r));
+  addPendingRegion(): void {
+    if (!this.selectedRegionId) return;
+
+    const region = this.selectableRegions.find(item => item.regionId === this.selectedRegionId);
+    if (!region) {
+      this.selectedRegionId = null;
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.pendingRegions = [...this.pendingRegions, region];
+    this.selectedRegionId = null;
+    this.notifyStateChanged();
   }
 
-  addRegion(region: string): void {
-    if (!this.addRegionTarget) return;
-    this.isAddingRegion = true;
-    this.svc.addRegion$(this.addRegionTarget.id, region)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(updated => {
-        if (updated) {
-          this.addRegionTarget = { ...updated };
+  removePendingRegion(regionId: number): void {
+    this.pendingRegions = this.pendingRegions.filter(region => region.regionId !== regionId);
+    this.notifyStateChanged();
+  }
+
+  openRemoveManagerConfirm(user: TerritoryUser, event?: MouseEvent): void {
+    event?.stopPropagation();
+    if (!this.canRemoveRegionalManagerRole(user)) return;
+
+    this.openDropdownUserId = null;
+    this.removeTarget = user;
+    this.removeError = null;
+    this.notifyStateChanged();
+  }
+
+  closeRemoveManagerConfirm(): void {
+    if (this.isRemovingManagerRole) return;
+    this.removeTarget = null;
+    this.removeError = null;
+    this.notifyStateChanged();
+  }
+
+  confirmRemoveManagerRole(): void {
+    if (!this.removeTarget || !this.activeTerritoryId || this.isRemovingManagerRole) return;
+
+    this.isRemovingManagerRole = true;
+    this.removeError = null;
+    this.notifyStateChanged();
+
+    this.svc.removeManagerRole$(this.removeTarget.userId, this.activeTerritoryId)
+      .pipe(
+        finalize(() => {
+          this.isRemovingManagerRole = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: updated => {
           this.syncItemInList(updated);
-          // also sync edit modal if open for same user
-          if (this.editUser?.id === updated.id) {
-            this.editUser = { ...updated };
-          }
-        }
-        this.isAddingRegion = false;
-        this.cdr.detectChanges();
+          this.editUser = this.editUser?.userId === updated.userId ? updated : this.editUser;
+          this.viewUser = this.viewUser?.userId === updated.userId ? updated : this.viewUser;
+          this.removeTarget = null;
+          this.removeError = null;
+        },
+        error: error => {
+          this.removeError = this.toSafeMessage(error, 'Unable to remove the manager role.');
+        },
       });
   }
 
-  // ── Create user modal ────────────────────────────────────────────────────
+  openAddRegionalManagerModal(user?: TerritoryUser, event?: MouseEvent): void {
+    event?.stopPropagation();
+    if (this.isSavingRegionalManager || !this.activeTerritoryId) return;
 
-  openCreateModal(): void {
-    this.showCreateModal = true;
-    this.newFirstName = '';
-    this.newLastName  = '';
-    this.newEmail     = '';
-    this.newRole      = 'Viewer';
-    this.cdr.detectChanges();
+    if (user) {
+      if (!this.canAddRegionalManagerRole(user)) return;
+      this.openDropdownUserId = null;
+    } else if (!this.canOpenAddRegionalManager) {
+      return;
+    }
+
+    this.successMessage = null;
+    this.addRegionalManagerOpen = true;
+    this.resetAddRegionalManagerState({ keepOpen: true });
+
+    if (user) {
+      const assignable = this.toAssignableUser(user);
+      this.regionalManagerPreselectedUser = assignable;
+      this.selectedRegionalManagerUser = assignable;
+      this.regionalManagerUsers = [assignable];
+      this.regionalManagerUserSearch = assignable.displayName;
+      this.loadRegionalManagerRegions();
+    } else {
+      this.searchRegionalManagerUsers();
+    }
+
+    this.notifyStateChanged();
   }
 
-  closeCreateModal(): void {
-    this.showCreateModal = false;
-    this.cdr.detectChanges();
+  closeAddRegionalManagerModal(): void {
+    if (this.isSavingRegionalManager) return;
+    this.addRegionalManagerOpen = false;
+    this.resetAddRegionalManagerState();
+    this.notifyStateChanged();
   }
 
-  createUser(): void {
-    if (!this.newFirstName || !this.newLastName || !this.newEmail) return;
-    this.isCreating = true;
-    this.svc.createUser$({
-      firstName: this.newFirstName,
-      lastName:  this.newLastName,
-      email:     this.newEmail,
-      role:      this.newRole,
-      status:    this.newRole === 'Regional Manager' ? 'Active' : 'Inactive',
-      assignedRegions: [],
-    }).pipe(takeUntil(this.destroy$)).subscribe(() => {
-      this.isCreating      = false;
-      this.showCreateModal = false;
-      this.displayCount    = PAGE_SIZE_INITIAL;
-      this.loadItems();
+  onRegionalManagerUserSearchChange(): void {
+    if (this.regionalManagerPreselectedUser) return;
+
+    if (this.regionalManagerUserSearchDebounceHandle) {
+      clearTimeout(this.regionalManagerUserSearchDebounceHandle);
+    }
+
+    this.regionalManagerUserSearchDebounceHandle = setTimeout(() => this.searchRegionalManagerUsers(), 250);
+  }
+
+  selectRegionalManagerUser(user: TerritoryAssignableUser): void {
+    if (this.regionalManagerPreselectedUser &&
+        this.regionalManagerPreselectedUser.userId !== user.userId) {
+      return;
+    }
+
+    this.selectedRegionalManagerUser = user;
+    this.selectedRegionalManagerRegions = [];
+    this.regionalManagerRegionSearch = '';
+    this.addRegionalManagerError = null;
+    this.loadRegionalManagerRegions();
+    this.notifyStateChanged();
+  }
+
+  isRegionalManagerUserLocked(user: TerritoryAssignableUser): boolean {
+    return !!this.regionalManagerPreselectedUser &&
+      this.regionalManagerPreselectedUser.userId !== user.userId;
+  }
+
+  onRegionalManagerRegionSearchChange(): void {
+    if (this.regionalManagerRegionSearchDebounceHandle) {
+      clearTimeout(this.regionalManagerRegionSearchDebounceHandle);
+    }
+
+    this.regionalManagerRegionSearchDebounceHandle = setTimeout(() => this.loadRegionalManagerRegions(), 250);
+  }
+
+  addRegionalManagerRegion(region: TerritoryUserAvailableRegion): void {
+    if (this.selectedRegionalManagerRegions.some(item => item.regionId === region.regionId)) return;
+
+    this.selectedRegionalManagerRegions = [...this.selectedRegionalManagerRegions, region];
+    this.notifyStateChanged();
+  }
+
+  removeRegionalManagerRegion(regionId: number): void {
+    this.selectedRegionalManagerRegions = this.selectedRegionalManagerRegions
+      .filter(region => region.regionId !== regionId);
+    this.notifyStateChanged();
+  }
+
+  saveAddRegionalManager(): void {
+    this.addRegionalManagerSubmitted = true;
+    if (!this.selectedRegionalManagerUser || !this.activeTerritoryId || this.selectedRegionalManagerRegions.length === 0) {
+      this.notifyStateChanged();
+      return;
+    }
+
+    if (this.isSavingRegionalManager) return;
+
+    this.isSavingRegionalManager = true;
+    this.addRegionalManagerError = null;
+    this.notifyStateChanged();
+
+    this.svc.addRegionalManager$(
+      this.selectedRegionalManagerUser.userId,
+      this.activeTerritoryId,
+      this.selectedRegionalManagerRegions.map(region => region.regionId),
+    ).pipe(
+      finalize(() => {
+        this.isSavingRegionalManager = false;
+        this.notifyStateChanged();
+      }),
+    ).subscribe({
+      next: updated => {
+        this.upsertItemInList(updated);
+        this.successMessage = `${updated.displayName} is now assigned as a Regional Manager.`;
+        this.addRegionalManagerOpen = false;
+        this.resetAddRegionalManagerState();
+      },
+      error: error => {
+        this.addRegionalManagerError = this.toSafeMessage(error, 'Unable to add Regional Manager access.');
+      },
     });
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  openAddTerritoryAssociateModal(user?: TerritoryUser, event?: MouseEvent): void {
+    event?.stopPropagation();
+    if (this.isSavingAssociate || !this.activeTerritoryId) return;
 
-  private syncItemInList(updated: PlatformUser): void {
-    const idx = this.items.findIndex(u => u.id === updated.id);
-    if (idx !== -1) {
-      this.items = [
-        ...this.items.slice(0, idx),
-        { ...updated },
-        ...this.items.slice(idx + 1),
-      ];
+    if (user) {
+      if (!this.canAddTerritoryAssociateRole(user)) return;
+      this.openDropdownUserId = null;
+    } else if (!this.canOpenAddTerritoryAssociate) {
+      return;
     }
+
+    this.successMessage = null;
+    this.addTerritoryAssociateOpen = true;
+    this.resetAddAssociateState({ keepOpen: true });
+
+    if (user) {
+      const assignable = this.toAssignableUser(user);
+      this.associatePreselectedUser = assignable;
+      this.selectedAssociateUser = assignable;
+      this.associateUsers = [assignable];
+      this.associateUserSearch = assignable.displayName;
+    } else {
+      this.searchAssociateUsers();
+    }
+
+    this.notifyStateChanged();
+  }
+
+  closeAddTerritoryAssociateModal(): void {
+    if (this.isSavingAssociate) return;
+    this.addTerritoryAssociateOpen = false;
+    this.resetAddAssociateState();
+    this.notifyStateChanged();
+  }
+
+  onAssociateUserSearchChange(): void {
+    if (this.associatePreselectedUser) return;
+
+    if (this.associateUserSearchDebounceHandle) {
+      clearTimeout(this.associateUserSearchDebounceHandle);
+    }
+
+    this.associateUserSearchDebounceHandle = setTimeout(() => this.searchAssociateUsers(), 250);
+  }
+
+  selectAssociateUser(user: TerritoryAssignableUser): void {
+    if (this.associatePreselectedUser &&
+        this.associatePreselectedUser.userId !== user.userId) {
+      return;
+    }
+
+    this.selectedAssociateUser = user;
+    this.addAssociateError = null;
+    this.notifyStateChanged();
+  }
+
+  isAssociateUserLocked(user: TerritoryAssignableUser): boolean {
+    return !!this.associatePreselectedUser &&
+      this.associatePreselectedUser.userId !== user.userId;
+  }
+
+  saveAddTerritoryAssociate(): void {
+    this.addAssociateSubmitted = true;
+    if (!this.selectedAssociateUser || !this.activeTerritoryId || this.selectedAssociateAlreadyAssigned) {
+      this.notifyStateChanged();
+      return;
+    }
+
+    if (this.isSavingAssociate) return;
+
+    this.isSavingAssociate = true;
+    this.addAssociateError = null;
+    this.notifyStateChanged();
+
+    this.svc.addTerritoryAssociate$(this.selectedAssociateUser.userId, this.activeTerritoryId)
+      .pipe(
+        finalize(() => {
+          this.isSavingAssociate = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: updated => {
+          this.upsertItemInList(updated);
+          this.successMessage = `${updated.displayName} is now assigned as a Territory Associate.`;
+          this.addTerritoryAssociateOpen = false;
+          this.resetAddAssociateState();
+        },
+        error: error => {
+          this.addAssociateError = this.toSafeMessage(error, 'Unable to add Territory Associate access.');
+        },
+      });
+  }
+
+  openRemoveAssociateConfirm(user: TerritoryUser, event?: MouseEvent): void {
+    event?.stopPropagation();
+    if (!user.canRemoveTerritoryAssociateRole) return;
+
+    this.openDropdownUserId = null;
+    this.removeAssociateTarget = user;
+    this.removeAssociateError = null;
+    this.notifyStateChanged();
+  }
+
+  closeRemoveAssociateConfirm(): void {
+    if (this.isRemovingAssociate) return;
+    this.removeAssociateTarget = null;
+    this.removeAssociateError = null;
+    this.notifyStateChanged();
+  }
+
+  confirmRemoveTerritoryAssociate(): void {
+    if (!this.removeAssociateTarget || !this.activeTerritoryId || this.isRemovingAssociate) return;
+
+    this.isRemovingAssociate = true;
+    this.removeAssociateError = null;
+    this.notifyStateChanged();
+
+    this.svc.removeTerritoryAssociate$(this.removeAssociateTarget.userId, this.activeTerritoryId)
+      .pipe(
+        finalize(() => {
+          this.isRemovingAssociate = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: updated => {
+          if (updated.isInTerritoryScope === false) {
+            this.removeItemFromList(updated.userId);
+          } else {
+            this.syncItemInList(updated);
+          }
+          this.successMessage = 'Territory Associate access was removed.';
+          this.removeAssociateTarget = null;
+          this.removeAssociateError = null;
+        },
+        error: error => {
+          this.removeAssociateError = this.toSafeMessage(error, 'Unable to remove Territory Associate access.');
+        },
+      });
+  }
+
+  formatLastLogin(user: TerritoryUser): string {
+    return this.svc.formatLastLogin(user.lastLoginAt, user.lastLoginDisplay);
+  }
+
+  avatarUrl(user: TerritoryUser): string | null {
+    const url = user.avatarUrl?.trim() ?? '';
+    return url && !this.failedAvatarIds.has(user.userId) ? url : null;
+  }
+
+  avatarAlt(user: TerritoryUser): string {
+    return `${user.displayName || user.email} profile image`;
+  }
+
+  onAvatarError(user: TerritoryUser): void {
+    this.failedAvatarIds.add(user.userId);
+    this.notifyStateChanged();
   }
 
   statusClass(status: string): string {
@@ -333,10 +822,456 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
   }
 
   roleClass(role: string): string {
-    return role === 'Regional Manager'
-      ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
-      : 'bg-gray-50 text-gray-500 ring-1 ring-gray-200';
+    if (role === 'Regional Manager') {
+      return 'bg-blue-50 text-blue-700 ring-1 ring-blue-200';
+    }
+
+    if (role === 'Territory Associate') {
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+    }
+
+    if (role === 'Territory Manager') {
+      return 'bg-slate-100 text-slate-700 ring-1 ring-slate-200';
+    }
+
+    return 'bg-gray-50 text-gray-500 ring-1 ring-gray-200';
   }
 
-  trackById(_: number, u: PlatformUser): string { return u.id; }
+  roleLabel(role: string): string {
+    const normalized = role.replace(/[\s_-]/g, '').toLowerCase();
+    switch (normalized) {
+      case 'territorymanager':
+      case 'nationalmanager':
+        return 'Territory Manager';
+      case 'territoryassociate':
+        return 'Territory Associate';
+      case 'regionalmanager':
+        return 'Regional Manager';
+      case 'registereduser':
+        return 'Viewer';
+      default:
+        return role || 'Viewer';
+    }
+  }
+
+  displayRoles(user: Pick<TerritoryUser, 'roles' | 'roleDisplayName'> | TerritoryAssignableUser): string[] {
+    const roles = ('roles' in user ? user.roles : [])
+      .map(role => this.roleLabel(role))
+      .filter(role => !!role);
+
+    const primary = 'roleDisplayName' in user ? user.roleDisplayName : '';
+    const normalized = new Set<string>();
+    const ordered: string[] = [];
+
+    for (const role of [primary, ...roles]) {
+      const key = role.replace(/[\s_-]/g, '').toLowerCase();
+      if (!key || normalized.has(key)) continue;
+      normalized.add(key);
+      ordered.push(role);
+    }
+
+    return ordered.length > 0 ? ordered : ['Viewer'];
+  }
+
+  trackByUserId(_: number, user: TerritoryUser): number {
+    return user.userId;
+  }
+
+  trackByRegionId(_: number, region: TerritoryUserAvailableRegion): number {
+    return region.regionId;
+  }
+
+  trackByAssignableUserId(_: number, user: TerritoryAssignableUser): number {
+    return user.userId;
+  }
+
+  private loadAssignedTerritories(): void {
+    this.territoryLoading = true;
+    this.errorMessage = null;
+    this.notifyStateChanged();
+
+    this.territoriesSubscription = this.territoryDashboard
+      .getAssignedTerritories()
+      .pipe(
+        finalize(() => {
+          this.territoryLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: territories => {
+          this.assignedTerritories = territories ?? [];
+          const persistedId = this.territoryDashboard.getActiveTerritoryId();
+          const selected =
+            this.assignedTerritories.find(territory => territory.id === persistedId) ??
+            this.assignedTerritories[0] ??
+            null;
+
+          this.activeTerritoryId = selected?.id ?? null;
+          this.territoryDashboard.setActiveTerritoryId(this.activeTerritoryId);
+
+          if (!this.activeTerritoryId) {
+            this.resetList();
+            return;
+          }
+
+          this.loadUsers(true);
+        },
+        error: error => {
+          this.handleLoadError(error, 'Unable to load assigned territories.');
+        },
+      });
+  }
+
+  private loadUsers(reset: boolean): void {
+    if (!this.activeTerritoryId) {
+      this.listRequestSequence++;
+      this.listSubscription?.unsubscribe();
+      this.resetList();
+      this.isLoading = false;
+      this.isLoadingMore = false;
+      this.notifyStateChanged();
+      return;
+    }
+
+    const requestId = ++this.listRequestSequence;
+    const skip = reset ? 0 : this.items.length;
+    this.listSubscription?.unsubscribe();
+
+    if (reset) {
+      this.isLoading = true;
+      this.resetList();
+    } else {
+      this.isLoadingMore = true;
+    }
+
+    this.errorMessage = null;
+    this.notifyStateChanged();
+
+    this.listSubscription = this.svc.getPage$({
+      territoryId: this.activeTerritoryId,
+      search: this.searchQuery,
+      sort: this.currentSort,
+      skip,
+      take: PAGE_SIZE,
+    }).pipe(
+      finalize(() => {
+        if (this.listRequestSequence === requestId) {
+          this.isLoading = false;
+          this.isLoadingMore = false;
+          this.notifyStateChanged();
+        }
+      }),
+    ).subscribe({
+      next: page => {
+        if (this.listRequestSequence !== requestId) return;
+
+        this.items = reset ? page.items : [...this.items, ...page.items];
+        this.totalItems = this.toSafeCount(page.totalCount);
+      },
+      error: error => {
+        if (this.listRequestSequence === requestId) {
+          this.handleLoadError(error, 'Unable to load users.');
+        }
+      },
+    });
+  }
+
+  private searchRegionalManagerUsers(): void {
+    if (!this.activeTerritoryId || !this.addRegionalManagerOpen) return;
+    if (this.regionalManagerPreselectedUser) {
+      this.regionalManagerUsers = [this.regionalManagerPreselectedUser];
+      return;
+    }
+
+    this.regionalManagerUsersSubscription?.unsubscribe();
+    this.isLoadingRegionalManagerUsers = true;
+    this.addRegionalManagerError = null;
+    this.notifyStateChanged();
+
+    this.regionalManagerUsersSubscription = this.svc.searchAssignableUsers$(
+      this.activeTerritoryId,
+      this.regionalManagerUserSearch,
+      10,
+      { excludeAlreadyRegionalManager: true },
+    ).pipe(
+      finalize(() => {
+        this.isLoadingRegionalManagerUsers = false;
+        this.notifyStateChanged();
+      }),
+    ).subscribe({
+      next: users => {
+        this.regionalManagerUsers = users;
+        const selectedUserId = this.selectedRegionalManagerUser?.userId;
+        if (selectedUserId && !users.some(user => user.userId === selectedUserId)) {
+          this.clearRegionalManagerSelection();
+        }
+      },
+      error: error => {
+        this.regionalManagerUsers = [];
+        this.addRegionalManagerError = this.toSafeMessage(error, 'Unable to search users.');
+      },
+    });
+  }
+
+  private searchAssociateUsers(): void {
+    if (!this.activeTerritoryId || !this.addTerritoryAssociateOpen) return;
+    if (this.associatePreselectedUser) {
+      this.associateUsers = [this.associatePreselectedUser];
+      return;
+    }
+
+    this.associateUsersSubscription?.unsubscribe();
+    this.isLoadingAssociateUsers = true;
+    this.addAssociateError = null;
+    this.notifyStateChanged();
+
+    this.associateUsersSubscription = this.svc.searchAssignableUsers$(
+      this.activeTerritoryId,
+      this.associateUserSearch,
+      10,
+      { excludeAlreadyTerritoryAssociate: true },
+    ).pipe(
+      finalize(() => {
+        this.isLoadingAssociateUsers = false;
+        this.notifyStateChanged();
+      }),
+    ).subscribe({
+      next: users => {
+        this.associateUsers = users;
+        const selectedUserId = this.selectedAssociateUser?.userId;
+        if (selectedUserId && !users.some(user => user.userId === selectedUserId)) {
+          this.selectedAssociateUser = null;
+        }
+      },
+      error: error => {
+        this.associateUsers = [];
+        this.addAssociateError = this.toSafeMessage(error, 'Unable to search users.');
+      },
+    });
+  }
+
+  private loadRegionalManagerRegions(): void {
+    if (!this.selectedRegionalManagerUser || !this.activeTerritoryId) return;
+
+    this.regionalManagerRegionsSubscription?.unsubscribe();
+    this.isLoadingRegionalManagerRegions = true;
+    this.addRegionalManagerError = null;
+    this.notifyStateChanged();
+
+    this.regionalManagerRegionsSubscription = this.svc.getAvailableRegions$(
+      this.selectedRegionalManagerUser.userId,
+      this.activeTerritoryId,
+      this.regionalManagerRegionSearch,
+    ).pipe(
+      finalize(() => {
+        this.isLoadingRegionalManagerRegions = false;
+        this.notifyStateChanged();
+      }),
+    ).subscribe({
+      next: regions => {
+        this.regionalManagerRegions = regions;
+      },
+      error: error => {
+        this.regionalManagerRegions = [];
+        this.addRegionalManagerError = this.toSafeMessage(error, 'Unable to load available regions.');
+      },
+    });
+  }
+
+  private loadAvailableRegions(): void {
+    if (!this.editUser || !this.activeTerritoryId || !this.editUser.canAddRegion) return;
+
+    this.regionsSubscription?.unsubscribe();
+    this.isLoadingRegions = true;
+    this.regionsError = null;
+    this.notifyStateChanged();
+
+    this.regionsSubscription = this.svc.getAvailableRegions$(
+      this.editUser.userId,
+      this.activeTerritoryId,
+      this.regionSearch,
+    ).pipe(
+      finalize(() => {
+        this.isLoadingRegions = false;
+        this.notifyStateChanged();
+      }),
+    ).subscribe({
+      next: regions => {
+        this.availableRegions = regions;
+        if (this.selectedRegionId && !this.selectableRegions.some(region => region.regionId === this.selectedRegionId)) {
+          this.selectedRegionId = null;
+        }
+      },
+      error: error => {
+        this.availableRegions = [];
+        this.selectedRegionId = null;
+        this.regionsError = this.toSafeMessage(error, 'Unable to load available regions.');
+      },
+    });
+  }
+
+  private resetEditRegionState(): void {
+    this.regionsSubscription?.unsubscribe();
+    if (this.regionSearchDebounceHandle) {
+      clearTimeout(this.regionSearchDebounceHandle);
+      this.regionSearchDebounceHandle = null;
+    }
+    this.availableRegions = [];
+    this.selectedRegionId = null;
+    this.pendingRegions = [];
+    this.regionSearch = '';
+    this.regionsError = null;
+    this.isLoadingRegions = false;
+  }
+
+  private resetAddRegionalManagerState(options: { keepOpen?: boolean } = {}): void {
+    this.regionalManagerUsersSubscription?.unsubscribe();
+    this.regionalManagerRegionsSubscription?.unsubscribe();
+    if (this.regionalManagerUserSearchDebounceHandle) {
+      clearTimeout(this.regionalManagerUserSearchDebounceHandle);
+      this.regionalManagerUserSearchDebounceHandle = null;
+    }
+    if (this.regionalManagerRegionSearchDebounceHandle) {
+      clearTimeout(this.regionalManagerRegionSearchDebounceHandle);
+      this.regionalManagerRegionSearchDebounceHandle = null;
+    }
+    if (!options.keepOpen) {
+      this.addRegionalManagerOpen = false;
+    }
+    this.regionalManagerUserSearch = '';
+    this.regionalManagerUsers = [];
+    this.selectedRegionalManagerUser = null;
+    this.regionalManagerPreselectedUser = null;
+    this.regionalManagerRegions = [];
+    this.selectedRegionalManagerRegions = [];
+    this.regionalManagerRegionSearch = '';
+    this.isLoadingRegionalManagerUsers = false;
+    this.isLoadingRegionalManagerRegions = false;
+    this.addRegionalManagerError = null;
+    this.addRegionalManagerSubmitted = false;
+  }
+
+  private clearRegionalManagerSelection(): void {
+    this.regionalManagerRegionsSubscription?.unsubscribe();
+    this.selectedRegionalManagerUser = null;
+    this.regionalManagerRegions = [];
+    this.selectedRegionalManagerRegions = [];
+    this.regionalManagerRegionSearch = '';
+    this.isLoadingRegionalManagerRegions = false;
+  }
+
+  private resetAddAssociateState(options: { keepOpen?: boolean } = {}): void {
+    this.associateUsersSubscription?.unsubscribe();
+    if (this.associateUserSearchDebounceHandle) {
+      clearTimeout(this.associateUserSearchDebounceHandle);
+      this.associateUserSearchDebounceHandle = null;
+    }
+    if (!options.keepOpen) {
+      this.addTerritoryAssociateOpen = false;
+    }
+    this.associateUserSearch = '';
+    this.associateUsers = [];
+    this.selectedAssociateUser = null;
+    this.associatePreselectedUser = null;
+    this.isLoadingAssociateUsers = false;
+    this.addAssociateError = null;
+    this.addAssociateSubmitted = false;
+  }
+
+  private syncItemInList(updated: TerritoryUser): void {
+    const index = this.items.findIndex(item => item.userId === updated.userId);
+    if (index === -1) return;
+
+    this.items = [
+      ...this.items.slice(0, index),
+      updated,
+      ...this.items.slice(index + 1),
+    ];
+  }
+
+  private upsertItemInList(updated: TerritoryUser): void {
+    const index = this.items.findIndex(item => item.userId === updated.userId);
+    if (index === -1) {
+      this.items = [updated, ...this.items];
+      this.totalItems += 1;
+      return;
+    }
+
+    this.items = [
+      ...this.items.slice(0, index),
+      updated,
+      ...this.items.slice(index + 1),
+    ];
+  }
+
+  private removeItemFromList(userId: number): void {
+    const nextItems = this.items.filter(item => item.userId !== userId);
+    if (nextItems.length === this.items.length) return;
+
+    this.items = nextItems;
+    this.totalItems = Math.max(0, this.totalItems - 1);
+  }
+
+  private toAssignableUser(user: TerritoryUser): TerritoryAssignableUser {
+    return {
+      userId: user.userId,
+      displayName: user.displayName,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      avatarUrl: user.avatarUrl,
+      initials: user.initials,
+      roles: user.roles,
+      assignedRegions: user.assignedRegions,
+      assignedTerritories: user.assignedTerritories,
+      isActive: user.isActive,
+    };
+  }
+
+  private resetList(): void {
+    this.items = [];
+    this.totalItems = 0;
+    this.failedAvatarIds.clear();
+  }
+
+  private handleLoadError(error: unknown, fallback: string): void {
+    this.isLoading = false;
+    this.isLoadingMore = false;
+    this.resetList();
+
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 401) {
+        this.errorMessage = 'Sign in with a Territory Manager account to view users.';
+        this.notifyStateChanged();
+        return;
+      }
+
+      if (error.status === 403) {
+        this.errorMessage = 'This account is not authorized for the selected territory.';
+        this.notifyStateChanged();
+        return;
+      }
+    }
+
+    this.errorMessage = this.toSafeMessage(error, fallback);
+    this.notifyStateChanged();
+  }
+
+  private toSafeMessage(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse) {
+      const message = error.error?.message;
+      return typeof message === 'string' && message.trim() ? message : fallback;
+    }
+
+    return fallback;
+  }
+
+  private toSafeCount(value: unknown): number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+  }
+
+  private notifyStateChanged(): void {
+    this.cdr.markForCheck();
+  }
 }

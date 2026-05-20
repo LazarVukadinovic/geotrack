@@ -93,6 +93,27 @@ public class RegionalLocationService : IRegionalLocationService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
+                CardImageUrl = location.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Location && image.ImageRole == EntityImageRole.Card)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                CoverImageUrl = location.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Location && image.ImageRole == EntityImageRole.Cover)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                GalleryImageUrls = location.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Location && image.ImageRole == EntityImageRole.Gallery)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
                 Tags = location.LocationTags
                     .OrderBy(locationTag => locationTag.Tag.Name)
                     .Select(locationTag => new RegionalLocationTagDto
@@ -152,6 +173,27 @@ public class RegionalLocationService : IRegionalLocationService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
+                CardImageUrl = location.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Location && image.ImageRole == EntityImageRole.Card)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                CoverImageUrl = location.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Location && image.ImageRole == EntityImageRole.Cover)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                GalleryImageUrls = location.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Location && image.ImageRole == EntityImageRole.Gallery)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList(),
                 Tags = location.LocationTags
                     .OrderBy(locationTag => locationTag.Tag.Name)
                     .Select(locationTag => new RegionalLocationTagDto
@@ -709,6 +751,9 @@ public class RegionalLocationService : IRegionalLocationService
             PublishedAt = row.PublishedAt,
             LastUpdatedAt = row.UpdatedAt ?? row.CreatedAt,
             ImageUrl = row.ImageUrl,
+            CardImageUrl = row.CardImageUrl,
+            CoverImageUrl = row.CoverImageUrl,
+            GalleryImageUrls = row.GalleryImageUrls,
             DetailRoute = "/locations/detail/" + row.Id,
             EditRoute = ExistingEditRoute(row.Id)
         };
@@ -739,6 +784,9 @@ public class RegionalLocationService : IRegionalLocationService
             PublishedAt = item.PublishedAt,
             LastUpdatedAt = item.LastUpdatedAt,
             ImageUrl = item.ImageUrl,
+            CardImageUrl = item.CardImageUrl,
+            CoverImageUrl = item.CoverImageUrl,
+            GalleryImageUrls = item.GalleryImageUrls,
             DetailRoute = item.DetailRoute,
             EditRoute = item.EditRoute,
             Latitude = row.Latitude,
@@ -924,5 +972,8 @@ public class RegionalLocationService : IRegionalLocationService
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public string? ImageUrl { get; set; }
+        public string? CardImageUrl { get; set; }
+        public string? CoverImageUrl { get; set; }
+        public List<string> GalleryImageUrls { get; set; } = new();
     }
 }

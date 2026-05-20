@@ -30,7 +30,7 @@ export class NationalAnalyticsComponent implements OnInit, OnDestroy {
 
   // ── Auth ─────────────────────────────────────────────────────────────────
   get userName(): string { return this.auth.fullName ?? 'Sarah Jenkins'; }
-  get userRole():  string { return this.auth.getUser()?.role ?? 'National Manager'; }
+  get userRole():  string { return this.auth.getUser()?.role ?? 'Territory Manager'; }
   get region():    string { return this.auth.getUser()?.region ?? 'Republika Srbija'; }
 
   // ── Loading state ────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ export class NationalAnalyticsComponent implements OnInit, OnDestroy {
 
   // ── Dynamic titles ────────────────────────────────────────────────────────
   get topSectionSuffix(): string {
-    if (this.isAllRegions) return ' Nationwide';
+    if (this.isAllRegions) return ' Territory-wide';
     if (this.selectedRegions.length === 1) return ` – ${this.selectedRegions[0]}`;
     return '';
   }

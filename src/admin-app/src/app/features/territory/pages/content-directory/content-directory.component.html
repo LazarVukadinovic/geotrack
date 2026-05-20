@@ -1,0 +1,167 @@
+<div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
+
+  <app-sidebar
+    [region]="activeTerritory?.displayName ?? ''"
+    [regions]="assignedTerritories"
+    [activeRegionId]="activeTerritoryId"
+    [regionLoading]="isTerritoryLoading"
+    (regionChange)="onTerritoryChange($event)"
+  />
+
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+    <app-topbar
+      [userName]="userName"
+      [userRole]="userRole"
+      [title]="title"
+      [showBack]="true"
+      backRoute="/territory/overview"
+    />
+
+    <div class="flex-1 overflow-y-auto px-8 py-6">
+      <div class="flex items-start justify-between mb-5">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900">{{ title }}</h1>
+          <p class="text-sm text-gray-500 mt-1">
+            Read-only territory-wide directory for the active assigned territory.
+          </p>
+        </div>
+        <span class="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+          Read-only
+        </span>
+      </div>
+
+      @if (errorMessage) {
+        <div class="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {{ errorMessage }}
+        </div>
+      }
+
+      <div class="flex items-center justify-between gap-4 mb-5">
+        <div class="inline-flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+          @for (type of contentTypes; track type.value) {
+            <button
+              type="button"
+              (click)="selectType(type.value)"
+              class="rounded-md px-4 py-2 text-sm font-semibold border-0 cursor-pointer transition-colors"
+              [class.bg-blue-600]="contentType === type.value"
+              [class.text-white]="contentType === type.value"
+              [class.bg-transparent]="contentType !== type.value"
+              [class.text-gray-600]="contentType !== type.value"
+            >
+              {{ type.label }}
+            </button>
+          }
+        </div>
+
+        <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 w-80 shadow-sm">
+          <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Search content..."
+            [(ngModel)]="searchQuery"
+            (input)="onSearchChange()"
+            class="bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 w-full"
+          />
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+        <div
+          class="grid items-center gap-4 px-5 py-4 border-b border-gray-100 bg-gray-50/60"
+          style="grid-template-columns: 1.4fr 1fr 1fr 120px 120px 120px;"
+        >
+          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Name</span>
+          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Region</span>
+          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Parent</span>
+          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Type</span>
+          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Views</span>
+          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Date</span>
+        </div>
+
+        @if (isLoading) {
+          @for (item of [1,2,3,4,5]; track item) {
+            <div
+              class="grid items-center gap-4 px-5 py-4 border-b border-gray-50 animate-pulse"
+              style="grid-template-columns: 1.4fr 1fr 1fr 120px 120px 120px;"
+            >
+              <div class="h-4 bg-gray-100 rounded w-44"></div>
+              <div class="h-4 bg-gray-100 rounded w-32"></div>
+              <div class="h-4 bg-gray-100 rounded w-32"></div>
+              <div class="h-4 bg-gray-100 rounded w-20"></div>
+              <div class="h-4 bg-gray-100 rounded w-16"></div>
+              <div class="h-4 bg-gray-100 rounded w-20"></div>
+            </div>
+          }
+        } @else {
+          @for (item of items; track item.entityType + '-' + item.id) {
+            @if (publicPreviewUrl(item); as publicUrl) {
+              <a
+                [href]="publicUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                [attr.aria-label]="'Open ' + item.name + ' in user app'"
+                class="group grid items-center gap-4 px-5 py-4 border-b border-gray-50 hover:bg-blue-50/40 transition-colors cursor-pointer no-underline text-inherit focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-blue-600"
+                style="grid-template-columns: 1.4fr 1fr 1fr 120px 120px 120px;"
+              >
+                <ng-container *ngTemplateOutlet="contentDirectoryRowCells; context: { $implicit: item, linked: true }"></ng-container>
+              </a>
+            } @else {
+              <div
+                class="grid items-center gap-4 px-5 py-4 border-b border-gray-50 transition-colors"
+                style="grid-template-columns: 1.4fr 1fr 1fr 120px 120px 120px;"
+                title="No public preview route"
+              >
+                <ng-container *ngTemplateOutlet="contentDirectoryRowCells; context: { $implicit: item, linked: false }"></ng-container>
+              </div>
+            }
+          } @empty {
+            <div class="flex flex-col items-center justify-center py-16 text-gray-400">
+              <svg class="w-12 h-12 mb-3 text-gray-200" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 12h8"/>
+              </svg>
+              <p class="text-sm font-medium">No {{ title.toLowerCase() }} found</p>
+              <p class="text-xs mt-1">Only content from the active assigned territory can appear here.</p>
+            </div>
+          }
+        }
+
+        @if (!isLoading) {
+          <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/40 text-sm text-gray-500">
+            Showing <span class="font-semibold text-gray-700">{{ items.length }}</span>
+            of <span class="font-semibold text-gray-700">{{ totalCount }}</span>
+            {{ title.toLowerCase() }}
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #contentDirectoryRowCells let-item let-linked="linked">
+  <div class="min-w-0">
+    <p
+      class="text-sm font-semibold truncate"
+      [ngClass]="linked ? 'text-blue-700 group-hover:text-blue-900 group-hover:underline' : 'text-gray-900'"
+    >
+      {{ item.name }}
+    </p>
+    <p class="text-[11px] text-gray-400">ID: {{ item.id }}</p>
+  </div>
+  <span class="text-sm text-gray-700 truncate">{{ item.regionName }}</span>
+  <span class="text-sm text-gray-500 truncate">{{ item.parentName || '-' }}</span>
+  <span class="text-sm text-gray-500 truncate">{{ item.typeName || item.entityType }}</span>
+  <span class="text-sm font-semibold text-blue-700">{{ formatViews(item.viewsLast30Days) }}</span>
+  <span class="text-sm text-gray-500">
+    @if (contentType === 'events') {
+      {{ item.startsAt | date:'d MMM yyyy' }}
+    } @else {
+      {{ item.createdAt | date:'d MMM yyyy' }}
+    }
+  </span>
+</ng-template>

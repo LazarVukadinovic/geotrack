@@ -23,6 +23,8 @@ public class AnalyticsEvent
 
     public string? Route { get; set; }
 
+    public int? DurationMs { get; set; }
+
     public string MetadataJson { get; set; } = "{}";
 
     public DateTime OccurredAt { get; set; }

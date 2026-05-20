@@ -156,12 +156,16 @@ builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
+builder.Services.AddScoped<ITerritoryDashboardService, TerritoryDashboardService>();
+builder.Services.AddScoped<ITerritoryUserAdminService, TerritoryUserAdminService>();
 builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
 builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
 builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();
 builder.Services.AddScoped<IRegionalPlaceService, RegionalPlaceService>();
 builder.Services.AddScoped<IRegionalEventService, RegionalEventService>();
 builder.Services.AddScoped<IRegionalMapService, RegionalMapService>();
+builder.Services.AddScoped<IRegionalAnalyticsService, RegionalAnalyticsService>();
+builder.Services.AddScoped<IRegionalMediaService, RegionalMediaService>();
 builder.Services.AddHttpClient<IClientLocationResolverService, ClientLocationResolverService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(5);
@@ -176,6 +180,7 @@ builder.Services.AddHttpClient<IMapService, MapService>(client =>
 
 builder.Services.AddScoped<IUserAvatarStorageService, LocalUserAvatarStorageService>();
 builder.Services.AddScoped<IContributionMediaStorageService, LocalContributionMediaStorageService>();
+builder.Services.AddScoped<IRegionalEntityImageStorageService, LocalRegionalEntityImageStorageService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
@@ -222,6 +227,14 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequireRegionalManager", policy =>
         policy.RequireRole(RoleNames.RegionalManager));
+    options.AddPolicy("RequireTerritoryManager", policy =>
+        policy.RequireRole(RoleNames.TerritoryManager, RoleNames.TerritoryAssociate));
+    options.AddPolicy("RequireAdminAppUser", policy =>
+        policy.RequireRole(
+            RoleNames.Admin,
+            RoleNames.TerritoryManager,
+            RoleNames.TerritoryAssociate,
+            RoleNames.RegionalManager));
 });
 
 builder.Services.AddRateLimiter(options =>
@@ -344,11 +357,32 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
+var allowedCorsOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()
+    ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? Array.Empty<string>();
+
+if (allowedCorsOrigins.Length == 0)
+{
+    allowedCorsOrigins = new[]
+    {
+        "http://localhost:4200",
+        "http://127.0.0.1:4200",
+        "http://localhost:4300",
+        "http://127.0.0.1:4300",
+        "https://softeng.pmf.kg.ac.rs:10131"
+    };
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAllOrigins", policy =>
+    options.AddPolicy("ConfiguredOrigins", policy =>
     {
-        policy.SetIsOriginAllowed(_ => true)
+        policy.WithOrigins(allowedCorsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -364,8 +398,10 @@ var shouldSeedDatabase =
     || app.Configuration.GetValue<bool>("SeedData:Enabled");
 var shouldSeedDemoRegionalManager =
     DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
+var shouldSeedDemoTerritoryManager =
+    DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 
-if (shouldSeedDatabase || shouldSeedDemoRegionalManager)
+if (shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -383,6 +419,14 @@ if (shouldSeedDatabase || shouldSeedDemoRegionalManager)
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger(nameof(DemoRegionalManagerSeeder));
         await DemoRegionalManagerSeeder.EnsureAsync(db, app.Configuration, logger);
+    }
+
+    if (shouldSeedDemoTerritoryManager)
+    {
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(nameof(DemoTerritoryManagerSeeder));
+        await DemoTerritoryManagerSeeder.EnsureAsync(db, app.Configuration, logger);
     }
 }
 
@@ -409,6 +453,10 @@ if (forwardedHeadersEnabled)
 {
     app.UseForwardedHeaders();
 }
+
+app.UseHttpsRedirection();
+
+app.UseCors("ConfigurationOrigins");
 
 // HTTPS can be terminated either by Kestrel itself or by a reverse proxy.
 // Keep it config-driven so local HTTP development still works unchanged.
@@ -451,6 +499,7 @@ var mediaRoot = Path.Combine(app.Environment.ContentRootPath, "media");
 Directory.CreateDirectory(Path.Combine(mediaRoot, "seed"));
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "avatars"));
 Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "contributions"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "uploads", "regional"));
 
 var mediaContentTypes = new FileExtensionContentTypeProvider();
 mediaContentTypes.Mappings[".svg"] = "image/svg+xml";
@@ -473,6 +522,13 @@ app.UseStaticFiles(new StaticFileOptions
         }
 
         if (context.Context.Request.Path.StartsWithSegments("/media/uploads/contributions"))
+        {
+            headers[HeaderNames.CacheControl] = "no-store";
+            headers["X-Robots-Tag"] = "noindex, noarchive, nosnippet";
+            return;
+        }
+
+        if (context.Context.Request.Path.StartsWithSegments("/media/uploads/regional"))
         {
             headers[HeaderNames.CacheControl] = "no-store";
             headers["X-Robots-Tag"] = "noindex, noarchive, nosnippet";

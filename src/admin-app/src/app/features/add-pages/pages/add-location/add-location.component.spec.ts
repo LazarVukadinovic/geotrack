@@ -109,7 +109,8 @@ describe('NewLocationComponent', () => {
           useValue: {
             fullName: 'Manager User',
             getUser: () => ({ email: 'manager@example.com', role: 'RegionalManager' }),
-            isNationalManager: () => false,
+            isTerritoryManager: () => false,
+            canAccessTerritoryAdmin: () => false,
             logout: vi.fn(),
           },
         },
@@ -248,6 +249,7 @@ describe('NewLocationComponent', () => {
     component.zoneConfirmed = true;
     (component as any).confirmedLayer = {};
     (component as any).confirmedShapeType = 'Polygon';
+    setParentDestinationZone();
     component.editorRef.nativeElement.innerHTML = '<p>Description</p>';
 
     component.publish();
@@ -274,10 +276,31 @@ describe('NewLocationComponent', () => {
     component.zoneConfirmed = true;
     (component as any).confirmedLayer = {};
     (component as any).confirmedShapeType = 'Polygon';
+    setParentDestinationZone();
 
     component.publish();
 
     expect(component.isSaving).toBe(false);
     expect(component.errorMessage).toBe('Validation failed.');
   });
+
+  function setParentDestinationZone(): void {
+    (component as any).mapZones = [{
+      id: 11,
+      entityType: 'Destination',
+      name: 'Backend Destination',
+      displayName: 'Backend Destination',
+      status: 'Published',
+      geometryGeoJson: {
+        type: 'Polygon',
+        coordinates: [[
+          [18, 42],
+          [20, 42],
+          [20, 44],
+          [18, 44],
+          [18, 42],
+        ]],
+      },
+    }];
+  }
 });

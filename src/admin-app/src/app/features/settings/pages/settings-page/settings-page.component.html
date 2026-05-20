@@ -161,9 +161,10 @@
           </div>
 
           <div class="bg-white rounded-xl border border-gray-100 mb-4 overflow-hidden"
+               data-testid="assignment-section"
                style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
             <div class="px-6 py-4 border-b border-gray-50">
-              <h2 class="text-base font-semibold text-gray-900">{{ isAdmin ? 'Administrator Assignment' : 'Regional Manager Assignment' }}</h2>
+              <h2 class="text-base font-semibold text-gray-900">{{ assignmentSectionTitle }}</h2>
               <p class="text-xs text-gray-500 mt-0.5">Details regarding your official role and responsibilities within the portal.</p>
             </div>
 
@@ -185,9 +186,9 @@
                       <circle cx="12" cy="10" r="3"/>
                       <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
                     </svg>
-                    <span class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Assigned Region</span>
+                    <span class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">{{ assignmentLabel }}</span>
                   </div>
-                  <p class="text-sm font-semibold text-gray-800 break-words">{{ assignedRegion }}</p>
+                  <p class="text-sm font-semibold text-gray-800 break-words">{{ assignmentDisplayValue }}</p>
                 </div>
                 <div class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50 min-w-0">
                   <div class="flex items-center gap-1.5 mb-1.5">

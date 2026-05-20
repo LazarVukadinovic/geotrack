@@ -21,6 +21,8 @@ const MAX_BATCH = 25;
 /** Hard cap matching the server's MaxBatchSize. */
 const SERVER_BATCH_CAP = 50;
 const MAX_DEDUPE_ENTRIES = 200;
+const MIN_DURATION_MS = 1_000;
+const MAX_DURATION_MS = 30 * 60 * 1_000;
 
 type FlushMode = 'normal' | 'soon' | 'immediate';
 
@@ -31,9 +33,19 @@ interface CollectionRule {
   flush?: FlushMode;
 }
 
+interface ActiveTimedView {
+  entityType?: AnalyticsEventEnvelope['entityType'];
+  entityId?: number;
+  destinationId?: number;
+  route?: string;
+  startedAtMs: number;
+  sourceEventType: 'page_view' | 'detail_view';
+}
+
 const COLLECTION_RULES: Partial<Record<AnalyticsEventType, CollectionRule>> = {
   page_view: { cooldownMs: 30_000, coalescePending: true },
   detail_view: { cooldownMs: 120_000, coalescePending: true },
+  page_duration: { flush: 'soon' },
   map_marker_opened: { cooldownMs: 20_000, coalescePending: true },
   directions_started: { cooldownMs: 30_000, coalescePending: true, flush: 'soon' },
   search_performed: { cooldownMs: 15_000, coalescePending: true, includeMetadata: true, flush: 'soon' },
@@ -87,6 +99,7 @@ export class AnalyticsService {
   private pagehideHandler: (() => void) | null = null;
   private unloadHandler: (() => void) | null = null;
   private readonly recentFingerprints = new Map<string, number>();
+  private activeTimedView: ActiveTimedView | null = null;
 
   constructor() {
     effect(() => {
@@ -108,6 +121,7 @@ export class AnalyticsService {
 
       this.visibilityHandler = () => {
         if (document.visibilityState === 'hidden') {
+          this.endCurrentView('hidden');
           this.flushNow();
         }
       };
@@ -117,9 +131,15 @@ export class AnalyticsService {
       // an Authorization header, so authenticated events flushed only here may
       // end up tagged anonymous-only. visibilitychange above is the primary
       // path for authenticated users.
-      this.pagehideHandler = () => this.beaconFlush();
+      this.pagehideHandler = () => {
+        this.endCurrentView('pagehide');
+        this.beaconFlush();
+      };
       window.addEventListener('pagehide', this.pagehideHandler);
-      this.unloadHandler = () => this.beaconFlush();
+      this.unloadHandler = () => {
+        this.endCurrentView('unload');
+        this.beaconFlush();
+      };
       window.addEventListener('beforeunload', this.unloadHandler);
     }
 
@@ -137,9 +157,14 @@ export class AnalyticsService {
       entityId: payload?.entityId,
       destinationId: payload?.destinationId ?? this.destinationService.id() ?? undefined,
       route: this.normalizeRoute(this.router.url),
+      durationMs: payload?.durationMs,
       metadata: payload?.metadata,
       clientOccurredAt: new Date().toISOString(),
     };
+
+    if (eventType === 'page_view' || eventType === 'detail_view') {
+      this.startTimedView(eventType, envelope);
+    }
 
     const rule = COLLECTION_RULES[eventType];
     const includeMetadata = rule?.includeMetadata === true;
@@ -177,14 +202,54 @@ export class AnalyticsService {
     url: string | null | undefined,
     payload?: Omit<TrackPayload, 'metadata'> & { metadata?: Record<string, unknown> },
   ): void {
+    const host = this.extractHost(url);
+    const partnerKey = this.normalizePartnerKey(providerName, host);
+
     this.track('outbound_link_clicked', {
       ...payload,
       metadata: {
         ...payload?.metadata,
-        provider: this.normalizeProvider(providerName, url),
-        host: this.extractHost(url),
+        provider: this.normalizeProvider(providerName, host, partnerKey),
+        partnerKey,
+        host,
       },
     });
+  }
+
+  endCurrentView(reason: 'navigation' | 'hidden' | 'pagehide' | 'unload' | 'manual' | 'replaced' = 'manual'): void {
+    if (!this.analyticsPreferences.enabled()) {
+      this.activeTimedView = null;
+      return;
+    }
+
+    const active = this.activeTimedView;
+    this.activeTimedView = null;
+    if (!active) return;
+
+    const durationMs = Math.min(Math.max(Date.now() - active.startedAtMs, 0), MAX_DURATION_MS);
+    if (durationMs < MIN_DURATION_MS) {
+      return;
+    }
+
+    this.enqueue({
+      eventType: 'page_duration',
+      entityType: active.entityType,
+      entityId: active.entityId,
+      destinationId: active.destinationId,
+      route: active.route,
+      durationMs,
+      metadata: {
+        sourceEventType: active.sourceEventType,
+        endReason: reason,
+      },
+      clientOccurredAt: new Date().toISOString(),
+    });
+
+    if (reason === 'hidden') {
+      this.scheduleFlush('immediate');
+    } else if (reason !== 'pagehide' && reason !== 'unload') {
+      this.scheduleFlush('soon');
+    }
   }
 
   flushNow(): void {
@@ -297,10 +362,12 @@ export class AnalyticsService {
     });
   }
 
-  private normalizeProvider(providerName: string | null | undefined, url: string | null | undefined): string {
-    const source = `${providerName ?? ''} ${this.extractHost(url) ?? ''}`.toLowerCase();
-    if (source.includes('booking')) return 'booking';
-    if (source.includes('airbnb')) return 'airbnb';
+  private normalizeProvider(
+    providerName: string | null | undefined,
+    host: string | null,
+    partnerKey: 'booking' | 'airbnb' | 'external',
+  ): string {
+    if (partnerKey === 'booking' || partnerKey === 'airbnb') return partnerKey;
 
     const nameSlug = (providerName ?? '')
       .trim()
@@ -308,7 +375,36 @@ export class AnalyticsService {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    return nameSlug || 'other';
+    if (nameSlug) return nameSlug;
+
+    const hostSlug = (host ?? '')
+      .split('.')[0]
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    return hostSlug || 'other';
+  }
+
+  private normalizePartnerKey(
+    providerName: string | null | undefined,
+    host: string | null,
+  ): 'booking' | 'airbnb' | 'external' {
+    const nameToken = (providerName ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+
+    if (nameToken === 'booking' || nameToken === 'bookingcom' || this.isHostOrSubdomain(host, 'booking.com')) {
+      return 'booking';
+    }
+
+    if (nameToken === 'airbnb' || this.isHostOrSubdomain(host, 'airbnb.com')) {
+      return 'airbnb';
+    }
+
+    return 'external';
   }
 
   private extractHost(url: string | null | undefined): string | null {
@@ -318,6 +414,11 @@ export class AnalyticsService {
     } catch {
       return null;
     }
+  }
+
+  private isHostOrSubdomain(host: string | null, rootDomain: string): boolean {
+    if (!host) return false;
+    return host === rootDomain || host.endsWith(`.${rootDomain}`);
   }
 
   private scheduleFlush(mode: FlushMode): void {
@@ -361,6 +462,25 @@ export class AnalyticsService {
     if (this._queue().length > 0) {
       this._queue.set([]);
     }
+  }
+
+  private startTimedView(
+    sourceEventType: 'page_view' | 'detail_view',
+    envelope: AnalyticsEventEnvelope,
+  ): void {
+    this.endCurrentView('replaced');
+    this.activeTimedView = {
+      entityType: envelope.entityType,
+      entityId: envelope.entityId,
+      destinationId: envelope.destinationId,
+      route: envelope.route,
+      startedAtMs: Date.now(),
+      sourceEventType,
+    };
+  }
+
+  private enqueue(envelope: AnalyticsEventEnvelope): void {
+    this._queue.update((q) => [...q, envelope]);
   }
 
   private isWithinDedupeWindow(fingerprint: string, now: number, cooldownMs: number): boolean {

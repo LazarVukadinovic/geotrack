@@ -1,6 +1,7 @@
 import { HTTP_INTERCEPTORS, HttpClient, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { vi } from 'vitest';
 
 import { AuthInterceptor } from './auth.interceptor';
@@ -11,16 +12,23 @@ describe('AuthInterceptor', () => {
     getAccessToken: vi.fn(),
     clearSession: vi.fn(),
   };
+  const router = {
+    url: '/destinations',
+    navigate: vi.fn(),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     authService.getAccessToken.mockReturnValue('access-token');
+    router.url = '/destinations';
+    router.navigate.mockResolvedValue(true);
 
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptorsFromDi()),
         provideHttpClientTesting(),
         { provide: AuthService, useValue: authService },
+        { provide: Router, useValue: router },
         { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
       ],
     });
@@ -63,5 +71,23 @@ describe('AuthInterceptor', () => {
     request.flush({ message: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
 
     expect(authService.clearSession).toHaveBeenCalledTimes(1);
+    expect(router.navigate).toHaveBeenCalledWith(['/login'], {
+      queryParams: { sessionExpired: '1', returnUrl: '/destinations' },
+      replaceUrl: true,
+    });
+  });
+
+  it('does not redirect when login returns 401 for bad credentials', () => {
+    const http = TestBed.inject(HttpClient);
+
+    http.post('/api/admin/auth/login', { email: 'regional@example.com', password: 'bad' }).subscribe({
+      error: () => undefined,
+    });
+
+    const request = TestBed.inject(HttpTestingController).expectOne('/api/admin/auth/login');
+    request.flush({ message: 'Invalid credentials' }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(authService.clearSession).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 });

@@ -243,6 +243,7 @@ public sealed class MapLocationAbuseProtectionTests
         public int RouteCalls { get; private set; }
         public int EntitiesCalls { get; private set; }
         public int MarkersCalls { get; private set; }
+        public int DestinationCalls { get; private set; }
 
         public Task<List<MapSearchResultDto>> SearchAsync(
             string query,
@@ -258,6 +259,13 @@ public sealed class MapLocationAbuseProtectionTests
             CancellationToken cancellationToken = default)
         {
             SearchCalls++;
+            return Task.FromResult(new List<MapSearchResultDto>());
+        }
+
+        public Task<List<MapSearchResultDto>> GetAllDestinationsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            DestinationCalls++;
             return Task.FromResult(new List<MapSearchResultDto>());
         }
 

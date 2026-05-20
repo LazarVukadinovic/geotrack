@@ -343,4 +343,3 @@ export class ExploreSectionListingService {
     return `/places/${id}`;
   }
 }
-

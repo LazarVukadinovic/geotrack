@@ -1,3 +1,5 @@
+import { RegionalEntityImageDto } from './regional-image.model';
+
 export type LocationSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type LocationStatusFilter = 'all' | 'published' | 'draft' | 'archived';
 
@@ -22,6 +24,10 @@ export interface RegionalLocationListItemDto {
   createdAt?: string | null;
   publishedAt?: string | null;
   imageUrl?: string | null;
+  cardImageUrl?: string | null;
+  coverImageUrl?: string | null;
+  galleryImageUrls?: string[];
+  images?: RegionalEntityImageDto[];
   detailRoute?: string | null;
   editRoute?: string | null;
 }
@@ -99,6 +105,7 @@ export interface RegionalLocationUpdateRequest {
   name?: string | null;
   summary?: string | null;
   description?: string | null;
+  status?: 'Published' | 'Draft' | 'Archived';
   locationTypeId?: number | null;
   latitude?: number | null;
   longitude?: number | null;

@@ -75,6 +75,8 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   eventTypesLoading = false;
   tagsLoading = false;
   tagSearchLoading = false;
+  readonly isEditMode = false;
+  readonly internalReferenceId = '';
   isSaving = false;
   errorMessage: string | null = null;
   feedbackMessage: string | null = null;

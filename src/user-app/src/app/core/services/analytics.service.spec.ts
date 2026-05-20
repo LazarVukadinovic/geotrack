@@ -30,6 +30,7 @@ describe('AnalyticsService', () => {
 
   afterEach(() => {
     httpMock.verify();
+    vi.restoreAllMocks();
     TestBed.resetTestingModule();
   });
 
@@ -145,7 +146,24 @@ describe('AnalyticsService', () => {
     expect(body.events[0].eventType).toBe('outbound_link_clicked');
     expect(body.events[0].metadata).toEqual({
       provider: 'booking',
+      partnerKey: 'booking',
       host: 'booking.com',
+    });
+    req.flush(null);
+  });
+
+  it('marks non-booking partner links as external with a provider slug', () => {
+    service.trackOutboundLink('Direct Booking', 'https://direct.example/stays/7', {
+      entityType: 'hotel',
+      entityId: 7,
+    });
+
+    const req = httpMock.expectOne('/api/analytics/events');
+    const body = req.request.body as { events: { eventType: string; metadata?: Record<string, unknown> }[] };
+    expect(body.events[0].metadata).toEqual({
+      provider: 'direct-booking',
+      partnerKey: 'external',
+      host: 'direct.example',
     });
     req.flush(null);
   });
@@ -184,6 +202,58 @@ describe('AnalyticsService', () => {
     const body = req.request.body as { events: { eventType: string }[] };
     expect(body.events).toHaveLength(1);
     expect(body.events[0].eventType).toBe('outbound_link_clicked');
+    req.flush(null);
+  });
+
+  it('sends page duration for the active entity view when navigation leaves it', () => {
+    const router = TestBed.inject(Router);
+    Object.defineProperty(router, 'url', { value: '/places/42?ref=foo', configurable: true });
+    let now = 10_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+    service.track('detail_view', { entityType: 'place', entityId: 42 });
+    now += 15_000;
+    service.endCurrentView('navigation');
+    service.flushNow();
+
+    const req = httpMock.expectOne('/api/analytics/events');
+    const body = req.request.body as {
+      events: {
+        eventType: string;
+        entityType?: string;
+        entityId?: number;
+        route?: string;
+        durationMs?: number;
+        metadata?: Record<string, unknown>;
+      }[];
+    };
+    const duration = body.events.find(event => event.eventType === 'page_duration');
+
+    expect(duration).toEqual(expect.objectContaining({
+      entityType: 'place',
+      entityId: 42,
+      route: '/places/:id',
+      durationMs: 15_000,
+      metadata: {
+        sourceEventType: 'detail_view',
+        endReason: 'navigation',
+      },
+    }));
+    req.flush(null);
+  });
+
+  it('caps excessive page duration before queueing it', () => {
+    let now = 10_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+    service.track('detail_view', { entityType: 'hotel', entityId: 7 });
+    now += 60 * 60 * 1000;
+    service.endCurrentView('navigation');
+    service.flushNow();
+
+    const req = httpMock.expectOne('/api/analytics/events');
+    const body = req.request.body as { events: { eventType: string; durationMs?: number }[] };
+    expect(body.events.find(event => event.eventType === 'page_duration')?.durationMs).toBe(30 * 60 * 1000);
     req.flush(null);
   });
 

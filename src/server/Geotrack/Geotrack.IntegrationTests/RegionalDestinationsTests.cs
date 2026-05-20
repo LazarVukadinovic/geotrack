@@ -218,6 +218,74 @@ public sealed class RegionalDestinationsTests
     }
 
     [Fact]
+    public async Task Destination_image_upload_and_create_persist_entity_images()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateDestinationsFixtureAsync(app);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var upload = await UploadOneImageAsync(manager, fixture.AssignedRegionId);
+
+        var request = BuildCreateRequest(fixture.AssignedRegionId, name: "Destination With Image");
+        request.CardImageUrl = upload.Url;
+        request.CoverImageUrl = upload.Url;
+
+        var response = await manager.PostAsJsonAsync("/api/admin/regional/destinations", request);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var created = await response.Content.ReadFromJsonAsync<RegionalDestinationDetailDto>();
+        Assert.NotNull(created);
+        Assert.Equal(upload.Url, created!.ImageUrl);
+        Assert.Equal(upload.Url, created.CardImageUrl);
+        Assert.Equal(upload.Url, created.CoverImageUrl);
+        Assert.Empty(created.GalleryImageUrls);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var storedImages = await db.EntityImages
+            .Where(image => image.DestinationId == created.Id)
+            .OrderBy(image => image.Id)
+            .ToListAsync();
+        Assert.Equal(2, storedImages.Count);
+        Assert.Contains(storedImages, image =>
+            image.TargetType == EntityImageTargetType.Destination &&
+            image.ImageRole == EntityImageRole.Card &&
+            image.Url == upload.Url &&
+            image.IsMain);
+        Assert.Contains(storedImages, image =>
+            image.TargetType == EntityImageTargetType.Destination &&
+            image.ImageRole == EntityImageRole.Cover &&
+            image.Url == upload.Url &&
+            !image.IsMain);
+    }
+
+    [Fact]
+    public async Task Destination_main_image_selection_is_deterministic()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateDestinationsFixtureAsync(app);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var firstUpload = await UploadOneImageAsync(manager, fixture.AssignedRegionId);
+        var secondUpload = await UploadOneImageAsync(manager, fixture.AssignedRegionId);
+
+        var request = BuildCreateRequest(fixture.AssignedRegionId, name: "Destination With Ordered Images");
+        request.CardImageUrl = secondUpload.Url;
+        request.CoverImageUrl = firstUpload.Url;
+        request.GalleryImageUrls = [firstUpload.Url];
+
+        var response = await manager.PostAsJsonAsync("/api/admin/regional/destinations", request);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var created = await response.Content.ReadFromJsonAsync<RegionalDestinationDetailDto>();
+        Assert.NotNull(created);
+        Assert.Equal(secondUpload.Url, created!.ImageUrl);
+        Assert.Equal(secondUpload.Url, created.CardImageUrl);
+        Assert.Equal(firstUpload.Url, created.CoverImageUrl);
+        Assert.Equal(firstUpload.Url, Assert.Single(created.GalleryImageUrls));
+    }
+
+    [Fact]
     public async Task Regional_manager_lists_only_assigned_region_destinations_with_default_25_item_page()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -403,6 +471,8 @@ public sealed class RegionalDestinationsTests
             Description = "Full destination description.",
             Status = "Published",
             BoundaryNote = "North boundary note.",
+            CardImageUrl = "/media/uploads/regional/default-card.png",
+            CoverImageUrl = "/media/uploads/regional/default-cover.png",
             Boundary = new RegionalDestinationBoundaryDto
             {
                 ShapeType = "Polygon",
@@ -523,6 +593,27 @@ public sealed class RegionalDestinationsTests
 
         await db.SaveChangesAsync();
     }
+
+    private static async Task<RegionalImageUploadResultDto> UploadOneImageAsync(HttpClient client, int regionId)
+    {
+        using var form = new MultipartFormDataContent();
+        using var content = new ByteArrayContent(TestPngBytes());
+        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(content, "files", "cover.png");
+
+        var response = await client.PostAsync($"/api/admin/regional/media/images?regionId={regionId}", form);
+        response.EnsureSuccessStatusCode();
+
+        var uploaded = await response.Content.ReadFromJsonAsync<RegionalImageUploadResponseDto>();
+        Assert.NotNull(uploaded);
+        var image = Assert.Single(uploaded!.Images);
+        Assert.StartsWith("/media/uploads/regional/", image.Url);
+        return image;
+    }
+
+    private static byte[] TestPngBytes() =>
+        Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=");
 
     private sealed record DestinationsFixture(
         int AssignedRegionId,

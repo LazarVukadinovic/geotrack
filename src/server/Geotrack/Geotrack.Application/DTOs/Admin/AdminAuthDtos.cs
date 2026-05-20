@@ -12,6 +12,7 @@ public class AdminAuthUserDto
     public string? AvatarUrl { get; set; }
     public List<string> Roles { get; set; } = new();
     public bool CanAccessRegionalAdmin { get; set; }
+    public bool CanAccessTerritoryAdmin { get; set; }
 }
 
 public class AdminLoginResponseDto

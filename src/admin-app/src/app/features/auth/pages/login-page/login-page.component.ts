@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, NgModel } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -11,7 +11,7 @@ import { AuthService } from '../../../../core/services/auth.service';
   templateUrl: './login-page.component.html',
   styleUrl: './login-page.component.css',
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   readonly email        = signal('');
   readonly password     = signal('');
   readonly rememberMe   = signal(false);
@@ -27,6 +27,12 @@ export class LoginComponent {
     private readonly route: ActivatedRoute,
     private readonly authService: AuthService,
   ) {}
+
+  ngOnInit(): void {
+    if (this.route.snapshot.queryParamMap.get('sessionExpired')) {
+      this.authError.set('Your session expired. Please sign in again.');
+    }
+  }
 
   togglePassword(): void {
     this.showPassword.update(v => !v);
@@ -95,6 +101,7 @@ export class LoginComponent {
 
     return value;
   }
+
   setSubmitHover(event: Event, isHover: boolean): void {
     const btn = event.target as HTMLButtonElement;
     if (this.isLoading()) return;

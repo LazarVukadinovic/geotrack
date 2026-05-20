@@ -373,7 +373,7 @@ public class RegionalMapService : IRegionalMapService
                     DestinationId = location.DestinationId,
                     LocationId = location.Id,
                     DetailRoute = $"/locations/detail/{location.Id}",
-                    EditRoute = "/locations/new"
+                    EditRoute = $"/locations/edit/{location.Id}"
                 }));
         }
 

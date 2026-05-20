@@ -43,6 +43,7 @@ public class RegionalEventListItemDto
     public string? Accessibility { get; set; }
     public List<RegionalEventTagDto> Tags { get; set; } = new();
     public string? ImageUrl { get; set; }
+    public List<RegionalEntityImageDto> Images { get; set; } = new();
     public string? DetailRoute { get; set; }
     public string? EditRoute { get; set; }
     public double? Latitude { get; set; }
@@ -63,19 +64,34 @@ public class RegionalEventListResponseDto
 
 public class RegionalEventUpdateRequestDto
 {
+    public string? ParentEntityType { get; set; }
+    public int? DestinationId { get; set; }
     public string? Name { get; set; }
+    public string? Summary { get; set; }
     public string? Description { get; set; }
+    public string? Status { get; set; }
     public int? EventTypeId { get; set; }
     public int? LocationId { get; set; }
     public int? PlaceId { get; set; }
+    public string? VenueName { get; set; }
+    public bool? IsAllDay { get; set; }
     public DateTime? StartsAt { get; set; }
     public DateTime? EndsAt { get; set; }
+    public bool? IsRecurring { get; set; }
+    public bool? IsFree { get; set; }
     public string? TicketPrice { get; set; }
+    public string? ExternalTicketLink { get; set; }
     public string? Duration { get; set; }
     public string? HostedBy { get; set; }
+    public string? OrganizerName { get; set; }
+    public string? ContactEmail { get; set; }
+    public int? AttendanceLimit { get; set; }
+    public string? AgeRestriction { get; set; }
     public string? VenueDescription { get; set; }
     public string? ArrivalTips { get; set; }
     public string? Accessibility { get; set; }
+    public List<int>? TagIds { get; set; }
+    public List<RegionalEntityImageInputDto>? Images { get; set; }
 }
 
 public record class RegionalEventCreateRequestDto
@@ -103,6 +119,7 @@ public record class RegionalEventCreateRequestDto
     public int? AttendanceLimit { get; set; }
     public string? AgeRestriction { get; set; }
     public List<int> TagIds { get; set; } = new();
+    public List<RegionalEntityImageInputDto> Images { get; set; } = new();
 
     public string? CardImageUrl { get; set; }
     public string? CoverImageUrl { get; set; }

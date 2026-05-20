@@ -403,10 +403,15 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         this.centerLng = dto.longitude ?? null;
         this.zoneConfirmed = this.hasValidCenter();
 
-        this.cardImageUrl = dto.imageUrl ?? null;
-        this.cardImageName = dto.imageUrl ? 'Existing card image' : '';
-        this.coverImageUrl = dto.imageUrl ?? null;
-        this.coverImageName = dto.imageUrl ? 'Existing cover image' : '';
+        this.cardImageUrl = dto.cardImageUrl ?? dto.imageUrl ?? null;
+        this.cardImageName = this.cardImageUrl ? 'Existing card image' : '';
+        this.coverImageUrl = dto.coverImageUrl ?? dto.imageUrl ?? null;
+        this.coverImageName = this.coverImageUrl ? 'Existing cover image' : '';
+        this.galleryImages = (dto.galleryImageUrls ?? []).map((url, index) => ({
+          url,
+          name: `Existing gallery image ${index + 1}`,
+          file: null as unknown as File,
+        }));
 
         this.selectedTagIds = new Set((dto.tags ?? []).map(tag => tag.id));
         for (const tag of dto.tags ?? []) {

@@ -9,7 +9,12 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminProfileService } from '../../../../core/services/admin-profile.service';
 import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
-import { AdminProfile, AdminProfileRegion } from '../../../../core/models/admin-profile.model';
+import {
+  AdminProfile,
+  AdminProfileAssignment,
+  AdminProfileRegion,
+  AdminProfileRole,
+} from '../../../../core/models/admin-profile.model';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 
 interface SelectOption {
@@ -111,7 +116,16 @@ export class SettingsComponent implements OnInit {
   }
 
   get currentRole(): string {
+    const roleDisplayName = this.lastProfile?.role?.roleDisplayName?.trim();
+    if (roleDisplayName) {
+      return roleDisplayName;
+    }
+
     const roles = this.lastProfile?.roles ?? [];
+    if (roles.some(role => this.normalizeRole(role) === 'territorymanager')) {
+      return 'Territory Manager';
+    }
+
     if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {
       return 'Regional Manager';
     }
@@ -120,17 +134,26 @@ export class SettingsComponent implements OnInit {
     return formattedRoles.join(', ') || this.userRole || '-';
   }
 
-  get assignedRegion(): string {
-    const regions = this.lastProfile?.regionalManager.assignedRegions ?? [];
-    if (regions.length === 0) {
-      return 'No assigned regions';
-    }
+  get assignmentSectionTitle(): string {
+    return this.lastProfile?.assignment?.sectionTitle?.trim() || 'Assignment';
+  }
 
-    return regions.map(region => region.displayName).join(', ');
+  get assignmentLabel(): string {
+    return this.lastProfile?.assignment?.label?.trim() || 'Assigned Area';
+  }
+
+  get assignmentDisplayValue(): string {
+    return this.lastProfile?.assignment?.displayValue?.trim() || '-';
+  }
+
+  get assignedRegion(): string {
+    return this.assignmentDisplayValue;
   }
 
   get memberSince(): string {
-    return this.formatDate(this.lastProfile?.regionalManager.memberSince);
+    return this.formatDate(
+      this.lastProfile?.assignment?.memberSince ?? this.lastProfile?.regionalManager.memberSince,
+    );
   }
 
   loadProfile(): void {
@@ -336,7 +359,7 @@ export class SettingsComponent implements OnInit {
       firstName: normalizedProfile.user.firstName,
       lastName: normalizedProfile.user.lastName,
       email: normalizedProfile.user.email,
-      region: this.assignedRegion,
+      region: this.assignmentDisplayValue,
       memberSince: this.memberSince,
       bio: normalizedProfile.user.shortBio ?? '',
       language: normalizedProfile.preferences.interfaceLanguage,
@@ -350,27 +373,146 @@ export class SettingsComponent implements OnInit {
   }
 
   private normalizeProfile(profile: AdminProfile): AdminProfile {
-    const language = this.isAllowedOption(this.languageOptions, profile.preferences.interfaceLanguage)
-      ? profile.preferences.interfaceLanguage
+    const roles = profile.roles ?? [];
+    const role = profile.role ?? this.buildFallbackRole(roles);
+    const regionalManager = {
+      assignedRegions: profile.regionalManager?.assignedRegions ?? [],
+      memberSince: profile.regionalManager?.memberSince ?? null,
+    };
+    const assignment = this.normalizeAssignment(
+      profile.assignment,
+      roles,
+      regionalManager,
+    );
+    const preferences = profile.preferences ?? {
+      interfaceLanguage: 'en-US',
+      timezone: 'UTC',
+      emailRequestsEnabled: true,
+      emailNewReviewEnabled: true,
+    };
+    const language = this.isAllowedOption(this.languageOptions, preferences.interfaceLanguage)
+      ? preferences.interfaceLanguage
       : 'en-US';
-    const timezone = this.isAllowedOption(this.timezoneOptions, profile.preferences.timezone)
-      ? profile.preferences.timezone
+    const timezone = this.isAllowedOption(this.timezoneOptions, preferences.timezone)
+      ? preferences.timezone
       : 'UTC';
 
     return {
       ...profile,
-      roles: profile.roles ?? [],
-      regionalManager: {
-        assignedRegions: profile.regionalManager?.assignedRegions ?? [],
-        memberSince: profile.regionalManager?.memberSince ?? null,
-      },
+      roles,
+      role,
+      assignment,
+      regionalManager,
       preferences: {
         interfaceLanguage: language,
         timezone,
-        emailRequestsEnabled: profile.preferences?.emailRequestsEnabled ?? true,
-        emailNewReviewEnabled: profile.preferences?.emailNewReviewEnabled ?? true,
+        emailRequestsEnabled: preferences.emailRequestsEnabled ?? true,
+        emailNewReviewEnabled: preferences.emailNewReviewEnabled ?? true,
       },
     };
+  }
+
+  private normalizeAssignment(
+    assignment: AdminProfileAssignment | null | undefined,
+    roles: string[],
+    regionalManager: AdminProfile['regionalManager'],
+  ): AdminProfileAssignment {
+    if (assignment) {
+      const assignedItems = assignment.assignedItems ?? [];
+      const displayValue = assignment.displayValue?.trim()
+        || this.joinAssignmentItems(assignedItems)
+        || this.emptyAssignmentValue(assignment.assignmentType, roles);
+
+      return {
+        assignmentType: assignment.assignmentType?.trim() || this.fallbackAssignmentType(roles),
+        sectionTitle: assignment.sectionTitle?.trim() || this.fallbackAssignmentTitle(roles),
+        label: assignment.label?.trim() || this.fallbackAssignmentLabel(roles),
+        displayValue,
+        assignedItems,
+        memberSince: assignment.memberSince ?? null,
+      };
+    }
+
+    return this.buildFallbackAssignment(roles, regionalManager);
+  }
+
+  private buildFallbackAssignment(
+    roles: string[],
+    regionalManager: AdminProfile['regionalManager'],
+  ): AdminProfileAssignment {
+    const isTerritoryManager = roles.some(role => this.normalizeRole(role) === 'territorymanager');
+    if (isTerritoryManager) {
+      return {
+        assignmentType: 'Territory',
+        sectionTitle: 'Territory Manager Assignment',
+        label: 'Assigned Territory',
+        displayValue: 'No assigned territories',
+        assignedItems: [],
+        memberSince: null,
+      };
+    }
+
+    const assignedItems = regionalManager.assignedRegions.map(region => ({
+      id: region.id,
+      name: region.name,
+      displayName: region.displayName,
+      assignedAt: region.assignedAt,
+    }));
+
+    return {
+      assignmentType: 'Region',
+      sectionTitle: 'Regional Manager Assignment',
+      label: 'Assigned Region',
+      displayValue: this.joinAssignmentItems(assignedItems) || 'No assigned regions',
+      assignedItems,
+      memberSince: regionalManager.memberSince ?? null,
+    };
+  }
+
+  private buildFallbackRole(roles: string[]): AdminProfileRole {
+    const roleCode = roles.find(role => this.normalizeRole(role) === 'territorymanager')
+      ?? roles.find(role => this.normalizeRole(role) === 'regionalmanager')
+      ?? roles[0]
+      ?? '';
+
+    return {
+      roleCode,
+      roleDisplayName: this.formatRole(roleCode),
+    };
+  }
+
+  private joinAssignmentItems(items: Array<{ displayName?: string | null }>): string {
+    return items
+      .map(item => item.displayName?.trim())
+      .filter((value): value is string => !!value)
+      .join(', ');
+  }
+
+  private fallbackAssignmentType(roles: string[]): string {
+    return roles.some(role => this.normalizeRole(role) === 'territorymanager')
+      ? 'Territory'
+      : 'Region';
+  }
+
+  private fallbackAssignmentTitle(roles: string[]): string {
+    return roles.some(role => this.normalizeRole(role) === 'territorymanager')
+      ? 'Territory Manager Assignment'
+      : 'Regional Manager Assignment';
+  }
+
+  private fallbackAssignmentLabel(roles: string[]): string {
+    return roles.some(role => this.normalizeRole(role) === 'territorymanager')
+      ? 'Assigned Territory'
+      : 'Assigned Region';
+  }
+
+  private emptyAssignmentValue(assignmentType: string | null | undefined, roles: string[]): string {
+    const normalizedType = (assignmentType ?? this.fallbackAssignmentType(roles)).trim().toLowerCase();
+    if (normalizedType === 'country') {
+      return 'No assigned countries';
+    }
+
+    return normalizedType === 'territory' ? 'No assigned territories' : 'No assigned regions';
   }
 
   private toSidebarRegion(region: AdminProfileRegion): RegionalAssignedRegion {
@@ -426,6 +568,7 @@ export class SettingsComponent implements OnInit {
     switch (this.normalizeRole(role)) {
       case 'regionalmanager':
         return 'Regional Manager';
+      case 'territorymanager':
       case 'nationalmanager':
         return 'Territory Manager';
       case 'admin':
@@ -503,7 +646,7 @@ export class SettingsComponent implements OnInit {
     }
 
     if (error instanceof HttpErrorResponse && error.status === 401) {
-      return 'Sign in with an authenticated Regional Manager account to view settings.';
+      return 'Sign in with an authenticated admin app account to view settings.';
     }
 
     return this.toErrorMessage(error, 'Unable to load profile settings.');

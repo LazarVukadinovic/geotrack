@@ -190,7 +190,7 @@ describe('AllLocationsComponent', () => {
     expect(component.items.map(item => item.name)).toEqual(['Region 8 Location']);
   });
 
-  it('navigates edit through the existing location create/edit flow with active region context', () => {
+  it('navigates edit through the canonical location edit route with active region context', () => {
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 

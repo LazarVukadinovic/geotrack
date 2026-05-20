@@ -11,6 +11,8 @@ public class AnalyticsEventDto
 
     public string? Route { get; set; }
 
+    public int? DurationMs { get; set; }
+
     public Dictionary<string, object?>? Metadata { get; set; }
 
     public DateTime? ClientOccurredAt { get; set; }

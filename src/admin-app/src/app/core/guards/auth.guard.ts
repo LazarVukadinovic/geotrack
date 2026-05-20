@@ -7,7 +7,11 @@ export const authGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isLoggedIn()) return true;
+  if (auth.isLoggedIn() && auth.hasValidAccessToken()) return true;
+  if (auth.isLoggedIn()) {
+    auth.clearSession();
+    return loginTree(router, state, true);
+  }
 
   return auth.restoreSession().pipe(
     map(user => user ? true : loginTree(router, state)),
@@ -19,7 +23,11 @@ export const administratorGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isAdministrator()) return true;
+  if (auth.isAdministrator() && auth.hasValidAccessToken()) return true;
+  if (auth.getUser() && !auth.hasValidAccessToken()) {
+    auth.clearSession();
+    return loginTree(router, state, true);
+  }
 
   return auth.restoreSession().pipe(
     map(user => {
@@ -29,20 +37,25 @@ export const administratorGuard: CanActivateFn = (_route, state) => {
   );
 };
 
-//NATIONAL MANAGER GUARD
-export const nationalManagerGuard: CanActivateFn = (_route, state) => {
+export const territoryManagerGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isNationalManager()) return true;
+  if (auth.canAccessTerritoryAdmin() && auth.hasValidAccessToken()) return true;
+  if (auth.getUser() && !auth.hasValidAccessToken()) {
+    auth.clearSession();
+    return loginTree(router, state, true);
+  }
 
   return auth.restoreSession().pipe(
     map(user => {
       if (!user) return loginTree(router, state);
-      return auth.isNationalManager() ? true : router.parseUrl(auth.getHomeRoute());
+      return auth.canAccessTerritoryAdmin() ? true : router.parseUrl(auth.getHomeRoute());
     }),
   );
 };
+
+export const nationalManagerGuard = territoryManagerGuard;
 
 //REGIONAL MANAGER GUARD
  
@@ -50,7 +63,11 @@ export const regionalManagerGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isRegionalManager()) return true;
+  if (auth.isRegionalManager() && auth.hasValidAccessToken()) return true;
+  if (auth.getUser() && !auth.hasValidAccessToken()) {
+    auth.clearSession();
+    return loginTree(router, state, true);
+  }
 
   return auth.restoreSession().pipe(
     map(user => {
@@ -60,11 +77,11 @@ export const regionalManagerGuard: CanActivateFn = (_route, state) => {
   );
 };
 
-function loginTree(router: Router, state: RouterStateSnapshot) {
+function loginTree(router: Router, state: RouterStateSnapshot, sessionExpired = false) {
   const returnUrl = safeReturnUrl(state.url);
   return returnUrl
-    ? router.createUrlTree(['/login'], { queryParams: { returnUrl } })
-    : router.parseUrl('/login');
+    ? router.createUrlTree(['/login'], { queryParams: { returnUrl, ...(sessionExpired ? { sessionExpired: '1' } : {}) } })
+    : router.createUrlTree(['/login'], { queryParams: sessionExpired ? { sessionExpired: '1' } : undefined });
 }
 
 function safeReturnUrl(value: string): string | null {

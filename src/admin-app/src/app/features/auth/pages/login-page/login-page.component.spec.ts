@@ -58,6 +58,32 @@ describe('LoginComponent', () => {
     expect(navigateSpy).toHaveBeenCalledWith('/dashboard');
   });
 
+  it('redirects territory managers to the territory dashboard after login', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    component.email.set('mika@gmail.com');
+    component.password.set('Proba123!');
+    component.onSubmit();
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'territory-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 42,
+        email: 'mika@gmail.com',
+        displayName: 'Mika',
+        roles: ['TerritoryManager'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: true,
+      },
+    });
+
+    expect(navigateSpy).toHaveBeenCalledWith('/territory/overview');
+  });
+
   it('shows a safe error when login fails', () => {
     component.email.set('regional@example.com');
     component.password.set('wrong-password');
@@ -82,6 +108,7 @@ describe('LoginComponent', () => {
         displayName: 'Regional Manager',
         roles: ['RegionalManager'],
         canAccessRegionalAdmin: true,
+        canAccessTerritoryAdmin: false,
       },
     };
   }

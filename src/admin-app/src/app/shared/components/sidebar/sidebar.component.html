@@ -37,12 +37,12 @@
           </svg>
           <select
             class="region-picker__select"
-            [value]="activeRegionId ?? ''"
-            [disabled]="regionLoading"
+            [value]="resolvedActiveId ?? ''"
+            [disabled]="isPickerLoading"
             (change)="onRegionSelectChange($event)"
-            aria-label="Active region"
+            [attr.aria-label]="isTerritory ? 'Active territory' : 'Active region'"
           >
-            @for (item of regions; track item.id) {
+            @for (item of pickerItems; track item.id) {
               <option [value]="item.id">{{ item.displayName }}</option>
             }
           </select>
@@ -123,14 +123,14 @@
     </nav>
   }
 
-  <!-- ══ NATIONAL MANAGER navigation ══ -->
-  @if (isNational) {
+  <!-- Territory Manager navigation -->
+  @if (isTerritory) {
     <nav class="flex-1 px-3 mt-1" aria-label="Main">
       <div class="text-white/35 text-[9px] font-bold tracking-widest px-2 mb-1.5">
         CONTENT MANAGEMENT
       </div>
 
-      @for (item of nationalMainNav; track item.path) {
+      @for (item of territoryMainNav; track item.path) {
         <a
           [routerLink]="item.path"
           [class.sidebar-link-active]="isActive(item.path, item.exact)"
@@ -177,7 +177,7 @@
         ANALYTICS
       </div>
 
-      @for (item of nationalAnalyticsNav; track item.path) {
+      @for (item of territoryAnalyticsNav; track item.path) {
         <a
           [routerLink]="item.path"
           [class.sidebar-link-active]="isActive(item.path)"
@@ -214,7 +214,7 @@
   }
 
   <!-- ══ REGIONAL MANAGER navigation ══ -->
-  @if (!isNational && !isAdministrator) {
+  @if (!isTerritory && !isAdministrator) {
     <nav class="flex-1 px-3 mt-1" aria-label="Main">
       @for (item of mainNav; track item.path) {
         <a

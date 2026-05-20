@@ -71,6 +71,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   assignedRegions: RegionalAssignedRegion[] = [];
   activeRegionId: number | null = null;
   regionLoading = false;
+  pendingRequestsCount: number | null = null;
   mapLoading = false;
   searchLoading = false;
   errorMessage: string | null = null;
@@ -93,6 +94,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private droppedPinGroup: any = null;
   private droppedPinMarker: any = null;
   private assignedRegionsSubscription: Subscription | null = null;
+  private sidebarSummarySubscription: Subscription | null = null;
   private mapSubscription: Subscription | null = null;
   private searchSubscription: Subscription | null = null;
   private searchHandle: ReturnType<typeof setTimeout> | null = null;
@@ -120,6 +122,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.mapRequestSequence++;
     this.assignedRegionsSubscription?.unsubscribe();
+    this.sidebarSummarySubscription?.unsubscribe();
     this.mapSubscription?.unsubscribe();
     this.searchSubscription?.unsubscribe();
 
@@ -197,6 +200,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
+          this.loadSidebarSummary(selectedRegion.id);
           this.loadMapData(selectedRegion.id);
         },
         error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
@@ -214,7 +218,31 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.searchQuery = '';
     this.searchResults = [];
     this.searchDropdownOpen = false;
+    this.loadSidebarSummary(regionId);
     this.loadMapData(regionId);
+  }
+
+  private loadSidebarSummary(regionId: number): void {
+    this.sidebarSummarySubscription?.unsubscribe();
+    this.sidebarSummarySubscription = this.dashboardService
+      .getSidebarSummary(regionId)
+      .subscribe({
+        next: summary => {
+          this.pendingRequestsCount = summary.pendingRequestsCount;
+          if (summary.assignedRegions?.length) {
+            this.assignedRegions = summary.assignedRegions;
+          }
+          if (summary.activeRegion) {
+            this.upsertAssignedRegion(summary.activeRegion);
+            this.setActiveRegion(summary.activeRegion.id, false);
+          }
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.pendingRequestsCount = null;
+          this.notifyStateChanged();
+        },
+      });
   }
 
   onSearchInput(): void {
@@ -791,8 +819,9 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private searchResultToPopupEntity(result: AdminMapSearchResult): PopupEntity {
+    const id = result.id;
     return {
-      id: result.id,
+      id,
       entityType: result.entityType,
       title: result.title,
       subtitle: result.subtitle,
@@ -801,11 +830,13 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       longitude: result.longitude,
       imageUrl: result.imageUrl,
       detailRoute: result.detailRoute,
-      editRoute: result.entityType === 'Destination'
-        ? `/destinations/edit/${result.id}`
-        : result.entityType === 'Location'
-          ? `/locations/edit/${result.id}`
-          : `/places/edit/${result.id}`,
+      editRoute: id
+        ? result.entityType === 'Destination'
+          ? `/destinations/edit/${id}`
+          : result.entityType === 'Location'
+            ? `/locations/edit/${id}`
+            : `/places/edit/${id}`
+        : null,
     };
   }
 
@@ -870,6 +901,16 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch {
       // Session persistence is a convenience only.
     }
+  }
+
+  private upsertAssignedRegion(region: RegionalAssignedRegion): void {
+    const existingIndex = this.assignedRegions.findIndex(item => item.id === region.id);
+    if (existingIndex >= 0) {
+      this.assignedRegions = this.assignedRegions.map(item => item.id === region.id ? region : item);
+      return;
+    }
+
+    this.assignedRegions = [region, ...this.assignedRegions];
   }
 
   private handleLoadError(error: unknown, fallback: string): void {

@@ -42,6 +42,44 @@ public class RegionalDashboardService : IRegionalDashboardService
             .ToListAsync();
     }
 
+    public async Task<RegionalSidebarSummaryDto> GetSidebarSummaryAsync(int userId, int? regionId)
+    {
+        var assignedRegions = await GetAssignedRegionsAsync(userId);
+        if (assignedRegions.Count == 0)
+        {
+            return new RegionalSidebarSummaryDto
+            {
+                AssignedRegions = assignedRegions,
+                ActiveRegion = null,
+                PendingRequestsCount = 0
+            };
+        }
+
+        var activeRegion = regionId.HasValue
+            ? assignedRegions.SingleOrDefault(region => region.Id == regionId.Value)
+            : assignedRegions[0];
+
+        if (activeRegion is null)
+            throw new UnauthorizedAccessException("Region is not assigned to the current regional manager.");
+
+        var queue = await _requestQueue.GetQueueAsync(
+            userId,
+            activeRegion.Id,
+            type: "all",
+            status: "pending",
+            search: null,
+            sort: "newest",
+            skip: 0,
+            take: 1);
+
+        return new RegionalSidebarSummaryDto
+        {
+            AssignedRegions = assignedRegions,
+            ActiveRegion = activeRegion,
+            PendingRequestsCount = queue.PendingCount
+        };
+    }
+
     public async Task<RegionalDashboardDto> GetDashboardAsync(int userId, int regionId)
     {
         var activeRegion = await GetAssignedRegionAsync(userId, regionId);

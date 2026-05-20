@@ -156,8 +156,20 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.BoundaryShapeType)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.BoundarySource)
+                .HasMaxLength(32);
+
             entity.HasIndex(x => x.Name)
                 .IsUnique();
+
+            entity.Property<Geometry?>("BoundaryGeometry")
+                .HasColumnType("geography (geometry)");
+
+            entity.HasIndex("BoundaryGeometry")
+                .HasMethod("GIST");
 
             entity.HasMany(x => x.Regions)
                 .WithOne(x => x.Territory)
@@ -178,6 +190,15 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.BoundaryShapeType)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.BoundarySource)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
             entity.HasOne(x => x.Territory)
                 .WithMany(x => x.Regions)
                 .HasForeignKey(x => x.TerritoryId)
@@ -187,6 +208,14 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => new { x.TerritoryId, x.Name })
                 .IsUnique();
+
+            entity.HasIndex(x => x.CreatedByUserId);
+
+            entity.Property<Geometry?>("BoundaryGeometry")
+                .HasColumnType("geography (geometry)");
+
+            entity.HasIndex("BoundaryGeometry")
+                .HasMethod("GIST");
         });
     }
 
@@ -927,6 +956,8 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.Location)
                 .HasMaxLength(200);
+
+            entity.Property(x => x.LastLoginAt);
 
             entity.Property(x => x.InterfaceLanguage)
                 .IsRequired()
@@ -2123,6 +2154,8 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.Route)
                 .HasMaxLength(300);
+
+            entity.Property(x => x.DurationMs);
 
             entity.Property(x => x.MetadataJson)
                 .IsRequired()

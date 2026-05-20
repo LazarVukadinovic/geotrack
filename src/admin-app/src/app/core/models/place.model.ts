@@ -1,3 +1,5 @@
+import { RegionalEntityImageDto } from './regional-image.model';
+
 export type PlaceSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type PlaceStatusFilter = 'all' | 'published' | 'draft' | 'archived';
 
@@ -26,6 +28,10 @@ export interface RegionalPlaceListItemDto {
   createdAt?: string | null;
   publishedAt?: string | null;
   imageUrl?: string | null;
+  cardImageUrl?: string | null;
+  coverImageUrl?: string | null;
+  galleryImageUrls?: string[];
+  images?: RegionalEntityImageDto[];
   detailRoute?: string | null;
   editRoute?: string | null;
 }

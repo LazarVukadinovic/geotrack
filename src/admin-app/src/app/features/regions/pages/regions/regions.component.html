@@ -1,56 +1,67 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
-
-  <app-sidebar />
+  <app-sidebar
+    [region]="activeTerritoryName"
+    [regions]="assignedTerritories"
+    [activeRegionId]="activeTerritoryId"
+    [regionLoading]="territoryLoading"
+    (regionChange)="onTerritoryChange($event)"
+  />
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-
     <app-topbar
       [userName]="userName"
       [userRole]="userRole"
       title="All Regions"
       [showBack]="true"
-      backRoute="/national-dashboard"
+      backRoute="/territory/overview"
     />
 
     <div class="flex-1 overflow-y-auto px-8 py-6" #scrollContainer>
-
-      <!-- Page header -->
       <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">All Regions</h1>
+        <h1 class="text-2xl font-bold text-gray-900">Regional Management</h1>
         <p class="text-sm text-gray-500 mt-0.5">
-          Manage all regions, their operational status, and regional content coverage.
+          View regions, Regional Manager coverage, and content inventory for the active territory.
         </p>
       </div>
 
-      <!-- Toolbar -->
-      <div class="flex items-center gap-3 mb-5">
-        <!-- Search -->
-        <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 w-72 shadow-sm">
+      <div *ngIf="errorMessage"
+           class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {{ errorMessage }}
+      </div>
+
+      <div *ngIf="feedbackMessage"
+           class="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        {{ feedbackMessage }}
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3 mb-5">
+        <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 w-80 shadow-sm">
           <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <input
             type="text"
-            placeholder="Search by region name or description..."
+            placeholder="Search regions, managers, or metadata..."
             [(ngModel)]="searchQuery"
             (input)="onSearchChange()"
-            class="bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 w-full"
+            [disabled]="!activeTerritoryId || territoryLoading"
+            class="bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 w-full disabled:cursor-not-allowed"
           />
           <button
             *ngIf="searchQuery"
-            (click)="searchQuery = ''; onSearchChange()"
+            (click)="clearSearch()"
             class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer p-0 leading-none text-lg flex-shrink-0"
           >&times;</button>
         </div>
 
-        <!-- Sort dropdown -->
         <div class="relative ml-1">
           <button
             (click)="sortOpen = !sortOpen; $event.stopPropagation()"
+            [disabled]="!activeTerritoryId || territoryLoading"
             class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200
                    rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300
-                   cursor-pointer transition-colors"
+                   cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2">
@@ -65,11 +76,11 @@
           <div
             *ngIf="sortOpen"
             class="absolute left-0 top-full mt-1 bg-white border border-gray-200
-                   rounded-lg shadow-lg z-10 w-52 py-1 overflow-hidden"
+                   rounded-lg shadow-lg z-10 w-64 py-1 overflow-hidden"
           >
             <button
               *ngFor="let opt of sortOptions"
-              (click)="applySortOption(opt); sortOpen = false"
+              (click)="applySortOption(opt)"
               class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50
                      transition-colors cursor-pointer border-none bg-transparent"
               [ngClass]="currentSortLabel === opt.label ? 'font-semibold text-blue-700 bg-blue-50' : ''"
@@ -79,34 +90,45 @@
 
         <div class="flex-1"></div>
 
-        <!-- Count badge -->
-        <span *ngIf="!isLoading" class="text-sm text-gray-500">
+        <button
+          *ngIf="canAddRegion"
+          type="button"
+          (click)="goToAddRegion()"
+          [disabled]="!activeTerritoryId || territoryLoading"
+          class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold
+                 border-none cursor-pointer shadow-sm hover:bg-blue-800 transition-colors
+                 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Region
+        </button>
+
+        <span *ngIf="!isLoading && !territoryLoading" class="text-sm text-gray-500">
           Showing <span class="font-semibold text-gray-700">{{ items.length }}</span>
           of <span class="font-semibold text-gray-700">{{ totalItems }}</span> regions
         </span>
       </div>
 
-      <!-- Table -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-
-        <!-- Header -->
         <div
-          class="grid items-center gap-4 px-5 py-5 border-b border-gray-100 bg-gray-50/60"
-          style="grid-template-columns: 56px 1fr 160px 160px 140px 160px;"
+          class="grid items-center gap-4 px-5 py-4 border-b border-gray-100 bg-gray-50/60"
+          style="grid-template-columns: 56px minmax(220px,1.5fr) minmax(250px,1fr) 110px 110px 120px;"
         >
-          <span style="grid-column: span 2" class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Regions</span>
-          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Content Entities</span>
-          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Assigned Persons</span>
-          <span class="text-[12px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
-          <span class="text-center text-[12px] font-bold text-gray-400 uppercase tracking-wider">Actions</span>
+          <div></div>
+          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Region</span>
+          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Content Entities</span>
+          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Pending</span>
+          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Health</span>
+          <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
         </div>
 
-        <!-- Skeleton -->
-        <ng-container *ngIf="isLoading">
+        <ng-container *ngIf="isLoading || territoryLoading">
           <div
             *ngFor="let i of [1,2,3,4,5]"
             class="grid items-center gap-4 px-5 py-4 border-b border-gray-50 animate-pulse"
-            style="grid-template-columns: 56px 1fr 160px 160px 140px 160px;"
+            style="grid-template-columns: 56px minmax(220px,1.5fr) minmax(250px,1fr) 110px 110px 120px;"
           >
             <div class="w-14 h-14 rounded-lg bg-gray-100"></div>
             <div class="flex flex-col gap-2">
@@ -114,99 +136,87 @@
               <div class="h-3 bg-gray-100 rounded w-64"></div>
               <div class="h-3 bg-gray-100 rounded w-24"></div>
             </div>
-            <div class="flex flex-col gap-2">
-              <div class="h-3 bg-gray-100 rounded w-28"></div>
-              <div class="h-3 bg-gray-100 rounded w-28"></div>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="h-6 bg-gray-100 rounded"></div>
+              <div class="h-6 bg-gray-100 rounded"></div>
+              <div class="h-6 bg-gray-100 rounded"></div>
             </div>
-            <div class="h-4 bg-gray-100 rounded w-16"></div>
+            <div class="h-5 bg-gray-100 rounded-full w-14"></div>
             <div class="h-5 bg-gray-100 rounded-full w-16"></div>
-            <div class="flex gap-2 justify-end">
-              <div class="w-16 h-7 bg-gray-100 rounded-lg"></div>
-              <div class="w-16 h-7 bg-gray-100 rounded-lg"></div>
-            </div>
+            <div class="h-5 bg-gray-100 rounded-full w-16"></div>
           </div>
         </ng-container>
 
-        <!-- Rows -->
-        <ng-container *ngIf="!isLoading">
+        <ng-container *ngIf="!isLoading && !territoryLoading">
           <div
-            *ngFor="let item of items; trackBy: trackById" (click)="viewRegion(item)"
+            *ngFor="let item of items; trackBy: trackById"
             class="grid items-center gap-4 px-5 py-4 border-b border-gray-50
                    hover:bg-blue-50/30 transition-colors cursor-pointer"
-            style="grid-template-columns: 56px 1fr 160px 160px 140px 160px;"
+            style="grid-template-columns: 56px minmax(220px,1.5fr) minmax(250px,1fr) 110px 110px 120px;"
+            (click)="viewRegion(item)"
           >
-            <!-- Thumbnail -->
             <div
-              class="w-14 h-14 rounded-lg flex-shrink-0 flex items-center justify-center"
-              [style.background]="item.imageBg"
+              class="w-14 h-14 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden bg-gray-100"
+              [style.background]="hasImage(item) ? null : item.imageBg"
             >
-              <svg class="w-6 h-6 text-blue-400 opacity-60" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <img *ngIf="hasImage(item)"
+                   [src]="item.imageUrl!"
+                   [alt]="item.name"
+                   class="w-full h-full object-cover"
+                   (error)="onImageError(item)" />
+              <svg *ngIf="!hasImage(item)" class="w-6 h-6 text-blue-500 opacity-60" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
               </svg>
             </div>
 
-            <!-- Details -->
             <div class="min-w-0">
               <div class="flex items-center gap-2 mb-0.5">
                 <p class="text-sm font-semibold text-gray-900 truncate">{{ item.name }}</p>
-                <span
-                  *ngIf="item.isTop"
-                  class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px]
-                         font-semibold bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0"
-                >
-                  <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                  </svg>
-                  Top
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px]
+                             font-semibold bg-gray-100 text-gray-500 border border-gray-200 flex-shrink-0">
+                  {{ item.assignedPersons }} assigned
                 </span>
               </div>
-              <p class="text-xs text-gray-500 leading-snug line-clamp-2 mb-1">{{ item.description }}</p>
-              <p class="text-[11px] text-gray-400">ID: {{ item.id }}</p>
+              <p class="text-xs text-gray-500 leading-snug line-clamp-1 mb-1">{{ item.description }}</p>
+              <p class="text-[11px] text-gray-400">ID: {{ item.regionId }}</p>
             </div>
 
-            <!-- Content entities -->
-            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5">
-              <div class="flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-                  <line x1="4" y1="22" x2="4" y2="15"/>
-                </svg>
-                <span class="text-sm font-medium text-gray-700">{{ item.destinations }}</span>
+            <div class="grid grid-cols-5 gap-2 text-sm text-gray-700">
+              <div class="rounded-lg bg-gray-50 px-2 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase text-gray-400">Dest</p>
+                <p class="font-semibold">{{ item.destinations }}</p>
               </div>
-              <div class="flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="10" r="3"/>
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                </svg>
-                <span class="text-sm font-medium text-gray-700">{{ item.locations }}</span>
+              <div class="rounded-lg bg-gray-50 px-2 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase text-gray-400">Loc</p>
+                <p class="font-semibold">{{ item.locations }}</p>
               </div>
-              <div class="flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-                  <polyline points="9 22 9 12 15 12 15 22"/>
-                </svg>
-                <span class="text-sm font-medium text-gray-700">{{ item.places }}</span>
+              <div class="rounded-lg bg-gray-50 px-2 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase text-gray-400">Places</p>
+                <p class="font-semibold">{{ item.places }}</p>
               </div>
-              <div class="flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2"/>
-                  <line x1="16" y1="2" x2="16" y2="6"/>
-                  <line x1="8" y1="2" x2="8" y2="6"/>
-                  <line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-                <span class="text-sm font-medium text-gray-700">{{ item.events }}</span>
+              <div class="rounded-lg bg-gray-50 px-2 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase text-gray-400">Stays</p>
+                <p class="font-semibold">{{ item.stays }}</p>
+              </div>
+              <div class="rounded-lg bg-gray-50 px-2 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase text-gray-400">Events</p>
+                <p class="font-semibold">{{ item.events }}</p>
               </div>
             </div>
 
-            <!-- Assigned persons -->
-            <div class="flex items-center justify-center gap-1.5 text-sm text-gray-700">
-              <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M16 11c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm-8 0c1.657 0 3-1.343 3-3S9.657 5 8 5 5 6.343 5 8s1.343 3 3 3zm0 2c-2.337 0-7 1.173-7 3.5V18h14v-1.5C15 14.173 10.337 13 8 13zm8 0c-.29 0-.621.018-.97.048C16.198 13.773 17 14.76 17 16.5V18h5v-1.5c0-2.327-4.663-3.5-6-3.5z"/>
-              </svg>
-              {{ item.assignedPersons }}
+            <div>
+              <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                {{ item.pendingRequests }}
+              </span>
             </div>
 
-            <!-- Status -->
+            <div>
+              <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold"
+                    [ngClass]="scoreClass(item.healthScore)">
+                {{ item.healthScore === null || item.healthScore === undefined ? 'Insufficient' : item.healthScore }}
+              </span>
+            </div>
+
             <div>
               <span
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
@@ -220,41 +230,8 @@
                 {{ item.status }}
               </span>
             </div>
-
-            <!-- Actions -->
-            <div class="flex items-center justify-center gap-2" (click)="$event.stopPropagation()">
-              <button
-                (click)="editRegion(item, $event)"
-                title="Edit"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
-                       text-blue-700 bg-white border border-blue-200 hover:bg-blue-50
-                       transition-colors cursor-pointer"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-                Edit
-              </button>
-              <button
-                (click)="promptDelete(item, $event)"
-                title="Delete"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
-                       text-red-600 bg-white border border-red-200 hover:bg-red-50
-                       transition-colors cursor-pointer"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3 6 5 6 21 6"/>
-                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-                  <path d="M10 11v6M14 11v6"/>
-                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
-                </svg>
-                Delete
-              </button>
-            </div>
           </div>
 
-          <!-- Empty state -->
           <div
             *ngIf="items.length === 0"
             class="flex flex-col items-center justify-center py-16 text-gray-400"
@@ -264,14 +241,12 @@
               <circle cx="12" cy="10" r="3"/>
               <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7z"/>
             </svg>
-            <p class="text-sm font-medium">No regions found</p>
-            <p class="text-xs mt-1">Try adjusting your search query</p>
+            <p class="text-sm font-medium">{{ emptyMessage }}</p>
           </div>
         </ng-container>
 
-        <!-- Footer -->
         <div
-          *ngIf="!isLoading"
+          *ngIf="!isLoading && !territoryLoading"
           class="flex flex-col items-center gap-3 px-5 py-3 border-t border-gray-100 bg-gray-50/40"
         >
           <p class="text-sm text-gray-500">
@@ -294,11 +269,11 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
             </svg>
-            <span>{{ isLoadingMore ? 'Loading…' : 'Show More' }}</span>
+            <span>{{ isLoadingMore ? 'Loading...' : 'Show More' }}</span>
             <span
               *ngIf="!isLoadingMore"
               class="text-[10px] font-bold bg-blue-100 text-blue-600 rounded-full px-1.5 py-0.5"
-            >+{{ totalItems - items.length }}</span>
+            >+{{ nextPageCount }}</span>
           </button>
           <span
             *ngIf="!hasMore && items.length > 0"
@@ -306,63 +281,6 @@
           >All regions loaded</span>
         </div>
       </div>
-
-    </div>
-  </div>
-</div>
-
-<!-- DELETE CONFIRMATION MODAL -->
-<div
-  *ngIf="deleteTarget"
-  class="fixed inset-0 z-50 flex items-center justify-center"
-  style="background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
-  (click)="cancelDelete()"
->
-  <div
-    class="bg-white rounded-2xl shadow-2xl overflow-hidden w-96 max-w-[92vw]"
-    (click)="$event.stopPropagation()"
-  >
-    <div class="px-6 pt-6 pb-4">
-      <div class="flex items-start gap-4">
-        <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-red-600" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-            <path d="M10 11v6M14 11v6"/>
-            <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
-          </svg>
-        </div>
-        <div>
-          <h3 class="text-base font-bold text-gray-900 mb-1">Delete Region</h3>
-          <p class="text-sm text-gray-500 leading-relaxed">
-            Are you sure you want to delete
-            <strong class="text-gray-800">{{ deleteTarget.name }}</strong>?
-            This action cannot be undone.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50/60">
-      <button
-        (click)="cancelDelete()"
-        class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600
-               bg-white border border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
-      >Cancel</button>
-      <button
-        (click)="confirmDelete()"
-        [disabled]="isDeleting"
-        class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
-               text-white bg-red-600 hover:bg-red-700 border-none cursor-pointer
-               transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        <svg *ngIf="isDeleting" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-        </svg>
-        {{ isDeleting ? 'Deleting…' : 'Delete' }}
-      </button>
     </div>
   </div>
 </div>

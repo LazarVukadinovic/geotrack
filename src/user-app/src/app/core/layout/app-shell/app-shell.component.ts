@@ -73,6 +73,7 @@ export class AppShellComponent implements OnInit {
       )
       .subscribe((event) => {
         if (event instanceof NavigationStart) {
+          this.analytics.endCurrentView('navigation');
           this.currentTrigger = event.navigationTrigger ?? 'imperative';
           const el = this.viewport()?.nativeElement;
           if (el) {

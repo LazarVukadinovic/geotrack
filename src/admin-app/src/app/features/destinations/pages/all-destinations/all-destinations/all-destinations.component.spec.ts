@@ -190,7 +190,7 @@ describe('AllDestinationsComponent', () => {
     expect(component.items.map(item => item.name)).toEqual(['Region 8 Destination']);
   });
 
-  it('navigates edit through the existing destination create/edit flow with active region context', () => {
+  it('navigates edit through the canonical destination edit route with active region context', () => {
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
@@ -200,7 +200,7 @@ describe('AllDestinationsComponent', () => {
 
     component.editDestination(component.items[0]);
 
-    expect(navigateSpy).toHaveBeenCalledWith(['/destinations/new'], {
+    expect(navigateSpy).toHaveBeenCalledWith(['/destinations/edit/21'], {
       queryParams: { regionId: 7 },
       state: {
         place: expect.objectContaining({ id: '21', name: 'Editable Destination' }),
@@ -273,7 +273,7 @@ describe('AllDestinationsComponent', () => {
       lastUpdatedAt: '2026-05-12T10:00:00Z',
       imageUrl: null,
       detailRoute: `/destinations/detail/${id}`,
-      editRoute: '/destinations/new',
+      editRoute: `/destinations/edit/${id}`,
     };
   }
 });

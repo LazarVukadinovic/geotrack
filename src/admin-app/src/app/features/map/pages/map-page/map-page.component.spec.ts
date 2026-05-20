@@ -33,10 +33,12 @@ describe('MapPageComponent', () => {
   it('loads active assigned region map data from the backend', () => {
     fixture.detectChanges();
     flushRegions([{ id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' }]);
+    flushSidebar(17, 3, [{ id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' }]);
     flushMap(17, mapResponse(17));
 
     expect(component.activeRegionId).toBe(17);
     expect(component.regionDisplayName).toBe('North Region');
+    expect(component.pendingRequestsCount).toBe(3);
     expect(component.mapLoading).toBe(false);
     expect(component.mapData?.markers[0].title).toBe('Real Place');
     expect(component.mapData?.zones[0].entityType).toBe('Region');
@@ -49,12 +51,21 @@ describe('MapPageComponent', () => {
       { id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' },
       { id: 18, name: 'South', displayName: 'South Region', territoryName: 'Testland' },
     ]);
+    flushSidebar(17, 2, [
+      { id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' },
+      { id: 18, name: 'South', displayName: 'South Region', territoryName: 'Testland' },
+    ]);
     flushMap(17, mapResponse(17));
 
     component.onRegionSelected(18);
+    flushSidebar(18, 4, [
+      { id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' },
+      { id: 18, name: 'South', displayName: 'South Region', territoryName: 'Testland' },
+    ]);
     flushMap(18, mapResponse(18, 'Other Place'));
 
     expect(component.activeRegionId).toBe(18);
+    expect(component.pendingRequestsCount).toBe(4);
     expect(component.mapData?.markers[0].title).toBe('Other Place');
     expect(sessionStorage.getItem('geotrack_admin_active_region_id')).toBe('18');
   });
@@ -72,6 +83,7 @@ describe('MapPageComponent', () => {
   it('searches only inside the active assigned region', () => {
     fixture.detectChanges();
     flushRegions([{ id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' }]);
+    flushSidebar(17, 0, [{ id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' }]);
     flushMap(17, mapResponse(17));
 
     component.searchQuery = 'museum';
@@ -150,6 +162,28 @@ describe('MapPageComponent', () => {
     });
   });
 
+  it('navigates marker edit actions with entity id and active region context', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    component.activeRegionId = 17;
+    component.selectedEntity = {
+      id: 8,
+      entityType: 'Place',
+      title: 'Real Place',
+      latitude: 45.1,
+      longitude: 16.2,
+      editRoute: '/places/edit/8',
+    };
+
+    component.editSelected();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/places/edit/8'], {
+      queryParams: { regionId: 17 },
+      state: { regionId: 17, returnTo: '/map' },
+    });
+  });
+
   function flushRegions(regions: RegionalAssignedRegion[]): void {
     const request = http.expectOne('/api/admin/regional/regions');
     expect(request.request.method).toBe('GET');
@@ -165,6 +199,21 @@ describe('MapPageComponent', () => {
 
     expect(request.request.method).toBe('GET');
     request.flush(response);
+  }
+
+  function flushSidebar(regionId: number, pendingRequestsCount: number, assignedRegions: RegionalAssignedRegion[]): void {
+    const request = http.expectOne(req =>
+      req.url === '/api/admin/regional/sidebar-summary' &&
+      req.params.get('regionId') === String(regionId),
+    );
+
+    expect(request.request.method).toBe('GET');
+    const activeRegion = assignedRegions.find(region => region.id === regionId) ?? assignedRegions[0];
+    request.flush({
+      assignedRegions,
+      activeRegion,
+      pendingRequestsCount,
+    });
   }
 
   function mapResponse(regionId: number, placeTitle = 'Real Place'): AdminMapResponse {

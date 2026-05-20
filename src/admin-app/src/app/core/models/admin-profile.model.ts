@@ -23,6 +23,27 @@ export interface AdminProfileRegionalManager {
   memberSince?: string | null;
 }
 
+export interface AdminProfileRole {
+  roleCode: string;
+  roleDisplayName: string;
+}
+
+export interface AdminProfileAssignmentItem {
+  id: number;
+  name: string;
+  displayName: string;
+  assignedAt?: string | null;
+}
+
+export interface AdminProfileAssignment {
+  assignmentType: string;
+  sectionTitle: string;
+  label: string;
+  displayValue: string;
+  assignedItems: AdminProfileAssignmentItem[];
+  memberSince?: string | null;
+}
+
 export interface AdminProfilePreferences {
   interfaceLanguage: string;
   timezone: string;
@@ -33,6 +54,8 @@ export interface AdminProfilePreferences {
 export interface AdminProfile {
   user: AdminProfileUser;
   roles: string[];
+  role?: AdminProfileRole | null;
+  assignment?: AdminProfileAssignment | null;
   regionalManager: AdminProfileRegionalManager;
   preferences: AdminProfilePreferences;
 }

@@ -18,6 +18,12 @@ public class AuthService : IAuthService
     private const int SessionOnlyRefreshTokenLifetimeDays = 1;
     private const string InvalidCredentialsMessage = "Invalid email or password.";
     private const string AdminAccessDeniedMessage = "You do not have access to the admin app.";
+    private static readonly string[] AdminAppRoles =
+    [
+        RoleNames.TerritoryManager,
+        RoleNames.TerritoryAssociate,
+        RoleNames.RegionalManager
+    ];
 
     private readonly IUserRepository _userRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
@@ -82,6 +88,7 @@ public class AuthService : IAuthService
             request,
             missingFieldsMessage: "Email and password are required",
             invalidCredentialsMessage: "Invalid credentials");
+        MarkSuccessfulLogin(user);
         return await IssueTokenPairAsync(user.Id, request.RememberMe);
     }
 
@@ -114,6 +121,20 @@ public class AuthService : IAuthService
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    public async Task<AdminLoginResponseDto> LoginAdminAsync(LoginRequestDto request)
+    {
+        var user = await AuthenticateUserAsync(
+            request,
+            missingFieldsMessage: "Email and password are required.",
+            invalidCredentialsMessage: InvalidCredentialsMessage);
+
+        var adminUser = await GetAdminUserAsync(user.Id);
+        MarkSuccessfulLogin(user);
+        var pair = await IssueTokenPairAsync(user.Id, request.RememberMe);
+
+        return ToAdminLoginResponse(pair, adminUser);
+    }
+
     public async Task<AdminLoginResponseDto> LoginRegionalManagerAsync(LoginRequestDto request)
     {
         var user = await AuthenticateUserAsync(
@@ -122,26 +143,45 @@ public class AuthService : IAuthService
             invalidCredentialsMessage: InvalidCredentialsMessage);
 
         var adminUser = await GetRegionalAdminUserAsync(user.Id);
+        MarkSuccessfulLogin(user);
         var pair = await IssueTokenPairAsync(user.Id, request.RememberMe);
 
         return ToAdminLoginResponse(pair, adminUser);
     }
 
+    public async Task<AdminLoginResponseDto> RefreshAdminAsync(RefreshRequestDto request)
+    {
+        var rotated = await RotateRefreshTokenWithUserAsync(request, AdminAppRoles);
+        var adminUser = await GetAdminUserAsync(rotated.UserId);
+
+        return ToAdminLoginResponse(rotated.Pair, adminUser);
+    }
+
     public async Task<AdminLoginResponseDto> RefreshRegionalManagerAsync(RefreshRequestDto request)
     {
-        var rotated = await RotateRefreshTokenWithUserAsync(request, RoleNames.RegionalManager);
+        var rotated = await RotateRefreshTokenWithUserAsync(request, [RoleNames.RegionalManager]);
         var adminUser = await GetRegionalAdminUserAsync(rotated.UserId);
 
         return ToAdminLoginResponse(rotated.Pair, adminUser);
     }
 
+    public async Task<AdminAuthUserDto> GetAdminUserAsync(int userId)
+    {
+        return await GetAdminUserAsync(userId, AdminAppRoles);
+    }
+
     public async Task<AdminAuthUserDto> GetRegionalAdminUserAsync(int userId)
+    {
+        return await GetAdminUserAsync(userId, [RoleNames.RegionalManager]);
+    }
+
+    private async Task<AdminAuthUserDto> GetAdminUserAsync(int userId, IReadOnlyCollection<string> requiredRoles)
     {
         var user = await _userRepository.GetByIdWithRolesAsync(userId)
             ?? throw new UnauthorizedAccessException(InvalidCredentialsMessage);
 
         var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
-        if (!roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal))
+        if (!requiredRoles.Any(requiredRole => roles.Contains(RoleNames.Normalize(requiredRole), StringComparer.Ordinal)))
             throw new ForbiddenAccessException(AdminAccessDeniedMessage);
 
         return new AdminAuthUserDto
@@ -153,7 +193,10 @@ public class AuthService : IAuthService
             DisplayName = BuildDisplayName(user),
             AvatarUrl = user.AvatarUrl,
             Roles = roles,
-            CanAccessRegionalAdmin = true
+            CanAccessRegionalAdmin = roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal),
+            CanAccessTerritoryAdmin =
+                roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal) ||
+                roles.Contains(RoleNames.TerritoryAssociate, StringComparer.Ordinal)
         };
     }
 
@@ -183,12 +226,16 @@ public class AuthService : IAuthService
         RefreshRequestDto request,
         string? requiredRole = null)
     {
-        return (await RotateRefreshTokenWithUserAsync(request, requiredRole)).Pair;
+        IReadOnlyCollection<string>? requiredRoles = string.IsNullOrWhiteSpace(requiredRole)
+            ? null
+            : [requiredRole];
+
+        return (await RotateRefreshTokenWithUserAsync(request, requiredRoles)).Pair;
     }
 
     private async Task<(LoginResponseDto Pair, int UserId)> RotateRefreshTokenWithUserAsync(
         RefreshRequestDto request,
-        string? requiredRole = null)
+        IReadOnlyCollection<string>? requiredRoles = null)
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
             throw new UnauthorizedAccessException("Refresh token is required");
@@ -201,13 +248,13 @@ public class AuthService : IAuthService
         stored.RevokedAt = DateTime.UtcNow;
         await _refreshTokenRepository.SaveChangesAsync();
 
-        if (!string.IsNullOrWhiteSpace(requiredRole))
+        if (requiredRoles is { Count: > 0 })
         {
             var user = await _userRepository.GetByIdWithRolesAsync(stored.UserId)
                 ?? throw new UnauthorizedAccessException("Invalid or expired refresh token");
             var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
 
-            if (!roles.Contains(RoleNames.Normalize(requiredRole), StringComparer.Ordinal))
+            if (!requiredRoles.Any(requiredRole => roles.Contains(RoleNames.Normalize(requiredRole), StringComparer.Ordinal)))
                 throw new ForbiddenAccessException(AdminAccessDeniedMessage);
         }
 
@@ -296,6 +343,12 @@ public class AuthService : IAuthService
         return string.IsNullOrWhiteSpace(user.Username)
             ? user.Email
             : user.Username;
+    }
+
+    private static void MarkSuccessfulLogin(User user)
+    {
+        user.LastLoginAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTime.UtcNow;
     }
 
     private static bool IsValidEmail(string email)

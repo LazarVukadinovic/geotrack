@@ -113,4 +113,3 @@ export interface ExploreCuratedItem {
   image: string;
   isSaved: boolean;
 }
-

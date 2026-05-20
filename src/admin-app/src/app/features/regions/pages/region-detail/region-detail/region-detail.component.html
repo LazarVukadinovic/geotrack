@@ -1,802 +1,443 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans">
-
-  <app-sidebar />
+  <app-sidebar [region]="regionDisplayName" (regionChange)="onTerritoryChange($event)" />
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-
     <app-topbar
       [userName]="userName"
       [userRole]="userRole"
-      [title]="region ? (isViewMode ? region.fullName : 'Edit Region') : 'Region'"
+      title="Region Detail"
       [showBack]="true"
-      backRoute="/regions"
+      backRoute="/territory/regions"
     />
 
-    <!-- Loading skeleton -->
     <div *ngIf="isLoading" class="flex-1 overflow-y-auto px-8 py-6 animate-pulse">
-      <div class="flex gap-6">
-        <div class="flex-1 space-y-4">
-          <div class="h-8 bg-gray-200 rounded w-64"></div>
-          <div class="h-4 bg-gray-100 rounded w-96"></div>
-          <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-            <div class="h-5 bg-gray-100 rounded w-40"></div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="h-10 bg-gray-100 rounded"></div>
-              <div class="h-10 bg-gray-100 rounded"></div>
-            </div>
-            <div class="h-10 bg-gray-100 rounded"></div>
-            <div class="h-28 bg-gray-100 rounded"></div>
-          </div>
-        </div>
-        <div class="w-64 space-y-4">
-          <div class="bg-white rounded-xl border border-gray-200 h-32"></div>
-          <div class="bg-white rounded-xl border border-gray-200 h-48"></div>
-        </div>
+      <div class="h-8 bg-gray-200 rounded w-64 mb-3"></div>
+      <div class="h-4 bg-gray-100 rounded w-96 mb-6"></div>
+      <div class="grid grid-cols-6 gap-3 mb-6">
+        <div *ngFor="let i of [1,2,3,4,5,6]" class="h-24 bg-white border border-gray-100 rounded-xl"></div>
+      </div>
+      <div class="grid grid-cols-3 gap-5">
+        <div class="col-span-2 h-64 bg-white border border-gray-100 rounded-xl"></div>
+        <div class="h-64 bg-white border border-gray-100 rounded-xl"></div>
       </div>
     </div>
 
-    <!-- Main content -->
-    <div *ngIf="!isLoading && region" class="flex-1 overflow-y-auto px-8 py-6">
-
-      <!-- Page header -->
-      <div class="flex items-start justify-between mb-6">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900">{{ region.fullName }}</h1>
-          <p class="text-sm text-gray-500 mt-0.5">
-            {{ isViewMode
-              ? 'Overview of region information, assigned team, and operational data.'
-              : 'Edit region information, assigned team, and operational overview.' }}
-          </p>
-          <button
-            *ngIf="parentTerritoryName"
-            type="button"
-            (click)="goToParentTerritory($event)"
-            class="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline bg-transparent border-0 p-0 cursor-pointer"
-          >
-            {{ parentTerritoryName }}
-          </button>
-        </div>
-      </div>
-
-      <div class="flex gap-6 items-start">
-
-        <!-- ═══════════════════════════════ LEFT COLUMN ═══════════════════════════════ -->
-        <div class="flex-1 min-w-0 space-y-5">
-
-          <!-- Basic Information card -->
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-              <h2 class="text-base font-bold text-gray-900">Basic Information</h2>
-            </div>
-            <div class="px-6 py-5 space-y-4">
-
-              <!-- Region Name + Internal Ref -->
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                    Region Name
-                  </label>
-                  <ng-container *ngIf="!isViewMode; else viewName">
-                    <input
-                      type="text"
-                      [(ngModel)]="editName"
-                      class="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200
-                             rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100
-                             transition-colors"
-                    />
-                  </ng-container>
-                  <ng-template #viewName>
-                    <div class="px-3 py-2.5 text-sm text-gray-800 bg-gray-50 border border-gray-100 rounded-lg">
-                      {{ region.name }}
-                    </div>
-                  </ng-template>
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                    Internal Reference ID
-                  </label>
-                  <ng-container *ngIf="!isViewMode; else viewRefId">
-                    <input
-                      type="text"
-                      [(ngModel)]="editRefId"
-                      class="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200
-                             rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100
-                             transition-colors"
-                    />
-                  </ng-container>
-                  <ng-template #viewRefId>
-                    <div class="px-3 py-2.5 text-sm text-gray-800 bg-gray-50 border border-gray-100 rounded-lg">
-                      {{ region.internalRefId }}
-                    </div>
-                  </ng-template>
-                </div>
-              </div>
-
-              <!-- Parent Territory -->
-              <div *ngIf="parentTerritoryName">
-                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  Territory
-                </label>
-                <button
-                  type="button"
-                  (click)="goToParentTerritory($event)"
-                  class="px-3 py-2.5 text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline bg-gray-50 border border-gray-100 rounded-lg cursor-pointer text-left"
-                >
-                  {{ parentTerritoryName }}
-                </button>
-              </div>
-
-              <!-- Short Summary -->
-              <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  Short Summary
-                </label>
-                <ng-container *ngIf="!isViewMode; else viewSummary">
-                  <input
-                    type="text"
-                    [(ngModel)]="editSummary"
-                    class="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200
-                           rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100
-                           transition-colors"
-                  />
-                </ng-container>
-                <ng-template #viewSummary>
-                  <div class="px-3 py-2.5 text-sm text-gray-800 bg-gray-50 border border-gray-100 rounded-lg">
-                    {{ region.shortSummary }}
-                  </div>
-                </ng-template>
-              </div>
-
-              <!-- Full Description -->
-              <div>
-                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  Full Description
-                </label>
-                <ng-container *ngIf="!isViewMode; else viewDesc">
-                  <textarea
-                    [(ngModel)]="editDescription"
-                    rows="5"
-                    class="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200
-                           rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100
-                           transition-colors resize-none leading-relaxed"
-                  ></textarea>
-                </ng-container>
-                <ng-template #viewDesc>
-                  <div class="px-3 py-2.5 text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-lg
-                              leading-relaxed min-h-[7rem]">
-                    {{ region.fullDescription }}
-                  </div>
-                </ng-template>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- Regional Team card -->
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 class="text-base font-bold text-gray-900">Regional Team</h2>
-              <button
-                *ngIf="!isViewMode"
-                (click)="openAssignModal()"
-                class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold
-                       text-white border-0 cursor-pointer"
-                style="background: linear-gradient(135deg,#1565d8 0%,#1a86e8 100%);"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                Assign User
-              </button>
-            </div>
-
-            <!-- Team table header -->
-            <div class="grid items-center px-6 py-2.5 bg-gray-50/70 border-b border-gray-100 text-[11px]
-                        font-bold text-gray-400 uppercase tracking-wider"
-                 style="grid-template-columns: 1fr 160px 100px 160px 120px;">
-              <span>User</span>
-              <span>Role</span>
-              <span>Status</span>
-              <span>Assigned</span>
-              <span class="text-right">Actions</span>
-            </div>
-
-            <!-- Team rows -->
-            <ng-container *ngIf="region.team.length > 0; else emptyTeam">
-              <div
-                *ngFor="let member of region.team"
-                class="grid items-center px-6 py-3.5 border-b border-gray-50 transition-colors"
-                [class.hover:bg-blue-50/30]="isViewMode"
-                [class.cursor-pointer]="isViewMode"
-                [class.hover:bg-blue-50/20]="!isViewMode"
-                (click)="isViewMode ? openViewMember(member) : null"
-                style="grid-template-columns: 1fr 160px 100px 160px 120px;"
-              >
-                <div class="flex items-center gap-3">
-                  <div
-                    class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                    [style.background]="member.avatarColor"
-                  >{{ member.initials }}</div>
-                  <div>
-                    <p class="text-sm font-semibold text-gray-800">{{ member.name }}</p>
-                    <p class="text-xs text-gray-400">{{ member.email }}</p>
-                  </div>
-                </div>
-                <span class="text-sm text-gray-600">{{ member.role }}</span>
-                <span
-                  class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold w-fit"
-                  [ngClass]="statusClass(member.status)"
-                >
-                  <span class="w-1.5 h-1.5 rounded-full"
-                    [class.bg-emerald-500]="member.status === 'Active'"
-                    [class.bg-gray-400]="member.status !== 'Active'">
-                  </span>
-                  {{ member.status }}
-                </span>
-                <span class="text-sm text-gray-500">{{ member.assignedDate }}</span>
-                <div class="flex items-center justify-end gap-2" (click)="$event.stopPropagation()">
-                  <ng-container *ngIf="!isViewMode">
-                    <button
-                      (click)="openEditMember(member)"
-                      class="text-xs font-semibold text-blue-700 hover:text-blue-900 cursor-pointer
-                             bg-transparent border-none transition-colors"
-                    >Edit</button>
-                    <button
-                      (click)="promptRemove(member)"
-                      class="text-xs font-semibold text-red-600 hover:text-red-800 cursor-pointer
-                             bg-transparent border-none transition-colors"
-                    >Remove</button>
-                  </ng-container>
-                </div>
-              </div>
-            </ng-container>
-            <ng-template #emptyTeam>
-              <div class="flex flex-col items-center justify-center py-10 text-gray-400">
-                <svg class="w-10 h-10 mb-2 text-gray-200" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M16 11c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm-8 0c1.657 0 3-1.343 3-3S9.657 5 8 5 5 6.343 5 8s1.343 3 3 3zm0 2c-2.337 0-7 1.173-7 3.5V18h14v-1.5C15 14.173 10.337 13 8 13zm8 0c-.29 0-.621.018-.97.048C16.198 13.773 17 14.76 17 16.5V18h5v-1.5c0-2.327-4.663-3.5-6-3.5z"/>
-                </svg>
-                <p class="text-sm font-medium">No team members assigned</p>
-                <p class="text-xs mt-0.5" *ngIf="!isViewMode">Click "Assign User" to add team members</p>
-              </div>
-            </ng-template>
-          </div>
-
-          <!-- Operational Overview card — bez Pending Requests -->
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-              <h2 class="text-base font-bold text-gray-900">Operational Overview</h2>
-            </div>
-            <div class="grid grid-cols-3 gap-px bg-gray-100">
-              <div class="bg-white px-6 py-5">
-                <p class="text-xs text-gray-400 font-medium mb-1">Total Destinations</p>
-                <p class="text-2xl font-bold text-gray-900">{{ region.destinations }}</p>
-              </div>
-              <div class="bg-white px-6 py-5">
-                <p class="text-xs text-gray-400 font-medium mb-1">Total Locations</p>
-                <p class="text-2xl font-bold text-gray-900">{{ region.locations }}</p>
-              </div>
-              <div class="bg-white px-6 py-5">
-                <p class="text-xs text-gray-400 font-medium mb-1">Total Places</p>
-                <p class="text-2xl font-bold text-gray-900">{{ region.places }}</p>
-              </div>
-              <div class="bg-white px-6 py-5">
-                <p class="text-xs text-gray-400 font-medium mb-1">Active Events</p>
-                <p class="text-2xl font-bold text-gray-900">{{ region.events }}</p>
-              </div>
-              <div class="bg-white px-6 py-5">
-                <p class="text-xs text-gray-400 font-medium mb-1">Assigned Persons</p>
-                <p class="text-2xl font-bold text-gray-900">{{ region.assignedPersons }}</p>
-              </div>
-              <div class="bg-white px-6 py-5">
-                <p class="text-xs text-gray-400 font-medium mb-1">Avg Processing Time</p>
-                <p class="text-2xl font-bold text-gray-900">
-                  {{ region.avgProcessingTime }}<span class="text-sm font-normal text-gray-400 ml-0.5">days</span>
-                </p>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- ═══════════════════════════════ RIGHT COLUMN ═══════════════════════════════ -->
-        <div class="w-64 flex-shrink-0 space-y-4">
-
-          <!-- Publishing / Actions card -->
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="px-5 py-4 border-b border-gray-100">
-              <h3 class="text-sm font-bold text-gray-900">Publishing</h3>
-            </div>
-            <div class="px-5 py-4 space-y-2">
-
-              <ng-container *ngIf="isViewMode">
-                <button
-                  (click)="switchToEdit()"
-                  class="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm
-                         font-semibold text-white border-0 cursor-pointer"
-                  style="background: linear-gradient(135deg,#1565d8 0%,#1a86e8 100%);"
-                >
-                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                  Edit Region
-                </button>
-              </ng-container>
-
-              <ng-container *ngIf="!isViewMode">
-                <button
-                  (click)="saveChanges()"
-                  class="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm
-                         font-semibold text-white border-0 cursor-pointer"
-                  style="background: linear-gradient(135deg,#1565d8 0%,#1a86e8 100%);"
-                >
-                  Save Changes
-                </button>
-                <button
-                  (click)="discardChanges()"
-                  class="w-full py-2.5 rounded-lg text-sm font-semibold text-gray-600 bg-white
-                         border border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
-                >Discard Changes</button>
-                <button
-                  (click)="cancelEdit()"
-                  class="w-full py-2.5 rounded-lg text-sm font-semibold text-gray-400 bg-transparent
-                         border-0 hover:text-gray-600 cursor-pointer transition-colors"
-                >Cancel</button>
-              </ng-container>
-
-            </div>
-          </div>
-
-          <!-- Metadata card -->
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="px-5 py-4 border-b border-gray-100">
-              <h3 class="text-sm font-bold text-gray-900">Metadata</h3>
-            </div>
-            <div class="px-5 py-4 space-y-3">
-              <div class="flex flex-col gap-0.5">
-                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Created by</span>
-                <span class="text-xs font-medium text-gray-700">{{ region.createdBy }}</span>
-              </div>
-              <div class="flex flex-col gap-0.5">
-                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Assigned region</span>
-                <span class="text-xs font-medium text-gray-700">{{ region.name }}</span>
-              </div>
-              <div class="flex flex-col gap-0.5">
-                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Created date</span>
-                <span class="text-xs font-medium text-gray-700">{{ region.createdDate }}</span>
-              </div>
-              <div class="flex flex-col gap-0.5">
-                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Last updated</span>
-                <span class="text-xs font-medium text-gray-700">{{ region.lastUpdated }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Region Health card -->
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="px-5 py-4 border-b border-gray-100">
-              <h3 class="text-sm font-bold text-gray-900">Region Health</h3>
-            </div>
-            <div class="px-5 py-4">
-              <div class="flex items-center gap-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100 mb-3">
-                <div
-                  class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                  [style.background]="scoreColor"
-                >{{ region.activityScore }}</div>
-                <div>
-                  <p class="text-xs font-semibold text-gray-700">Activity Score</p>
-                  <p class="text-[10px] text-gray-400">Top 10% nationwide</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Quick Links card -->
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="px-5 py-4 border-b border-gray-100">
-              <h3 class="text-sm font-bold text-gray-900">Quick Links</h3>
-            </div>
-            <div class="px-5 py-4 space-y-2">
-              <a href="#" class="flex items-center justify-between text-sm text-blue-700 hover:text-blue-900
-                                  font-medium transition-colors">
-                View Region Content
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-              </a>
-              <a href="#" class="flex items-center justify-between text-sm text-blue-700 hover:text-blue-900
-                                  font-medium transition-colors">
-                View Analytics Report
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-              </a>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <!-- Not found -->
-    <div *ngIf="!isLoading && !region" class="flex-1 flex items-center justify-center text-gray-400">
+    <div *ngIf="!isLoading && errorMessage" class="flex-1 flex items-center justify-center text-gray-500">
       <div class="text-center">
         <svg class="w-14 h-14 mx-auto mb-3 text-gray-200" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="1.5">
           <circle cx="12" cy="10" r="3"/>
           <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7z"/>
         </svg>
-        <p class="text-sm font-semibold">Region not found</p>
-        <button (click)="goBack()"
-          class="mt-3 text-sm font-semibold text-blue-700 hover:text-blue-900 bg-transparent border-none cursor-pointer">
-          ← Back to Regions
+        <p class="text-sm font-semibold text-gray-700">{{ errorMessage }}</p>
+        <button
+          (click)="goBack()"
+          class="mt-4 px-4 py-2 rounded-lg text-sm font-semibold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 cursor-pointer"
+        >
+          Back to Regions
         </button>
       </div>
     </div>
 
-  </div>
-</div>
-
-<!-- ═══════════════ ASSIGN USER MODAL ═══════════════ -->
-<div
-  *ngIf="showAssignModal"
-  class="fixed inset-0 z-50 flex items-center justify-center"
-  style="background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
-  (click)="closeAssignModal()"
->
-  <div
-    class="bg-white rounded-2xl shadow-2xl w-[420px] max-w-[92vw] overflow-hidden"
-    (click)="$event.stopPropagation()"
-  >
-    <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
-      <h3 class="text-base font-bold text-gray-900">Assign User</h3>
-      <button (click)="closeAssignModal()"
-        class="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer text-xl leading-none"
-      >&times;</button>
-    </div>
-    <div class="px-6 py-5 space-y-4">
-
-      <!-- Full Name with dropdown -->
-      <div class="relative">
-        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Full Name</label>
-        <input
-          type="text"
-          [(ngModel)]="newUserName"
-          placeholder="Izaberite korisnika..."
-          autocomplete="off"
-          (focus)="onNameFocus()"
-          (input)="onNameInput()"
-          (blur)="scheduleCloseNameDropdown()"
-          class="w-full px-3 py-2.5 text-sm text-gray-800 border border-gray-200 rounded-lg outline-none
-                 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors"
-        />
-        <div
-          *ngIf="showNameDropdown"
-          class="absolute left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg
-                 max-h-48 overflow-y-auto mt-1"
-          style="top: 100%;"
-        >
-          <div
-            *ngFor="let user of filteredByName"
-            (mousedown)="selectUserForAssign(user)"
-            class="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 cursor-pointer transition-colors"
-          >
-            <div
-              class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-              [style.background]="user.avatarColor"
-            >{{ user.avatarInitials }}</div>
-            <div class="min-w-0">
-              <p class="text-sm font-semibold text-gray-800 truncate">{{ user.firstName }} {{ user.lastName }}</p>
-              <p class="text-xs text-gray-400 truncate">{{ user.email }}</p>
-            </div>
-          </div>
-          <div *ngIf="filteredByName.length === 0"
-               class="px-3 py-3 text-sm text-gray-400 text-center">
-            Nema korisnika
-          </div>
-        </div>
-      </div>
-
-      <!-- Email with dropdown -->
-      <div class="relative">
-        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email</label>
-        <input
-          type="text"
-          [(ngModel)]="newUserEmail"
-          placeholder="Izaberite korisnika..."
-          autocomplete="off"
-          (focus)="onEmailFocus()"
-          (input)="onEmailInput()"
-          (blur)="scheduleCloseEmailDropdown()"
-          class="w-full px-3 py-2.5 text-sm text-gray-800 border border-gray-200 rounded-lg outline-none
-                 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors"
-        />
-        <div
-          *ngIf="showEmailDropdown"
-          class="absolute left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg
-                 max-h-48 overflow-y-auto mt-1"
-          style="top: 100%;"
-        >
-          <div
-            *ngFor="let user of filteredByEmail"
-            (mousedown)="selectUserForAssign(user)"
-            class="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 cursor-pointer transition-colors"
-          >
-            <div
-              class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-              [style.background]="user.avatarColor"
-            >{{ user.avatarInitials }}</div>
-            <div class="min-w-0">
-              <p class="text-sm font-semibold text-gray-800 truncate">{{ user.firstName }} {{ user.lastName }}</p>
-              <p class="text-xs text-gray-400 truncate">{{ user.email }}</p>
-            </div>
-          </div>
-          <div *ngIf="filteredByEmail.length === 0"
-               class="px-3 py-3 text-sm text-gray-400 text-center">
-            No user
-          </div>
-        </div>
-      </div>
-
-      <!-- Role -->
-      <div>
-        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Role</label>
-        <select
-          [(ngModel)]="newUserRole"
-          class="w-full px-3 py-2.5 text-sm text-gray-800 border border-gray-200 rounded-lg outline-none
-                 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors bg-white"
-        >
-          <option value="Viewer">Viewer</option>
-          <option value="Regional Manager">Regional Manager</option>
-        </select>
-      </div>
-
-    </div>
-    <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50/60">
-      <button
-        (click)="closeAssignModal()"
-        class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-white border border-gray-300
-               hover:bg-gray-50 cursor-pointer transition-colors"
-      >Cancel</button>
-      <button
-        (click)="assignUser()"
-        [disabled]="!newUserName || !newUserEmail"
-        class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white
-               border-0 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        style="background: linear-gradient(135deg,#1565d8 0%,#1a86e8 100%);"
-      >
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        Assign
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════ EDIT MEMBER MODAL ═══════════════ -->
-<div
-  *ngIf="editMember"
-  class="fixed inset-0 z-50 flex items-center justify-center"
-  style="background: rgba(0,0,0,0.45); backdrop-filter: blur(3px);"
-  (click)="closeEditMember()"
->
-  <div
-    class="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col"
-    style="width: 520px; max-width: 96vw; max-height: 90vh;"
-    (click)="$event.stopPropagation()"
-  >
-    <!-- Header -->
-    <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
-      <h3 class="text-base font-bold text-gray-900">{{ isMemberReadOnly ? 'User Details' : 'Edit User' }}</h3>
-      <button
-        (click)="closeEditMember()"
-        class="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer text-xl leading-none"
-      >&times;</button>
-    </div>
-
-    <!-- Body -->
-    <div class="overflow-y-auto flex-1 px-6 py-5 space-y-6">
-
-      <!-- User identity -->
-      <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-        <div
-          class="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-          [style.background]="editMember.avatarColor"
-        >{{ editMember.avatarInitials }}</div>
-        <div>
-          <p class="text-base font-bold text-gray-900">{{ editMember.firstName }} {{ editMember.lastName }}</p>
-          <p class="text-sm text-gray-400">{{ editMember.email }}</p>
-        </div>
-        <div class="ml-auto">
-          <span
-            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-            [ngClass]="statusClass(editMember.status)"
-          >
-            <span class="w-1.5 h-1.5 rounded-full"
-              [class.bg-emerald-500]="editMember.status === 'Active'"
-              [class.bg-gray-400]="editMember.status === 'Inactive'">
-            </span>
-            {{ editMember.status }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Role section -->
-      <div>
-        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Role Management</h4>
-        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-          <div>
-            <p class="text-sm font-semibold text-gray-800">Current Role</p>
-            <span
-              class="inline-flex items-center mt-1 px-2.5 py-1 rounded-full text-[11px] font-semibold"
-              [ngClass]="roleClass(editMember.role)"
-            >{{ editMember.role }}</span>
-          </div>
-          <ng-container *ngIf="!isMemberReadOnly">
-            <ng-container *ngIf="editMember.role !== 'Regional Manager'">
-              <button
-                (click)="toggleMemberRole()"
-                [disabled]="isTogglingRole"
-                class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold
-                       text-white border-0 cursor-pointer transition-colors
-                       disabled:opacity-60 disabled:cursor-not-allowed"
-                style="background: linear-gradient(135deg, #1565d8 0%, #1a86e8 100%);"
-              >
-                <svg *ngIf="isTogglingRole" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                </svg>
-                <svg *ngIf="!isTogglingRole" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-                {{ isTogglingRole ? 'Updating…' : 'Assign Manager Role' }}
-              </button>
-            </ng-container>
-            <ng-container *ngIf="editMember.role === 'Regional Manager'">
-              <button
-                (click)="toggleMemberRole()"
-                [disabled]="isTogglingRole"
-                class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold
-                       text-red-600 bg-white border border-red-200 hover:bg-red-50 cursor-pointer
-                       transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <svg *ngIf="isTogglingRole" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                </svg>
-                <svg *ngIf="!isTogglingRole" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-                {{ isTogglingRole ? 'Updating…' : 'Remove Manager Role' }}
-              </button>
-            </ng-container>
-          </ng-container>
-        </div>
-        <p *ngIf="!isMemberReadOnly" class="text-xs text-gray-400 mt-2">
-          <ng-container *ngIf="editMember.role !== 'Regional Manager'">
-            Assigning the Regional Manager role will set this user's status to <strong>Active</strong>.
-          </ng-container>
-          <ng-container *ngIf="editMember.role === 'Regional Manager'">
-            Removing the manager role will set this user's status to <strong>Inactive</strong>.
-          </ng-container>
-        </p>
-      </div>
-
-      <!-- Assigned regions -->
-      <div>
-        <div class="flex items-center justify-between mb-3">
-          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Regions</h4>
-        </div>
-        <div *ngIf="editMember.assignedRegions.length > 0; else noRegionsMember"
-             class="flex flex-col gap-2">
-          <div
-            *ngFor="let r of editMember.assignedRegions"
-            class="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100"
-          >
-            <div class="flex items-center gap-2">
-              <svg class="w-3.5 h-3.5 text-blue-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
-              </svg>
-              <span class="text-sm font-medium text-gray-700">{{ r }}</span>
-            </div>
+    <div *ngIf="!isLoading && !errorMessage && detail as d" class="flex-1 overflow-y-auto px-8 py-6">
+      <div class="flex items-start justify-between gap-6 mb-6">
+        <div class="min-w-0">
+          <div class="flex items-center gap-3 mb-2">
             <button
-              *ngIf="!isMemberReadOnly"
-              (click)="removeRegionFromMember(r)"
-              class="text-xs text-red-500 hover:text-red-700 bg-transparent border-none cursor-pointer transition-colors font-medium"
-            >Remove</button>
-          </div>
-        </div>
-        <ng-template #noRegionsMember>
-          <div class="flex items-center justify-center py-6 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-            <div class="text-center">
-              <svg class="w-8 h-8 mx-auto mb-2 text-gray-200" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
+              (click)="goBack()"
+              class="inline-flex items-center gap-1 text-sm font-semibold text-gray-500 hover:text-gray-800 bg-transparent border-none cursor-pointer p-0"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
               </svg>
-              <p class="text-sm text-gray-400">No regions assigned</p>
-            </div>
+              Regions
+            </button>
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold"
+                  [ngClass]="statusClass(d.region.status)">
+              {{ d.region.status }}
+            </span>
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 ring-1 ring-gray-200">
+              Read-only
+            </span>
           </div>
-        </ng-template>
-      </div>
-
-      <!-- Metadata -->
-      <div class="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
-        <div class="flex flex-col gap-0.5">
-          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">User ID</span>
-          <span class="text-xs font-mono text-gray-600">{{ editMember.id }}</span>
-        </div>
-        <div class="flex flex-col gap-0.5">
-          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Member Since</span>
-          <span class="text-xs text-gray-600">{{ editMember.createdAt }}</span>
-        </div>
-        <div class="flex flex-col gap-0.5">
-          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Last Login</span>
-          <span class="text-xs text-gray-600">{{ formatLastLogin(editMember.lastLogin) }}</span>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Footer -->
-    <div class="flex items-center justify-end px-6 py-4 border-t border-gray-100 bg-gray-50/60">
-      <button
-        (click)="closeEditMember()"
-        class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-white
-               border border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
-      >Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════ REMOVE MEMBER CONFIRM MODAL ═══════════════ -->
-<div
-  *ngIf="removeTarget"
-  class="fixed inset-0 z-50 flex items-center justify-center"
-  style="background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
-  (click)="cancelRemove()"
->
-  <div
-    class="bg-white rounded-2xl shadow-2xl w-96 max-w-[92vw] overflow-hidden"
-    (click)="$event.stopPropagation()"
-  >
-    <div class="px-6 pt-6 pb-4">
-      <div class="flex items-start gap-4">
-        <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-red-600" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M16 11c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm-8 0c1.657 0 3-1.343 3-3S9.657 5 8 5 5 6.343 5 8s1.343 3 3 3zm0 2c-2.337 0-7 1.173-7 3.5V18h14v-1.5C15 14.173 10.337 13 8 13zm8 0c-.29 0-.621.018-.97.048C16.198 13.773 17 14.76 17 16.5V18h5v-1.5c0-2.327-4.663-3.5-6-3.5z"/>
-          </svg>
-        </div>
-        <div>
-          <h3 class="text-base font-bold text-gray-900 mb-1">Remove Team Member</h3>
-          <p class="text-sm text-gray-500 leading-relaxed">
-            Are you sure you want to remove
-            <strong class="text-gray-800">{{ removeTarget.name }}</strong>
-            from this region? This action cannot be undone.
+          <h1 class="text-2xl font-bold text-gray-900 truncate">{{ d.region.displayName || d.region.name }}</h1>
+          <p class="text-sm text-gray-500 mt-1">
+            {{ d.region.territoryDisplayName }} territory
+            <span *ngIf="d.managers.length > 0"> · {{ d.managers.length }} regional manager{{ d.managers.length !== 1 ? 's' : '' }}</span>
           </p>
         </div>
+
+        <div class="flex items-center gap-4">
+          <div class="text-right">
+            <p class="text-xs font-semibold uppercase text-gray-400">Health</p>
+            <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold"
+                  [ngClass]="scoreClass(d.health.score)">
+              {{ d.health.score === null || d.health.score === undefined ? 'Insufficient data' : d.health.score }}
+            </span>
+          </div>
+          <div class="text-right">
+            <p class="text-xs font-semibold uppercase text-gray-400">Pending</p>
+            <p class="text-xl font-bold text-gray-900">{{ d.summary.pendingRequestsCount }}</p>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50/60">
-      <button
-        (click)="cancelRemove()"
-        class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-white border border-gray-300
-               hover:bg-gray-50 cursor-pointer transition-colors"
-      >Cancel</button>
-      <button
-        (click)="confirmRemove()"
-        [disabled]="isRemoving"
-        class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-600
-               hover:bg-red-700 border-none cursor-pointer transition-colors
-               disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        <svg *ngIf="isRemoving" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-        </svg>
-        {{ isRemoving ? 'Removing…' : 'Remove' }}
-      </button>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 mb-6">
+        <div class="bg-white rounded-xl border border-gray-200 px-4 py-4 shadow-sm">
+          <p class="text-xs font-semibold uppercase text-gray-400">Destinations</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ d.summary.destinationsCount }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 px-4 py-4 shadow-sm">
+          <p class="text-xs font-semibold uppercase text-gray-400">Locations</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ d.summary.locationsCount }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 px-4 py-4 shadow-sm">
+          <p class="text-xs font-semibold uppercase text-gray-400">Places</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ d.summary.placesCount }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 px-4 py-4 shadow-sm">
+          <p class="text-xs font-semibold uppercase text-gray-400">Stays</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ d.summary.staysCount }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 px-4 py-4 shadow-sm">
+          <p class="text-xs font-semibold uppercase text-gray-400">Events</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ d.summary.eventsCount }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 px-4 py-4 shadow-sm">
+          <p class="text-xs font-semibold uppercase text-gray-400">Visits</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ d.summary.visits }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 px-4 py-4 shadow-sm">
+          <p class="text-xs font-semibold uppercase text-gray-400">Saves</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ d.summary.saves }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 px-4 py-4 shadow-sm">
+          <p class="text-xs font-semibold uppercase text-gray-400">Rating</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ formatRating(d.summary.averageRating) }}</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-6">
+        <section class="xl:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div>
+              <h2 class="text-base font-bold text-gray-900">Region Health</h2>
+              <p class="text-xs text-gray-400 mt-0.5">{{ d.health.statusLabel }}</p>
+            </div>
+            <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold"
+                  [ngClass]="scoreClass(d.health.score)">
+              {{ d.health.score === null || d.health.score === undefined ? 'Insufficient data' : d.health.score }}
+            </span>
+          </div>
+          <div class="px-5 py-4">
+            <div *ngIf="healthInsights.length > 0; else noHealthInsights" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div *ngFor="let insight of healthInsights"
+                   class="rounded-lg border px-3 py-3"
+                   [ngClass]="insightClass(insight.severity)">
+                <p class="text-sm font-semibold">{{ insight.label }}</p>
+                <p class="text-xs leading-relaxed mt-1 opacity-90">{{ insight.detail }}</p>
+              </div>
+            </div>
+            <ng-template #noHealthInsights>
+              <p class="text-sm text-gray-500">Insufficient data</p>
+            </ng-template>
+            <button
+              *ngIf="hiddenHealthInsightCount > 0 || showAllHealthDetails"
+              (click)="showAllHealthDetails = !showAllHealthDetails"
+              class="mt-4 text-sm font-semibold text-blue-700 hover:text-blue-900 bg-transparent border-none cursor-pointer p-0"
+            >
+              {{ showAllHealthDetails ? 'Show less' : 'Show ' + hiddenHealthInsightCount + ' more' }}
+            </button>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h2 class="text-base font-bold text-gray-900">Regional Managers</h2>
+          </div>
+          <div class="px-5 py-4">
+            <div *ngIf="d.managers.length > 0; else noManagers" class="space-y-3">
+              <div *ngFor="let manager of d.managers" class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold overflow-hidden">
+                  <ng-container *ngIf="managerAvatarUrl(manager) as avatarUrl; else detailManagerInitials">
+                    <img
+                      [src]="avatarUrl"
+                      [alt]="managerAvatarAlt(manager)"
+                      class="w-full h-full object-cover"
+                      (error)="onManagerAvatarError(manager)"
+                    />
+                  </ng-container>
+                  <ng-template #detailManagerInitials>{{ managerInitials(manager) }}</ng-template>
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-gray-800 truncate">{{ manager.displayName }}</p>
+                  <p class="text-xs text-gray-400 truncate">{{ manager.email }}</p>
+                </div>
+              </div>
+            </div>
+            <ng-template #noManagers>
+              <p class="text-sm text-gray-500">No active Regional Manager assigned.</p>
+            </ng-template>
+
+            <div *ngIf="d.analytics.topEntities.length > 0" class="mt-5 pt-4 border-t border-gray-100">
+              <h3 class="text-xs font-bold uppercase text-gray-400 mb-3">Top Viewed</h3>
+              <div *ngFor="let entity of d.analytics.topEntities.slice(0, 3)" class="flex items-center justify-between gap-3 py-1.5">
+                <span class="text-sm text-gray-700 truncate">{{ entity.name }}</span>
+                <span class="text-xs font-semibold text-gray-500">{{ entity.views }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between gap-4 px-5 py-4 border-b border-gray-100">
+          <div>
+            <h2 class="text-base font-bold text-gray-900">Region Content</h2>
+            <p class="text-xs text-gray-400 mt-0.5">
+              {{ contentTotal }} item{{ contentTotal !== 1 ? 's' : '' }}
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 w-72">
+              <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search content..."
+                [(ngModel)]="contentSearch"
+                (input)="onContentSearchChange()"
+                class="bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 w-full"
+              />
+              <button
+                *ngIf="contentSearch"
+                (click)="clearContentSearch()"
+                class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer p-0 leading-none text-lg flex-shrink-0"
+              >&times;</button>
+            </div>
+
+            <div class="relative">
+              <button
+                (click)="contentSortOpen = !contentSortOpen; $event.stopPropagation()"
+                class="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200
+                       rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 cursor-pointer"
+              >
+                Sort: {{ currentContentSortLabel }}
+                <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </button>
+              <div
+                *ngIf="contentSortOpen"
+                class="absolute right-0 top-full mt-1 bg-white border border-gray-200
+                       rounded-lg shadow-lg z-10 w-48 py-1 overflow-hidden"
+              >
+                <button
+                  *ngFor="let opt of contentSortOptions"
+                  (click)="applyContentSort(opt)"
+                  class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50
+                         transition-colors cursor-pointer border-none bg-transparent"
+                  [ngClass]="currentContentSortLabel === opt.label ? 'font-semibold text-blue-700 bg-blue-50' : ''"
+                >{{ opt.label }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 px-5 pt-4">
+          <button
+            *ngFor="let tab of tabs"
+            (click)="setActiveTab(tab.value)"
+            class="px-3 py-1.5 rounded-lg text-sm font-semibold border cursor-pointer"
+            [ngClass]="activeTab === tab.value
+              ? 'bg-blue-700 text-white border-blue-700'
+              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <div *ngIf="contentErrorMessage"
+             class="mx-5 mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {{ contentErrorMessage }}
+        </div>
+
+        <div class="mt-4 border-t border-gray-100">
+          <div
+            class="grid items-center gap-4 px-5 py-3 bg-gray-50/60 border-b border-gray-100"
+            style="grid-template-columns: minmax(260px,1.4fr) minmax(180px,1fr) 170px 150px 130px;"
+          >
+            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Name</span>
+            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent</span>
+            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Coverage</span>
+            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Engagement</span>
+            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
+          </div>
+
+          <ng-container *ngIf="isContentLoading">
+            <div *ngFor="let i of [1,2,3,4,5]"
+                 class="grid items-center gap-4 px-5 py-4 border-b border-gray-50 animate-pulse"
+                 style="grid-template-columns: minmax(260px,1.4fr) minmax(180px,1fr) 170px 150px 130px;">
+              <div class="space-y-2">
+                <div class="h-4 bg-gray-100 rounded w-44"></div>
+                <div class="h-3 bg-gray-100 rounded w-72"></div>
+              </div>
+              <div class="h-4 bg-gray-100 rounded w-36"></div>
+              <div class="h-4 bg-gray-100 rounded w-28"></div>
+              <div class="h-4 bg-gray-100 rounded w-28"></div>
+              <div class="h-5 bg-gray-100 rounded-full w-16"></div>
+            </div>
+          </ng-container>
+
+          <ng-container *ngIf="!isContentLoading">
+            <div *ngFor="let item of contentItems; trackBy: trackByContentId">
+              <div
+                class="grid items-center gap-4 px-5 py-4 border-b border-gray-50 transition-colors"
+                [ngClass]="publicPreviewUrl(item) ? 'cursor-pointer hover:bg-blue-50/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-blue-600' : ''"
+                [attr.tabindex]="publicPreviewUrl(item) ? 0 : null"
+                [attr.role]="publicPreviewUrl(item) ? 'link' : null"
+                [attr.aria-label]="publicPreviewUrl(item) ? 'Open ' + item.name + ' in user app' : null"
+                (click)="openPublicPreview(item, $event)"
+                (keydown.enter)="openPublicPreviewFromKeyboard(item, $event)"
+                (keydown.space)="openPublicPreviewFromKeyboard(item, $event)"
+                style="grid-template-columns: minmax(260px,1.4fr) minmax(180px,1fr) 170px 150px 130px;"
+              >
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 mb-0.5">
+                    <ng-container *ngIf="publicPreviewUrl(item) as publicUrl; else publicPreviewUnavailable">
+                      <a
+                        [href]="publicUrl"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="block min-w-0 max-w-full truncate text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                      >
+                        {{ item.name }}
+                      </a>
+                    </ng-container>
+                    <ng-template #publicPreviewUnavailable>
+                      <span
+                        class="block min-w-0 max-w-full truncate text-sm font-semibold text-gray-900"
+                        aria-disabled="true"
+                        title="No public preview route"
+                      >
+                        {{ item.name }}
+                      </span>
+                    </ng-template>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                      {{ item.typeName || item.entityType }}
+                    </span>
+                  </div>
+                  <p class="text-xs text-gray-500 line-clamp-1">
+                    {{ item.summary || item.description || formatDate(item.startsAt || item.updatedAt || item.createdAt) }}
+                  </p>
+                </div>
+
+                <div class="min-w-0">
+                  <p class="text-sm text-gray-700 truncate">{{ item.parentName || item.destinationName || item.locationName || '-' }}</p>
+                  <p *ngIf="item.startsAt" class="text-xs text-gray-400">{{ formatDate(item.startsAt) }}</p>
+                </div>
+
+                <div class="text-xs text-gray-600">
+                  <ng-container *ngIf="item.entityType === 'destination' || item.entityType === 'destinations'; else compactCounts">
+                    {{ item.locationsCount }} locations · {{ item.placesCount }} places · {{ item.eventsCount }} events
+                  </ng-container>
+                  <ng-template #compactCounts>
+                    {{ item.placesCount }} places · {{ item.eventsCount }} events
+                  </ng-template>
+                </div>
+
+                <div class="text-xs text-gray-600">
+                  <div>{{ item.views }} views · {{ item.saves }} saves</div>
+                  <div>{{ item.reviewsCount }} reviews · {{ formatRating(item.averageRating) }}</div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold"
+                        [ngClass]="statusClass(item.status)">
+                    {{ item.status }}
+                  </span>
+                  <button
+                    *ngIf="hasDestinationHealth(item)"
+                    (click)="toggleDestinationHealth(item, $event)"
+                    class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border cursor-pointer"
+                    [ngClass]="scoreClass(item.health?.score)"
+                  >
+                    {{ item.health?.score === null || item.health?.score === undefined ? 'Health' : item.health?.score }}
+                  </button>
+                </div>
+              </div>
+
+              <div
+                *ngIf="isDestinationExpanded(item)"
+                class="px-5 py-4 bg-blue-50/30 border-b border-blue-100"
+              >
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div
+                    *ngFor="let insight of (item.health?.drivers || []).concat(item.health?.recommendations || [])"
+                    class="rounded-lg border px-3 py-3"
+                    [ngClass]="insightClass(insight.severity)"
+                  >
+                    <p class="text-sm font-semibold">{{ insight.label }}</p>
+                    <p class="text-xs leading-relaxed mt-1 opacity-90">{{ insight.detail }}</p>
+                  </div>
+                </div>
+                <p *ngIf="!(item.health?.drivers?.length || item.health?.recommendations?.length)" class="text-sm text-gray-500">
+                  Insufficient data
+                </p>
+              </div>
+            </div>
+
+            <div
+              *ngIf="contentItems.length === 0"
+              class="flex flex-col items-center justify-center py-14 text-gray-400"
+            >
+              <svg class="w-12 h-12 mb-3 text-gray-200" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="10" r="3"/>
+                <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7z"/>
+              </svg>
+              <p class="text-sm font-medium">No content found</p>
+            </div>
+          </ng-container>
+        </div>
+
+        <div
+          *ngIf="!isContentLoading"
+          class="flex flex-col items-center gap-3 px-5 py-3 border-t border-gray-100 bg-gray-50/40"
+        >
+          <p class="text-sm text-gray-500">
+            Showing
+            <span class="font-semibold text-gray-700">{{ contentItems.length }}</span>
+            of
+            <span class="font-semibold text-gray-700">{{ contentTotal }}</span>
+            item{{ contentTotal !== 1 ? 's' : '' }}
+          </p>
+          <button
+            *ngIf="hasMoreContent"
+            (click)="loadMoreContent()"
+            [disabled]="isContentLoadingMore"
+            class="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold
+                   text-blue-700 bg-white border border-blue-200 hover:bg-blue-50
+                   transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <svg *ngIf="isContentLoadingMore" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <span>{{ isContentLoadingMore ? 'Loading...' : 'Show More' }}</span>
+            <span *ngIf="!isContentLoadingMore"
+                  class="text-[10px] font-bold bg-blue-100 text-blue-600 rounded-full px-1.5 py-0.5">
+              +{{ nextContentPageCount }}
+            </span>
+          </button>
+          <span *ngIf="!hasMoreContent && contentItems.length > 0" class="text-xs text-gray-400 italic">
+            All content loaded
+          </span>
+        </div>
+      </section>
     </div>
   </div>
 </div>

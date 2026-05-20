@@ -15,7 +15,7 @@ public class RegionalEventService : IRegionalEventService
     private const int MaxTake = 50;
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
-    private const string ExistingEditRoute = "/events/new";
+    private const string ArchivedStatus = "Archived";
 
     private readonly AppDbContext _db;
 
@@ -117,7 +117,23 @@ public class RegionalEventService : IRegionalEventService
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
-                    .FirstOrDefault()
+                    .FirstOrDefault(),
+                Images = @event.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Event)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => new RegionalEntityImageDto
+                    {
+                        Id = image.Id,
+                        Url = image.Url,
+                        AltText = image.AltText,
+                        Caption = image.Caption,
+                        IsMain = image.IsMain,
+                        SortOrder = image.SortOrder
+                    })
+                    .ToList()
             })
             .ToListAsync();
 
@@ -196,7 +212,23 @@ public class RegionalEventService : IRegionalEventService
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
-                    .FirstOrDefault()
+                    .FirstOrDefault(),
+                Images = @event.Images
+                    .Where(image => image.TargetType == EntityImageTargetType.Event)
+                    .OrderByDescending(image => image.IsMain)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => new RegionalEntityImageDto
+                    {
+                        Id = image.Id,
+                        Url = image.Url,
+                        AltText = image.AltText,
+                        Caption = image.Caption,
+                        IsMain = image.IsMain,
+                        SortOrder = image.SortOrder
+                    })
+                    .ToList()
             })
             .SingleOrDefaultAsync()
             ?? throw new KeyNotFoundException("Event not found.");
@@ -224,6 +256,7 @@ public class RegionalEventService : IRegionalEventService
         var ticketPrice = request.IsFree
             ? null
             : NormalizeTicketPrice(request.TicketPrice);
+        var images = RegionalEntityImageRequestNormalizer.Normalize(request.Images, name);
         var now = DateTime.UtcNow;
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -257,6 +290,18 @@ public class RegionalEventService : IRegionalEventService
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
             CreatedAt = now,
+            Images = images
+                .Select(image => new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Event,
+                    Url = image.Url,
+                    AltText = image.AltText,
+                    Caption = image.Caption,
+                    IsMain = image.IsMain,
+                    SortOrder = image.SortOrder,
+                    CreatedAt = now
+                })
+                .ToList(),
             EventTags = tagIds
                 .Select(tagId => new EventTag { TagId = tagId })
                 .ToList()
@@ -284,10 +329,16 @@ public class RegionalEventService : IRegionalEventService
 
         var @event = await _db.Events
             .Include(item => item.Destination)
+            .Include(item => item.EventTags)
+            .Include(item => item.Images)
             .SingleOrDefaultAsync(item => item.Id == eventId && item.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Event not found.");
 
-        if (request.LocationId.HasValue)
+        if (!string.IsNullOrWhiteSpace(request.ParentEntityType))
+        {
+            await ApplyParentUpdateAsync(@event, regionId, request);
+        }
+        else if (request.LocationId.HasValue)
         {
             var location = await _db.Locations
                 .SingleOrDefaultAsync(item =>
@@ -323,6 +374,18 @@ public class RegionalEventService : IRegionalEventService
             !await _db.EventTypes.AnyAsync(item => item.Id == request.EventTypeId.Value))
         {
             throw new InvalidOperationException("Event type is invalid.");
+        }
+
+        if (request.TagIds is not null)
+        {
+            var tagIds = await ValidateEventTagIdsAsync(request.TagIds);
+            ReplaceTags(@event, tagIds);
+        }
+
+        if (request.Images is not null)
+        {
+            var fallbackAltText = request.Name ?? @event.Name;
+            ReplaceImages(@event, request.Images, fallbackAltText);
         }
 
         ApplyUpdate(@event, request);
@@ -651,6 +714,16 @@ public class RegionalEventService : IRegionalEventService
             @event.Description = description;
         }
 
+        if (request.Summary is not null)
+        {
+            @event.Summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
+        }
+
+        if (request.Status is not null)
+        {
+            @event.Status = NormalizeUpdateStatus(request.Status);
+        }
+
         if (request.EventTypeId.HasValue)
         {
             if (request.EventTypeId.Value <= 0)
@@ -659,23 +732,166 @@ public class RegionalEventService : IRegionalEventService
             @event.EventTypeId = request.EventTypeId.Value;
         }
 
-        var startsAt = request.StartsAt ?? @event.StartDate;
-        var endsAt = request.EndsAt ?? @event.EndDate;
-        if (endsAt < startsAt)
-            throw new InvalidOperationException("Event end date must be after the start date.");
+        var isAllDay = request.IsAllDay ?? @event.IsAllDay;
+        var schedule = NormalizeSchedule(request.StartsAt ?? @event.StartDate, request.EndsAt ?? @event.EndDate, isAllDay);
 
-        if (request.StartsAt.HasValue)
-            @event.StartDate = request.StartsAt.Value;
+        if (request.IsAllDay.HasValue)
+            @event.IsAllDay = request.IsAllDay.Value;
 
-        if (request.EndsAt.HasValue)
-            @event.EndDate = request.EndsAt.Value;
+        if (request.StartsAt.HasValue || request.EndsAt.HasValue || request.IsAllDay.HasValue)
+        {
+            @event.StartDate = schedule.StartsAt;
+            @event.EndDate = schedule.EndsAt;
+        }
 
-        @event.TicketPrice = NormalizeOptionalText(request.TicketPrice, 100, "Ticket price is too long.", @event.TicketPrice);
+        if (request.VenueName is not null)
+        {
+            @event.VenueName = NormalizeOptionalText(request.VenueName, 200, "Venue name is too long.");
+        }
+
+        if (request.IsRecurring.HasValue)
+        {
+            @event.IsRecurring = request.IsRecurring.Value;
+        }
+
+        if (request.IsFree.HasValue)
+        {
+            @event.IsFree = request.IsFree.Value;
+        }
+
+        if (request.IsFree == true)
+        {
+            @event.TicketPrice = null;
+        }
+        else
+        {
+            @event.TicketPrice = NormalizeOptionalText(request.TicketPrice, 100, "Ticket price is too long.", @event.TicketPrice);
+        }
+
+        if (request.ExternalTicketLink is not null)
+        {
+            @event.ExternalTicketLink = NormalizeUrl(request.ExternalTicketLink, "External ticket link is invalid.");
+        }
+
         @event.Duration = NormalizeOptionalText(request.Duration, 100, "Duration is too long.", @event.Duration);
-        @event.HostedBy = NormalizeOptionalText(request.HostedBy, 200, "Host name is too long.", @event.HostedBy);
+        @event.HostedBy = NormalizeOptionalText(request.OrganizerName ?? request.HostedBy, 200, "Host name is too long.", @event.HostedBy);
+
+        if (request.ContactEmail is not null)
+        {
+            @event.ContactEmail = NormalizeEmail(request.ContactEmail);
+        }
+
+        if (request.AttendanceLimit.HasValue)
+        {
+            @event.AttendanceLimit = NormalizeAttendanceLimit(request.AttendanceLimit);
+        }
+
+        if (request.AgeRestriction is not null)
+        {
+            @event.AgeRestriction = NormalizeOptionalText(request.AgeRestriction, 100, "Age restriction is too long.");
+        }
+
         @event.VenueDescription = NormalizeOptionalText(request.VenueDescription, 2000, "Venue description is too long.", @event.VenueDescription);
         @event.ArrivalTips = NormalizeOptionalText(request.ArrivalTips, 2000, "Arrival tips are too long.", @event.ArrivalTips);
         @event.Accessibility = NormalizeOptionalText(request.Accessibility, 1000, "Accessibility notes are too long.", @event.Accessibility);
+    }
+
+    private async Task ApplyParentUpdateAsync(Event @event, int regionId, RegionalEventUpdateRequestDto request)
+    {
+        var parentType = NormalizeToken(request.ParentEntityType ?? string.Empty);
+        switch (parentType)
+        {
+            case "destination":
+            {
+                if (!request.DestinationId.HasValue || request.DestinationId.Value <= 0)
+                    throw new InvalidOperationException("Parent destination is required.");
+
+                var destination = await _db.Destinations
+                    .SingleOrDefaultAsync(item => item.Id == request.DestinationId.Value && item.RegionId == regionId)
+                    ?? throw new InvalidOperationException("Destination is invalid for the selected region.");
+
+                @event.DestinationId = destination.Id;
+                @event.LocationId = null;
+                @event.PlaceId = null;
+                @event.ParentEntityType = "Destination";
+                break;
+            }
+
+            case "location":
+            {
+                if (!request.LocationId.HasValue || request.LocationId.Value <= 0)
+                    throw new InvalidOperationException("Parent location is required.");
+
+                var location = await _db.Locations
+                    .SingleOrDefaultAsync(item => item.Id == request.LocationId.Value && item.Destination.RegionId == regionId)
+                    ?? throw new InvalidOperationException("Location is invalid for the selected region.");
+
+                @event.DestinationId = location.DestinationId;
+                @event.LocationId = location.Id;
+                @event.PlaceId = null;
+                @event.ParentEntityType = "Location";
+                break;
+            }
+
+            case "place":
+            {
+                if (!request.PlaceId.HasValue || request.PlaceId.Value <= 0)
+                    throw new InvalidOperationException("Parent place is required.");
+
+                var place = await _db.Places
+                    .Include(item => item.Location)
+                    .SingleOrDefaultAsync(item => item.Id == request.PlaceId.Value && item.Location.Destination.RegionId == regionId)
+                    ?? throw new InvalidOperationException("Place is invalid for the selected region.");
+
+                @event.DestinationId = place.Location.DestinationId;
+                @event.LocationId = place.LocationId;
+                @event.PlaceId = place.Id;
+                @event.ParentEntityType = "Place";
+                break;
+            }
+
+            default:
+                throw new InvalidOperationException("Event parent type is required.");
+        }
+    }
+
+    private void ReplaceImages(
+        Event @event,
+        IEnumerable<RegionalEntityImageInputDto> imageRequests,
+        string fallbackAltText)
+    {
+        var images = RegionalEntityImageRequestNormalizer.Normalize(imageRequests, fallbackAltText);
+        var now = DateTime.UtcNow;
+
+        _db.EntityImages.RemoveRange(@event.Images.Where(image => image.TargetType == EntityImageTargetType.Event));
+
+        foreach (var image in images)
+        {
+            @event.Images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Event,
+                EventId = @event.Id,
+                Url = image.Url,
+                AltText = image.AltText,
+                Caption = image.Caption,
+                IsMain = image.IsMain,
+                SortOrder = image.SortOrder,
+                CreatedAt = now
+            });
+        }
+    }
+
+    private static void ReplaceTags(Event @event, IEnumerable<int> tagIds)
+    {
+        @event.EventTags.Clear();
+        foreach (var tagId in tagIds)
+        {
+            @event.EventTags.Add(new EventTag
+            {
+                EventId = @event.Id,
+                TagId = tagId
+            });
+        }
     }
 
     private static string? NormalizeOptionalText(string? value, int maxLength, string errorMessage, string? currentValue)
@@ -726,6 +942,19 @@ public class RegionalEventService : IRegionalEventService
             "draft" => DraftStatus,
             _ => throw new InvalidOperationException("Event status is invalid.")
         };
+    }
+
+    private static string NormalizeUpdateStatus(string status)
+    {
+        var normalized = NormalizeToken(status);
+        if (normalized is "published" or "publish")
+            return PublishedStatus;
+        if (normalized == "draft")
+            return DraftStatus;
+        if (normalized == "archived")
+            return ArchivedStatus;
+
+        throw new InvalidOperationException("Event status is invalid.");
     }
 
     private async Task<int> ResolveEventTypeIdAsync(int? eventTypeId)
@@ -1085,8 +1314,9 @@ public class RegionalEventService : IRegionalEventService
             Accessibility = row.Accessibility,
             Tags = row.Tags,
             ImageUrl = row.ImageUrl,
+            Images = row.Images,
             DetailRoute = "/events/detail/" + row.Id,
-            EditRoute = ExistingEditRoute,
+            EditRoute = "/events/edit/" + row.Id,
             Latitude = row.Latitude,
             Longitude = row.Longitude
         };
@@ -1138,6 +1368,7 @@ public class RegionalEventService : IRegionalEventService
             Accessibility = item.Accessibility,
             Tags = item.Tags,
             ImageUrl = item.ImageUrl,
+            Images = item.Images,
             DetailRoute = item.DetailRoute,
             EditRoute = item.EditRoute,
             Latitude = item.Latitude,
@@ -1250,6 +1481,7 @@ public class RegionalEventService : IRegionalEventService
         public string? Accessibility { get; set; }
         public List<RegionalEventTagDto> Tags { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public List<RegionalEntityImageDto> Images { get; set; } = new();
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
     }

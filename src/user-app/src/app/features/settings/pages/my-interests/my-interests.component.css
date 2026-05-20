@@ -11,8 +11,8 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-.selected-chips { 
-  scrollbar-width: none; 
+.selected-chips {
+  scrollbar-width: none;
 }
 
 @media (min-width: 1024px) {
@@ -166,4 +166,3 @@
     padding-bottom: 0;
   }
 }
-

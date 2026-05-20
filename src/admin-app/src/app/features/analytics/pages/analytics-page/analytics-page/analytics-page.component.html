@@ -1,7 +1,14 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans" (click)="onDocumentClick()">
 
   <!-- ════════════════ SIDEBAR ════════════════ -->
-  <app-sidebar [region]="region" />
+  <app-sidebar
+    [region]="regionDisplayName"
+    [regions]="assignedRegions"
+    [activeRegionId]="activeRegionId"
+    [pendingRequestsCount]="pendingRequestsCount"
+    [regionLoading]="regionLoading"
+    (regionChange)="onRegionSelected($event)"
+  />
 
   <!-- ════════════════ MAIN ════════════════ -->
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -30,11 +37,11 @@
             <input
               type="text"
               [ngModel]="searchQuery()"
-              (ngModelChange)="searchQuery.set($event)"
+              (ngModelChange)="onSearchChange($event)"
               [placeholder]="searchPlaceholder()"
               class="text-sm text-gray-700 border-0 bg-transparent outline-none w-full placeholder-gray-400"
             />
-            <button *ngIf="searchQuery()" (click)="searchQuery.set('')"
+            <button *ngIf="searchQuery()" (click)="clearSearch()"
                     class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer p-0 leading-none text-lg flex-shrink-0">
               &times;
             </button>
@@ -71,16 +78,32 @@
           <!-- Export -->
           <button
             (click)="exportData()"
+            [disabled]="!activeRegionId || exporting"
             class="flex items-center gap-2 text-sm font-semibold text-white px-4 py-1.5 rounded-lg transition-colors cursor-pointer border-0 bg-[#185FA5] hover:bg-[#0f4f8c]"
+            [ngClass]="(!activeRegionId || exporting) ? 'opacity-60 cursor-not-allowed' : ''"
           >
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            Export Data
+            {{ exporting ? 'Exporting...' : 'Export Data' }}
           </button>
         </div>
+      </div>
+
+      <div
+        *ngIf="(regionLoading || analyticsLoading) && sortedRows().length === 0 && !errorMessage"
+        class="bg-white rounded-xl border border-gray-100 p-6 text-sm text-gray-500 mb-4"
+      >
+        Loading analytics for the active region...
+      </div>
+
+      <div *ngIf="errorMessage" class="bg-white rounded-xl border border-red-100 p-6 mb-4">
+        <p class="text-sm font-semibold text-red-600">
+          {{ authRequired ? 'Authentication required' : 'Analytics unavailable' }}
+        </p>
+        <p class="text-sm text-gray-500 mt-1">{{ errorMessage }}</p>
       </div>
 
       <!-- ══ Main layout: content + right panel ══════════════════════════ -->
@@ -123,7 +146,15 @@
               <div class="text-sm font-semibold text-gray-800 mb-0.5">Page Views Trend</div>
               <ng-container *ngIf="trendChart() as chart">
                 <div class="text-xs text-gray-400 mb-4">{{ chart.subtitle }}</div>
-                <svg viewBox="0 0 320 160" class="w-full" style="height: 160px;">
+                <svg
+                  viewBox="0 0 320 160"
+                  class="w-full"
+                  style="height: 160px;"
+                  role="img"
+                  aria-label="Page views trend line chart"
+                  data-testid="page-views-trend-chart"
+                  (mouseleave)="clearActiveTrendPoint()"
+                >
                   <defs>
                     <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stop-color="#185FA5" stop-opacity="0.15"/>
@@ -136,7 +167,53 @@
                   <line x1="24" y1="94"  x2="316" y2="94"  stroke="#f3f4f6" stroke-width="1"/>
                   <line x1="24" y1="134" x2="316" y2="134" stroke="#f3f4f6" stroke-width="1"/>
                   <path [attr.d]="chart.areaPath" fill="url(#areaGrad)"/>
-                  <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round"/>
+                  <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                  <g
+                    *ngFor="let point of chart.points; let pointIndex = index"
+                    [appAnalyticsTooltip]="trendTooltip(point)"
+                    [attr.aria-label]="trendAriaLabel(point)"
+                    (mouseenter)="setActiveTrendPoint(pointIndex)"
+                    (mousemove)="setActiveTrendPoint(pointIndex)"
+                    (mouseleave)="clearActiveTrendPoint(pointIndex)"
+                    (focus)="setActiveTrendPoint(pointIndex)"
+                    (blur)="clearActiveTrendPoint(pointIndex)"
+                    (touchstart)="setActiveTrendPointFromTouch(pointIndex)"
+                    tabindex="0"
+                    focusable="true"
+                    role="img"
+                    data-testid="page-views-trend-point"
+                    style="cursor: pointer;"
+                  >
+                    <rect
+                      [attr.x]="point.hoverX"
+                      y="14"
+                      [attr.width]="point.hoverWidth"
+                      height="134"
+                      fill="transparent"
+                    ></rect>
+                  </g>
+                  <ng-container *ngIf="activeTrendPoint() as activePoint">
+                    <circle
+                      [attr.cx]="activePoint.x"
+                      [attr.cy]="activePoint.y"
+                      r="7"
+                      fill="#185FA5"
+                      opacity="0.14"
+                      aria-hidden="true"
+                      style="pointer-events: none;"
+                    ></circle>
+                    <circle
+                      [attr.cx]="activePoint.x"
+                      [attr.cy]="activePoint.y"
+                      r="4.5"
+                      fill="#ffffff"
+                      stroke="#185FA5"
+                      stroke-width="2"
+                      aria-hidden="true"
+                      data-testid="page-views-trend-active-point"
+                      style="pointer-events: none;"
+                    ></circle>
+                  </ng-container>
                   <text *ngFor="let lbl of chart.xLabels" [attr.x]="lbl.x" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">{{ lbl.text }}</text>
                 </svg>
               </ng-container>
@@ -148,7 +225,15 @@
               <div class="text-xs text-gray-400 mb-4">By total page views</div>
               <div class="flex flex-col gap-3">
                 <ng-container *ngIf="topPerformers().length > 0; else noPerformers">
-                  <div *ngFor="let e of topPerformers()" class="flex items-center gap-3">
+                  <div
+                    *ngFor="let e of topPerformers()"
+                    class="flex items-center gap-3 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    [appAnalyticsTooltip]="topPerformerTooltip(e)"
+                    [attr.aria-label]="topPerformerAriaLabel(e)"
+                    tabindex="0"
+                    role="img"
+                    data-testid="top-performing-row"
+                  >
                     <span class="text-xs text-gray-600 w-36 truncate flex-shrink-0">{{ e.name }}</span>
                     <div class="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
                       <div class="h-full rounded" style="background: #185FA5;" [style.width]="topPerformerBarPct(e) + '%'"></div>
@@ -180,12 +265,26 @@
                     [attr.stroke-dasharray]="arc.dasharray"
                     [attr.stroke-dashoffset]="arc.dashoffset"
                     transform="rotate(-90 80 80)"
+                    [appAnalyticsTooltip]="distributionTooltip(arc)"
+                    [attr.aria-label]="distributionAriaLabel(arc)"
+                    tabindex="0"
+                    role="img"
+                    data-testid="entity-distribution-segment"
+                    style="cursor: pointer;"
                   />
                   <text x="80" y="74" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">{{ donutTotalDisplay() }}</text>
                   <text x="80" y="91" text-anchor="middle" font-size="10" fill="#9ca3af">TOTAL</text>
                 </svg>
                 <div class="flex items-center gap-4 flex-wrap justify-center">
-                  <div *ngFor="let arc of donutArcs()" class="flex items-center gap-1.5 text-xs text-gray-600">
+                  <div
+                    *ngFor="let arc of donutArcs()"
+                    class="flex items-center gap-1.5 text-xs text-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    [appAnalyticsTooltip]="distributionTooltip(arc)"
+                    [attr.aria-label]="distributionAriaLabel(arc)"
+                    tabindex="0"
+                    role="img"
+                    data-testid="entity-distribution-legend-item"
+                  >
                     <span class="w-3 h-3 rounded-full flex-shrink-0" [style.background]="arc.color"></span>
                     {{ arc.label }} <span class="text-gray-400">({{ arc.count }})</span>
                   </div>
@@ -198,7 +297,15 @@
               <div class="text-sm font-semibold text-gray-800 mb-0.5">Engagement Funnel</div>
               <div class="text-xs text-gray-400 mb-4">User journey completion</div>
               <div class="flex flex-col gap-2.5">
-                <div *ngFor="let item of funnelData()" class="flex flex-col gap-1">
+                <div
+                  *ngFor="let item of funnelData()"
+                  class="flex flex-col gap-1 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  [appAnalyticsTooltip]="funnelTooltip(item)"
+                  [attr.aria-label]="funnelAriaLabel(item)"
+                  tabindex="0"
+                  role="img"
+                  data-testid="engagement-funnel-row"
+                >
                   <div class="flex justify-between text-xs text-gray-600 font-medium">
                     <span>{{ item.label }}</span><span class="text-gray-400">{{ item.value }}</span>
                   </div>
@@ -210,12 +317,238 @@
             </div>
           </div>
 
+          <!-- Monthly Visits Over Time -->
+          <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);" data-testid="monthly-visits-card">
+            <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+              <div>
+                <div class="text-sm font-semibold text-gray-800 mb-0.5">Monthly Visits Over Time</div>
+                <div class="text-xs text-gray-400">Entity detail and entity-scoped page views by month</div>
+              </div>
+
+              <label class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
+                <span class="text-sm text-gray-500">Range:</span>
+                <select
+                  [ngModel]="selectedMonthlyVisitYears"
+                  (ngModelChange)="onMonthlyVisitYearsChange($event)"
+                  class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer"
+                  aria-label="Monthly visits year range"
+                >
+                  <option *ngFor="let option of monthlyVisitYearOptions" [ngValue]="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+            </div>
+
+            <div *ngIf="monthlyVisitsErrorMessage" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-3">
+              {{ monthlyVisitsErrorMessage }}
+            </div>
+
+            <ng-container *ngIf="monthlyVisitChart() as monthlyChart">
+              <div class="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                <div class="text-xs text-gray-500">
+                  Total visits:
+                  <span class="font-semibold text-gray-800">{{ formatNum(monthlyChart.totalVisits) }}</span>
+                </div>
+                <div class="flex items-center gap-4 flex-wrap">
+                  <div *ngFor="let item of monthlyChart.legend" class="flex items-center gap-1.5 text-xs text-gray-600">
+                    <span class="w-3 h-3 rounded-full flex-shrink-0" [style.background]="item.color"></span>
+                    <span>{{ item.label }}</span>
+                    <span class="text-gray-400">({{ formatNum(item.total) }})</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="overflow-x-auto -mx-1 px-1">
+                <svg viewBox="0 0 720 230" class="w-full min-w-[640px]" style="height: 230px;" role="img" aria-label="Monthly visits over time bar chart">
+                  <ng-container *ngFor="let label of monthlyChart.yLabels">
+                    <line x1="48" [attr.y1]="label.y" x2="702" [attr.y2]="label.y" stroke="#f3f4f6" stroke-width="1"/>
+                    <text x="4" [attr.y]="label.y + 3" font-size="10" fill="#9ca3af">{{ label.text }}</text>
+                  </ng-container>
+
+                  <line x1="48" y1="184" x2="702" y2="184" stroke="#e5e7eb" stroke-width="1"/>
+
+                  <ng-container *ngIf="!monthlyChart.isEmpty">
+                    <rect
+                      *ngFor="let bar of monthlyChart.bars"
+                      [attr.x]="bar.x"
+                      [attr.y]="bar.y"
+                      [attr.width]="bar.width"
+                      [attr.height]="bar.height"
+                      [attr.fill]="bar.color"
+                      [appAnalyticsTooltip]="monthlyVisitTooltip(bar)"
+                      [attr.aria-label]="monthlyVisitAriaLabel(bar)"
+                      tabindex="0"
+                      role="img"
+                      data-testid="monthly-visits-bar"
+                      rx="3"
+                    ></rect>
+                  </ng-container>
+
+                  <text *ngFor="let label of monthlyChart.xLabels" [attr.x]="label.x" y="212" font-size="10" fill="#6b7280" text-anchor="middle">{{ label.text }}</text>
+                  <text *ngIf="monthlyChart.isEmpty" x="375" y="100" text-anchor="middle" font-size="13" fill="#9ca3af">No visit data yet for this selection.</text>
+                </svg>
+              </div>
+
+              <p *ngIf="monthlyVisitsLoading" class="text-xs text-gray-400 mt-2">Loading monthly visits...</p>
+            </ng-container>
+          </div>
+
+          <!-- Tag Views -->
+          <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);" data-testid="tag-views-card">
+            <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+              <div>
+                <div class="text-sm font-semibold text-gray-800 mb-0.5">Tag Views</div>
+                <div class="text-xs text-gray-400">Views grouped by destination, location, place, and event tags</div>
+              </div>
+
+              <div class="flex items-center gap-2 flex-wrap justify-end" (click)="$event.stopPropagation()">
+                <label class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
+                  <span class="text-sm text-gray-500">Period:</span>
+                  <select
+                    [ngModel]="selectedTagViewsPeriod"
+                    (ngModelChange)="onTagViewsPeriodChange($event)"
+                    class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer"
+                    aria-label="Tag views period"
+                  >
+                    <option *ngFor="let option of tagViewPeriodOptions" [ngValue]="option.value">{{ option.label }}</option>
+                  </select>
+                </label>
+
+                <div class="relative">
+                  <button
+                    type="button"
+                    (click)="toggleTagSelector($event)"
+                    class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 cursor-pointer hover:border-gray-300"
+                    aria-haspopup="listbox"
+                    [attr.aria-expanded]="tagSelectorOpen"
+                  >
+                    <span class="max-w-36 truncate">{{ selectedTagControlLabel() }}</span>
+                    <svg class="w-3 h-3 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+
+                  <div
+                    *ngIf="tagSelectorOpen"
+                    class="absolute right-0 top-full mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden"
+                    (click)="$event.stopPropagation()"
+                    data-testid="tag-selector-menu"
+                  >
+                    <div class="p-2 border-b border-gray-100">
+                      <input
+                        type="text"
+                        [ngModel]="tagSearchSig()"
+                        (ngModelChange)="onTagSearchChange($event)"
+                        placeholder="Search tags"
+                        class="w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 outline-none"
+                      />
+                    </div>
+
+                    <div class="max-h-56 overflow-y-auto py-1">
+                      <label
+                        *ngFor="let tag of visibleTagOptions()"
+                        class="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          class="mt-0.5"
+                          [checked]="isTagSelected(tag.tagId)"
+                          (change)="onTagCheckboxChange(tag.tagId, $event)"
+                        />
+                        <span class="min-w-0">
+                          <span class="block text-sm font-medium text-gray-700 truncate" [title]="tag.name">{{ tag.name }}</span>
+                          <span class="block text-[11px] text-gray-400 truncate">{{ tagScopeSummary(tag) }}</span>
+                        </span>
+                      </label>
+
+                      <p *ngIf="visibleTagOptions().length === 0" class="text-sm text-gray-400 px-3 py-3">
+                        {{ availableTagOptions().length === 0 ? 'No tags available for this region.' : 'No tags match your search.' }}
+                      </p>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2 p-2 border-t border-gray-100">
+                      <span class="text-[11px] text-gray-400">{{ selectedTagControlLabel() }}</span>
+                      <button
+                        type="button"
+                        (click)="clearSelectedTags()"
+                        class="text-xs font-semibold text-blue-700 bg-transparent border-0 cursor-pointer hover:text-blue-900"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="tagViewsErrorMessage" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-3">
+              {{ tagViewsErrorMessage }}
+            </div>
+
+            <ng-container *ngIf="tagViewsChart() as tagChart">
+              <div class="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                <div class="text-xs text-gray-500">
+                  Total tag views:
+                  <span class="font-semibold text-gray-800">{{ formatNum(tagChart.totalViews) }}</span>
+                </div>
+                <p *ngIf="tagViewsLoading" class="text-xs text-gray-400">Loading tag views...</p>
+              </div>
+
+              <div class="overflow-x-auto -mx-1 px-1">
+                <svg
+                  [attr.viewBox]="'0 0 ' + tagChart.width + ' 238'"
+                  class="w-full"
+                  [style.min-width.px]="tagChart.width"
+                  style="height: 238px;"
+                  role="img"
+                  aria-label="Tag views bar chart"
+                >
+                  <ng-container *ngFor="let label of tagChart.yLabels">
+                    <line x1="54" [attr.y1]="label.y" [attr.x2]="tagChart.width - 22" [attr.y2]="label.y" stroke="#f3f4f6" stroke-width="1"/>
+                    <text x="4" [attr.y]="label.y + 3" font-size="10" fill="#9ca3af">{{ label.text }}</text>
+                  </ng-container>
+
+                  <line x1="54" y1="170" [attr.x2]="tagChart.width - 22" y2="170" stroke="#e5e7eb" stroke-width="1"/>
+
+                  <ng-container *ngIf="!tagChart.isEmpty">
+                    <rect
+                      *ngFor="let bar of tagChart.bars"
+                      [attr.x]="bar.x"
+                      [attr.y]="bar.y"
+                      [attr.width]="bar.width"
+                      [attr.height]="bar.height"
+                      [attr.fill]="bar.color"
+                      [appAnalyticsTooltip]="tagViewTooltip(bar)"
+                      [attr.aria-label]="tagViewAriaLabel(bar)"
+                      tabindex="0"
+                      role="img"
+                      data-testid="tag-views-bar"
+                      rx="4"
+                    ></rect>
+
+                    <text
+                      *ngFor="let label of tagChart.xLabels"
+                      [attr.x]="label.x"
+                      y="198"
+                      font-size="10"
+                      fill="#6b7280"
+                      text-anchor="end"
+                      [attr.transform]="'rotate(-28 ' + label.x + ' 198)'"
+                    >
+                      <title>{{ label.fullText }}</title>
+                      {{ label.text }}
+                    </text>
+                  </ng-container>
+
+                  <text *ngIf="tagChart.isEmpty" [attr.x]="tagChart.width / 2" y="96" text-anchor="middle" font-size="13" fill="#9ca3af">No tag view data for this period.</text>
+                </svg>
+              </div>
+            </ng-container>
+          </div>
+
           <!-- Entity Performance Details Table -->
           <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
             <div class="flex items-start justify-between mb-4">
               <div>
                 <div class="text-sm font-semibold text-gray-800 mb-0.5">{{ entityDetailsTitle() }}</div>
-                <div class="text-xs text-gray-400">Top 50 {{ entityTypeWord() }} by {{ currentSortLabel() | lowercase }}.</div>
+                <div class="text-xs text-gray-400">Filtered {{ entityTypeWord() }} by {{ currentSortLabel() | lowercase }}.</div>
               </div>
               <div class="flex items-center gap-3">
                 <!-- Sort dropdown -->
@@ -266,7 +599,14 @@
                 <tbody>
                   <tr
                     *ngFor="let row of sortedRows().slice(0, visibleCount())"
-                    class="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer"
+                    class="border-b border-gray-50 hover:bg-blue-50/60 focus:bg-blue-50/80 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-200 transition-colors cursor-pointer"
+                    tabindex="0"
+                    role="button"
+                    [attr.aria-label]="'Open analytics details for ' + row.name"
+                    data-testid="entity-performance-row"
+                    (click)="openEntityDetails(row, $event)"
+                    (keydown.enter)="openEntityDetails(row, $event)"
+                    (keydown.space)="openEntityDetails(row, $event)"
                   >
                     <td class="py-3">
                       <div class="flex items-center gap-3">
@@ -296,13 +636,8 @@
                       </div>
                     </td>
                     <td class="py-3 text-right">
-                      <span class="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-semibold" [ngClass]="trendClass(row.trend)">
-                        <ng-container [ngSwitch]="row.trend">
-                          <svg *ngSwitchCase="'up'"     class="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
-                          <svg *ngSwitchCase="'stable'" class="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                          <svg *ngSwitchCase="'down'"   class="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        </ng-container>
-                        {{ trendLabel(row.trend) }}
+                      <span class="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-semibold" [ngClass]="entityStatusClass(row.status)">
+                        {{ row.status || 'Unknown' }}
                       </span>
                     </td>
                   </tr>
@@ -317,16 +652,16 @@
             <div class="flex flex-col items-center gap-3 mt-4 pt-4 border-t border-gray-100">
               <p class="text-sm text-gray-500">
                 Showing
-                <span class="font-semibold text-gray-700">{{ Math.min(visibleCount(), sortedRows().length) }}</span>
-                of
                 <span class="font-semibold text-gray-700">{{ sortedRows().length }}</span>
+                of
+                <span class="font-semibold text-gray-700">{{ totalRows() }}</span>
                 {{ entityTypeWord() }}
               </p>
               <button *ngIf="tableHasMore()" (click)="showMore()"
                       class="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 transition-colors cursor-pointer">
                 <span>Show More</span>
                 <span class="text-[10px] font-bold bg-blue-100 text-blue-600 rounded-full px-1.5 py-0.5">
-                  +{{ sortedRows().length - visibleCount() }}
+                  +{{ remainingRows() }}
                 </span>
               </button>
               <span *ngIf="!tableHasMore() && sortedRows().length > 0"
@@ -339,15 +674,73 @@
         <!-- ── Right panel ─────────────────────────────────────────────── -->
         <div class="w-72 flex-shrink-0 flex flex-col gap-4">
 
+          <!-- Destination Ranking -->
+          <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);" data-testid="destination-ranking-card">
+            <div class="flex items-center gap-2 mb-1">
+              <svg class="w-4 h-4 text-gray-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 21s7-4.35 7-11a7 7 0 10-14 0c0 6.65 7 11 7 11z"/>
+                <circle cx="12" cy="10" r="2.5"/>
+              </svg>
+              <span class="text-sm font-semibold text-gray-800">Destination Ranking</span>
+            </div>
+            <p class="text-xs text-gray-400 mb-4">Most visited destinations by page views</p>
+
+            <ng-container *ngIf="analyticsLoading && destinationRanking().length === 0; else destinationRankingContent">
+              <p class="text-sm text-gray-400 py-3">Loading destination ranking...</p>
+            </ng-container>
+
+            <ng-template #destinationRankingContent>
+              <div *ngIf="destinationRanking().length > 0; else noDestinationRanking" class="flex flex-col gap-3">
+                <div
+                  *ngFor="let item of destinationRanking()"
+                  class="grid items-center gap-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  style="grid-template-columns: 1.5rem minmax(0, 1fr) 2.25rem;"
+                  [appAnalyticsTooltip]="destinationRankingTooltip(item)"
+                  [attr.aria-label]="destinationRankingAriaLabel(item)"
+                  tabindex="0"
+                  role="img"
+                  data-testid="destination-ranking-row"
+                >
+                  <span class="text-[11px] font-bold text-blue-600 bg-blue-50 rounded-full w-6 h-6 flex items-center justify-center">
+                    {{ item.rank }}
+                  </span>
+                  <div class="min-w-0">
+                    <div class="text-xs font-medium text-gray-700 truncate" [title]="item.destinationName">
+                      {{ item.destinationName }}
+                    </div>
+                    <div class="h-2.5 bg-gray-100 rounded overflow-hidden mt-1.5">
+                      <div
+                        class="h-full rounded"
+                        style="background: #185FA5;"
+                        [style.width]="destinationRankingBarPct(item) + '%'"
+                        data-testid="destination-ranking-bar-fill"
+                      ></div>
+                    </div>
+                  </div>
+                  <span class="text-xs text-gray-500 text-right font-medium">{{ formatNum(item.visits) }}</span>
+                </div>
+              </div>
+
+              <ng-template #noDestinationRanking>
+                <p class="text-sm text-gray-400 py-3">No destination visit data yet.</p>
+              </ng-template>
+            </ng-template>
+          </div>
+
           <!-- Actionable Insights -->
           <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
             <div class="flex items-center gap-2 mb-1">
               <svg class="w-4 h-4 text-gray-800" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
               <span class="text-sm font-semibold text-gray-800">Actionable Insights</span>
             </div>
-            <p class="text-xs text-gray-400 mb-4">Automated analysis for Šumadija region.</p>
+            <p class="text-xs text-gray-400 mb-4">
+              Automated analysis for {{ regionDisplayName || 'the active region' }}.
+            </p>
 
             <div class="flex flex-col gap-3">
+              <p *ngIf="actionableInsightsSig().length === 0" class="text-sm text-gray-400 py-3">
+                No actionable insights yet for the current filters.
+              </p>
               <div
                 *ngFor="let ins of actionableInsightsSig()"
                 class="rounded-lg p-4 border"
@@ -369,10 +762,83 @@
               </div>
             </div>
 
-            <button class="w-full mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 border border-blue-200 rounded-lg py-2.5 bg-white hover:bg-blue-50 transition-colors cursor-pointer">
+            <button
+              (click)="exportData()"
+              [disabled]="!activeRegionId || exporting"
+              class="w-full mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 border border-blue-200 rounded-lg py-2.5 bg-white hover:bg-blue-50 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-              Generate Full Report
+              {{ exporting ? 'Generating...' : 'Generate Full Report' }}
             </button>
+          </div>
+
+          <!-- Visitor Behavior -->
+          <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+            <div class="flex items-center gap-2 mb-1">
+              <svg class="w-4 h-4 text-gray-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M22 12h-4"/>
+                <path d="M20 10v4"/>
+              </svg>
+              <span class="text-sm font-semibold text-gray-800">Visitor Behavior</span>
+            </div>
+            <p class="text-xs text-gray-400 mb-4">
+              Active-region visitor engagement for {{ selectedPeriod | lowercase }}.
+            </p>
+
+            <ng-container *ngIf="visitorBehaviorSig() as behavior">
+              <div class="grid grid-cols-2 gap-2 mb-3">
+                <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Logged-in users</div>
+                  <div class="text-xl font-bold text-gray-900 mt-1">{{ formatNum(behavior.loggedInVisitors) }}</div>
+                </div>
+                <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Anonymous visitors</div>
+                  <div class="text-xl font-bold text-gray-900 mt-1">{{ formatNum(behavior.anonymousVisitors) }}</div>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-blue-100 bg-blue-50 p-3 mb-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Returned during this period</div>
+                    <div class="text-xl font-bold text-gray-900 mt-1">{{ formatNum(behavior.returningVisitors) }}</div>
+                  </div>
+                  <div class="text-sm font-semibold text-blue-700">
+                    {{ behavior.returningVisitorRatePercent | number:'1.0-1' }}%
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-gray-100 bg-white p-3">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                  <svg class="w-3.5 h-3.5 text-gray-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M12 7v5l3 2"/>
+                  </svg>
+                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Longest engagement</span>
+                </div>
+
+                <ng-container *ngIf="behavior.topTimeSpentEntity as topTimeSpent; else noTimeSpent">
+                  <div class="text-sm font-semibold text-gray-800 leading-snug">
+                    {{ topTimeSpent.pageOrEntityName }}
+                  </div>
+                  <div class="text-xs text-gray-500 mt-1">
+                    Avg {{ formatDurationSeconds(topTimeSpent.averageTimeSpentSeconds) }}
+                    <span class="text-gray-300">/</span>
+                    Total {{ formatDurationSeconds(topTimeSpent.totalTimeSpentSeconds) }}
+                  </div>
+                  <div class="text-[11px] text-gray-400 mt-1">
+                    {{ topTimeSpent.visitCount }} timed {{ topTimeSpent.visitCount === 1 ? 'visit' : 'visits' }}
+                  </div>
+                </ng-container>
+
+                <ng-template #noTimeSpent>
+                  <p class="text-sm text-gray-400 py-2">Not enough visitor behavior data yet.</p>
+                </ng-template>
+              </div>
+            </ng-container>
           </div>
 
           <!-- Auto Insights -->
@@ -402,7 +868,266 @@
     </div>
   </div>
 
-  <!-- ── Custom date range modal ── -->
+  <!-- Entity detail overlay -->
+  <ng-container *ngIf="selectedEntityRowSig() as selectedRow">
+    <div
+      class="fixed inset-0 z-50 flex items-stretch justify-end sm:p-4"
+      style="background: rgba(15,23,42,0.42); backdrop-filter: blur(2px);"
+      (click)="closeEntityDetails()"
+    >
+      <section
+        class="bg-white shadow-2xl w-full sm:max-w-2xl lg:max-w-4xl h-full sm:h-auto sm:max-h-[92vh] sm:rounded-2xl overflow-hidden flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        [attr.aria-label]="'Analytics details for ' + selectedRow.name"
+        data-testid="entity-detail-overlay"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="flex items-start justify-between gap-4 px-5 sm:px-6 py-5 border-b border-gray-100">
+          <div class="flex items-start gap-3 min-w-0">
+            <div
+              class="w-14 h-14 rounded-xl flex-shrink-0 bg-gray-100 border border-gray-100"
+              [style.background]="entityDetailImageBackground(selectedRow, selectedEntityDetailSig())"
+            ></div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap mb-1">
+                <span class="text-[10px] px-1.5 py-px rounded font-semibold" [ngClass]="typeClass(entityDetailType(selectedRow, selectedEntityDetailSig()))">
+                  {{ typeLabel(entityDetailType(selectedRow, selectedEntityDetailSig())).toUpperCase() }}
+                </span>
+                <span
+                  class="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-semibold"
+                  [ngClass]="entityStatusClass(selectedEntityDetailSig()?.status ?? selectedRow.status)"
+                >
+                  {{ selectedEntityDetailSig()?.status || selectedRow.status || 'Unknown' }}
+                </span>
+              </div>
+              <h2 class="text-lg sm:text-xl font-bold text-gray-900 leading-tight truncate">
+                {{ entityDetailTitle(selectedRow, selectedEntityDetailSig()) }}
+              </h2>
+              <p class="text-sm text-gray-500 mt-1 truncate">
+                {{ selectedEntityDetailSig()?.regionDisplayName || selectedRow.location }}
+                <ng-container *ngIf="selectedEntityDetailSig()?.destinationName as destinationName">
+                  <span class="text-gray-300">/</span> {{ destinationName }}
+                </ng-container>
+                <ng-container *ngIf="selectedEntityDetailSig()?.locationName as locationName">
+                  <span class="text-gray-300">/</span> {{ locationName }}
+                </ng-container>
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            (click)="closeEntityDetails()"
+            class="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer border-0 bg-transparent flex-shrink-0"
+            aria-label="Close entity details"
+            data-testid="entity-detail-close"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-5">
+          <div *ngIf="entityDetailLoading" class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 mb-4">
+            Loading entity details...
+          </div>
+
+          <div *ngIf="entityDetailErrorMessage" class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 mb-4">
+            <p class="text-sm font-semibold text-red-700">Details unavailable</p>
+            <p class="text-sm text-red-600 mt-1">{{ entityDetailErrorMessage }}</p>
+          </div>
+
+          <ng-container *ngIf="selectedEntityDetailSig() as detail">
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
+              <div *ngFor="let metric of entityDetailMetrics(detail)" class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{{ metric.label }}</div>
+                <div class="text-xl font-bold text-gray-900 mt-1">{{ metric.value }}</div>
+                <div *ngIf="metric.sub" class="text-[11px] text-gray-400 mt-0.5">{{ metric.sub }}</div>
+              </div>
+            </div>
+
+            <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-5">
+              <div class="min-w-0 space-y-5">
+                <section>
+                  <h3 class="text-sm font-bold text-gray-900 mb-2">Overview</h3>
+                  <p *ngIf="detail.description || detail.summary; else noEntityDescription" class="text-sm text-gray-600 leading-6 whitespace-pre-line">
+                    {{ detail.description || detail.summary }}
+                  </p>
+                  <ng-template #noEntityDescription>
+                    <p class="text-sm text-gray-400">No additional description is available.</p>
+                  </ng-template>
+                </section>
+
+                <section *ngIf="detail.tags.length > 0">
+                  <h3 class="text-sm font-bold text-gray-900 mb-2">Tags</h3>
+                  <div class="flex flex-wrap gap-2">
+                    <span *ngFor="let tag of detail.tags" class="inline-flex items-center rounded-full bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-1">
+                      {{ tag.name }}
+                    </span>
+                  </div>
+                </section>
+
+                <section *ngIf="detail.galleryImages.length > 1">
+                  <h3 class="text-sm font-bold text-gray-900 mb-2">Gallery</h3>
+                  <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    <div
+                      *ngFor="let image of detail.galleryImages"
+                      class="aspect-video rounded-lg bg-gray-100 border border-gray-100"
+                      [style.background]="'url(' + image + ') center/cover'"
+                    ></div>
+                  </div>
+                </section>
+
+                <section *ngIf="detail.typeSpecific.amenities.length > 0">
+                  <h3 class="text-sm font-bold text-gray-900 mb-2">Amenities</h3>
+                  <div class="flex flex-wrap gap-2">
+                    <span *ngFor="let amenity of detail.typeSpecific.amenities" class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-1">
+                      {{ amenity }}
+                    </span>
+                  </div>
+                </section>
+
+                <section *ngIf="detail.typeSpecific.operatingHours.length > 0">
+                  <h3 class="text-sm font-bold text-gray-900 mb-2">Operating Hours</h3>
+                  <div class="grid sm:grid-cols-2 gap-2">
+                    <div *ngFor="let hour of detail.typeSpecific.operatingHours" class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                      {{ operatingHoursLabel(hour) }}
+                    </div>
+                  </div>
+                </section>
+
+                <section *ngIf="detail.typeSpecific.bookingPartners.length > 0">
+                  <h3 class="text-sm font-bold text-gray-900 mb-2">Booking Partners</h3>
+                  <div class="flex flex-col gap-2">
+                    <div *ngFor="let partner of detail.typeSpecific.bookingPartners" class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                      <a
+                        *ngIf="partner.url; else bookingPartnerLabel"
+                        [href]="partner.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-blue-700 hover:text-blue-900 font-semibold break-all"
+                      >
+                        {{ partner.label }}
+                      </a>
+                      <ng-template #bookingPartnerLabel>{{ partner.label }}</ng-template>
+                    </div>
+                  </div>
+                </section>
+
+                <ng-container *ngIf="selectedExternalPartnerClickChart() as partnerChart">
+                  <section class="rounded-xl border border-gray-100 bg-white p-4" data-testid="external-partner-click-card">
+                    <div class="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <h3 class="text-sm font-bold text-gray-900">External Partner Click Distribution</h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Tracked outbound booking partner clicks</p>
+                      </div>
+                      <span *ngIf="partnerChart.hasClickData" class="text-xs font-semibold text-gray-500">
+                        {{ formatNum(partnerChart.totalClicks) }} clicks
+                      </span>
+                    </div>
+
+                    <ng-container *ngIf="partnerChart.hasClickData; else noExternalPartnerClicks">
+                      <div class="grid sm:grid-cols-[11rem_minmax(0,1fr)] gap-4 items-center">
+                        <svg viewBox="0 0 160 160" class="w-40 h-40 mx-auto" role="img" aria-label="External partner click distribution pie chart">
+                          <circle cx="80" cy="80" r="54" fill="none" stroke="#f3f4f6" stroke-width="22"/>
+                          <circle
+                            *ngFor="let arc of partnerChart.arcs"
+                            cx="80"
+                            cy="80"
+                            r="54"
+                            fill="none"
+                            [attr.stroke]="arc.color"
+                            stroke-width="22"
+                            [attr.stroke-dasharray]="arc.dasharray"
+                            [attr.stroke-dashoffset]="arc.dashoffset"
+                            transform="rotate(-90 80 80)"
+                            [appAnalyticsTooltip]="externalPartnerClickTooltip(arc)"
+                            [attr.aria-label]="externalPartnerClickAriaLabel(arc)"
+                            tabindex="0"
+                            role="img"
+                            data-testid="external-partner-click-segment"
+                            style="cursor: pointer;"
+                          >
+                          </circle>
+                          <text x="80" y="76" text-anchor="middle" font-size="19" font-weight="700" fill="#111827">{{ formatNum(partnerChart.totalClicks) }}</text>
+                          <text x="80" y="94" text-anchor="middle" font-size="10" fill="#9ca3af">CLICKS</text>
+                        </svg>
+
+                        <div class="flex flex-col gap-2 min-w-0">
+                          <div
+                            *ngFor="let item of partnerChart.items"
+                            class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            [appAnalyticsTooltip]="externalPartnerClickTooltip(item)"
+                            [attr.aria-label]="externalPartnerClickAriaLabel(item)"
+                            tabindex="0"
+                            role="img"
+                            data-testid="external-partner-click-legend-item"
+                          >
+                            <span class="w-3 h-3 rounded-full flex-shrink-0" [style.background]="item.color"></span>
+                            <div class="min-w-0">
+                              <div class="text-sm font-semibold text-gray-700 truncate" [title]="item.partnerLabel">{{ item.partnerLabel }}</div>
+                              <div class="text-[11px] text-gray-400">{{ formatPercent(item.sharePercent) }}</div>
+                            </div>
+                            <div class="text-sm font-bold text-gray-900 tabular-nums">{{ formatNum(item.clickCount) }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </ng-container>
+
+                    <ng-template #noExternalPartnerClicks>
+                      <p class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-3 text-sm text-gray-400">
+                        No external partner click data available yet.
+                      </p>
+                    </ng-template>
+                  </section>
+                </ng-container>
+              </div>
+
+              <div class="min-w-0 space-y-5">
+                <section>
+                  <h3 class="text-sm font-bold text-gray-900 mb-2">Entity Details</h3>
+                  <div class="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                    <div *ngFor="let item of entityOverviewItems(detail)" class="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 px-3 py-2.5 bg-white">
+                      <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ item.label }}</span>
+                      <span class="text-sm text-gray-700 min-w-0 break-words">{{ item.value }}</span>
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 class="text-sm font-bold text-gray-900 mb-2">{{ typeLabel(entityDetailType(selectedRow, detail)) }} Fields</h3>
+                  <div *ngIf="typeSpecificItems(detail).length > 0; else noTypeFields" class="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                    <div *ngFor="let item of typeSpecificItems(detail)" class="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 px-3 py-2.5 bg-white">
+                      <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ item.label }}</span>
+                      <span class="text-sm text-gray-700 min-w-0 break-words">
+                        <a
+                          *ngIf="item.href; else plainDetailValue"
+                          [href]="item.href"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-blue-700 hover:text-blue-900 font-semibold break-all"
+                        >
+                          {{ item.value }}
+                        </a>
+                        <ng-template #plainDetailValue>{{ item.value }}</ng-template>
+                      </span>
+                    </div>
+                  </div>
+                  <ng-template #noTypeFields>
+                    <p class="text-sm text-gray-400 rounded-xl border border-gray-100 px-3 py-3">No extra type-specific fields are available.</p>
+                  </ng-template>
+                </section>
+              </div>
+            </div>
+          </ng-container>
+        </div>
+      </section>
+    </div>
+  </ng-container>
+
+  <!-- Custom date range modal -->
   <div
     *ngIf="showCustomDateModal"
     class="fixed inset-0 z-50 flex items-center justify-center"

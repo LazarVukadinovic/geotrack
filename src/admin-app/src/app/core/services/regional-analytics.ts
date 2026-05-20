@@ -1,234 +1,308 @@
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, of } from 'rxjs';
-import { RegionalAnalyticsData, MetricCard, EntityRow, ActionableInsight, AutoInsight, CategoryFilter, DistributionSlice, CategoryAggregate } from '../models/regional-analytics.model';
-import { LocationsListService, LocationListItem } from './locations-list.service';
-import { DestinationsListService, DestinationListItem } from './destinations-list.service';
-import { EventsListService, EventListItem } from './events-list.service';
-import { PlacesListService, PlaceListItem } from './places-list.service';
+import { Observable, map } from 'rxjs';
+import {
+  ActionableInsight,
+  AutoInsight,
+  CategoryFilter,
+  DistributionSlice,
+  EntityRow,
+  MetricCard,
+  RegionalAnalyticsActionableInsights,
+  RegionalAnalyticsDistributionItem,
+  RegionalAnalyticsEntityDetail,
+  RegionalAnalyticsEntityDetailParams,
+  RegionalAnalyticsEntityMetric,
+  RegionalMonthlyVisits,
+  RegionalMonthlyVisitsParams,
+  RegionalTagViewsAnalyticsResponse,
+  RegionalTagViewsParams,
+  RegionalAnalyticsOverview,
+  RegionalAnalyticsOverviewParams,
+  RegionalAnalyticsTrendPoint,
+} from '../models/regional-analytics.model';
 
 @Injectable({ providedIn: 'root' })
 export class RegionalAnalyticsService {
+  private readonly http = inject(HttpClient);
+  private readonly palette = ['#1252A0', '#2E7EC0', '#5ab0e8', '#f59e0b', '#10b981', '#8b5cf6'];
 
-  private readonly locationsSvc    = inject(LocationsListService);
-  private readonly destinationsSvc = inject(DestinationsListService);
-  private readonly eventsSvc       = inject(EventsListService);
-  private readonly placesSvc       = inject(PlacesListService);
-
-  getData$(): Observable<RegionalAnalyticsData> {
-    const locations    = this.locationsSvc.getAllItems();
-    const destinations = this.destinationsSvc.getAllItems();
-    const events       = this.eventsSvc.getAllItems();
-    const places       = this.placesSvc.getAllItems();
-
-    const entityRows: EntityRow[] = [
-      ...locations.map(i    => this.locationToRow(i)),
-      ...destinations.map(i => this.destinationToRow(i)),
-      ...events.map(i       => this.eventToRow(i)),
-      ...places.map(i       => this.placeToRow(i)),
-    ];
-
-    return of({
-      metrics:            this.buildMetrics(locations, destinations, events, places),
-      categories:         this.buildCategories(locations, destinations, events, places),
-      entityRows,
-      distribution:       this.buildDistribution(locations, destinations, events, places),
-      pageViewsTrend:     this.buildPageViewsTrend(locations, destinations, events, places),
-      actionableInsights: this.buildActionableInsights(entityRows),
-      insights:           this.buildAutoInsights(entityRows),
+  getOverview(params: RegionalAnalyticsOverviewParams): Observable<RegionalAnalyticsOverview> {
+    return this.http.get<RegionalAnalyticsOverview>('/api/admin/regional/analytics/overview', {
+      params: this.toHttpParams(params),
     });
   }
 
-  // ── Row mappers ──────────────────────────────────────────────────────────────
-
-  private locationToRow(i: LocationListItem): EntityRow {
-    return {
-      name: i.name, type: 'LOCATION', location: i.region, imageBg: i.imageBg,
-      views: i.analyticsViews ?? 0, visitors: i.analyticsVisitors ?? 0,
-      saves: i.analyticsSaves ?? 0, actions: i.analyticsActions ?? 0,
-      reviewAvg: i.analyticsReviewAvg ?? 0, reviewCount: i.analyticsReviewCount ?? 0,
-      trend: i.analyticsTrend ?? 'stable',
-    };
+  getMonthlyVisits(params: RegionalMonthlyVisitsParams): Observable<RegionalMonthlyVisits> {
+    return this.http.get<RegionalMonthlyVisits>('/api/admin/regional/analytics/monthly-visits', {
+      params: this.toMonthlyVisitHttpParams(params),
+    });
   }
 
-  private destinationToRow(i: DestinationListItem): EntityRow {
-    return {
-      name: i.name, type: 'DESTINATION', location: i.region, imageBg: i.imageBg,
-      views: i.analyticsViews ?? 0, visitors: i.analyticsVisitors ?? 0,
-      saves: i.analyticsSaves ?? 0, actions: i.analyticsActions ?? 0,
-      reviewAvg: i.analyticsReviewAvg ?? 0, reviewCount: i.analyticsReviewCount ?? 0,
-      trend: i.analyticsTrend ?? 'stable',
-    };
+  getTagViews(params: RegionalTagViewsParams): Observable<RegionalTagViewsAnalyticsResponse> {
+    return this.http.get<RegionalTagViewsAnalyticsResponse>('/api/admin/regional/analytics/tag-views', {
+      params: this.toTagViewsHttpParams(params),
+    });
   }
 
-  private eventToRow(i: EventListItem): EntityRow {
-    return {
-      name: i.name, type: 'EVENT', location: i.region, imageBg: i.imageBg,
-      views: i.analyticsViews ?? 0, visitors: i.analyticsVisitors ?? 0,
-      saves: i.analyticsSaves ?? 0, actions: i.analyticsActions ?? 0,
-      reviewAvg: i.analyticsReviewAvg ?? 0, reviewCount: i.analyticsReviewCount ?? 0,
-      trend: i.analyticsTrend ?? 'stable',
-    };
+  getEntityDetail(params: RegionalAnalyticsEntityDetailParams): Observable<RegionalAnalyticsEntityDetail> {
+    return this.http.get<RegionalAnalyticsEntityDetail>(
+      `/api/admin/regional/analytics/entities/${encodeURIComponent(params.entityType)}/${params.entityId}/details`,
+      {
+        params: new HttpParams()
+          .set('regionId', String(params.regionId))
+          .set('period', params.period ?? '30d'),
+      },
+    );
   }
 
-  private placeToRow(i: PlaceListItem): EntityRow {
-    return {
-      name: i.name, type: 'PLACE', location: i.region, imageBg: i.imageBg,
-      views: i.analyticsViews ?? 0, visitors: i.analyticsVisitors ?? 0,
-      saves: i.analyticsSaves ?? 0, actions: i.analyticsActions ?? 0,
-      reviewAvg: i.analyticsReviewAvg ?? 0, reviewCount: i.analyticsReviewCount ?? 0,
-      trend: i.analyticsTrend ?? 'stable',
-    };
+  exportCsv(params: RegionalAnalyticsOverviewParams): Observable<Blob> {
+    return this.http.get('/api/admin/regional/analytics/export', {
+      params: this.toHttpParams(params, false),
+      responseType: 'blob',
+    });
   }
 
-  // ── Metrics builder ──────────────────────────────────────────────────────────
+  buildMetricCards(overview: RegionalAnalyticsOverview): MetricCard[] {
+    const totals = overview.totals;
+    const comparison = overview.comparison;
 
-  private buildMetrics(
-    locations: LocationListItem[], destinations: DestinationListItem[],
-    events: EventListItem[], places: PlaceListItem[],
-  ): Record<CategoryFilter, MetricCard[]> {
-    const mk = (items: { analyticsViews?: number; analyticsVisitors?: number; analyticsSaves?: number; analyticsActions?: number; analyticsReviewAvg?: number; analyticsReviewCount?: number }[], label: string): MetricCard[] => {
-      const views    = items.reduce((s, i) => s + (i.analyticsViews    ?? 0), 0);
-      const visitors = items.reduce((s, i) => s + (i.analyticsVisitors ?? 0), 0);
-      const saves    = items.reduce((s, i) => s + (i.analyticsSaves    ?? 0), 0);
-      const actions  = items.reduce((s, i) => s + (i.analyticsActions  ?? 0), 0);
-      const reviews  = items.reduce((s, i) => s + (i.analyticsReviewCount ?? 0), 0);
-      const rated    = items.filter(i => (i.analyticsReviewAvg ?? 0) > 0);
-      const avgRating = rated.length > 0
-        ? (rated.reduce((s, i) => s + (i.analyticsReviewAvg ?? 0), 0) / rated.length)
-        : 0;
-      const fmt = (n: number) => n >= 1_000_000 ? (n / 1_000_000).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
-      const suffix = label ? ` – ${label}` : '';
-      return [
-        { label: `Page Views${suffix}`,    value: fmt(views),    delta: 12.5, deltaLabel: 'vs last month', icon: 'trend'    },
-        { label: `Unique Visitors${suffix}`, value: fmt(visitors), delta:  8.2, deltaLabel: 'vs last month', icon: 'users'    },
-        { label: `Saves${suffix}`,         value: fmt(saves),    delta: 15.4, deltaLabel: 'vs last month', icon: 'bookmark' },
-        { label: 'Average Rating',         value: avgRating.toFixed(1), delta: 0.5, deltaLabel: 'vs last month', icon: 'star'  },
-        { label: `Ext. Clicks${suffix}`,   value: fmt(actions),  delta: -2.1, deltaLabel: 'vs last month', icon: 'link'     },
-        { label: `Total Reviews${suffix}`, value: reviews.toLocaleString(), delta: 5.8, deltaLabel: 'vs last month', icon: 'chat' },
-      ];
-    };
-    return {
-      all:          mk([...locations, ...destinations, ...events, ...places], ''),
-      locations:    mk(locations,    'Locations'),
-      destinations: mk(destinations, 'Destinations'),
-      events:       mk(events,       'Events'),
-      places:       mk(places,       'Places'),
-    };
-  }
-
-  // ── Category aggregates ──────────────────────────────────────────────────────
-
-  private buildCategories(
-    locations: LocationListItem[], destinations: DestinationListItem[],
-    events: EventListItem[], places: PlaceListItem[],
-  ): CategoryAggregate[] {
-    const sum = (items: { analyticsViews?: number }[]) => items.reduce((s, i) => s + (i.analyticsViews ?? 0), 0);
-    const locViews  = sum(locations);
-    const destViews = sum(destinations);
-    const evtViews  = sum(events);
-    const plcViews  = sum(places);
-    const maxVisits = Math.max(locViews, destViews, evtViews, plcViews);
     return [
-      { name: 'Locations',    count: locations.length,    visits: locViews,  maxVisits, color: '#1a4db5' },
-      { name: 'Destinations', count: destinations.length, visits: destViews, maxVisits, color: '#1e6bb8' },
-      { name: 'Places',       count: places.length,       visits: plcViews,  maxVisits, color: '#2d8dd6' },
-      { name: 'Events',       count: events.length,       visits: evtViews,  maxVisits, color: '#5ab0e8' },
+      {
+        label: 'Page Views',
+        value: this.formatNumber(totals.pageViews),
+        delta: comparison.pageViewsChangePercent,
+        deltaLabel: 'vs previous period',
+        icon: 'trend',
+      },
+      {
+        label: 'Unique Visitors',
+        value: this.formatNumber(totals.uniqueVisitors),
+        delta: comparison.uniqueVisitorsChangePercent,
+        deltaLabel: 'vs previous period',
+        icon: 'users',
+      },
+      {
+        label: 'Saves',
+        value: this.formatNumber(totals.saves),
+        delta: comparison.savesChangePercent,
+        deltaLabel: 'vs previous period',
+        icon: 'bookmark',
+      },
+      {
+        label: 'Average Rating',
+        value: totals.averageRating.toFixed(1),
+        delta: comparison.averageRatingChangePercent,
+        deltaLabel: 'vs previous period',
+        icon: 'star',
+      },
+      {
+        label: 'Ext. Clicks',
+        value: this.formatNumber(totals.externalClicks),
+        delta: comparison.externalClicksChangePercent,
+        deltaLabel: 'vs previous period',
+        icon: 'link',
+      },
+      {
+        label: 'Total Reviews',
+        value: this.formatNumber(totals.totalReviews),
+        delta: comparison.totalReviewsChangePercent,
+        deltaLabel: 'vs previous period',
+        icon: 'chat',
+      },
     ];
   }
 
-  // ── Distribution builder ─────────────────────────────────────────────────────
-
-  private buildDistribution(
-    locations: LocationListItem[], destinations: DestinationListItem[],
-    events: EventListItem[], places: PlaceListItem[],
-  ): Record<CategoryFilter, DistributionSlice[]> {
-    const palette = ['#1252A0', '#2E7EC0', '#5ab0e8', '#f59e0b', '#10b981', '#8b5cf6'];
-    const byCat = (items: { category: string }[]): DistributionSlice[] => {
-      const counts: Record<string, number> = {};
-      for (const i of items) counts[i.category] = (counts[i.category] ?? 0) + 1;
-      return Object.entries(counts).sort((a, b) => b[1] - a[1])
-        .map(([label, count], idx) => ({ label, count, color: palette[idx % palette.length] }));
-    };
-    return {
-      all: [
-        { label: 'Places',       count: places.length,       color: palette[0] },
-        { label: 'Locations',    count: locations.length,    color: palette[1] },
-        { label: 'Destinations', count: destinations.length, color: palette[2] },
-        { label: 'Events',       count: events.length,       color: palette[3] },
-      ],
-      locations:    byCat(locations),
-      destinations: byCat(destinations),
-      events:       byCat(events),
-      places:       byCat(places),
-    };
+  mapEntityRows(rows: RegionalAnalyticsEntityMetric[]): EntityRow[] {
+    return rows.map((row) => ({
+      entityType: row.entityType,
+      entityId: row.entityId,
+      name: row.name,
+      type: this.toUiType(row.entityType),
+      location: row.regionDisplayName,
+      views: row.pageViews,
+      visitors: row.uniqueVisitors,
+      saves: row.saves,
+      actions: row.externalClicks,
+      reviewAvg: row.averageRating,
+      reviewCount: row.reviewCount,
+      trend: row.pageViews > 0 || row.saves > 0 || row.externalClicks > 0 ? 'up' : 'stable',
+      imageBg: row.imageUrl ? `url("${row.imageUrl}") center/cover` : this.fallbackGradient(row.entityType, row.entityId),
+      imageUrl: row.imageUrl,
+      status: row.status,
+      detailRoute: row.detailRoute,
+    }));
   }
 
-  // ── Page views trend ────────────────────────────────────────────────────────
+  mapDistribution(items: RegionalAnalyticsDistributionItem[]): DistributionSlice[] {
+    return items.map((item, index) => ({
+      label: item.label,
+      count: item.count,
+      color: this.palette[index % this.palette.length],
+    }));
+  }
 
-  private buildPageViewsTrend(
-    locations: LocationListItem[], destinations: DestinationListItem[],
-    events: EventListItem[], places: PlaceListItem[],
-  ): Record<import('../models/regional-analytics.model').CategoryFilter, number[]> {
-    const gen = (items: { analyticsViews?: number; analyticsTrend?: string }[]): number[] => {
-      const total = items.reduce((s, i) => s + (i.analyticsViews ?? 0), 0);
-      if (total === 0) return Array(365).fill(0);
-      const upCount   = items.filter(i => i.analyticsTrend === 'up').length;
-      const downCount = items.filter(i => i.analyticsTrend === 'down').length;
-      const dir = upCount > downCount ? 1 : upCount < downCount ? -1 : 0;
-      const avg = total / 365;
-      return Array.from({ length: 365 }, (_, d) => {
-        const t     = d / 364;
-        const trend = 1 + dir * 0.5 * t;
-        const wave  = 0.18 * Math.sin(t * Math.PI * 6);
-        const noise = (this.seededRand(d * 137 + (total % 1000)) - 0.5) * 0.25;
-        return Math.max(0, Math.round(avg * (trend + wave + noise)));
+  mapTrend(points: RegionalAnalyticsTrendPoint[]): RegionalAnalyticsTrendPoint[] {
+    return points.map((point) => ({
+      date: point.date,
+      views: Math.max(0, Number(point.views) || 0),
+      uniqueVisitors: Math.max(0, Number(point.uniqueVisitors) || 0),
+    }));
+  }
+
+  buildActionableInsights(insights: RegionalAnalyticsActionableInsights): ActionableInsight[] {
+    const cards: ActionableInsight[] = [];
+
+    if (insights.topViewedLocation) {
+      cards.push({
+        icon: 'pin',
+        label: 'TOP VIEWED LOCATION',
+        title: insights.topViewedLocation.name,
+        subtitle: `${this.formatNumber(insights.topViewedLocation.pageViews)} Views`,
+        highlightClass: 'text-blue-600',
       });
-    };
+    }
+
+    if (insights.mostSaved) {
+      cards.push({
+        icon: 'bookmark',
+        label: 'MOST SAVED',
+        title: insights.mostSaved.name,
+        subtitle: `${this.formatNumber(insights.mostSaved.saves)} Saves`,
+        highlightClass: 'text-gray-700',
+      });
+    }
+
+    if (insights.highestPerformingEvent) {
+      cards.push({
+        icon: 'calendar',
+        label: 'HIGHEST PERFORMING EVENT',
+        title: insights.highestPerformingEvent.name,
+        subtitle: `${this.formatNumber(insights.highestPerformingEvent.pageViews)} Views`,
+        highlightClass: 'text-gray-700',
+      });
+    }
+
+    return cards;
+  }
+
+  buildAutoInsights(messages: string[]): AutoInsight[] {
+    return messages.map((detail) => ({
+      type: 'info',
+      title: 'Analytics notice',
+      detail,
+    }));
+  }
+
+  asBucket<T>(filter: CategoryFilter, value: T, empty: T): Record<CategoryFilter, T> {
     return {
-      all:          gen([...locations, ...destinations, ...events, ...places]),
-      locations:    gen(locations),
-      destinations: gen(destinations),
-      events:       gen(events),
-      places:       gen(places),
+      all: filter === 'all' ? value : empty,
+      locations: filter === 'locations' ? value : empty,
+      destinations: filter === 'destinations' ? value : empty,
+      events: filter === 'events' ? value : empty,
+      places: filter === 'places' ? value : empty,
     };
   }
 
-  private seededRand(seed: number): number {
-    const x = Math.sin(seed + 1) * 10000;
-    return x - Math.floor(x);
+  downloadCsv(blob: Blob, activeRegionName: string, periodKey: string): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const safeRegion = activeRegionName.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'region';
+    anchor.href = url;
+    anchor.download = `regional-analytics-${safeRegion}-${periodKey}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
-  // ── Actionable insights ──────────────────────────────────────────────────────
-
-  private buildActionableInsights(rows: EntityRow[]): ActionableInsight[] {
-    const topViewed   = [...rows].sort((a, b) => b.views - a.views)[0];
-    const topSaved    = [...rows].sort((a, b) => b.saves - a.saves)[0];
-    const topEvent    = [...rows].filter(r => r.type === 'EVENT').sort((a, b) => b.views - a.views)[0];
-    const lowestRated = [...rows].filter(r => r.reviewCount > 50).sort((a, b) => a.reviewAvg - b.reviewAvg)[0];
-    const trending    = [...rows].filter(r => r.trend === 'up').sort((a, b) => b.visitors - a.visitors)[0];
-
-    const fmt = (n: number) => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
-    const insights: ActionableInsight[] = [];
-    if (topViewed) insights.push({ icon: 'pin', label: `TOP VIEWED ${topViewed.type}`, title: topViewed.name, subtitle: `${fmt(topViewed.views)} Views`, highlightClass: 'text-blue-600' });
-    if (topSaved)  insights.push({ icon: 'bookmark', label: 'MOST SAVED', title: topSaved.name, subtitle: `${fmt(topSaved.saves)} Saves (High Intent)`, highlightClass: 'text-gray-700' });
-    if (topEvent)  insights.push({ icon: 'calendar', label: 'HIGHEST PERFORMING EVENT', title: topEvent.name, subtitle: `${fmt(topEvent.views)} Views (Trending)`, highlightClass: 'text-gray-700' });
-    if (lowestRated) insights.push({ icon: 'warning', label: 'ACTION REQUIRED', title: lowestRated.name, subtitle: `Avg. Rating ${lowestRated.reviewAvg.toFixed(1)}`, highlightClass: 'text-red-600' });
-    if (trending)  insights.push({ icon: 'trend', label: 'FASTEST GROWING', title: trending.name, subtitle: `+Trending — ${fmt(trending.visitors)} Visitors`, highlightClass: 'text-gray-700' });
-    return insights;
+  getData$(params: RegionalAnalyticsOverviewParams) {
+    return this.getOverview(params).pipe(
+      map((overview) => ({
+        metrics: this.asBucket('all', this.buildMetricCards(overview), [] as MetricCard[]),
+        categories: [],
+        entityRows: this.mapEntityRows(overview.entityRows),
+        distribution: this.asBucket('all', this.mapDistribution(overview.entityTypeDistribution), [] as DistributionSlice[]),
+        pageViewsTrend: this.asBucket('all', this.mapTrend(overview.pageViewsTrend), [] as RegionalAnalyticsTrendPoint[]),
+        actionableInsights: this.buildActionableInsights(overview.actionableInsights),
+        insights: this.buildAutoInsights(overview.actionableInsights.messages ?? []),
+      })),
+    );
   }
 
-  // ── Auto insights ────────────────────────────────────────────────────────────
+  private toHttpParams(params: RegionalAnalyticsOverviewParams, includePaging = true): HttpParams {
+    let httpParams = new HttpParams()
+      .set('regionId', String(params.regionId))
+      .set('period', params.period ?? '30d')
+      .set('entityType', params.entityType ?? 'all');
 
-  private buildAutoInsights(rows: EntityRow[]): AutoInsight[] {
-    const topUp     = [...rows].filter(r => r.trend === 'up').sort((a, b) => b.views - a.views)[0];
-    const topDown   = [...rows].filter(r => r.trend === 'down').sort((a, b) => a.reviewAvg - b.reviewAvg)[0];
-    const topRated  = [...rows].sort((a, b) => b.reviewAvg - a.reviewAvg)[0];
-    const lowRated  = [...rows].filter(r => r.reviewCount > 50).sort((a, b) => a.reviewAvg - b.reviewAvg)[0];
-    const insights: AutoInsight[] = [];
-    if (topUp)    insights.push({ type: 'success', title: `${topUp.name} — Trending Up`, detail: `${topUp.name} is gaining traction with ${(topUp.views / 1000).toFixed(1)}K views and a ${topUp.reviewAvg.toFixed(1)} avg. rating. Consider featuring it in regional promotions.` });
-    if (topDown)  insights.push({ type: 'warning', title: `Engagement Drop — ${topDown.name}`, detail: `${topDown.name} shows declining engagement. Review visitor feedback and consider a content refresh or promotional push.` });
-    if (topRated) insights.push({ type: 'info',    title: `Top Rated: ${topRated.name}`, detail: `${topRated.name} holds the highest average rating of ${topRated.reviewAvg.toFixed(1)} (${topRated.reviewCount} reviews). Use this as a benchmark for content quality.` });
-    if (lowRated) insights.push({ type: 'danger',  title: `Low Satisfaction — ${lowRated.name}`, detail: `${lowRated.name} has an average rating of ${lowRated.reviewAvg.toFixed(1)} with ${lowRated.reviewCount} reviews. Investigate recurring complaints and prioritise improvements.` });
-    return insights;
+    if (params.search?.trim()) {
+      httpParams = httpParams.set('search', params.search.trim());
+    }
+
+    if (includePaging) {
+      httpParams = httpParams
+        .set('skip', String(params.skip ?? 0))
+        .set('take', String(params.take ?? 25));
+    }
+
+    if (params.sort) {
+      httpParams = httpParams.set('sort', params.sort);
+    }
+
+    return httpParams;
+  }
+
+  private toMonthlyVisitHttpParams(params: RegionalMonthlyVisitsParams): HttpParams {
+    let httpParams = new HttpParams()
+      .set('regionId', String(params.regionId))
+      .set('selectedYearsBack', String(params.selectedYearsBack))
+      .set('entityType', params.entityType ?? 'all');
+
+    if (params.search?.trim()) {
+      httpParams = httpParams.set('search', params.search.trim());
+    }
+
+    return httpParams;
+  }
+
+  private toTagViewsHttpParams(params: RegionalTagViewsParams): HttpParams {
+    let httpParams = new HttpParams()
+      .set('regionId', String(params.regionId))
+      .set('period', params.period)
+      .set('take', String(params.take ?? 15))
+      .set('entityType', params.entityType ?? 'all');
+
+    for (const tagId of params.tagIds ?? []) {
+      httpParams = httpParams.append('tagIds', String(tagId));
+    }
+
+    return httpParams;
+  }
+
+  private toUiType(type: RegionalAnalyticsEntityMetric['entityType']): EntityRow['type'] {
+    switch (type) {
+      case 'destination':
+        return 'DESTINATION';
+      case 'location':
+        return 'LOCATION';
+      case 'event':
+        return 'EVENT';
+      case 'place':
+      default:
+        return 'PLACE';
+    }
+  }
+
+  private formatNumber(value: number): string {
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+    return String(value);
+  }
+
+  private fallbackGradient(entityType: string, entityId: number): string {
+    const seed = Math.abs(entityId + entityType.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0));
+    const colors = ['#0ea5e9', '#f97316', '#10b981', '#8b5cf6', '#e11d48', '#0891b2', '#2563eb'];
+    const a = colors[seed % colors.length];
+    const b = colors[(seed + 3) % colors.length];
+    return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
   }
 }

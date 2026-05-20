@@ -1,3 +1,5 @@
+import { RegionalAssignedRegion } from './dashboard.model';
+
 export interface MetricCard {
   label: string;
   value: string;
@@ -15,6 +17,8 @@ export interface CategoryAggregate {
 }
 
 export interface EntityRow {
+  entityType: RegionalAnalyticsEntityType;
+  entityId: number;
   name: string;
   type: 'PLACE' | 'DESTINATION' | 'EVENT' | 'LOCATION';
   location: string;
@@ -26,6 +30,9 @@ export interface EntityRow {
   reviewCount: number;
   trend: 'up' | 'stable' | 'down';
   imageBg: string;
+  imageUrl?: string | null;
+  status: string;
+  detailRoute?: string | null;
 }
 
 export interface AutoInsight {
@@ -47,6 +54,8 @@ export type CategoryFilter = 'all' | 'locations' | 'destinations' | 'events' | '
 
 export type EntitySortField = 'views' | 'visitors' | 'saves' | 'reviewAvg' | 'name';
 
+export type RegionalAnalyticsEntityType = 'destination' | 'location' | 'place' | 'event';
+
 export interface DistributionSlice {
   label: string;
   count: number;
@@ -60,5 +69,330 @@ export interface RegionalAnalyticsData {
   actionableInsights: ActionableInsight[];
   insights: AutoInsight[];
   distribution: Record<CategoryFilter, DistributionSlice[]>;
-  pageViewsTrend: Record<CategoryFilter, number[]>;
+  pageViewsTrend: Record<CategoryFilter, RegionalAnalyticsTrendPoint[]>;
+}
+
+export interface RegionalAnalyticsOverviewParams {
+  regionId: number;
+  period?: string;
+  entityType?: RegionalAnalyticsEntityType | 'all';
+  search?: string;
+  skip?: number;
+  take?: number;
+  sort?: string;
+}
+
+export type RegionalMonthlyVisitYearsBack = 1 | 2 | 3;
+
+export type RegionalTagViewsPeriod = '24h' | '7d' | '1m' | '3m' | '6m' | '1y';
+
+export interface RegionalMonthlyVisitsParams {
+  regionId: number;
+  selectedYearsBack: RegionalMonthlyVisitYearsBack;
+  entityType?: RegionalAnalyticsEntityType | 'all';
+  search?: string;
+}
+
+export interface RegionalTagViewsParams {
+  regionId: number;
+  period: RegionalTagViewsPeriod;
+  tagIds?: number[];
+  take?: number;
+  entityType?: RegionalAnalyticsEntityType | 'all';
+}
+
+export interface RegionalAnalyticsEntityDetailParams {
+  regionId: number;
+  entityType: RegionalAnalyticsEntityType;
+  entityId: number;
+  period?: string;
+}
+
+export interface RegionalAnalyticsOverview {
+  activeRegion: RegionalAssignedRegion;
+  period: RegionalAnalyticsPeriod;
+  totals: RegionalAnalyticsTotals;
+  comparison: RegionalAnalyticsComparison;
+  pageViewsTrend: RegionalAnalyticsTrendPoint[];
+  topPerformingEntities: RegionalAnalyticsEntityMetric[];
+  entityTypeDistribution: RegionalAnalyticsDistributionItem[];
+  engagementFunnel: RegionalAnalyticsEngagementFunnel;
+  actionableInsights: RegionalAnalyticsActionableInsights;
+  destinationRanking: RegionalDestinationRankingItem[];
+  visitorBehavior: RegionalVisitorBehaviorAnalytics;
+  entityRows: RegionalAnalyticsEntityMetric[];
+  pagination: RegionalAnalyticsPagination;
+  pendingRequestsCount: number;
+}
+
+export interface RegionalMonthlyVisits {
+  activeRegion: RegionalAssignedRegion;
+  selectedYearsBack: RegionalMonthlyVisitYearsBack;
+  monthLabels: string[];
+  series: RegionalMonthlyVisitsSeries[];
+  totalVisits: number;
+  visitMetric: string;
+  visitEventTypes: string[];
+  timeZone: string;
+}
+
+export interface RegionalMonthlyVisitsSeries {
+  yearLabel: string;
+  year: number;
+  startDate: string;
+  endDate: string;
+  monthlyVisitCounts: number[];
+  totalVisits: number;
+}
+
+export interface RegionalTagViewsAnalyticsResponse {
+  period: RegionalTagViewsPeriod;
+  regionId: number;
+  regionDisplayName: string;
+  totalViews: number;
+  availableTags: RegionalTagViewsAvailableTag[];
+  items: RegionalTagViewsItem[];
+}
+
+export interface RegionalTagViewsAvailableTag {
+  tagId: number;
+  name: string;
+  entityScopes: string[];
+}
+
+export interface RegionalTagViewsItem {
+  tagId: number;
+  tagName: string;
+  views: number;
+  percentageOfTotal: number;
+  entityScopes: string[];
+}
+
+export interface RegionalAnalyticsPeriod {
+  key: string;
+  startDate?: string | null;
+  endDate: string;
+}
+
+export interface RegionalAnalyticsTotals {
+  pageViews: number;
+  uniqueVisitors: number;
+  saves: number;
+  averageRating: number;
+  externalClicks: number;
+  totalReviews: number;
+}
+
+export interface RegionalAnalyticsComparison {
+  pageViewsChangePercent: number;
+  uniqueVisitorsChangePercent: number;
+  savesChangePercent: number;
+  averageRatingChangePercent: number;
+  externalClicksChangePercent: number;
+  totalReviewsChangePercent: number;
+}
+
+export interface RegionalAnalyticsTrendPoint {
+  date: string;
+  views: number;
+  uniqueVisitors: number;
+}
+
+export interface RegionalAnalyticsEntityMetric {
+  entityType: RegionalAnalyticsEntityType;
+  entityId: number;
+  name: string;
+  regionDisplayName: string;
+  imageUrl?: string | null;
+  categoryLabel?: string | null;
+  pageViews: number;
+  uniqueVisitors: number;
+  saves: number;
+  externalClicks: number;
+  averageRating: number;
+  reviewCount: number;
+  status: string;
+  detailRoute?: string | null;
+}
+
+export interface RegionalAnalyticsDistributionItem {
+  entityType: string;
+  label: string;
+  count: number;
+}
+
+export interface RegionalAnalyticsEngagementFunnel {
+  pageViews: number;
+  uniqueVisitors: number;
+  saves: number;
+  externalClicks: number;
+  reviews: number;
+}
+
+export interface RegionalAnalyticsActionableInsights {
+  topViewedLocation?: RegionalAnalyticsEntityMetric | null;
+  mostSaved?: RegionalAnalyticsEntityMetric | null;
+  highestPerformingEvent?: RegionalAnalyticsEntityMetric | null;
+  messages: string[];
+}
+
+export interface RegionalDestinationRankingItem {
+  destinationId: number;
+  destinationName: string;
+  regionId: number;
+  regionDisplayName: string;
+  visits: number;
+  rank: number;
+  percentageOfTopValue: number;
+  imageUrl?: string | null;
+  detailRoute?: string | null;
+}
+
+export interface RegionalVisitorBehaviorAnalytics {
+  loggedInVisitors: number;
+  anonymousVisitors: number;
+  returningVisitors: number;
+  returningVisitorRatePercent: number;
+  topTimeSpentEntity?: RegionalTimeSpentEntity | null;
+  topTimeSpentPages: RegionalTimeSpentEntity[];
+  hasTimeSpentData: boolean;
+  notes: string[];
+}
+
+export interface RegionalTimeSpentEntity {
+  pageOrEntityName: string;
+  entityType: RegionalAnalyticsEntityType | string;
+  entityId?: number | null;
+  routeOrPage?: string | null;
+  averageTimeSpentSeconds: number;
+  totalTimeSpentSeconds: number;
+  visitCount: number;
+}
+
+export interface RegionalAnalyticsEntityDetail {
+  entityType: RegionalAnalyticsEntityType;
+  entityId: number;
+  name: string;
+  title?: string | null;
+  subtitle?: string | null;
+  status: string;
+  regionId: number;
+  regionDisplayName: string;
+  destinationId?: number | null;
+  destinationName?: string | null;
+  locationId?: number | null;
+  locationName?: string | null;
+  placeId?: number | null;
+  placeName?: string | null;
+  description?: string | null;
+  summary?: string | null;
+  imageUrl?: string | null;
+  galleryImages: string[];
+  tags: RegionalAnalyticsEntityTag[];
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  publishedAt?: string | null;
+  analytics: RegionalAnalyticsEntityDetailMetrics;
+  typeSpecific: RegionalAnalyticsEntityTypeSpecific;
+}
+
+export interface RegionalAnalyticsEntityDetailMetrics {
+  views: number;
+  uniqueVisitors: number;
+  saves: number;
+  externalClicks: number;
+  reviews: number;
+  averageRating: number;
+  ratingCount: number;
+  trendChangePercent: number;
+  lastViewedAt?: string | null;
+}
+
+export interface RegionalAnalyticsEntityTypeSpecific {
+  destinationType?: string | null;
+  locationType?: string | null;
+  placeType?: string | null;
+  stayType?: string | null;
+  eventType?: string | null;
+  category?: string | null;
+  parentEntityType?: string | null;
+  parentDestination?: string | null;
+  parentLocation?: string | null;
+  parentPlace?: string | null;
+  boundaryNote?: string | null;
+  boundaryShapeType?: string | null;
+  locationsCount?: number | null;
+  placesCount?: number | null;
+  eventsCount?: number | null;
+  website?: string | null;
+  bookingExternalLink?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  priceRange?: string | null;
+  openingHours?: string | null;
+  operatingHours: RegionalPlaceOperatingHour[];
+  amenities: string[];
+  bookingPartners: RegionalAnalyticsEntityLink[];
+  externalPartnerClicks: RegionalAnalyticsExternalPartnerClick[];
+  bestTimeToVisit?: string | null;
+  visitorTips?: string | null;
+  accessNotes?: string | null;
+  accessibilityNotes?: string | null;
+  venueName?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  allDay?: boolean | null;
+  isRecurring?: boolean | null;
+  ticketPrice?: string | null;
+  isFree?: boolean | null;
+  externalTicketLink?: string | null;
+  organizerName?: string | null;
+  attendanceLimit?: number | null;
+  ageRestriction?: string | null;
+  duration?: string | null;
+  venueDescription?: string | null;
+  arrivalTips?: string | null;
+  accessibility?: string | null;
+}
+
+export interface RegionalAnalyticsEntityTag {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export interface RegionalAnalyticsEntityLink {
+  label: string;
+  url?: string | null;
+}
+
+export interface RegionalAnalyticsExternalPartnerClick {
+  partnerKey: 'booking' | 'airbnb' | 'external' | string;
+  partnerLabel: string;
+  url?: string | null;
+  clickCount: number;
+  sharePercent: number;
+}
+
+export interface RegionalPlaceOperatingHour {
+  dayOfWeek: string;
+  isOpen: boolean;
+  openTime?: string | null;
+  closeTime?: string | null;
+}
+
+export interface RegionalAnalyticsPagination {
+  totalCount: number;
+  skip: number;
+  take: number;
+  hasMore: boolean;
+}
+
+export interface RegionalSidebarSummary {
+  assignedRegions: RegionalAssignedRegion[];
+  activeRegion?: RegionalAssignedRegion | null;
+  pendingRequestsCount: number;
 }

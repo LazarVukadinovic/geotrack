@@ -12,6 +12,7 @@ interface AdminAuthUserResponse {
   avatarUrl?: string | null;
   roles: string[];
   canAccessRegionalAdmin: boolean;
+  canAccessTerritoryAdmin?: boolean;
 }
 
 interface LoginResponse {
@@ -26,15 +27,22 @@ interface LoginResponse {
 export class AuthService {
   private static readonly sessionHintKey = 'geotrack_admin_session';
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
+  private static readonly activeTerritoryStorageKey = 'geotrack_admin_active_territory_id';
 
   private accessToken: string | null = null;
+  private accessTokenExpiresAtMs: number | null = null;
   private refreshRequest$: Observable<User | null> | null = null;
   private readonly _currentUser = signal<User | null>(null);
 
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
   readonly isAdministrator = computed(() => this._currentUser()?.role === 'Administrator');
+  readonly isTerritoryManager = computed(() => this._currentUser()?.role === 'Territory Manager');
+  readonly isTerritoryAssociate = computed(() => this._currentUser()?.role === 'Territory Associate');
   readonly isNationalManager = computed(() => this._currentUser()?.role === 'Territory Manager');
+  readonly canAccessTerritoryAdmin = computed(() =>
+    this._currentUser()?.role === 'Territory Manager' ||
+    this._currentUser()?.role === 'Territory Associate');
   readonly isRegionalManager = computed(() => this._currentUser()?.role === 'Regional Manager');
 
   constructor(@Optional() private readonly http: HttpClient | null) {}
@@ -45,6 +53,12 @@ export class AuthService {
 
   getAccessToken(): string | null {
     return this.accessToken;
+  }
+
+  hasValidAccessToken(): boolean {
+    if (!this.accessToken) return false;
+    if (!this.accessTokenExpiresAtMs) return true;
+    return Date.now() < this.accessTokenExpiresAtMs;
   }
 
   get fullName(): string {
@@ -60,7 +74,7 @@ export class AuthService {
         { withCredentials: true },
       )
       .pipe(
-        tap(response => this.setToken(response.accessToken)),
+        tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
         map(response => this.mapAdminUser(response.user)),
         tap(user => {
           this._currentUser.set(user);
@@ -89,7 +103,7 @@ export class AuthService {
     this.refreshRequest$ = this.httpClient
       .post<LoginResponse>('/api/admin/auth/refresh', {}, { withCredentials: true })
       .pipe(
-        tap(response => this.setToken(response.accessToken)),
+        tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
         map(response => this.mapAdminUser(response.user)),
         tap(user => this._currentUser.set(user)),
         map(user => user as User | null),
@@ -134,7 +148,8 @@ export class AuthService {
       case 'Administrator':
         return '/admin-dashboard';
       case 'Territory Manager':
-        return '/national-dashboard';
+      case 'Territory Associate':
+        return '/territory/overview';
       case 'Regional Manager':
         return '/dashboard';
       default:
@@ -182,23 +197,41 @@ export class AuthService {
   }
 
   private resolveAdminRole(roles: string[]): UserRole {
-    if (roles.some(role => ['administrator', 'superadmin', 'sysadmin'].includes(this.normalizeRole(role)))) {
+    if (roles.some(role => ['admin', 'administrator', 'superadmin', 'sysadmin'].includes(this.normalizeRole(role)))) {
       return 'Administrator';
+    }
+
+    if (roles.some(role => ['territorymanager', 'nationalmanager'].includes(this.normalizeRole(role)))) {
+      return 'Territory Manager';
+    }
+
+    if (roles.some(role => this.normalizeRole(role) === 'territoryassociate')) {
+      return 'Territory Associate';
     }
 
     if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {
       return 'Regional Manager';
     }
 
-    if (roles.some(role => ['admin', 'superadmin', 'nationalmanager', 'territorymanager'].includes(this.normalizeRole(role)))) {
-      return 'Territory Manager';
-    }
-
     throw new Error('This account is not assigned to an admin role.');
   }
 
-  private setToken(token: string): void {
+  private setToken(token: string, expiresAt?: string | null, expiresIn?: number | null): void {
     this.accessToken = token;
+    this.accessTokenExpiresAtMs = this.resolveExpiryMs(expiresAt, expiresIn);
+  }
+
+  private resolveExpiryMs(expiresAt?: string | null, expiresIn?: number | null): number | null {
+    const parsed = expiresAt ? Date.parse(expiresAt) : NaN;
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+
+    if (typeof expiresIn === 'number' && Number.isFinite(expiresIn) && expiresIn > 0) {
+      return Date.now() + expiresIn * 1000;
+    }
+
+    return null;
   }
 
   private normalizeRole(role: string): string {
@@ -239,10 +272,12 @@ export class AuthService {
 
   private clearLocalSession(): void {
     this.accessToken = null;
+    this.accessTokenExpiresAtMs = null;
     this._currentUser.set(null);
     try {
       sessionStorage.removeItem(AuthService.sessionHintKey);
       sessionStorage.removeItem(AuthService.activeRegionStorageKey);
+      sessionStorage.removeItem(AuthService.activeTerritoryStorageKey);
     } catch {
       // Session restore is a convenience only.
     }

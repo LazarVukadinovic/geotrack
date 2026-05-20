@@ -41,6 +41,9 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int?>("DestinationId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("EntityId")
                         .HasColumnType("integer");
 
@@ -982,13 +985,33 @@ namespace Geotrack.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<Geometry>("BoundaryGeometry")
+                        .HasColumnType("geography (geometry)");
+
+                    b.Property<string>("BoundaryShapeType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("BoundarySource")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("OsmAdminLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("OsmRelationId")
+                        .HasColumnType("bigint");
 
                     b.Property<int>("TerritoryId")
                         .HasColumnType("integer");
@@ -997,6 +1020,12 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BoundaryGeometry");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("BoundaryGeometry"), "GIST");
+
+                    b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("TerritoryId");
 
@@ -1189,6 +1218,17 @@ namespace Geotrack.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<Geometry>("BoundaryGeometry")
+                        .HasColumnType("geography (geometry)");
+
+                    b.Property<string>("BoundaryShapeType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("BoundarySource")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1197,10 +1237,20 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int?>("OsmAdminLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("OsmRelationId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BoundaryGeometry");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("BoundaryGeometry"), "GIST");
 
                     b.HasIndex("Name")
                         .IsUnique();
@@ -2509,6 +2559,9 @@ namespace Geotrack.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Location")
                         .HasMaxLength(200)
