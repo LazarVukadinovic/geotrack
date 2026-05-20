@@ -19,9 +19,10 @@ public sealed class AdminProfileTests
 {
     private static readonly DateTime FirstAssignedAt = new(2024, 1, 5, 9, 30, 0, DateTimeKind.Utc);
     private static readonly DateTime SecondAssignedAt = new(2024, 2, 10, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime TerritoryAssignedAt = new(2024, 3, 15, 8, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public async Task Admin_profile_requires_authentication_and_regional_manager_role()
+    public async Task Admin_profile_requires_authentication_and_admin_app_role()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         await PrepareRegionalManagerAsync(app);
@@ -67,12 +68,53 @@ public sealed class AdminProfileTests
         Assert.Equal("elena@example.com", profile.User.Email);
         Assert.Equal("Existing admin bio", profile.User.ShortBio);
         Assert.Contains(RoleNames.RegionalManager, profile.Roles);
+        Assert.Equal(RoleNames.RegionalManager, profile.Role.RoleCode);
+        Assert.Equal("Regional Manager", profile.Role.RoleDisplayName);
+        Assert.Equal("Region", profile.Assignment.AssignmentType);
+        Assert.Equal("Regional Manager Assignment", profile.Assignment.SectionTitle);
+        Assert.Equal("Assigned Region", profile.Assignment.Label);
         Assert.Equal(2, profile.RegionalManager.AssignedRegions.Count);
         Assert.Equal(FirstAssignedAt, profile.RegionalManager.MemberSince);
+        Assert.Equal(FirstAssignedAt, profile.Assignment.MemberSince);
+        Assert.Equal(2, profile.Assignment.AssignedItems.Count);
 
         var expectedRegionNames = setup.AssignedRegions.Select(region => region.Name).OrderBy(name => name).ToList();
         var actualRegionNames = profile.RegionalManager.AssignedRegions.Select(region => region.Name).OrderBy(name => name).ToList();
         Assert.Equal(expectedRegionNames, actualRegionNames);
+    }
+
+    [Fact]
+    public async Task Admin_profile_returns_territory_manager_role_and_assigned_territory()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var setup = await PrepareTerritoryManagerAsync(app);
+
+        using var client = app.CreateClient();
+        await LoginTerritoryManagerAsync(client);
+
+        var profile = await client.GetFromJsonAsync<AdminProfileResponseDto>("/api/admin/profile");
+
+        Assert.NotNull(profile);
+        Assert.Equal(setup.UserId, profile!.User.Id);
+        Assert.Equal("Mika", profile.User.FirstName);
+        Assert.Equal("Mikic", profile.User.LastName);
+        Assert.Equal("mika@gmail.com", profile.User.Email);
+        Assert.Equal("Territory profile bio", profile.User.ShortBio);
+        Assert.Contains(RoleNames.TerritoryManager, profile.Roles);
+        Assert.Equal(RoleNames.TerritoryManager, profile.Role.RoleCode);
+        Assert.Equal("Territory Manager", profile.Role.RoleDisplayName);
+        Assert.Equal("Territory", profile.Assignment.AssignmentType);
+        Assert.Equal("Territory Manager Assignment", profile.Assignment.SectionTitle);
+        Assert.Equal("Assigned Territory", profile.Assignment.Label);
+        Assert.NotEqual("Assigned Region", profile.Assignment.Label);
+        Assert.Equal(setup.AssignedTerritory.Name, profile.Assignment.DisplayValue);
+        Assert.Equal(TerritoryAssignedAt, profile.Assignment.MemberSince);
+
+        var assignedItem = Assert.Single(profile.Assignment.AssignedItems);
+        Assert.Equal(setup.AssignedTerritory.Id, assignedItem.Id);
+        Assert.Equal("Croatia", assignedItem.Name);
+        Assert.Equal("Croatia", assignedItem.DisplayName);
+        Assert.Empty(profile.RegionalManager.AssignedRegions);
     }
 
     [Fact]
@@ -112,6 +154,7 @@ public sealed class AdminProfileTests
         Assert.False(updated.Preferences.EmailRequestsEnabled);
         Assert.True(updated.Preferences.EmailNewReviewEnabled);
         Assert.Contains(RoleNames.RegionalManager, updated.Roles);
+        Assert.Equal("Assigned Region", updated.Assignment.Label);
         Assert.Equal(2, updated.RegionalManager.AssignedRegions.Count);
 
         await using var scope = app.Services.CreateAsyncScope();
@@ -131,6 +174,52 @@ public sealed class AdminProfileTests
         Assert.Equal("Updated bio", reloaded!.User.ShortBio);
         Assert.False(reloaded.Preferences.EmailRequestsEnabled);
         Assert.True(reloaded.Preferences.EmailNewReviewEnabled);
+    }
+
+    [Fact]
+    public async Task Territory_admin_profile_update_does_not_change_role_or_assignment()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var setup = await PrepareTerritoryManagerAsync(app);
+
+        using var client = app.CreateClient();
+        await LoginTerritoryManagerAsync(client);
+
+        var updateResponse = await client.PutAsJsonAsync(
+            "/api/admin/profile",
+            new
+            {
+                firstName = "Updated",
+                lastName = "Territory",
+                shortBio = "Updated territory bio",
+                interfaceLanguage = "sr",
+                timezone = "Europe/Belgrade",
+                emailRequestsEnabled = false,
+                emailNewReviewEnabled = true,
+                role = new { roleCode = "Admin", roleDisplayName = "Admin" },
+                assignment = new { label = "Assigned Region", displayValue = "Tampered" },
+            });
+        updateResponse.EnsureSuccessStatusCode();
+
+        var updated = await updateResponse.Content.ReadFromJsonAsync<AdminProfileResponseDto>();
+        Assert.NotNull(updated);
+        Assert.Equal("Updated", updated!.User.FirstName);
+        Assert.Equal("Territory", updated.User.LastName);
+        Assert.Equal("Updated territory bio", updated.User.ShortBio);
+        Assert.Equal("mika@gmail.com", updated.User.Email);
+        Assert.Contains(RoleNames.TerritoryManager, updated.Roles);
+        Assert.Equal(RoleNames.TerritoryManager, updated.Role.RoleCode);
+        Assert.Equal("Territory Manager", updated.Role.RoleDisplayName);
+        Assert.Equal("Assigned Territory", updated.Assignment.Label);
+        Assert.Equal(setup.AssignedTerritory.Name, updated.Assignment.DisplayValue);
+        Assert.Equal(TerritoryAssignedAt, updated.Assignment.MemberSince);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var assignment = await db.TerritoryManagerTerritories.SingleAsync(existing =>
+            existing.UserId == setup.UserId &&
+            existing.TerritoryId == setup.AssignedTerritory.Id);
+        Assert.Equal(TerritoryAssignedAt, assignment.CreatedAt);
     }
 
     [Fact]
@@ -212,6 +301,25 @@ public sealed class AdminProfileTests
         return session;
     }
 
+    private static async Task<AdminLoginResponseDto> LoginTerritoryManagerAsync(HttpClient client)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new LoginRequestDto
+            {
+                Email = "mika@gmail.com",
+                Password = "Proba123!",
+            });
+        response.EnsureSuccessStatusCode();
+
+        var session = await response.Content.ReadFromJsonAsync<AdminLoginResponseDto>();
+        Assert.NotNull(session);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", session!.AccessToken);
+
+        return session;
+    }
+
     private static async Task<(int UserId, List<Region> AssignedRegions)> PrepareRegionalManagerAsync(
         GeotrackApiFactory app)
     {
@@ -265,6 +373,60 @@ public sealed class AdminProfileTests
         await db.SaveChangesAsync();
 
         return (user.Id, regions);
+    }
+
+    private static async Task<(int UserId, Territory AssignedTerritory)> PrepareTerritoryManagerAsync(
+        GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var user = await db.Users
+            .Include(existing => existing.UserRoles)
+            .SingleAsync(existing => existing.Email == "mika@gmail.com");
+        var role = await db.Roles.SingleAsync(existing => existing.Name == RoleNames.TerritoryManager);
+
+        if (!user.UserRoles.Any(userRole => userRole.RoleId == role.Id))
+        {
+            user.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = role.Id,
+            });
+        }
+
+        if (!await db.TerritoryManagers.AnyAsync(existing => existing.UserId == user.Id))
+        {
+            db.TerritoryManagers.Add(new TerritoryManager
+            {
+                UserId = user.Id,
+            });
+        }
+
+        user.FirstName = "Mika";
+        user.LastName = "Mikic";
+        user.ShortBio = "Territory profile bio";
+        user.InterfaceLanguage = "en-US";
+        user.Timezone = "UTC";
+        user.EmailRequestsEnabled = true;
+        user.EmailNewReviewEnabled = false;
+
+        var territory = await db.Territories.SingleAsync(existing => existing.Name == "Croatia");
+        var existingAssignments = await db.TerritoryManagerTerritories
+            .Where(assignment => assignment.UserId == user.Id)
+            .ToListAsync();
+        db.TerritoryManagerTerritories.RemoveRange(existingAssignments);
+
+        db.TerritoryManagerTerritories.Add(new TerritoryManagerTerritory
+        {
+            UserId = user.Id,
+            TerritoryId = territory.Id,
+            CreatedAt = TerritoryAssignedAt,
+        });
+
+        await db.SaveChangesAsync();
+
+        return (user.Id, territory);
     }
 
     private static async Task<List<Region>> EnsureTwoRegionsAsync(AppDbContext db)

@@ -168,6 +168,7 @@ public sealed class TerritoryUserAdministrationTests
             $"/api/admin/territory/users/{fixture.ViewerUserId}/available-regions?territoryId={fixture.AssignedTerritoryId}");
         Assert.NotNull(available);
         Assert.Contains(available!.Items, item => item.RegionId == fixture.AssignedRegionOneId);
+        Assert.DoesNotContain(available.Items, item => item.RegionId == fixture.AssignedRegionTwoId);
         Assert.DoesNotContain(available.Items, item => item.RegionId == fixture.UnassignedRegionId);
 
         var add = await client.PostAsJsonAsync(
@@ -191,6 +192,303 @@ public sealed class TerritoryUserAdministrationTests
     }
 
     [Fact]
+    public async Task Add_regional_manager_assigns_role_regions_and_prevents_duplicates()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/regional-manager",
+            new TerritoryUserAddRegionalManagerRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                RegionIds = new List<int> { fixture.AssignedRegionOneId }
+            });
+        response.EnsureSuccessStatusCode();
+
+        var updated = await response.Content.ReadFromJsonAsync<TerritoryUserListItemDto>();
+        Assert.NotNull(updated);
+        Assert.Equal(RoleNames.RegionalManager, updated!.RoleCode);
+        Assert.Contains(RoleNames.RegionalManager, updated.Roles);
+        Assert.Contains(updated.AssignedRegions, region => region.RegionId == fixture.AssignedRegionOneId);
+
+        var duplicate = await client.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/regional-manager",
+            new TerritoryUserAddRegionalManagerRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                RegionIds = new List<int> { fixture.AssignedRegionOneId }
+            });
+        duplicate.EnsureSuccessStatusCode();
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(1, await db.UserRoles.CountAsync(role =>
+            role.UserId == fixture.PlainUserId &&
+            role.Role.Name == RoleNames.RegionalManager));
+        Assert.Equal(1, await db.RegionalManagerRegions.CountAsync(assignment =>
+            assignment.UserId == fixture.PlainUserId &&
+            assignment.RegionId == fixture.AssignedRegionOneId &&
+            assignment.IsActive));
+    }
+
+    [Fact]
+    public async Task Add_regional_manager_rejects_regions_outside_assigned_territory()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/regional-manager",
+            new TerritoryUserAddRegionalManagerRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                RegionIds = new List<int> { fixture.UnassignedRegionId }
+            });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.False(await db.UserRoles.AnyAsync(role =>
+            role.UserId == fixture.PlainUserId &&
+            role.Role.Name == RoleNames.RegionalManager));
+    }
+
+    [Fact]
+    public async Task Territory_manager_can_add_territory_associate_to_existing_user_without_duplicates()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
+            new TerritoryUserAddTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        response.EnsureSuccessStatusCode();
+
+        var updated = await response.Content.ReadFromJsonAsync<TerritoryUserListItemDto>();
+        Assert.NotNull(updated);
+        Assert.Equal(RoleNames.TerritoryAssociate, updated!.RoleCode);
+        Assert.Contains(RoleNames.TerritoryAssociate, updated.Roles);
+        Assert.Contains(updated.AssignedTerritories, territory => territory.TerritoryId == fixture.AssignedTerritoryId);
+
+        var duplicate = await client.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
+            new TerritoryUserAddTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        duplicate.EnsureSuccessStatusCode();
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(1, await db.UserRoles.CountAsync(role =>
+            role.UserId == fixture.PlainUserId &&
+            role.Role.Name == RoleNames.TerritoryAssociate));
+        Assert.Equal(1, await db.TerritoryManagerTerritories.CountAsync(assignment =>
+            assignment.UserId == fixture.PlainUserId &&
+            assignment.TerritoryId == fixture.AssignedTerritoryId));
+    }
+
+    [Fact]
+    public async Task Add_territory_associate_preserves_existing_regional_manager_role()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}/territory-associate",
+            new TerritoryUserAddTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        response.EnsureSuccessStatusCode();
+
+        var updated = await response.Content.ReadFromJsonAsync<TerritoryUserListItemDto>();
+        Assert.NotNull(updated);
+        Assert.Contains(RoleNames.RegionalManager, updated!.Roles);
+        Assert.Contains(RoleNames.TerritoryAssociate, updated.Roles);
+        Assert.Contains(updated.AssignedRegions, region => region.RegionId == fixture.AssignedRegionOneId);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.True(await db.UserRoles.AnyAsync(role =>
+            role.UserId == fixture.ActiveManagerUserId &&
+            role.Role.Name == RoleNames.RegionalManager));
+        Assert.True(await db.RegionalManagerRegions.AnyAsync(assignment =>
+            assignment.UserId == fixture.ActiveManagerUserId &&
+            assignment.RegionId == fixture.AssignedRegionOneId &&
+            assignment.IsActive));
+    }
+
+    [Fact]
+    public async Task Territory_associate_cannot_add_territory_associate()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+        await GrantTerritoryAssociateRoleAsync(app, "elena@example.com", fixture.AssignedTerritoryId);
+
+        using var associateClient = await LoginAdminAsync(app, "elena@example.com", "password123");
+        var response = await associateClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
+            new TerritoryUserAddTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Territory_manager_can_remove_territory_associate_assignment_without_deleting_user()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var add = await client.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
+            new TerritoryUserAddTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        add.EnsureSuccessStatusCode();
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate/remove",
+            new TerritoryUserRemoveTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        response.EnsureSuccessStatusCode();
+
+        var updated = await response.Content.ReadFromJsonAsync<TerritoryUserListItemDto>();
+        Assert.NotNull(updated);
+        Assert.False(updated!.IsInTerritoryScope);
+        Assert.Equal("Inactive", updated.Status);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.True(await db.Users.AnyAsync(user => user.Id == fixture.PlainUserId));
+        Assert.False(await db.UserRoles.AnyAsync(role =>
+            role.UserId == fixture.PlainUserId &&
+            role.Role.Name == RoleNames.TerritoryAssociate));
+        Assert.False(await db.TerritoryManagerTerritories.AnyAsync(assignment =>
+            assignment.UserId == fixture.PlainUserId &&
+            assignment.TerritoryId == fixture.AssignedTerritoryId));
+        Assert.True(await db.UserRoles.AnyAsync(role =>
+            role.UserId == fixture.PlainUserId &&
+            role.Role.Name == RoleNames.RegisteredUser));
+    }
+
+    [Fact]
+    public async Task Territory_associate_cannot_remove_regional_territory_or_associate_roles()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+        await GrantTerritoryAssociateRoleAsync(app, "elena@example.com", fixture.AssignedTerritoryId);
+
+        using var managerClient = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var add = await managerClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
+            new TerritoryUserAddTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        add.EnsureSuccessStatusCode();
+
+        using var associateClient = await LoginAdminAsync(app, "elena@example.com", "password123");
+        var removeAssociate = await associateClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate/remove",
+            new TerritoryUserRemoveTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, removeAssociate.StatusCode);
+
+        var removeRegionalManager = await associateClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}/remove-manager-role",
+            new TerritoryUserRemoveManagerRoleRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, removeRegionalManager.StatusCode);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var territoryManagerId = await db.Users
+            .Where(user => user.Email == "mika@gmail.com")
+            .Select(user => user.Id)
+            .SingleAsync();
+
+        var removeTerritoryManager = await associateClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{territoryManagerId}/remove-manager-role",
+            new TerritoryUserRemoveManagerRoleRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        Assert.NotEqual(HttpStatusCode.OK, removeTerritoryManager.StatusCode);
+    }
+
+    [Fact]
+    public async Task List_action_flags_are_correct_for_territory_manager_and_associate()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+        await GrantTerritoryAssociateRoleAsync(app, "elena@example.com", fixture.AssignedTerritoryId);
+
+        using var managerClient = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var add = await managerClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
+            new TerritoryUserAddTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        add.EnsureSuccessStatusCode();
+
+        var managerView = await managerClient.GetFromJsonAsync<TerritoryUserListResponseDto>(
+            $"/api/admin/territory/users?territoryId={fixture.AssignedTerritoryId}&skip=0&take=20");
+        Assert.NotNull(managerView);
+        var associateRowForManager = Assert.Single(managerView!.Items, item => item.UserId == fixture.PlainUserId);
+        Assert.False(associateRowForManager.CanAddTerritoryAssociate);
+        Assert.False(associateRowForManager.CanAddTerritoryAssociateRole);
+        Assert.True(associateRowForManager.CanAddRegionalManagerRole);
+        Assert.True(associateRowForManager.CanRemoveTerritoryAssociateRole);
+
+        var regionalRowForManager = Assert.Single(managerView.Items, item => item.UserId == fixture.ActiveManagerUserId);
+        Assert.True(regionalRowForManager.CanAddTerritoryAssociate);
+        Assert.True(regionalRowForManager.CanAddTerritoryAssociateRole);
+        Assert.False(regionalRowForManager.CanAddRegionalManagerRole);
+        Assert.True(regionalRowForManager.CanRemoveRegionalManagerRole);
+
+        using var associateClient = await LoginAdminAsync(app, "elena@example.com", "password123");
+        var associateView = await associateClient.GetFromJsonAsync<TerritoryUserListResponseDto>(
+            $"/api/admin/territory/users?territoryId={fixture.AssignedTerritoryId}&skip=0&take=20");
+        Assert.NotNull(associateView);
+        Assert.All(associateView!.Items, item =>
+        {
+            Assert.False(item.CanAddTerritoryAssociate);
+            Assert.False(item.CanAddTerritoryAssociateRole);
+            Assert.False(item.CanRemoveTerritoryAssociateRole);
+        });
+
+        var regionalRowForAssociate = Assert.Single(associateView.Items, item => item.UserId == fixture.ActiveManagerUserId);
+        Assert.True(regionalRowForAssociate.CanAddRegion);
+        Assert.False(regionalRowForAssociate.CanRemoveRegionalManagerRole);
+    }
+
+    [Fact]
     public async Task Edit_user_updates_only_safe_profile_fields()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -204,7 +502,7 @@ public sealed class TerritoryUserAdministrationTests
                 TerritoryId = fixture.AssignedTerritoryId,
                 FirstName = "Renamed",
                 LastName = "Manager",
-                DisplayName = "Renamed Manager"
+                RegionIdsToAdd = new List<int> { fixture.AssignedRegionTwoId }
             });
         response.EnsureSuccessStatusCode();
 
@@ -213,11 +511,128 @@ public sealed class TerritoryUserAdministrationTests
         Assert.Equal("Renamed Manager", updated!.DisplayName);
         Assert.Equal("Renamed", updated.FirstName);
         Assert.Equal(fixture.ActiveManagerEmail, updated.Email);
+        Assert.Contains(updated.AssignedRegions, region => region.RegionId == fixture.AssignedRegionTwoId);
 
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var persisted = await db.Users.SingleAsync(user => user.Id == fixture.ActiveManagerUserId);
         Assert.Equal(fixture.ActiveManagerEmail, persisted.Email);
+        Assert.Equal("Active Manager", persisted.DisplayName);
+        Assert.Equal(1, await db.RegionalManagerRegions.CountAsync(assignment =>
+            assignment.UserId == fixture.ActiveManagerUserId &&
+            assignment.RegionId == fixture.AssignedRegionTwoId &&
+            assignment.IsActive));
+    }
+
+    [Fact]
+    public async Task Edit_user_rejects_out_of_scope_users_and_regions_without_duplicates()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+        var outsideUser = await client.PutAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.OutOfTerritoryUserId}",
+            new TerritoryUserUpdateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                FirstName = "Blocked",
+                LastName = "User"
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, outsideUser.StatusCode);
+
+        var outsideRegion = await client.PutAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}",
+            new TerritoryUserUpdateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                FirstName = "Blocked",
+                LastName = "Region",
+                RegionIdsToAdd = new List<int> { fixture.UnassignedRegionId }
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, outsideRegion.StatusCode);
+
+        var duplicate = await client.PutAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}",
+            new TerritoryUserUpdateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                FirstName = "Duplicate",
+                LastName = "Region",
+                RegionIdsToAdd = new List<int> { fixture.AssignedRegionOneId }
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, duplicate.StatusCode);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(1, await db.RegionalManagerRegions.CountAsync(assignment =>
+            assignment.UserId == fixture.ActiveManagerUserId &&
+            assignment.RegionId == fixture.AssignedRegionOneId));
+    }
+
+    [Fact]
+    public async Task Territory_user_mutations_reject_regional_and_anonymous_callers()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+        await GrantRegionalManagerRoleAsync(app, "elena@example.com");
+
+        using var anonymousClient = app.CreateClient();
+        var anonymous = await anonymousClient.PutAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}",
+            new TerritoryUserUpdateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                FirstName = "Anonymous",
+                LastName = "Caller"
+            });
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        using var regionalClient = await LoginAdminAsync(app, "elena@example.com", "password123");
+        var regional = await regionalClient.PutAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}",
+            new TerritoryUserUpdateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                FirstName = "Regional",
+                LastName = "Caller"
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, regional.StatusCode);
+
+        var anonymousAddRegionalManager = await anonymousClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/regional-manager",
+            new TerritoryUserAddRegionalManagerRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                RegionIds = new List<int> { fixture.AssignedRegionOneId }
+            });
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousAddRegionalManager.StatusCode);
+
+        var anonymousAddTerritoryAssociate = await anonymousClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
+            new TerritoryUserAddTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousAddTerritoryAssociate.StatusCode);
+
+        var regionalAddTerritoryAssociate = await regionalClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
+            new TerritoryUserAddTerritoryAssociateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, regionalAddTerritoryAssociate.StatusCode);
+
+        var regionalAddRegionalManager = await regionalClient.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.PlainUserId}/regional-manager",
+            new TerritoryUserAddRegionalManagerRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                RegionIds = new List<int> { fixture.AssignedRegionOneId }
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, regionalAddRegionalManager.StatusCode);
     }
 
     [Fact]
@@ -356,6 +771,47 @@ public sealed class TerritoryUserAdministrationTests
         await db.SaveChangesAsync();
     }
 
+    private static async Task GrantTerritoryAssociateRoleAsync(GeotrackApiFactory app, string email, int territoryId)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users
+            .Include(existing => existing.TerritoryManager)
+                .ThenInclude(manager => manager!.TerritoryManagerTerritories)
+            .SingleAsync(existing => existing.Email == email);
+        var role = await db.Roles.SingleAsync(existing => existing.Name == RoleNames.TerritoryAssociate);
+
+        if (!await db.UserRoles.AnyAsync(userRole => userRole.UserId == user.Id && userRole.RoleId == role.Id))
+        {
+            db.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = role.Id
+            });
+        }
+
+        if (user.TerritoryManager is null)
+        {
+            user.TerritoryManager = new TerritoryManager
+            {
+                UserId = user.Id
+            };
+            db.TerritoryManagers.Add(user.TerritoryManager);
+        }
+
+        if (!user.TerritoryManager.TerritoryManagerTerritories.Any(assignment => assignment.TerritoryId == territoryId))
+        {
+            user.TerritoryManager.TerritoryManagerTerritories.Add(new TerritoryManagerTerritory
+            {
+                UserId = user.Id,
+                TerritoryId = territoryId,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
     private static async Task<TerritoryUsersFixture> CreateFixtureAsync(
         GeotrackApiFactory app,
         bool createCrossTerritoryManager = false)
@@ -442,12 +898,21 @@ public sealed class TerritoryUserAdministrationTests
             "Outside Manager",
             null,
             null);
+        var plainUser = await CreateUserAsync(
+            db,
+            $"plain-user-{suffix}@example.com",
+            "Plain",
+            "User",
+            "Plain User",
+            null,
+            null);
 
         db.UserRoles.AddRange(
             new UserRole { UserId = activeManager.Id, RoleId = regionalRole.Id },
             new UserRole { UserId = viewer.Id, RoleId = registeredRole.Id },
             new UserRole { UserId = inactiveManager.Id, RoleId = regionalRole.Id },
-            new UserRole { UserId = outUser.Id, RoleId = regionalRole.Id });
+            new UserRole { UserId = outUser.Id, RoleId = regionalRole.Id },
+            new UserRole { UserId = plainUser.Id, RoleId = registeredRole.Id });
 
         db.RegionalManagerRegions.AddRange(
             new RegionalManagerRegion
@@ -522,6 +987,8 @@ public sealed class TerritoryUserAdministrationTests
             activeManager.Email,
             viewer.Id,
             viewer.Email,
+            plainUser.Id,
+            plainUser.Email,
             inactiveManager.Id,
             outUser.Id,
             crossTerritoryManager?.Id ?? 0);
@@ -602,6 +1069,8 @@ public sealed class TerritoryUserAdministrationTests
         string ActiveManagerEmail,
         int ViewerUserId,
         string ViewerEmail,
+        int PlainUserId,
+        string PlainUserEmail,
         int InactiveManagerUserId,
         int OutOfTerritoryUserId,
         int CrossTerritoryManagerUserId);
