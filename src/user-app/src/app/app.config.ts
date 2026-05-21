@@ -9,6 +9,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { catchError, firstValueFrom, of, switchMap } from 'rxjs';
 
 import { routes } from './app.routes';
+import { apiUrlInterceptor } from './core/services/api-url.interceptor';
 import { authInterceptor } from './core/services/auth.interceptor';
 import { authErrorInterceptor } from './core/services/auth-error.interceptor';
 import { TokenStorageService } from './core/services/token-storage.service';
@@ -26,9 +27,9 @@ export const appConfig: ApplicationConfig = {
     // the user profile are both settled before any route guard or page runs.
     provideRouter(routes, withEnabledBlockingInitialNavigation()),
 
-    // authInterceptor first (attaches Authorization header / proactive refresh);
-    // authErrorInterceptor second (retries with a fresh token on 401).
-    provideHttpClient(withInterceptors([authInterceptor, authErrorInterceptor])),
+    // authInterceptor first sees local /api paths, apiUrlInterceptor then maps
+    // them to the configured environment URL, and authErrorInterceptor handles 401 retries.
+    provideHttpClient(withInterceptors([authInterceptor, apiUrlInterceptor, authErrorInterceptor])),
 
     // ── Startup session restore ─────────────────────────────────────────────
     // On every cold start:
