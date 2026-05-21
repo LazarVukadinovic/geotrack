@@ -17,8 +17,7 @@ public sealed class CorsPolicyTests
             "http://localhost:4200",
             "http://127.0.0.1:4200",
             "http://localhost:4300",
-            "http://127.0.0.1:4300",
-            "https://softeng.pmf.kg.ac.rs:10131"
+            "http://127.0.0.1:4300"
         };
 
         foreach (var origin in allowedOrigins)
@@ -28,6 +27,19 @@ public sealed class CorsPolicyTests
 
             AssertCorsAllowsOrigin(response, origin);
         }
+    }
+
+    [Fact]
+    public async Task Development_cors_rejects_production_origin()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        const string origin = "https://softeng.pmf.kg.ac.rs:10131";
+        using var request = BuildPreflightRequest(origin);
+        using var response = await client.SendAsync(request);
+
+        AssertCorsOmitsOrigin(response, origin);
     }
 
     [Fact]

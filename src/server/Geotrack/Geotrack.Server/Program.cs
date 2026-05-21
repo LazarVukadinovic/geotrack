@@ -366,16 +366,21 @@ var allowedCorsOrigins = builder.Configuration
     .ToArray()
     ?? Array.Empty<string>();
 
-if (allowedCorsOrigins.Length == 0)
+if (allowedCorsOrigins.Length == 0 && builder.Environment.IsDevelopment())
 {
     allowedCorsOrigins = new[]
     {
         "http://localhost:4200",
         "http://127.0.0.1:4200",
         "http://localhost:4300",
-        "http://127.0.0.1:4300",
-        "https://softeng.pmf.kg.ac.rs:10131"
+        "http://127.0.0.1:4300"
     };
+}
+
+if (allowedCorsOrigins.Length == 0)
+{
+    throw new InvalidOperationException(
+        "Cors:AllowedOrigins must be configured for this environment.");
 }
 
 builder.Services.AddCors(options =>
@@ -454,23 +459,19 @@ if (forwardedHeadersEnabled)
     app.UseForwardedHeaders();
 }
 
-app.UseHttpsRedirection();
-
-app.UseCors("ConfigurationOrigins");
-
 // HTTPS can be terminated either by Kestrel itself or by a reverse proxy.
-// Keep it config-driven so local HTTP development still works unchanged.
-if (!app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Hsts:Enabled"))
-{
-    app.UseHsts();
-}
-
+// Keep redirection config-driven so local HTTP development still works unchanged.
 if (app.Configuration.GetValue<bool>("HttpsRedirection:Enabled"))
 {
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowAllOrigins");
+if (!app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Hsts:Enabled"))
+{
+    app.UseHsts();
+}
+
+app.UseCors("ConfiguredOrigins");
 
 app.Use(async (context, next) =>
 {
@@ -589,9 +590,21 @@ app.UseRateLimiter();
 
 app.MapControllers();
 
-if (File.Exists(Path.Combine(webRoot, "index.html")))
+var userIndexPath = Path.Combine(webRoot, "index.html");
+if (File.Exists(userIndexPath))
 {
-    app.MapFallbackToFile("index.html");
+    app.MapFallback(async context =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsJsonAsync(new { message = "API endpoint not found." });
+            return;
+        }
+
+        context.Response.ContentType = "text/html";
+        await context.Response.SendFileAsync(userIndexPath);
+    });
 }
 
 app.Run();
