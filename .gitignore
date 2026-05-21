@@ -38,6 +38,11 @@ logs/
 tmp/
 temp/
 
+# Certificates and private keys
+*.pfx
+*.pem
+*.key
+
 # NuGet
 *.nupkg
 *.snupkg
