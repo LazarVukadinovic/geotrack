@@ -87,6 +87,7 @@ describe('AddDestinationComponent', () => {
           useValue: {
             fullName: 'Manager User',
             getUser: () => ({ email: 'manager@example.com', role: 'RegionalManager' }),
+            isAdministrator: () => false,
             isTerritoryManager: () => false,
             canAccessTerritoryAdmin: () => false,
             logout: vi.fn(),

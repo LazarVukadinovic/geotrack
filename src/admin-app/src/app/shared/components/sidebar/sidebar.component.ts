@@ -1,10 +1,11 @@
-import { ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output, inject, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, take } from 'rxjs/operators';
 import { AuthService } from '../../../core/services/auth.service';
 import { RegionalAssignedRegion } from '../../../core/models/dashboard.model';
 import { TerritoryDashboardService } from '../../../core/services/territory-dashboard.service';
+import { RegionalManagerSidebarStateService } from '../../../core/services/regional-manager-sidebar-state.service';
 
 export interface SidebarNavItem {
   label: string;
@@ -21,11 +22,10 @@ export interface SidebarNavItem {
   templateUrl: './sidebar.component.html',
   styleUrl: './sidebar.component.css',
 })
-export class SidebarComponent implements OnInit {
+export class SidebarComponent implements OnInit, OnChanges {
   @Input() region = '';
   @Input() regions: RegionalAssignedRegion[] = [];
   @Input() activeRegionId: number | null = null;
-  @Input() pendingRequestsCount: number | null = null;
   @Input() reportedReviewsCount: number | null = null;
   @Input() regionLoading = false;
   @Output() regionChange = new EventEmitter<number>();
@@ -33,6 +33,7 @@ export class SidebarComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly territoryDashboard = inject(TerritoryDashboardService);
+  private readonly regionalSidebarState = inject(RegionalManagerSidebarStateService);
   private readonly cdr = inject(ChangeDetectorRef);
 
   private readonly currentUrl = signal(this.router.url);
@@ -47,6 +48,8 @@ export class SidebarComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.syncRegionalSidebarState();
+
     if (!this.auth.canAccessTerritoryAdmin() || this.regions.length > 0) {
       return;
     }
@@ -77,6 +80,12 @@ export class SidebarComponent implements OnInit {
           this.cdr.markForCheck();
         },
       });
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['activeRegionId'] || changes['regions'] || changes['region']) {
+      this.syncRegionalSidebarState();
+    }
   }
 
   isActive(path: string, exact = false): boolean {
@@ -145,7 +154,7 @@ export class SidebarComponent implements OnInit {
         label: 'Requests Queue',
         path: '/requests',
         icon: 'inbox',
-        badge: this.pendingRequestsCount || undefined,
+        badge: this.requestsQueueBadge,
       },
       { label: 'Map', path: '/map', icon: 'map' },
     ];
@@ -174,6 +183,8 @@ export class SidebarComponent implements OnInit {
       if (this.isTerritory) {
         this.loadedActiveTerritoryId = regionId;
         this.territoryDashboard.setActiveTerritoryId(regionId);
+      } else if (this.shouldUseRegionalSidebarState) {
+        this.regionalSidebarState.selectRegion(regionId, this.regions);
       }
       this.regionChange.emit(regionId);
     }
@@ -181,7 +192,8 @@ export class SidebarComponent implements OnInit {
 
   private resolvedRegionLabel(): string | null {
     const activeRegion = this.pickerItems.find((region) => region.id === this.resolvedActiveId);
-    const value = this.region || activeRegion?.displayName || this.auth.getUser()?.region || '';
+    const sharedActiveRegion = this.shouldUseRegionalSidebarState ? this.regionalSidebarState.activeRegion() : null;
+    const value = this.region || activeRegion?.displayName || sharedActiveRegion?.displayName || this.auth.getUser()?.region || '';
     return value.trim() || null;
   }
 
@@ -199,5 +211,43 @@ export class SidebarComponent implements OnInit {
 
   private get emptyPickerLabel(): string {
     return this.isTerritory ? 'No assigned territories' : 'No assigned regions';
+  }
+
+  private get shouldUseRegionalSidebarState(): boolean {
+    return this.auth.getUser()?.role === 'Regional Manager' && !this.isAdministrator && !this.isTerritory;
+  }
+
+  private get requestsQueueBadge(): number | undefined {
+    if (!this.shouldUseRegionalSidebarState) {
+      return undefined;
+    }
+
+    const count = this.regionalSidebarState.pendingRequestsCount();
+    return typeof count === 'number' && count > 0 ? count : undefined;
+  }
+
+  private syncRegionalSidebarState(): void {
+    if (!this.shouldUseRegionalSidebarState) {
+      return;
+    }
+
+    if (this.regions.length > 0) {
+      this.regionalSidebarState.setAssignedRegions(this.regions);
+    }
+
+    const activeRegionId = this.toPositiveRegionId(this.activeRegionId);
+    if (activeRegionId) {
+      this.regionalSidebarState.selectRegion(activeRegionId, this.regions);
+      return;
+    }
+
+    if (this.region.trim()) {
+      this.regionalSidebarState.ensureLoaded();
+    }
+  }
+
+  private toPositiveRegionId(value: unknown): number | null {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 }

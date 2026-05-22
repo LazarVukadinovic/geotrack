@@ -71,6 +71,7 @@ describe('AddRegionComponent', () => {
     const authService = {
       fullName: 'Mika Mikic',
       getUser: vi.fn(() => ({ role: 'Territory Manager', region: '' })),
+      isAdministrator: vi.fn(() => false),
       canAccessTerritoryAdmin: vi.fn(() => true),
       logout: vi.fn(),
     };

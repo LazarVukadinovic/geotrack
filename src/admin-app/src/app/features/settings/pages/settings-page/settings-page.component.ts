@@ -116,6 +116,11 @@ export class SettingsComponent implements OnInit {
   }
 
   get currentRole(): string {
+    const activeRole = this.userRole.trim();
+    if (activeRole) {
+      return activeRole;
+    }
+
     const roleDisplayName = this.lastProfile?.role?.roleDisplayName?.trim();
     if (roleDisplayName) {
       return roleDisplayName;
@@ -124,6 +129,10 @@ export class SettingsComponent implements OnInit {
     const roles = this.lastProfile?.roles ?? [];
     if (roles.some(role => this.normalizeRole(role) === 'territorymanager')) {
       return 'Territory Manager';
+    }
+
+    if (roles.some(role => this.normalizeRole(role) === 'territoryassociate')) {
+      return 'Territory Associate';
     }
 
     if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {
@@ -571,6 +580,8 @@ export class SettingsComponent implements OnInit {
       case 'territorymanager':
       case 'nationalmanager':
         return 'Territory Manager';
+      case 'territoryassociate':
+        return 'Territory Associate';
       case 'admin':
         return 'Admin';
       default:
