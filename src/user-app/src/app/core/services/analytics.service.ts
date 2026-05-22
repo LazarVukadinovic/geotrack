@@ -20,6 +20,7 @@ const SOON_FLUSH_DELAY_MS = 750;
 const MAX_BATCH = 25;
 /** Hard cap matching the server's MaxBatchSize. */
 const SERVER_BATCH_CAP = 50;
+const MAX_KEEPALIVE_BODY_CHARS = 60_000;
 const MAX_DEDUPE_ENTRIES = 200;
 const MIN_DURATION_MS = 1_000;
 const MAX_DURATION_MS = 30 * 60 * 1_000;
@@ -122,23 +123,21 @@ export class AnalyticsService {
       this.visibilityHandler = () => {
         if (document.visibilityState === 'hidden') {
           this.endCurrentView('hidden');
-          this.flushNow();
+          this.pageLifecycleFlush();
         }
       };
       document.addEventListener('visibilitychange', this.visibilityHandler);
 
-      // pagehide/beforeunload are last-ditch flushes. sendBeacon cannot attach
-      // an Authorization header, so authenticated events flushed only here may
-      // end up tagged anonymous-only. visibilitychange above is the primary
-      // path for authenticated users.
+      // pagehide/beforeunload are last-ditch flushes. Use fetch keepalive first
+      // because sendBeacon cannot attach X-Anonymous-Session.
       this.pagehideHandler = () => {
         this.endCurrentView('pagehide');
-        this.beaconFlush();
+        this.pageLifecycleFlush();
       };
       window.addEventListener('pagehide', this.pagehideHandler);
       this.unloadHandler = () => {
         this.endCurrentView('unload');
-        this.beaconFlush();
+        this.pageLifecycleFlush();
       };
       window.addEventListener('beforeunload', this.unloadHandler);
     }
@@ -246,7 +245,7 @@ export class AnalyticsService {
     });
 
     if (reason === 'hidden') {
-      this.scheduleFlush('immediate');
+      this.scheduleFlush('soon');
     } else if (reason !== 'pagehide' && reason !== 'unload') {
       this.scheduleFlush('soon');
     }
@@ -267,10 +266,7 @@ export class AnalyticsService {
     const remaining = queued.slice(SERVER_BATCH_CAP);
     this._queue.set(remaining);
 
-    const batch: AnalyticsEventBatch = {
-      anonymousSessionId: this.anonymousSessionId,
-      events: toSend,
-    };
+    const batch = this.buildBatch(toSend);
 
     this.http
       .post(ENDPOINT, batch, {
@@ -281,11 +277,11 @@ export class AnalyticsService {
   }
 
   /**
-   * Best-effort flush on unload. Uses sendBeacon (cannot attach Authorization).
-   * Authenticated-only events that hit only this path may end up tagged
-   * anonymous-only; accepted trade-off.
+   * Best-effort flush for browser page lifecycle exits. Normal route changes
+   * and periodic flushing keep using HttpClient so interceptors still apply;
+   * this path avoids browsers cancelling a regular XHR during hide/unload.
    */
-  private beaconFlush(): void {
+  private pageLifecycleFlush(): void {
     this.clearScheduledFlush();
 
     if (!this.analyticsPreferences.enabled()) {
@@ -295,23 +291,20 @@ export class AnalyticsService {
 
     const queued = this._queue();
     if (queued.length === 0) return;
-    if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return;
+    const prepared = this.prepareLifecycleBatch(queued);
+    if (!prepared) return;
 
-    const toSend = queued.slice(0, SERVER_BATCH_CAP);
-    const remaining = queued.slice(SERVER_BATCH_CAP);
-    const batch: AnalyticsEventBatch = {
-      anonymousSessionId: this.anonymousSessionId,
-      events: toSend,
-    };
-
-    try {
-      const blob = new Blob([JSON.stringify(batch)], { type: 'application/json' });
-      if (navigator.sendBeacon(ENDPOINT, blob)) {
-        this._queue.set(remaining);
-      }
-    } catch {
-      // ignore; analytics must never throw.
+    if (this.tryFetchKeepalive(prepared.serialized)) {
+      this._queue.set(prepared.remaining);
+      return;
     }
+
+    if (this.trySendBeacon(prepared.serialized)) {
+      this._queue.set(prepared.remaining);
+      return;
+    }
+
+    this.flushNow();
   }
 
   private cleanup(): void {
@@ -481,6 +474,68 @@ export class AnalyticsService {
 
   private enqueue(envelope: AnalyticsEventEnvelope): void {
     this._queue.update((q) => [...q, envelope]);
+  }
+
+  private buildBatch(events: AnalyticsEventEnvelope[]): AnalyticsEventBatch {
+    return {
+      anonymousSessionId: this.anonymousSessionId,
+      events,
+    };
+  }
+
+  private prepareLifecycleBatch(
+    queued: AnalyticsEventEnvelope[],
+  ): { serialized: string; remaining: AnalyticsEventEnvelope[] } | null {
+    let eventCount = Math.min(queued.length, SERVER_BATCH_CAP);
+
+    while (eventCount > 0) {
+      const toSend = queued.slice(0, eventCount);
+      const serialized = JSON.stringify(this.buildBatch(toSend));
+      if (serialized.length <= MAX_KEEPALIVE_BODY_CHARS || eventCount === 1) {
+        return {
+          serialized,
+          remaining: queued.slice(eventCount),
+        };
+      }
+
+      eventCount -= 1;
+    }
+
+    return null;
+  }
+
+  private tryFetchKeepalive(serialized: string): boolean {
+    if (serialized.length > MAX_KEEPALIVE_BODY_CHARS || typeof fetch !== 'function') {
+      return false;
+    }
+
+    try {
+      void fetch(ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Anonymous-Session': this.anonymousSessionId,
+        },
+        body: serialized,
+        keepalive: true,
+        credentials: 'same-origin',
+      }).catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private trySendBeacon(serialized: string): boolean {
+    if (serialized.length > MAX_KEEPALIVE_BODY_CHARS) return false;
+    if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return false;
+
+    try {
+      const blob = new Blob([serialized], { type: 'application/json' });
+      return navigator.sendBeacon(ENDPOINT, blob);
+    } catch {
+      return false;
+    }
   }
 
   private isWithinDedupeWindow(fingerprint: string, now: number, cooldownMs: number): boolean {
