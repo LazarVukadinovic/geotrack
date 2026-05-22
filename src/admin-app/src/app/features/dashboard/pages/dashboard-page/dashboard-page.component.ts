@@ -81,10 +81,6 @@ export class DashboardComponent implements OnInit {
     );
   }
 
-  get pendingRequestsCount(): number | null {
-    return this.dashboard?.stats.pendingRequests ?? null;
-  }
-
   get activities(): RegionalDashboardActivityItem[] {
     return this.dashboard?.recentActivity ?? [];
   }
