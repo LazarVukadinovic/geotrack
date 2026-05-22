@@ -9,6 +9,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ReviewRequestsService } from '../../../../core/services/review-requests.service';
+import { RegionalManagerSidebarStateService } from '../../../../core/services/regional-manager-sidebar-state.service';
 import {
   RegionalRequestQueueResponse,
   RegionalRequestQueueCountsByType,
@@ -115,10 +116,12 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
     private readonly auth: AuthService,
     private readonly dashboardService: DashboardService,
     private readonly requestsService: ReviewRequestsService,
+    private readonly sidebarState: RegionalManagerSidebarStateService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
+    this.applyNavigationFeedback();
     this.loadAssignedRegions();
   }
 
@@ -338,6 +341,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
         next: result => {
           this.feedbackMessage = `${result.succeededCount} request${result.succeededCount === 1 ? '' : 's'} approved.`;
           this.selectedIds.clear();
+          this.refreshSidebarBadge();
           this.loadQueue();
         },
         error: error => this.handleActionError(error),
@@ -364,6 +368,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
         next: () => {
           this.feedbackMessage = 'Request approved.';
           this.selectedIds.delete(request.requestKey);
+          this.refreshSidebarBadge();
           this.loadQueue();
           this.notifyStateChanged();
         },
@@ -397,6 +402,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
           next: () => {
             this.feedbackMessage = 'Request rejected.';
             this.selectedIds.delete(modal.item!.requestKey);
+            this.refreshSidebarBadge();
             this.loadQueue();
             this.notifyStateChanged();
           },
@@ -419,6 +425,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
         next: result => {
           this.feedbackMessage = `${result.succeededCount} request${result.succeededCount === 1 ? '' : 's'} rejected.`;
           this.selectedIds.clear();
+          this.refreshSidebarBadge();
           this.loadQueue();
         },
         error: error => this.handleActionError(error),
@@ -590,6 +597,23 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
     return this.pendingVisibleRequests
       .filter(request => this.selectedIds.has(request.requestKey))
       .map(request => request.requestKey);
+  }
+
+  private refreshSidebarBadge(): void {
+    if (this.activeRegionId) {
+      this.sidebarState.refresh(this.activeRegionId);
+    }
+  }
+
+  private applyNavigationFeedback(): void {
+    const state = history.state as { feedbackMessage?: unknown } | null;
+    const feedbackMessage = typeof state?.feedbackMessage === 'string'
+      ? state.feedbackMessage.trim()
+      : '';
+
+    if (feedbackMessage) {
+      this.feedbackMessage = feedbackMessage;
+    }
   }
 
   private setProcessing(request: RegionalRequestQueueItem, value: boolean): void {

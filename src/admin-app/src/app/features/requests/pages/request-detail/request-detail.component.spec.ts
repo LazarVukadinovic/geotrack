@@ -65,8 +65,16 @@ describe('RequestDetailComponent', () => {
     expect(text).toContain('Backend Region');
     expect(text).toContain('Reporter');
     expect(text).toContain('Report comment');
+    expect(text).toContain('Report Decision');
+    expect(text).toContain('Remove Review');
+    expect(text).toContain('Keep Review');
+    expect(text).toContain('This note is visible only to admins/moderators.');
+    expect(text).not.toContain('Reject Reason');
     expect(text).not.toContain('Loading request details...');
     expect(text).not.toContain('Loading...');
+
+    const note = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement | null;
+    expect(note?.placeholder).toBe('Optional internal moderation note');
   });
 
   it('reads contribution route params and calls the contribution detail API', () => {
@@ -103,6 +111,22 @@ describe('RequestDetailComponent', () => {
     expect(text).toContain('proof.pdf');
     expect(link?.target).toBe('_blank');
     expect(link?.rel).toContain('noopener');
+  });
+
+  it('renders contribution decision labels without a reject reason field', () => {
+    setRoute({ source: 'contribution', id: '12' }, { regionId: '7' });
+
+    fixture.detectChanges();
+    flushRegions();
+    flushDetail('contribution', 12, 7, contributionDetail());
+    fixture.detectChanges();
+
+    const text = normalizedText();
+    expect(text).toContain('Review Decision');
+    expect(text).toContain('Approve Contribution');
+    expect(text).toContain('Reject Contribution');
+    expect(text).toContain('Approve applies the submitted contribution.');
+    expect(text).not.toContain('Reject Reason');
   });
 
   it('reads review-report route params and calls the review-report detail API', () => {
@@ -193,7 +217,7 @@ describe('RequestDetailComponent', () => {
     expect(markSpy).toHaveBeenCalled();
   });
 
-  it('approves and rejects through the regional queue API', () => {
+  it('removes or keeps reported reviews through the correct regional queue actions', () => {
     component.ngOnInit();
     flushRegions();
     flushDetail('review-report', 5, 7, reviewReportDetail());
@@ -202,19 +226,33 @@ describe('RequestDetailComponent', () => {
     const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
     component.reviewerNotes = 'Reviewed.';
-    component.approveRequest();
+    component.startApproveDecision();
+    expect(component.pendingDecision).toBe('approve');
+    component.confirmDecision();
     const approve = http.expectOne('/api/admin/regional/requests/review-report/5/approve');
     expect(approve.request.body).toEqual({ regionId: 7, note: 'Reviewed.' });
     approve.flush({ requestKey: 'review-report:5', success: true, status: 'Approved' });
-    expect(navigateSpy).toHaveBeenCalledWith(['/requests'], { queryParams: { regionId: 7 } });
+    flushSidebarSummary(7, 0);
+    expect(navigateSpy).toHaveBeenCalledWith(['/requests'], {
+      queryParams: { regionId: 7 },
+      state: { feedbackMessage: 'Reported review removed.' },
+    });
 
     component.request = { ...reviewReportDetail(), status: 'Pending' };
-    component.rejectReason = 'No violation';
-    component.rejectRequest();
+    component.reviewerNotes = 'No violation.';
+    component.startRejectDecision();
+    expect(component.pendingDecision).toBe('reject');
+    component.confirmDecision();
     const reject = http.expectOne('/api/admin/regional/requests/review-report/5/reject');
     expect(reject.request.body.regionId).toBe(7);
-    expect(reject.request.body.reason).toBe('No violation');
+    expect(reject.request.body.reason).toBeUndefined();
+    expect(reject.request.body.note).toBe('No violation.');
     reject.flush({ requestKey: 'review-report:5', success: true, status: 'Rejected' });
+    flushSidebarSummary(7, 0);
+    expect(navigateSpy).toHaveBeenCalledWith(['/requests'], {
+      queryParams: { regionId: 7 },
+      state: { feedbackMessage: 'Review kept; report rejected.' },
+    });
   });
 
   function setRoute(params: Record<string, string>, queryParams: Record<string, string>): void {
@@ -239,6 +277,20 @@ describe('RequestDetailComponent', () => {
     const request = expectDetailRequest(source, id, regionId);
     expect(request.request.method).toBe('GET');
     request.flush(response);
+  }
+
+  function flushSidebarSummary(regionId: number, pendingRequestsCount: number): void {
+    const request = http.expectOne(
+      req =>
+        req.url === '/api/admin/regional/sidebar-summary' &&
+        req.params.get('regionId') === String(regionId),
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      assignedRegions: [{ id: regionId, name: 'Backend Region', displayName: 'Backend Region' }],
+      activeRegion: { id: regionId, name: 'Backend Region', displayName: 'Backend Region' },
+      pendingRequestsCount,
+    });
   }
 
   function expectDetailRequest(source: string, id: number, regionId: number) {

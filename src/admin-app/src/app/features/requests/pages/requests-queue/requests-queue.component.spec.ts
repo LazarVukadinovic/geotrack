@@ -6,11 +6,13 @@ import { vi } from 'vitest';
 
 import { ReviewQueueComponent } from './requests-queue.component';
 import { RegionalRequestQueueResponse, ReviewRequest } from '../../../../core/models/review-request.model';
+import { RegionalManagerSidebarStateService } from '../../../../core/services/regional-manager-sidebar-state.service';
 
 describe('ReviewQueueComponent', () => {
   let component: ReviewQueueComponent;
   let fixture: ComponentFixture<ReviewQueueComponent>;
   let http: HttpTestingController;
+  let sidebarState: RegionalManagerSidebarStateService;
 
   beforeEach(async () => {
     sessionStorage.clear();
@@ -23,6 +25,7 @@ describe('ReviewQueueComponent', () => {
     fixture = TestBed.createComponent(ReviewQueueComponent);
     component = fixture.componentInstance;
     http = TestBed.inject(HttpTestingController);
+    sidebarState = TestBed.inject(RegionalManagerSidebarStateService);
   });
 
   afterEach(() => {
@@ -290,8 +293,10 @@ describe('ReviewQueueComponent', () => {
     expect(approve.request.body.regionId).toBe(7);
     approve.flush({ requestKey: 'contribution:12', success: true, status: 'Approved' });
     flushQueue(7, queueResponse([], 0));
+    flushSidebarSummary(7, 0);
 
     expect(component.feedbackMessage).toBe('Request approved.');
+    expect(sidebarState.pendingRequestsCount()).toBe(0);
   });
 
   it('opens a reject reason modal and rejects a row', () => {
@@ -310,8 +315,10 @@ describe('ReviewQueueComponent', () => {
     expect(reject.request.body.reason).toBe('Duplicate');
     reject.flush({ requestKey: 'contribution:12', success: true, status: 'Rejected' });
     flushQueue(7, queueResponse([], 0));
+    flushSidebarSummary(7, 0);
 
     expect(component.feedbackMessage).toBe('Request rejected.');
+    expect(sidebarState.pendingRequestsCount()).toBe(0);
   });
 
   it('selects only pending visible rows for bulk approve and reject', () => {
@@ -328,6 +335,7 @@ describe('ReviewQueueComponent', () => {
     expect(approve.request.body.requestKeys).toEqual(['contribution:12']);
     approve.flush({ results: [], succeededCount: 1, failedCount: 0 });
     flushQueue(7, queueResponse([contributionItem()]));
+    flushSidebarSummary(7, 1);
 
     component.selectedIds.add('contribution:12');
     component.openRejectSelected();
@@ -338,6 +346,7 @@ describe('ReviewQueueComponent', () => {
     expect(reject.request.body.reason).toBe('Not relevant');
     reject.flush({ results: [], succeededCount: 1, failedCount: 0 });
     flushQueue(7, queueResponse([], 0));
+    flushSidebarSummary(7, 0);
   });
 
   it('shows a no-active-region state without loading queue rows', () => {
@@ -420,6 +429,20 @@ describe('ReviewQueueComponent', () => {
     );
     expect(request.request.method).toBe('GET');
     request.flush(response);
+  }
+
+  function flushSidebarSummary(regionId: number, pendingRequestsCount: number): void {
+    const request = http.expectOne(
+      req =>
+        req.url === '/api/admin/regional/sidebar-summary' &&
+        req.params.get('regionId') === String(regionId),
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      assignedRegions: [{ id: regionId, name: 'Backend Region', displayName: 'Backend Region' }],
+      activeRegion: { id: regionId, name: 'Backend Region', displayName: 'Backend Region' },
+      pendingRequestsCount,
+    });
   }
 
   function normalizedText(): string {

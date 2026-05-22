@@ -9,6 +9,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ReviewRequestsService } from '../../../../core/services/review-requests.service';
+import { RegionalManagerSidebarStateService } from '../../../../core/services/regional-manager-sidebar-state.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { ReviewRequestDetail } from '../../../../core/models/review-request.model';
 
@@ -16,6 +17,8 @@ interface DetailLoadOptions {
   allowRegionFallback: boolean;
   attemptedRegionIds: number[];
 }
+
+type DecisionAction = 'approve' | 'reject';
 
 @Component({
   selector: 'app-review-request-detail',
@@ -36,8 +39,8 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
   errorMessage: string | null = null;
   authRequired = false;
   reviewerNotes = '';
-  rejectReason = '';
   processing = false;
+  pendingDecision: DecisionAction | null = null;
 
   private detailRequestSequence = 0;
   private regionSubscription: Subscription | null = null;
@@ -49,6 +52,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     private readonly auth: AuthService,
     private readonly dashboardService: DashboardService,
     private readonly requestsService: ReviewRequestsService,
+    private readonly sidebarState: RegionalManagerSidebarStateService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
@@ -82,6 +86,57 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     return this.request?.status === 'Pending' && !this.processing && !!this.activeRegionId;
   }
 
+  get isReportRequest(): boolean {
+    return this.request?.source === 'ReviewReport' || this.request?.source === 'CommentReport';
+  }
+
+  get reportContentLabel(): string {
+    const entityType = this.request?.entityType?.toString().trim().toLowerCase();
+    const contributionType = this.request?.contributionType?.toString().trim().toLowerCase();
+    return entityType === 'comment' || contributionType?.includes('comment') ? 'Comment' : 'Review';
+  }
+
+  get decisionCardTitle(): string {
+    return this.isReportRequest ? 'Report Decision' : 'Review Decision';
+  }
+
+  get decisionHelperText(): string {
+    if (!this.isReportRequest) {
+      return 'Approve applies the submitted contribution. Reject closes it without applying changes.';
+    }
+
+    const content = this.reportContentLabel.toLowerCase();
+    return `Removing the ${content} accepts this report and removes the content from public view. Keeping the ${content} rejects the report and leaves the content visible.`;
+  }
+
+  get approveButtonLabel(): string {
+    return this.isReportRequest ? `Remove ${this.reportContentLabel}` : 'Approve Contribution';
+  }
+
+  get rejectButtonLabel(): string {
+    return this.isReportRequest ? `Keep ${this.reportContentLabel}` : 'Reject Contribution';
+  }
+
+  get confirmationTitle(): string {
+    const content = this.reportContentLabel.toLowerCase();
+    return this.pendingDecision === 'approve'
+      ? `Remove reported ${content}?`
+      : `Keep reported ${content}?`;
+  }
+
+  get confirmationBody(): string {
+    const content = this.reportContentLabel.toLowerCase();
+    return this.pendingDecision === 'approve'
+      ? `This will accept the report and remove the reported ${content} from public view. This action should only be used when the report is valid.`
+      : `This will reject the report and keep the ${content} visible.`;
+  }
+
+  get confirmationButtonLabel(): string {
+    return this.pendingDecision === 'approve'
+      ? `Remove ${this.reportContentLabel}`
+      : `Keep ${this.reportContentLabel}`;
+  }
+
   get primaryImageUrl(): string | null {
     return (
       this.request?.images?.find(image => image.isMain)?.url ??
@@ -109,10 +164,17 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     return url;
   }
 
-  goBack(): void {
-    this.router.navigate(['/requests'], {
-      queryParams: this.activeRegionId ? { regionId: this.activeRegionId } : undefined,
-    });
+  goBack(feedbackMessage?: string): void {
+    const extras: { queryParams?: { regionId: number }; state?: { feedbackMessage: string } } = {};
+    if (this.activeRegionId) {
+      extras.queryParams = { regionId: this.activeRegionId };
+    }
+
+    if (feedbackMessage) {
+      extras.state = { feedbackMessage };
+    }
+
+    this.router.navigate(['/requests'], extras);
   }
 
   onRegionSelected(regionId: number): void {
@@ -121,8 +183,52 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     this.setActiveRegion(regionId, true);
     this.request = null;
     this.reviewerNotes = '';
-    this.rejectReason = '';
+    this.pendingDecision = null;
     this.loadRequest({ allowRegionFallback: false, attemptedRegionIds: [regionId] });
+    this.notifyStateChanged();
+  }
+
+  startApproveDecision(): void {
+    if (!this.canModerate) return;
+
+    if (this.isReportRequest) {
+      this.pendingDecision = 'approve';
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.approveRequest();
+  }
+
+  startRejectDecision(): void {
+    if (!this.canModerate) return;
+
+    if (this.isReportRequest) {
+      this.pendingDecision = 'reject';
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.rejectRequest();
+  }
+
+  confirmDecision(): void {
+    const decision = this.pendingDecision;
+    this.pendingDecision = null;
+    this.notifyStateChanged();
+
+    if (decision === 'approve') {
+      this.approveRequest();
+      return;
+    }
+
+    if (decision === 'reject') {
+      this.rejectRequest();
+    }
+  }
+
+  cancelDecisionConfirmation(): void {
+    this.pendingDecision = null;
     this.notifyStateChanged();
   }
 
@@ -132,6 +238,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     this.processing = true;
     this.errorMessage = null;
     this.notifyStateChanged();
+    // For report requests, backend approve accepts the report and removes the reported content.
     this.requestsService
       .approveBySource(this.activeRegionId, this.request.source, this.request.requestId, this.reviewerNotes)
       .pipe(
@@ -145,7 +252,8 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
           if (result.item) {
             this.request = { ...this.request!, ...result.item };
           }
-          this.goBack();
+          this.refreshSidebarBadge();
+          this.goBack(this.actionSuccessMessage('approve'));
         },
         error: error => this.handleActionError(error),
       });
@@ -157,12 +265,13 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     this.processing = true;
     this.errorMessage = null;
     this.notifyStateChanged();
+    // For report requests, backend reject dismisses the report and keeps the reported content visible.
     this.requestsService
       .rejectBySource(
         this.activeRegionId,
         this.request.source,
         this.request.requestId,
-        this.rejectReason,
+        undefined,
         this.reviewerNotes,
       )
       .pipe(
@@ -176,7 +285,8 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
           if (result.item) {
             this.request = { ...this.request!, ...result.item };
           }
-          this.goBack();
+          this.refreshSidebarBadge();
+          this.goBack(this.actionSuccessMessage('reject'));
         },
         error: error => this.handleActionError(error),
       });
@@ -309,7 +419,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
 
           this.request = detail;
           this.reviewerNotes = detail.decisionNote ?? '';
-          this.rejectReason = '';
+          this.pendingDecision = null;
           this.setActiveRegion(detail.regionId, false);
           this.upsertAssignedRegion(detail);
         },
@@ -465,6 +575,22 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     }
 
     return null;
+  }
+
+  private refreshSidebarBadge(): void {
+    if (this.activeRegionId) {
+      this.sidebarState.refresh(this.activeRegionId);
+    }
+  }
+
+  private actionSuccessMessage(action: DecisionAction): string {
+    if (!this.isReportRequest) {
+      return action === 'approve' ? 'Contribution approved.' : 'Contribution rejected.';
+    }
+
+    return action === 'approve'
+      ? `Reported ${this.reportContentLabel.toLowerCase()} removed.`
+      : `${this.reportContentLabel} kept; report rejected.`;
   }
 
   private notifyStateChanged(): void {
