@@ -1,4 +1,5 @@
 export type UserRole = 'Administrator' | 'Territory Manager' | 'Territory Associate' | 'Regional Manager';
+export type AdminRoleCode = 'Admin' | 'TerritoryManager' | 'TerritoryAssociate' | 'RegionalManager';
 
 export interface User {
   id: string;
@@ -6,6 +7,8 @@ export interface User {
   lastName: string;
   email: string;
   role: UserRole;
+  activeRoleCode: AdminRoleCode;
+  roles: AdminRoleCode[];
   region: string;
   memberSince: string;
   bio: string;

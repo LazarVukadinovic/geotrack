@@ -104,6 +104,88 @@ describe('AuthService', () => {
     expect(service.getHomeRoute()).toBe('/territory/overview');
   });
 
+  it('uses the existing territory-first redirect priority for multi-role admin users', () => {
+    service.login('multi@example.com', 'Proba123!').subscribe(user => {
+      expect(user.email).toBe('multi@example.com');
+      expect(user.role).toBe('Territory Manager');
+      expect(user.roles).toEqual(['TerritoryManager', 'RegionalManager']);
+    });
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'multi-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 44,
+        email: 'multi@example.com',
+        displayName: 'Multi Role',
+        roles: ['RegionalManager', 'TerritoryManager'],
+        canAccessRegionalAdmin: true,
+        canAccessTerritoryAdmin: true,
+      },
+    });
+
+    expect(service.getHomeRoute()).toBe('/territory/overview');
+  });
+
+  it('switches the active admin view only to a role owned by the current user', () => {
+    service.login('multi@example.com', 'Proba123!').subscribe();
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'multi-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 44,
+        email: 'multi@example.com',
+        displayName: 'Multi Role',
+        roles: ['TerritoryManager', 'RegionalManager'],
+        canAccessRegionalAdmin: true,
+        canAccessTerritoryAdmin: true,
+      },
+    });
+
+    expect(service.switchAdminView('RegionalManager')).toBe(true);
+    expect(service.getUser()?.role).toBe('Regional Manager');
+    expect(service.getHomeRoute()).toBe('/dashboard');
+    expect(sessionStorage.getItem('geotrack_admin_active_view')).toBe('RegionalManager');
+
+    expect(service.switchAdminView('Admin')).toBe(false);
+    expect(service.getUser()?.role).toBe('Regional Manager');
+  });
+
+  it('falls back from an invalid stored admin view during session restore', () => {
+    sessionStorage.setItem('geotrack_admin_session', '1');
+    sessionStorage.setItem('geotrack_admin_active_view', 'RegionalManager');
+
+    service.restoreSession().subscribe(user => {
+      expect(user?.role).toBe('Territory Associate');
+      expect(user?.activeRoleCode).toBe('TerritoryAssociate');
+    });
+
+    const request = http.expectOne('/api/admin/auth/refresh');
+    expect(request.request.method).toBe('POST');
+    request.flush({
+      accessToken: 'associate-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 45,
+        email: 'associate@example.com',
+        displayName: 'Associate User',
+        roles: ['TerritoryAssociate'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: true,
+      },
+    });
+
+    expect(sessionStorage.getItem('geotrack_admin_active_view')).toBe('TerritoryAssociate');
+    expect(service.getHomeRoute()).toBe('/territory/overview');
+  });
+
   it('uses a safe message for invalid credentials', () => {
     let message = '';
 

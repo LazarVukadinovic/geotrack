@@ -8,6 +8,8 @@ describe('User model', () => {
       lastName: 'Admin',
       email: 'ada@example.com',
       role: 'Regional Manager',
+      activeRoleCode: 'RegionalManager',
+      roles: ['RegionalManager'],
       region: '',
       memberSince: '',
       bio: '',
