@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
+using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
@@ -177,8 +178,7 @@ public sealed class RegionalRequestQueueTests
             new RegionalRequestDecisionRequestDto
             {
                 RegionId = fixture.AssignedRegionId,
-                Reason = "Missing details",
-                Note = "Please add details."
+                Note = "Internal moderation note."
             });
         rejectResponse.EnsureSuccessStatusCode();
         var rejected = await rejectResponse.Content.ReadFromJsonAsync<RegionalRequestActionResultDto>();
@@ -195,16 +195,26 @@ public sealed class RegionalRequestQueueTests
         Assert.NotNull(approvedContribution.PlaceId);
         Assert.Equal(PlaceContributionStatus.Rejected, rejectedContribution.Status);
         Assert.Null(rejectedContribution.PlaceId);
-        Assert.Contains("Missing details", rejectedContribution.ReviewNote);
+        Assert.Equal("Internal moderation note.", rejectedContribution.ReviewNote);
 
-        Assert.True(await db.UserNotifications.AnyAsync(notification =>
+        var approvalNotification = await db.UserNotifications.SingleAsync(notification =>
             notification.UserId == fixture.ContributorUserId &&
             notification.Type == "contribution_approved" &&
-            notification.RelatedEntityId == fixture.PendingContributionId));
-        Assert.True(await db.UserNotifications.AnyAsync(notification =>
+            notification.RelatedEntityId == fixture.PendingContributionId);
+        Assert.Equal("Your contribution was approved.", approvalNotification.Message);
+
+        var rejectionNotification = await db.UserNotifications.SingleAsync(notification =>
             notification.UserId == fixture.ContributorUserId &&
             notification.Type == "contribution_rejected" &&
-            notification.RelatedEntityId == fixture.SecondPendingContributionId));
+            notification.RelatedEntityId == fixture.SecondPendingContributionId);
+        Assert.Equal("Your contribution was reviewed but was not approved.", rejectionNotification.Message);
+        Assert.DoesNotContain("Internal moderation note", rejectionNotification.Message, StringComparison.OrdinalIgnoreCase);
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var publicDetail = await contributorClient.GetFromJsonAsync<PlaceContributionResponseDto>(
+            $"/api/contributions/{fixture.SecondPendingContributionId}");
+        Assert.NotNull(publicDetail);
+        Assert.Null(publicDetail!.Contribution.ReviewNote);
     }
 
     [Fact]
@@ -228,7 +238,7 @@ public sealed class RegionalRequestQueueTests
             new RegionalRequestDecisionRequestDto
             {
                 RegionId = fixture.AssignedRegionId,
-                Reason = "No violation found"
+                Note = "Keep review internal note."
             });
         rejectResponse.EnsureSuccessStatusCode();
 
@@ -239,24 +249,37 @@ public sealed class RegionalRequestQueueTests
 
         Assert.Equal(ReviewReportStatus.Actioned, acceptedReport.Status);
         Assert.Equal(ReviewReportDecision.RemoveReview, acceptedReport.Decision);
+        Assert.Equal("Remove unsafe review.", acceptedReport.DecisionNote);
         Assert.False(await db.PlaceReviews.AnyAsync(review => review.Id == fixture.ReviewToRemoveId));
 
         Assert.Equal(ReviewReportStatus.Dismissed, rejectedReport.Status);
         Assert.Equal(ReviewReportDecision.KeepReview, rejectedReport.Decision);
+        Assert.Equal("Keep review internal note.", rejectedReport.DecisionNote);
         Assert.True(await db.PlaceReviews.AnyAsync(review => review.Id == fixture.ReviewToKeepId));
 
-        Assert.True(await db.UserNotifications.AnyAsync(notification =>
+        var acceptedReportNotification = await db.UserNotifications.SingleAsync(notification =>
             notification.UserId == fixture.ContributorUserId &&
             notification.Type == "review_report_accepted" &&
-            notification.RelatedEntityId == fixture.PendingReportToApproveId));
-        Assert.True(await db.UserNotifications.AnyAsync(notification =>
+            notification.RelatedEntityId == fixture.PendingReportToApproveId);
+        Assert.Equal(
+            "Your report was reviewed and the reported content was removed from public view.",
+            acceptedReportNotification.Message);
+        Assert.DoesNotContain("Remove unsafe review", acceptedReportNotification.Message, StringComparison.OrdinalIgnoreCase);
+
+        var rejectedReportNotification = await db.UserNotifications.SingleAsync(notification =>
             notification.UserId == fixture.ContributorUserId &&
             notification.Type == "review_report_rejected" &&
-            notification.RelatedEntityId == fixture.PendingReportToRejectId));
-        Assert.True(await db.UserNotifications.AnyAsync(notification =>
+            notification.RelatedEntityId == fixture.PendingReportToRejectId);
+        Assert.Equal(
+            "Your report was reviewed and the content will remain visible.",
+            rejectedReportNotification.Message);
+        Assert.DoesNotContain("Keep review internal note", rejectedReportNotification.Message, StringComparison.OrdinalIgnoreCase);
+
+        var authorNotification = await db.UserNotifications.SingleAsync(notification =>
             notification.UserId == fixture.ReviewAuthorUserId &&
             notification.Type == "reported_review_removed" &&
-            notification.RelatedEntityId == fixture.ReviewToRemoveId));
+            notification.RelatedEntityId == fixture.ReviewToRemoveId);
+        Assert.Equal("Your review was removed after moderation.", authorNotification.Message);
     }
 
     [Fact]

@@ -93,8 +93,8 @@ public class UserNotificationService : IUserNotificationService
             Type = isApproved ? ContributionApprovedType : ContributionRejectedType,
             Title = isApproved ? "Contribution approved" : "Contribution rejected",
             Message = isApproved
-                ? $"Your place contribution \"{contribution.Name}\" was approved and is now published."
-                : $"Your place contribution \"{contribution.Name}\" was rejected. Review the feedback and update it when you are ready.",
+                ? "Your contribution was approved."
+                : "Your contribution was reviewed but was not approved.",
             RelatedEntityType = "contribution",
             RelatedEntityId = contribution.Id,
             ActionUrl = $"/contributions/{contribution.Id}",
@@ -117,8 +117,8 @@ public class UserNotificationService : IUserNotificationService
             Type = accepted ? ReviewReportAcceptedType : ReviewReportRejectedType,
             Title = accepted ? "Review report accepted" : "Review report reviewed",
             Message = accepted
-                ? $"Thanks for helping keep GeoTrack safe. The reported review for \"{report.EntityName}\" was removed."
-                : $"Your report for a review on \"{report.EntityName}\" was reviewed. The review will remain visible.",
+                ? "Your report was reviewed and the reported content was removed from public view."
+                : "Your report was reviewed and the content will remain visible.",
             RelatedEntityType = "review_report",
             RelatedEntityId = report.Id,
             ActionUrl = null,
@@ -139,7 +139,7 @@ public class UserNotificationService : IUserNotificationService
             UserId = report.ReviewAuthorUserId,
             Type = ReportedReviewRemovedType,
             Title = "Review removed",
-            Message = $"A review you posted for \"{report.EntityName}\" was removed after moderation.",
+            Message = "Your review was removed after moderation.",
             RelatedEntityType = "review",
             RelatedEntityId = report.ReviewId,
             ActionUrl = null,

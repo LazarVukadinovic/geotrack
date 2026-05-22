@@ -559,7 +559,8 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             OwnershipProofDocumentUrl = contribution.OwnershipProofDocumentUrl,
             OwnershipProofOriginalFileName = contribution.OwnershipProofOriginalFileName,
             OwnershipProofContentType = contribution.OwnershipProofContentType,
-            OwnershipProofUploadedAt = contribution.OwnershipProofUploadedAt
+            OwnershipProofUploadedAt = contribution.OwnershipProofUploadedAt,
+            DecisionNote = contribution.ReviewNote
         };
     }
 
