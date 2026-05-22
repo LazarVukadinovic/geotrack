@@ -42,6 +42,8 @@ public class TerritoryRegionHealthDto
     public int StaysCount { get; set; }
     public int EventsCount { get; set; }
     public int PendingRequestsCount { get; set; }
+    public int HealthScore { get; set; }
+    public TerritoryHealthDto Health { get; set; } = new();
     public int ActivityScore { get; set; }
     public List<TerritoryRegionManagerDto> AssignedManagers { get; set; } = new();
     public List<string> AssignedManagersPreview { get; set; } = new();
@@ -109,6 +111,7 @@ public class TerritoryRegionDirectoryItemDto
     public string? ManagerDisplayName { get; set; }
     public List<TerritoryRegionManagerDto> AssignedManagers { get; set; } = new();
     public int? HealthScore { get; set; }
+    public TerritoryHealthDto? Health { get; set; }
     public int ActivityScore { get; set; }
     public string? ImageUrl { get; set; }
     public string? DetailRoute { get; set; }
@@ -260,16 +263,29 @@ public class TerritoryRegionSummaryDto
 public class TerritoryHealthDto
 {
     public int? Score { get; set; }
+    public string Status { get; set; } = "insufficient_data";
     public string StatusLabel { get; set; } = "Insufficient data";
+    public string? PeriodLabel { get; set; }
+    public DateTime CalculatedAt { get; set; }
     public List<TerritoryHealthInsightDto> Drivers { get; set; } = new();
+    public List<TerritoryHealthInsightDto> Issues { get; set; } = new();
     public List<TerritoryHealthInsightDto> Recommendations { get; set; } = new();
 }
 
 public class TerritoryHealthInsightDto
 {
+    public string? Key { get; set; }
     public string Label { get; set; } = string.Empty;
+    public string? Title { get; set; }
     public string Detail { get; set; } = string.Empty;
+    public string? Message { get; set; }
     public string Severity { get; set; } = "info";
+    public int? ScoreContribution { get; set; }
+    public int? MaxPoints { get; set; }
+    public string? Status { get; set; }
+    public string? RecommendationKey { get; set; }
+    public int? Priority { get; set; }
+    public string? ActionRoute { get; set; }
 }
 
 public class TerritoryRegionContentPreviewDto

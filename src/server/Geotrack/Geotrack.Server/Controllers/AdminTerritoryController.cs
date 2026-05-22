@@ -12,15 +12,18 @@ namespace Geotrack.Server.Controllers;
 public sealed class AdminTerritoryController : ControllerBase
 {
     private readonly ITerritoryDashboardService _territoryDashboard;
+    private readonly ITerritoryAnalyticsService _territoryAnalytics;
     private readonly ITerritoryUserAdminService _territoryUsers;
     private readonly ILogger<AdminTerritoryController> _logger;
 
     public AdminTerritoryController(
         ITerritoryDashboardService territoryDashboard,
+        ITerritoryAnalyticsService territoryAnalytics,
         ITerritoryUserAdminService territoryUsers,
         ILogger<AdminTerritoryController> logger)
     {
         _territoryDashboard = territoryDashboard;
+        _territoryAnalytics = territoryAnalytics;
         _territoryUsers = territoryUsers;
         _logger = logger;
     }
@@ -63,6 +66,79 @@ public sealed class AdminTerritoryController : ControllerBase
         try
         {
             return Ok(await _territoryDashboard.GetDashboardAsync(GetCurrentUserId(), territoryId));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("analytics/overview")]
+    public async Task<ActionResult<TerritoryAnalyticsOverviewDto>> GetAnalyticsOverview(
+        [FromQuery] int? territoryId = null,
+        [FromQuery] string? period = null,
+        [FromQuery] List<int>? regionIds = null,
+        [FromQuery] string? status = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 5,
+        [FromQuery] string? sort = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryAnalytics.GetOverviewAsync(
+                GetCurrentUserId(),
+                new TerritoryAnalyticsOverviewQuery
+                {
+                    TerritoryId = territoryId,
+                    Period = period,
+                    RegionIds = regionIds ?? new List<int>(),
+                    Status = status,
+                    Skip = skip,
+                    Take = take,
+                    Sort = sort
+                },
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("analytics/export")]
+    public async Task<IActionResult> ExportAnalytics(
+        [FromQuery] int? territoryId = null,
+        [FromQuery] string? period = null,
+        [FromQuery] List<int>? regionIds = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? sort = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            var csv = await _territoryAnalytics.ExportCsvAsync(
+                GetCurrentUserId(),
+                new TerritoryAnalyticsOverviewQuery
+                {
+                    TerritoryId = territoryId,
+                    Period = period,
+                    RegionIds = regionIds ?? new List<int>(),
+                    Status = status,
+                    Sort = sort
+                },
+                cancellationToken);
+
+            return File(
+                System.Text.Encoding.UTF8.GetBytes(csv),
+                "text/csv",
+                "territory-analytics.csv");
         }
         catch (Exception ex)
         {

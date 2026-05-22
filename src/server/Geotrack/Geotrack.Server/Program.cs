@@ -156,7 +156,9 @@ builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
+builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
 builder.Services.AddScoped<ITerritoryDashboardService, TerritoryDashboardService>();
+builder.Services.AddScoped<ITerritoryAnalyticsService, TerritoryAnalyticsService>();
 builder.Services.AddScoped<ITerritoryUserAdminService, TerritoryUserAdminService>();
 builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
 builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
@@ -454,9 +456,12 @@ if (forwardedHeadersEnabled)
     app.UseForwardedHeaders();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
-app.UseCors("ConfigurationOrigins");
+app.UseCors("ConfiguredOrigins");
 
 // HTTPS can be terminated either by Kestrel itself or by a reverse proxy.
 // Keep it config-driven so local HTTP development still works unchanged.
@@ -469,8 +474,6 @@ if (app.Configuration.GetValue<bool>("HttpsRedirection:Enabled"))
 {
     app.UseHttpsRedirection();
 }
-
-app.UseCors("AllowAllOrigins");
 
 app.Use(async (context, next) =>
 {
