@@ -60,6 +60,7 @@ describe('RegionDetailComponent', () => {
       score: 48,
       statusLabel: 'Needs attention',
       drivers: [{ label: 'Missing media', detail: 'No hero image is attached.', severity: 'warning' }],
+      issues: [],
       recommendations: [{ label: 'Add image', detail: 'Add a hero image to improve visibility.', severity: 'action' }],
     },
   };
@@ -206,6 +207,7 @@ describe('RegionDetailComponent', () => {
       score: 68,
       statusLabel: 'Moderate',
       drivers: [{ label: 'Coverage', detail: 'Content coverage is growing.', severity: 'info' }],
+      issues: [],
       recommendations: [{ label: 'Review queue', detail: 'Review pending contributions.', severity: 'action' }],
     },
     content: {

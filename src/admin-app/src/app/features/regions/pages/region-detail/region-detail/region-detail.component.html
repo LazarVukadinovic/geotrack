@@ -376,7 +376,7 @@
               >
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div
-                    *ngFor="let insight of (item.health?.drivers || []).concat(item.health?.recommendations || [])"
+                    *ngFor="let insight of (item.health?.drivers || []).concat(item.health?.issues || [], item.health?.recommendations || [])"
                     class="rounded-lg border px-3 py-3"
                     [ngClass]="insightClass(insight.severity)"
                   >
@@ -384,7 +384,7 @@
                     <p class="text-xs leading-relaxed mt-1 opacity-90">{{ insight.detail }}</p>
                   </div>
                 </div>
-                <p *ngIf="!(item.health?.drivers?.length || item.health?.recommendations?.length)" class="text-sm text-gray-500">
+                <p *ngIf="!(item.health?.drivers?.length || item.health?.issues?.length || item.health?.recommendations?.length)" class="text-sm text-gray-500">
                   Insufficient data
                 </p>
               </div>

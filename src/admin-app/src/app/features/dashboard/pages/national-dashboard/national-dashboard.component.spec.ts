@@ -39,6 +39,14 @@ describe('NationalDashboardComponent', () => {
         staysCount: 0,
         eventsCount: 6,
         pendingRequestsCount: 1,
+        healthScore: 82,
+        health: {
+          score: 82,
+          statusLabel: 'Healthy',
+          drivers: [],
+          issues: [],
+          recommendations: [],
+        },
         activityScore: 82,
         assignedManagers: [
           {

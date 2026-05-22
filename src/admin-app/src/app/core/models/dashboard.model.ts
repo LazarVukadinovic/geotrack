@@ -124,6 +124,8 @@ export interface TerritoryRegionHealth {
   staysCount: number;
   eventsCount: number;
   pendingRequestsCount: number;
+  healthScore: number;
+  health: TerritoryHealth;
   activityScore: number;
   assignedManagers: TerritoryRegionManager[];
   assignedManagersPreview: string[];
@@ -186,6 +188,7 @@ export interface TerritoryRegionDirectoryItem {
   managerDisplayName?: string | null;
   assignedManagers: TerritoryRegionManager[];
   healthScore?: number | null;
+  health?: TerritoryHealth | null;
   activityScore: number;
   imageUrl?: string | null;
   detailRoute?: string | null;
@@ -301,15 +304,28 @@ export interface TerritoryContentDirectoryResponse {
 }
 
 export interface TerritoryHealthInsight {
+  key?: string | null;
   label: string;
+  title?: string | null;
   detail: string;
+  message?: string | null;
   severity: 'info' | 'positive' | 'warning' | 'action' | string;
+  scoreContribution?: number | null;
+  maxPoints?: number | null;
+  status?: string | null;
+  recommendationKey?: string | null;
+  priority?: number | null;
+  actionRoute?: string | null;
 }
 
 export interface TerritoryHealth {
   score?: number | null;
+  status?: string | null;
   statusLabel: string;
+  periodLabel?: string | null;
+  calculatedAt?: string | null;
   drivers: TerritoryHealthInsight[];
+  issues: TerritoryHealthInsight[];
   recommendations: TerritoryHealthInsight[];
 }
 
