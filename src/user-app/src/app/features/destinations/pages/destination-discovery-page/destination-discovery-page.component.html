@@ -16,12 +16,15 @@
   <section class="destination-discovery__search" aria-label="Destination search">
     <div class="destination-discovery__search-box">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M11 19a8 8 0 1 1 5.3-2l3.35 3.35" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" stroke="currentColor" />
       </svg>
       <input
-        type="search"
+        type="text"
+        enterkeyhint="search"
+        autocomplete="off"
         [value]="query()"
-        placeholder="Search beaches, culture, luxury hotels, local food..."
+        placeholder="Search destinations..."
         aria-label="Search destinations"
         (input)="onQueryInput($any($event.target).value)"
         (keydown.enter)="submitSearch()"
@@ -35,59 +38,83 @@
   </section>
 
   <section class="destination-discovery__layout">
-    <aside class="destination-discovery__filters" aria-label="Destination filters">
+    <aside
+      class="destination-discovery__filters"
+      [class.destination-discovery__filters--expanded]="filtersExpanded()"
+      aria-label="Destination filters"
+    >
       <div class="destination-discovery__filters-header">
-        <h2>Filters</h2>
-        @if (hasActiveFilters()) {
-          <button type="button" (click)="clearFilters()">Clear</button>
-        }
+        <h2>
+          Filters
+          @if (activeFilterCount() > 0) {
+            <span class="destination-discovery__filter-badge">{{ activeFilterCount() }}</span>
+          }
+        </h2>
+        <div class="destination-discovery__filters-actions">
+          @if (hasActiveFilters()) {
+            <button type="button" (click)="clearFilters()">Clear</button>
+          }
+          <button
+            type="button"
+            class="destination-discovery__filters-toggle"
+            [attr.aria-expanded]="filtersExpanded()"
+            aria-label="Toggle filters"
+            (click)="toggleFilters()"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 9l7 7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      @if (filtersLoading()) {
-        <p class="destination-discovery__filter-state">Loading filters...</p>
-      } @else if (filtersError()) {
-        <p class="destination-discovery__filter-state destination-discovery__filter-state--error">
-          {{ filtersError() }}
-        </p>
-      } @else {
-        @if (visibleDestinationTypeFilters().length > 0) {
-          <div class="destination-filter-group">
-            <h3>Destination type</h3>
-            <div class="destination-filter-group__options">
-              @for (type of visibleDestinationTypeFilters(); track type.id) {
-                <button
-                  type="button"
-                  class="destination-filter-chip"
-                  [class.destination-filter-chip--active]="isDestinationTypeSelected(type.id)"
-                  (click)="toggleDestinationType(type.id)"
-                >
-                  <span>{{ type.name }}</span>
-                  <small>{{ type.count }}</small>
-                </button>
-              }
+      <div class="destination-discovery__filters-body">
+        @if (filtersLoading()) {
+          <p class="destination-discovery__filter-state">Loading filters...</p>
+        } @else if (filtersError()) {
+          <p class="destination-discovery__filter-state destination-discovery__filter-state--error">
+            {{ filtersError() }}
+          </p>
+        } @else {
+          @if (visibleDestinationTypeFilters().length > 0) {
+            <div class="destination-filter-group">
+              <h3>Destination type</h3>
+              <div class="destination-filter-group__options">
+                @for (type of visibleDestinationTypeFilters(); track type.id) {
+                  <button
+                    type="button"
+                    class="destination-filter-chip"
+                    [class.destination-filter-chip--active]="isDestinationTypeSelected(type.id)"
+                    (click)="toggleDestinationType(type.id)"
+                  >
+                    <span>{{ type.name }}</span>
+                    <small>{{ type.count }}</small>
+                  </button>
+                }
+              </div>
             </div>
-          </div>
-        }
+          }
 
-        @for (group of visibleTagTypeFilters(); track group.id) {
-          <div class="destination-filter-group">
-            <h3>{{ group.label }}</h3>
-            <div class="destination-filter-group__options">
-              @for (option of group.options; track option.id) {
-                <button
-                  type="button"
-                  class="destination-filter-chip"
-                  [class.destination-filter-chip--active]="isTagSelected(option.id)"
-                  (click)="toggleTag(option.id)"
-                >
-                  <span>{{ option.name }}</span>
-                  <small>{{ option.count }}</small>
-                </button>
-              }
+          @for (group of visibleTagTypeFilters(); track group.id) {
+            <div class="destination-filter-group">
+              <h3>{{ group.label }}</h3>
+              <div class="destination-filter-group__options">
+                @for (option of group.options; track option.id) {
+                  <button
+                    type="button"
+                    class="destination-filter-chip"
+                    [class.destination-filter-chip--active]="isTagSelected(option.id)"
+                    (click)="toggleTag(option.id)"
+                  >
+                    <span>{{ option.name }}</span>
+                    <small>{{ option.count }}</small>
+                  </button>
+                }
+              </div>
             </div>
-          </div>
+          }
         }
-      }
+      </div>
     </aside>
 
     <section class="destination-discovery__results" aria-label="Destination results">

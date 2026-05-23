@@ -38,6 +38,7 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
   protected readonly tagTypeFilters = signal<DestinationDiscoveryTagTypeFilter[]>([]);
   protected readonly selectedDestinationTypeIds = signal<Set<number>>(new Set());
   protected readonly selectedTagIds = signal<Set<number>>(new Set());
+  protected readonly filtersExpanded = signal(false);
 
   protected readonly visibleDestinationTypeFilters = computed(() =>
     this.destinationTypeFilters().filter(type => type.count > 0),
@@ -51,6 +52,10 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
     this.query().trim().length > 0 ||
     this.selectedDestinationTypeIds().size > 0 ||
     this.selectedTagIds().size > 0,
+  );
+
+  protected readonly activeFilterCount = computed(() =>
+    this.selectedDestinationTypeIds().size + this.selectedTagIds().size,
   );
 
   protected readonly resultSummary = computed(() => {
@@ -116,6 +121,10 @@ export class DestinationDiscoveryPageComponent implements OnDestroy {
   protected toggleTag(tagId: number): void {
     this.selectedTagIds.update(current => this.toggleSetValue(current, tagId));
     this.runSearch(0, false);
+  }
+
+  protected toggleFilters(): void {
+    this.filtersExpanded.update(v => !v);
   }
 
   protected clearFilters(): void {
