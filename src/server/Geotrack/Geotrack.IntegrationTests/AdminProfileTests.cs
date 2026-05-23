@@ -249,6 +249,8 @@ public sealed class AdminProfileTests
         var avatar = await upload.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
         Assert.NotNull(avatar);
         Assert.StartsWith("/media/uploads/avatars/", avatar!.AvatarUrl);
+        Assert.NotNull(avatar.AvatarVersion);
+        Assert.NotNull(avatar.UpdatedAt);
 
         await using (var scope = app.Services.CreateAsyncScope())
         {
@@ -263,6 +265,7 @@ public sealed class AdminProfileTests
         var sharedUserProfile = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
         Assert.NotNull(sharedUserProfile);
         Assert.Equal(avatar.AvatarUrl, sharedUserProfile!.AvatarUrl);
+        Assert.Equal(avatar.AvatarVersion, sharedUserProfile.AvatarVersion);
 
         var remove = await client.DeleteAsync("/api/admin/profile/avatar");
         remove.EnsureSuccessStatusCode();
@@ -270,6 +273,7 @@ public sealed class AdminProfileTests
         var removedAvatar = await remove.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
         Assert.NotNull(removedAvatar);
         Assert.Equal(string.Empty, removedAvatar!.AvatarUrl);
+        Assert.Null(removedAvatar.AvatarVersion);
 
         await using (var scope = app.Services.CreateAsyncScope())
         {
@@ -280,6 +284,46 @@ public sealed class AdminProfileTests
                 .SingleAsync();
             Assert.Null(userAvatar);
         }
+    }
+
+    [Fact]
+    public async Task User_avatar_upload_is_visible_to_admin_profile_and_auth_current_user()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var setup = await PrepareRegionalManagerAsync(app);
+
+        using var client = app.CreateClient();
+        await LoginRegionalManagerAsync(client);
+
+        var upload = await client.PutAsync(
+            "/api/user/me/avatar",
+            BuildMultipart(ValidPngBytes(), "image/png", "phone-avatar.png"));
+        upload.EnsureSuccessStatusCode();
+
+        var uploaded = await upload.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
+        Assert.NotNull(uploaded);
+        Assert.StartsWith("/media/uploads/avatars/", uploaded!.AvatarUrl);
+        Assert.NotNull(uploaded.AvatarVersion);
+
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var storedAvatar = await db.Users
+                .Where(user => user.Id == setup.UserId)
+                .Select(user => user.AvatarUrl)
+                .SingleAsync();
+            Assert.Equal(uploaded.AvatarUrl, storedAvatar);
+        }
+
+        var adminProfile = await client.GetFromJsonAsync<AdminProfileResponseDto>("/api/admin/profile");
+        Assert.NotNull(adminProfile);
+        Assert.Equal(uploaded.AvatarUrl, adminProfile!.User.AvatarUrl);
+        Assert.Equal(uploaded.AvatarVersion, adminProfile.User.AvatarVersion);
+
+        var adminCurrentUser = await client.GetFromJsonAsync<AdminAuthUserDto>("/api/admin/auth/me");
+        Assert.NotNull(adminCurrentUser);
+        Assert.Equal(uploaded.AvatarUrl, adminCurrentUser!.AvatarUrl);
+        Assert.Equal(uploaded.AvatarVersion, adminCurrentUser.AvatarVersion);
     }
 
     private static async Task<AdminLoginResponseDto> LoginRegionalManagerAsync(HttpClient client)
