@@ -6,6 +6,7 @@ export interface AdminProfileUser {
   email: string;
   shortBio?: string | null;
   avatarUrl?: string | null;
+  avatarVersion?: number | null;
   createdAt: string;
   updatedAt?: string | null;
 }
@@ -72,5 +73,6 @@ export interface UpdateAdminProfileRequest {
 
 export interface AdminProfileAvatarResponse {
   avatarUrl: string;
+  avatarVersion?: number | null;
   updatedAt?: string | null;
 }

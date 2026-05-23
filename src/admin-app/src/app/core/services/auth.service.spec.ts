@@ -33,6 +33,8 @@ describe('AuthService', () => {
       resolved = true;
       expect(user.email).toBe('regional@example.com');
       expect(user.role).toBe('Regional Manager');
+      expect(user.avatarUrl).toBe('/media/uploads/avatars/regional.png');
+      expect(user.avatarVersion).toBe(101);
     });
 
     const request = http.expectOne('/api/admin/auth/login');
@@ -227,6 +229,8 @@ describe('AuthService', () => {
         id: 7,
         email: 'regional@example.com',
         displayName: 'Regional Manager',
+        avatarUrl: '/media/uploads/avatars/regional.png',
+        avatarVersion: 101,
         roles: ['RegionalManager'],
         canAccessRegionalAdmin: true,
         canAccessTerritoryAdmin: false,

@@ -17,4 +17,5 @@ export interface User {
   notifyRequests: boolean;
   notifyNewReview: boolean;
   avatarUrl?: string;
+  avatarVersion?: number | null;
 }

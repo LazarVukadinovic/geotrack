@@ -17,6 +17,7 @@ interface AdminAuthUserResponse {
   lastName?: string;
   displayName: string;
   avatarUrl?: string | null;
+  avatarVersion?: number | null;
   roles: string[];
   canAccessRegionalAdmin: boolean;
   canAccessTerritoryAdmin?: boolean;
@@ -223,6 +224,7 @@ export class AuthService {
       notifyRequests: true,
       notifyNewReview: true,
       avatarUrl: response.avatarUrl ?? undefined,
+      avatarVersion: response.avatarVersion ?? null,
     };
   }
 
