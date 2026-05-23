@@ -10,6 +10,7 @@ public class AdminAuthUserDto
     public string LastName { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string? AvatarUrl { get; set; }
+    public long? AvatarVersion { get; set; }
     public List<string> Roles { get; set; } = new();
     public bool CanAccessRegionalAdmin { get; set; }
     public bool CanAccessTerritoryAdmin { get; set; }

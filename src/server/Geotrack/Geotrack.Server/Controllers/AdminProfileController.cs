@@ -34,6 +34,7 @@ public class AdminProfileController : ControllerBase
     }
 
     [HttpGet]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<ActionResult<AdminProfileResponseDto>> GetProfile()
     {
         try

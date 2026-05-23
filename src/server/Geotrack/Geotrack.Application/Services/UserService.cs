@@ -87,6 +87,7 @@ public class UserService : IUserService
             LastName = user.LastName,
             PhoneNumber = user.PhoneNumber,
             AvatarUrl = user.AvatarUrl,
+            AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             Location = user.Location,
             NeedsInterestsOnboarding = user.NeedsInterestsOnboarding,
             AnalyticsEnabled = user.AnalyticsEnabled,
@@ -120,6 +121,7 @@ public class UserService : IUserService
             LastName = user.LastName,
             PhoneNumber = user.PhoneNumber,
             AvatarUrl = user.AvatarUrl,
+            AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             Location = user.Location,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt
@@ -155,6 +157,7 @@ public class UserService : IUserService
         return new UpdateAvatarResponseDto
         {
             AvatarUrl = user.AvatarUrl ?? string.Empty,
+            AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             UpdatedAt = user.UpdatedAt,
         };
     }
@@ -179,6 +182,7 @@ public class UserService : IUserService
         return new UpdateAvatarResponseDto
         {
             AvatarUrl = string.Empty,
+            AvatarVersion = null,
             UpdatedAt = user.UpdatedAt,
         };
     }

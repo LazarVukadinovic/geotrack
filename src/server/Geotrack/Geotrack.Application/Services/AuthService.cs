@@ -192,6 +192,7 @@ public class AuthService : IAuthService
             LastName = user.LastName,
             DisplayName = BuildDisplayName(user),
             AvatarUrl = user.AvatarUrl,
+            AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             Roles = roles,
             CanAccessRegionalAdmin = roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal),
             CanAccessTerritoryAdmin =

@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -96,6 +97,7 @@ public class AdminProfileService : IAdminProfileService
                 Email = user.Email,
                 ShortBio = user.ShortBio,
                 AvatarUrl = user.AvatarUrl,
+                AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
                 CreatedAt = user.CreatedAt,
                 UpdatedAt = user.UpdatedAt,
             },
