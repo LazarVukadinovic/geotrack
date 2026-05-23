@@ -38,6 +38,7 @@ describe('SettingsComponent', () => {
     expect(component.lastName()).toBe('Rossi');
     expect(component.email()).toBe('elena@example.com');
     expect(component.bio()).toBe('Regional manager bio');
+    expect(component.avatarImageUrl()).toBe('/media/uploads/avatars/current.png?v=101');
     expect(component.currentRole).toBe('Regional Manager');
     expect(component.assignmentSectionTitle).toBe('Regional Manager Assignment');
     expect(component.assignmentLabel).toBe('Assigned Region');
@@ -142,9 +143,14 @@ describe('SettingsComponent', () => {
     const upload = http.expectOne('/api/admin/profile/avatar');
     expect(upload.request.method).toBe('POST');
     expect(upload.request.body instanceof FormData).toBe(true);
-    upload.flush({ avatarUrl: '/media/uploads/avatars/updated.png', updatedAt: '2026-05-13T10:00:00Z' });
+    upload.flush({
+      avatarUrl: '/media/uploads/avatars/updated.png',
+      avatarVersion: 202,
+      updatedAt: '2026-05-13T10:00:00Z',
+    });
 
     expect(component.avatarUrl()).toBe('/media/uploads/avatars/updated.png');
+    expect(component.avatarImageUrl()).toBe('/media/uploads/avatars/updated.png?v=202');
 
     component.removeAvatar();
 
@@ -179,6 +185,7 @@ describe('SettingsComponent', () => {
         email: 'elena@example.com',
         shortBio: 'Regional manager bio',
         avatarUrl: '/media/uploads/avatars/current.png',
+        avatarVersion: 101,
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: null,
       },
@@ -246,6 +253,7 @@ describe('SettingsComponent', () => {
         email: 'mika@gmail.com',
         shortBio: 'Territory manager bio',
         avatarUrl: '/media/uploads/avatars/mika.png',
+        avatarVersion: 303,
         createdAt: '2024-03-01T00:00:00Z',
         updatedAt: null,
       },

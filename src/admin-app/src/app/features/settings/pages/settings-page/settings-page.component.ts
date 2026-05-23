@@ -9,6 +9,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminProfileService } from '../../../../core/services/admin-profile.service';
 import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
+import { buildAvatarDisplayUrl } from '../../../../core/utils/avatar-url';
 import {
   AdminProfile,
   AdminProfileAssignment,
@@ -60,6 +61,8 @@ export class SettingsComponent implements OnInit {
   readonly email = signal('');
   readonly bio = signal('');
   readonly avatarUrl = signal('');
+  readonly avatarVersion = signal<number | null>(null);
+  readonly avatarImageUrl = computed(() => buildAvatarDisplayUrl(this.avatarUrl(), this.avatarVersion()));
   readonly bioMaxLength = 300;
   readonly bioLength = computed(() => this.bio().length);
   readonly initials = computed(() => this.buildInitials());
@@ -238,9 +241,11 @@ export class SettingsComponent implements OnInit {
       .subscribe({
         next: response => {
           const avatarUrl = response.avatarUrl ?? '';
+          const avatarVersion = response.avatarVersion ?? null;
           this.avatarUrl.set(avatarUrl);
-          this.patchLastProfileAvatar(avatarUrl, response.updatedAt ?? null);
-          this.patchAuthUser({ avatarUrl });
+          this.avatarVersion.set(avatarVersion);
+          this.patchLastProfileAvatar(avatarUrl, avatarVersion, response.updatedAt ?? null);
+          this.patchAuthUser({ avatarUrl, avatarVersion });
           this.avatarError.set(null);
           this.notifyStateChanged();
         },
@@ -271,8 +276,9 @@ export class SettingsComponent implements OnInit {
       .subscribe({
         next: response => {
           this.avatarUrl.set('');
-          this.patchLastProfileAvatar('', response.updatedAt ?? null);
-          this.patchAuthUser({ avatarUrl: undefined });
+          this.avatarVersion.set(null);
+          this.patchLastProfileAvatar('', null, response.updatedAt ?? null);
+          this.patchAuthUser({ avatarUrl: undefined, avatarVersion: null });
           this.avatarError.set(null);
           this.notifyStateChanged();
         },
@@ -354,6 +360,7 @@ export class SettingsComponent implements OnInit {
     this.email.set(normalizedProfile.user.email ?? '');
     this.bio.set((normalizedProfile.user.shortBio ?? '').slice(0, this.bioMaxLength));
     this.avatarUrl.set(normalizedProfile.user.avatarUrl ?? '');
+    this.avatarVersion.set(normalizedProfile.user.avatarVersion ?? null);
     this.language.set(normalizedProfile.preferences.interfaceLanguage);
     this.timezone.set(normalizedProfile.preferences.timezone);
     this.notifyRequests.set(normalizedProfile.preferences.emailRequestsEnabled);
@@ -376,6 +383,7 @@ export class SettingsComponent implements OnInit {
       notifyRequests: normalizedProfile.preferences.emailRequestsEnabled,
       notifyNewReview: normalizedProfile.preferences.emailNewReviewEnabled,
       avatarUrl: normalizedProfile.user.avatarUrl ?? undefined,
+      avatarVersion: normalizedProfile.user.avatarVersion ?? null,
     });
 
     this.notifyStateChanged();
@@ -548,7 +556,7 @@ export class SettingsComponent implements OnInit {
     this.persistRegion(selectedRegion.id);
   }
 
-  private patchLastProfileAvatar(avatarUrl: string, updatedAt: string | null): void {
+  private patchLastProfileAvatar(avatarUrl: string, avatarVersion: number | null, updatedAt: string | null): void {
     if (!this.lastProfile) {
       return;
     }
@@ -558,6 +566,7 @@ export class SettingsComponent implements OnInit {
       user: {
         ...this.lastProfile.user,
         avatarUrl: avatarUrl || null,
+        avatarVersion,
         updatedAt,
       },
     };

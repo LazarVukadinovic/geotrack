@@ -105,6 +105,16 @@ describe('TopbarComponent', () => {
     expect(menu.querySelector('img')?.getAttribute('src')).toBe('/media/uploads/avatars/mika.png');
   });
 
+  it('renders the current auth user avatar with a cache-busting version', () => {
+    currentUser = {
+      ...currentUser,
+      avatarUrl: '/media/uploads/avatars/current.png',
+      avatarVersion: 101,
+    };
+
+    expect(component.displayAvatarUrl).toBe('/media/uploads/avatars/current.png?v=101');
+  });
+
   it('navigates to the settings route for the active view', () => {
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);

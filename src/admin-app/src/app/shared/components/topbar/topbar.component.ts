@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { AdminView } from '../../../core/models/admin-view.model';
+import { buildAvatarDisplayUrl } from '../../../core/utils/avatar-url';
 
 @Component({
   selector: 'app-topbar',
@@ -38,7 +39,8 @@ export class TopbarComponent {
   }
 
   get displayAvatarUrl(): string {
-    const avatarUrl = this.auth.getUser()?.avatarUrl ?? '';
+    const user = this.auth.getUser();
+    const avatarUrl = buildAvatarDisplayUrl(user?.avatarUrl, user?.avatarVersion);
     return avatarUrl && avatarUrl !== this.failedAvatarUrl ? avatarUrl : '';
   }
 
