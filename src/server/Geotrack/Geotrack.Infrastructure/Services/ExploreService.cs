@@ -399,7 +399,9 @@ public class ExploreService : IExploreService
                 Name = DisplayTextSafety.CleanRequired(resolvedDestination.Name, "Nearby"),
                 Description = DisplayTextSafety.CleanOptional(resolvedDestination.Description) ?? string.Empty,
                 Latitude = resolvedDestination.Latitude,
-                Longitude = resolvedDestination.Longitude
+                Longitude = resolvedDestination.Longitude,
+                TerritoryId = resolvedDestination.TerritoryId,
+                TerritoryName = resolvedDestination.TerritoryName
             },
             Sections = sections
                 .Where(section => section.Items.Count > 0)
@@ -1051,7 +1053,9 @@ public class ExploreService : IExploreService
                 Latitude = d.Latitude,
                 Longitude = d.Longitude,
                 DistanceMeters = 0,
-                Priority = -1
+                Priority = -1,
+                TerritoryId = d.Region.TerritoryId,
+                TerritoryName = d.Region.Territory.Name
             })
             .SingleOrDefaultAsync();
     }
@@ -2063,7 +2067,9 @@ public class ExploreService : IExploreService
                 Latitude = d.Latitude,
                 Longitude = d.Longitude,
                 DistanceMeters = EF.Property<Point>(d, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
-                Priority = 0
+                Priority = 0,
+                TerritoryId = d.Region.TerritoryId,
+                TerritoryName = d.Region.Territory.Name
             })
             .OrderBy(d => d.DistanceMeters)
             .ThenBy(d => d.Name)
@@ -2097,7 +2103,9 @@ public class ExploreService : IExploreService
                 DistanceMeters = EF.Property<Point?>(d, SpatialPointFactory.CoordinatesPropertyName) != null
                     ? EF.Property<Point>(d, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
                     : 0,
-                Priority = -1
+                Priority = -1,
+                TerritoryId = d.Region.TerritoryId,
+                TerritoryName = d.Region.Territory.Name
             })
             .SingleOrDefaultAsync();
     }
@@ -2184,7 +2192,9 @@ public class ExploreService : IExploreService
             Name = DisplayTextSafety.CleanRequired(destination.Name, "Nearby"),
             Description = DisplayTextSafety.CleanOptional(destination.Description) ?? string.Empty,
             Latitude = destination.Latitude,
-            Longitude = destination.Longitude
+            Longitude = destination.Longitude,
+            TerritoryId = destination.TerritoryId,
+            TerritoryName = destination.TerritoryName
         };
     }
 
@@ -2339,6 +2349,8 @@ public class ExploreService : IExploreService
         public double Longitude { get; set; }
         public double DistanceMeters { get; set; }
         public int Priority { get; set; }
+        public int? TerritoryId { get; set; }
+        public string? TerritoryName { get; set; }
     }
 
     private sealed class CuratedInterestSignal

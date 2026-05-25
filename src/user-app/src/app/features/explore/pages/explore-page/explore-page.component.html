@@ -36,7 +36,12 @@
         </div>
       </section>
     } @else {
-      <app-welcome-hero [city]="heroCity()" [country]="heroCountry()" />
+      <app-welcome-hero
+        [city]="heroCity()"
+        [country]="heroCountry()"
+        [destinationRoute]="destinationDetailRoute()"
+        [countryRoute]="countryDetailRoute()"
+      />
 
       @if (isDestinationMode()) {
         <div class="explore-page__destination-links">

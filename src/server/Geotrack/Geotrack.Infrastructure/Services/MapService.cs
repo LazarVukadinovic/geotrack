@@ -19,6 +19,7 @@ public class MapService : IMapService
 {
     private const string NominatimBaseUrl = "https://nominatim.openstreetmap.org";
     private const string OsrmBaseUrl = "https://router.project-osrm.org/route/v1/foot";
+    private const string OsrmCarBaseUrl = "https://router.project-osrm.org/route/v1/car";
     private const double DestinationZoomThreshold = 10d;
     private const string PublishedStatus = "Published";
     private static readonly TimeSpan SearchCacheDuration = TimeSpan.FromMinutes(10);
@@ -389,6 +390,87 @@ public class MapService : IMapService
         catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
         {
             LogProviderFailure("osrm-route", ex);
+            return null;
+        }
+
+        var route = result?.Routes?.FirstOrDefault();
+        if (!string.Equals(result?.Code, "Ok", StringComparison.OrdinalIgnoreCase) ||
+            route?.Geometry?.Coordinates is not { Count: > 1 })
+        {
+            return null;
+        }
+
+        var mappedRoute = new MapRouteResponseDto
+        {
+            Coordinates = route.Geometry.Coordinates
+                .Where(pair => pair.Count >= 2)
+                .Select(pair => new MapCoordinateDto
+                {
+                    Latitude = pair[1],
+                    Longitude = pair[0],
+                })
+                .Where(point => HasValidCoordinates(point.Latitude, point.Longitude))
+                .Take(5_000)
+                .ToList(),
+            DistanceMeters = route.Distance,
+            DurationSeconds = route.Duration,
+        };
+
+        if (mappedRoute.Coordinates.Count <= 1)
+        {
+            return null;
+        }
+
+        _cache.Set(
+            cacheKey,
+            mappedRoute,
+            new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = RouteCacheDuration
+            });
+
+        return mappedRoute;
+    }
+
+    public async Task<MapRouteResponseDto?> GetDrivingRouteAsync(
+        double originLatitude,
+        double originLongitude,
+        double destinationLatitude,
+        double destinationLongitude,
+        CancellationToken cancellationToken = default)
+    {
+        if (!HasValidCoordinates(originLatitude, originLongitude) ||
+            !HasValidCoordinates(destinationLatitude, destinationLongitude))
+        {
+            return null;
+        }
+
+        var normalizedOriginLatitude = NormalizeCoordinate(originLatitude);
+        var normalizedOriginLongitude = NormalizeCoordinate(originLongitude);
+        var normalizedDestinationLatitude = NormalizeCoordinate(destinationLatitude);
+        var normalizedDestinationLongitude = NormalizeCoordinate(destinationLongitude);
+        var cacheKey = BuildCacheKey(
+            "map:driving-route:v1",
+            string.Join(
+                ";",
+                $"{FormatCoordinate(normalizedOriginLatitude)},{FormatCoordinate(normalizedOriginLongitude)}",
+                $"{FormatCoordinate(normalizedDestinationLatitude)},{FormatCoordinate(normalizedDestinationLongitude)}"));
+        if (_cache.TryGetValue<MapRouteResponseDto>(cacheKey, out var cachedRoute))
+        {
+            return cachedRoute;
+        }
+
+        var url =
+            $"{OsrmCarBaseUrl}/{FormatCoordinate(normalizedOriginLongitude)},{FormatCoordinate(normalizedOriginLatitude)};{FormatCoordinate(normalizedDestinationLongitude)},{FormatCoordinate(normalizedDestinationLatitude)}?overview=full&geometries=geojson";
+
+        OsrmRouteResponse? result;
+        try
+        {
+            result = await _httpClient.GetFromJsonAsync<OsrmRouteResponse>(url, cancellationToken);
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            LogProviderFailure("osrm-driving-route", ex);
             return null;
         }
 

@@ -66,6 +66,14 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected readonly isDestinationMode = computed(() => this.destinationSvc.isDestinationMode());
   protected readonly sections = computed(() => this.explore.sections());
   protected readonly selectedDestination = computed(() => this.explore.selectedDestination());
+  protected readonly destinationDetailRoute = computed(() => {
+    const dest = this.selectedDestination();
+    return dest?.id ? `/destinations/${dest.id}` : null;
+  });
+  protected readonly countryDetailRoute = computed(() => {
+    const dest = this.selectedDestination();
+    return dest?.territoryId ? `/territories/${dest.territoryId}` : null;
+  });
 
   protected readonly canUseExploreSearch = computed(() => {
     if (this.destinationSvc.isDestinationMode()) {
@@ -172,9 +180,10 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   private readonly heroLocation = computed(() => {
     if (this.destinationSvc.isDestinationMode()) {
+      const dest = this.selectedDestination();
       return {
-        city: this.destinationSvc.name() || 'Explore',
-        country: '',
+        city: dest?.name || this.destinationSvc.name() || 'Explore',
+        country: dest?.territoryName ?? '',
       };
     }
 

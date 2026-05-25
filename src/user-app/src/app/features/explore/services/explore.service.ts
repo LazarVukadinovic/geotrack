@@ -23,7 +23,7 @@ import type {
 } from '../models/explore-extras.model';
 
 interface ExploreApiResponse {
-  selectedDestination?: { id: number; name: string; latitude: number; longitude: number };
+  selectedDestination?: { id: number; name: string; latitude: number; longitude: number; territoryId?: number; territoryName?: string };
   sections?: ApiExploreSection[];
 
   // Legacy payload support while backend/frontend are being switched together.

@@ -362,6 +362,11 @@
           </button>
         </div>
 
+        @if (routeInfoMessage) {
+          <div class="px-4 pb-2">
+            <p class="text-xs text-slate-500">{{ routeInfoMessage }}</p>
+          </div>
+        }
         @if (routeErrorMessage) {
           <div class="px-4 pb-2">
             <p class="text-xs text-red-500">{{ routeErrorMessage }}</p>

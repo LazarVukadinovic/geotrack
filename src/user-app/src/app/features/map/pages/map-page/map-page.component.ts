@@ -52,6 +52,7 @@ interface CachedViewport extends MapViewportBounds {
 interface StoredMapViewState {
   center?: [number, number];
   zoom?: number;
+  destinationId?: number | null;
 }
 
 interface MapInitialView {
@@ -131,6 +132,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   emptyStateMessage = '';
   loadErrorMessage = '';
   routeErrorMessage = '';
+  routeInfoMessage = '';
   showNoDataModal = false;
   showLegend = false;
 
@@ -233,6 +235,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
           this.isUserLocation = false;
           this.navigatedWithDestination = true;
         }
+        this.noDataModalDismissed = true;
       }
     }
   }
@@ -375,7 +378,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = '';
+    this.routeErrorMessage = ''; this.routeInfoMessage = '';
     this.clearRoute();
 
     sessionStorage.setItem('mapLocation', JSON.stringify({
@@ -454,7 +457,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = '';
+    this.routeErrorMessage = ''; this.routeInfoMessage = '';
     this.clearRoute();
     this.mapFilterState.clearSelection();
 
@@ -538,7 +541,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const routeRequestId = ++this.routeRequestSeq;
 
     this.isLoadingRoute = true;
-    this.routeErrorMessage = '';
+    this.routeErrorMessage = ''; this.routeInfoMessage = '';
     this.clearRoute();
     this.cdr.detectChanges();
 
@@ -553,6 +556,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     if (!origin || !this.hasUsableCoordinates(origin.latitude, origin.longitude)) {
       this.isLoadingRoute = false;
+      this.routeInfoMessage = '';
       this.routeErrorMessage = 'Location is unavailable, so directions cannot be calculated yet.';
       this.cdr.detectChanges();
       return;
@@ -562,22 +566,28 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.placeUserMarker(origin.latitude, origin.longitude);
     }
 
+    const straightLineKm = this.haversineKm(
+      origin.latitude, origin.longitude,
+      selectedPlace.latitude, selectedPlace.longitude,
+    );
+    const useDriving = straightLineKm > 30;
+
     this.analytics.track('directions_started', {
       entityType: this.toAnalyticsEntityType(selectedPlace),
       entityId: selectedPlace.entityId,
       metadata: {
         surface: 'map',
         provider: 'osrm',
+        mode: useDriving ? 'car' : 'foot',
         originSource: origin.source,
       },
     });
 
-    this.mapApi.getWalkingRoute(
-      origin.latitude,
-      origin.longitude,
-      selectedPlace.latitude,
-      selectedPlace.longitude,
-    ).subscribe({
+    const routeRequest = useDriving
+      ? this.mapApi.getDrivingRoute(origin.latitude, origin.longitude, selectedPlace.latitude, selectedPlace.longitude)
+      : this.mapApi.getWalkingRoute(origin.latitude, origin.longitude, selectedPlace.latitude, selectedPlace.longitude);
+
+    routeRequest.subscribe({
       next: (route) => {
         if (!this.isCurrentRouteRequest(routeRequestId, selectedKey)) {
           if (routeRequestId === this.routeRequestSeq) {
@@ -589,6 +599,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         this.drawRoute(route);
         this.fitRoute(route);
         this.isLoadingRoute = false;
+        this.routeInfoMessage = this.buildRouteLabel(route, useDriving);
         this.cdr.detectChanges();
       },
       error: () => {
@@ -600,10 +611,52 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
           return;
         }
         this.isLoadingRoute = false;
-        this.routeErrorMessage = 'Walking directions are unavailable right now.';
+        this.routeErrorMessage = useDriving
+          ? 'Driving directions are unavailable right now.'
+          : 'Walking directions are unavailable right now.';
         this.cdr.detectChanges();
       },
     });
+  }
+
+  private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371;
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  private buildRouteLabel(route: MapRouteResult, isDriving: boolean): string {
+    const parts: string[] = [];
+
+    const durationSeconds = route.durationSeconds;
+    if (typeof durationSeconds === 'number' && durationSeconds > 0) {
+      const totalMin = Math.round(durationSeconds / 60);
+      let timeLabel: string;
+      if (totalMin >= 60) {
+        const hours = Math.floor(totalMin / 60);
+        const minutes = totalMin % 60;
+        timeLabel = minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`;
+      } else {
+        timeLabel = `${totalMin} min`;
+      }
+      parts.push(isDriving ? `${timeLabel} drive` : `${timeLabel} walk`);
+    }
+
+    const distanceMeters = route.distanceMeters;
+    if (typeof distanceMeters === 'number' && distanceMeters > 0) {
+      const km = distanceMeters / 1000;
+      const kmLabel = km >= 10
+        ? `${Math.round(km)} km`
+        : `${km.toFixed(1)} km`;
+      parts.push(kmLabel);
+    }
+
+    return parts.join(' · ');
   }
 
   openDetails(): void {
@@ -623,7 +676,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = '';
+    this.routeErrorMessage = ''; this.routeInfoMessage = '';
     this.clearRoute();
   }
 
@@ -778,6 +831,36 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     const exactLocation = await this.locationSvc.refreshExactLocationForMap();
 
+    // Re-check destination after awaiting location.
+    // Also check whether the stored mapViewState was saved for a different destination
+    // (e.g., user browsed Tara, panned around, then went back to Explore and picked Novi Sad).
+    if (this.destinationSvc.isDestinationMode()) {
+      const dsId = this.destinationSvc.id();
+      const dsLat = this.destinationSvc.latitude();
+      const dsLon = this.destinationSvc.longitude();
+      const dsName = this.destinationSvc.name();
+      if (typeof dsLat === 'number' && typeof dsLon === 'number' && dsName) {
+        const savedViewState = this.readSessionJson<StoredMapViewState>(MAP_VIEW_STATE_KEY);
+        const savedViewDestId = savedViewState?.destinationId ?? null;
+        const destinationChanged = dsId != null && savedViewDestId !== dsId;
+
+        const currentSaved = this.readSessionJson<{ lat?: number; lon?: number }>('mapLocation');
+        const coordsMatch = currentSaved &&
+          Math.abs((currentSaved.lat ?? 0) - dsLat) < 0.001 &&
+          Math.abs((currentSaved.lon ?? 0) - dsLon) < 0.001;
+
+        // Re-center if: coords don't match (new destination set after constructor ran)
+        // OR if the saved camera view belongs to a different destination.
+        if (!coordsMatch || destinationChanged) {
+          this.destinationName = dsName;
+          this.destinationLat = dsLat;
+          this.destinationLon = dsLon;
+          this.isUserLocation = false;
+          return { center: [dsLon, dsLat], zoom: INITIAL_LOCATION_ZOOM };
+        }
+      }
+    }
+
     const savedView = this.readSavedMapViewState();
     if (this.hasOpenedMapThisSession() && savedView) {
       return savedView;
@@ -825,9 +908,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const center = this.map.getCenter();
     const zoom = this.map.getZoom();
     try {
+      const destinationId = this.destinationSvc.isDestinationMode()
+        ? (this.destinationSvc.id() ?? null)
+        : null;
       sessionStorage.setItem(MAP_VIEW_STATE_KEY, JSON.stringify({
         center: [center.lng, center.lat],
         zoom,
+        destinationId,
       }));
       this.markMapOpenedThisSession();
     } catch {
@@ -1141,7 +1228,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     if (marker.entityType === 'destination') {
       this.selectedPlace = null;
-      this.routeErrorMessage = '';
+      this.routeErrorMessage = ''; this.routeInfoMessage = '';
       this.searchResults = [];
       this.clearRoute();
       this.noDataModalDismissed = true;
@@ -1186,7 +1273,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
 
     this.selectedPlace = marker;
-    this.routeErrorMessage = '';
+    this.routeErrorMessage = ''; this.routeInfoMessage = '';
     this.clearRoute();
     this.analytics.track('map_marker_opened', {
       entityType: this.toAnalyticsEntityType(marker),
@@ -1222,7 +1309,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = '';
+    this.routeErrorMessage = ''; this.routeInfoMessage = '';
     this.clearRoute();
   }
 
@@ -1307,7 +1394,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private drawRoute(route: MapRouteResult): void {
     const coordinates = route.coordinates.map((point) => [point.longitude, point.latitude] as [number, number]);
     if (coordinates.length < 2) {
-      this.routeErrorMessage = 'Walking directions are unavailable right now.';
+      this.routeInfoMessage = '';
+      this.routeErrorMessage = 'Directions are unavailable right now.';
       return;
     }
 
@@ -1354,7 +1442,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
     );
 
-    this.map.fitBounds(bounds, { padding: 70, duration: 900 });
+    this.map.fitBounds(bounds, { padding: { top: 100, bottom: 260, left: 80, right: 80 }, duration: 900 });
   }
 
   clearRoute(): void {
@@ -1416,7 +1504,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = '';
+    this.routeErrorMessage = ''; this.routeInfoMessage = '';
     this.clearRoute();
     this.noDataModalDismissed = false;
 
@@ -1475,7 +1563,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = '';
+    this.routeErrorMessage = ''; this.routeInfoMessage = '';
     this.clearRoute();
 
     this.map.resize();
