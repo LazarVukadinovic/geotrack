@@ -45,14 +45,14 @@ export class AuthService {
 
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
-  readonly isAdministrator = computed(() => this._currentUser()?.role === 'Administrator');
-  readonly isTerritoryManager = computed(() => this._currentUser()?.role === 'Territory Manager');
-  readonly isTerritoryAssociate = computed(() => this._currentUser()?.role === 'Territory Associate');
-  readonly isNationalManager = computed(() => this._currentUser()?.role === 'Territory Manager');
+  readonly isAdministrator = computed(() => this._currentUser()?.activeRoleCode === 'Admin');
+  readonly isTerritoryManager = computed(() => this._currentUser()?.activeRoleCode === 'TerritoryManager');
+  readonly isTerritoryAssociate = computed(() => this._currentUser()?.activeRoleCode === 'TerritoryAssociate');
+  readonly isNationalManager = computed(() => this._currentUser()?.activeRoleCode === 'TerritoryManager');
   readonly canAccessTerritoryAdmin = computed(() =>
-    this._currentUser()?.role === 'Territory Manager' ||
-    this._currentUser()?.role === 'Territory Associate');
-  readonly isRegionalManager = computed(() => this._currentUser()?.role === 'Regional Manager');
+    this._currentUser()?.activeRoleCode === 'TerritoryManager' ||
+    this._currentUser()?.activeRoleCode === 'TerritoryAssociate');
+  readonly isRegionalManager = computed(() => this._currentUser()?.activeRoleCode === 'RegionalManager');
   readonly availableAdminViews = computed(() => getAdminViewsForRoles(this._currentUser()?.roles ?? []));
   readonly activeAdminView = computed(() => getAdminViewByCode(this._currentUser()?.activeRoleCode));
 
@@ -94,7 +94,7 @@ export class AuthService {
       )
       .pipe(
         tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
-        map(response => this.mapAdminUser(response.user)),
+        map(response => this.mapAdminUser(response.user, false)),
         tap(user => {
           this._currentUser.set(user);
           this.setSessionHint();
@@ -193,9 +193,9 @@ export class AuthService {
     );
   }
 
-  private mapAdminUser(response: AdminAuthUserResponse): User {
+  private mapAdminUser(response: AdminAuthUserResponse, preferStoredView = true): User {
     const roleCodes = this.resolveAdminRoleCodes(response.roles);
-    const preferredRoleCode = this.readActiveViewCode();
+    const preferredRoleCode = preferStoredView ? this.readActiveViewCode() : null;
     const activeView = resolveAdminViewForRoles(roleCodes, preferredRoleCode);
     if (!activeView) {
       throw new Error('This account is not assigned to an admin role.');

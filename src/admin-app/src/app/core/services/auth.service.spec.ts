@@ -106,6 +106,62 @@ describe('AuthService', () => {
     expect(service.getHomeRoute()).toBe('/territory/overview');
   });
 
+  it('maps admin roles to the existing administrator dashboard route', () => {
+    service.login('zika@gmail.com', 'Proba123!').subscribe(user => {
+      expect(user.email).toBe('zika@gmail.com');
+      expect(user.role).toBe('Administrator');
+      expect(user.activeRoleCode).toBe('Admin');
+      expect(user.roles).toEqual(['Admin']);
+    });
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'admin-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 46,
+        email: 'zika@gmail.com',
+        displayName: 'Zika',
+        roles: ['Admin'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: false,
+      },
+    });
+
+    expect(service.isAdministrator()).toBe(true);
+    expect(service.isRegionalManager()).toBe(false);
+    expect(service.canAccessTerritoryAdmin()).toBe(false);
+    expect(service.getHomeRoute()).toBe('/admin-dashboard');
+  });
+
+  it('gives admin role priority over a stored non-admin view during login', () => {
+    sessionStorage.setItem('geotrack_admin_active_view', 'RegionalManager');
+
+    service.login('zika@gmail.com', 'Proba123!').subscribe(user => {
+      expect(user.activeRoleCode).toBe('Admin');
+      expect(user.roles).toEqual(['Admin', 'RegionalManager']);
+    });
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'admin-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 47,
+        email: 'zika@gmail.com',
+        displayName: 'Zika',
+        roles: ['RegionalManager', 'Admin'],
+        canAccessRegionalAdmin: true,
+        canAccessTerritoryAdmin: false,
+      },
+    });
+
+    expect(service.getHomeRoute()).toBe('/admin-dashboard');
+    expect(sessionStorage.getItem('geotrack_admin_active_view')).toBe('Admin');
+  });
+
   it('uses the existing territory-first redirect priority for multi-role admin users', () => {
     service.login('multi@example.com', 'Proba123!').subscribe(user => {
       expect(user.email).toBe('multi@example.com');
