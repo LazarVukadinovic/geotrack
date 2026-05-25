@@ -174,7 +174,18 @@ export class ExploreSectionListingService {
   toggleSaved(item: ExploreSectionItem): void {
     const numericId = parseInt(item.id, 10);
     if (isNaN(numericId)) return;
-    if (item.entityType === 'event') return;
+
+    if (item.entityType === 'event') {
+      this.saveToCollection.open({
+        entityType: 'event',
+        entityId: numericId,
+        title: item.title,
+        imageUrl: item.image,
+        surface: `explore_section_${this.currentSectionKey ?? 'unknown'}`,
+        analyticsEntityType: 'event',
+      });
+      return;
+    }
 
     const saveEntityType = item.entityType === 'stay' ? 'place' : item.entityType;
     if (saveEntityType !== 'place') return;

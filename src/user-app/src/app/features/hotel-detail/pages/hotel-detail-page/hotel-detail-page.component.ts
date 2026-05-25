@@ -135,6 +135,16 @@ export class HotelDetailPageComponent {
     if (id) this.service.toggleSaved(id);
   }
 
+  protected share(): void {
+    const title = this.hotel()?.title ?? '';
+    const url = globalThis.location.href;
+    if (navigator.share) {
+      void navigator.share({ title, url });
+    } else {
+      void navigator.clipboard.writeText(url);
+    }
+  }
+
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/stays', id]);
   }

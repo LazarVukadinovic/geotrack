@@ -89,7 +89,7 @@ export class ExploreSectionListingPageComponent {
   }
 
   protected canSave(item: ExploreSectionItem): boolean {
-    return item.entityType === 'place' || item.entityType === 'stay';
+    return item.entityType === 'place' || item.entityType === 'stay' || item.entityType === 'event';
   }
 
   protected itemKey(item: ExploreSectionItem): string {

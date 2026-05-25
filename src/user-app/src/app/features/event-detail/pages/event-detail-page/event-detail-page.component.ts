@@ -89,6 +89,16 @@ export class EventDetailPageComponent {
     if (id) this.service.toggleSaved(id);
   }
 
+  protected share(): void {
+    const title = this.event()?.title ?? '';
+    const url = globalThis.location.href;
+    if (navigator.share) {
+      void navigator.share({ title, url });
+    } else {
+      void navigator.clipboard.writeText(url);
+    }
+  }
+
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/events', id]);
   }

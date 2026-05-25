@@ -5,9 +5,6 @@
     <p class="explore-listing__eyebrow">Explore section</p>
     <h1 class="explore-listing__title">{{ title() }}</h1>
 
-    @if (totalCount() > 0) {
-      <p class="explore-listing__count">{{ totalCount() }} items</p>
-    }
   </section>
 
   @if (filters().length > 0) {

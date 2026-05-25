@@ -34,6 +34,10 @@
   font-size: var(--text-sm);
 }
 
+.explore-listing__count {
+  text-align: center;
+}
+
 .explore-listing__grid {
   display: grid;
   grid-template-columns: 1fr;
