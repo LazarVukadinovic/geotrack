@@ -400,18 +400,19 @@ public class MapService : IMapService
             return null;
         }
 
+        var rawCoords = route.Geometry.Coordinates
+            .Where(pair => pair.Count >= 2)
+            .Select(pair => new MapCoordinateDto
+            {
+                Latitude = pair[1],
+                Longitude = pair[0],
+            })
+            .Where(point => HasValidCoordinates(point.Latitude, point.Longitude))
+            .ToList();
+
         var mappedRoute = new MapRouteResponseDto
         {
-            Coordinates = route.Geometry.Coordinates
-                .Where(pair => pair.Count >= 2)
-                .Select(pair => new MapCoordinateDto
-                {
-                    Latitude = pair[1],
-                    Longitude = pair[0],
-                })
-                .Where(point => HasValidCoordinates(point.Latitude, point.Longitude))
-                .Take(5_000)
-                .ToList(),
+            Coordinates = DecimateCoordinates(rawCoords),
             DistanceMeters = route.Distance,
             DurationSeconds = route.Duration,
         };
@@ -481,18 +482,19 @@ public class MapService : IMapService
             return null;
         }
 
+        var rawDrivingCoords = route.Geometry.Coordinates
+            .Where(pair => pair.Count >= 2)
+            .Select(pair => new MapCoordinateDto
+            {
+                Latitude = pair[1],
+                Longitude = pair[0],
+            })
+            .Where(point => HasValidCoordinates(point.Latitude, point.Longitude))
+            .ToList();
+
         var mappedRoute = new MapRouteResponseDto
         {
-            Coordinates = route.Geometry.Coordinates
-                .Where(pair => pair.Count >= 2)
-                .Select(pair => new MapCoordinateDto
-                {
-                    Latitude = pair[1],
-                    Longitude = pair[0],
-                })
-                .Where(point => HasValidCoordinates(point.Latitude, point.Longitude))
-                .Take(5_000)
-                .ToList(),
+            Coordinates = DecimateCoordinates(rawDrivingCoords),
             DistanceMeters = route.Distance,
             DurationSeconds = route.Duration,
         };
@@ -849,6 +851,21 @@ public class MapService : IMapService
                 .Take(60)
                 .ToList(),
         };
+    }
+
+    private static List<MapCoordinateDto> DecimateCoordinates(List<MapCoordinateDto> coords, int maxPoints = 5000)
+    {
+        if (coords.Count <= maxPoints)
+            return coords;
+
+        var result = new List<MapCoordinateDto>(maxPoints);
+        double stride = (double)(coords.Count - 1) / (maxPoints - 1);
+
+        for (int i = 0; i < maxPoints - 1; i++)
+            result.Add(coords[(int)(i * stride)]);
+
+        result.Add(coords[coords.Count - 1]);
+        return result;
     }
 
     private static HashSet<string> NormalizeCategories(IEnumerable<string>? categories) =>

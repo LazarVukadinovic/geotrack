@@ -597,7 +597,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
           return;
         }
         this.drawRoute(route);
-        this.fitRoute(route);
+        this.fitRoute(route, origin, selectedPlace);
         this.isLoadingRoute = false;
         this.routeInfoMessage = this.buildRouteLabel(route, useDriving);
         this.cdr.detectChanges();
@@ -1433,13 +1433,26 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  private fitRoute(route: MapRouteResult): void {
-    const coordinates = route.coordinates.map((point) => [point.longitude, point.latitude] as [number, number]);
-    if (coordinates.length < 2) return;
+  private fitRoute(
+    route: MapRouteResult,
+    origin?: { latitude: number; longitude: number } | null,
+    destination?: { latitude: number; longitude: number } | null,
+  ): void {
+    const routeCoords = route.coordinates.map((point) => [point.longitude, point.latitude] as [number, number]);
+    if (routeCoords.length < 2) return;
 
-    const bounds = coordinates.reduce(
+    const allCoords: [number, number][] = [...routeCoords];
+
+    if (origin && this.hasUsableCoordinates(origin.latitude, origin.longitude)) {
+      allCoords.push([origin.longitude, origin.latitude]);
+    }
+    if (destination && this.hasUsableCoordinates(destination.latitude, destination.longitude)) {
+      allCoords.push([destination.longitude, destination.latitude]);
+    }
+
+    const bounds = allCoords.reduce(
       (acc, coord) => acc.extend(coord as maplibregl.LngLatLike),
-      new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
+      new maplibregl.LngLatBounds(allCoords[0], allCoords[0]),
     );
 
     this.map.fitBounds(bounds, { padding: { top: 100, bottom: 260, left: 80, right: 80 }, duration: 900 });
