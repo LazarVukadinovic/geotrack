@@ -120,6 +120,7 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
         }
 
         await using var drop = connection.CreateCommand();
+        drop.CommandTimeout = 120;
         drop.CommandText = $"DROP DATABASE IF EXISTS \"{_databaseName}\"";
         await drop.ExecuteNonQueryAsync();
 
