@@ -156,6 +156,9 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.CountryCode)
+                .HasMaxLength(2);
+
             entity.Property(x => x.BoundaryShapeType)
                 .HasMaxLength(32);
 
@@ -164,6 +167,10 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.Name)
                 .IsUnique();
+
+            entity.HasIndex(x => x.CountryCode)
+                .IsUnique()
+                .HasFilter("\"CountryCode\" IS NOT NULL");
 
             entity.Property<Geometry?>("BoundaryGeometry")
                 .HasColumnType("geography (geometry)");

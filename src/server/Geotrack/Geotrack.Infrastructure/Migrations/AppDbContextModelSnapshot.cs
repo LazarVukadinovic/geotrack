@@ -996,6 +996,10 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1251,6 +1255,10 @@ namespace Geotrack.Infrastructure.Migrations
                     b.HasIndex("BoundaryGeometry");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("BoundaryGeometry"), "GIST");
+
+                    b.HasIndex("CountryCode")
+                        .IsUnique()
+                        .HasFilter("\"CountryCode\" IS NOT NULL");
 
                     b.HasIndex("Name")
                         .IsUnique();

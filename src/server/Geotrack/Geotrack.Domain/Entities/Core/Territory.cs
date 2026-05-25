@@ -7,6 +7,7 @@ public class Territory
     public int Id { get; set; }
 
     public string Name { get; set; } = string.Empty;
+    public string? CountryCode { get; set; }
     public string? BoundaryShapeType { get; set; }
     public string? BoundarySource { get; set; }
     public long? OsmRelationId { get; set; }
