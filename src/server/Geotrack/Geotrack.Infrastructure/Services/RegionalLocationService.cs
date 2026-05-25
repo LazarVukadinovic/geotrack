@@ -221,6 +221,12 @@ public class RegionalLocationService : IRegionalLocationService
 
         var destination = await _db.Destinations
             .AsNoTracking()
+            .Select(item => new
+            {
+                item.Id,
+                item.RegionId,
+                BoundaryGeometry = EF.Property<Geometry?>(item, BoundaryGeometryPropertyName)
+            })
             .SingleOrDefaultAsync(item =>
                 item.Id == request.DestinationId &&
                 item.RegionId == request.RegionId)
@@ -230,7 +236,26 @@ public class RegionalLocationService : IRegionalLocationService
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
         var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
-        var coordinates = ResolveCoordinates(request);
+        var boundary = BuildBoundary(request.Boundary);
+        if (boundary is not null)
+        {
+            EnsureLocationBoundaryInsideParentDestination(boundary.Geometry, destination.BoundaryGeometry);
+        }
+        var coordinates = ResolveCoordinates(request, boundary);
+        var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, request.RegionId);
+        RegionalBoundaryGuard.EnsurePointInsideScope(
+            coordinates.Latitude,
+            coordinates.Longitude,
+            boundaryScope,
+            "Location center");
+        EnsurePointInsideParentDestination(
+            coordinates.Latitude,
+            coordinates.Longitude,
+            destination.BoundaryGeometry);
+        if (boundary is not null)
+        {
+            RegionalBoundaryGuard.EnsureGeometryInsideScope(boundary.Geometry, boundaryScope, "Location");
+        }
         var locationTypeId = await ResolveLocationTypeIdAsync(request.LocationTypeId);
         var tagIds = await ValidateLocationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
@@ -249,8 +274,8 @@ public class RegionalLocationService : IRegionalLocationService
             Longitude = coordinates.Longitude,
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
-            BoundaryNote = null,
-            BoundaryShapeType = null,
+            BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long."),
+            BoundaryShapeType = boundary?.ShapeType,
             CreatedAt = now,
             LocationTags = tagIds
                 .Select(tagId => new LocationTag { TagId = tagId })
@@ -258,6 +283,10 @@ public class RegionalLocationService : IRegionalLocationService
         };
 
         _db.Locations.Add(location);
+        if (boundary is not null)
+        {
+            _db.Entry(location).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = boundary.Geometry;
+        }
 
         await _db.SaveChangesAsync();
 
@@ -284,6 +313,7 @@ public class RegionalLocationService : IRegionalLocationService
             .SingleOrDefaultAsync(item => item.Id == locationId && item.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Location not found.");
 
+        var parentDestinationChanged = request.DestinationId.HasValue;
         if (request.DestinationId.HasValue)
         {
             var destination = await _db.Destinations
@@ -302,6 +332,24 @@ public class RegionalLocationService : IRegionalLocationService
         }
 
         ApplyUpdate(location, request);
+        if (parentDestinationChanged || request.Latitude.HasValue || request.Longitude.HasValue)
+        {
+            var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, regionId);
+            RegionalBoundaryGuard.EnsurePointInsideScope(
+                location.Latitude,
+                location.Longitude,
+                boundaryScope,
+                "Location center");
+            var parentDestinationBoundary = await _db.Destinations
+                .AsNoTracking()
+                .Where(item => item.Id == location.DestinationId)
+                .Select(item => EF.Property<Geometry?>(item, BoundaryGeometryPropertyName))
+                .SingleAsync();
+            EnsurePointInsideParentDestination(
+                location.Latitude,
+                location.Longitude,
+                parentDestinationBoundary);
+        }
 
         if (request.TagIds is not null)
         {
@@ -605,6 +653,32 @@ public class RegionalLocationService : IRegionalLocationService
         return tagIds;
     }
 
+    private static void EnsurePointInsideParentDestination(
+        double latitude,
+        double longitude,
+        Geometry? parentDestinationBoundary)
+    {
+        if (parentDestinationBoundary is null || parentDestinationBoundary.IsEmpty)
+            return;
+
+        var point = Wgs84GeometryFactory.CreatePoint(new Coordinate(longitude, latitude));
+        point.SRID = 4326;
+
+        if (!parentDestinationBoundary.Covers(point))
+            throw new InvalidOperationException("Location coordinates must be inside parent destination boundary.");
+    }
+
+    private static void EnsureLocationBoundaryInsideParentDestination(
+        Geometry locationBoundary,
+        Geometry? parentDestinationBoundary)
+    {
+        if (parentDestinationBoundary is null || parentDestinationBoundary.IsEmpty || !parentDestinationBoundary.IsValid)
+            throw new InvalidOperationException("Parent destination must have a boundary before adding location zones.");
+
+        if (!parentDestinationBoundary.Covers(locationBoundary))
+            throw new InvalidOperationException("Location boundary must be inside parent destination boundary.");
+    }
+
     private static BoundaryResult? BuildBoundary(RegionalLocationBoundaryDto? boundary)
     {
         if (boundary is null)
@@ -650,10 +724,20 @@ public class RegionalLocationService : IRegionalLocationService
         return new BoundaryResult(shapeType, polygon);
     }
 
-    private static LocationCoordinates ResolveCoordinates(RegionalLocationCreateRequestDto request)
+    private static LocationCoordinates ResolveCoordinates(
+        RegionalLocationCreateRequestDto request,
+        BoundaryResult? boundary)
     {
         if (!request.Latitude.HasValue || !request.Longitude.HasValue)
+        {
+            if (boundary is not null)
+            {
+                var centroid = boundary.Geometry.Centroid;
+                return new LocationCoordinates(centroid.Y, centroid.X);
+            }
+
             throw new InvalidOperationException("A location center point is required.");
+        }
 
         ValidateLatitude(request.Latitude.Value);
         ValidateLongitude(request.Longitude.Value);

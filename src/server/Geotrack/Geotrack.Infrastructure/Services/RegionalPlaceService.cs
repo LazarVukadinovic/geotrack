@@ -304,6 +304,12 @@ public class RegionalPlaceService : IRegionalPlaceService
         var status = NormalizeCreateStatus(request.Status);
         var coordinates = ResolveRequiredCoordinates(request.Latitude, request.Longitude);
         ValidateCoordinatesWithinBoundaries(coordinates, location.LocationBoundaryGeometry, location.DestinationBoundaryGeometry);
+        var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, request.RegionId);
+        RegionalBoundaryGuard.EnsurePointInsideScope(
+            coordinates.Latitude,
+            coordinates.Longitude,
+            boundaryScope,
+            "Place coordinates");
         var tagIds = await ValidatePlaceTagIdsAsync(request.TagIds);
         var operatingHours = NormalizeOperatingHours(request.OperatingHoursEnabled, request.OperatingHours);
         var now = DateTime.UtcNow;
@@ -376,6 +382,7 @@ public class RegionalPlaceService : IRegionalPlaceService
             .SingleOrDefaultAsync(item => item.Id == placeId && item.Location.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Place not found.");
 
+        var parentLocationChanged = request.LocationId.HasValue;
         if (request.LocationId.HasValue)
         {
             var location = await _db.Locations
@@ -405,6 +412,21 @@ public class RegionalPlaceService : IRegionalPlaceService
         }
 
         ApplyUpdate(place, request);
+        if (parentLocationChanged || request.Latitude.HasValue || request.Longitude.HasValue)
+        {
+            var parentBoundaries = await GetParentBoundariesAsync(place.LocationId, regionId);
+            var coordinates = new PlaceCoordinates(place.Latitude, place.Longitude);
+            ValidateCoordinatesWithinBoundaries(
+                coordinates,
+                parentBoundaries.LocationBoundaryGeometry,
+                parentBoundaries.DestinationBoundaryGeometry);
+            var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, regionId);
+            RegionalBoundaryGuard.EnsurePointInsideScope(
+                coordinates.Latitude,
+                coordinates.Longitude,
+                boundaryScope,
+                "Place coordinates");
+        }
 
         if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
         {
@@ -925,6 +947,22 @@ public class RegionalPlaceService : IRegionalPlaceService
         return new PlaceCoordinates(latitude.Value, longitude.Value);
     }
 
+    private async Task<ParentBoundaryResult> GetParentBoundariesAsync(int locationId, int regionId)
+    {
+        return await _db.Locations
+            .AsNoTracking()
+            .Where(location =>
+                location.Id == locationId &&
+                location.Destination.RegionId == regionId)
+            .Select(location => new ParentBoundaryResult
+            {
+                LocationBoundaryGeometry = EF.Property<Geometry?>(location, BoundaryGeometryPropertyName),
+                DestinationBoundaryGeometry = EF.Property<Geometry?>(location.Destination, BoundaryGeometryPropertyName)
+            })
+            .SingleOrDefaultAsync()
+            ?? throw new InvalidOperationException("Parent location is invalid for the selected region.");
+    }
+
     private static void ValidateCoordinatesWithinBoundaries(
         PlaceCoordinates coordinates,
         Geometry? locationBoundary,
@@ -1371,6 +1409,12 @@ public class RegionalPlaceService : IRegionalPlaceService
     private static string BuildInternalReferenceId(int placeId) => $"PLC-{placeId:D6}";
 
     private sealed record PlaceCoordinates(double Latitude, double Longitude);
+
+    private sealed class ParentBoundaryResult
+    {
+        public Geometry? LocationBoundaryGeometry { get; set; }
+        public Geometry? DestinationBoundaryGeometry { get; set; }
+    }
 
     private sealed record OperatingHoursResult(
         bool Enabled,

@@ -67,6 +67,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 Id = assignment.TerritoryId,
                 Name = assignment.Territory.Name,
                 DisplayName = assignment.Territory.Name,
+                CountryCode = assignment.Territory.CountryCode,
                 StatusLabel = "Assigned"
             })
             .ToListAsync();
@@ -337,6 +338,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 Id = activeTerritory.Id,
                 Name = activeTerritory.Name,
                 DisplayName = activeTerritory.Name,
+                CountryCode = activeTerritory.CountryCode,
                 StatusLabel = "Assigned"
             },
             TerritoryBoundaryGeoJson = ToGeoJson(territoryGeometry),
@@ -2319,6 +2321,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             {
                 Id = assignment.TerritoryId,
                 Name = assignment.Territory.Name,
+                CountryCode = assignment.Territory.CountryCode,
                 BoundaryShapeType = assignment.Territory.BoundaryShapeType,
                 BoundarySource = assignment.Territory.BoundarySource,
                 BoundaryGeometry = EF.Property<Geometry?>(
@@ -2420,6 +2423,18 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             "osm" or "osmboundary" => OsmBoundarySource,
             _ => throw new InvalidOperationException("Boundary source is invalid.")
         };
+    }
+
+    private static string? ExtractCountryCode(string? boundarySource)
+    {
+        if (string.IsNullOrWhiteSpace(boundarySource) ||
+            !boundarySource.StartsWith("CountryGeoJson:", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var code = boundarySource["CountryGeoJson:".Length..].Trim().ToUpperInvariant();
+        return code.Length == 2 ? code : null;
     }
 
     private static string NormalizeRegionShapeType(string? value)
@@ -2913,6 +2928,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string? CountryCode { get; set; }
         public string? BoundaryShapeType { get; set; }
         public string? BoundarySource { get; set; }
         public Geometry? BoundaryGeometry { get; set; }

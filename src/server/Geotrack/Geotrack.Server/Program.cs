@@ -155,12 +155,15 @@ builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionReposi
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
+builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+builder.Services.AddScoped<IAdminTerritoryManagementService, AdminTerritoryManagementService>();
 builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
 builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
 builder.Services.AddScoped<ITerritoryDashboardService, TerritoryDashboardService>();
 builder.Services.AddScoped<ITerritoryAnalyticsService, TerritoryAnalyticsService>();
 builder.Services.AddScoped<ITerritoryUserAdminService, TerritoryUserAdminService>();
 builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
+builder.Services.AddScoped<RegionalBoundaryGuard>();
 builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
 builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();
 builder.Services.AddScoped<IRegionalPlaceService, RegionalPlaceService>();
@@ -227,6 +230,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization(options =>
 {
+    options.AddPolicy("RequireAdmin", policy =>
+        policy.RequireRole(RoleNames.Admin));
     options.AddPolicy("RequireRegionalManager", policy =>
         policy.RequireRole(RoleNames.RegionalManager));
     options.AddPolicy("RequireTerritoryManager", policy =>
