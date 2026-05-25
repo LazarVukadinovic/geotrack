@@ -24,6 +24,7 @@ import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media
 import type { AnalyticsEntityType } from '../../../../core/services/analytics.types';
 import type { ResolvedLocation } from '../../../../core/models/location.model';
 import { MapFilterOption, MapFilterStateService } from '../../services/map-filter-state.service';
+import { DestinationService } from '../../../../core/services/destination.service';
 
 const MAP_STYLE_URL = '/map-style.json?v=osm-liberty-v1';
 
@@ -149,6 +150,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     private readonly analytics: AnalyticsService,
     private readonly locationSvc: LocationService,
     private readonly mapFilterState: MapFilterStateService,
+    private readonly destinationSvc: DestinationService,
   ) {
     const nav = this.router.getCurrentNavigation();
     const state = (nav?.extras?.state ?? history.state) as MapNavigationState;
@@ -211,6 +213,27 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.selectedCategoryLabelFilters = [];
       this.hasActiveFilters = false;
       this.mapFilterState.clearSelection();
+    }
+
+    // Explore → Map sync: if explore switched to a different destination, re-center the map.
+    // Skip when navigating from within the map (filters, preview restore, mapFocus, or explicit fromExplore).
+    const isInternalMapNav = !!(state?.fromFilters || state?.mapPreviewRestore);
+    if (!isInternalMapNav && !this.navigatedWithDestination && !this.initialMapFocus && this.destinationSvc.isDestinationMode()) {
+      const dsLat = this.destinationSvc.latitude();
+      const dsLon = this.destinationSvc.longitude();
+      const dsName = this.destinationSvc.name();
+      if (typeof dsLat === 'number' && typeof dsLon === 'number' && dsName) {
+        const coordsAlreadyMatch = savedLocation &&
+          Math.abs((savedLocation.lat ?? 0) - dsLat) < 0.001 &&
+          Math.abs((savedLocation.lon ?? 0) - dsLon) < 0.001;
+        if (!coordsAlreadyMatch) {
+          this.destinationName = dsName;
+          this.destinationLat = dsLat;
+          this.destinationLon = dsLon;
+          this.isUserLocation = false;
+          this.navigatedWithDestination = true;
+        }
+      }
     }
   }
 
@@ -361,6 +384,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       lon: result.longitude,
       isUserLocation: false,
     }));
+
+    if (result.id && (result.type === 'destination' || !result.type)) {
+      this.destinationSvc.setDestinationOverride({
+        id: result.id,
+        name: result.name,
+        latitude: result.latitude,
+        longitude: result.longitude,
+      });
+    }
 
     this.map.flyTo({ center: [result.longitude, result.latitude], zoom: 14, duration: 900, essential: true });
     this.analytics.track('search_performed', {
@@ -1126,6 +1158,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         lon: marker.longitude,
         isUserLocation: false,
       }));
+
+      this.destinationSvc.setDestinationOverride({
+        id: marker.entityId,
+        name: marker.title,
+        latitude: marker.latitude,
+        longitude: marker.longitude,
+      });
 
       this.analytics.track('map_marker_opened', {
         entityType: 'destination',

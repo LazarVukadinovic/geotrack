@@ -88,6 +88,7 @@
 }
 
 .map-page__no-data-overlay {
+  z-index: var(--map-layer-preview);
   background: rgba(15, 23, 42, 0.35);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);

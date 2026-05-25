@@ -31,7 +31,9 @@
       />
       @if (query().trim()) {
         <button type="button" class="destination-discovery__clear" aria-label="Clear search" (click)="clearQuery()">
-          ×
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
         </button>
       }
     </div>
@@ -43,7 +45,7 @@
       [class.destination-discovery__filters--expanded]="filtersExpanded()"
       aria-label="Destination filters"
     >
-      <div class="destination-discovery__filters-header">
+      <div class="destination-discovery__filters-header" (click)="toggleFilters()">
         <h2>
           Filters
           @if (activeFilterCount() > 0) {
@@ -52,14 +54,14 @@
         </h2>
         <div class="destination-discovery__filters-actions">
           @if (hasActiveFilters()) {
-            <button type="button" (click)="clearFilters()">Clear</button>
+            <button type="button" (click)="$event.stopPropagation(); clearFilters()">Clear</button>
           }
           <button
             type="button"
             class="destination-discovery__filters-toggle"
             [attr.aria-expanded]="filtersExpanded()"
             aria-label="Toggle filters"
-            (click)="toggleFilters()"
+            (click)="$event.stopPropagation(); toggleFilters()"
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M5 9l7 7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
@@ -69,51 +71,53 @@
       </div>
 
       <div class="destination-discovery__filters-body">
-        @if (filtersLoading()) {
-          <p class="destination-discovery__filter-state">Loading filters...</p>
-        } @else if (filtersError()) {
-          <p class="destination-discovery__filter-state destination-discovery__filter-state--error">
-            {{ filtersError() }}
-          </p>
-        } @else {
-          @if (visibleDestinationTypeFilters().length > 0) {
-            <div class="destination-filter-group">
-              <h3>Destination type</h3>
-              <div class="destination-filter-group__options">
-                @for (type of visibleDestinationTypeFilters(); track type.id) {
-                  <button
-                    type="button"
-                    class="destination-filter-chip"
-                    [class.destination-filter-chip--active]="isDestinationTypeSelected(type.id)"
-                    (click)="toggleDestinationType(type.id)"
-                  >
-                    <span>{{ type.name }}</span>
-                    <small>{{ type.count }}</small>
-                  </button>
-                }
+        <div class="destination-discovery__filters-body-inner">
+          @if (filtersLoading()) {
+            <p class="destination-discovery__filter-state">Loading filters...</p>
+          } @else if (filtersError()) {
+            <p class="destination-discovery__filter-state destination-discovery__filter-state--error">
+              {{ filtersError() }}
+            </p>
+          } @else {
+            @if (visibleDestinationTypeFilters().length > 0) {
+              <div class="destination-filter-group">
+                <h3>Destination type</h3>
+                <div class="destination-filter-group__options">
+                  @for (type of visibleDestinationTypeFilters(); track type.id) {
+                    <button
+                      type="button"
+                      class="destination-filter-chip"
+                      [class.destination-filter-chip--active]="isDestinationTypeSelected(type.id)"
+                      (click)="toggleDestinationType(type.id)"
+                    >
+                      <span>{{ type.name }}</span>
+                      <small>{{ type.count }}</small>
+                    </button>
+                  }
+                </div>
               </div>
-            </div>
-          }
+            }
 
-          @for (group of visibleTagTypeFilters(); track group.id) {
-            <div class="destination-filter-group">
-              <h3>{{ group.label }}</h3>
-              <div class="destination-filter-group__options">
-                @for (option of group.options; track option.id) {
-                  <button
-                    type="button"
-                    class="destination-filter-chip"
-                    [class.destination-filter-chip--active]="isTagSelected(option.id)"
-                    (click)="toggleTag(option.id)"
-                  >
-                    <span>{{ option.name }}</span>
-                    <small>{{ option.count }}</small>
-                  </button>
-                }
+            @for (group of visibleTagTypeFilters(); track group.id) {
+              <div class="destination-filter-group">
+                <h3>{{ group.label }}</h3>
+                <div class="destination-filter-group__options">
+                  @for (option of group.options; track option.id) {
+                    <button
+                      type="button"
+                      class="destination-filter-chip"
+                      [class.destination-filter-chip--active]="isTagSelected(option.id)"
+                      (click)="toggleTag(option.id)"
+                    >
+                      <span>{{ option.name }}</span>
+                      <small>{{ option.count }}</small>
+                    </button>
+                  }
+                </div>
               </div>
-            </div>
+            }
           }
-        }
+        </div>
       </div>
     </aside>
 
