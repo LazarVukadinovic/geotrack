@@ -17,7 +17,8 @@ public interface IEventService
         int id,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null);
+        double? longitude = null,
+        bool useCurrentLocationDistance = false);
 
     // Master detail/section/review methods
     Task<GetEventDetailsResponseDto> GetEventDetailsAsync(int eventId, int? userId);

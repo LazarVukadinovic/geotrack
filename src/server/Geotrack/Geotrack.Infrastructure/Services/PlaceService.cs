@@ -131,12 +131,14 @@ public class PlaceService : IPlaceService
         int id,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        bool useCurrentLocationDistance = false)
     {
         var place = await _db.Places
             .AsNoTracking()
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
+                .ThenInclude(l => l.Destination)
             .Include(p => p.Images)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
@@ -187,11 +189,14 @@ public class PlaceService : IPlaceService
             ReviewReportTargetType.Place,
             previewReviews.Select(r => r.Id));
 
+        var (originLat, originLng) = ResolveDistanceOrigin(
+            useCurrentLocationDistance, latitude, longitude,
+            place.Location?.Destination?.Latitude, place.Location?.Destination?.Longitude);
+
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
-            latitude,
-            longitude,
-            place.Latitude,
-            place.Longitude);
+            originLat, originLng,
+            place.Latitude, place.Longitude,
+            useCurrentLocationDistance);
         var images = ToImageDtos(place.Images);
 
         return new PlaceDetailDto
@@ -236,10 +241,9 @@ public class PlaceService : IPlaceService
                     Image = GetMainImageUrl(s.Images),
                     Rating = CalculateAverageRating(s.PlaceReviews),
                     Distance = SpatialDistanceFormatter.FormatBetween(
-                        latitude,
-                        longitude,
-                        s.Latitude,
-                        s.Longitude),
+                        originLat, originLng,
+                        s.Latitude, s.Longitude,
+                        useCurrentLocationDistance),
                     IsSaved = favoriteIds.Contains(s.Id)
                 })
                 .ToList(),
@@ -256,12 +260,14 @@ public class PlaceService : IPlaceService
         int id,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        bool useCurrentLocationDistance = false)
     {
         var place = await _db.Places
             .AsNoTracking()
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
+                .ThenInclude(l => l.Destination)
             .Include(p => p.Images)
             .Include(p => p.Stay)
                 .ThenInclude(s => s!.StayType)
@@ -318,11 +324,14 @@ public class PlaceService : IPlaceService
             ReviewReportTargetType.Place,
             previewReviews.Select(r => r.Id));
 
+        var (originLat, originLng) = ResolveDistanceOrigin(
+            useCurrentLocationDistance, latitude, longitude,
+            place.Location?.Destination?.Latitude, place.Location?.Destination?.Longitude);
+
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
-            latitude,
-            longitude,
-            place.Latitude,
-            place.Longitude);
+            originLat, originLng,
+            place.Latitude, place.Longitude,
+            useCurrentLocationDistance);
 
         var stayAmenities = place.Stay?.StayAmenities
             .Select(sa => new AmenityDto
@@ -390,10 +399,9 @@ public class PlaceService : IPlaceService
                     Image = GetMainImageUrl(s.Images),
                     Rating = CalculateAverageRating(s.PlaceReviews),
                     Distance = SpatialDistanceFormatter.FormatBetween(
-                        latitude,
-                        longitude,
-                        s.Latitude,
-                        s.Longitude),
+                        originLat, originLng,
+                        s.Latitude, s.Longitude,
+                        useCurrentLocationDistance),
                     IsSaved = favoriteIds.Contains(s.Id)
                 })
                 .ToList(),
@@ -934,6 +942,14 @@ public class PlaceService : IPlaceService
 
         terms.Add(normalized + "s");
     }
+
+    private static (double? lat, double? lng) ResolveDistanceOrigin(
+        bool useCurrentLocationDistance,
+        double? userLat, double? userLng,
+        double? destinationLat, double? destinationLng) =>
+        useCurrentLocationDistance
+            ? (userLat, userLng)
+            : (destinationLat, destinationLng);
 
     private static bool HasUsableCoordinates(double latitude, double longitude) =>
         !double.IsNaN(latitude) &&

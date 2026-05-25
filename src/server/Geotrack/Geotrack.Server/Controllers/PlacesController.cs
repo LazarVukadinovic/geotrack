@@ -56,10 +56,11 @@ public class PlacesController : ControllerBase
     public async Task<ActionResult> GetPlaceDetail(
         int id,
         [FromQuery] double? latitude = null,
-        [FromQuery] double? longitude = null)
+        [FromQuery] double? longitude = null,
+        [FromQuery] string? distanceOrigin = null)
     {
         var userId = GetUserId();
-        var detail = await _placeService.GetPlaceDetailAsync(id, userId, latitude, longitude);
+        var detail = await _placeService.GetPlaceDetailAsync(id, userId, latitude, longitude, UseCurrentLocationDistance(distanceOrigin));
         if (detail == null) return NotFound();
         return Ok(detail);
     }
@@ -101,10 +102,11 @@ public class PlacesController : ControllerBase
     public async Task<ActionResult> GetHotelDetail(
         int id,
         [FromQuery] double? latitude = null,
-        [FromQuery] double? longitude = null)
+        [FromQuery] double? longitude = null,
+        [FromQuery] string? distanceOrigin = null)
     {
         var userId = GetUserId();
-        var detail = await _placeService.GetHotelDetailAsync(id, userId, latitude, longitude);
+        var detail = await _placeService.GetHotelDetailAsync(id, userId, latitude, longitude, UseCurrentLocationDistance(distanceOrigin));
         if (detail == null) return NotFound();
         return Ok(detail);
     }
@@ -205,6 +207,10 @@ public class PlacesController : ControllerBase
 
         return null;
     }
+
+    private static bool UseCurrentLocationDistance(string? distanceOrigin) =>
+        string.Equals(distanceOrigin, "current-location", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(distanceOrigin, "user", StringComparison.OrdinalIgnoreCase);
 
     private static bool HasValidCoordinates(double latitude, double longitude)
     {

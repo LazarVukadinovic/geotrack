@@ -213,7 +213,8 @@ public class EventService : IEventService
         int id,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        bool useCurrentLocationDistance = false)
     {
         var evt = await _db.Events
             .AsNoTracking()
@@ -245,6 +246,9 @@ public class EventService : IEventService
         var (eventLatitude, eventLongitude) = ResolveCoordinates(evt);
         var images = ToImageDtos(evt.Images);
 
+        var originLat = useCurrentLocationDistance ? latitude : evt.Destination?.Latitude;
+        var originLng = useCurrentLocationDistance ? longitude : evt.Destination?.Longitude;
+
         return new EventDetailDto
         {
             Id = evt.Id,
@@ -260,10 +264,11 @@ public class EventService : IEventService
             Images = images,
             Tags = evt.EventTags.Select(et => new TagLabelDto { Label = et.Tag.Name }).ToList(),
             Distance = SpatialDistanceFormatter.FormatBetween(
-                latitude,
-                longitude,
+                originLat,
+                originLng,
                 eventLatitude,
-                eventLongitude),
+                eventLongitude,
+                useCurrentLocationDistance),
             About = evt.Description,
             Info = new EventDetailInfoDto
             {

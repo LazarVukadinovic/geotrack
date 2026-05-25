@@ -1,9 +1,10 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
-import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
+import { LocationService } from '../../../core/services/location.service';
+import { DestinationService } from '../../../core/services/destination.service';
 import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { PlaceDetail } from '../../../core/models/place.model';
@@ -41,9 +42,10 @@ export class PlaceDetailService {
 
   private readonly http = inject(HttpClient);
   private readonly favoriteState = inject(FavoriteStateService);
-  private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly locationSvc = inject(LocationService);
+  private readonly destinationSvc = inject(DestinationService);
   private readonly _cache = signal<Record<string, PlaceDetail>>({});
   private readonly _loadState = signal<Record<string, DetailLoadState>>({});
   private readonly lastRequestKeyById = new Map<string, string>();
@@ -141,9 +143,13 @@ export class PlaceDetailService {
   }
 
   private buildLocationQuery(): string {
-    const loc = this.locationSvc.location();
-    if (!loc) return '';
-    return `?latitude=${loc.latitude}&longitude=${loc.longitude}`;
+    if (this.destinationSvc.mode() === 'location') {
+      const loc = this.locationSvc.location();
+      if (loc) {
+        return `?latitude=${loc.latitude}&longitude=${loc.longitude}&distanceOrigin=current-location`;
+      }
+    }
+    return '?distanceOrigin=destination-centre';
   }
 
   private setLoadState(id: string, state: DetailLoadState): void {

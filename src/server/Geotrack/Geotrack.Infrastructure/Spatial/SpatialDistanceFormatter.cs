@@ -30,6 +30,27 @@ internal static class SpatialDistanceFormatter
             destinationLongitude));
     }
 
+    internal static string? FormatBetween(
+        double? originLatitude,
+        double? originLongitude,
+        double? destinationLatitude,
+        double? destinationLongitude,
+        bool useCurrentLocationDistance)
+    {
+        var label = Format(CalculateDistanceMeters(
+            originLatitude,
+            originLongitude,
+            destinationLatitude,
+            destinationLongitude));
+
+        if (string.IsNullOrWhiteSpace(label) || useCurrentLocationDistance)
+            return label;
+
+        return label.EndsWith(" away", StringComparison.OrdinalIgnoreCase)
+            ? label[..^5] + " from centre"
+            : label + " from centre";
+    }
+
     private static double? CalculateDistanceMeters(
         double? originLatitude,
         double? originLongitude,
