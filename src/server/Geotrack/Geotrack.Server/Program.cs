@@ -402,8 +402,10 @@ var shouldSeedDemoRegionalManager =
     DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 var shouldSeedDemoTerritoryManager =
     shouldSeedDatabase || DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
+var shouldSeedDemoAdmin =
+    shouldSeedDatabase || DemoAdminSeeder.IsEnabled(app.Environment, app.Configuration);
 
-if (shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager)
+if (shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager || shouldSeedDemoAdmin)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -413,6 +415,14 @@ if (shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerrito
     if (shouldSeedDatabase)
     {
         await SeedData.InitializeAsync(db);
+    }
+
+    if (shouldSeedDemoAdmin)
+    {
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(nameof(DemoAdminSeeder));
+        await DemoAdminSeeder.EnsureAsync(db, app.Configuration, logger);
     }
 
     if (shouldSeedDemoRegionalManager)

@@ -20,6 +20,7 @@ public class AuthService : IAuthService
     private const string AdminAccessDeniedMessage = "You do not have access to the admin app.";
     private static readonly string[] AdminAppRoles =
     [
+        RoleNames.Admin,
         RoleNames.TerritoryManager,
         RoleNames.TerritoryAssociate,
         RoleNames.RegionalManager
