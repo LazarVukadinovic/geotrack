@@ -214,10 +214,6 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.locationSvc.location()?.source !== 'gps',
   );
 
-  protected readonly useLocationModeActionLabel = computed(() =>
-    this.locationSvc.location()?.source === 'gps' ? 'Use location' : 'Use IP location',
-  );
-
   protected readonly displayedDestinationActionLabel = computed(() => {
     const name = this.selectedDestination()?.name?.trim();
     return name ? `Explore ${name}` : 'Explore other destinations';

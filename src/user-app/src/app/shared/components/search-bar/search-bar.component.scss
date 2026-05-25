@@ -9,8 +9,7 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 
   &:focus-within {
-    border-color: rgba(26, 43, 76, 0.15);
-    box-shadow: 0 0 0 3px rgba(217, 125, 84, 0.18);
+    border-color: rgba(26, 43, 76, 0.2);
   }
 }
 
