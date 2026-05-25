@@ -2,16 +2,17 @@ import {
   Component, OnInit, OnDestroy, HostListener,
   ChangeDetectionStrategy, ChangeDetectorRef, inject,
 } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
-import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { takeUntil, debounceTime, distinctUntilChanged, finalize } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { TerritoryService } from '../../../../core/services/administrator/territory.service';
-import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
-import { Territory, Country, TerritoryManager, CreateTerritoryRequest } from '../../../../core/models/administrator/territory.model';
-import { TerritoryWorldMapComponent, CountryMapAssignment } from './territory-world-map.component';
+import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
+import { Territory, TerritoryDetail, Country, TerritoryManager, CreateTerritoryRequest, GeoJsonGeometry } from '../../../../core/models/administrator/territory.model';
+import { TerritoryWorldMapComponent, CountryMapAssignment, CountryMapClick } from './territory-world-map.component';
 import { CountryMiniMapComponent } from './country-mini-map.component';
 
 type ViewTab = 'map' | 'list';
@@ -27,12 +28,14 @@ type SortDir = 'asc' | 'desc';
 })
 export class TerritoryManagementComponent implements OnInit, OnDestroy {
   private readonly svc    = inject(TerritoryService);
-  private readonly revSvc = inject(AdminReviewsService);
+  private readonly dashboardSvc = inject(AdminDashboardService);
   private readonly cdr    = inject(ChangeDetectorRef);
   private destroy$    = new Subject<void>();
   private searchSubject = new Subject<string>();
+  private mapManagerSearchSubject = new Subject<string>();
+  private editManagerSearchSubject = new Subject<string>();
 
-  get reportedReviewsCount(): number { return this.revSvc.getReportedCount(); }
+  reportedReviewsCount = 0;
 
   // ── View state ────────────────────────────────────────────────────────────
   activeTab: ViewTab = 'map';
@@ -53,7 +56,12 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
 
   // ── Assign from map (create new territory for a country) ──────────────────
   mapClickedCountry: Country | null = null;
-  mapAssignManagerId = '';
+  mapClickedCountryBoundary: GeoJsonGeometry | null = null;
+  mapManagerSearch = '';
+  mapManagerUsers: TerritoryManager[] = [];
+  selectedMapManager: TerritoryManager | null = null;
+  isLoadingMapManagers = false;
+  mapAssignError = '';
   isCreatingFromMap = false;
 
   // ── List sort ─────────────────────────────────────────────────────────────
@@ -88,14 +96,21 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   isDeleting = false;
 
   // ── Edit modal (change country and/or manager) ────────────────────────────
-  editTarget: Territory | null = null;
+  editTarget: TerritoryDetail | null = null;
   editAssignedManagerId = '';
   editCountryCode = '';
   editUnavailableCodes: string[] = [];
+  editManagerSearch = '';
+  editManagerUsers: TerritoryManager[] = [];
+  selectedEditManager: TerritoryManager | null = null;
+  isLoadingEditManagers = false;
+  editError = '';
   isEditing = false;
 
   // ── Detail modal ──────────────────────────────────────────────────────────
-  detailTarget: Territory | null = null;
+  detailTarget: TerritoryDetail | null = null;
+  detailError = '';
+  isDetailLoading = false;
 
   // ── Dropdown ─────────────────────────────────────────────────────────────
   openDropdownId: string | null = null;
@@ -103,19 +118,48 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   sortDropdownPos = { top: 0, right: 0 };
 
   ngOnInit(): void {
+    this.loadPendingReportsBadge();
     this.allCountriesList = this.svc.getAllCountries();
     this.managers         = this.svc.getAllManagers();
     this.activeManagers   = this.svc.getActiveManagers();
     this.loadTerritories();
+    this.refreshManagers();
 
     this.searchSubject.pipe(
       debounceTime(300),
       distinctUntilChanged(),
       takeUntil(this.destroy$),
     ).subscribe(() => this.loadTerritories());
+
+    this.mapManagerSearchSubject.pipe(
+      debounceTime(250),
+      distinctUntilChanged(),
+      takeUntil(this.destroy$),
+    ).subscribe(() => this.loadMapManagerCandidates());
+
+    this.editManagerSearchSubject.pipe(
+      debounceTime(250),
+      distinctUntilChanged(),
+      takeUntil(this.destroy$),
+    ).subscribe(() => this.loadEditManagerCandidates());
   }
 
   ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
+
+  private loadPendingReportsBadge(): void {
+    this.dashboardSvc.loadDashboard()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: dashboard => {
+          this.reportedReviewsCount = dashboard.badges.pendingReportsCount;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.reportedReviewsCount = 0;
+          this.cdr.markForCheck();
+        },
+      });
+  }
 
   @HostListener('document:click')
   onDocumentClick(): void {
@@ -123,6 +167,25 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
     if (this.openDropdownId) { this.openDropdownId = null; changed = true; }
     if (this.listSortOpen)   { this.listSortOpen = false; changed = true; }
     if (changed) this.cdr.detectChanges();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.editTarget) {
+      this.closeEdit();
+      return;
+    }
+    if (this.detailTarget) {
+      this.closeDetail();
+      return;
+    }
+    if (this.mapClickedCountry) {
+      this.closeMapAssignModal();
+      return;
+    }
+    if (this.deleteTarget) {
+      this.closeDeleteConfirm();
+    }
   }
 
   loadTerritories(): void {
@@ -134,12 +197,21 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
       sortField: this.listSortField,
       sortDir: this.listSortDir,
       countryFilter: [],
-    }).pipe(takeUntil(this.destroy$)).subscribe(page => {
-      this.territories      = page.items;
-      this.totalTerritories = page.total;
-      this.isLoading        = false;
-      this.buildCountryAssignments();
-      this.cdr.detectChanges();
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: page => {
+        this.territories      = page.items;
+        this.totalTerritories = page.total;
+        this.isLoading        = false;
+        this.buildCountryAssignments();
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.territories = [];
+        this.totalTerritories = 0;
+        this.isLoading = false;
+        this.buildCountryAssignments();
+        this.cdr.detectChanges();
+      },
     });
   }
 
@@ -159,44 +231,88 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   onListSearchChange(): void { this.searchSubject.next(this.listSearch); }
 
   // ── World map ─────────────────────────────────────────────────────────────
-  onMapCountryClick(code: string): void {
+  onMapCountryClick(event: CountryMapClick | string): void {
+    const code = typeof event === 'string' ? event : event.code;
     const assignment = this.countryAssignments.get(code);
     if (assignment) {
       const territory = this.territories.find(t => t.countries.includes(code));
       if (territory) {
         this.tabBeforeDetail = this.activeTab;
-        this.detailTarget = { ...territory };
-        this.cdr.detectChanges();
+        this.openTerritoryDetail(territory);
       }
       return;
     }
     const country = this.svc.getCountryByCode(code);
     if (!country) return;
-    this.mapClickedCountry  = country;
-    this.mapAssignManagerId = '';
-    this.activeManagers     = this.svc.getActiveManagers();
+    this.mapClickedCountry  = {
+      ...country,
+      name: typeof event === 'string' ? country.name : (event.name || country.name),
+    };
+    this.mapClickedCountryBoundary = typeof event === 'string' ? null : event.geometry;
+    this.selectedMapManager = null;
+    this.mapManagerSearch = '';
+    this.mapAssignError = this.mapClickedCountryBoundary
+      ? ''
+      : 'Country boundary could not be loaded. Reload the map before assigning this territory.';
+    this.loadMapManagerCandidates();
     this.cdr.detectChanges();
   }
 
   closeMapAssignModal(): void {
-    this.mapClickedCountry  = null;
-    this.mapAssignManagerId = '';
+    this.mapClickedCountry = null;
+    this.mapClickedCountryBoundary = null;
+    this.mapManagerSearch = '';
+    this.mapManagerUsers = [];
+    this.selectedMapManager = null;
+    this.mapAssignError = '';
+    this.cdr.detectChanges();
+  }
+
+  onMapManagerSearchChange(): void {
+    this.mapManagerSearchSubject.next(this.mapManagerSearch);
+  }
+
+  selectMapManager(user: TerritoryManager): void {
+    if (user.canAssign === false) {
+      this.mapAssignError = user.ineligibilityReason || 'This user cannot be assigned to another country.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.selectedMapManager = user;
+    this.mapAssignError = '';
     this.cdr.detectChanges();
   }
 
   confirmMapAssign(): void {
-    if (!this.mapClickedCountry) return;
+    if (!this.mapClickedCountry || !this.selectedMapManager || !this.mapClickedCountryBoundary) {
+      this.mapAssignError = !this.mapClickedCountryBoundary
+        ? 'Country boundary is required before assigning a Territory Manager.'
+        : 'Select a Territory Manager before assigning this country.';
+      this.cdr.detectChanges();
+      return;
+    }
     this.isCreatingFromMap = true;
+    this.mapAssignError = '';
     const req: CreateTerritoryRequest = {
       name: this.mapClickedCountry.name,
       countries: [this.mapClickedCountry.code],
-      assignedManagerId: this.mapAssignManagerId || null,
+      assignedManagerId: this.selectedMapManager.id,
+      assignedManagerUserId: this.selectedMapManager.userId,
+      boundary: this.mapClickedCountryBoundary,
     };
-    this.svc.create$(req).pipe(takeUntil(this.destroy$)).subscribe(() => {
-      this.isCreatingFromMap  = false;
-      this.mapClickedCountry  = null;
-      this.mapAssignManagerId = '';
-      this.loadTerritories();
+    this.svc.create$(req).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.isCreatingFromMap = false;
+        this.closeMapAssignModal();
+        this.refreshManagers();
+        this.loadTerritories();
+      },
+      error: error => {
+        this.isCreatingFromMap = false;
+        this.mapAssignError = this.extractErrorMessage(error, 'Territory Manager could not be assigned.');
+        this.cdr.detectChanges();
+      },
     });
   }
 
@@ -223,7 +339,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
     this.openDropdownId  = null;
     this.assignTarget    = { ...territory };
     this.assignManagerId = '';
-    this.activeManagers  = this.svc.getActiveManagers();
+    this.activeManagers  = this.managers.filter(manager => manager.isActive !== false && manager.status !== 'Inactive');
     this.cdr.detectChanges();
   }
 
@@ -275,63 +391,156 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
     // let the map tab render, then trigger zoom
     setTimeout(() => {
       this.highlightCountryCode = code;
-      this.detailTarget = { ...territory };
+      this.openTerritoryDetail(territory);
       this.cdr.detectChanges();
     }, 50);
   }
 
   closeDetail(): void {
     this.detailTarget = null;
+    this.detailError = '';
+    this.isDetailLoading = false;
     this.highlightCountryCode = '';
     this.activeTab = this.tabBeforeDetail;
     this.cdr.detectChanges();
   }
 
+  private openTerritoryDetail(territory: Territory): void {
+    this.detailError = '';
+    this.isDetailLoading = true;
+    this.detailTarget = this.asDetailFallback(territory);
+    this.cdr.markForCheck();
+
+    this.svc.getDetail$(territory.territoryId ?? territory.id)
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.isDetailLoading = false;
+          this.cdr.markForCheck();
+        }),
+      )
+      .subscribe({
+        next: detail => {
+          this.detailTarget = detail;
+          this.applyTerritoryUpdate(detail);
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.detailError = this.extractErrorMessage(error, 'Territory details could not be loaded.');
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
   // ── Edit modal (country + manager change) ─────────────────────────────────
   private tabBeforeEdit: ViewTab = 'list';
 
-  openEdit(territory: Territory, event?: MouseEvent): void {
+  openEdit(territory: Territory | TerritoryDetail, event?: MouseEvent): void {
     event?.stopPropagation();
-    // if called from detail modal, use the tab that was active before detail opened
-    this.tabBeforeEdit         = this.detailTarget ? this.tabBeforeDetail : this.activeTab;
-    this.activeTab             = this.tabBeforeEdit;
-    this.openDropdownId        = null;
-    this.detailTarget          = null;
-    this.editTarget            = { ...territory };
-    this.editAssignedManagerId = territory.assignedManagerId ?? '';
-    this.editCountryCode       = territory.countries[0] ?? '';
-    this.editUnavailableCodes  = this.territories
-      .filter(t => t.id !== territory.id)
-      .flatMap(t => t.countries);
-    this.activeManagers        = this.svc.getActiveManagers();
-    this.cdr.detectChanges();
+    this.tabBeforeEdit = this.detailTarget ? this.tabBeforeDetail : this.activeTab;
+    this.openDropdownId = null;
+    this.editError = '';
+
+    if ('boundaryGeoJson' in territory || this.detailTarget?.territoryId === territory.territoryId) {
+      this.startEdit((this.detailTarget?.territoryId === territory.territoryId ? this.detailTarget : territory) as TerritoryDetail);
+      return;
+    }
+
+    this.isDetailLoading = true;
+    this.svc.getDetail$(territory.territoryId ?? territory.id)
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.isDetailLoading = false;
+          this.cdr.markForCheck();
+        }),
+      )
+      .subscribe({
+        next: detail => {
+          this.detailTarget = detail;
+          this.applyTerritoryUpdate(detail);
+          this.startEdit(detail);
+        },
+        error: error => {
+          this.detailError = this.extractErrorMessage(error, 'Territory details could not be loaded.');
+          this.cdr.markForCheck();
+        },
+      });
   }
 
   closeEdit(): void {
     this.activeTab = this.tabBeforeEdit;
     this.highlightCountryCode = '';
     this.editTarget = null;
+    this.editManagerUsers = [];
+    this.selectedEditManager = null;
+    this.editManagerSearch = '';
+    this.editError = '';
     this.cdr.detectChanges();
   }
 
-  onEditMapCountryClick(code: string): void {
-    this.editCountryCode = code;
+  onEditMapCountryClick(event: CountryMapClick | string): void {
+    this.editCountryCode = typeof event === 'string' ? event : event.code;
     this.cdr.detectChanges();
+  }
+
+  onEditManagerSearchChange(): void {
+    this.editManagerSearchSubject.next(this.editManagerSearch);
+  }
+
+  selectEditManager(user: TerritoryManager | null): void {
+    if (user?.canAssign === false) {
+      this.editError = user.ineligibilityReason || 'This user cannot be assigned to this country.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.selectedEditManager = user;
+    this.editAssignedManagerId = user?.id ?? '';
+    this.editError = '';
+    this.cdr.markForCheck();
+  }
+
+  isCurrentEditManager(user: TerritoryManager): boolean {
+    return !!this.editTarget?.assignedManagerId && this.editTarget.assignedManagerId === user.id;
+  }
+
+  isSelectedEditManager(user: TerritoryManager): boolean {
+    return this.editAssignedManagerId === user.id;
   }
 
   saveEdit(): void {
     if (!this.editTarget) return;
+    if (this.editAssignedManagerId && !this.editTarget.hasBoundary) {
+      this.editError = this.editTarget.boundaryRequiredMessage
+        || 'This country cannot be assigned until its boundary geometry is available.';
+      this.cdr.markForCheck();
+      return;
+    }
+
     this.isEditing = true;
     const managerId = this.editAssignedManagerId || null;
 
-    this.svc.assign$(this.editTarget.id, managerId)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => {
-        this.isEditing            = false;
-        this.editTarget           = null;
-        this.activeTab            = this.tabBeforeEdit;
-        this.highlightCountryCode = '';
-        this.loadTerritories();
+    this.svc.updateManager$(this.editTarget.territoryId ?? this.editTarget.id, managerId)
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.isEditing = false;
+          this.cdr.markForCheck();
+        }),
+      )
+      .subscribe({
+        next: detail => {
+          this.editTarget = null;
+          this.detailTarget = detail;
+          this.applyTerritoryUpdate(detail);
+          this.refreshManagers();
+          this.loadTerritories();
+        },
+        error: error => {
+          this.editError = this.extractErrorMessage(error, 'Territory Manager assignment could not be saved.');
+          this.cdr.markForCheck();
+        },
       });
   }
 
@@ -349,6 +558,98 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+  private refreshManagers(): void {
+    this.svc.searchManagerCandidates$('', 50)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: managers => {
+          this.managers = managers;
+          this.activeManagers = managers.filter(manager => manager.isActive !== false && manager.status !== 'Inactive');
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.managers = [];
+          this.activeManagers = [];
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private loadMapManagerCandidates(): void {
+    this.isLoadingMapManagers = true;
+    this.svc.searchManagerCandidates$(this.mapManagerSearch, 25)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: users => {
+          this.mapManagerUsers = users;
+          this.isLoadingMapManagers = false;
+          if (this.selectedMapManager) {
+            this.selectedMapManager = users.find(user => user.id === this.selectedMapManager?.id) ?? this.selectedMapManager;
+          }
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.mapManagerUsers = [];
+          this.isLoadingMapManagers = false;
+          this.mapAssignError = this.extractErrorMessage(error, 'Users could not be loaded.');
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  displayRoles(user: TerritoryManager): string[] {
+    return this.displayRoleLabels(user.roles);
+  }
+
+  displayRoleLabels(roles: string[] | null | undefined): string[] {
+    const labels = (roles ?? [])
+      .map(role => this.roleLabel(role))
+      .filter(role => role !== 'Registered User');
+
+    const distinct = Array.from(new Set(labels));
+    return distinct.length > 0 ? distinct : ['Viewer'];
+  }
+
+  roleClass(role: string): string {
+    const normalized = this.roleLabel(role);
+    if (normalized === 'Admin') return 'bg-purple-50 text-purple-700 ring-purple-200';
+    if (normalized === 'Territory Manager') return 'bg-slate-100 text-slate-700 ring-slate-200';
+    if (normalized === 'Territory Associate') return 'bg-amber-50 text-amber-700 ring-amber-200';
+    if (normalized === 'Regional Manager') return 'bg-blue-50 text-blue-700 ring-blue-200';
+    return 'bg-gray-100 text-gray-600 ring-gray-200';
+  }
+
+  roleLabel(role: string): string {
+    const normalized = role.replace(/[\s_-]/g, '').toLowerCase();
+    if (normalized === 'admin') return 'Admin';
+    if (normalized === 'territorymanager' || normalized === 'nationalmanager') return 'Territory Manager';
+    if (normalized === 'territoryassociate') return 'Territory Associate';
+    if (normalized === 'regionalmanager') return 'Regional Manager';
+    if (normalized === 'registereduser') return 'Registered User';
+    if (normalized === 'viewer') return 'Viewer';
+    return role;
+  }
+
+  onAvatarError(event: Event): void {
+    const image = event.target as HTMLImageElement | null;
+    if (image) {
+      image.style.display = 'none';
+    }
+  }
+
+  private extractErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse) {
+      const body = error.error as { message?: unknown } | string | null;
+      if (typeof body === 'string' && body.trim()) {
+        return body.trim();
+      }
+      if (body && typeof body === 'object' && typeof body.message === 'string' && body.message.trim()) {
+        return body.message.trim();
+      }
+    }
+    return fallback;
+  }
+
   countryName(code: string): string {
     return this.svc.getCountryByCode(code)?.name ?? code;
   }
@@ -358,7 +659,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   }
 
   statusClass(status: string): string {
-    return status === 'Active'
+    return status === 'Assigned' || status === 'Active'
       ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
       : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
   }
@@ -378,4 +679,87 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   }
 
   trackById(_: number, t: Territory): string { return t.id; }
+
+  private startEdit(detail: TerritoryDetail): void {
+    this.editTarget = { ...detail };
+    this.editAssignedManagerId = detail.assignedManagerId ?? '';
+    this.editCountryCode = detail.countries[0] ?? detail.countryCode ?? '';
+    this.editUnavailableCodes = this.territories
+      .filter(t => t.id !== detail.id)
+      .flatMap(t => t.countries);
+    this.editManagerSearch = '';
+    this.editManagerUsers = [];
+    this.selectedEditManager = null;
+    this.editError = !detail.hasBoundary
+      ? detail.boundaryRequiredMessage || 'This country cannot be assigned until its boundary geometry is available.'
+      : '';
+    this.loadEditManagerCandidates();
+    this.cdr.markForCheck();
+  }
+
+  private loadEditManagerCandidates(): void {
+    if (!this.editTarget) return;
+
+    this.isLoadingEditManagers = true;
+    this.svc.getAssignableManagers$(this.editTarget.territoryId ?? this.editTarget.id, this.editManagerSearch, 25)
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.isLoadingEditManagers = false;
+          this.cdr.markForCheck();
+        }),
+      )
+      .subscribe({
+        next: users => {
+          this.editManagerUsers = users;
+          this.selectedEditManager = this.editAssignedManagerId
+            ? users.find(user => user.id === this.editAssignedManagerId) ?? null
+            : null;
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.editManagerUsers = [];
+          this.editError = this.extractErrorMessage(error, 'Users could not be loaded.');
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private asDetailFallback(territory: Territory): TerritoryDetail {
+    return {
+      ...territory,
+      assignedManager: territory.assignedManagerId
+        ? {
+            id: territory.assignedManagerId,
+            userId: Number(territory.assignedManagerId),
+            displayName: territory.assignedManagerName ?? 'Assigned manager',
+            name: territory.assignedManagerName ?? 'Assigned manager',
+            email: territory.assignedManagerEmail ?? '',
+            initials: this.managerInitials(territory.assignedManagerId),
+            roles: [],
+            assignedAt: territory.updatedAt,
+          }
+        : null,
+      boundaryGeoJson: territory.zone?.geometry ?? null,
+      viewport: null,
+      boundaryRequiredMessage: territory.hasBoundary ? null : 'This country cannot be assigned until its boundary geometry is available.',
+      canAssign: !!territory.hasBoundary,
+    };
+  }
+
+  private applyTerritoryUpdate(updated: Territory): void {
+    const index = this.territories.findIndex(item => item.id === updated.id || item.territoryId === updated.territoryId);
+    if (index >= 0) {
+      this.territories = [
+        ...this.territories.slice(0, index),
+        { ...this.territories[index], ...updated },
+        ...this.territories.slice(index + 1),
+      ];
+    } else {
+      this.territories = [updated, ...this.territories];
+      this.totalTerritories += 1;
+    }
+    this.buildCountryAssignments();
+    this.cdr.markForCheck();
+  }
 }

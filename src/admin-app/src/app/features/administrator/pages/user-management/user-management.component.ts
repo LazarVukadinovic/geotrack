@@ -11,7 +11,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { AppUsersService } from '../../../../core/services/administrator/app-users.service';
 import { AppUser, AppUsersPageRequest, AppUserSortField, AppUserSortDir } from '../../../../core/models/administrator/app-user.model';
 import { TerritoryService } from '../../../../core/services/administrator/territory.service';
-import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
+import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
 import { TerritoryManager, Territory } from '../../../../core/models/administrator/territory.model';
 
 type ActiveTab = 'appUsers' | 'managers';
@@ -29,10 +29,10 @@ const PAGE_SIZE_STEP    = 5;
 export class UserManagementComponent implements OnInit, OnDestroy {
   private readonly appUsersSvc  = inject(AppUsersService);
   private readonly territorySvc = inject(TerritoryService);
-  private readonly revSvc       = inject(AdminReviewsService);
+  private readonly dashboardSvc = inject(AdminDashboardService);
   private readonly cdr          = inject(ChangeDetectorRef);
 
-  get reportedReviewsCount(): number { return this.revSvc.getReportedCount(); }
+  reportedReviewsCount = 0;
   private destroy$      = new Subject<void>();
   private searchSubject = new Subject<string>();
 
@@ -132,6 +132,7 @@ export class UserManagementComponent implements OnInit, OnDestroy {
   isChangingStatus                          = false;
 
   ngOnInit(): void {
+    this.loadPendingReportsBadge();
     this.managers = this.territorySvc.getAllManagers();
 
     this.territorySvc.getPage$({ page: 1, pageSize: 1000, search: '', sortField: 'createdAt', sortDir: 'desc', countryFilter: [] })
@@ -153,6 +154,21 @@ export class UserManagementComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
+
+  private loadPendingReportsBadge(): void {
+    this.dashboardSvc.loadDashboard()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: dashboard => {
+          this.reportedReviewsCount = dashboard.badges.pendingReportsCount;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.reportedReviewsCount = 0;
+          this.cdr.markForCheck();
+        },
+      });
+  }
 
   @HostListener('document:click')
   onDocumentClick(): void {

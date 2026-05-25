@@ -156,7 +156,7 @@
                       <div class="flex items-center gap-2.5">
                         <span class="text-2xl leading-none">{{ countryFlag(t.countries[0]) }}</span>
                         <div>
-                          <p class="text-sm font-semibold text-gray-900">{{ countryName(t.countries[0]) }}</p>
+                          <p class="text-sm font-semibold text-gray-900">{{ t.displayName || t.name }}</p>
                           <p class="text-[10px] text-gray-400 mt-0.5">{{ t.id }}</p>
                         </div>
                       </div>
@@ -268,51 +268,123 @@
 <!-- ── Assign from map modal ──────────────────────────────────────────────── -->
 @if (mapClickedCountry) {
   <div class="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeMapAssignModal()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0 text-2xl">
-          {{ countryFlag(mapClickedCountry.code) }}
-        </div>
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[86vh] overflow-hidden flex flex-col" (click)="$event.stopPropagation()">
+      <div class="flex items-start justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
         <div>
           <h2 class="text-base font-bold text-gray-900">Assign Territory Manager</h2>
-          <p class="text-sm text-gray-500">{{ mapClickedCountry.name }}</p>
+          <p class="text-sm text-gray-500 mt-0.5">{{ mapClickedCountry.name }}</p>
+        </div>
+        <button (click)="closeMapAssignModal()" class="p-1.5 text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer rounded-lg hover:bg-gray-100 transition-colors">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="px-6 py-5 overflow-y-auto flex-1 space-y-4">
+        <div class="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
+          <div class="w-11 h-11 rounded-xl bg-white shadow-sm flex items-center justify-center flex-shrink-0 text-sm font-bold text-gray-900">
+            {{ mapClickedCountry.code }}
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-gray-900 truncate">{{ mapClickedCountry.name }}</p>
+            <p class="text-xs text-gray-500">{{ mapClickedCountry.code }} country boundary</p>
+          </div>
+          @if (mapClickedCountryBoundary) {
+            <span class="ml-auto inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Boundary ready</span>
+          } @else {
+            <span class="ml-auto inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-red-200">Boundary missing</span>
+          }
+        </div>
+
+        @if (mapAssignError) {
+          <div class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {{ mapAssignError }}
+          </div>
+        }
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-2">Territory Manager <span class="text-red-500">*</span></label>
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              [(ngModel)]="mapManagerSearch"
+              (ngModelChange)="onMapManagerSearchChange()"
+              type="text"
+              placeholder="Search users by name or email"
+              class="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
+          </div>
+        </div>
+
+        <div class="border border-gray-100 rounded-xl overflow-hidden bg-white">
+          @if (isLoadingMapManagers) {
+            <div class="flex items-center justify-center py-10 text-sm text-gray-400">Loading users...</div>
+          } @else if (mapManagerUsers.length === 0) {
+            <div class="flex items-center justify-center py-10 text-sm text-gray-400">No users found</div>
+          } @else {
+            <div class="max-h-80 overflow-y-auto">
+              @for (user of mapManagerUsers; track user.id) {
+                <button
+                  type="button"
+                  (click)="selectMapManager(user)"
+                  [disabled]="user.canAssign === false"
+                  class="w-full flex items-center gap-3 px-4 py-3 text-left border-0 border-b border-l-4 border-gray-50 bg-white hover:bg-blue-50/40 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  [class.bg-blue-50]="selectedMapManager?.id === user.id"
+                  [class.border-l-blue-600]="selectedMapManager?.id === user.id"
+                  [class.ring-1]="selectedMapManager?.id === user.id"
+                  [class.ring-inset]="selectedMapManager?.id === user.id"
+                  [class.ring-blue-200]="selectedMapManager?.id === user.id"
+                  [class.shadow-sm]="selectedMapManager?.id === user.id"
+                >
+                  <span class="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden" [style.background]="user.avatarColor">
+                    @if (user.avatarUrl) {
+                      <img [src]="user.avatarUrl" [alt]="user.name" class="w-full h-full object-cover" (error)="onAvatarError($event)" />
+                    } @else {
+                      {{ user.initials }}
+                    }
+                  </span>
+
+                  <span class="min-w-0 flex-1">
+                    <span class="flex items-center gap-2 min-w-0">
+                      <span class="text-sm font-semibold text-gray-900 truncate">{{ user.name }}</span>
+                      @if (selectedMapManager?.id === user.id) {
+                        <svg class="w-4 h-4 text-blue-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      }
+                    </span>
+                    <span class="block text-xs text-gray-500 truncate">{{ user.email }}</span>
+                    <span class="flex flex-wrap gap-1.5 mt-2">
+                      @for (role of displayRoles(user); track role) {
+                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1" [class]="roleClass(role)">
+                          {{ role }}
+                        </span>
+                      }
+                    </span>
+                    @if (user.ineligibilityReason) {
+                      <span class="block text-[11px] text-amber-700 mt-2">{{ user.ineligibilityReason }}</span>
+                    }
+                  </span>
+                </button>
+              }
+            </div>
+          }
         </div>
       </div>
 
-      <label class="block text-xs font-medium text-gray-600 mb-1.5">Territory Manager <span class="text-red-500">*</span></label>
-      <div class="relative mb-1.5">
-        <select
-          [(ngModel)]="mapAssignManagerId"
-          class="w-full appearance-none px-3 py-2.5 pr-9 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white transition-colors"
-          [class.border-gray-200]="mapAssignManagerId"
-          [class.border-red-300]="!mapAssignManagerId"
-        >
-          <option value="">— Select a manager —</option>
-          @for (mgr of activeManagers; track mgr.id) {
-            <option [value]="mgr.id">{{ mgr.name }} · {{ mgr.email }}</option>
-          }
-        </select>
-        <svg class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </div>
-      @if (!mapAssignManagerId) {
-        <p class="text-[11px] text-red-500 mb-5">A Territory Manager must be selected.</p>
-      } @else {
-        <div class="mb-5"></div>
-      }
-
-      <div class="flex gap-3 justify-end">
+      <div class="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end flex-shrink-0">
         <button (click)="closeMapAssignModal()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
           Cancel
         </button>
         <button
           (click)="confirmMapAssign()"
-          [disabled]="isCreatingFromMap || !mapAssignManagerId"
+          [disabled]="isCreatingFromMap || !selectedMapManager || !mapClickedCountryBoundary"
           class="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors border-0 cursor-pointer disabled:opacity-60"
         >
-          {{ isCreatingFromMap ? 'Saving…' : 'Confirm' }}
+          {{ isCreatingFromMap ? 'Assigning...' : 'Assign Territory Manager' }}
         </button>
       </div>
     </div>
@@ -321,50 +393,194 @@
 
 <!-- ── Edit Territory Modal (country + manager) ───────────────────────────── -->
 @if (editTarget) {
-  <div class="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeEdit()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
+  <div class="fixed inset-0 z-[900] flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeEdit()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[88vh] overflow-hidden flex flex-col" (click)="$event.stopPropagation()">
 
-      <div class="flex items-center justify-between mb-5">
-        <h2 class="text-base font-bold text-gray-900">Edit Territory</h2>
-        <button (click)="closeEdit()" class="p-1.5 text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer rounded-lg hover:bg-gray-100 transition-colors">
+      <div class="flex items-start justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
+        <div>
+          <h2 class="text-base font-bold text-gray-900">Edit Territory</h2>
+          <p class="text-sm text-gray-500 mt-0.5">{{ editTarget.displayName || editTarget.name }}</p>
+        </div>
+        <button (click)="closeEdit()" aria-label="Close edit territory" class="p-1.5 text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer rounded-lg hover:bg-gray-100 transition-colors">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
       </div>
 
-      <!-- Country (read-only) -->
-      <label class="block text-xs font-semibold text-gray-600 mb-2">Country</label>
-      <div class="flex items-center gap-2 mb-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
-        <span class="text-xl">{{ countryFlag(editCountryCode) }}</span>
-        <span class="text-sm font-semibold text-gray-800">{{ countryName(editCountryCode) }}</span>
-        <span class="ml-auto text-xs text-gray-400">Cannot be changed</span>
-      </div>
-
-      <!-- Manager select -->
-      <label class="block text-xs font-semibold text-gray-600 mb-1.5">Assigned Manager <span class="text-gray-400 font-normal">(optional)</span></label>
-      <div class="relative mb-6">
-        <select
-          [(ngModel)]="editAssignedManagerId"
-          class="w-full appearance-none px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white"
-        >
-          <option value="">— Unassigned —</option>
-          @for (mgr of activeManagers; track mgr.id) {
-            <option [value]="mgr.id">{{ mgr.name }} · {{ mgr.email }}</option>
+      <div class="px-6 py-5 overflow-y-auto flex-1 space-y-5">
+        <div class="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
+          <div class="w-11 h-11 rounded-xl bg-white shadow-sm flex items-center justify-center flex-shrink-0 text-sm font-bold text-gray-900">
+            {{ editCountryCode || editTarget.countryCode || '--' }}
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-gray-900 truncate">{{ editTarget.displayName || editTarget.name }}</p>
+            <p class="text-xs text-gray-500">{{ editTarget.internalReference || editTarget.id }}</p>
+          </div>
+          <span class="ml-auto inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1" [class]="statusClass(editTarget.status)">
+            {{ editTarget.status }}
+          </span>
+          @if (editTarget.hasBoundary) {
+            <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Boundary ready</span>
+          } @else {
+            <span class="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-red-200">Boundary missing</span>
           }
-        </select>
-        <svg class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
+        </div>
+
+        @if (editError) {
+          <div class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {{ editError }}
+          </div>
+        }
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-xs font-semibold text-gray-600 uppercase tracking-wider">Current Manager</p>
+            @if (editTarget.assignedManager) {
+              <button
+                type="button"
+                (click)="selectEditManager(null)"
+                class="text-xs font-semibold text-red-600 hover:text-red-700 bg-transparent border-0 cursor-pointer"
+              >
+                Unassign Manager
+              </button>
+            }
+          </div>
+
+          @if (editTarget.assignedManager) {
+            <div class="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+              <span class="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden" [style.background]="managerColor(editTarget.assignedManagerId)">
+                @if (editTarget.assignedManager.avatarUrl) {
+                  <img [src]="editTarget.assignedManager.avatarUrl" [alt]="editTarget.assignedManager.displayName" class="w-full h-full object-cover" (error)="onAvatarError($event)" />
+                } @else {
+                  {{ editTarget.assignedManager.initials }}
+                }
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-semibold text-gray-900 truncate">{{ editTarget.assignedManager.displayName }}</span>
+                <span class="block text-xs text-gray-500 truncate">{{ editTarget.assignedManager.email }}</span>
+                <span class="flex flex-wrap gap-1.5 mt-2">
+                  @for (role of displayRoleLabels(editTarget.assignedManager.roles); track role) {
+                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1" [class]="roleClass(role)">
+                      {{ role }}
+                    </span>
+                  }
+                </span>
+              </span>
+              <span class="text-[11px] font-semibold text-blue-700 bg-blue-50 rounded-full px-2 py-0.5 ring-1 ring-blue-100">Currently assigned</span>
+            </div>
+          } @else {
+            <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-500 italic">
+              No manager assigned
+            </div>
+          }
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-2">Territory Manager <span class="text-gray-400 font-normal">(optional)</span></label>
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              [(ngModel)]="editManagerSearch"
+              (ngModelChange)="onEditManagerSearchChange()"
+              type="text"
+              placeholder="Search users by name or email"
+              class="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
+          </div>
+        </div>
+
+        <div class="border border-gray-100 rounded-xl overflow-hidden bg-white">
+          <button
+            type="button"
+            (click)="selectEditManager(null)"
+            class="w-full flex items-center gap-3 px-4 py-3 text-left border-0 border-b border-l-4 border-gray-50 bg-white hover:bg-blue-50/40 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-300"
+            [class.bg-blue-50]="!editAssignedManagerId"
+            [class.border-l-blue-600]="!editAssignedManagerId"
+            [class.ring-1]="!editAssignedManagerId"
+            [class.ring-inset]="!editAssignedManagerId"
+            [class.ring-blue-200]="!editAssignedManagerId"
+          >
+            <span class="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 text-lg font-light flex-shrink-0 bg-gray-100">--</span>
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center gap-2 min-w-0">
+                <span class="text-sm font-semibold text-gray-900 truncate">Unassigned</span>
+                @if (!editAssignedManagerId) {
+                  <svg class="w-4 h-4 text-blue-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                }
+              </span>
+              <span class="block text-xs text-gray-500 truncate">No Territory Manager will be assigned</span>
+            </span>
+          </button>
+
+          @if (isLoadingEditManagers) {
+            <div class="flex items-center justify-center py-10 text-sm text-gray-400">Loading users...</div>
+          } @else if (editManagerUsers.length === 0) {
+            <div class="flex items-center justify-center py-10 text-sm text-gray-400">No users found</div>
+          } @else {
+            <div class="max-h-80 overflow-y-auto">
+              @for (user of editManagerUsers; track user.id) {
+                <button
+                  type="button"
+                  (click)="selectEditManager(user)"
+                  [disabled]="user.canAssign === false"
+                  class="w-full flex items-center gap-3 px-4 py-3 text-left border-0 border-b border-l-4 border-gray-50 bg-white hover:bg-blue-50/40 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  [class.bg-blue-50]="isSelectedEditManager(user)"
+                  [class.border-l-blue-600]="isSelectedEditManager(user)"
+                  [class.ring-1]="isSelectedEditManager(user)"
+                  [class.ring-inset]="isSelectedEditManager(user)"
+                  [class.ring-blue-200]="isSelectedEditManager(user)"
+                  [class.shadow-sm]="isSelectedEditManager(user)"
+                >
+                  <span class="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden" [style.background]="user.avatarColor">
+                    @if (user.avatarUrl) {
+                      <img [src]="user.avatarUrl" [alt]="user.name" class="w-full h-full object-cover" (error)="onAvatarError($event)" />
+                    } @else {
+                      {{ user.initials }}
+                    }
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="flex items-center gap-2 min-w-0">
+                      <span class="text-sm font-semibold text-gray-900 truncate">{{ user.name }}</span>
+                      @if (isSelectedEditManager(user)) {
+                        <svg class="w-4 h-4 text-blue-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      }
+                      @if (isCurrentEditManager(user)) {
+                        <span class="text-[10px] font-semibold text-blue-700 bg-blue-50 rounded-full px-2 py-0.5 ring-1 ring-blue-100">Current</span>
+                      }
+                    </span>
+                    <span class="block text-xs text-gray-500 truncate">{{ user.email }}</span>
+                    <span class="flex flex-wrap gap-1.5 mt-2">
+                      @for (role of displayRoles(user); track role) {
+                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1" [class]="roleClass(role)">
+                          {{ role }}
+                        </span>
+                      }
+                    </span>
+                    @if (user.ineligibilityReason) {
+                      <span class="block text-[11px] text-amber-700 mt-2">{{ user.ineligibilityReason }}</span>
+                    }
+                  </span>
+                </button>
+              }
+            </div>
+          }
+        </div>
       </div>
 
-      <div class="flex gap-3 justify-end">
+      <div class="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end flex-shrink-0">
         <button (click)="closeEdit()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
           Cancel
         </button>
         <button
           (click)="saveEdit()"
-          [disabled]="isEditing"
+          [disabled]="isEditing || (!!editAssignedManagerId && !editTarget.hasBoundary)"
           class="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors border-0 cursor-pointer disabled:opacity-60"
         >
           {{ isEditing ? 'Saving…' : 'Save Changes' }}
@@ -391,7 +607,7 @@
       </div>
       <p class="text-sm text-gray-700 mb-6">
         You are about to delete the territory for
-        <strong>{{ countryName(deleteTarget.countries[0]) }}</strong>.
+        <strong>{{ deleteTarget.displayName || deleteTarget.name }}</strong>.
         The country will become available on the map again.
       </p>
       <div class="flex gap-3 justify-end">
@@ -421,12 +637,12 @@
           <span class="text-3xl leading-none">{{ countryFlag(detailTarget.countries[0]) }}</span>
           <div>
             <div class="flex items-center gap-2">
-              <h2 class="text-base font-bold text-gray-900">{{ countryName(detailTarget.countries[0]) }}</h2>
+              <h2 class="text-base font-bold text-gray-900">{{ detailTarget.displayName || detailTarget.name }}</h2>
               <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium flex-shrink-0" [class]="statusClass(detailTarget.status)">
                 {{ detailTarget.status }}
               </span>
             </div>
-            <p class="text-xs text-gray-400">{{ detailTarget.id }}</p>
+            <p class="text-xs text-gray-400">{{ detailTarget.internalReference || detailTarget.id }}</p>
           </div>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
@@ -449,30 +665,52 @@
       </div>
 
       <div class="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+        @if (isDetailLoading) {
+          <div class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+            Loading territory details...
+          </div>
+        }
+
+        @if (detailError) {
+          <div class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {{ detailError }}
+          </div>
+        }
 
         <!-- Mini map -->
-        <div class="h-44 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
-          <app-country-mini-map
-            style="height:100%;display:block;"
-            [countryCode]="detailTarget.countries[0]"
-            [countryName]="countryName(detailTarget.countries[0])"
-          />
+        <div class="h-44 rounded-xl overflow-hidden border border-gray-100 bg-gray-50 relative">
+          @if (detailTarget.boundaryGeoJson) {
+            <app-country-mini-map
+              style="height:100%;display:block;"
+              [countryCode]="detailTarget.countries[0]"
+              [countryName]="detailTarget.displayName || detailTarget.name"
+              [geometry]="detailTarget.boundaryGeoJson"
+            />
+          } @else {
+            <div class="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-gray-500">
+              {{ detailTarget.boundaryRequiredMessage || 'Boundary geometry is not available for this country.' }}
+            </div>
+          }
         </div>
 
         <!-- Manager -->
         <div>
           <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Assigned Manager</p>
-          @if (detailTarget.assignedManagerId) {
+          @if (detailTarget.assignedManager) {
             <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
               <span
-                class="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                class="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden"
                 [style.background]="managerColor(detailTarget.assignedManagerId)"
               >
-                {{ managerInitials(detailTarget.assignedManagerId) }}
+                @if (detailTarget.assignedManager.avatarUrl) {
+                  <img [src]="detailTarget.assignedManager.avatarUrl" [alt]="detailTarget.assignedManager.displayName" class="w-full h-full object-cover" (error)="onAvatarError($event)" />
+                } @else {
+                  {{ detailTarget.assignedManager.initials }}
+                }
               </span>
               <div>
-                <p class="text-sm font-semibold text-gray-800">{{ detailTarget.assignedManagerName }}</p>
-                <p class="text-xs text-gray-400">{{ detailTarget.assignedManagerEmail }}</p>
+                <p class="text-sm font-semibold text-gray-800">{{ detailTarget.assignedManager.displayName }}</p>
+                <p class="text-xs text-gray-400">{{ detailTarget.assignedManager.email }}</p>
               </div>
             </div>
           } @else {

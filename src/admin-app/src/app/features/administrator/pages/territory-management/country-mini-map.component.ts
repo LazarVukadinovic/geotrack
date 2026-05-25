@@ -2,6 +2,7 @@ import {
   Component, AfterViewInit, OnDestroy, OnChanges, SimpleChanges,
   Input, ViewChild, ElementRef, ChangeDetectionStrategy, ChangeDetectorRef, inject,
 } from '@angular/core';
+import { GeoJsonGeometry } from '../../../../core/models/administrator/territory.model';
 
 declare const L: any;
 
@@ -16,6 +17,7 @@ export class CountryMiniMapComponent implements AfterViewInit, OnDestroy, OnChan
 
   @Input() countryCode = '';
   @Input() countryName = '';
+  @Input() geometry: GeoJsonGeometry | null = null;
 
   private map: any;
   private countryLayer: any;
@@ -27,8 +29,8 @@ export class CountryMiniMapComponent implements AfterViewInit, OnDestroy, OnChan
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if ((changes['countryCode'] || changes['countryName']) && this.map && !changes['countryCode']?.firstChange) {
-      this.loadCountry();
+    if ((changes['countryCode'] || changes['countryName'] || changes['geometry']) && this.map) {
+      this.renderCountry();
     }
   }
 
@@ -55,29 +57,29 @@ export class CountryMiniMapComponent implements AfterViewInit, OnDestroy, OnChan
       opacity: 0.3,
     }).addTo(this.map);
 
-    if (this.countryCode) this.loadCountry();
+    this.renderCountry();
   }
 
-  private async loadCountry(): Promise<void> {
+  private renderCountry(): void {
     if (!this.map || this.destroyed) return;
     if (this.countryLayer) {
       this.map.removeLayer(this.countryLayer);
       this.countryLayer = null;
     }
+    if (!this.geometry) return;
+
     try {
-      const q = encodeURIComponent(this.countryName || this.countryCode);
-      const resp = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${q}&format=geojson&polygon_geojson=1&limit=1`,
-        { headers: { 'User-Agent': 'GeotrackAdminApp/1.0' } },
-      );
-      const data = await resp.json();
-      if (this.destroyed || !this.map) return;
-      if (data.features?.length > 0) {
-        this.countryLayer = L.geoJSON(data.features[0], {
-          style: { color: '#3b82f6', weight: 2, fillColor: '#3b82f6', fillOpacity: 0.35 },
-        }).addTo(this.map);
-        try { this.map.fitBounds(this.countryLayer.getBounds(), { padding: [20, 20] }); } catch { /* ignore */ }
-      }
-    } catch { /* ignore network errors */ }
+      this.countryLayer = L.geoJSON({
+        type: 'Feature',
+        geometry: this.geometry,
+        properties: {
+          code: this.countryCode,
+          name: this.countryName,
+        },
+      }, {
+        style: { color: '#3b82f6', weight: 2, fillColor: '#3b82f6', fillOpacity: 0.35 },
+      }).addTo(this.map);
+      try { this.map.fitBounds(this.countryLayer.getBounds(), { padding: [20, 20] }); } catch { /* ignore */ }
+    } catch { /* ignore invalid geometry */ }
   }
 }

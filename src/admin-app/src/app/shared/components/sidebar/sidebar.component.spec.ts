@@ -145,6 +145,16 @@ describe('SidebarComponent', () => {
     expect(normalizedText()).not.toContain('Requests Queue');
   });
 
+  it('shows the Administrator Review Management badge from the provided pending reports count', () => {
+    currentRole = 'Administrator';
+    fixture.componentRef.setInput('reportedReviewsCount', 7);
+    fixture.detectChanges();
+
+    const text = normalizedText();
+    expect(text).toContain('Review Management');
+    expect(text).toContain('7');
+  });
+
   function flushSidebarSummary(regionId: number, pendingRequestsCount: number): void {
     const request = http.expectOne(req =>
       req.url === '/api/admin/regional/sidebar-summary' &&

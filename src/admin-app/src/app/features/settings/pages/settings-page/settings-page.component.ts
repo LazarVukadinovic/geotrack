@@ -8,7 +8,7 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminProfileService } from '../../../../core/services/admin-profile.service';
-import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
+import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
 import { buildAvatarDisplayUrl } from '../../../../core/utils/avatar-url';
 import {
   AdminProfile,
@@ -86,7 +86,7 @@ export class SettingsComponent implements OnInit {
     private readonly router: Router,
     private readonly auth: AuthService,
     private readonly adminProfileService: AdminProfileService,
-    private readonly adminReviewsService: AdminReviewsService,
+    private readonly adminDashboardService: AdminDashboardService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
@@ -94,11 +94,10 @@ export class SettingsComponent implements OnInit {
     return this.auth.isAdministrator();
   }
 
-  get reportedReviewsCount(): number {
-    return this.adminReviewsService.getReportedCount();
-  }
+  reportedReviewsCount = 0;
 
   ngOnInit(): void {
+    this.loadPendingReportsBadge();
     this.loadProfile();
   }
 
@@ -196,6 +195,24 @@ export class SettingsComponent implements OnInit {
           this.notifyStateChanged();
         },
       });
+  }
+
+  private loadPendingReportsBadge(): void {
+    if (!this.isAdmin) {
+      this.reportedReviewsCount = 0;
+      return;
+    }
+
+    this.adminDashboardService.loadDashboard().subscribe({
+      next: dashboard => {
+        this.reportedReviewsCount = dashboard.badges.pendingReportsCount;
+        this.notifyStateChanged();
+      },
+      error: () => {
+        this.reportedReviewsCount = 0;
+        this.notifyStateChanged();
+      },
+    });
   }
 
   onBioChange(value: string): void {

@@ -1,10 +1,10 @@
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, BehaviorSubject, of } from 'rxjs';
-import { delay, tap } from 'rxjs/operators';
+import { Observable, BehaviorSubject, map, tap } from 'rxjs';
 import {
   Country, Territory, TerritoryManager,
   CreateTerritoryRequest, TerritoryPage, TerritoryPageRequest,
-  GeoJsonFeature,
+  GeoJsonFeature, GeoJsonGeometry, TerritoryDetail,
 } from '../../models/administrator/territory.model';
 
 export const ALL_COUNTRIES: Country[] = [
@@ -210,44 +210,12 @@ export const ALL_COUNTRIES: Country[] = [
 
 export const CONTINENTS = ['Europe', 'Asia', 'Africa', 'North America', 'South America', 'Oceania'] as const;
 
-const TERRITORY_MANAGERS: TerritoryManager[] = [
-  { id: 'TM-001', name: 'Marko Stojanović', email: 'm.stojanovic@geotrack.com', initials: 'MS', avatarColor: '#3b82f6', assignedTerritoryIds: ['TERR-001'], status: 'Active' },
-  { id: 'TM-002', name: 'Jelena Marković', email: 'j.markovic@geotrack.com', initials: 'JM', avatarColor: '#10b981', assignedTerritoryIds: ['TERR-002'], status: 'Active' },
-  { id: 'TM-003', name: 'John Williams', email: 'j.williams@geotrack.com', initials: 'JW', avatarColor: '#8b5cf6', assignedTerritoryIds: ['TERR-004'], status: 'Active' },
-  { id: 'TM-004', name: 'Ana Đorđević', email: 'a.djordjevic@geotrack.com', initials: 'AĐ', avatarColor: '#f59e0b', assignedTerritoryIds: [], status: 'Active' },
-  { id: 'TM-005', name: 'Robert Chen', email: 'r.chen@geotrack.com', initials: 'RC', avatarColor: '#ef4444', assignedTerritoryIds: [], status: 'Inactive' },
-];
-
-let TERRITORIES: Territory[] = [
-  {
-    id: 'TERR-001', name: 'Germany',
-    countries: ['DE'],
-    assignedManagerId: 'TM-001', assignedManagerName: 'Marko Stojanović', assignedManagerEmail: 'm.stojanovic@geotrack.com',
-    status: 'Active', createdAt: '2024-01-10T09:00:00Z', updatedAt: '2024-03-15T14:30:00Z',
-  },
-  {
-    id: 'TERR-002', name: 'Serbia',
-    countries: ['RS'],
-    assignedManagerId: 'TM-002', assignedManagerName: 'Jelena Marković', assignedManagerEmail: 'j.markovic@geotrack.com',
-    status: 'Active', createdAt: '2024-01-15T10:00:00Z', updatedAt: '2024-04-20T11:15:00Z',
-  },
-  {
-    id: 'TERR-003', name: 'Turkey',
-    countries: ['TR'],
-    assignedManagerId: null, assignedManagerName: null, assignedManagerEmail: null,
-    status: 'Unassigned', createdAt: '2024-02-01T08:00:00Z', updatedAt: '2024-02-01T08:00:00Z',
-  },
-  {
-    id: 'TERR-004', name: 'Thailand',
-    countries: ['TH'],
-    assignedManagerId: 'TM-003', assignedManagerName: 'John Williams', assignedManagerEmail: 'j.williams@geotrack.com',
-    status: 'Active', createdAt: '2024-02-20T12:00:00Z', updatedAt: '2024-05-01T09:45:00Z',
-  },
-];
-
 @Injectable({ providedIn: 'root' })
 export class TerritoryService {
+  private readonly endpoint = '/api/admin/territories';
   readonly lastPage$ = new BehaviorSubject<TerritoryPage | null>(null);
+
+  constructor(private readonly http: HttpClient) {}
 
   getAllCountries(): Country[] {
     return ALL_COUNTRIES;
@@ -266,205 +234,285 @@ export class TerritoryService {
   }
 
   getAllManagers(): TerritoryManager[] {
-    return [...TERRITORY_MANAGERS];
+    return [];
   }
 
   getActiveManagers(): TerritoryManager[] {
-    return TERRITORY_MANAGERS.filter(m => m.status === 'Active');
+    return [];
   }
 
   getPage$(req: TerritoryPageRequest): Observable<TerritoryPage> {
-    const { search, pageSize, page, sortField, sortDir, countryFilter } = req;
+    let params = new HttpParams()
+      .set('page', String(Math.max(1, req.page)))
+      .set('pageSize', String(Math.max(1, req.pageSize)))
+      .set('sortField', req.sortField)
+      .set('sortDir', req.sortDir);
 
-    let filtered = TERRITORIES.filter(t => {
-      if (search) {
-        const q = search.toLowerCase();
-        const matchName    = t.name.toLowerCase().includes(q);
-        const matchManager = t.assignedManagerName?.toLowerCase().includes(q) ?? false;
-        const matchCountry = t.countries.some(code => {
-          const c = ALL_COUNTRIES.find(x => x.code === code);
-          return c?.name.toLowerCase().includes(q) ?? false;
-        });
-        if (!matchName && !matchManager && !matchCountry) return false;
+    if (req.search?.trim()) {
+      params = params.set('search', req.search.trim());
+    }
+
+    for (const code of req.countryFilter ?? []) {
+      if (code?.trim()) {
+        params = params.append('countryFilter', code.trim().toUpperCase());
       }
-      if (countryFilter.length > 0) {
-        return countryFilter.every(code => t.countries.includes(code));
-      }
-      return true;
-    });
+    }
 
-    filtered = [...filtered].sort((a, b) => {
-      let cmp = 0;
-      if (sortField === 'name')           cmp = a.name.localeCompare(b.name);
-      else if (sortField === 'status')    cmp = a.status.localeCompare(b.status);
-      else if (sortField === 'countries') cmp = a.countries.length - b.countries.length;
-      else if (sortField === 'createdAt') cmp = a.createdAt.localeCompare(b.createdAt);
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-
-    const total = filtered.length;
-    const offset = (page - 1) * pageSize;
-    const items = filtered.slice(offset, offset + pageSize);
-    const result = { items, total };
-    return of(result).pipe(
-      delay(300),
-      tap(p => this.lastPage$.next(p)),
+    return this.http.get<TerritoryPage>(this.endpoint, { params }).pipe(
+      map(page => ({
+        items: (page.items ?? []).map(item => this.normalizeTerritory(item)),
+        total: Number.isFinite(page.total) ? page.total : 0,
+      })),
+      tap(page => this.lastPage$.next(page)),
     );
   }
 
+  getDetail$(territoryId: string | number): Observable<TerritoryDetail> {
+    const id = this.toTerritoryId(territoryId);
+    if (!id) {
+      throw new Error('Territory id is invalid.');
+    }
+
+    return this.http
+      .get<TerritoryDetail>(`${this.endpoint}/${id}`)
+      .pipe(map(item => this.normalizeTerritoryDetail(item)));
+  }
+
   updateCountries$(id: string, name: string, countries: string[], zone?: GeoJsonFeature | null): Observable<Territory | null> {
-    const idx = TERRITORIES.findIndex(t => t.id === id);
-    if (idx === -1) return of(null).pipe(delay(300));
-    TERRITORIES[idx] = { ...TERRITORIES[idx], name, countries, zone: zone ?? TERRITORIES[idx].zone, updatedAt: new Date().toISOString() };
-    return of({ ...TERRITORIES[idx] }).pipe(delay(400));
+    const territoryId = this.toTerritoryId(id);
+    if (!territoryId) {
+      throw new Error('Territory id is invalid.');
+    }
+
+    const country = countries[0] ? this.getCountryByCode(countries[0]) : undefined;
+    return this.http.put<Territory>(`${this.endpoint}/${territoryId}/manager`, {
+      name,
+      countryCode: country?.code ?? countries[0] ?? null,
+      boundary: zone?.geometry ?? null,
+    }).pipe(map(item => this.normalizeTerritory(item)));
   }
 
   create$(req: CreateTerritoryRequest): Observable<Territory> {
-    const id = `TERR-${String(TERRITORIES.length + 1).padStart(3, '0')}`;
-    const manager = req.assignedManagerId
-      ? TERRITORY_MANAGERS.find(m => m.id === req.assignedManagerId) ?? null
-      : null;
-    const territory: Territory = {
-      id,
+    const countryCode = req.countries[0] ?? null;
+    return this.http.post<Territory>(this.endpoint, {
       name: req.name,
-      countries: req.countries,
-      assignedManagerId: manager?.id ?? null,
-      assignedManagerName: manager?.name ?? null,
-      assignedManagerEmail: manager?.email ?? null,
-      status: manager ? 'Active' : 'Unassigned',
-      zone: req.zone ?? null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    TERRITORIES.push(territory);
-    if (manager) {
-      const idx = TERRITORY_MANAGERS.findIndex(m => m.id === manager.id);
-      if (idx !== -1) TERRITORY_MANAGERS[idx].assignedTerritoryIds.push(id);
-    }
-    return of(territory).pipe(delay(500));
+      countryCode,
+      assignedManagerUserId: req.assignedManagerUserId ?? this.toUserId(req.assignedManagerId ?? null),
+      boundary: req.boundary ?? req.zone?.geometry ?? null,
+    }).pipe(map(item => this.normalizeTerritory(item)));
   }
 
   assign$(territoryId: string, managerId: string | null): Observable<Territory | null> {
-    const idx = TERRITORIES.findIndex(t => t.id === territoryId);
-    if (idx === -1) return of(null).pipe(delay(300));
-
-    const prev = TERRITORIES[idx];
-    if (prev.assignedManagerId) {
-      const mIdx = TERRITORY_MANAGERS.findIndex(m => m.id === prev.assignedManagerId);
-      if (mIdx !== -1) {
-        TERRITORY_MANAGERS[mIdx].assignedTerritoryIds =
-          TERRITORY_MANAGERS[mIdx].assignedTerritoryIds.filter(id => id !== territoryId);
-      }
+    const id = this.toTerritoryId(territoryId);
+    if (!id) {
+      throw new Error('Territory id is invalid.');
     }
 
-    const manager = managerId ? TERRITORY_MANAGERS.find(m => m.id === managerId) ?? null : null;
-    TERRITORIES[idx] = {
-      ...prev,
-      assignedManagerId: manager?.id ?? null,
-      assignedManagerName: manager?.name ?? null,
-      assignedManagerEmail: manager?.email ?? null,
-      status: manager ? 'Active' : 'Unassigned',
-      updatedAt: new Date().toISOString(),
-    };
+    return this.updateManager$(id, managerId).pipe(map(item => this.normalizeTerritory(item)));
+  }
 
-    if (manager) {
-      const mIdx = TERRITORY_MANAGERS.findIndex(m => m.id === manager.id);
-      if (mIdx !== -1 && !TERRITORY_MANAGERS[mIdx].assignedTerritoryIds.includes(territoryId)) {
-        TERRITORY_MANAGERS[mIdx].assignedTerritoryIds.push(territoryId);
-      }
+  updateManager$(territoryId: string | number, managerId: string | number | null): Observable<TerritoryDetail> {
+    const id = this.toTerritoryId(territoryId);
+    if (!id) {
+      throw new Error('Territory id is invalid.');
     }
 
-    return of({ ...TERRITORIES[idx] }).pipe(delay(400));
+    return this.http.put<TerritoryDetail>(`${this.endpoint}/${id}/manager`, {
+      managerUserId: this.toUserId(managerId),
+    }).pipe(map(item => this.normalizeTerritoryDetail(item)));
   }
 
   delete$(id: string): Observable<void> {
-    const idx = TERRITORIES.findIndex(t => t.id === id);
-    if (idx !== -1) {
-      const t = TERRITORIES[idx];
-      if (t.assignedManagerId) {
-        const mIdx = TERRITORY_MANAGERS.findIndex(m => m.id === t.assignedManagerId);
-        if (mIdx !== -1) {
-          TERRITORY_MANAGERS[mIdx].assignedTerritoryIds =
-            TERRITORY_MANAGERS[mIdx].assignedTerritoryIds.filter(tid => tid !== id);
-        }
-      }
-      TERRITORIES.splice(idx, 1);
+    const territoryId = this.toTerritoryId(id);
+    if (!territoryId) {
+      throw new Error('Territory id is invalid.');
     }
-    return of(undefined).pipe(delay(400));
+
+    return this.http.delete<void>(`${this.endpoint}/${territoryId}`);
   }
 
   setManagerStatus$(id: string, status: 'Active' | 'Inactive'): Observable<void> {
-    const idx = TERRITORY_MANAGERS.findIndex(m => m.id === id);
-    if (idx !== -1) TERRITORY_MANAGERS[idx] = { ...TERRITORY_MANAGERS[idx], status };
-    if (status === 'Inactive') {
-      for (let i = 0; i < TERRITORIES.length; i++) {
-        if (TERRITORIES[i].assignedManagerId === id) {
-          TERRITORIES[i] = {
-            ...TERRITORIES[i],
-            assignedManagerId: null,
-            assignedManagerName: null,
-            assignedManagerEmail: null,
-            status: 'Unassigned',
-            updatedAt: new Date().toISOString(),
-          };
-        }
-      }
-      if (idx !== -1) TERRITORY_MANAGERS[idx] = { ...TERRITORY_MANAGERS[idx], assignedTerritoryIds: [] };
-    }
-    return of(undefined).pipe(delay(400));
+    void id;
+    void status;
+    throw new Error('Manager activation is handled through user administration.');
   }
 
   addManager$(user: { id: string; firstName: string; lastName: string; email: string }): Observable<TerritoryManager> {
-    const existing = TERRITORY_MANAGERS.find(m => m.id === `TM-USR-${user.id}`);
-    if (existing) return of(existing).pipe(delay(200));
-
-    const nameParts = [user.firstName, user.lastName].filter(Boolean);
-    const initials = nameParts.map(p => p[0]?.toUpperCase() ?? '').join('').slice(0, 2) || '?';
-    const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
-    const avatarColor = colors[TERRITORY_MANAGERS.length % colors.length];
-
-    const manager: TerritoryManager = {
-      id: `TM-USR-${user.id}`,
-      name: nameParts.join(' ') || user.email,
-      email: user.email,
-      initials,
-      avatarColor,
-      assignedTerritoryIds: [],
-      status: 'Active',
-    };
-    TERRITORY_MANAGERS.push(manager);
-    return of(manager).pipe(delay(400));
+    const displayName = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email;
+    return this.searchManagerCandidates$(user.email, 1).pipe(
+      map(items => items[0] ?? {
+        id: user.id,
+        userId: this.toUserId(user.id) ?? 0,
+        name: displayName,
+        displayName,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        initials: this.buildInitials(displayName, user.email),
+        avatarColor: this.avatarColorFor(user.id),
+        assignedTerritoryIds: [],
+        status: 'Active' as const,
+        roles: [],
+        assignedTerritories: [],
+        isActive: true,
+        canAssign: true,
+      }),
+    );
   }
 
   isAlreadyManager(userId: string): boolean {
-    return TERRITORY_MANAGERS.some(m => m.id === `TM-USR-${userId}`);
+    void userId;
+    return false;
   }
 
   removeManager$(id: string): Observable<void> {
-    const idx = TERRITORY_MANAGERS.findIndex(m => m.id === id);
-    if (idx !== -1) {
-      for (let i = 0; i < TERRITORIES.length; i++) {
-        if (TERRITORIES[i].assignedManagerId === id) {
-          TERRITORIES[i] = {
-            ...TERRITORIES[i],
-            assignedManagerId: null,
-            assignedManagerName: null,
-            assignedManagerEmail: null,
-            status: 'Unassigned',
-            updatedAt: new Date().toISOString(),
-          };
-        }
-      }
-      TERRITORY_MANAGERS.splice(idx, 1);
-    }
-    return of(undefined).pipe(delay(400));
+    void id;
+    throw new Error('Manager removal is handled by unassigning territories.');
   }
 
   getAssignedCountryCodes(): Set<string> {
     const codes = new Set<string>();
-    for (const t of TERRITORIES) {
+    for (const t of this.lastPage$.value?.items ?? []) {
       for (const c of t.countries) codes.add(c);
     }
     return codes;
+  }
+
+  searchManagerCandidates$(query?: string | null, take = 20, territoryId?: number | null): Observable<TerritoryManager[]> {
+    let params = new HttpParams().set('take', String(Math.max(1, take)));
+    if (query?.trim()) {
+      params = params.set('query', query.trim());
+    }
+    if (territoryId && territoryId > 0) {
+      params = params.set('territoryId', String(territoryId));
+    }
+
+    return this.http
+      .get<{ items: TerritoryManager[] }>(`${this.endpoint}/managers/search`, { params })
+      .pipe(map(response => (response.items ?? []).map(item => this.normalizeManager(item))));
+  }
+
+  getAssignableManagers$(territoryId: string | number, query?: string | null, take = 20): Observable<TerritoryManager[]> {
+    const id = this.toTerritoryId(territoryId);
+    if (!id) {
+      throw new Error('Territory id is invalid.');
+    }
+
+    let params = new HttpParams().set('take', String(Math.max(1, take)));
+    if (query?.trim()) {
+      params = params.set('query', query.trim());
+    }
+
+    return this.http
+      .get<{ items: TerritoryManager[] }>(`${this.endpoint}/${id}/assignable-managers`, { params })
+      .pipe(map(response => (response.items ?? []).map(item => this.normalizeManager(item))));
+  }
+
+  private normalizeTerritory(value: Territory): Territory {
+    const countryCode = value.countryCode ?? value.countries?.[0] ?? null;
+    const territoryId = value.territoryId ?? this.toTerritoryId(value.id) ?? 0;
+    const hasManager = !!(value.assignedManagerId || value.assignedManagerUserId);
+    const status = value.status === 'Assigned' || value.status === 'Active'
+      ? (hasManager ? 'Assigned' : 'Unassigned')
+      : 'Unassigned';
+
+    return {
+      ...value,
+      territoryId,
+      countryId: value.countryId ?? territoryId,
+      id: value.id || `TERR-${String(territoryId).padStart(3, '0')}`,
+      displayName: value.displayName ?? value.name,
+      internalReference: value.internalReference ?? value.id ?? `TERR-${String(territoryId).padStart(3, '0')}`,
+      countryCode,
+      countries: countryCode ? [countryCode] : (value.countries ?? []),
+      assignedManagerId: value.assignedManagerId ?? (value.assignedManagerUserId ? String(value.assignedManagerUserId) : null),
+      status,
+      createdAt: value.createdAt,
+      updatedAt: value.updatedAt ?? value.createdAt,
+    };
+  }
+
+  private normalizeTerritoryDetail(value: TerritoryDetail): TerritoryDetail {
+    const base = this.normalizeTerritory(value);
+    const assignedManager = value.assignedManager
+      ? {
+          ...value.assignedManager,
+          id: value.assignedManager.id || String(value.assignedManager.userId),
+          name: value.assignedManager.name || value.assignedManager.displayName || value.assignedManager.email,
+          displayName: value.assignedManager.displayName || value.assignedManager.name || value.assignedManager.email,
+          initials: value.assignedManager.initials ||
+            this.buildInitials(value.assignedManager.displayName || value.assignedManager.name || value.assignedManager.email, value.assignedManager.email),
+          roles: value.assignedManager.roles ?? [],
+        }
+      : null;
+
+    return {
+      ...value,
+      ...base,
+      assignedManager,
+      boundaryGeoJson: value.boundaryGeoJson ?? null,
+      viewport: value.viewport ?? null,
+      boundaryRequiredMessage: value.boundaryRequiredMessage ?? null,
+      canAssign: value.canAssign ?? !!value.hasBoundary,
+    };
+  }
+
+  private normalizeManager(value: TerritoryManager): TerritoryManager {
+    const userId = value.userId ?? this.toUserId(value.id) ?? 0;
+    const name = value.name || value.displayName || value.email;
+    const assignedTerritoryIds = value.assignedTerritoryIds?.length
+      ? value.assignedTerritoryIds
+      : (value.assignedTerritories ?? []).map(item => `TERR-${String(item.territoryId).padStart(3, '0')}`);
+
+    return {
+      ...value,
+      id: value.id || String(userId),
+      userId,
+      name,
+      displayName: value.displayName ?? name,
+      initials: value.initials || this.buildInitials(name, value.email),
+      avatarColor: value.avatarColor || this.avatarColorFor(String(userId)),
+      assignedTerritoryIds,
+      roles: value.roles ?? [],
+      assignedTerritories: value.assignedTerritories ?? [],
+      status: value.status ?? 'Active',
+      isActive: value.isActive ?? value.status !== 'Inactive',
+      canAssign: value.canAssign ?? true,
+    };
+  }
+
+  private toTerritoryId(id: string | number | null | undefined): number | null {
+    if (typeof id === 'number' && Number.isFinite(id)) return id;
+    if (!id) return null;
+
+    const direct = Number(id);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const match = String(id).match(/(\d+)$/);
+    const parsed = match ? Number(match[1]) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  private toUserId(id: string | number | null | undefined): number | null {
+    if (typeof id === 'number' && Number.isFinite(id)) return id;
+    if (!id) return null;
+
+    const parsed = Number(id);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  private avatarColorFor(seed: string): string {
+    const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
+    const hash = Array.from(seed).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  }
+
+  private buildInitials(name: string, email: string): string {
+    const source = name.trim() || email.trim();
+    const parts = source.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
+    }
+    return (source.slice(0, 2) || '?').toUpperCase();
   }
 }

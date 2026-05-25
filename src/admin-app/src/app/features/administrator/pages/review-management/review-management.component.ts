@@ -12,6 +12,7 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
 import { AppUsersService } from '../../../../core/services/administrator/app-users.service';
+import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
 import {
   AdminReview, AdminReviewsPageRequest,
   ReviewSortField, ReviewSortDir, ReviewStatusFilter,
@@ -30,6 +31,7 @@ const PAGE_SIZE_STEP    = 8;
 export class ReviewManagementComponent implements OnInit, OnDestroy {
   private readonly revSvc   = inject(AdminReviewsService);
   private readonly usersSvc = inject(AppUsersService);
+  private readonly dashboardSvc = inject(AdminDashboardService);
   private readonly cdr      = inject(ChangeDetectorRef);
   private readonly route    = inject(ActivatedRoute);
   private readonly router   = inject(Router);
@@ -40,6 +42,7 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
   reviews: AdminReview[]   = [];
   totalReviews             = 0;
   reportedCount            = 0;
+  pendingReportsCount      = 0;
   isLoading                = false;
   isLoadingMore            = false;
   displayCount             = PAGE_SIZE_INITIAL;
@@ -99,11 +102,18 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
   detailReview: AdminReview | null = null;
 
   ngOnInit(): void {
+    this.loadPendingReportsBadge();
+
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe(params => {
+      const status = params['status'];
+      if (status === 'reported' || status === 'pending') {
+        this.statusFilter = 'reported';
+      }
+
       if (params['highlight']) {
         this.highlightId    = params['highlight'];
         this.statusFilter   = 'reported';
-        this.router.navigate([], { queryParams: {}, replaceUrl: true });
+        this.router.navigate([], { queryParams: { status: 'reported' }, replaceUrl: true });
       }
       this.loadReviews();
     });
@@ -116,13 +126,26 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
       this.loadReviews();
     });
 
-    this.revSvc.notifications$.pipe(takeUntil(this.destroy$)).subscribe(() => {
-      this.reportedCount = this.revSvc.getReportedCount();
-      this.cdr.detectChanges();
-    });
   }
 
   ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
+
+  private loadPendingReportsBadge(): void {
+    this.dashboardSvc.loadDashboard()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: dashboard => {
+          this.pendingReportsCount = dashboard.badges.pendingReportsCount;
+          this.reportedCount = dashboard.badges.pendingReportsCount;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.pendingReportsCount = 0;
+          this.reportedCount = 0;
+          this.cdr.markForCheck();
+        },
+      });
+  }
 
   @HostListener('document:click')
   onDocumentClick(): void {
@@ -144,7 +167,7 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
       .subscribe(page => {
         this.reviews      = page.items;
         this.totalReviews = page.total;
-        this.reportedCount = page.reportedCount;
+        this.reportedCount = this.pendingReportsCount;
         this.isLoading    = false;
         this.cdr.detectChanges();
 

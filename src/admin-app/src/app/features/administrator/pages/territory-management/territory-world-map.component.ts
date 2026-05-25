@@ -5,6 +5,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ALL_COUNTRIES } from '../../../../core/services/administrator/territory.service';
+import { GeoJsonGeometry } from '../../../../core/models/administrator/territory.model';
 
 declare const L: any;
 
@@ -16,6 +17,12 @@ export interface CountryMapAssignment {
   managerId: string;
   managerName: string;
   managerColor: string;
+}
+
+export interface CountryMapClick {
+  code: string;
+  name: string;
+  geometry: GeoJsonGeometry | null;
 }
 
 @Component({
@@ -58,7 +65,7 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
   @Input() selectedCode = '';
   @Input() unavailableCodes: string[] = [];
   @Input() highlightCode = '';
-  @Output() countryClick = new EventEmitter<string>();
+  @Output() countryClick = new EventEmitter<CountryMapClick>();
 
   isLoading = true;
   loadFailed = false;
@@ -194,7 +201,7 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
             : `<strong>${name}</strong><br><span style="color:#6b7280;font-size:11px;">Click to select</span>`,
           { sticky: true }
         );
-        layer.on('click', () => this.zone.run(() => this.countryClick.emit(code)));
+        layer.on('click', () => this.emitCountryClick(code, name, layer));
         layer.on('mouseover', (e: any) => {
           if (code !== this.selectedCode) e.target.setStyle({ fillColor: '#60a5fa', fillOpacity: 0.6 });
         });
@@ -211,7 +218,7 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
         `<strong>${name}</strong><br><span style="color:#6b7280;font-size:11px;">Assigned — click to view</span>`,
         { sticky: true }
       );
-      layer.on('click', () => this.zone.run(() => this.countryClick.emit(code)));
+      layer.on('click', () => this.emitCountryClick(code, name, layer));
       layer.on('mouseover', (e: any) => {
         e.target.setStyle({ fillColor: '#2563eb', fillOpacity: 0.7 });
       });
@@ -223,7 +230,7 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
         `<strong>${name}</strong><br><span style="color:#6b7280;font-size:11px;">Available — click to assign</span>`,
         { sticky: true }
       );
-      layer.on('click', () => this.zone.run(() => this.countryClick.emit(code)));
+      layer.on('click', () => this.emitCountryClick(code, name, layer));
       layer.on('mouseover', (e: any) => {
         e.target.setStyle({ fillColor: '#60a5fa', fillOpacity: 0.6 });
       });
@@ -258,5 +265,17 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
         } catch { /* ignore */ }
       }
     });
+  }
+
+  private emitCountryClick(code: string, name: string, layer: any): void {
+    const rawGeometry = layer.feature?.geometry;
+    const geometry = rawGeometry?.type === 'Polygon' || rawGeometry?.type === 'MultiPolygon'
+      ? {
+          type: rawGeometry.type,
+          coordinates: rawGeometry.coordinates,
+        } as GeoJsonGeometry
+      : null;
+
+    this.zone.run(() => this.countryClick.emit({ code, name, geometry }));
   }
 }
