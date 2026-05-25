@@ -135,6 +135,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   routeInfoMessage = '';
   showNoDataModal = false;
   showLegend = false;
+  isPinToPinMode = false;
+  pinToPinOrigin: MapEntityMarker | null = null;
 
   categories = [
     { id: 'all', label: 'All' },
@@ -217,8 +219,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.mapFilterState.clearSelection();
     }
 
-    // Explore → Map sync: if explore switched to a different destination, re-center the map.
-    // Skip when navigating from within the map (filters, preview restore, mapFocus, or explicit fromExplore).
     const isInternalMapNav = !!(state?.fromFilters || state?.mapPreviewRestore);
     if (!isInternalMapNav && !this.navigatedWithDestination && !this.initialMapFocus && this.destinationSvc.isDestinationMode()) {
       const dsLat = this.destinationSvc.latitude();
@@ -677,7 +677,97 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
     this.routeErrorMessage = ''; this.routeInfoMessage = '';
+    this.isPinToPinMode = false;
+    this.pinToPinOrigin = null;
     this.clearRoute();
+  }
+
+  startPinToPinRoute(): void {
+    if (!this.selectedPlace) return;
+    this.pinToPinOrigin = this.selectedPlace;
+    this.isPinToPinMode = true;
+    this.selectedPlace = null;
+    this.routeErrorMessage = '';
+    this.routeInfoMessage = '';
+    this.clearRoute();
+    this.cdr.detectChanges();
+  }
+
+  cancelPinToPinMode(): void {
+    this.isPinToPinMode = false;
+    this.selectedPlace = this.pinToPinOrigin;
+    this.pinToPinOrigin = null;
+    this.cdr.detectChanges();
+  }
+
+  async openPinToPinDirections(destination: MapEntityMarker): Promise<void> {
+    const origin = this.pinToPinOrigin;
+    if (!origin) return;
+
+    this.isPinToPinMode = false;
+    this.pinToPinOrigin = null;
+    this.selectedPlace = destination;
+
+    const routeRequestId = ++this.routeRequestSeq;
+    const selectedKey = this.getMarkerKey(destination);
+
+    this.isLoadingRoute = true;
+    this.routeErrorMessage = '';
+    this.routeInfoMessage = '';
+    this.clearRoute();
+    this.cdr.detectChanges();
+
+    const straightLineKm = this.haversineKm(
+      origin.latitude, origin.longitude,
+      destination.latitude, destination.longitude,
+    );
+    const useDriving = straightLineKm > 30;
+
+    this.analytics.track('directions_started', {
+      entityType: this.toAnalyticsEntityType(destination),
+      entityId: destination.entityId,
+      metadata: {
+        surface: 'map',
+        provider: 'osrm',
+        mode: useDriving ? 'car' : 'foot',
+        originSource: 'pin',
+      },
+    });
+
+    const routeRequest = useDriving
+      ? this.mapApi.getDrivingRoute(origin.latitude, origin.longitude, destination.latitude, destination.longitude)
+      : this.mapApi.getWalkingRoute(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
+
+    routeRequest.subscribe({
+      next: (route) => {
+        if (!this.isCurrentRouteRequest(routeRequestId, selectedKey)) {
+          if (routeRequestId === this.routeRequestSeq) {
+            this.isLoadingRoute = false;
+            this.cdr.detectChanges();
+          }
+          return;
+        }
+        this.drawRoute(route);
+        this.fitRoute(route, origin, destination);
+        this.isLoadingRoute = false;
+        this.routeInfoMessage = this.buildRouteLabel(route, useDriving);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        if (!this.isCurrentRouteRequest(routeRequestId, selectedKey)) {
+          if (routeRequestId === this.routeRequestSeq) {
+            this.isLoadingRoute = false;
+            this.cdr.detectChanges();
+          }
+          return;
+        }
+        this.isLoadingRoute = false;
+        this.routeErrorMessage = useDriving
+          ? 'Driving directions are unavailable right now.'
+          : 'Walking directions are unavailable right now.';
+        this.cdr.detectChanges();
+      },
+    });
   }
 
   private readonly resizeHandler = () => this.map?.resize();
@@ -789,7 +879,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       try {
         this.map.setLayoutProperty(layerLike.id, 'visibility', 'none');
       } catch {
-        // Ignore style layers that cannot be modified by MapLibre at runtime.
       }
     }
   }
@@ -831,9 +920,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     const exactLocation = await this.locationSvc.refreshExactLocationForMap();
 
-    // Re-check destination after awaiting location.
-    // Also check whether the stored mapViewState was saved for a different destination
-    // (e.g., user browsed Tara, panned around, then went back to Explore and picked Novi Sad).
     if (this.destinationSvc.isDestinationMode()) {
       const dsId = this.destinationSvc.id();
       const dsLat = this.destinationSvc.latitude();
@@ -849,8 +935,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
           Math.abs((currentSaved.lat ?? 0) - dsLat) < 0.001 &&
           Math.abs((currentSaved.lon ?? 0) - dsLon) < 0.001;
 
-        // Re-center if: coords don't match (new destination set after constructor ran)
-        // OR if the saved camera view belongs to a different destination.
         if (!coordsMatch || destinationChanged) {
           this.destinationName = dsName;
           this.destinationLat = dsLat;
@@ -900,7 +984,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     try {
       sessionStorage.setItem(MAP_OPENED_THIS_SESSION_KEY, 'true');
     } catch {
-      // storage may be unavailable; restore simply falls back to location.
     }
   }
 
@@ -918,7 +1001,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       }));
       this.markMapOpenedThisSession();
     } catch {
-      // storage may be unavailable; the next map open will resolve location again.
     }
   }
 
@@ -985,7 +1067,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         mapPreviewRestore: true,
       } satisfies MapNavigationState, '', this.router.url);
     } catch {
-      // History state may be unavailable in restricted browser modes.
     }
   }
 
@@ -999,7 +1080,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       delete nextState.mapPreviewRestore;
       globalThis.history.replaceState(nextState, '', this.router.url);
     } catch {
-      // If history state cannot be updated, the in-memory selectedPlace still controls this view.
     }
   }
 
@@ -1223,6 +1303,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private onMarkerClick(marker: MapEntityMarker): void {
+    if (this.isPinToPinMode) {
+      if (marker.entityType !== 'destination') {
+        void this.openPinToPinDirections(marker);
+      }
+      return;
+    }
+
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
 

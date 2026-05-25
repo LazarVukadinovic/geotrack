@@ -410,11 +410,12 @@ public class MapService : IMapService
             .Where(point => HasValidCoordinates(point.Latitude, point.Longitude))
             .ToList();
 
+        const double walkingSpeedMs = 5000.0 / 3600.0; // 5 km/h in m/s
         var mappedRoute = new MapRouteResponseDto
         {
             Coordinates = DecimateCoordinates(rawCoords),
             DistanceMeters = route.Distance,
-            DurationSeconds = route.Duration,
+            DurationSeconds = route.Distance > 0 ? route.Distance / walkingSpeedMs : route.Duration,
         };
 
         if (mappedRoute.Coordinates.Count <= 1)

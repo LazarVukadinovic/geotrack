@@ -373,7 +373,7 @@
           </div>
         }
 
-        <div class="flex gap-2 px-4 pb-4">
+        <div class="flex gap-2 px-4 pb-2">
           @if (place.detailRoute) {
             <button
               (click)="openDetails()"
@@ -399,6 +399,42 @@
               </svg>
             }
             {{ isLoadingRoute ? 'Calculating…' : 'Directions' }}
+          </button>
+        </div>
+
+        <div class="px-4 pb-4">
+          <button
+            (click)="startPinToPinRoute()"
+            class="w-full py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 text-xs font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.8"/>
+              <circle cx="19" cy="18" r="2" stroke="currentColor" stroke-width="1.8"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                d="M5 8v3a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4"/>
+            </svg>
+            Route between pins
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (isPinToPinMode) {
+      <div class="map-page__pin-to-pin-banner absolute left-0 right-0 flex justify-center px-3">
+        <div class="w-full bg-[#1a2b4a] text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl">
+          <svg class="w-5 h-5 flex-none text-[#e8570a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="19" cy="18" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+              d="M5 8v3a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4"/>
+          </svg>
+          <p class="text-sm font-medium flex-1">Tap a pin to set the destination</p>
+          <button
+            (click)="cancelPinToPinMode()"
+            class="flex-none w-7 h-7 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            aria-label="Cancel pin selection">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
           </button>
         </div>
       </div>

@@ -41,6 +41,12 @@
   animation: map-bottom-card-enter 160ms ease-out both;
 }
 
+.map-page__pin-to-pin-banner {
+  bottom: var(--map-bottom-gap);
+  z-index: var(--map-layer-preview);
+  animation: map-bottom-card-enter 160ms ease-out both;
+}
+
 .map-page__locate-button {
   bottom: var(--map-bottom-gap);
   z-index: var(--map-layer-floating-control);
