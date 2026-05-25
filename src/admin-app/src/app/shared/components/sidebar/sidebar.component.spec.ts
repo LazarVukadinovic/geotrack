@@ -22,8 +22,9 @@ describe('SidebarComponent', () => {
   ];
 
   const authService = {
-    getUser: vi.fn(() => currentRole ? { role: currentRole, region: '' } : null),
+    getUser: vi.fn(() => currentRole ? { role: currentRole, activeRoleCode: activeRoleCode(currentRole), region: '' } : null),
     isAdministrator: vi.fn(() => currentRole === 'Administrator'),
+    isRegionalManager: vi.fn(() => currentRole === 'Regional Manager'),
     canAccessTerritoryAdmin: vi.fn(() => currentRole === 'Territory Manager'),
     logout: vi.fn(),
   };
@@ -159,5 +160,20 @@ describe('SidebarComponent', () => {
 
   function normalizedText(): string {
     return (fixture.nativeElement.textContent as string).replace(/\s+/g, ' ').trim();
+  }
+
+  function activeRoleCode(role: string): string {
+    switch (role) {
+      case 'Administrator':
+        return 'Admin';
+      case 'Territory Manager':
+        return 'TerritoryManager';
+      case 'Territory Associate':
+        return 'TerritoryAssociate';
+      case 'Regional Manager':
+        return 'RegionalManager';
+      default:
+        return role;
+    }
   }
 });

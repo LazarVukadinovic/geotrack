@@ -228,13 +228,12 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
   }
 
   get canOpenAddRegionalManager(): boolean {
-    const role = this.auth.getUser()?.role;
     return !!this.activeTerritoryId &&
-      (role === 'Territory Manager' || role === 'Territory Associate');
+      this.auth.canAccessTerritoryAdmin();
   }
 
   get canOpenAddTerritoryAssociate(): boolean {
-    return !!this.activeTerritoryId && this.auth.getUser()?.role === 'Territory Manager';
+    return !!this.activeTerritoryId && this.auth.isTerritoryManager();
   }
 
   get regionalManagerSelectableRegions(): TerritoryUserAvailableRegion[] {

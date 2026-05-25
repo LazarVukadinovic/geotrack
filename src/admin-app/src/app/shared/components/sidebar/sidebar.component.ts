@@ -214,7 +214,7 @@ export class SidebarComponent implements OnInit, OnChanges {
   }
 
   private get shouldUseRegionalSidebarState(): boolean {
-    return this.auth.getUser()?.role === 'Regional Manager' && !this.isAdministrator && !this.isTerritory;
+    return this.auth.getUser()?.activeRoleCode === 'RegionalManager' && !this.isAdministrator && !this.isTerritory;
   }
 
   private get requestsQueueBadge(): number | undefined {
