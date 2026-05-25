@@ -35,6 +35,8 @@ export class ExploreSectionListingPageComponent {
   protected readonly emptyReason = this.listing.emptyReason;
   protected readonly filters = this.listing.filters;
   protected readonly hasActiveFilters = this.listing.hasActiveFilters;
+  protected readonly activeFilterCount = computed(() => this.listing.selectedTagIds().length);
+  protected readonly filtersExpanded = signal(false);
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -64,6 +66,10 @@ export class ExploreSectionListingPageComponent {
 
   protected loadMore(): void {
     this.listing.loadMore();
+  }
+
+  protected toggleFilters(): void {
+    this.filtersExpanded.update(v => !v);
   }
 
   protected toggleFilter(tagId: number): void {
