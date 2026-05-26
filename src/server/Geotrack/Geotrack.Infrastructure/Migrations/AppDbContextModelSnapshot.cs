@@ -986,7 +986,7 @@ namespace Geotrack.Infrastructure.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<Geometry>("BoundaryGeometry")
-                        .HasColumnType("geography (geometry)");
+                        .HasColumnType("geometry (geometry, 4326)");
 
                     b.Property<string>("BoundaryShapeType")
                         .HasMaxLength(32)
@@ -1223,15 +1223,57 @@ namespace Geotrack.Infrastructure.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<Geometry>("BoundaryGeometry")
-                        .HasColumnType("geography (geometry)");
+                        .HasColumnType("geometry (geometry, 4326)");
+
+                    b.Property<Geometry>("BoundaryDisplayGeometry")
+                        .HasColumnType("geometry (geometry, 4326)");
+
+                    b.Property<string>("BoundaryExternalKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("BoundaryAdmLevel")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime?>("BoundaryImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BoundaryLicense")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BoundaryReleaseType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("BoundaryShapeType")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("BoundaryShapeGroup")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("BoundaryShapeId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("BoundarySource")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<string>("BoundarySourceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("CountryIso3")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1247,10 +1289,21 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<long?>("OsmRelationId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("TerritoryKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Country");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BoundaryExternalKey")
+                        .IsUnique()
+                        .HasFilter("\"BoundaryExternalKey\" IS NOT NULL");
 
                     b.HasIndex("BoundaryGeometry");
 
@@ -1259,6 +1312,10 @@ namespace Geotrack.Infrastructure.Migrations
                     b.HasIndex("CountryCode")
                         .IsUnique()
                         .HasFilter("\"CountryCode\" IS NOT NULL");
+
+                    b.HasIndex("CountryIso3")
+                        .IsUnique()
+                        .HasFilter("\"CountryIso3\" IS NOT NULL");
 
                     b.HasIndex("Name")
                         .IsUnique();

@@ -156,14 +156,43 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.TerritoryKind)
+                .IsRequired()
+                .HasMaxLength(32)
+                .HasDefaultValue(TerritoryKinds.Country);
+
             entity.Property(x => x.CountryCode)
                 .HasMaxLength(2);
+
+            entity.Property(x => x.CountryIso3)
+                .HasMaxLength(3);
 
             entity.Property(x => x.BoundaryShapeType)
                 .HasMaxLength(32);
 
+            entity.Property(x => x.BoundaryShapeGroup)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.BoundaryShapeId)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.BoundaryExternalKey)
+                .HasMaxLength(300);
+
             entity.Property(x => x.BoundarySource)
                 .HasMaxLength(32);
+
+            entity.Property(x => x.BoundarySourceUrl)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.BoundaryAdmLevel)
+                .HasMaxLength(16);
+
+            entity.Property(x => x.BoundaryReleaseType)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.BoundaryLicense)
+                .HasMaxLength(200);
 
             entity.HasIndex(x => x.Name)
                 .IsUnique();
@@ -172,11 +201,22 @@ public class AppDbContext : DbContext
                 .IsUnique()
                 .HasFilter("\"CountryCode\" IS NOT NULL");
 
+            entity.HasIndex(x => x.CountryIso3)
+                .IsUnique()
+                .HasFilter("\"CountryIso3\" IS NOT NULL");
+
+            entity.HasIndex(x => x.BoundaryExternalKey)
+                .IsUnique()
+                .HasFilter("\"BoundaryExternalKey\" IS NOT NULL");
+
             entity.Property<Geometry?>("BoundaryGeometry")
-                .HasColumnType("geography (geometry)");
+                .HasColumnType("geometry (geometry, 4326)");
 
             entity.HasIndex("BoundaryGeometry")
                 .HasMethod("GIST");
+
+            entity.Property<Geometry?>("BoundaryDisplayGeometry")
+                .HasColumnType("geometry (geometry, 4326)");
 
             entity.HasMany(x => x.Regions)
                 .WithOne(x => x.Territory)
@@ -219,7 +259,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.CreatedByUserId);
 
             entity.Property<Geometry?>("BoundaryGeometry")
-                .HasColumnType("geography (geometry)");
+                .HasColumnType("geometry (geometry, 4326)");
 
             entity.HasIndex("BoundaryGeometry")
                 .HasMethod("GIST");
