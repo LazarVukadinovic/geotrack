@@ -105,6 +105,13 @@ export class ExploreSectionListingService {
 
   readonly items = computed(() => this._items().map(item => this.resolveSavedState(item)));
 
+  invalidate(): void {
+    this.currentSectionKey = null;
+    this.currentDestinationId = null;
+    this._page.set(null);
+    this._items.set([]);
+  }
+
   load(sectionKey: string, destinationId: number): void {
     const normalizedKey = sectionKey.trim();
     if (!normalizedKey || !Number.isFinite(destinationId) || destinationId <= 0) {

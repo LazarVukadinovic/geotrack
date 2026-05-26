@@ -93,9 +93,9 @@ export class EventDetailPageComponent {
     const title = this.event()?.title ?? '';
     const url = globalThis.location.href;
     if (navigator.share) {
-      void navigator.share({ title, url });
-    } else {
-      void navigator.clipboard.writeText(url);
+      navigator.share({ title, text: title, url }).catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      });
     }
   }
 

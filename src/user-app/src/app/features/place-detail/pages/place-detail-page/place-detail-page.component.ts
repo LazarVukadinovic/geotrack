@@ -12,6 +12,8 @@ import { ImageFallbackDirective } from '../../../../shared/directives/image-fall
 import { HttpClient } from '@angular/common/http';
 import { PlaceDetailService } from '../../services/place-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
+import { ExploreService } from '../../../explore/services/explore.service';
+import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { PlaceDetail } from '../../../../core/models/place.model';
 import type { MapEntityMarker, MapEntityType } from '../../../../core/services/map-api.service';
@@ -32,6 +34,8 @@ export class PlaceDetailPageComponent {
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly http     = inject(HttpClient);
+  private readonly exploreService = inject(ExploreService);
+  private readonly listingService = inject(ExploreSectionListingService);
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
@@ -129,9 +133,9 @@ export class PlaceDetailPageComponent {
     const title = this.place()?.title ?? '';
     const url = globalThis.location.href;
     if (navigator.share) {
-      void navigator.share({ title, url });
-    } else {
-      void navigator.clipboard.writeText(url);
+      navigator.share({ title, text: title, url }).catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      });
     }
   }
 
@@ -278,6 +282,8 @@ export class PlaceDetailPageComponent {
       this.analytics.track('review_created', { entityType: 'place', entityId: numId });
     }
     this.service.loadPlaceDetail(id);
+    this.exploreService.invalidate();
+    this.listingService.invalidate();
   }
 
   protected onDirectionsClick(): void {

@@ -44,7 +44,7 @@
   }
 
   &.icon-button--compact {
-    width: 38px;
-    height: 38px;
+    width: var(--icon-btn-compact-size, 38px);
+    height: var(--icon-btn-compact-size, 38px);
   }
 }

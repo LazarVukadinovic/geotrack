@@ -69,6 +69,8 @@
   color: #1a2b4c;
   cursor: pointer;
   flex-shrink: 0;
+  pointer-events: auto;
+  touch-action: manipulation;
   transition: background 0.15s ease, transform 0.1s ease;
 
   svg {
