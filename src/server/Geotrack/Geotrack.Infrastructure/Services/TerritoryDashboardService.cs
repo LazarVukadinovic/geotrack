@@ -46,11 +46,16 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
 
     private readonly AppDbContext _db;
     private readonly IHealthScoreService _healthScores;
+    private readonly LocalBoundaryImportService _localBoundaryImport;
 
-    public TerritoryDashboardService(AppDbContext db, IHealthScoreService healthScores)
+    public TerritoryDashboardService(
+        AppDbContext db,
+        IHealthScoreService healthScores,
+        LocalBoundaryImportService localBoundaryImport)
     {
         _db = db;
         _healthScores = healthScores;
+        _localBoundaryImport = localBoundaryImport;
     }
 
     public async Task<List<TerritoryAssignedTerritoryDto>> GetAssignedTerritoriesAsync(int userId)
@@ -60,6 +65,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         return await _db.TerritoryManagerTerritories
             .AsNoTracking()
             .Where(assignment => assignment.UserId == userId)
+            .Where(assignment => assignment.Territory.TerritoryKind == TerritoryKinds.Country)
             .OrderBy(assignment => assignment.Territory.Name)
             .ThenBy(assignment => assignment.TerritoryId)
             .Select(assignment => new TerritoryAssignedTerritoryDto
@@ -349,6 +355,35 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 ? MissingTerritoryBoundaryMessage
                 : null
         };
+    }
+
+    public async Task<BoundaryRegionCandidateResponseDto> GetRegionBoundaryCandidatesAsync(
+        int userId,
+        int? territoryId,
+        string? admLevel,
+        string? search,
+        int skip,
+        int take)
+    {
+        await EnsureTerritoryManagerOnlyRoleAsync(userId);
+
+        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, territoryId)
+            ?? throw new UnauthorizedAccessException("Territory is not assigned to the current territory manager.");
+        var territoryGeometry = ToPolygonalGeometry(activeTerritory.BoundaryGeometry);
+        if (territoryGeometry is null)
+            throw new InvalidOperationException(MissingTerritoryBoundaryMessage);
+
+        var iso3 = CountryRegistry.NormalizeIso3(activeTerritory.CountryIso3)
+            ?? CountryRegistry.ToIso3(activeTerritory.CountryCode)
+            ?? throw new InvalidOperationException("Assigned country/territory must have an ISO3 country code before loading boundary candidates.");
+
+        return await _localBoundaryImport.GetRegionCandidatesAsync(
+            string.IsNullOrWhiteSpace(admLevel) ? "ADM1" : admLevel,
+            iso3,
+            territoryGeometry,
+            search,
+            skip,
+            take);
     }
 
     public async Task<TerritoryRegionCreateResponseDto> CreateRegionAsync(
@@ -2307,7 +2342,9 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
 
         var query = _db.TerritoryManagerTerritories
             .AsNoTracking()
-            .Where(assignment => assignment.UserId == userId);
+            .Where(assignment =>
+                assignment.UserId == userId &&
+                assignment.Territory.TerritoryKind == TerritoryKinds.Country);
 
         if (territoryId.HasValue)
         {
@@ -2322,6 +2359,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 Id = assignment.TerritoryId,
                 Name = assignment.Territory.Name,
                 CountryCode = assignment.Territory.CountryCode,
+                CountryIso3 = assignment.Territory.CountryIso3,
                 BoundaryShapeType = assignment.Territory.BoundaryShapeType,
                 BoundarySource = assignment.Territory.BoundarySource,
                 BoundaryGeometry = EF.Property<Geometry?>(
@@ -2929,6 +2967,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? CountryCode { get; set; }
+        public string? CountryIso3 { get; set; }
         public string? BoundaryShapeType { get; set; }
         public string? BoundarySource { get; set; }
         public Geometry? BoundaryGeometry { get; set; }

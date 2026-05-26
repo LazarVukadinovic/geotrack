@@ -190,6 +190,39 @@ public sealed class AdminTerritoryController : ControllerBase
         }
     }
 
+    [HttpGet("regions/boundary-candidates")]
+    public async Task<ActionResult<BoundaryRegionCandidateResponseDto>> GetRegionBoundaryCandidates(
+        [FromQuery] int? territoryId = null,
+        [FromQuery] string? level = null,
+        [FromQuery] string? search = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 50)
+    {
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        if (skip < 0)
+            return BadRequest(new { message = "skip must be zero or greater." });
+
+        if (take <= 0)
+            return BadRequest(new { message = "take must be positive." });
+
+        try
+        {
+            return Ok(await _territoryDashboard.GetRegionBoundaryCandidatesAsync(
+                GetCurrentUserId(),
+                territoryId,
+                level,
+                search,
+                skip,
+                take));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpPost("regions")]
     public async Task<ActionResult<TerritoryRegionCreateResponseDto>> CreateRegion(
         [FromBody] TerritoryRegionCreateRequestDto? request)
