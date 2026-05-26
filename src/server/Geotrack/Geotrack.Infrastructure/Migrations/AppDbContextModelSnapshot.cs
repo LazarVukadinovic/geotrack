@@ -2763,6 +2763,107 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.AdminNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AudienceRole")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int?>("TargetId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetRoute")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AudienceRole", "CreatedAt");
+
+                    b.HasIndex("Type", "TargetType", "TargetId")
+                        .IsUnique();
+
+                    b.ToTable("AdminNotifications", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.AdminNotificationReadState", b =>
+                {
+                    b.Property<int>("AdminNotificationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AdminNotificationId", "UserId");
+
+                    b.HasIndex("UserId", "ReadAt");
+
+                    b.ToTable("AdminNotificationReadStates", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.AdminNotificationReadState", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Users.AdminNotification", "AdminNotification")
+                        .WithMany("ReadStates")
+                        .HasForeignKey("AdminNotificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AdminNotification");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserAiProviderKey", b =>
                 {
                     b.Property<int>("Id")
@@ -3932,6 +4033,11 @@ namespace Geotrack.Infrastructure.Migrations
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.PlaceContribution", b =>
                 {
                     b.Navigation("Images");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.AdminNotification", b =>
+                {
+                    b.Navigation("ReadStates");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.Role", b =>

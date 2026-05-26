@@ -57,6 +57,8 @@ public class AppDbContext : DbContext
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
     public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
+    public DbSet<AdminNotification> AdminNotifications => Set<AdminNotification>();
+    public DbSet<AdminNotificationReadState> AdminNotificationReadStates => Set<AdminNotificationReadState>();
     public DbSet<UserPlace> UserPlaces => Set<UserPlace>();
     public DbSet<UserAiProviderKey> UserAiProviderKeys => Set<UserAiProviderKey>();
 
@@ -1952,6 +1954,72 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.UserId, x.CreatedAt });
             entity.HasIndex(x => new { x.UserId, x.ReadAt });
             entity.HasIndex(x => new { x.RelatedEntityType, x.RelatedEntityId });
+        });
+
+        modelBuilder.Entity<AdminNotification>(entity =>
+        {
+            entity.ToTable("AdminNotifications");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.AudienceRole)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Type)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Title)
+                .IsRequired()
+                .HasMaxLength(160);
+
+            entity.Property(x => x.Message)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.Severity)
+                .IsRequired()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.TargetType)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.TargetRoute)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.MetadataJson)
+                .HasColumnType("jsonb");
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasMany(x => x.ReadStates)
+                .WithOne(x => x.AdminNotification)
+                .HasForeignKey(x => x.AdminNotificationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.AudienceRole, x.CreatedAt });
+            entity.HasIndex(x => new { x.Type, x.TargetType, x.TargetId })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<AdminNotificationReadState>(entity =>
+        {
+            entity.ToTable("AdminNotificationReadStates");
+
+            entity.HasKey(x => new { x.AdminNotificationId, x.UserId });
+
+            entity.Property(x => x.ReadAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.ReadAt });
         });
     }
 
