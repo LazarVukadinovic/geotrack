@@ -30,6 +30,7 @@ public sealed class AdminDashboardTests
         Assert.Equal("/admin-territories", dashboard.QuickLinks.TerritoryManagementRoute);
         Assert.Equal("/admin-users", dashboard.QuickLinks.UserManagementRoute);
         Assert.Equal("/admin-reviews", dashboard.QuickLinks.ReviewManagementRoute);
+        Assert.Equal("/admin-support-tickets", dashboard.QuickLinks.SupportTicketsRoute);
         Assert.Equal("/admin-reviews?status=reported", dashboard.QuickLinks.PendingReportsRoute);
     }
 
@@ -57,6 +58,7 @@ public sealed class AdminDashboardTests
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         await EnsureDashboardReviewReportsAsync(app);
+        await EnsureDashboardSupportTicketsAsync(app);
 
         using var client = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
 
@@ -67,13 +69,22 @@ public sealed class AdminDashboardTests
         Assert.Equal(expected.TerritoriesCount, dashboard!.Stats.TerritoriesCount);
         Assert.Equal(expected.AssignedTerritoriesCount, dashboard.Stats.AssignedTerritoriesCount);
         Assert.Equal(expected.AppUsersCount, dashboard.Stats.AppUsersCount);
-        Assert.Equal(0, dashboard.Stats.SuspendedUsersCount);
+        Assert.Equal(expected.SuspendedUsersCount, dashboard.Stats.SuspendedUsersCount);
         Assert.Equal(expected.ReviewsCount, dashboard.Stats.ReviewsCount);
         Assert.Equal(expected.ReportedReviewsCount, dashboard.Stats.ReportedReviewsCount);
         Assert.Equal(expected.PendingReportsCount, dashboard.Stats.PendingReportsCount);
+        Assert.Equal(expected.SupportTicketsCount, dashboard.Stats.SupportTicketsCount);
+        Assert.Equal(expected.OpenSupportTicketsCount, dashboard.Stats.OpenSupportTicketsCount);
+        Assert.Equal(expected.InProgressSupportTicketsCount, dashboard.Stats.InProgressSupportTicketsCount);
+        Assert.Equal(expected.ResolvedSupportTicketsCount, dashboard.Stats.ResolvedSupportTicketsCount);
+        Assert.Equal(expected.DismissedSupportTicketsCount, dashboard.Stats.DismissedSupportTicketsCount);
+        Assert.Equal(expected.UnresolvedSupportTicketsCount, dashboard.Stats.UnresolvedSupportTicketsCount);
+        Assert.Equal(expected.HighPrioritySupportTicketsCount, dashboard.Stats.HighPrioritySupportTicketsCount);
         Assert.Equal(expected.PendingReportsCount, dashboard.Badges.PendingReportsCount);
+        Assert.Equal(expected.UnresolvedSupportTicketsCount, dashboard.Badges.SupportReportsCount);
         Assert.True(dashboard.Stats.ReportedReviewsCount >= dashboard.Stats.PendingReportsCount);
         Assert.True(dashboard.Stats.PendingReportsCount > 0);
+        Assert.True(dashboard.Stats.UnresolvedSupportTicketsCount > 0);
     }
 
     [Fact]
@@ -93,7 +104,10 @@ public sealed class AdminDashboardTests
         Assert.Equal(0, dashboard.Stats.ReviewsCount);
         Assert.Equal(0, dashboard.Stats.ReportedReviewsCount);
         Assert.Equal(0, dashboard.Stats.PendingReportsCount);
+        Assert.Equal(0, dashboard.Stats.SupportTicketsCount);
+        Assert.Equal(0, dashboard.Stats.UnresolvedSupportTicketsCount);
         Assert.Equal(0, dashboard.Badges.PendingReportsCount);
+        Assert.Equal(0, dashboard.Badges.SupportReportsCount);
     }
 
     private static async Task<HttpClient> LoginAdminAsync(GeotrackApiFactory app, string email, string password)
@@ -199,6 +213,55 @@ public sealed class AdminDashboardTests
         await db.SaveChangesAsync();
     }
 
+    private static async Task EnsureDashboardSupportTicketsAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var userId = await db.Users
+            .OrderBy(user => user.Id)
+            .Select(user => user.Id)
+            .FirstAsync();
+
+        var token = $"dashboard-support-{Guid.NewGuid():N}";
+        var now = DateTime.UtcNow;
+        db.SupportRequests.AddRange(
+            new SupportRequest
+            {
+                UserId = userId,
+                Category = "account-access",
+                Subject = $"{token} open",
+                Message = "Dashboard support open ticket.",
+                Status = SupportRequestStatuses.Open,
+                Priority = SupportRequestPriorities.High,
+                CreatedAt = now.AddMinutes(-3)
+            },
+            new SupportRequest
+            {
+                UserId = userId,
+                Category = "location-and-maps",
+                Subject = $"{token} in progress",
+                Message = "Dashboard support in-progress ticket.",
+                Status = SupportRequestStatuses.InProgress,
+                Priority = SupportRequestPriorities.Normal,
+                CreatedAt = now.AddMinutes(-2),
+                UpdatedAt = now.AddMinutes(-1)
+            },
+            new SupportRequest
+            {
+                UserId = userId,
+                Category = "privacy-and-data",
+                Subject = $"{token} resolved",
+                Message = "Dashboard support resolved ticket.",
+                Status = SupportRequestStatuses.Resolved,
+                Priority = SupportRequestPriorities.Critical,
+                CreatedAt = now.AddMinutes(-1),
+                UpdatedAt = now,
+                ResolvedAt = now
+            });
+
+        await db.SaveChangesAsync();
+    }
+
     private static async Task AddReportIfMissingAsync(
         AppDbContext db,
         PlaceReview review,
@@ -248,6 +311,12 @@ public sealed class AdminDashboardTests
             await db.EventReviews.AsNoTracking().CountAsync() +
             await db.DestinationReviews.AsNoTracking().CountAsync() +
             await db.LocationReviews.AsNoTracking().CountAsync();
+        var openSupportTicketsCount = await db.SupportRequests
+            .AsNoTracking()
+            .CountAsync(ticket => ticket.Status == SupportRequestStatuses.Open || ticket.Status == "Received");
+        var inProgressSupportTicketsCount = await db.SupportRequests
+            .AsNoTracking()
+            .CountAsync(ticket => ticket.Status == SupportRequestStatuses.InProgress);
 
         return new DashboardCounts(
             TerritoriesCount: await db.Territories.AsNoTracking().CountAsync(),
@@ -256,12 +325,37 @@ public sealed class AdminDashboardTests
                 .Select(assignment => assignment.TerritoryId)
                 .Distinct()
                 .CountAsync(),
-            AppUsersCount: await db.Users.AsNoTracking().CountAsync(),
+            AppUsersCount: await db.Users.AsNoTracking().CountAsync(user => !user.IsDeleted),
+            SuspendedUsersCount: await db.Users
+                .AsNoTracking()
+                .CountAsync(user => !user.IsDeleted && user.IsSuspended),
             ReviewsCount: reviewsCount,
             ReportedReviewsCount: await db.ReviewReports.AsNoTracking().CountAsync(),
             PendingReportsCount: await db.ReviewReports
                 .AsNoTracking()
-                .CountAsync(report => report.Status == ReviewReportStatus.Pending));
+                .CountAsync(report => report.Status == ReviewReportStatus.Pending),
+            SupportTicketsCount: await db.SupportRequests.AsNoTracking().CountAsync(),
+            OpenSupportTicketsCount: openSupportTicketsCount,
+            InProgressSupportTicketsCount: inProgressSupportTicketsCount,
+            ResolvedSupportTicketsCount: await db.SupportRequests
+                .AsNoTracking()
+                .CountAsync(ticket => ticket.Status == SupportRequestStatuses.Resolved),
+            DismissedSupportTicketsCount: await db.SupportRequests
+                .AsNoTracking()
+                .CountAsync(ticket => ticket.Status == SupportRequestStatuses.Dismissed),
+            UnresolvedSupportTicketsCount: openSupportTicketsCount + inProgressSupportTicketsCount,
+            HighPrioritySupportTicketsCount: await db.SupportRequests
+                .AsNoTracking()
+                .CountAsync(ticket =>
+                    (
+                        ticket.Status == SupportRequestStatuses.Open ||
+                        ticket.Status == "Received" ||
+                        ticket.Status == SupportRequestStatuses.InProgress
+                    ) &&
+                    (
+                        ticket.Priority == SupportRequestPriorities.High ||
+                        ticket.Priority == SupportRequestPriorities.Critical
+                    )));
     }
 
     private static async Task ClearReportReviewAndAssignmentTablesAsync(GeotrackApiFactory app)
@@ -274,6 +368,7 @@ public sealed class AdminDashboardTests
         await db.EventReviews.ExecuteDeleteAsync();
         await db.DestinationReviews.ExecuteDeleteAsync();
         await db.LocationReviews.ExecuteDeleteAsync();
+        await db.SupportRequests.ExecuteDeleteAsync();
         await db.TerritoryManagerTerritories.ExecuteDeleteAsync();
     }
 
@@ -281,7 +376,15 @@ public sealed class AdminDashboardTests
         int TerritoriesCount,
         int AssignedTerritoriesCount,
         int AppUsersCount,
+        int SuspendedUsersCount,
         int ReviewsCount,
         int ReportedReviewsCount,
-        int PendingReportsCount);
+        int PendingReportsCount,
+        int SupportTicketsCount,
+        int OpenSupportTicketsCount,
+        int InProgressSupportTicketsCount,
+        int ResolvedSupportTicketsCount,
+        int DismissedSupportTicketsCount,
+        int UnresolvedSupportTicketsCount,
+        int HighPrioritySupportTicketsCount);
 }

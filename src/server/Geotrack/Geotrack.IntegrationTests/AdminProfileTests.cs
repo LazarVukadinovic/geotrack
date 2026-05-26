@@ -20,6 +20,7 @@ public sealed class AdminProfileTests
     private static readonly DateTime FirstAssignedAt = new(2024, 1, 5, 9, 30, 0, DateTimeKind.Utc);
     private static readonly DateTime SecondAssignedAt = new(2024, 2, 10, 12, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime TerritoryAssignedAt = new(2024, 3, 15, 8, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime AdminCreatedAt = new(2023, 11, 20, 10, 15, 0, DateTimeKind.Utc);
 
     [Fact]
     public async Task Admin_profile_requires_authentication_and_admin_app_role()
@@ -118,6 +119,36 @@ public sealed class AdminProfileTests
     }
 
     [Fact]
+    public async Task Admin_profile_returns_administrator_system_access_scope()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var userId = await PrepareAdministratorAsync(app);
+
+        using var client = app.CreateClient();
+        await LoginAdministratorAsync(client);
+
+        var profile = await client.GetFromJsonAsync<AdminProfileResponseDto>("/api/admin/profile");
+
+        Assert.NotNull(profile);
+        Assert.Equal(userId, profile!.User.Id);
+        Assert.Equal("Zika", profile.User.FirstName);
+        Assert.Equal("Admin", profile.User.LastName);
+        Assert.Equal("zika@gmail.com", profile.User.Email);
+        Assert.Equal("Administrator profile bio", profile.User.ShortBio);
+        Assert.Contains(RoleNames.Admin, profile.Roles);
+        Assert.Equal(RoleNames.Admin, profile.Role.RoleCode);
+        Assert.Equal("Administrator", profile.Role.RoleDisplayName);
+        Assert.Equal("System", profile.Assignment.AssignmentType);
+        Assert.Equal("System Access", profile.Assignment.SectionTitle);
+        Assert.Equal("Scope", profile.Assignment.Label);
+        Assert.Equal("Platform-wide", profile.Assignment.DisplayValue);
+        Assert.Equal("Full access", profile.Assignment.AccessLevel);
+        Assert.Equal(AdminCreatedAt, profile.Assignment.MemberSince);
+        Assert.Empty(profile.Assignment.AssignedItems);
+        Assert.Empty(profile.RegionalManager.AssignedRegions);
+    }
+
+    [Fact]
     public async Task Admin_profile_update_only_changes_editable_profile_and_preference_fields()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -174,6 +205,63 @@ public sealed class AdminProfileTests
         Assert.Equal("Updated bio", reloaded!.User.ShortBio);
         Assert.False(reloaded.Preferences.EmailRequestsEnabled);
         Assert.True(reloaded.Preferences.EmailNewReviewEnabled);
+    }
+
+    [Fact]
+    public async Task Administrator_profile_update_keeps_email_role_and_system_access_read_only()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var userId = await PrepareAdministratorAsync(app);
+
+        using var client = app.CreateClient();
+        await LoginAdministratorAsync(client);
+
+        var updateResponse = await client.PutAsJsonAsync(
+            "/api/admin/profile",
+            new
+            {
+                firstName = "Updated",
+                lastName = "Administrator",
+                shortBio = "Updated admin bio",
+                interfaceLanguage = "sr",
+                timezone = "Europe/Belgrade",
+                emailRequestsEnabled = false,
+                emailNewReviewEnabled = true,
+                email = "attacker@example.com",
+                role = new { roleCode = "RegionalManager", roleDisplayName = "Regional Manager" },
+                assignment = new { label = "Assigned Region", displayValue = "Tampered" },
+            });
+        updateResponse.EnsureSuccessStatusCode();
+
+        var updated = await updateResponse.Content.ReadFromJsonAsync<AdminProfileResponseDto>();
+        Assert.NotNull(updated);
+        Assert.Equal("Updated", updated!.User.FirstName);
+        Assert.Equal("Administrator", updated.User.LastName);
+        Assert.Equal("Updated admin bio", updated.User.ShortBio);
+        Assert.Equal("zika@gmail.com", updated.User.Email);
+        Assert.Equal("sr", updated.Preferences.InterfaceLanguage);
+        Assert.Equal("Europe/Belgrade", updated.Preferences.Timezone);
+        Assert.False(updated.Preferences.EmailRequestsEnabled);
+        Assert.True(updated.Preferences.EmailNewReviewEnabled);
+        Assert.Contains(RoleNames.Admin, updated.Roles);
+        Assert.Equal(RoleNames.Admin, updated.Role.RoleCode);
+        Assert.Equal("Administrator", updated.Role.RoleDisplayName);
+        Assert.Equal("Scope", updated.Assignment.Label);
+        Assert.Equal("Platform-wide", updated.Assignment.DisplayValue);
+        Assert.Equal("Full access", updated.Assignment.AccessLevel);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users
+            .Include(existing => existing.UserRoles)
+                .ThenInclude(userRole => userRole.Role)
+            .SingleAsync(existing => existing.Id == userId);
+
+        Assert.Equal("zika@gmail.com", user.Email);
+        Assert.Contains(user.UserRoles, userRole => userRole.Role.Name == RoleNames.Admin);
+        Assert.Equal("Updated", user.FirstName);
+        Assert.Equal("Administrator", user.LastName);
+        Assert.Equal("Updated admin bio", user.ShortBio);
     }
 
     [Fact]
@@ -287,6 +375,49 @@ public sealed class AdminProfileTests
     }
 
     [Fact]
+    public async Task Administrator_profile_avatar_upload_and_remove_updates_shared_user_avatar()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var userId = await PrepareAdministratorAsync(app);
+
+        using var client = app.CreateClient();
+        await LoginAdministratorAsync(client);
+
+        var upload = await client.PostAsync(
+            "/api/admin/profile/avatar",
+            BuildMultipart(ValidPngBytes(), "image/png", "admin-avatar.png"));
+        upload.EnsureSuccessStatusCode();
+
+        var avatar = await upload.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
+        Assert.NotNull(avatar);
+        Assert.StartsWith("/media/uploads/avatars/", avatar!.AvatarUrl);
+        Assert.NotNull(avatar.AvatarVersion);
+
+        var sharedUserProfile = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
+        Assert.NotNull(sharedUserProfile);
+        Assert.Equal(avatar.AvatarUrl, sharedUserProfile!.AvatarUrl);
+        Assert.Equal(avatar.AvatarVersion, sharedUserProfile.AvatarVersion);
+
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var storedAvatar = await db.Users
+                .Where(user => user.Id == userId)
+                .Select(user => user.AvatarUrl)
+                .SingleAsync();
+            Assert.Equal(avatar.AvatarUrl, storedAvatar);
+        }
+
+        var remove = await client.DeleteAsync("/api/admin/profile/avatar");
+        remove.EnsureSuccessStatusCode();
+
+        var removedAvatar = await remove.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
+        Assert.NotNull(removedAvatar);
+        Assert.Equal(string.Empty, removedAvatar!.AvatarUrl);
+        Assert.Null(removedAvatar.AvatarVersion);
+    }
+
+    [Fact]
     public async Task User_avatar_upload_is_visible_to_admin_profile_and_auth_current_user()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -334,6 +465,25 @@ public sealed class AdminProfileTests
             {
                 Email = "elena@example.com",
                 Password = "password123",
+            });
+        response.EnsureSuccessStatusCode();
+
+        var session = await response.Content.ReadFromJsonAsync<AdminLoginResponseDto>();
+        Assert.NotNull(session);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", session!.AccessToken);
+
+        return session;
+    }
+
+    private static async Task<AdminLoginResponseDto> LoginAdministratorAsync(HttpClient client)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new LoginRequestDto
+            {
+                Email = "zika@gmail.com",
+                Password = "Proba123!",
             });
         response.EnsureSuccessStatusCode();
 
@@ -471,6 +621,39 @@ public sealed class AdminProfileTests
         await db.SaveChangesAsync();
 
         return (user.Id, territory);
+    }
+
+    private static async Task<int> PrepareAdministratorAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var user = await db.Users
+            .Include(existing => existing.UserRoles)
+            .SingleAsync(existing => existing.Email == "zika@gmail.com");
+        var role = await db.Roles.SingleAsync(existing => existing.Name == RoleNames.Admin);
+
+        if (!user.UserRoles.Any(userRole => userRole.RoleId == role.Id))
+        {
+            user.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = role.Id,
+            });
+        }
+
+        user.FirstName = "Zika";
+        user.LastName = "Admin";
+        user.ShortBio = "Administrator profile bio";
+        user.InterfaceLanguage = "en-US";
+        user.Timezone = "UTC";
+        user.EmailRequestsEnabled = true;
+        user.EmailNewReviewEnabled = false;
+        user.CreatedAt = AdminCreatedAt;
+
+        await db.SaveChangesAsync();
+
+        return user.Id;
     }
 
     private static async Task<List<Region>> EnsureTwoRegionsAsync(AppDbContext db)
