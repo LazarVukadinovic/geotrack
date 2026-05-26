@@ -176,6 +176,7 @@ builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionReposi
 
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
+builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 builder.Services.AddScoped<IAdminUserManagementService, AdminUserManagementService>();
