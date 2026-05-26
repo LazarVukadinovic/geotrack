@@ -1,4 +1,5 @@
 using Geotrack.Application.DTOs.Auth;
+using Geotrack.Application.Exceptions;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -42,6 +43,11 @@ public class AuthController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+        catch (ForbiddenAccessException ex)
+        {
+            DeleteRefreshTokenCookie();
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
         catch (UnauthorizedAccessException ex)
         {
             return Unauthorized(new { message = ex.Message });
@@ -60,6 +66,11 @@ public class AuthController : ControllerBase
         catch (UnauthorizedAccessException ex)
         {
             return Unauthorized(new { message = ex.Message });
+        }
+        catch (ForbiddenAccessException ex)
+        {
+            DeleteRefreshTokenCookie();
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
     }
 
@@ -85,6 +96,11 @@ public class AuthController : ControllerBase
         {
             DeleteRefreshTokenCookie();
             return Unauthorized(new { message = ex.Message });
+        }
+        catch (ForbiddenAccessException ex)
+        {
+            DeleteRefreshTokenCookie();
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
     }
 

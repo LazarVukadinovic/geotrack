@@ -14,6 +14,7 @@ public class UserNotificationService : IUserNotificationService
     private const string ReviewReportAcceptedType = "review_report_accepted";
     private const string ReviewReportRejectedType = "review_report_rejected";
     private const string ReportedReviewRemovedType = "reported_review_removed";
+    private const string ReviewRemovedByModeratorType = "review_removed_by_moderator";
 
     private readonly IUserNotificationRepository _notificationRepository;
 
@@ -144,6 +145,32 @@ public class UserNotificationService : IUserNotificationService
             RelatedEntityId = report.ReviewId,
             ActionUrl = null,
             CreatedAt = report.ReviewedAt ?? DateTime.UtcNow
+        });
+    }
+
+    public void AddReviewRemovedByModeratorNotification(
+        int authorUserId,
+        string targetType,
+        int reviewId,
+        DateTime createdAt)
+    {
+        if (authorUserId <= 0 || reviewId <= 0)
+        {
+            return;
+        }
+
+        _notificationRepository.Add(new UserNotification
+        {
+            UserId = authorUserId,
+            Type = ReviewRemovedByModeratorType,
+            Title = "Review removed",
+            Message = "Your review was removed after moderation.",
+            RelatedEntityType = string.IsNullOrWhiteSpace(targetType)
+                ? "review"
+                : $"{targetType.Trim().ToLowerInvariant()}_review",
+            RelatedEntityId = reviewId,
+            ActionUrl = null,
+            CreatedAt = createdAt
         });
     }
 
