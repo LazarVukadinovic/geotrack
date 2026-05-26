@@ -14,17 +14,26 @@ export interface AdminDashboardStats {
   reviewsCount: number;
   reportedReviewsCount: number;
   pendingReportsCount: number;
+  supportTicketsCount: number;
+  openSupportTicketsCount: number;
+  inProgressSupportTicketsCount: number;
+  resolvedSupportTicketsCount: number;
+  dismissedSupportTicketsCount: number;
+  unresolvedSupportTicketsCount: number;
+  highPrioritySupportTicketsCount: number;
 }
 
 export interface AdminDashboardQuickLinks {
   territoryManagementRoute: string;
   userManagementRoute: string;
   reviewManagementRoute: string;
+  supportTicketsRoute: string;
   pendingReportsRoute: string;
 }
 
 export interface AdminDashboardBadges {
   pendingReportsCount: number;
+  supportReportsCount: number;
 }
 
 export interface AdminDashboard {

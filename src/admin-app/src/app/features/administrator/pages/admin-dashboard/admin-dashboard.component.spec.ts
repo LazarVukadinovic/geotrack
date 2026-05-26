@@ -17,15 +17,15 @@ import { AuthService } from '../../../../core/services/auth.service';
   imports: [CommonModule],
   template: `
     <aside>
-      Review Management
-      @if ((reportedReviewsCount ?? 0) > 0) {
-        <span class="sidebar-badge">{{ reportedReviewsCount }}</span>
+      Support Reports
+      @if ((supportReportsCount ?? 0) > 0) {
+        <span class="sidebar-badge">{{ supportReportsCount }}</span>
       }
     </aside>
   `,
 })
 class SidebarStubComponent {
-  @Input() reportedReviewsCount: number | null = null;
+  @Input() supportReportsCount: number | null = null;
 }
 
 @Component({
@@ -84,29 +84,29 @@ describe('AdminDashboardComponent', () => {
     expect(text).toContain('App Users');
     expect(text).toContain('34');
     expect(text).toContain('2 suspended');
-    expect(text).toContain('Reviews');
-    expect(text).toContain('56');
-    expect(text).toContain('9 reported');
-    expect(text).toContain('Pending Reports');
+    expect(text).toContain('Support Reports');
+    expect(text).toContain('5');
+    expect(text).toContain('1 high priority');
+    expect(text).toContain('Review Reports');
     expect(text).toContain('7');
-    expect(text).toContain('Need attention');
+    expect(text).toContain('Need moderation');
     expect(text).not.toContain('20');
     expect(text).not.toContain('8 reported');
   });
 
-  it('passes the backend pending reports count to the sidebar badge', () => {
+  it('passes the backend support reports count to the sidebar badge', () => {
     fixture.detectChanges();
 
     const badge = fixture.nativeElement.querySelector('.sidebar-badge') as HTMLElement | null;
-    expect(badge?.textContent?.trim()).toBe('7');
+    expect(badge?.textContent?.trim()).toBe('5');
   });
 
-  it('navigates the Pending Reports button to the pending review management route', () => {
+  it('navigates the Support Reports button to the support tickets route', () => {
     fixture.detectChanges();
 
-    clickButtonContaining('Pending Reports');
+    clickButtonContaining('Support Reports');
 
-    expect(router.navigateByUrl).toHaveBeenCalledWith('/admin-reviews?status=reported');
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/admin-support-tickets');
   });
 
   it('navigates quick action cards to existing administrator pages', () => {
@@ -114,11 +114,11 @@ describe('AdminDashboardComponent', () => {
 
     clickButtonContaining('Manage Territories');
     clickButtonContaining('Manage Users');
-    clickButtonContaining('Manage Reviews');
+    clickButtonContaining('Manage Support Reports');
 
     expect(router.navigateByUrl).toHaveBeenCalledWith('/admin-territories');
     expect(router.navigateByUrl).toHaveBeenCalledWith('/admin-users');
-    expect(router.navigateByUrl).toHaveBeenCalledWith('/admin-reviews');
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/admin-support-tickets');
   });
 
   it('renders a loading state while dashboard data is pending', () => {
@@ -175,15 +175,24 @@ describe('AdminDashboardComponent', () => {
         reviewsCount: 56,
         reportedReviewsCount: 9,
         pendingReportsCount: 7,
+        supportTicketsCount: 13,
+        openSupportTicketsCount: 3,
+        inProgressSupportTicketsCount: 2,
+        resolvedSupportTicketsCount: 6,
+        dismissedSupportTicketsCount: 2,
+        unresolvedSupportTicketsCount: 5,
+        highPrioritySupportTicketsCount: 1,
       },
       quickLinks: {
         territoryManagementRoute: '/admin-territories',
         userManagementRoute: '/admin-users',
         reviewManagementRoute: '/admin-reviews',
+        supportTicketsRoute: '/admin-support-tickets',
         pendingReportsRoute: '/admin-reviews?status=reported',
       },
       badges: {
         pendingReportsCount: 7,
+        supportReportsCount: 5,
       },
     };
   }

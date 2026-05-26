@@ -41,6 +41,7 @@ export interface AdminProfileAssignment {
   sectionTitle: string;
   label: string;
   displayValue: string;
+  accessLevel?: string | null;
   assignedItems: AdminProfileAssignmentItem[];
   memberSince?: string | null;
 }

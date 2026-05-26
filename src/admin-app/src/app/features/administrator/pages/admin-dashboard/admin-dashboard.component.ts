@@ -31,7 +31,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   dashboard: AdminDashboard | null = null;
   isLoading = false;
   errorMessage: string | null = null;
-  pendingReportsCount = 0;
+  supportReportsCount = 0;
 
   get userName(): string {
     return this.dashboard?.currentUser.displayName || this.auth.fullName || 'Administrator';
@@ -65,13 +65,13 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       .subscribe({
         next: dashboard => {
           this.dashboard = dashboard;
-          this.pendingReportsCount = dashboard.badges.pendingReportsCount;
+          this.supportReportsCount = dashboard.badges.supportReportsCount;
           this.buildStats(dashboard.stats);
           this.cdr.markForCheck();
         },
         error: () => {
           this.dashboard = null;
-          this.pendingReportsCount = 0;
+          this.supportReportsCount = 0;
           this.stats = [];
           this.errorMessage = 'Unable to load administrator dashboard data.';
           this.cdr.markForCheck();
@@ -99,17 +99,17 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         route: quickLinks?.userManagementRoute ?? '/admin-users',
       },
       {
-        label: 'Reviews',
-        value: stats.reviewsCount,
-        sub: `${stats.reportedReviewsCount} reported`,
+        label: 'Support Reports',
+        value: stats.unresolvedSupportTicketsCount,
+        sub: this.supportReportsSubtitle(stats),
         color: '#8b5cf6',
-        icon: 'review',
-        route: quickLinks?.reviewManagementRoute ?? '/admin-reviews',
+        icon: 'support',
+        route: quickLinks?.supportTicketsRoute ?? '/admin-support-tickets',
       },
       {
-        label: 'Pending Reports',
+        label: 'Review Reports',
         value: stats.pendingReportsCount,
-        sub: stats.pendingReportsCount > 0 ? 'Need attention' : 'No pending reports',
+        sub: stats.pendingReportsCount > 0 ? 'Need moderation' : 'No pending review reports',
         color: '#ef4444',
         icon: 'alert',
         route: quickLinks?.pendingReportsRoute ?? '/admin-reviews?status=reported',
@@ -118,10 +118,22 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
   }
 
   openPendingReports(): void {
-    this.navigateTo(this.dashboard?.quickLinks.pendingReportsRoute ?? '/admin-reviews?status=reported');
+    this.navigateTo(this.dashboard?.quickLinks.supportTicketsRoute ?? '/admin-support-tickets');
   }
 
   navigateTo(route: string): void {
     this.router.navigateByUrl(route);
+  }
+
+  private supportReportsSubtitle(stats: AdminDashboardStats): string {
+    if (stats.highPrioritySupportTicketsCount > 0) {
+      return `${stats.highPrioritySupportTicketsCount} high priority`;
+    }
+
+    if (stats.unresolvedSupportTicketsCount === 0) {
+      return 'No unresolved tickets';
+    }
+
+    return `${stats.openSupportTicketsCount} open, ${stats.inProgressSupportTicketsCount} in progress`;
   }
 }

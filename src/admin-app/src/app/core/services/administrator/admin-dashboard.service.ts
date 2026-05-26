@@ -17,6 +17,9 @@ export class AdminDashboardService {
   readonly pendingReportsCount$ = this.dashboard$.pipe(
     map(dashboard => dashboard?.badges.pendingReportsCount ?? dashboard?.stats.pendingReportsCount ?? 0),
   );
+  readonly supportReportsCount$ = this.dashboard$.pipe(
+    map(dashboard => this.supportReportsCountFromDashboard(dashboard)),
+  );
 
   constructor(private readonly http: HttpClient) {}
 
@@ -36,6 +39,10 @@ export class AdminDashboardService {
     return dashboard?.badges.pendingReportsCount ?? dashboard?.stats.pendingReportsCount ?? 0;
   }
 
+  getSupportReportsCount(): number {
+    return this.supportReportsCountFromDashboard(this.dashboardSubject.value);
+  }
+
   private normalizeDashboard(value: AdminDashboard | null | undefined): AdminDashboard {
     const stats = this.normalizeStats(value?.stats);
 
@@ -43,7 +50,7 @@ export class AdminDashboardService {
       currentUser: this.normalizeCurrentUser(value?.currentUser),
       stats,
       quickLinks: this.normalizeQuickLinks(value?.quickLinks),
-      badges: this.normalizeBadges(value?.badges, stats.pendingReportsCount),
+      badges: this.normalizeBadges(value?.badges, stats.pendingReportsCount, stats.unresolvedSupportTicketsCount),
     };
   }
 
@@ -66,6 +73,13 @@ export class AdminDashboardService {
       reviewsCount: this.toNumber(value?.reviewsCount),
       reportedReviewsCount: this.toNumber(value?.reportedReviewsCount),
       pendingReportsCount: this.toNumber(value?.pendingReportsCount),
+      supportTicketsCount: this.toNumber(value?.supportTicketsCount),
+      openSupportTicketsCount: this.toNumber(value?.openSupportTicketsCount),
+      inProgressSupportTicketsCount: this.toNumber(value?.inProgressSupportTicketsCount),
+      resolvedSupportTicketsCount: this.toNumber(value?.resolvedSupportTicketsCount),
+      dismissedSupportTicketsCount: this.toNumber(value?.dismissedSupportTicketsCount),
+      unresolvedSupportTicketsCount: this.toNumber(value?.unresolvedSupportTicketsCount),
+      highPrioritySupportTicketsCount: this.toNumber(value?.highPrioritySupportTicketsCount),
     };
   }
 
@@ -74,14 +88,24 @@ export class AdminDashboardService {
       territoryManagementRoute: value?.territoryManagementRoute || '/admin-territories',
       userManagementRoute: value?.userManagementRoute || '/admin-users',
       reviewManagementRoute: value?.reviewManagementRoute || '/admin-reviews',
+      supportTicketsRoute: value?.supportTicketsRoute || '/admin-support-tickets',
       pendingReportsRoute: value?.pendingReportsRoute || '/admin-reviews?status=reported',
     };
   }
 
-  private normalizeBadges(value: AdminDashboardBadges | null | undefined, fallbackPendingReportsCount: number): AdminDashboardBadges {
+  private normalizeBadges(
+    value: AdminDashboardBadges | null | undefined,
+    fallbackPendingReportsCount: number,
+    fallbackSupportReportsCount: number,
+  ): AdminDashboardBadges {
     return {
       pendingReportsCount: this.toNumber(value?.pendingReportsCount, fallbackPendingReportsCount),
+      supportReportsCount: this.toNumber(value?.supportReportsCount, fallbackSupportReportsCount),
     };
+  }
+
+  private supportReportsCountFromDashboard(dashboard: AdminDashboard | null | undefined): number {
+    return dashboard?.badges.supportReportsCount ?? dashboard?.stats.unresolvedSupportTicketsCount ?? 0;
   }
 
   private toNumber(value: unknown, fallback = 0): number {

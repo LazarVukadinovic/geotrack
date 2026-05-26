@@ -1,5 +1,5 @@
 <div class="flex h-screen overflow-hidden bg-gray-50">
-  <app-sidebar [reportedReviewsCount]="pendingReportsCount" />
+  <app-sidebar [supportReportsCount]="supportReportsCount" />
 
   <div class="flex flex-col flex-1 min-w-0 overflow-hidden">
     <app-topbar title="Administrator Dashboard" />
@@ -21,10 +21,10 @@
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          Pending Reports
-          @if (pendingReportsCount > 0) {
+          Support Reports
+          @if (supportReportsCount > 0) {
             <span class="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
-              {{ pendingReportsCount }}
+              {{ supportReportsCount }}
             </span>
           }
         </button>
@@ -76,8 +76,10 @@
                         <path d="M23 21v-2a4 4 0 00-3-3.87" />
                         <path d="M16 3.13a4 4 0 010 7.75" />
                       }
-                      @case ('review') {
+                      @case ('support') {
                         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                        <path d="M8 9h8" />
+                        <path d="M8 13h5" />
                       }
                       @case ('alert') {
                         <circle cx="12" cy="12" r="10" stroke-linecap="round" />
@@ -130,16 +132,18 @@
 
           <button
             type="button"
-            (click)="navigateTo(dashboard?.quickLinks?.reviewManagementRoute || '/admin-reviews')"
+            (click)="navigateTo(dashboard?.quickLinks?.supportTicketsRoute || '/admin-support-tickets')"
             class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-left hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer"
           >
             <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style="background: rgba(139,92,246,0.1)">
               <svg class="w-5 h-5 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                <path d="M8 9h8" />
+                <path d="M8 13h5" />
               </svg>
             </div>
-            <p class="text-sm font-semibold text-gray-900">Manage Reviews</p>
-            <p class="text-xs text-gray-400 mt-1">Moderate reported reviews and take action on repeat offenders</p>
+            <p class="text-sm font-semibold text-gray-900">Manage Support Reports</p>
+            <p class="text-xs text-gray-400 mt-1">Review user-submitted app reports and resolve support tickets</p>
           </button>
         </div>
       }
