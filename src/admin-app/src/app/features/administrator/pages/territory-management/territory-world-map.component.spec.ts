@@ -104,7 +104,7 @@ describe('TerritoryWorldMapComponent', () => {
 
     component.ngOnChanges({ featureCollection: {} as any });
 
-    expect(L.geoJSON).toHaveBeenCalledTimes(1);
+    expect((globalThis as any).L.geoJSON).toHaveBeenCalledTimes(1);
     expect(featureLayers[0].feature.properties.status).toBe('Assigned');
     expect(featureLayers[0].setStyle).toHaveBeenCalled();
   });

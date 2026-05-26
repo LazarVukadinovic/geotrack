@@ -17,7 +17,7 @@ import { CountryMapAssignment, CountryMapClick } from './territory-world-map.com
   template: '<aside></aside>',
 })
 class SidebarStubComponent {
-  @Input() reportedReviewsCount: number | null = null;
+  @Input() supportReportsCount: number | null = null;
 }
 
 @Component({
@@ -95,7 +95,7 @@ describe('TerritoryManagementComponent', () => {
       imports: [TerritoryManagementComponent],
       providers: [
         { provide: TerritoryService, useValue: territoryService },
-        { provide: AdminDashboardService, useValue: { loadDashboard: () => of({ badges: { pendingReportsCount: 0 } }) } },
+        { provide: AdminDashboardService, useValue: { loadDashboard: () => of({ badges: { pendingReportsCount: 0, supportReportsCount: 0 } }) } },
       ],
     })
       .overrideComponent(TerritoryManagementComponent, {

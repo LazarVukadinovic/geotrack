@@ -35,7 +35,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   private mapManagerSearchSubject = new Subject<string>();
   private editManagerSearchSubject = new Subject<string>();
 
-  reportedReviewsCount = 0;
+  supportReportsCount = 0;
 
   // ── View state ────────────────────────────────────────────────────────────
   activeTab: ViewTab = 'map';
@@ -157,11 +157,11 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: dashboard => {
-          this.reportedReviewsCount = dashboard.badges.pendingReportsCount;
+          this.supportReportsCount = dashboard.badges.supportReportsCount;
           this.cdr.markForCheck();
         },
         error: () => {
-          this.reportedReviewsCount = 0;
+          this.supportReportsCount = 0;
           this.cdr.markForCheck();
         },
       });

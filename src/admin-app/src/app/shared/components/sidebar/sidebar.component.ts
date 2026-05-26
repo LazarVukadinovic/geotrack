@@ -27,6 +27,7 @@ export class SidebarComponent implements OnInit, OnChanges {
   @Input() regions: RegionalAssignedRegion[] = [];
   @Input() activeRegionId: number | null = null;
   @Input() reportedReviewsCount: number | null = null;
+  @Input() supportReportsCount: number | null = null;
   @Input() regionLoading = false;
   @Output() regionChange = new EventEmitter<number>();
 
@@ -124,11 +125,12 @@ export class SidebarComponent implements OnInit, OnChanges {
       { label: 'Admin Dashboard', path: '/admin-dashboard', icon: 'dashboard', exact: true },
       { label: 'Territory Management', path: '/admin-territories', icon: 'globe' },
       { label: 'User Management', path: '/admin-users', icon: 'users' },
+      { label: 'Review Management', path: '/admin-reviews', icon: 'review' },
       {
-        label: 'Review Management',
-        path: '/admin-reviews',
-        icon: 'review',
-        badge: this.reportedReviewsCount || undefined,
+        label: 'Support Reports',
+        path: '/admin-support-tickets',
+        icon: 'support',
+        badge: this.supportReportsCount || undefined,
       },
     ];
   }

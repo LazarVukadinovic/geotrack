@@ -145,13 +145,14 @@ describe('SidebarComponent', () => {
     expect(normalizedText()).not.toContain('Requests Queue');
   });
 
-  it('shows the Administrator Review Management badge from the provided pending reports count', () => {
+  it('shows the Administrator Support Reports badge from the provided unresolved support count', () => {
     currentRole = 'Administrator';
-    fixture.componentRef.setInput('reportedReviewsCount', 7);
+    fixture.componentRef.setInput('supportReportsCount', 7);
     fixture.detectChanges();
 
     const text = normalizedText();
     expect(text).toContain('Review Management');
+    expect(text).toContain('Support Reports');
     expect(text).toContain('7');
   });
 

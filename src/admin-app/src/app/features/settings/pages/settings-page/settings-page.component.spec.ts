@@ -73,6 +73,36 @@ describe('SettingsComponent', () => {
     expect(assignmentText).not.toContain('No assigned regions');
   });
 
+  it('renders administrator profile settings with system access instead of region assignment labels', () => {
+    flushProfile(administratorProfileResponse());
+    fixture.detectChanges();
+
+    expect(component.currentRole).toBe('Administrator');
+    expect(component.assignmentSectionTitle).toBe('System Access');
+    expect(component.assignmentLabel).toBe('Scope');
+    expect(component.assignmentDisplayValue).toBe('Platform-wide');
+    expect(component.assignmentAccessLevel).toBe('Full access');
+    expect(component.memberSince).not.toBe('-');
+
+    const text = fixture.nativeElement.textContent as string;
+    const assignmentSection = fixture.nativeElement.querySelector('[data-testid="assignment-section"]') as HTMLElement;
+    const assignmentText = assignmentSection.textContent ?? '';
+    expect(text).not.toContain('Settings unavailable');
+    expect(text).toContain('Public Profile');
+    expect(assignmentText).toContain('System Access');
+    expect(assignmentText).toContain('Administrator');
+    expect(assignmentText).toContain('Scope');
+    expect(assignmentText).toContain('Platform-wide');
+    expect(assignmentText).toContain('Access Level');
+    expect(assignmentText).toContain('Full access');
+    expect(text).toContain('Reports');
+    expect(text).toContain('Receive an email when a new report needs administrator review.');
+    expect(text).toContain('Reviews');
+    expect(assignmentText).not.toContain('Assigned Region');
+    expect(assignmentText).not.toContain('Assigned Country');
+    expect(assignmentText).not.toContain('No assigned regions');
+  });
+
   it('submits editable fields only and includes notification preferences', () => {
     flushProfile();
 
@@ -116,6 +146,21 @@ describe('SettingsComponent', () => {
 
     expect(component.isSaving()).toBe(false);
     expect(component.saveSuccess()).toBe(true);
+  });
+
+  it('keeps save disabled until profile settings have changes', () => {
+    flushProfile();
+    fixture.detectChanges();
+
+    const saveButton = fixture.nativeElement.querySelector('.btn-save') as HTMLButtonElement;
+    expect(component.hasChanges).toBe(false);
+    expect(saveButton.disabled).toBe(true);
+
+    component.firstName.set('Updated');
+    fixture.detectChanges();
+
+    expect(component.hasChanges).toBe(true);
+    expect(saveButton.disabled).toBe(false);
   });
 
   it('cancels unsaved profile edits by resetting to the last loaded profile', () => {
@@ -276,6 +321,47 @@ describe('SettingsComponent', () => {
             assignedAt: '2024-03-15T08:00:00Z',
           },
         ],
+      },
+      regionalManager: {
+        memberSince: null,
+        assignedRegions: [],
+      },
+      preferences: {
+        interfaceLanguage: 'en-US',
+        timezone: 'UTC',
+        emailRequestsEnabled: true,
+        emailNewReviewEnabled: true,
+      },
+    };
+  }
+
+  function administratorProfileResponse(): AdminProfile {
+    return {
+      user: {
+        id: 46,
+        firstName: 'Zika',
+        lastName: 'Admin',
+        displayName: 'Zika Admin',
+        email: 'zika@gmail.com',
+        shortBio: 'Administrator profile bio',
+        avatarUrl: null,
+        avatarVersion: null,
+        createdAt: '2023-11-20T10:15:00Z',
+        updatedAt: null,
+      },
+      roles: ['Admin'],
+      role: {
+        roleCode: 'Admin',
+        roleDisplayName: 'Administrator',
+      },
+      assignment: {
+        assignmentType: 'System',
+        sectionTitle: 'System Access',
+        label: 'Scope',
+        displayValue: 'Platform-wide',
+        accessLevel: 'Full access',
+        memberSince: '2023-11-20T10:15:00Z',
+        assignedItems: [],
       },
       regionalManager: {
         memberSince: null,

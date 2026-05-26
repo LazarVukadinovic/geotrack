@@ -47,6 +47,13 @@ export const routes: Routes = [
           import('./features/administrator/pages/review-management/review-management.component')
             .then(m => m.ReviewManagementComponent),
       },
+      {
+        path: 'admin-support-tickets',
+        canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/support-tickets/support-tickets.component')
+            .then(m => m.SupportTicketsComponent),
+      },
 
       // ── Regional Manager routes ────────────────────────────────────────
       {
