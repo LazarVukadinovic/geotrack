@@ -1,10 +1,12 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, BehaviorSubject, map, tap } from 'rxjs';
+import { Observable, BehaviorSubject, combineLatest, map, shareReplay, tap } from 'rxjs';
 import {
   Country, Territory, TerritoryManager,
   CreateTerritoryRequest, TerritoryPage, TerritoryPageRequest,
-  GeoJsonFeature, GeoJsonGeometry, TerritoryDetail,
+  GeoJsonFeature, GeoJsonGeometry, TerritoryDetail, TerritoryMapBoundaryFeatureCollection,
+  TerritoryMapFeatureCollection, TerritoryMapFeatureProperties, TerritoryMapStatusCollection,
+  TerritoryMapStatusItem,
 } from '../../models/administrator/territory.model';
 
 export const ALL_COUNTRIES: Country[] = [
@@ -213,6 +215,8 @@ export const CONTINENTS = ['Europe', 'Asia', 'Africa', 'North America', 'South A
 @Injectable({ providedIn: 'root' })
 export class TerritoryService {
   private readonly endpoint = '/api/admin/territories';
+  private boundaryCache$: Observable<TerritoryMapBoundaryFeatureCollection> | null = null;
+  private mapCache$: Observable<TerritoryMapFeatureCollection> | null = null;
   readonly lastPage$ = new BehaviorSubject<TerritoryPage | null>(null);
 
   constructor(private readonly http: HttpClient) {}
@@ -230,7 +234,8 @@ export class TerritoryService {
   }
 
   getCountryByCode(code: string): Country | undefined {
-    return ALL_COUNTRIES.find(c => c.code === code);
+    const normalized = code?.trim().toUpperCase();
+    return ALL_COUNTRIES.find(c => c.code === normalized || c.iso3 === normalized);
   }
 
   getAllManagers(): TerritoryManager[] {
@@ -265,6 +270,45 @@ export class TerritoryService {
       })),
       tap(page => this.lastPage$.next(page)),
     );
+  }
+
+  getMap$(forceRefresh = false): Observable<TerritoryMapFeatureCollection> {
+    if (!forceRefresh && this.mapCache$) {
+      return this.mapCache$;
+    }
+
+    this.mapCache$ = combineLatest([
+      this.getMapBoundaries$(forceRefresh),
+      this.getMapStatus$(forceRefresh),
+    ]).pipe(
+      map(([boundaries, status]) => this.mergeMapCollection(boundaries, status)),
+      shareReplay({ bufferSize: 1, refCount: false }),
+    );
+
+    return this.mapCache$;
+  }
+
+  refreshMap$(): Observable<TerritoryMapFeatureCollection> {
+    this.mapCache$ = null;
+    this.boundaryCache$ = null;
+    return this.getMap$(true);
+  }
+
+  refreshMapStatus$(): Observable<TerritoryMapFeatureCollection> {
+    this.mapCache$ = null;
+    this.mapCache$ = combineLatest([
+      this.getMapBoundaries$(),
+      this.getMapStatus$(true),
+    ]).pipe(
+      map(([boundaries, status]) => this.mergeMapCollection(boundaries, status)),
+      shareReplay({ bufferSize: 1, refCount: false }),
+    );
+    return this.mapCache$;
+  }
+
+  invalidateMapCache(): void {
+    this.mapCache$ = null;
+    this.boundaryCache$ = null;
   }
 
   getDetail$(territoryId: string | number): Observable<TerritoryDetail> {
@@ -409,12 +453,17 @@ export class TerritoryService {
   }
 
   private normalizeTerritory(value: Territory): Territory {
-    const countryCode = value.countryCode ?? value.countries?.[0] ?? null;
+    const territoryKind = this.normalizeTerritoryKind(value.territoryKind);
+    const isDisputed = territoryKind === 'DisputedTerritory';
+    const countryCode = isDisputed ? null : (value.iso2 ?? value.countryCode ?? value.countries?.[0] ?? null);
+    const iso3 = value.iso3 ?? null;
     const territoryId = value.territoryId ?? this.toTerritoryId(value.id) ?? 0;
     const hasManager = !!(value.assignedManagerId || value.assignedManagerUserId);
-    const status = value.status === 'Assigned' || value.status === 'Active'
-      ? (hasManager ? 'Assigned' : 'Unassigned')
-      : 'Unassigned';
+    const status = isDisputed
+      ? (value.status === 'DisputedAssigned' ? 'DisputedAssigned' : 'DisputedViewOnly')
+      : value.status === 'Assigned' || value.status === 'Active'
+        ? (hasManager ? 'Assigned' : 'Unassigned')
+        : 'Unassigned';
 
     return {
       ...value,
@@ -423,8 +472,11 @@ export class TerritoryService {
       id: value.id || `TERR-${String(territoryId).padStart(3, '0')}`,
       displayName: value.displayName ?? value.name,
       internalReference: value.internalReference ?? value.id ?? `TERR-${String(territoryId).padStart(3, '0')}`,
+      territoryKind,
       countryCode,
-      countries: countryCode ? [countryCode] : (value.countries ?? []),
+      iso2: countryCode,
+      iso3: isDisputed ? null : iso3,
+      countries: countryCode ? [countryCode] : [],
       assignedManagerId: value.assignedManagerId ?? (value.assignedManagerUserId ? String(value.assignedManagerUserId) : null),
       status,
       createdAt: value.createdAt,
@@ -453,7 +505,7 @@ export class TerritoryService {
       boundaryGeoJson: value.boundaryGeoJson ?? null,
       viewport: value.viewport ?? null,
       boundaryRequiredMessage: value.boundaryRequiredMessage ?? null,
-      canAssign: value.canAssign ?? !!value.hasBoundary,
+      canAssign: base.territoryKind === 'DisputedTerritory' ? false : (value.canAssign ?? !!value.hasBoundary),
     };
   }
 
@@ -479,6 +531,232 @@ export class TerritoryService {
       isActive: value.isActive ?? value.status !== 'Inactive',
       canAssign: value.canAssign ?? true,
     };
+  }
+
+  private getMapBoundaries$(forceRefresh = false): Observable<TerritoryMapBoundaryFeatureCollection> {
+    if (!forceRefresh && this.boundaryCache$) {
+      return this.boundaryCache$;
+    }
+
+    const options = forceRefresh ? this.noCacheOptions() : undefined;
+
+    this.boundaryCache$ = this.http
+      .get<TerritoryMapBoundaryFeatureCollection>(`${this.endpoint}/map/boundaries`, options)
+      .pipe(
+        map(collection => this.normalizeBoundaryCollection(collection)),
+        shareReplay({ bufferSize: 1, refCount: false }),
+      );
+
+    return this.boundaryCache$;
+  }
+
+  private getMapStatus$(forceRefresh = false): Observable<TerritoryMapStatusCollection> {
+    return this.http
+      .get<TerritoryMapStatusCollection>(
+        `${this.endpoint}/map/status`,
+        forceRefresh ? this.noCacheOptions() : undefined,
+      )
+      .pipe(map(collection => this.normalizeStatusCollection(collection)));
+  }
+
+  private noCacheOptions(): { params: HttpParams; headers: HttpHeaders } {
+    return {
+      params: new HttpParams().set('_', String(Date.now())),
+      headers: new HttpHeaders({ 'Cache-Control': 'no-cache' }),
+    };
+  }
+
+  private mergeMapCollection(
+    boundaries: TerritoryMapBoundaryFeatureCollection,
+    status: TerritoryMapStatusCollection,
+  ): TerritoryMapFeatureCollection {
+    const statusByKey = new Map<string, TerritoryMapStatusItem>();
+    for (const item of status.items ?? []) {
+      statusByKey.set(this.mapStatusKey(item), item);
+    }
+
+    const usedStatusKeys = new Set<string>();
+    const features = (boundaries.features ?? []).map(feature => {
+      const key = this.mapBoundaryKey(feature.properties);
+      const item = key ? statusByKey.get(key) : undefined;
+      if (key && item) {
+        usedStatusKeys.add(key);
+      }
+
+      const baseProps: TerritoryMapFeatureProperties = {
+        territoryId: feature.properties.territoryId ?? item?.territoryId ?? null,
+        countryId: feature.properties.countryId ?? item?.countryId ?? null,
+        territoryKind: this.normalizeTerritoryKind(item?.territoryKind ?? feature.properties.territoryKind),
+        iso2: item?.iso2 ?? feature.properties.iso2 ?? null,
+        iso3: item?.iso3 ?? feature.properties.iso3 ?? null,
+        countryCode: item?.countryCode ?? feature.properties.countryCode ?? null,
+        name: item?.name ?? feature.properties.name,
+        displayName: item?.displayName ?? feature.properties.displayName ?? feature.properties.name,
+        status: item?.status ?? (feature.geometry ? 'Available' : 'MissingBoundary'),
+        shapeGroup: item?.shapeGroup ?? feature.properties.shapeGroup ?? null,
+        shapeType: item?.shapeType ?? feature.properties.shapeType ?? null,
+        shapeId: item?.shapeId ?? feature.properties.shapeId ?? null,
+        assignedManager: item?.assignedManager ?? null,
+        hasBoundary: item?.hasBoundary ?? !!feature.geometry,
+        hasValidationBoundary: item?.hasValidationBoundary ?? item?.hasBoundary ?? !!feature.geometry,
+        hasDisplayBoundary: item?.hasDisplayBoundary ?? feature.properties.hasDisplayBoundary ?? !!feature.geometry,
+        canAssign: item?.canAssign ?? false,
+        canEdit: item?.canEdit ?? false,
+        boundaryRequiredMessage: item?.boundaryRequiredMessage ?? null,
+        boundaryMissingReason: item?.boundaryMissingReason ?? item?.boundaryRequiredMessage ?? null,
+        viewport: feature.properties.viewport ?? null,
+      };
+
+      return {
+        type: 'Feature' as const,
+        geometry: feature.geometry,
+        properties: this.normalizeMapProperties(baseProps),
+      };
+    });
+
+    for (const item of status.items ?? []) {
+      const key = this.mapStatusKey(item);
+      if (!key || usedStatusKeys.has(key)) {
+        continue;
+      }
+
+      features.push({
+        type: 'Feature',
+        geometry: null,
+        properties: this.normalizeMapProperties({
+          ...item,
+          viewport: null,
+        }),
+      });
+    }
+
+    return {
+      type: 'FeatureCollection',
+      features,
+      attribution: boundaries.attribution ?? null,
+      generatedAt: status.generatedAt ?? boundaries.generatedAt ?? null,
+    };
+  }
+
+  private normalizeBoundaryCollection(
+    collection: TerritoryMapBoundaryFeatureCollection,
+  ): TerritoryMapBoundaryFeatureCollection {
+    return {
+      type: 'FeatureCollection',
+      features: (collection.features ?? []).map(feature => {
+        const territoryKind = this.normalizeTerritoryKind(feature.properties.territoryKind);
+        return {
+          ...feature,
+          properties: {
+            ...feature.properties,
+            territoryKind,
+            iso2: territoryKind === 'DisputedTerritory' ? null : feature.properties.iso2 ?? null,
+            iso3: territoryKind === 'DisputedTerritory' ? null : feature.properties.iso3 ?? null,
+            countryCode: territoryKind === 'DisputedTerritory' ? null : feature.properties.countryCode ?? null,
+          },
+        };
+      }),
+      attribution: collection.attribution ?? null,
+      generatedAt: collection.generatedAt ?? null,
+    };
+  }
+
+  private normalizeStatusCollection(collection: TerritoryMapStatusCollection): TerritoryMapStatusCollection {
+    return {
+      items: (collection.items ?? []).map(item => this.normalizeStatusItem(item)),
+      generatedAt: collection.generatedAt ?? null,
+    };
+  }
+
+  private normalizeStatusItem(item: TerritoryMapStatusItem): TerritoryMapStatusItem {
+    const territoryKind = this.normalizeTerritoryKind(item.territoryKind);
+    return {
+      ...item,
+      territoryKind,
+      iso2: territoryKind === 'DisputedTerritory' ? null : item.iso2 ?? null,
+      iso3: territoryKind === 'DisputedTerritory' ? null : item.iso3 ?? null,
+      countryCode: territoryKind === 'DisputedTerritory' ? null : item.countryCode ?? null,
+      assignedManager: item.assignedManager ?? null,
+      hasValidationBoundary: item.hasValidationBoundary ?? item.hasBoundary,
+      hasDisplayBoundary: item.hasDisplayBoundary ?? item.hasBoundary,
+      boundaryRequiredMessage: item.boundaryRequiredMessage ?? null,
+      boundaryMissingReason: item.boundaryMissingReason ?? item.boundaryRequiredMessage ?? null,
+    };
+  }
+
+  private normalizeMapCollection(collection: TerritoryMapFeatureCollection): TerritoryMapFeatureCollection {
+    return {
+      type: 'FeatureCollection',
+      features: (collection.features ?? []).map(feature => ({
+        ...feature,
+        properties: this.normalizeMapProperties(feature.properties),
+      })),
+      attribution: collection.attribution ?? null,
+      generatedAt: collection.generatedAt ?? null,
+    };
+  }
+
+  private normalizeMapProperties(properties: TerritoryMapFeatureProperties): TerritoryMapFeatureProperties {
+    const territoryKind = this.normalizeTerritoryKind(properties.territoryKind);
+    return {
+      ...properties,
+      territoryKind,
+      iso2: territoryKind === 'DisputedTerritory' ? null : properties.iso2 ?? null,
+      iso3: territoryKind === 'DisputedTerritory' ? null : properties.iso3 ?? null,
+      countryCode: territoryKind === 'DisputedTerritory' ? null : properties.countryCode ?? null,
+      assignedManager: properties.assignedManager ?? null,
+      hasValidationBoundary: properties.hasValidationBoundary ?? properties.hasBoundary,
+      hasDisplayBoundary: properties.hasDisplayBoundary ?? properties.hasBoundary,
+      boundaryRequiredMessage: properties.boundaryRequiredMessage ?? null,
+      boundaryMissingReason: properties.boundaryMissingReason ?? properties.boundaryRequiredMessage ?? null,
+      viewport: properties.viewport ?? null,
+    };
+  }
+
+  private mapBoundaryKey(properties: {
+    territoryId?: number | null;
+    iso2?: string | null;
+    iso3?: string | null;
+    countryCode?: string | null;
+    shapeId?: string | null;
+    shapeGroup?: string | null;
+  }): string {
+    return this.mapFeatureKey(
+      properties.territoryId,
+      properties.iso2 ?? properties.countryCode ?? null,
+      properties.iso3 ?? null,
+      properties.shapeId ?? null,
+      properties.shapeGroup ?? null,
+    );
+  }
+
+  private mapStatusKey(item: TerritoryMapStatusItem): string {
+    return this.mapFeatureKey(
+      item.territoryId,
+      item.iso2 ?? item.countryCode ?? null,
+      item.iso3 ?? null,
+      item.shapeId ?? null,
+      item.shapeGroup ?? null,
+    );
+  }
+
+  private mapFeatureKey(
+    territoryId: number | null | undefined,
+    iso2: string | null,
+    iso3: string | null,
+    shapeId: string | null,
+    shapeGroup: string | null,
+  ): string {
+    if (territoryId) return `territory:${territoryId}`;
+    if (shapeId?.trim()) return `shape:${shapeId.trim().toUpperCase()}`;
+    if (iso3?.trim()) return `iso3:${iso3.trim().toUpperCase()}`;
+    if (iso2?.trim()) return `iso2:${iso2.trim().toUpperCase()}`;
+    if (shapeGroup?.trim()) return `group:${shapeGroup.trim().toUpperCase()}`;
+    return '';
+  }
+
+  private normalizeTerritoryKind(value: Territory['territoryKind']): 'Country' | 'DisputedTerritory' {
+    return value === 'DisputedTerritory' ? 'DisputedTerritory' : 'Country';
   }
 
   private toTerritoryId(id: string | number | null | undefined): number | null {

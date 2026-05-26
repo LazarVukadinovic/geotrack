@@ -11,7 +11,7 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { TerritoryService } from '../../../../core/services/administrator/territory.service';
 import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
-import { Territory, TerritoryDetail, Country, TerritoryManager, CreateTerritoryRequest, GeoJsonGeometry } from '../../../../core/models/administrator/territory.model';
+import { Territory, TerritoryDetail, Country, TerritoryManager, GeoJsonGeometry, TerritoryMapFeatureCollection } from '../../../../core/models/administrator/territory.model';
 import { TerritoryWorldMapComponent, CountryMapAssignment, CountryMapClick } from './territory-world-map.component';
 import { CountryMiniMapComponent } from './country-mini-map.component';
 
@@ -53,9 +53,14 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   // ── World map assignments ─────────────────────────────────────────────────
   countryAssignments = new Map<string, CountryMapAssignment>();
   highlightCountryCode = '';
+  mapFeatureCollection: TerritoryMapFeatureCollection | null = null;
+  isMapLoading = false;
+  mapLoadFailed = false;
+  mapAttribution = 'Boundary data provided by geoBoundaries (gbOpen), licensed under CC BY 4.0.';
 
   // ── Assign from map (create new territory for a country) ──────────────────
   mapClickedCountry: Country | null = null;
+  mapClickedTerritoryId: number | null = null;
   mapClickedCountryBoundary: GeoJsonGeometry | null = null;
   mapManagerSearch = '';
   mapManagerUsers: TerritoryManager[] = [];
@@ -122,6 +127,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
     this.allCountriesList = this.svc.getAllCountries();
     this.managers         = this.svc.getAllManagers();
     this.activeManagers   = this.svc.getActiveManagers();
+    this.loadTerritoryMap();
     this.loadTerritories();
     this.refreshManagers();
 
@@ -156,6 +162,33 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.reportedReviewsCount = 0;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private loadTerritoryMap(forceRefresh = false): void {
+    this.isMapLoading = true;
+    this.mapLoadFailed = false;
+    const request$ = forceRefresh ? this.svc.refreshMap$() : this.svc.getMap$();
+    request$
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.isMapLoading = false;
+          this.cdr.markForCheck();
+        }),
+      )
+      .subscribe({
+        next: collection => {
+          this.mapFeatureCollection = collection;
+          this.mapAttribution = collection.attribution || this.mapAttribution;
+          this.mapLoadFailed = false;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.mapFeatureCollection = null;
+          this.mapLoadFailed = true;
           this.cdr.markForCheck();
         },
       });
@@ -218,6 +251,10 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   private buildCountryAssignments(): void {
     const map = new Map<string, CountryMapAssignment>();
     for (const t of this.territories) {
+      if (!t.assignedManagerId && !t.assignedManagerUserId) {
+        continue;
+      }
+
       const managerName = t.assignedManagerName ?? 'Unassigned';
       for (const code of t.countries) {
         if (!map.has(code)) {
@@ -230,36 +267,89 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
 
   onListSearchChange(): void { this.searchSubject.next(this.listSearch); }
 
+  retryTerritoryMap(): void {
+    this.loadTerritoryMap(true);
+  }
+
+  private refreshTerritoryMapStatus(): void {
+    this.svc.refreshMapStatus$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: collection => {
+          this.mapFeatureCollection = collection;
+          this.mapAttribution = collection.attribution || this.mapAttribution;
+          this.mapLoadFailed = false;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.mapLoadFailed = true;
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
   // ── World map ─────────────────────────────────────────────────────────────
   onMapCountryClick(event: CountryMapClick | string): void {
     const code = typeof event === 'string' ? event : event.code;
+    const territoryId = typeof event === 'string' ? null : event.territoryId;
     const assignment = this.countryAssignments.get(code);
-    if (assignment) {
-      const territory = this.territories.find(t => t.countries.includes(code));
-      if (territory) {
-        this.tabBeforeDetail = this.activeTab;
-        this.openTerritoryDetail(territory);
-      }
+    const isDisputedFeature = typeof event !== 'string' && this.isDisputedMapClick(event);
+    if (isDisputedFeature) {
+      const target = territoryId
+        ? this.territories.find(t => (t.territoryId ?? Number(t.id)) === territoryId)
+        : null;
+
+      this.tabBeforeDetail = this.activeTab;
+      this.openTerritoryDetail(target ?? this.mapClickToTerritoryFallback(event));
       return;
     }
-    const country = this.svc.getCountryByCode(code);
-    if (!country) return;
+
+    const isAssignedFeature = typeof event !== 'string' && event.status === 'Assigned';
+    if (assignment || isAssignedFeature) {
+      const territory = territoryId
+        ? this.territories.find(t => (t.territoryId ?? Number(t.id)) === territoryId)
+        : this.territories.find(t => t.countries.includes(code));
+      const target = territory ?? (typeof event === 'string' || !territoryId
+        ? null
+        : this.mapClickToTerritoryFallback(event));
+      if (!target) return;
+
+      this.tabBeforeDetail = this.activeTab;
+      this.openTerritoryDetail(target);
+      return;
+    }
+
+    if (typeof event !== 'string' && !event.canAssign) {
+      this.mapAssignError = event.boundaryMissingReason || event.boundaryRequiredMessage || 'Boundary data is missing. Run the backend ADM0 boundary setup before assigning this country.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    const country = this.svc.getCountryByCode(code) ?? {
+      code,
+      iso3: typeof event === 'string' ? null : event.iso3,
+      name: typeof event === 'string' ? code : event.name,
+      continent: '',
+      flag: '',
+    };
     this.mapClickedCountry  = {
       ...country,
       name: typeof event === 'string' ? country.name : (event.name || country.name),
     };
+    this.mapClickedTerritoryId = territoryId;
     this.mapClickedCountryBoundary = typeof event === 'string' ? null : event.geometry;
     this.selectedMapManager = null;
     this.mapManagerSearch = '';
-    this.mapAssignError = this.mapClickedCountryBoundary
+    this.mapAssignError = this.mapClickedTerritoryId && this.mapClickedCountryBoundary
       ? ''
-      : 'Country boundary could not be loaded. Reload the map before assigning this territory.';
+      : 'Boundary data is missing. Run the backend ADM0 boundary setup before assigning this country.';
     this.loadMapManagerCandidates();
     this.cdr.detectChanges();
   }
 
   closeMapAssignModal(): void {
     this.mapClickedCountry = null;
+    this.mapClickedTerritoryId = null;
     this.mapClickedCountryBoundary = null;
     this.mapManagerSearch = '';
     this.mapManagerUsers = [];
@@ -285,28 +375,25 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   }
 
   confirmMapAssign(): void {
-    if (!this.mapClickedCountry || !this.selectedMapManager || !this.mapClickedCountryBoundary) {
-      this.mapAssignError = !this.mapClickedCountryBoundary
-        ? 'Country boundary is required before assigning a Territory Manager.'
+    if (!this.mapClickedCountry || !this.selectedMapManager || !this.mapClickedTerritoryId || !this.mapClickedCountryBoundary) {
+      this.mapAssignError = !this.mapClickedTerritoryId || !this.mapClickedCountryBoundary
+        ? 'Boundary data is missing. Run the backend ADM0 boundary setup before assigning this country.'
         : 'Select a Territory Manager before assigning this country.';
       this.cdr.detectChanges();
       return;
     }
     this.isCreatingFromMap = true;
     this.mapAssignError = '';
-    const req: CreateTerritoryRequest = {
-      name: this.mapClickedCountry.name,
-      countries: [this.mapClickedCountry.code],
-      assignedManagerId: this.selectedMapManager.id,
-      assignedManagerUserId: this.selectedMapManager.userId,
-      boundary: this.mapClickedCountryBoundary,
-    };
-    this.svc.create$(req).pipe(takeUntil(this.destroy$)).subscribe({
-      next: () => {
+    this.svc.updateManager$(this.mapClickedTerritoryId, this.selectedMapManager.userId ?? this.selectedMapManager.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+      next: detail => {
         this.isCreatingFromMap = false;
+        this.applyTerritoryUpdate(detail);
         this.closeMapAssignModal();
         this.refreshManagers();
         this.loadTerritories();
+        this.refreshTerritoryMapStatus();
       },
       error: error => {
         this.isCreatingFromMap = false;
@@ -336,6 +423,12 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   // ── Assign manager (from list for existing territory) ─────────────────────
   openAssignModal(territory: Territory, event?: MouseEvent): void {
     event?.stopPropagation();
+    if (this.isDisputedTerritory(territory)) {
+      this.tabBeforeDetail = this.activeTab;
+      this.openTerritoryDetail(territory);
+      return;
+    }
+
     this.openDropdownId  = null;
     this.assignTarget    = { ...territory };
     this.assignManagerId = '';
@@ -354,6 +447,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
         this.isAssigning  = false;
         this.assignTarget = null;
         this.loadTerritories();
+        this.refreshTerritoryMapStatus();
       });
   }
 
@@ -374,6 +468,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
       this.isDeleting   = false;
       this.deleteTarget = null;
       this.loadTerritories();
+      this.loadTerritoryMap(true);
     });
   }
 
@@ -437,6 +532,13 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
 
   openEdit(territory: Territory | TerritoryDetail, event?: MouseEvent): void {
     event?.stopPropagation();
+    if (this.isDisputedTerritory(territory)) {
+      this.editError = 'This disputed boundary is shown for map completeness and cannot be assigned as a country territory.';
+      this.openDropdownId = null;
+      this.cdr.markForCheck();
+      return;
+    }
+
     this.tabBeforeEdit = this.detailTarget ? this.tabBeforeDetail : this.activeTab;
     this.openDropdownId = null;
     this.editError = '';
@@ -511,6 +613,12 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
 
   saveEdit(): void {
     if (!this.editTarget) return;
+    if (this.isDisputedTerritory(this.editTarget)) {
+      this.editError = 'This disputed boundary is shown for map completeness and cannot be assigned as a country territory.';
+      this.cdr.markForCheck();
+      return;
+    }
+
     if (this.editAssignedManagerId && !this.editTarget.hasBoundary) {
       this.editError = this.editTarget.boundaryRequiredMessage
         || 'This country cannot be assigned until its boundary geometry is available.';
@@ -536,6 +644,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
           this.applyTerritoryUpdate(detail);
           this.refreshManagers();
           this.loadTerritories();
+          this.refreshTerritoryMapStatus();
         },
         error: error => {
           this.editError = this.extractErrorMessage(error, 'Territory Manager assignment could not be saved.');
@@ -659,9 +768,29 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   }
 
   statusClass(status: string): string {
+    if (status === 'DisputedViewOnly' || status === 'DisputedAssigned') {
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+    }
+
     return status === 'Assigned' || status === 'Active'
       ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
       : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+  }
+
+  territoryKindLabel(territory: Territory | TerritoryDetail): string {
+    return this.isDisputedTerritory(territory) ? 'Disputed Territory' : 'Country / ADM0';
+  }
+
+  boundaryTypeLabel(territory: Territory | TerritoryDetail): string {
+    return territory.boundaryAdmLevel || territory.boundaryShapeType || 'Boundary';
+  }
+
+  isDisputedTerritory(territory: Territory | TerritoryDetail | null | undefined): boolean {
+    return territory?.territoryKind === 'DisputedTerritory' ||
+      territory?.status === 'DisputedViewOnly' ||
+      territory?.status === 'DisputedAssigned' ||
+      territory?.boundaryAdmLevel === 'DISP' ||
+      territory?.boundaryShapeType === 'DISP';
   }
 
   managerInitials(managerId: string | null): string {
@@ -725,6 +854,46 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
       });
   }
 
+  private mapClickToTerritoryFallback(event: CountryMapClick): Territory {
+    const territoryId = event.territoryId ?? 0;
+    const id = `TERR-${String(territoryId).padStart(3, '0')}`;
+    const now = new Date().toISOString();
+    const isDisputed = this.isDisputedMapClick(event);
+    return {
+      id,
+      territoryId,
+      countryId: territoryId,
+      name: event.name,
+      displayName: event.name,
+      internalReference: id,
+      territoryKind: event.territoryKind,
+      countryCode: isDisputed ? null : event.iso2 ?? event.code,
+      iso2: isDisputed ? null : event.iso2 ?? event.code,
+      iso3: isDisputed ? null : event.iso3,
+      countries: isDisputed ? [] : [event.iso2 ?? event.code],
+      assignedManagerUserId: null,
+      assignedManagerId: null,
+      assignedManagerName: null,
+      assignedManagerEmail: null,
+      status: isDisputed
+        ? (event.status === 'DisputedAssigned' ? 'DisputedAssigned' : 'DisputedViewOnly')
+        : event.status === 'Assigned' ? 'Assigned' : 'Unassigned',
+      boundaryShapeType: event.shapeType,
+      boundaryShapeGroup: event.shapeGroup,
+      boundaryShapeId: event.shapeId,
+      boundaryAdmLevel: isDisputed ? 'DISP' : null,
+      boundarySource: 'geoBoundaries',
+      boundaryReleaseType: 'gbOpen',
+      boundaryLicense: 'CC BY 4.0',
+      hasBoundary: event.hasBoundary,
+      zone: event.geometry
+        ? { type: 'Feature', geometry: event.geometry, properties: null }
+        : null,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
   private asDetailFallback(territory: Territory): TerritoryDetail {
     return {
       ...territory,
@@ -742,8 +911,10 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
         : null,
       boundaryGeoJson: territory.zone?.geometry ?? null,
       viewport: null,
-      boundaryRequiredMessage: territory.hasBoundary ? null : 'This country cannot be assigned until its boundary geometry is available.',
-      canAssign: !!territory.hasBoundary,
+      boundaryRequiredMessage: this.isDisputedTerritory(territory)
+        ? 'This disputed boundary is shown for map completeness and cannot be assigned as a country territory.'
+        : territory.hasBoundary ? null : 'This country cannot be assigned until its boundary geometry is available.',
+      canAssign: this.isDisputedTerritory(territory) ? false : !!territory.hasBoundary,
     };
   }
 
@@ -761,5 +932,12 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
     }
     this.buildCountryAssignments();
     this.cdr.markForCheck();
+  }
+
+  private isDisputedMapClick(event: CountryMapClick): boolean {
+    return event.territoryKind === 'DisputedTerritory' ||
+      event.status === 'DisputedViewOnly' ||
+      event.status === 'DisputedAssigned' ||
+      event.shapeType === 'DISP';
   }
 }

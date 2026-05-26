@@ -4,14 +4,15 @@ import {
   ChangeDetectionStrategy, ChangeDetectorRef, NgZone, inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ALL_COUNTRIES } from '../../../../core/services/administrator/territory.service';
-import { GeoJsonGeometry } from '../../../../core/models/administrator/territory.model';
+import {
+  GeoJsonGeometry,
+  TerritoryMapFeature,
+  TerritoryMapFeatureCollection,
+  TerritoryMapFeatureProperties,
+  TerritoryMapStatus,
+} from '../../../../core/models/administrator/territory.model';
 
 declare const L: any;
-
-const NAME_TO_CODE = new Map<string, string>(
-  ALL_COUNTRIES.map(c => [c.name.toLowerCase(), c.code])
-);
 
 export interface CountryMapAssignment {
   managerId: string;
@@ -21,7 +22,21 @@ export interface CountryMapAssignment {
 
 export interface CountryMapClick {
   code: string;
+  iso2: string | null;
+  iso3: string | null;
   name: string;
+  territoryKind: string;
+  shapeGroup: string | null;
+  shapeType: string | null;
+  shapeId: string | null;
+  territoryId: number | null;
+  status: TerritoryMapStatus;
+  canAssign: boolean;
+  hasBoundary: boolean;
+  hasValidationBoundary: boolean;
+  hasDisplayBoundary: boolean;
+  boundaryRequiredMessage: string | null;
+  boundaryMissingReason: string | null;
   geometry: GeoJsonGeometry | null;
 }
 
@@ -39,7 +54,7 @@ export interface CountryMapClick {
             <svg class="w-6 h-6 text-blue-400 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4" stroke-dashoffset="10"/>
             </svg>
-            <p class="text-sm text-gray-500">Loading world map…</p>
+            <p class="text-sm text-gray-500">Loading stored ADM0 boundaries...</p>
           </div>
         </div>
       }
@@ -49,8 +64,15 @@ export interface CountryMapClick {
             <svg class="w-8 h-8 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            <p class="text-sm font-medium text-gray-500">Map could not be loaded</p>
-            <p class="text-xs text-gray-400">Check your internet connection and reload the page</p>
+            <p class="text-sm font-medium text-gray-500">Map data could not be loaded</p>
+            <p class="text-xs text-gray-400">Stored country boundaries are unavailable right now</p>
+            <button
+              type="button"
+              class="mt-1 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50"
+              (click)="retryLoad.emit()"
+            >
+              Retry
+            </button>
           </div>
         </div>
       }
@@ -60,17 +82,21 @@ export interface CountryMapClick {
 export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnChanges {
   @ViewChild('mapEl', { static: true }) mapEl!: ElementRef<HTMLDivElement>;
 
+  @Input() featureCollection: TerritoryMapFeatureCollection | null = null;
   @Input() assignments: Map<string, CountryMapAssignment> = new Map();
   @Input() pickerMode = false;
   @Input() selectedCode = '';
   @Input() unavailableCodes: string[] = [];
   @Input() highlightCode = '';
+  @Input() isLoading = false;
+  @Input() loadFailed = false;
   @Output() countryClick = new EventEmitter<CountryMapClick>();
+  @Output() retryLoad = new EventEmitter<void>();
 
-  isLoading = true;
-  loadFailed = false;
   private map: any;
   private geoLayer: any;
+  private renderFrame: number | null = null;
+  private geometrySignature = '';
   private unavailableSet = new Set<string>();
   private readonly cdr  = inject(ChangeDetectorRef);
   private readonly zone = inject(NgZone);
@@ -83,6 +109,9 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
     if (changes['unavailableCodes']) {
       this.unavailableSet = new Set(this.unavailableCodes);
     }
+    if (this.map && changes['featureCollection']) {
+      this.applyFeatureCollectionChange();
+    }
     if (this.geoLayer && (changes['assignments'] || changes['selectedCode'] || changes['unavailableCodes'])) {
       this.refreshStyles();
     }
@@ -92,82 +121,153 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
   }
 
   ngOnDestroy(): void {
+    if (this.renderFrame !== null) {
+      cancelAnimationFrame(this.renderFrame);
+      this.renderFrame = null;
+    }
     this.map?.remove();
   }
 
   private initMap(): void {
-    this.map = L.map(this.mapEl.nativeElement, {
-      center: [25, 10],
-      zoom: 2,
-      minZoom: 1,
-      maxZoom: 7,
-      zoomControl: true,
-      worldCopyJump: true,
+    this.zone.runOutsideAngular(() => {
+      this.map = L.map(this.mapEl.nativeElement, {
+        center: [25, 10],
+        zoom: 2,
+        minZoom: 1,
+        maxZoom: 7,
+        zoomControl: true,
+        worldCopyJump: false,
+        maxBounds: [[-85, -220], [85, 220]],
+        maxBoundsViscosity: 0.65,
+        preferCanvas: true,
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        opacity: 0.35,
+        noWrap: false,
+      }).addTo(this.map);
+
+      this.renderLayer();
     });
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      opacity: 0.35,
-    }).addTo(this.map);
-
-    this.fetchCountries();
   }
 
-  private async fetchCountries(): Promise<void> {
-    const urls = [
-      // naturalearth 110m via jsDelivr (~900 KB, brzo)
-      'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@v5.1.2/geojson/ne_110m_admin_0_countries.geojson',
-      // originalni geo-countries via jsDelivr (fallback, ~22 MB)
-      'https://cdn.jsdelivr.net/gh/datasets/geo-countries@0.1.0/data/countries.geojson',
-    ];
+  private renderLayer(): void {
+    if (!this.map) return;
 
-    let loaded = false;
-    for (const url of urls) {
-      try {
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        const data = await res.json();
-        this.renderLayer(data);
-        loaded = true;
-        break;
-      } catch {
-        // probaj sledeći URL
+    if (this.renderFrame !== null) {
+      cancelAnimationFrame(this.renderFrame);
+    }
+
+    this.renderFrame = requestAnimationFrame(() => {
+      this.renderFrame = null;
+      this.renderLayerNow();
+    });
+  }
+
+  private renderLayerNow(): void {
+    if (!this.map) return;
+
+    if (this.geoLayer) {
+      this.map.removeLayer(this.geoLayer);
+      this.geoLayer = null;
+    }
+
+    const features = (this.featureCollection?.features ?? [])
+      .filter((feature): feature is TerritoryMapFeature => !!feature.geometry);
+
+    const geojson = {
+      type: 'FeatureCollection',
+      features: features.map(feature => ({
+        type: 'Feature',
+        geometry: feature.geometry,
+        properties: feature.properties,
+      })),
+    };
+
+    this.geoLayer = L.geoJSON(geojson, {
+      renderer: typeof L.canvas === 'function' ? L.canvas({ padding: 0.35 }) : undefined,
+      noClip: true,
+      fillRule: 'nonzero',
+      style: (feature: any) => this.styleFor(feature.properties as TerritoryMapFeatureProperties),
+      onEachFeature: (feature: any, layer: any) => {
+        this.bindLayer(layer, feature.properties as TerritoryMapFeatureProperties, feature.geometry ?? null);
+      },
+    }).addTo(this.map);
+    this.geometrySignature = this.buildGeometrySignature(features);
+
+    this.cdr.markForCheck();
+  }
+
+  private applyFeatureCollectionChange(): void {
+    const features = (this.featureCollection?.features ?? [])
+      .filter((feature): feature is TerritoryMapFeature => !!feature.geometry);
+    const nextSignature = this.buildGeometrySignature(features);
+    if (this.geoLayer && nextSignature === this.geometrySignature) {
+      this.updateLayerProperties(features);
+      this.refreshStyles();
+      return;
+    }
+
+    this.renderLayer();
+  }
+
+  private updateLayerProperties(features: TerritoryMapFeature[]): void {
+    if (!this.geoLayer) return;
+    const propertiesByKey = new Map<string, TerritoryMapFeatureProperties>();
+    for (const feature of features) {
+      const key = this.featureKey(feature.properties);
+      if (key) {
+        propertiesByKey.set(key, feature.properties);
       }
     }
 
-    if (!loaded) this.loadFailed = true;
-    this.isLoading = false;
-    this.cdr.detectChanges();
+    this.geoLayer.eachLayer((layer: any) => {
+      const props = layer.feature?.properties as TerritoryMapFeatureProperties | undefined;
+      const key = props ? this.featureKey(props) : '';
+      const nextProps = key ? propertiesByKey.get(key) : undefined;
+      if (nextProps && layer.feature) {
+        layer.feature.properties = nextProps;
+      }
+    });
   }
 
-  private extractCode(props: any): string {
-    const iso2: string = props.ISO_A2;
-    if (iso2 && iso2 !== '-99' && iso2 !== '-1') return iso2;
-    const eh: string = props.ISO_A2_EH;
-    if (eh && eh !== '-99' && eh !== '-1') return eh;
-    const name: string = (props.ADMIN ?? props.NAME ?? '').toLowerCase();
-    if (name) {
-      const byName = NAME_TO_CODE.get(name);
-      if (byName) return byName;
+  private buildGeometrySignature(features: TerritoryMapFeature[]): string {
+    return features
+      .map(feature => {
+        const key = this.featureKey(feature.properties);
+        const geometry = feature.geometry;
+        return `${key}:${geometry?.type ?? 'null'}:${this.coordinateCount(geometry?.coordinates)}`;
+      })
+      .sort()
+      .join('|');
+  }
+
+  private coordinateCount(value: unknown): number {
+    if (!Array.isArray(value)) {
+      return 0;
     }
-    return '-99';
+
+    if (typeof value[0] === 'number') {
+      return 1;
+    }
+
+    return value.reduce((sum, child) => sum + this.coordinateCount(child), 0);
   }
 
-  private renderLayer(geojson: any): void {
-    this.geoLayer = L.geoJSON(geojson, {
-      style: (feature: any) => this.styleFor(this.extractCode(feature.properties)),
-      onEachFeature: (feature: any, layer: any) => {
-        const code: string = this.extractCode(feature.properties);
-        const name: string = feature.properties.ADMIN ?? feature.properties.NAME ?? code;
-        this.bindLayer(layer, code, name);
-      },
-    }).addTo(this.map);
-  }
+  private styleFor(props: TerritoryMapFeatureProperties): any {
+    const code = this.featureCode(props);
+    if (this.isDisputed(props)) {
+      if (props.status === 'DisputedAssigned') {
+        return { fillColor: '#7c3aed', fillOpacity: 0.5, color: '#5b21b6', weight: 1.1, dashArray: '5 3' };
+      }
+      return { fillColor: '#f59e0b', fillOpacity: 0.38, color: '#b45309', weight: 1.1, dashArray: '5 3' };
+    }
 
-  private styleFor(code: string): any {
-    if (code === '-99' || code === '-1') {
+    if (!code) {
       return { fillColor: '#e5e7eb', fillOpacity: 0.25, color: '#d1d5db', weight: 0.5 };
     }
+
     if (this.pickerMode) {
       if (code === this.selectedCode) {
         return { fillColor: '#10b981', fillOpacity: 0.65, color: '#ffffff', weight: 1 };
@@ -177,89 +277,122 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
       }
       return { fillColor: '#cbd5e1', fillOpacity: 0.45, color: '#94a3b8', weight: 0.5 };
     }
-    const a = this.assignments.get(code);
-    if (a) {
-      return { fillColor: '#3b82f6', fillOpacity: 0.55, color: '#ffffff', weight: 0.8 };
+
+    const status = this.effectiveStatus(props);
+    if (status === 'Assigned') {
+      return { fillColor: '#3b82f6', fillOpacity: 0.58, color: '#1d4ed8', weight: 0.9 };
     }
-    return { fillColor: '#cbd5e1', fillOpacity: 0.45, color: '#94a3b8', weight: 0.5 };
+    if (status === 'MissingBoundary') {
+      return { fillColor: '#e5e7eb', fillOpacity: 0.3, color: '#9ca3af', weight: 0.7, dashArray: '4 4' };
+    }
+    if (status === 'MissingDisplayGeometry') {
+      return { fillColor: '#fef3c7', fillOpacity: 0.45, color: '#d97706', weight: 0.9, dashArray: '2 4' };
+    }
+    return { fillColor: '#bbf7d0', fillOpacity: 0.42, color: '#15803d', weight: 0.75 };
   }
 
-  private bindLayer(layer: any, code: string, name: string): void {
-    if (code === '-99' || code === '-1') return;
+  private bindLayer(layer: any, props: TerritoryMapFeatureProperties, geometry: GeoJsonGeometry | null): void {
+    const code = this.featureCode(props);
+    const key = this.featureKey(props);
+    if (!key) return;
+
+    const name = props.displayName || props.name || code || 'Boundary feature';
+    const status = this.effectiveStatus(props);
 
     if (this.pickerMode) {
+      if (this.isDisputed(props) || !code) {
+        layer.bindTooltip(
+          `<strong>${name}</strong><br><span style="color:#b45309;font-size:11px;">Disputed territory - view-only</span>`,
+          { sticky: true },
+        );
+        return;
+      }
+
       const isUnavailable = this.unavailableSet.has(code);
       if (isUnavailable) {
         layer.bindTooltip(
           `<strong>${name}</strong><br><span style="color:#6b7280;font-size:11px;">Assigned elsewhere</span>`,
-          { sticky: true }
+          { sticky: true },
         );
       } else {
         layer.bindTooltip(
           code === this.selectedCode
             ? `<strong>${name}</strong><br><span style="color:#10b981;font-size:11px;">Selected</span>`
             : `<strong>${name}</strong><br><span style="color:#6b7280;font-size:11px;">Click to select</span>`,
-          { sticky: true }
+          { sticky: true },
         );
-        layer.on('click', () => this.emitCountryClick(code, name, layer));
+        layer.on('click', () => this.emitCountryClick(props, geometry));
         layer.on('mouseover', (e: any) => {
           if (code !== this.selectedCode) e.target.setStyle({ fillColor: '#60a5fa', fillOpacity: 0.6 });
         });
-        layer.on('mouseout', (e: any) => {
-          e.target.setStyle(this.styleFor(code));
-        });
+        layer.on('mouseout', (e: any) => e.target.setStyle(this.styleFor(props)));
       }
       return;
     }
 
-    const a = this.assignments.get(code);
-    if (a) {
+    if (this.isDisputed(props)) {
+      const assignability = props.canAssign
+        ? 'Click to view assignment options'
+        : 'View-only - not assignable as a country territory';
       layer.bindTooltip(
-        `<strong>${name}</strong><br><span style="color:#6b7280;font-size:11px;">Assigned — click to view</span>`,
-        { sticky: true }
+        `<strong>${name}</strong><br><span style="color:#b45309;font-size:11px;">Disputed territory</span><br><span style="color:#6b7280;font-size:11px;">shapeType: ${props.shapeType || props.boundaryAdmLevel || 'DISP'} - ${assignability}</span>`,
+        { sticky: true },
       );
-      layer.on('click', () => this.emitCountryClick(code, name, layer));
-      layer.on('mouseover', (e: any) => {
-        e.target.setStyle({ fillColor: '#2563eb', fillOpacity: 0.7 });
-      });
-      layer.on('mouseout', (e: any) => {
-        e.target.setStyle(this.styleFor(code));
-      });
-    } else {
-      layer.bindTooltip(
-        `<strong>${name}</strong><br><span style="color:#6b7280;font-size:11px;">Available — click to assign</span>`,
-        { sticky: true }
-      );
-      layer.on('click', () => this.emitCountryClick(code, name, layer));
-      layer.on('mouseover', (e: any) => {
-        e.target.setStyle({ fillColor: '#60a5fa', fillOpacity: 0.6 });
-      });
-      layer.on('mouseout', (e: any) => {
-        e.target.setStyle(this.styleFor(code));
-      });
+      layer.on('click', () => this.emitCountryClick(props, geometry));
+      layer.on('mouseover', (e: any) => e.target.setStyle({ fillColor: '#fbbf24', fillOpacity: 0.52, color: '#92400e' }));
+      layer.on('mouseout', (e: any) => e.target.setStyle(this.styleFor(props)));
+      return;
     }
+
+    if (status === 'MissingBoundary' || status === 'MissingDisplayGeometry') {
+      layer.bindTooltip(
+        `<strong>${name}</strong><br><span style="color:#b45309;font-size:11px;">${status === 'MissingDisplayGeometry' ? 'Display geometry must be rebuilt.' : 'Boundary missing'}</span>`,
+        { sticky: true },
+      );
+      return;
+    }
+
+    if (status === 'Assigned') {
+      const manager = this.assignments.get(code)?.managerName || props.assignedManager?.displayName || 'Assigned manager';
+      layer.bindTooltip(
+        `<strong>${name}</strong><br><span style="color:#6b7280;font-size:11px;">Assigned to ${manager} - click to view</span>`,
+        { sticky: true },
+      );
+      layer.on('click', () => this.emitCountryClick(props, geometry));
+      layer.on('mouseover', (e: any) => e.target.setStyle({ fillColor: '#2563eb', fillOpacity: 0.7 }));
+      layer.on('mouseout', (e: any) => e.target.setStyle(this.styleFor(props)));
+      return;
+    }
+
+    layer.bindTooltip(
+      `<strong>${name}</strong><br><span style="color:#6b7280;font-size:11px;">Available - click to assign</span>`,
+      { sticky: true },
+    );
+    layer.on('click', () => this.emitCountryClick(props, geometry));
+    layer.on('mouseover', (e: any) => e.target.setStyle({ fillColor: '#86efac', fillOpacity: 0.58, color: '#166534' }));
+    layer.on('mouseout', (e: any) => e.target.setStyle(this.styleFor(props)));
   }
 
   private refreshStyles(): void {
     if (!this.geoLayer) return;
-    this.geoLayer.eachLayer((layer: any) => {
-      const props = layer.feature?.properties;
-      if (!props) return;
-      const code: string = this.extractCode(props);
-      const name: string = props.ADMIN ?? props.NAME ?? code;
-      layer.setStyle(this.styleFor(code));
-      layer.off('click').off('mouseover').off('mouseout');
-      layer.unbindTooltip();
-      this.bindLayer(layer, code, name);
+    this.zone.runOutsideAngular(() => {
+      this.geoLayer.eachLayer((layer: any) => {
+        const props = layer.feature?.properties as TerritoryMapFeatureProperties | undefined;
+        if (!props) return;
+        layer.setStyle(this.styleFor(props));
+        layer.off('click').off('mouseover').off('mouseout');
+        layer.unbindTooltip();
+        this.bindLayer(layer, props, layer.feature?.geometry ?? null);
+      });
     });
   }
 
   zoomToCountry(code: string): void {
     if (!this.geoLayer || !this.map) return;
     this.geoLayer.eachLayer((layer: any) => {
-      const props = layer.feature?.properties;
+      const props = layer.feature?.properties as TerritoryMapFeatureProperties | undefined;
       if (!props) return;
-      if (this.extractCode(props) === code) {
+      if (this.featureCode(props) === code || props.iso3 === code || this.featureKey(props) === code) {
         try {
           this.map.fitBounds(layer.getBounds(), { padding: [40, 40], maxZoom: 6 });
         } catch { /* ignore */ }
@@ -267,15 +400,60 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
     });
   }
 
-  private emitCountryClick(code: string, name: string, layer: any): void {
-    const rawGeometry = layer.feature?.geometry;
-    const geometry = rawGeometry?.type === 'Polygon' || rawGeometry?.type === 'MultiPolygon'
-      ? {
-          type: rawGeometry.type,
-          coordinates: rawGeometry.coordinates,
-        } as GeoJsonGeometry
-      : null;
+  private emitCountryClick(props: TerritoryMapFeatureProperties, geometry: GeoJsonGeometry | null): void {
+    const code = this.featureCode(props) || this.featureKey(props);
+    if (!code) return;
 
-    this.zone.run(() => this.countryClick.emit({ code, name, geometry }));
+    this.zone.run(() => this.countryClick.emit({
+      code,
+      iso2: props.iso2 ?? props.countryCode ?? null,
+      iso3: props.iso3 ?? null,
+      name: props.displayName || props.name || code,
+      territoryKind: props.territoryKind ?? 'Country',
+      shapeGroup: props.shapeGroup ?? props.boundaryShapeGroup ?? null,
+      shapeType: props.shapeType ?? props.boundaryShapeType ?? props.boundaryAdmLevel ?? null,
+      shapeId: props.shapeId ?? props.boundaryShapeId ?? null,
+      territoryId: props.territoryId ?? null,
+      status: this.effectiveStatus(props),
+      canAssign: props.canAssign,
+      hasBoundary: props.hasBoundary,
+      hasValidationBoundary: props.hasValidationBoundary ?? props.hasBoundary,
+      hasDisplayBoundary: props.hasDisplayBoundary ?? !!geometry,
+      boundaryRequiredMessage: props.boundaryRequiredMessage ?? null,
+      boundaryMissingReason: props.boundaryMissingReason ?? props.boundaryRequiredMessage ?? null,
+      geometry,
+    }));
+  }
+
+  private effectiveStatus(props: TerritoryMapFeatureProperties): TerritoryMapStatus {
+    if (this.isDisputed(props)) {
+      return props.status;
+    }
+
+    const code = this.featureCode(props);
+    if (code && this.assignments.has(code)) {
+      return 'Assigned';
+    }
+    return props.status;
+  }
+
+  private featureCode(props: TerritoryMapFeatureProperties): string {
+    return props.iso2 || props.countryCode || props.iso3 || '';
+  }
+
+  private featureKey(props: TerritoryMapFeatureProperties): string {
+    return this.featureCode(props) ||
+      props.boundaryExternalKey ||
+      props.shapeId ||
+      props.shapeGroup ||
+      (props.territoryId ? `territory-${props.territoryId}` : '');
+  }
+
+  private isDisputed(props: TerritoryMapFeatureProperties): boolean {
+    return props.territoryKind === 'DisputedTerritory' ||
+      props.status === 'DisputedViewOnly' ||
+      props.status === 'DisputedAssigned' ||
+      props.shapeType === 'DISP' ||
+      props.boundaryAdmLevel === 'DISP';
   }
 }

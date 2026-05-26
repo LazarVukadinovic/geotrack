@@ -64,24 +64,43 @@
           <div class="flex items-center gap-5 px-5 py-3 border-b border-gray-100 flex-shrink-0">
             <span class="text-xs font-semibold text-gray-600">Legend</span>
             <span class="flex items-center gap-1.5 text-xs text-gray-500">
-              <span class="w-3.5 h-3.5 rounded-sm border border-slate-300 bg-slate-200 inline-block"></span>
+              <span class="w-3.5 h-3.5 rounded-sm border border-green-700 bg-green-200 inline-block"></span>
               Available
             </span>
             <span class="flex items-center gap-1.5 text-xs text-gray-500">
-              <span class="w-3.5 h-3.5 rounded-sm bg-blue-400 inline-block"></span>
+              <span class="w-3.5 h-3.5 rounded-sm border border-blue-700 bg-blue-400 inline-block"></span>
               Assigned
             </span>
-            <span class="ml-auto text-[11px] text-gray-400">Hover over a country for details · Click to assign or view</span>
+            <span class="flex items-center gap-1.5 text-xs text-gray-500">
+              <span class="w-3.5 h-3.5 rounded-sm border border-gray-300 bg-gray-100 inline-block"></span>
+              Missing boundary
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-gray-500">
+              <span class="w-3.5 h-3.5 rounded-sm border border-amber-600 bg-amber-100 inline-block"></span>
+              Missing display
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-gray-500">
+              <span class="w-3.5 h-3.5 rounded-sm border border-amber-600 bg-amber-400/50 inline-block"></span>
+              Disputed territory
+            </span>
+            <span class="ml-auto text-xs text-gray-400">Hover for details - Click countries to assign or view disputed boundaries</span>
           </div>
 
           <!-- Map -->
           <div class="flex-1 min-h-0">
             <app-territory-world-map
               style="height:100%;display:block;"
+              [featureCollection]="mapFeatureCollection"
               [assignments]="countryAssignments"
               [highlightCode]="highlightCountryCode"
+              [isLoading]="isMapLoading"
+              [loadFailed]="mapLoadFailed"
               (countryClick)="onMapCountryClick($event)"
+              (retryLoad)="retryTerritoryMap()"
             />
+          </div>
+          <div class="px-5 py-2 border-t border-gray-100 text-[11px] text-gray-400 flex-shrink-0">
+            {{ mapAttribution }}
           </div>
         </div>
       }
@@ -154,10 +173,10 @@
                   >
                     <td class="px-5 py-4">
                       <div class="flex items-center gap-2.5">
-                        <span class="text-2xl leading-none">{{ countryFlag(t.countries[0]) }}</span>
+                        <span class="text-2xl leading-none">{{ isDisputedTerritory(t) ? '' : countryFlag(t.countries[0]) }}</span>
                         <div>
                           <p class="text-sm font-semibold text-gray-900">{{ t.displayName || t.name }}</p>
-                          <p class="text-[10px] text-gray-400 mt-0.5">{{ t.id }}</p>
+                          <p class="text-[10px] text-gray-400 mt-0.5">{{ isDisputedTerritory(t) ? 'Disputed territory' : t.id }}</p>
                         </div>
                       </div>
                     </td>
@@ -239,17 +258,19 @@
   >
     @for (t of territories; track t.id) {
       @if (t.id === openDropdownId) {
-        <button
-          (click)="openEdit(t)"
-          class="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-        >
-          <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-          Edit
-        </button>
-        <div class="my-0.5 border-t border-gray-100"></div>
+        @if (!isDisputedTerritory(t)) {
+          <button
+            (click)="openEdit(t)"
+            class="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
+          >
+            <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Edit
+          </button>
+          <div class="my-0.5 border-t border-gray-100"></div>
+        }
         <button
           (click)="openDeleteConfirm(t)"
           class="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
@@ -634,10 +655,15 @@
       <!-- Header -->
       <div class="flex items-start justify-between px-6 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
         <div class="flex items-center gap-2.5">
-          <span class="text-3xl leading-none">{{ countryFlag(detailTarget.countries[0]) }}</span>
+          <span class="text-3xl leading-none">{{ isDisputedTerritory(detailTarget) ? '' : countryFlag(detailTarget.countries[0]) }}</span>
           <div>
             <div class="flex items-center gap-2">
               <h2 class="text-base font-bold text-gray-900">{{ detailTarget.displayName || detailTarget.name }}</h2>
+              @if (isDisputedTerritory(detailTarget)) {
+                <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200 flex-shrink-0">
+                  Disputed Territory
+                </span>
+              }
               <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium flex-shrink-0" [class]="statusClass(detailTarget.status)">
                 {{ detailTarget.status }}
               </span>
@@ -646,16 +672,18 @@
           </div>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-          <button
-            (click)="openEdit(detailTarget)"
-            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border-0 cursor-pointer transition-colors"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-            Edit
-          </button>
+          @if (!isDisputedTerritory(detailTarget)) {
+            <button
+              (click)="openEdit(detailTarget)"
+              class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border-0 cursor-pointer transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              Edit
+            </button>
+          }
           <button (click)="closeDetail()" class="p-1.5 text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer rounded-lg hover:bg-gray-100 transition-colors">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -677,18 +705,24 @@
           </div>
         }
 
+        @if (isDisputedTerritory(detailTarget)) {
+          <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            This disputed boundary is shown for map completeness and cannot be assigned as a country territory.
+          </div>
+        }
+
         <!-- Mini map -->
         <div class="h-44 rounded-xl overflow-hidden border border-gray-100 bg-gray-50 relative">
           @if (detailTarget.boundaryGeoJson) {
             <app-country-mini-map
               style="height:100%;display:block;"
-              [countryCode]="detailTarget.countries[0]"
+              [countryCode]="detailTarget.countries[0] || detailTarget.boundaryShapeGroup || ''"
               [countryName]="detailTarget.displayName || detailTarget.name"
               [geometry]="detailTarget.boundaryGeoJson"
             />
           } @else {
-            <div class="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-gray-500">
-              {{ detailTarget.boundaryRequiredMessage || 'Boundary geometry is not available for this country.' }}
+            <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-sm text-gray-500">
+              <span>{{ detailTarget.boundaryRequiredMessage || 'Boundary geometry is not available for this country.' }}</span>
             </div>
           }
         </div>
@@ -696,7 +730,7 @@
         <!-- Manager -->
         <div>
           <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Assigned Manager</p>
-          @if (detailTarget.assignedManager) {
+          @if (detailTarget.assignedManager && !isDisputedTerritory(detailTarget)) {
             <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
               <span
                 class="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden"
@@ -713,9 +747,30 @@
                 <p class="text-xs text-gray-400">{{ detailTarget.assignedManager.email }}</p>
               </div>
             </div>
+          } @else if (isDisputedTerritory(detailTarget)) {
+            <p class="text-sm text-amber-700">View-only disputed boundary</p>
           } @else {
             <p class="text-sm text-gray-400 italic">No manager assigned</p>
           }
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="p-3 bg-gray-50 rounded-xl">
+            <p class="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Category</p>
+            <p class="text-xs font-semibold text-gray-700">{{ territoryKindLabel(detailTarget) }}</p>
+          </div>
+          <div class="p-3 bg-gray-50 rounded-xl">
+            <p class="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Boundary type</p>
+            <p class="text-xs font-semibold text-gray-700">{{ boundaryTypeLabel(detailTarget) }}</p>
+          </div>
+          <div class="p-3 bg-gray-50 rounded-xl">
+            <p class="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Source</p>
+            <p class="text-xs font-semibold text-gray-700">{{ detailTarget.boundarySource || 'geoBoundaries' }} {{ detailTarget.boundaryReleaseType || '' }}</p>
+          </div>
+          <div class="p-3 bg-gray-50 rounded-xl">
+            <p class="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Shape group</p>
+            <p class="text-xs font-semibold text-gray-700">{{ detailTarget.boundaryShapeGroup || detailTarget.iso3 || detailTarget.countryCode || 'None' }}</p>
+          </div>
         </div>
 
         <!-- Dates -->
