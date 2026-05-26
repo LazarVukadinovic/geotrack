@@ -37,6 +37,8 @@ interface HierarchyDetail {
 type EntityType = 'location' | 'destination' | 'region' | 'territory';
 type LoadState = 'loading' | 'loaded' | 'notFound' | 'error';
 
+
+
 @Component({
   selector: 'app-entity-hierarchy-detail-page',
   standalone: true,
@@ -52,6 +54,48 @@ export class EntityHierarchyDetailPageComponent {
 
   protected readonly detail = signal<HierarchyDetail | null>(null);
   protected readonly loadState = signal<LoadState>('loading');
+
+  protected readonly expandedSectionIndex = signal<number | null>(null);
+
+  protected toggleSection(index: number): void {
+    this.expandedSectionIndex.update(current => current === index ? null : index);
+  }
+
+  protected sectionCount(section: DetailSectionPreview): number {
+    return (section.places?.length ?? 0) +
+          (section.events?.length ?? 0) +
+          (section.locations?.length ?? 0);
+  }
+
+  protected sectionItems(section: DetailSectionPreview): { name: string }[] {
+    const all = [
+      ...(section.places ?? []),
+      ...(section.events ?? []),
+      ...(section.locations ?? []),
+    ] as Record<string, unknown>[];
+    return all.map(item => ({
+      name: String(item['name'] ?? item['title'] ?? 'Item'),
+    }));
+  }
+
+  protected readonly fullExpandedSections = signal<Set<number>>(new Set());
+
+  protected toggleFullExpand(index: number, event: Event): void {
+    event.stopPropagation();
+    this.fullExpandedSections.update(current => {
+      const next = new Set(current);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  }
+
+  protected isFullExpanded(index: number): boolean {
+    return this.fullExpandedSections().has(index);
+  }
 
   constructor() {
     combineLatest([this.route.paramMap, this.route.data])
