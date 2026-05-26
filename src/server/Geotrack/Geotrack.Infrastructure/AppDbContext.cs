@@ -1006,6 +1006,20 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.LastLoginAt);
 
+            entity.Property(x => x.IsSuspended)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.SuspendedAt);
+
+            entity.Property(x => x.SuspendedByUserId);
+
+            entity.Property(x => x.IsDeleted)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.DeletedAt);
+
+            entity.Property(x => x.DeletedByUserId);
+
             entity.Property(x => x.InterfaceLanguage)
                 .IsRequired()
                 .HasMaxLength(10)
@@ -1051,6 +1065,8 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.Email)
                 .IsUnique();
+
+            entity.HasIndex(x => new { x.IsDeleted, x.IsSuspended });
         });
 
         modelBuilder.Entity<UserRole>(entity =>
@@ -1847,6 +1863,35 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Status)
                 .HasMaxLength(40);
 
+            entity.Property(x => x.Priority)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue(SupportRequestPriorities.Normal);
+
+            entity.Property(x => x.PageUrl)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.UserAgent)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.DeviceInfo)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.Browser)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.Platform)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.AttachmentUrl)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.InternalNote)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.ResolutionMessage)
+                .HasMaxLength(2000);
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -1855,7 +1900,21 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(x => x.ResolvedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.ResolvedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.AssignedAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.AssignedAdminId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+            entity.HasIndex(x => new { x.Status, x.CreatedAt });
+            entity.HasIndex(x => x.Priority);
+            entity.HasIndex(x => x.ResolvedByUserId);
+            entity.HasIndex(x => x.AssignedAdminId);
         });
 
         modelBuilder.Entity<UserNotification>(entity =>
