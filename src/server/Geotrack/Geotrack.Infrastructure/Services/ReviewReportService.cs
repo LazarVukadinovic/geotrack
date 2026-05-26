@@ -11,11 +11,16 @@ public class ReviewReportService : IReviewReportService
 {
     private readonly AppDbContext _db;
     private readonly IUserNotificationService _notificationService;
+    private readonly IAdminNotificationService _adminNotificationService;
 
-    public ReviewReportService(AppDbContext db, IUserNotificationService notificationService)
+    public ReviewReportService(
+        AppDbContext db,
+        IUserNotificationService notificationService,
+        IAdminNotificationService adminNotificationService)
     {
         _db = db;
         _notificationService = notificationService;
+        _adminNotificationService = adminNotificationService;
     }
 
     public async Task<ReportReviewResponseDto> ReportReviewAsync(
@@ -80,6 +85,8 @@ public class ReviewReportService : IReviewReportService
                 Message = "You have already reported this review."
             };
         }
+
+        await _adminNotificationService.CreateReviewReportedNotificationAsync(report);
 
         return new ReportReviewResponseDto
         {

@@ -36,6 +36,7 @@ public class UserService : IUserService
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IUserAvatarStorageService _userAvatarStorageService;
     private readonly IFavoriteService _favoriteService;
+    private readonly IAdminNotificationService _adminNotificationService;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public UserService(
@@ -46,7 +47,8 @@ public class UserService : IUserService
         IEventRepository eventRepository,
         IRefreshTokenRepository refreshTokenRepository,
         IUserAvatarStorageService userAvatarStorageService,
-        IFavoriteService favoriteService)
+        IFavoriteService favoriteService,
+        IAdminNotificationService adminNotificationService)
     {
         _userRepository = userRepository;
         _destinationRepository = destinationRepository;
@@ -56,6 +58,7 @@ public class UserService : IUserService
         _refreshTokenRepository = refreshTokenRepository;
         _userAvatarStorageService = userAvatarStorageService;
         _favoriteService = favoriteService;
+        _adminNotificationService = adminNotificationService;
     }
 
     public async Task<GetMeResponseDto> GetMeAsync(int userId)
@@ -407,6 +410,7 @@ public class UserService : IUserService
 
         await _userRepository.AddSupportRequestAsync(supportRequest);
         await _userRepository.SaveChangesAsync();
+        await _adminNotificationService.CreateSupportTicketCreatedNotificationAsync(supportRequest);
 
         return MapCreatedSupportRequest(supportRequest);
     }
