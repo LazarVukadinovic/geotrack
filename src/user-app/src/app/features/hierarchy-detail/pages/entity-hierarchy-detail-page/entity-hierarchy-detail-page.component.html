@@ -54,7 +54,9 @@
 
     @if (d.sections.length > 0) {
       <section class="ehd__panel">
-      <h2 class="ehd__section-title">Related content</h2>
+      <h2 class="ehd__section-title">
+  {{ d.sections.length === 1 && d.sections[0].sectionTitle ? d.sections[0].sectionTitle : 'Related content' }}
+    </h2>
       <div class="ehd__section-list">
         @for (section of d.sections; track $index) {
           <div
@@ -77,7 +79,11 @@
             @if (expandedSectionIndex() === $index && sectionCount(section) > 0) {
               <div class="ehd__section-items">
                 @for (item of (isFullExpanded($index) ? sectionItems(section) : sectionItems(section).slice(0, 5)); track $index) {
-                  <div class="ehd__section-item">{{ item.name }}</div>
+                  @if (item.route) {
+                    <a class="ehd__section-item" [routerLink]="item.route" (click)="expandedSectionIndex.set(null)">{{ item.name }}</a>
+                  } @else {
+                    <div class="ehd__section-item">{{ item.name }}</div>
+                  }
                 }
                 @if (sectionCount(section) > 5) {
                   <button class="ehd__section-see-all" (click)="toggleFullExpand($index, $event)">
