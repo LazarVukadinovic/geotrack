@@ -2,6 +2,7 @@ using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Net.Http.Headers;
 
 namespace Geotrack.Server.Controllers;
 
@@ -11,13 +12,16 @@ namespace Geotrack.Server.Controllers;
 public sealed class AdminTerritoriesController : ControllerBase
 {
     private readonly IAdminTerritoryManagementService _territories;
+    private readonly ILocalBoundaryImportService _localBoundaryImport;
     private readonly ILogger<AdminTerritoriesController> _logger;
 
     public AdminTerritoriesController(
         IAdminTerritoryManagementService territories,
+        ILocalBoundaryImportService localBoundaryImport,
         ILogger<AdminTerritoriesController> logger)
     {
         _territories = territories;
+        _localBoundaryImport = localBoundaryImport;
         _logger = logger;
     }
 
@@ -29,6 +33,74 @@ public sealed class AdminTerritoriesController : ControllerBase
         try
         {
             return Ok(await _territories.GetTerritoriesAsync(request, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("map")]
+    public async Task<ActionResult<AdminTerritoryMapFeatureCollectionDto>> GetTerritoryMap(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _territories.GetTerritoryMapAsync(cancellationToken);
+            ApplyMapCacheHeaders(result);
+
+            if (!string.IsNullOrWhiteSpace(result.ETag) &&
+                Request.Headers.IfNoneMatch.Any(value =>
+                    !string.IsNullOrWhiteSpace(value) &&
+                    value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                        .Any(tag => string.Equals(tag, result.ETag, StringComparison.Ordinal))))
+            {
+                return StatusCode(StatusCodes.Status304NotModified);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("map/boundaries")]
+    public async Task<ActionResult<AdminTerritoryMapBoundaryFeatureCollectionDto>> GetTerritoryMapBoundaries(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _territories.GetTerritoryMapBoundariesAsync(cancellationToken);
+            ApplyBoundaryMapCacheHeaders(result);
+
+            if (!string.IsNullOrWhiteSpace(result.ETag) &&
+                Request.Headers.IfNoneMatch.Any(value =>
+                    !string.IsNullOrWhiteSpace(value) &&
+                    value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                        .Any(tag => string.Equals(tag, result.ETag, StringComparison.Ordinal))))
+            {
+                return StatusCode(StatusCodes.Status304NotModified);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("map/status")]
+    public async Task<ActionResult<AdminTerritoryMapStatusCollectionDto>> GetTerritoryMapStatus(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _territories.GetTerritoryMapStatusAsync(cancellationToken);
+            ApplyStatusCacheHeaders(result);
+            return Ok(result);
         }
         catch (Exception ex)
         {
@@ -81,6 +153,183 @@ public sealed class AdminTerritoriesController : ControllerBase
         try
         {
             return Ok(await _territories.GetAssignableManagersAsync(territoryId, query, take, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("import-boundary")]
+    public async Task<ActionResult<AdminTerritoryDetailDto>> ImportBoundaryByIso3(
+        [FromBody] AdminImportTerritoryBoundaryRequestDto? request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _territories.ImportBoundaryAsync(request, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("{territoryId:int}/import-boundary")]
+    public async Task<ActionResult<AdminTerritoryDetailDto>> ImportBoundary(
+        [FromRoute] int territoryId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _territories.ImportBoundaryAsync(territoryId, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("import-boundaries/missing")]
+    [HttpPost("boundaries/import-missing")]
+    public async Task<ActionResult<GeoBoundariesBatchImportResultDto>> ImportMissingBoundaries(
+        [FromBody] AdminImportTerritoryBoundariesRequestDto? request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _territories.ImportMissingBoundariesAsync(
+                request ?? new AdminImportTerritoryBoundariesRequestDto(),
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("import-boundaries/all")]
+    [HttpPost("boundaries/import-all")]
+    public async Task<ActionResult<GeoBoundariesBatchImportResultDto>> ImportAllBoundaries(
+        [FromBody] AdminImportTerritoryBoundariesRequestDto? request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _territories.ImportAllBoundariesAsync(
+                request ?? new AdminImportTerritoryBoundariesRequestDto(),
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("boundaries/import-local-adm0")]
+    public async Task<ActionResult<BoundaryImportSummaryDto>> ImportLocalAdm0Boundary(
+        [FromQuery] bool force = false,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Ok(await _localBoundaryImport.ImportLocalBoundariesAsync("ADM0", force, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("boundaries/import-local-adm1")]
+    public async Task<ActionResult<BoundaryImportSummaryDto>> ImportLocalAdm1Boundaries(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Ok(await _localBoundaryImport.ImportLocalBoundariesAsync("ADM1", forceRefresh: false, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("boundaries/import-local-adm2")]
+    public async Task<ActionResult<BoundaryImportSummaryDto>> ImportLocalAdm2Boundaries(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Ok(await _localBoundaryImport.ImportLocalBoundariesAsync("ADM2", forceRefresh: false, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("boundaries/import-local")]
+    public async Task<ActionResult<BoundaryImportSummaryDto>> ImportLocalBoundaries(
+        [FromQuery] string? level,
+        [FromQuery] bool force = false,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(level))
+            return BadRequest(new { message = "level query parameter is required." });
+
+        try
+        {
+            return Ok(await _localBoundaryImport.ImportLocalBoundariesAsync(level, force, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("boundaries/rebuild-display-geometry")]
+    public async Task<ActionResult<BoundaryDisplayGeometryRebuildResultDto>> RebuildDisplayGeometry(
+        [FromQuery] bool onlyMissing = true,
+        [FromQuery] string? iso3 = null,
+        [FromQuery] bool force = false,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Ok(await _territories.RebuildDisplayGeometryAsync(onlyMissing, iso3, force, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("boundaries/debug/{iso3}")]
+    public async Task<ActionResult<BoundaryGeometryDebugDto>> GetBoundaryDebug(
+        [FromRoute] string iso3,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Ok(await _territories.GetBoundaryDebugAsync(iso3, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("boundaries/reconciliation")]
+    public async Task<ActionResult<BoundaryReconciliationReportDto>> GetBoundaryReconciliation(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return Ok(await _localBoundaryImport.GetAdm0ReconciliationAsync(cancellationToken));
         }
         catch (Exception ex)
         {
@@ -151,6 +400,54 @@ public sealed class AdminTerritoriesController : ControllerBase
             InvalidOperationException => BadRequest(new { message = ex.Message }),
             _ => HandleUnexpectedException(ex)
         };
+    }
+
+    private void ApplyMapCacheHeaders(AdminTerritoryMapFeatureCollectionDto result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.ETag))
+        {
+            Response.Headers[HeaderNames.ETag] = result.ETag;
+        }
+
+        if (result.LastModified.HasValue)
+        {
+            Response.Headers[HeaderNames.LastModified] = result.LastModified.Value.ToString("R");
+        }
+
+        Response.Headers[HeaderNames.CacheControl] = "private, max-age=60";
+        Response.Headers[HeaderNames.Vary] = "Authorization, Accept-Encoding";
+    }
+
+    private void ApplyBoundaryMapCacheHeaders(AdminTerritoryMapBoundaryFeatureCollectionDto result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.ETag))
+        {
+            Response.Headers[HeaderNames.ETag] = result.ETag;
+        }
+
+        if (result.LastModified.HasValue)
+        {
+            Response.Headers[HeaderNames.LastModified] = result.LastModified.Value.ToString("R");
+        }
+
+        Response.Headers[HeaderNames.CacheControl] = "private, max-age=86400";
+        Response.Headers[HeaderNames.Vary] = "Authorization, Accept-Encoding";
+    }
+
+    private void ApplyStatusCacheHeaders(AdminTerritoryMapStatusCollectionDto result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.ETag))
+        {
+            Response.Headers[HeaderNames.ETag] = result.ETag;
+        }
+
+        if (result.LastModified.HasValue)
+        {
+            Response.Headers[HeaderNames.LastModified] = result.LastModified.Value.ToString("R");
+        }
+
+        Response.Headers[HeaderNames.CacheControl] = "no-store";
+        Response.Headers[HeaderNames.Vary] = "Authorization, Accept-Encoding";
     }
 
     private ActionResult HandleUnexpectedException(Exception ex)

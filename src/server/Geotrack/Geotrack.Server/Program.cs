@@ -13,11 +13,13 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
+using System.IO.Compression;
 using System.Net;
 using System.Security.Claims;
 using System.Text;
@@ -58,9 +60,29 @@ builder.Services.AddControllers()
     });
 
 builder.Services.AddMemoryCache();
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[]
+    {
+        "application/json",
+        "application/problem+json"
+    });
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("Mcp"));
+builder.Services.Configure<BoundaryImportOptions>(builder.Configuration.GetSection("BoundaryImport"));
 builder.Services.AddDataProtection()
     .SetApplicationName("GeoTrack");
 
@@ -156,6 +178,14 @@ builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+builder.Services.AddHttpClient<IGeoBoundariesService, GeoBoundariesService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("GeoTrack/1.0");
+});
+builder.Services.AddScoped<LocalBoundaryImportService>();
+builder.Services.AddScoped<ILocalBoundaryImportService>(serviceProvider =>
+    serviceProvider.GetRequiredService<LocalBoundaryImportService>());
 builder.Services.AddScoped<IAdminTerritoryManagementService, AdminTerritoryManagementService>();
 builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
 builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
@@ -477,6 +507,8 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseCors("ConfiguredOrigins");
+
+app.UseResponseCompression();
 
 // HTTPS can be terminated either by Kestrel itself or by a reverse proxy.
 // Keep it config-driven so local HTTP development still works unchanged.

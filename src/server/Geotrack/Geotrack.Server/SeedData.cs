@@ -273,6 +273,8 @@ public static class SeedData
         var croatia = new Territory
         {
             Name = "Croatia",
+            CountryCode = "HR",
+            CountryIso3 = "HRV",
             CreatedAt = now
         };
 
@@ -2189,6 +2191,8 @@ public static class SeedData
             territory = new Territory
             {
                 Name = name,
+                CountryCode = string.Equals(name, "Croatia", StringComparison.OrdinalIgnoreCase) ? "HR" : null,
+                CountryIso3 = string.Equals(name, "Croatia", StringComparison.OrdinalIgnoreCase) ? "HRV" : null,
                 CreatedAt = now
             };
 
