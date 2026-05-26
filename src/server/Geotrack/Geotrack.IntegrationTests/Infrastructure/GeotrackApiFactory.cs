@@ -13,6 +13,7 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
 {
     private readonly string _databaseName = $"geotrack_batch11_{Guid.NewGuid():N}";
     private readonly string _environmentName;
+    private readonly IReadOnlyDictionary<string, string?> _configurationOverrides;
 
     private string? _baseConnectionString;
     private string? _testConnectionString;
@@ -21,9 +22,12 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
     private string TestDataProtectionKeyDirectory =>
         Path.Combine(AppContext.BaseDirectory, ".dataprotection-keys", _databaseName);
 
-    private GeotrackApiFactory(string environmentName)
+    private GeotrackApiFactory(
+        string environmentName,
+        IReadOnlyDictionary<string, string?>? configurationOverrides)
     {
         _environmentName = environmentName;
+        _configurationOverrides = configurationOverrides ?? new Dictionary<string, string?>();
     }
 
     static GeotrackApiFactory()
@@ -33,9 +37,11 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
 #pragma warning restore CS0618
     }
 
-    public static async Task<GeotrackApiFactory> CreateAsync(string environmentName = "Development")
+    public static async Task<GeotrackApiFactory> CreateAsync(
+        string environmentName = "Development",
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
     {
-        var factory = new GeotrackApiFactory(environmentName);
+        var factory = new GeotrackApiFactory(environmentName, configurationOverrides);
         await factory.InitializeAsync();
         return factory;
     }
@@ -78,6 +84,11 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
                 {
                     ["ConnectionStrings:DefaultConnection"] = _testConnectionString,
                 });
+
+            if (_configurationOverrides.Count > 0)
+            {
+                config.AddInMemoryCollection(_configurationOverrides);
+            }
         });
         builder.ConfigureLogging(logging =>
         {

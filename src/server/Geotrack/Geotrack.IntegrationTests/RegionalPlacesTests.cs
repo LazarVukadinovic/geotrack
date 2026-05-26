@@ -11,11 +11,19 @@ using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
+using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using Polygon = NetTopologySuite.Geometries.Polygon;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.IntegrationTests;
 
 public sealed class RegionalPlacesTests
 {
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 4326);
+
     [Fact]
     public async Task Regional_manager_creates_place_in_assigned_region_with_tags_reference_point_and_hours()
     {
@@ -44,7 +52,8 @@ public sealed class RegionalPlacesTests
                 placeTypeId,
                 placeTags.Select(tag => tag.Id).ToArray()));
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var responseBody = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.Created, responseBody);
         var created = await response.Content.ReadFromJsonAsync<RegionalPlaceDetailDto>();
         Assert.NotNull(created);
         Assert.Equal(fixture.AssignedRegionId, created!.RegionId);
@@ -506,6 +515,14 @@ public sealed class RegionalPlacesTests
 
         var now = DateTime.UtcNow;
         var territory = await db.Territories.OrderBy(item => item.Id).FirstAsync();
+        territory.BoundaryShapeType = "Polygon";
+        territory.BoundarySource = "IntegrationTest";
+        SetBoundary(db, territory, Polygon(
+            (40.0, 15.0),
+            (40.0, 22.0),
+            (47.0, 22.0),
+            (47.0, 15.0)));
+
         var destinationType = await db.DestinationTypes.OrderBy(item => item.Id).FirstAsync();
         var locationType = await db.LocationTypes.OrderBy(item => item.Id).FirstAsync();
         var eventType = await db.EventTypes.OrderBy(item => item.Id).FirstAsync();
@@ -694,6 +711,29 @@ public sealed class RegionalPlacesTests
         }
 
         await db.SaveChangesAsync();
+    }
+
+    private static void SetBoundary(AppDbContext db, Territory territory, Geometry geometry)
+    {
+        db.Entry(territory)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = geometry;
+    }
+
+    private static Polygon Polygon(params (double Latitude, double Longitude)[] points)
+    {
+        var coordinates = points
+            .Select(point => new Coordinate(point.Longitude, point.Latitude))
+            .ToList();
+
+        if (!coordinates[0].Equals2D(coordinates[^1]))
+        {
+            coordinates.Add(new Coordinate(coordinates[0].X, coordinates[0].Y));
+        }
+
+        var polygon = GeometryFactory.CreatePolygon(coordinates.ToArray());
+        polygon.SRID = 4326;
+        return polygon;
     }
 
     private sealed record PlacesFixture(

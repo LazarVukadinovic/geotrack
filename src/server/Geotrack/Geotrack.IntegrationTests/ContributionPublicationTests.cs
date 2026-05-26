@@ -15,11 +15,19 @@ using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
+using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using Polygon = NetTopologySuite.Geometries.Polygon;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.IntegrationTests;
 
 public sealed class ContributionPublicationTests
 {
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 4326);
+
     [Fact]
     public async Task Approving_a_place_contribution_for_a_stay_preserves_contact_price_type_and_partner_urls()
     {
@@ -910,6 +918,15 @@ public sealed class ContributionPublicationTests
         var now = DateTime.UtcNow;
 
         var inScopeRegion = await db.Regions.SingleAsync(region => region.Name == "Dalmatia");
+        var territory = await db.Territories.SingleAsync(item => item.Id == inScopeRegion.TerritoryId);
+        territory.BoundaryShapeType = "Polygon";
+        territory.BoundarySource = "IntegrationTest";
+        SetBoundary(db, territory, Polygon(
+            (40.0, 13.0),
+            (40.0, 22.0),
+            (47.0, 22.0),
+            (47.0, 13.0)));
+
         var inScopeLocation = await db.Locations
             .Where(location => location.Destination.RegionId == inScopeRegion.Id)
             .OrderBy(location => location.Id)
@@ -1087,6 +1104,29 @@ public sealed class ContributionPublicationTests
         });
 
         await db.SaveChangesAsync();
+    }
+
+    private static void SetBoundary(AppDbContext db, Territory territory, Geometry geometry)
+    {
+        db.Entry(territory)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = geometry;
+    }
+
+    private static Polygon Polygon(params (double Latitude, double Longitude)[] points)
+    {
+        var coordinates = points
+            .Select(point => new Coordinate(point.Longitude, point.Latitude))
+            .ToList();
+
+        if (!coordinates[0].Equals2D(coordinates[^1]))
+        {
+            coordinates.Add(new Coordinate(coordinates[0].X, coordinates[0].Y));
+        }
+
+        var polygon = GeometryFactory.CreatePolygon(coordinates.ToArray());
+        polygon.SRID = 4326;
+        return polygon;
     }
 
     private sealed record ContributionScopeFixture(
