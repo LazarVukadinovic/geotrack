@@ -49,6 +49,7 @@ public class AdminProfileAssignmentDto
     public string SectionTitle { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
     public string DisplayValue { get; set; } = string.Empty;
+    public string? AccessLevel { get; set; }
     public List<AdminProfileAssignmentItemDto> AssignedItems { get; set; } = new();
     public DateTime? MemberSince { get; set; }
 }

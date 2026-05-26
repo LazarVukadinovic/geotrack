@@ -181,6 +181,8 @@ public class AuthService : IAuthService
         var user = await _userRepository.GetByIdWithRolesAsync(userId)
             ?? throw new UnauthorizedAccessException(InvalidCredentialsMessage);
 
+        EnsureAccountCanAuthenticate(user);
+
         var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
         if (!requiredRoles.Any(requiredRole => roles.Contains(RoleNames.Normalize(requiredRole), StringComparer.Ordinal)))
             throw new ForbiddenAccessException(AdminAccessDeniedMessage);
@@ -217,6 +219,8 @@ public class AuthService : IAuthService
         if (user == null)
             throw new UnauthorizedAccessException(invalidCredentialsMessage);
 
+        EnsureAccountCanAuthenticate(user);
+
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
         if (result == PasswordVerificationResult.Failed)
             throw new UnauthorizedAccessException(invalidCredentialsMessage);
@@ -250,10 +254,12 @@ public class AuthService : IAuthService
         stored.RevokedAt = DateTime.UtcNow;
         await _refreshTokenRepository.SaveChangesAsync();
 
+        var user = await _userRepository.GetByIdWithRolesAsync(stored.UserId)
+            ?? throw new UnauthorizedAccessException("Invalid or expired refresh token");
+        EnsureAccountCanAuthenticate(user);
+
         if (requiredRoles is { Count: > 0 })
         {
-            var user = await _userRepository.GetByIdWithRolesAsync(stored.UserId)
-                ?? throw new UnauthorizedAccessException("Invalid or expired refresh token");
             var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
 
             if (!requiredRoles.Any(requiredRole => roles.Contains(RoleNames.Normalize(requiredRole), StringComparer.Ordinal)))
@@ -281,6 +287,7 @@ public class AuthService : IAuthService
     {
         var user = await _userRepository.GetByIdWithRolesAsync(userId)
             ?? throw new UnauthorizedAccessException("Invalid credentials");
+        EnsureAccountCanAuthenticate(user);
         var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
 
         var accessToken  = _jwtService.GenerateAccessToken(userId, roles);
@@ -351,6 +358,15 @@ public class AuthService : IAuthService
     {
         user.LastLoginAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
+    }
+
+    private static void EnsureAccountCanAuthenticate(User user)
+    {
+        if (user.IsDeleted)
+            throw new UnauthorizedAccessException(InvalidCredentialsMessage);
+
+        if (user.IsSuspended)
+            throw new ForbiddenAccessException("Account is suspended.");
     }
 
     private static bool IsValidEmail(string email)

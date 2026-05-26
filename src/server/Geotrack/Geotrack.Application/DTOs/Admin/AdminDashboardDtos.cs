@@ -26,6 +26,13 @@ public class AdminDashboardStatsDto
     public int ReviewsCount { get; set; }
     public int ReportedReviewsCount { get; set; }
     public int PendingReportsCount { get; set; }
+    public int SupportTicketsCount { get; set; }
+    public int OpenSupportTicketsCount { get; set; }
+    public int InProgressSupportTicketsCount { get; set; }
+    public int ResolvedSupportTicketsCount { get; set; }
+    public int DismissedSupportTicketsCount { get; set; }
+    public int UnresolvedSupportTicketsCount { get; set; }
+    public int HighPrioritySupportTicketsCount { get; set; }
 }
 
 public class AdminDashboardQuickLinksDto
@@ -33,10 +40,12 @@ public class AdminDashboardQuickLinksDto
     public string TerritoryManagementRoute { get; set; } = "/admin-territories";
     public string UserManagementRoute { get; set; } = "/admin-users";
     public string ReviewManagementRoute { get; set; } = "/admin-reviews";
+    public string SupportTicketsRoute { get; set; } = "/admin-support-tickets";
     public string PendingReportsRoute { get; set; } = "/admin-reviews?status=reported";
 }
 
 public class AdminDashboardBadgesDto
 {
     public int PendingReportsCount { get; set; }
+    public int SupportReportsCount { get; set; }
 }

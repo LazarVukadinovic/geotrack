@@ -178,6 +178,9 @@ builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+builder.Services.AddScoped<IAdminUserManagementService, AdminUserManagementService>();
+builder.Services.AddScoped<IAdminReviewManagementService, AdminReviewManagementService>();
+builder.Services.AddScoped<IAdminSupportTicketService, AdminSupportTicketService>();
 builder.Services.AddHttpClient<IGeoBoundariesService, GeoBoundariesService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
@@ -633,6 +636,45 @@ app.Use(async (context, next) =>
 });
 
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        var userIdValue = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.User.FindFirstValue("sub")
+            ?? context.User.FindFirstValue("userId");
+
+        if (!int.TryParse(userIdValue, out var userId))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { message = "Invalid user session." });
+            return;
+        }
+
+        var db = context.RequestServices.GetRequiredService<AppDbContext>();
+        var accountState = await db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => new { user.IsSuspended, user.IsDeleted })
+            .SingleOrDefaultAsync(context.RequestAborted);
+
+        if (accountState is null || accountState.IsDeleted)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { message = "Invalid user session." });
+            return;
+        }
+
+        if (accountState.IsSuspended)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { message = "Account is suspended." });
+            return;
+        }
+    }
+
+    await next();
+});
 app.UseAuthorization();
 
 app.UseRateLimiter();

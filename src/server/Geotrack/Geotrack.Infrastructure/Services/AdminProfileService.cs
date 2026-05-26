@@ -181,7 +181,8 @@ public class AdminProfileService : IAdminProfileService
 
     private static void EnsureAdminRole(IReadOnlyCollection<string> roles)
     {
-        if (!roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal) &&
+        if (!roles.Contains(RoleNames.Admin, StringComparer.Ordinal) &&
+            !roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal) &&
             !roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal) &&
             !roles.Contains(RoleNames.TerritoryAssociate, StringComparer.Ordinal))
             throw new UnauthorizedAccessException("Admin role is required.");
@@ -189,6 +190,9 @@ public class AdminProfileService : IAdminProfileService
 
     private static string ResolvePrimaryAdminRole(IReadOnlyCollection<string> roles)
     {
+        if (roles.Contains(RoleNames.Admin, StringComparer.Ordinal))
+            return RoleNames.Admin;
+
         if (roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
             return RoleNames.TerritoryManager;
 
@@ -205,7 +209,7 @@ public class AdminProfileService : IAdminProfileService
             RoleNames.TerritoryManager => "Territory Manager",
             RoleNames.TerritoryAssociate => "Territory Associate",
             RoleNames.RegionalManager => "Regional Manager",
-            RoleNames.Admin => "Admin",
+            RoleNames.Admin => "Administrator",
             _ => roleCode
         };
     }
@@ -241,6 +245,20 @@ public class AdminProfileService : IAdminProfileService
         IReadOnlyCollection<TerritoryManagerTerritory> territoryAssignments,
         DateTime userCreatedAt)
     {
+        if (roleCode == RoleNames.Admin)
+        {
+            return new AdminProfileAssignmentDto
+            {
+                AssignmentType = "System",
+                SectionTitle = "System Access",
+                Label = "Scope",
+                DisplayValue = "Platform-wide",
+                AccessLevel = "Full access",
+                AssignedItems = new List<AdminProfileAssignmentItemDto>(),
+                MemberSince = userCreatedAt == default ? null : userCreatedAt,
+            };
+        }
+
         if (roleCode is RoleNames.TerritoryManager or RoleNames.TerritoryAssociate)
         {
             var items = territoryAssignments

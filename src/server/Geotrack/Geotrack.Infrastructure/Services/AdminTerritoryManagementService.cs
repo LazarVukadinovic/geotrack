@@ -278,6 +278,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
 
         var users = _db.Users
             .AsNoTracking()
+            .Where(user => !user.IsDeleted)
             .Include(user => user.UserRoles)
                 .ThenInclude(userRole => userRole.Role)
             .Include(user => user.TerritoryManager!)
@@ -840,6 +841,12 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
 
         if (roles.Contains(RoleNames.Admin, StringComparer.Ordinal))
             throw new InvalidOperationException("Administrators cannot be assigned as Territory Managers.");
+
+        if (user.IsDeleted)
+            throw new InvalidOperationException("Deleted users cannot be assigned as Territory Managers.");
+
+        if (user.IsSuspended)
+            throw new InvalidOperationException("Suspended users cannot be assigned as Territory Managers.");
 
         var conflictingAssignment = user.TerritoryManager?.TerritoryManagerTerritories
             .FirstOrDefault(assignment =>
@@ -1688,6 +1695,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
         var conflicting = assignedTerritories.FirstOrDefault(assignment =>
             !countryTerritoryId.HasValue || assignment.TerritoryId != countryTerritoryId.Value);
         var adminRoleConflict = roles.Contains(RoleNames.Admin, StringComparer.Ordinal);
+        var isActive = !user.IsDeleted && !user.IsSuspended;
 
         return new AdminTerritoryManagerCandidateDto
         {
@@ -1702,14 +1710,16 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
             Initials = BuildInitials(displayName, user.Email),
             Roles = roles,
             AssignedTerritories = assignedTerritories,
-            Status = "Active",
-            IsActive = true,
-            CanAssign = conflicting is null && !adminRoleConflict,
+            Status = isActive ? "Active" : "Inactive",
+            IsActive = isActive,
+            CanAssign = isActive && conflicting is null && !adminRoleConflict,
             IneligibilityReason = adminRoleConflict
                 ? "Administrators cannot be assigned as Territory Managers."
-                : conflicting is null
-                    ? null
-                    : $"Already assigned as Territory Manager for {conflicting.DisplayName}."
+                : !isActive
+                    ? "Inactive users cannot be assigned as Territory Managers."
+                    : conflicting is null
+                        ? null
+                        : $"Already assigned as Territory Manager for {conflicting.DisplayName}."
         };
     }
 

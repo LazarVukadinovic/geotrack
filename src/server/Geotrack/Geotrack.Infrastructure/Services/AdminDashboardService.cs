@@ -2,6 +2,7 @@ using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Services;
@@ -51,7 +52,11 @@ public class AdminDashboardService : IAdminDashboardService
 
         var appUsersCount = await _db.Users
             .AsNoTracking()
-            .CountAsync(cancellationToken);
+            .CountAsync(user => !user.IsDeleted, cancellationToken);
+
+        var suspendedUsersCount = await _db.Users
+            .AsNoTracking()
+            .CountAsync(user => !user.IsDeleted && user.IsSuspended, cancellationToken);
 
         var reviewsCount =
             await _db.PlaceReviews.AsNoTracking().CountAsync(cancellationToken) +
@@ -66,6 +71,45 @@ public class AdminDashboardService : IAdminDashboardService
         var pendingReportsCount = await _db.ReviewReports
             .AsNoTracking()
             .CountAsync(report => report.Status == ReviewReportStatus.Pending, cancellationToken);
+
+        var supportTicketsCount = await _db.SupportRequests
+            .AsNoTracking()
+            .CountAsync(cancellationToken);
+
+        var openSupportTicketsCount = await _db.SupportRequests
+            .AsNoTracking()
+            .CountAsync(ticket =>
+                ticket.Status == SupportRequestStatuses.Open ||
+                ticket.Status == "Received",
+                cancellationToken);
+
+        var inProgressSupportTicketsCount = await _db.SupportRequests
+            .AsNoTracking()
+            .CountAsync(ticket => ticket.Status == SupportRequestStatuses.InProgress, cancellationToken);
+
+        var resolvedSupportTicketsCount = await _db.SupportRequests
+            .AsNoTracking()
+            .CountAsync(ticket => ticket.Status == SupportRequestStatuses.Resolved, cancellationToken);
+
+        var dismissedSupportTicketsCount = await _db.SupportRequests
+            .AsNoTracking()
+            .CountAsync(ticket => ticket.Status == SupportRequestStatuses.Dismissed, cancellationToken);
+
+        var unresolvedSupportTicketsCount = openSupportTicketsCount + inProgressSupportTicketsCount;
+
+        var highPrioritySupportTicketsCount = await _db.SupportRequests
+            .AsNoTracking()
+            .CountAsync(ticket =>
+                (
+                    ticket.Status == SupportRequestStatuses.Open ||
+                    ticket.Status == "Received" ||
+                    ticket.Status == SupportRequestStatuses.InProgress
+                ) &&
+                (
+                    ticket.Priority == SupportRequestPriorities.High ||
+                    ticket.Priority == SupportRequestPriorities.Critical
+                ),
+                cancellationToken);
 
         return new AdminDashboardDto
         {
@@ -87,16 +131,23 @@ public class AdminDashboardService : IAdminDashboardService
                 TerritoriesCount = territoriesCount,
                 AssignedTerritoriesCount = assignedTerritoriesCount,
                 AppUsersCount = appUsersCount,
-                // User currently has no suspended/disabled/inactive status column.
-                SuspendedUsersCount = 0,
+                SuspendedUsersCount = suspendedUsersCount,
                 ReviewsCount = reviewsCount,
                 ReportedReviewsCount = reportedReviewsCount,
-                PendingReportsCount = pendingReportsCount
+                PendingReportsCount = pendingReportsCount,
+                SupportTicketsCount = supportTicketsCount,
+                OpenSupportTicketsCount = openSupportTicketsCount,
+                InProgressSupportTicketsCount = inProgressSupportTicketsCount,
+                ResolvedSupportTicketsCount = resolvedSupportTicketsCount,
+                DismissedSupportTicketsCount = dismissedSupportTicketsCount,
+                UnresolvedSupportTicketsCount = unresolvedSupportTicketsCount,
+                HighPrioritySupportTicketsCount = highPrioritySupportTicketsCount
             },
             QuickLinks = new AdminDashboardQuickLinksDto(),
             Badges = new AdminDashboardBadgesDto
             {
-                PendingReportsCount = pendingReportsCount
+                PendingReportsCount = pendingReportsCount,
+                SupportReportsCount = unresolvedSupportTicketsCount
             }
         };
     }
