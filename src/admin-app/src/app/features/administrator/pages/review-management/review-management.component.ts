@@ -130,12 +130,10 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
       }
 
       if (params['highlight']) {
-        this.highlightKey = String(params['highlight']);
+        const reviewKey = String(params['highlight']);
+        this.highlightKey = reviewKey;
         this.statusFilter = 'reported';
-        this.router.navigate([], {
-          queryParams: { status: 'reported' },
-          replaceUrl: true,
-        });
+        this.openDetailFromRoute(reviewKey);
       }
 
       this.resetAndLoad();
@@ -526,6 +524,57 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
     return report.reportId;
   }
 
+  private openDetailFromRoute(reviewKey: string): void {
+    if (!reviewKey.trim()) {
+      return;
+    }
+
+    if (this.detailTarget?.reviewKey === reviewKey || this.detailReview?.reviewKey === reviewKey) {
+      return;
+    }
+
+    const reviewId = this.reviewIdFromKey(reviewKey);
+    this.openDropdownId = null;
+    this.detailTarget = {
+      reviewKey,
+      reviewId,
+      author: {
+        userId: 0,
+        displayName: 'Review author',
+        email: '',
+        initials: 'RA',
+        status: 'Unknown',
+        avatarColor: '#64748b',
+      },
+      rating: 0,
+      maxRating: 5,
+      content: 'Loading review...',
+      createdAt: '',
+      status: 'Reported',
+      reviewedEntity: {
+        entityId: 0,
+        entityType: 'Review',
+        name: 'Reported review',
+      },
+      reports: {
+        reportCount: 0,
+        pendingReportCount: 0,
+      },
+      permissions: {
+        canDeleteReview: false,
+        canSuspendAuthor: false,
+        canUnsuspendAuthor: false,
+        canDeleteAuthor: false,
+        canRemoveReviewAndSuspendAuthor: false,
+        canRemoveReviewAndDeleteAuthor: false,
+      },
+    };
+    this.detailReview = null;
+    this.detailErrorMessage = '';
+    this.loadDetail(reviewKey);
+    this.cdr.markForCheck();
+  }
+
   private loadDetail(reviewKey: string, showLoading = true): void {
     const sequence = ++this.detailLoadSequence;
     this.detailErrorMessage = '';
@@ -741,5 +790,10 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
     }
 
     return 'Something went wrong. Please try again.';
+  }
+
+  private reviewIdFromKey(reviewKey: string): number {
+    const parsed = Number(reviewKey.split(':').at(1));
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
   }
 }

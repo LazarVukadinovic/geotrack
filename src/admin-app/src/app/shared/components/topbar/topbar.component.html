@@ -15,12 +15,25 @@
     <h1 class="text-xl font-bold text-gray-900">{{ title }}</h1>
   </div>
   <div class="flex items-center gap-4">
-    <button class="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition bg-transparent border-0 cursor-pointer">
+    <button
+      type="button"
+      class="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition bg-transparent border-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-100"
+      [attr.aria-label]="unreadNotificationCount > 0 ? 'Open notifications, ' + unreadNotificationCount + ' unread' : 'Open notifications'"
+      aria-controls="admin-notification-drawer"
+      [attr.aria-expanded]="notificationDrawerOpen"
+      [disabled]="!canUseAdminNotifications"
+      (click)="openNotifications($event)"
+    >
       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
         <path d="M13.73 21a2 2 0 01-3.46 0"/>
       </svg>
-      <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500"></span>
+      <span
+        *ngIf="unreadNotificationCount > 0"
+        class="absolute -right-1 -top-1 min-w-4 h-4 rounded-full bg-blue-600 px-1 text-[10px] font-bold leading-4 text-white shadow-sm"
+      >
+        {{ unreadNotificationLabel }}
+      </span>
     </button>
     <div class="relative">
       <button
@@ -140,3 +153,196 @@
     </div>
   </div>
 </header>
+
+<div
+  *ngIf="notificationDrawerOpen"
+  class="fixed inset-0 z-[80] bg-gray-900/20"
+  role="presentation"
+  (click)="closeNotifications()"
+>
+  <aside
+    id="admin-notification-drawer"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="admin-notification-title"
+    class="absolute right-0 top-0 flex h-full w-full max-w-[430px] flex-col bg-white shadow-2xl"
+    style="box-shadow: -18px 0 48px rgba(15, 23, 42, 0.18);"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
+      <div>
+        <h2 id="admin-notification-title" class="text-base font-bold text-gray-900">Notifications</h2>
+        <p class="mt-0.5 text-xs font-medium text-gray-500">{{ unreadNotificationCount }} unread</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          [disabled]="!canMarkAllNotificationsRead"
+          (click)="markAllNotificationsRead($event)"
+        >
+          {{ markingAllNotificationsRead ? 'Saving...' : 'Mark all as read' }}
+        </button>
+        <button
+          type="button"
+          class="flex h-8 w-8 items-center justify-center rounded-lg border-0 bg-transparent text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+          aria-label="Close notifications"
+          (click)="closeNotifications()"
+        >
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-1 border-b border-gray-100 px-5 py-3">
+      <button
+        type="button"
+        class="rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-gray-50"
+        [class.bg-blue-50]="notificationFilter === 'all'"
+        [class.text-blue-700]="notificationFilter === 'all'"
+        [class.text-gray-500]="notificationFilter !== 'all'"
+        (click)="setNotificationFilter('all')"
+      >
+        All
+      </button>
+      <button
+        type="button"
+        class="rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-gray-50"
+        [class.bg-blue-50]="notificationFilter === 'unread'"
+        [class.text-blue-700]="notificationFilter === 'unread'"
+        [class.text-gray-500]="notificationFilter !== 'unread'"
+        (click)="setNotificationFilter('unread')"
+      >
+        Unread
+      </button>
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div *ngIf="notificationsLoading" class="space-y-3" aria-label="Loading notifications">
+        <div *ngFor="let item of notificationSkeletonItems" class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+          <div class="flex gap-3">
+            <div class="h-9 w-9 rounded-full bg-gray-100"></div>
+            <div class="min-w-0 flex-1">
+              <div class="mb-2 h-3 w-32 rounded bg-gray-100"></div>
+              <div class="mb-2 h-3 w-full rounded bg-gray-100"></div>
+              <div class="h-3 w-20 rounded bg-gray-100"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="!notificationsLoading && notificationsError" class="rounded-xl border border-red-100 bg-red-50 px-4 py-4">
+        <p class="text-sm font-medium text-red-700">{{ notificationsError }}</p>
+        <button
+          type="button"
+          class="mt-3 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+          (click)="retryNotifications()"
+        >
+          Retry
+        </button>
+      </div>
+
+      <div *ngIf="!notificationsLoading && !notificationsError && filteredNotifications.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
+        <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 01-3.46 0" />
+          </svg>
+        </div>
+        <p class="text-sm font-semibold text-gray-700">{{ notificationEmptyTitle }}</p>
+        <p class="mt-1 max-w-xs text-sm leading-5 text-gray-500">{{ notificationEmptyDescription }}</p>
+      </div>
+
+      <div *ngIf="!notificationsLoading && !notificationsError && filteredNotifications.length > 0" class="space-y-3">
+        <button
+          *ngFor="let notification of filteredNotifications; trackBy: trackByNotificationId"
+          type="button"
+          class="flex w-full gap-3 rounded-xl border bg-white p-4 text-left shadow-sm transition-all hover:border-blue-200 hover:shadow-md disabled:cursor-wait"
+          [class.border-blue-200]="!notification.isRead"
+          [class.border-gray-100]="notification.isRead"
+          [class.ring-1]="!notification.isRead"
+          [class.ring-blue-100]="!notification.isRead"
+          [disabled]="markingNotificationReadId === notification.id"
+          (click)="openNotification(notification, $event)"
+        >
+          <span
+            class="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
+            [class]="notificationIconClass(notification)"
+          >
+            <svg
+              *ngIf="notification.type === 'SupportTicketCreated'"
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+              <path d="M8 9h8" />
+              <path d="M8 13h5" />
+            </svg>
+            <svg
+              *ngIf="notification.type === 'ReviewReported' || notification.type === 'CommentReported'"
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <svg
+              *ngIf="notification.type !== 'SupportTicketCreated' && notification.type !== 'ReviewReported' && notification.type !== 'CommentReported'"
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </span>
+
+          <span class="min-w-0 flex-1">
+            <span class="flex items-start justify-between gap-3">
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-bold text-gray-900">{{ notification.title }}</span>
+                <span class="mt-1 block text-sm leading-5 text-gray-600">{{ notification.message }}</span>
+              </span>
+              <span *ngIf="!notification.isRead" class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-blue-600"></span>
+            </span>
+            <span class="mt-3 flex flex-wrap items-center gap-2">
+              <span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1" [class]="notificationSeverityClass(notification.severity)">
+                {{ notification.severity }}
+              </span>
+              <span class="text-xs font-medium text-gray-400">{{ notificationTargetLabel(notification) }}</span>
+              <span class="text-xs text-gray-300">.</span>
+              <span class="text-xs font-medium text-gray-400">{{ formatNotificationTime(notification.createdAt) }}</span>
+            </span>
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="notificationsHasMore && !notificationsLoading" class="border-t border-gray-100 px-5 py-4">
+      <button
+        type="button"
+        class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60"
+        [disabled]="notificationsLoadingMore"
+        (click)="loadMoreNotifications()"
+      >
+        {{ notificationsLoadingMore ? 'Loading...' : 'Load more' }}
+      </button>
+    </div>
+  </aside>
+</div>

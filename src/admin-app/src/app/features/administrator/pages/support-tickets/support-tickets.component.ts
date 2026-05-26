@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { Observable, Subject, finalize } from 'rxjs';
 import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
@@ -43,6 +44,7 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
   private readonly ticketsSvc = inject(AdminSupportTicketsService);
   private readonly dashboardSvc = inject(AdminDashboardService);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly route = inject(ActivatedRoute);
   private readonly destroy$ = new Subject<void>();
   private readonly searchSubject = new Subject<string>();
 
@@ -120,6 +122,12 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadSupportReportsBadge();
+    this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe(params => {
+      const ticketId = this.toPositiveInt(params['ticketId'] ?? params['id']);
+      if (ticketId) {
+        this.openDetailFromRoute(ticketId);
+      }
+    });
     this.resetAndLoad();
 
     this.searchSubject.pipe(
@@ -394,6 +402,46 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
     return ticket.ticketId;
   }
 
+  private openDetailFromRoute(ticketId: number): void {
+    if (this.detailTarget?.ticketId === ticketId || this.detailTicket?.ticketId === ticketId) {
+      return;
+    }
+
+    this.openDropdownId = null;
+    this.detailTarget = {
+      ticketId,
+      referenceCode: `GT-${String(ticketId).padStart(6, '0')}`,
+      reporter: {
+        displayName: 'Support reporter',
+        email: '',
+        initials: 'SR',
+        isAnonymous: true,
+        avatarColor: '#64748b',
+      },
+      category: 'other',
+      categoryLabel: 'Support request',
+      subject: 'Support report',
+      messagePreview: '',
+      status: 'Open',
+      priority: 'Normal',
+      createdAt: '',
+      hasAttachment: false,
+      permissions: {
+        canView: true,
+        canMarkInProgress: false,
+        canResolve: false,
+        canDismiss: false,
+        canReopen: false,
+        canAddNote: false,
+      },
+    };
+    this.detailTicket = null;
+    this.detailInternalNote = '';
+    this.detailErrorMessage = '';
+    this.loadDetail(ticketId);
+    this.cdr.markForCheck();
+  }
+
   private resetAndLoad(): void {
     this.nextSkip = null;
     this.hasMore = false;
@@ -601,5 +649,10 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
     }
 
     return 'Unable to load support tickets right now. Please try again.';
+  }
+
+  private toPositiveInt(value: unknown): number | null {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }
 }

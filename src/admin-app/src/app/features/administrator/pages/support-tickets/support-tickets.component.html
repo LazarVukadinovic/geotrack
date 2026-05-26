@@ -207,6 +207,7 @@
         <div class="grid grid-cols-1 gap-3">
           @for (ticket of tickets; track ticket.ticketId) {
             <div
+              [id]="'support-ticket-' + ticket.ticketId"
               (click)="openDetail(ticket, $event)"
               class="bg-white rounded-2xl shadow-sm border transition-all cursor-pointer hover:shadow-md"
               [class.border-red-300]="ticket.status === 'Open'"
