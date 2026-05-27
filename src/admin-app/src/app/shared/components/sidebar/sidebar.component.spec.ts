@@ -26,6 +26,7 @@ describe('SidebarComponent', () => {
   const authService = {
     getUser: vi.fn(() => currentRole ? { role: currentRole, activeRoleCode: activeRoleCode(currentRole), region: '' } : null),
     isAdministrator: vi.fn(() => currentRole === 'Administrator'),
+    isContentModerator: vi.fn(() => currentRole === 'Content Moderator'),
     isRegionalManager: vi.fn(() => currentRole === 'Regional Manager'),
     canAccessTerritoryAdmin: vi.fn(() => currentRole === 'Territory Manager'),
     logout: vi.fn(),
@@ -241,9 +242,26 @@ describe('SidebarComponent', () => {
     fixture.detectChanges();
 
     const text = normalizedText();
-    expect(text).toContain('Review Management');
+    expect(text).not.toContain('Review Management');
     expect(text).toContain('Support Reports');
     expect(text).toContain('7');
+  });
+
+  it('shows only moderation navigation and review badge for Content Moderator', () => {
+    currentRole = 'Content Moderator';
+    fixture.componentRef.setInput('reportedReviewsCount', 3);
+    fixture.detectChanges();
+
+    const text = normalizedText();
+    expect(text).toContain('CONTENT MODERATION');
+    expect(text).toContain('Dashboard');
+    expect(text).toContain('Review Management');
+    expect(text).toContain('3');
+    expect(text).toContain('Settings');
+    expect(text).toContain('Sign out');
+    expect(text).not.toContain('Support Reports');
+    expect(text).not.toContain('Territory Management');
+    expect(text).not.toContain('User Management');
   });
 
   function flushSidebarSummary(regionId: number, pendingRequestsCount: number): void {
@@ -304,6 +322,8 @@ describe('SidebarComponent', () => {
     switch (role) {
       case 'Administrator':
         return 'Admin';
+      case 'Content Moderator':
+        return 'ContentModerator';
       case 'Territory Manager':
         return 'TerritoryManager';
       case 'Territory Associate':

@@ -147,6 +147,10 @@ export class SidebarComponent implements OnInit, OnChanges {
     return this.auth.isAdministrator();
   }
 
+  get isContentModerator(): boolean {
+    return this.auth.isContentModerator();
+  }
+
   get isTerritory(): boolean {
     return this.auth.canAccessTerritoryAdmin();
   }
@@ -156,12 +160,27 @@ export class SidebarComponent implements OnInit, OnChanges {
       { label: 'Admin Dashboard', path: '/admin-dashboard', icon: 'dashboard', exact: true },
       { label: 'Territory Management', path: '/admin-territories', icon: 'globe' },
       { label: 'User Management', path: '/admin-users', icon: 'users' },
-      { label: 'Review Management', path: '/admin-reviews', icon: 'review' },
       {
         label: 'Support Reports',
         path: '/admin-support-tickets',
         icon: 'support',
         badge: this.supportReportsCount || undefined,
+      },
+    ];
+  }
+
+  get contentModeratorMainNav(): SidebarNavItem[] {
+    return [
+      { label: 'Dashboard', path: '/content-moderator/dashboard', icon: 'dashboard', exact: true },
+      { label: 'Destinations', path: '/content-moderator/destinations', icon: 'flag' },
+      { label: 'Locations', path: '/content-moderator/locations', icon: 'pin' },
+      { label: 'Places', path: '/content-moderator/places', icon: 'home' },
+      { label: 'Events', path: '/content-moderator/events', icon: 'calendar' },
+      {
+        label: 'Review Management',
+        path: '/content-moderator/review-management',
+        icon: 'review',
+        badge: this.reportedReviewsCount || undefined,
       },
     ];
   }
@@ -393,7 +412,7 @@ export class SidebarComponent implements OnInit, OnChanges {
   }
 
   private get shouldUseRegionalSidebarState(): boolean {
-    return this.auth.getUser()?.activeRoleCode === 'RegionalManager' && !this.isAdministrator && !this.isTerritory;
+    return this.auth.getUser()?.activeRoleCode === 'RegionalManager' && !this.isAdministrator && !this.isContentModerator && !this.isTerritory;
   }
 
   private get requestsQueueBadge(): number | undefined {
