@@ -422,14 +422,23 @@ var allowedCorsOrigins = builder.Configuration
 
 if (allowedCorsOrigins.Length == 0)
 {
-    allowedCorsOrigins = new[]
-    {
-        "http://localhost:4200",
-        "http://127.0.0.1:4200",
-        "http://localhost:4300",
-        "http://127.0.0.1:4300",
-        "https://softeng.pmf.kg.ac.rs:10131"
-    };
+    allowedCorsOrigins = builder.Environment.IsDevelopment()
+        ? new[]
+        {
+            "http://localhost:4200",
+            "http://127.0.0.1:4200",
+            "https://localhost:4200",
+            "https://127.0.0.1:4200",
+            "http://localhost:4300",
+            "http://127.0.0.1:4300",
+            "https://localhost:4300",
+            "https://127.0.0.1:4300"
+        }
+        : new[]
+        {
+            "https://softeng.pmf.kg.ac.rs:10131",
+            "https://softeng.pmf.kg.ac.rs:10132"
+        };
 }
 
 builder.Services.AddCors(options =>
@@ -447,20 +456,20 @@ var app = builder.Build();
 
 await PostgisStartup.EnsureReadyAsync(app.Services, app.Environment.IsDevelopment());
 
-var shouldSeedDatabase =
-    app.Environment.IsDevelopment()
-    || app.Configuration.GetValue<bool>("SeedData:Enabled");
+var seedEnabledForEnvironment = IsSeedEnabledForEnvironment(app.Environment, app.Configuration);
+var shouldSeedDatabase = seedEnabledForEnvironment;
 var shouldAutoMigrate =
     app.Environment.IsDevelopment()
-    || app.Configuration.GetValue<bool>("Database:AutoMigrate");
+    || app.Configuration.GetValue<bool>("Database:AutoMigrate")
+    || shouldSeedDatabase;
 var shouldSeedDemoRegionalManager =
-    DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
+    seedEnabledForEnvironment && DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 var shouldSeedDemoTerritoryManager =
-    shouldSeedDatabase || DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
+    seedEnabledForEnvironment && DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 var shouldSeedDemoAdmin =
-    shouldSeedDatabase || DemoAdminSeeder.IsEnabled(app.Environment, app.Configuration);
+    seedEnabledForEnvironment && DemoAdminSeeder.IsEnabled(app.Environment, app.Configuration);
 var shouldSeedDemoContentModerator =
-    shouldSeedDatabase || DemoContentModeratorSeeder.IsEnabled(app.Environment, app.Configuration);
+    seedEnabledForEnvironment && DemoContentModeratorSeeder.IsEnabled(app.Environment, app.Configuration);
 
 if (shouldAutoMigrate || shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager || shouldSeedDemoAdmin || shouldSeedDemoContentModerator)
 {
@@ -545,11 +554,6 @@ if (app.Environment.IsDevelopment())
 if (forwardedHeadersEnabled)
 {
     app.UseForwardedHeaders();
-}
-
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
 }
 
 app.UseCors("ConfiguredOrigins");
@@ -783,6 +787,22 @@ static string GetUserOrIpRateLimitPartition(HttpContext httpContext)
     }
 
     return $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+}
+
+static bool IsSeedEnabledForEnvironment(IHostEnvironment environment, IConfiguration configuration)
+{
+    var configuredEnabled =
+        configuration.GetValue<bool?>("Seed:Enabled")
+        ?? configuration.GetValue<bool?>("SeedData:Enabled");
+
+    var enabled = configuredEnabled ?? environment.IsDevelopment();
+    if (!enabled)
+    {
+        return false;
+    }
+
+    return environment.IsDevelopment()
+        || configuration.GetValue<bool>("Seed:RunInProduction");
 }
 
 static bool TryParseNetwork(string value, out Microsoft.AspNetCore.HttpOverrides.IPNetwork network)
