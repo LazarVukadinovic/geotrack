@@ -1,802 +1,947 @@
 <div class="flex h-screen overflow-hidden bg-gray-50" (click)="onDocumentClick()">
-  <app-sidebar [reportedReviewsCount]="reportedReviewsCount" />
+  <app-sidebar [supportReportsCount]="supportReportsCount" />
 
   <div class="flex flex-col flex-1 min-w-0 overflow-hidden">
     <app-topbar title="User Management" [showBack]="true" backRoute="/admin-dashboard" />
 
     <main class="flex-1 overflow-y-auto px-6 py-6">
-
-      <!-- Header -->
       <div class="mb-6">
         <h1 class="text-xl font-bold text-gray-900">User Management</h1>
         <p class="text-sm text-gray-500 mt-0.5">Delete or suspend app users and manage Territory Manager accounts</p>
       </div>
 
-      <!-- Tabs -->
+      @if (successMessage) {
+        <div class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+          {{ successMessage }}
+        </div>
+      }
+
+      @if (errorMessage && !isLoading) {
+        <div class="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p class="text-sm font-medium text-red-700">{{ errorMessage }}</p>
+          <button
+            type="button"
+            (click)="retry()"
+            class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+          >
+            Retry
+          </button>
+        </div>
+      }
+
       <div class="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit mb-6">
         <button
-          (click)="activeTab = 'appUsers'; displayCount = 10; loadAppUsers()"
+          type="button"
+          (click)="setTab('app-users')"
           class="px-5 py-2 rounded-lg text-sm font-medium transition-colors"
-          [class.bg-white]="activeTab === 'appUsers'"
-          [class.text-gray-900]="activeTab === 'appUsers'"
-          [class.shadow-sm]="activeTab === 'appUsers'"
-          [class.text-gray-500]="activeTab !== 'appUsers'"
+          [class.bg-white]="activeTab === 'app-users'"
+          [class.text-gray-900]="activeTab === 'app-users'"
+          [class.shadow-sm]="activeTab === 'app-users'"
+          [class.text-gray-500]="activeTab !== 'app-users'"
         >
           App Users
-          <span class="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full" [class.bg-blue-100]="activeTab === 'appUsers'" [class.text-blue-700]="activeTab === 'appUsers'" [class.bg-gray-200]="activeTab !== 'appUsers'" [class.text-gray-500]="activeTab !== 'appUsers'">
-            {{ totalAppUsers }}
+          <span
+            class="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+            [class.bg-blue-100]="activeTab === 'app-users'"
+            [class.text-blue-700]="activeTab === 'app-users'"
+            [class.bg-gray-200]="activeTab !== 'app-users'"
+            [class.text-gray-500]="activeTab !== 'app-users'"
+          >
+            {{ counts.appUsersCount }}
           </span>
         </button>
         <button
-          (click)="activeTab = 'managers'"
+          type="button"
+          (click)="setTab('territory-managers')"
           class="px-5 py-2 rounded-lg text-sm font-medium transition-colors"
-          [class.bg-white]="activeTab === 'managers'"
-          [class.text-gray-900]="activeTab === 'managers'"
-          [class.shadow-sm]="activeTab === 'managers'"
-          [class.text-gray-500]="activeTab !== 'managers'"
+          [class.bg-white]="activeTab === 'territory-managers'"
+          [class.text-gray-900]="activeTab === 'territory-managers'"
+          [class.shadow-sm]="activeTab === 'territory-managers'"
+          [class.text-gray-500]="activeTab !== 'territory-managers'"
         >
           Territory Managers
-          <span class="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full" [class.bg-blue-100]="activeTab === 'managers'" [class.text-blue-700]="activeTab === 'managers'" [class.bg-gray-200]="activeTab !== 'managers'" [class.text-gray-500]="activeTab !== 'managers'">
-            {{ managers.length }}
+          <span
+            class="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+            [class.bg-blue-100]="activeTab === 'territory-managers'"
+            [class.text-blue-700]="activeTab === 'territory-managers'"
+            [class.bg-gray-200]="activeTab !== 'territory-managers'"
+            [class.text-gray-500]="activeTab !== 'territory-managers'"
+          >
+            {{ counts.territoryManagersCount }}
           </span>
         </button>
       </div>
 
-      <!-- ══ APP USERS TAB ══ -->
-      @if (activeTab === 'appUsers') {
-        <!-- Toolbar -->
-        <div class="flex items-center gap-3 mb-4">
-          <!-- Search -->
-          <div class="relative flex-1 max-w-sm">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              [(ngModel)]="searchQuery"
-              (ngModelChange)="onSearchChange()"
-              type="text"
-              placeholder="Search by name or email…"
-              class="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-            />
-          </div>
-
-          <!-- Status filter – custom dropdown -->
-          <div class="relative" (click)="$event.stopPropagation()">
-            <button
-              (click)="statusFilterOpen = !statusFilterOpen"
-              class="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              {{ statusFilterLabel }}
-              <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            @if (statusFilterOpen) {
-              <div class="absolute left-0 top-full mt-1 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
-                <button (click)="applyStatusFilter('all')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer" [class.font-semibold]="statusFilter === 'all'" [class.text-blue-600]="statusFilter === 'all'">All statuses</button>
-                <button (click)="applyStatusFilter('active')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer" [class.font-semibold]="statusFilter === 'active'" [class.text-blue-600]="statusFilter === 'active'">Active</button>
-                <button (click)="applyStatusFilter('suspended')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer" [class.font-semibold]="statusFilter === 'suspended'" [class.text-blue-600]="statusFilter === 'suspended'">Suspended</button>
-              </div>
-            }
-          </div>
-
-          <!-- Sort – funnel icon -->
-          <div class="relative" (click)="$event.stopPropagation()">
-            <button
-              (click)="sortOpen = !sortOpen"
-              class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-            >
-              <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-              </svg>
-              {{ currentSortLabel }}
-              <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            @if (sortOpen) {
-              <div class="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
-                @for (opt of sortOptions; track opt.label) {
-                  <button
-                    (click)="applySortOption(opt)"
-                    class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer"
-                    [class.font-semibold]="opt.field === sortField && opt.dir === sortDir"
-                    [class.text-blue-600]="opt.field === sortField && opt.dir === sortDir"
-                    [class.bg-blue-50]="opt.field === sortField && opt.dir === sortDir"
-                  >
-                    {{ opt.label }}
-                  </button>
-                }
-              </div>
-            }
-          </div>
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <div class="relative flex-1 min-w-64 max-w-sm">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            [(ngModel)]="searchQuery"
+            (ngModelChange)="onSearchChange()"
+            type="text"
+            placeholder="Search by name or email..."
+            class="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+          />
         </div>
 
-        <!-- Table -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          @if (isLoading) {
-            <div class="flex items-center justify-center py-16 text-sm text-gray-400">Loading…</div>
-          } @else if (appUsers.length === 0) {
-            <div class="flex flex-col items-center justify-center py-16">
-              <svg class="w-10 h-10 text-gray-200 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              </svg>
-              <p class="text-sm text-gray-500 font-medium">No users found</p>
-            </div>
-          } @else {
-            <table class="w-full">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-5 py-3">User</th>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Status</th>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Reviews</th>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Reported</th>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Joined</th>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Last Active</th>
-                  <th class="px-4 py-3 w-10"></th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-50">
-                @for (user of appUsers; track user.id) {
-                  <tr class="hover:bg-gray-50/50 transition-colors" [class.opacity-60]="user.status === 'Suspended'">
-                    <td class="px-5 py-3.5">
-                      <div class="flex items-center gap-3">
-                        <span
-                          class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                          [style.background]="user.avatarColor"
-                        >{{ user.avatarInitials }}</span>
-                        <div>
-                          <p class="text-sm font-semibold text-gray-900">{{ user.firstName }} {{ user.lastName }}</p>
-                          <p class="text-xs text-gray-400">{{ user.email }}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="px-4 py-3.5">
-                      <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" [class]="statusClass(user.status)">
-                        {{ user.status }}
-                      </span>
-                    </td>
-                    <td class="px-4 py-3.5 text-sm text-gray-700">{{ user.reviewCount }}</td>
-                    <td class="px-4 py-3.5">
-                      @if (user.reportedReviewCount > 0) {
-                        <span class="inline-flex items-center gap-1 text-xs font-semibold text-red-600">
-                          <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="12" y1="8" x2="12" y2="12"/>
-                            <line x1="12" y1="16" x2="12.01" y2="16"/>
-                          </svg>
-                          {{ user.reportedReviewCount }}
-                        </span>
-                      } @else {
-                        <span class="text-xs text-gray-300">—</span>
-                      }
-                    </td>
-                    <td class="px-4 py-3.5 text-xs text-gray-500">{{ formatDate(user.joinedAt) }}</td>
-                    <td class="px-4 py-3.5 text-xs text-gray-500">{{ formatDate(user.lastActiveAt) }}</td>
-                    <td class="px-4 py-3.5 relative">
-                      <button
-                        (click)="toggleDropdown(user.id, $event)"
-                        class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer"
-                      >
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                          <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-
-            @if (hasMore) {
-              <div class="flex justify-center py-4 border-t border-gray-50">
+        <div class="relative" (click)="$event.stopPropagation()">
+          <button
+            type="button"
+            (click)="statusFilterOpen = !statusFilterOpen"
+            class="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            {{ statusFilterLabel }}
+            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          @if (statusFilterOpen) {
+            <div class="absolute left-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+              @for (option of statusOptions; track option.value) {
                 <button
-                  (click)="loadMore()"
-                  [disabled]="isLoadingMore"
-                  class="px-5 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors bg-transparent border-0 cursor-pointer disabled:opacity-50"
+                  type="button"
+                  (click)="applyStatusFilter(option.value)"
+                  class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer"
+                  [class.font-semibold]="statusFilter === option.value"
+                  [class.text-blue-600]="statusFilter === option.value"
+                  [class.bg-blue-50]="statusFilter === option.value"
                 >
-                  {{ isLoadingMore ? 'Loading…' : 'Load more' }}
+                  {{ option.label }}
                 </button>
-              </div>
-            }
-          }
-        </div>
-      }
-
-      <!-- ══ TERRITORY MANAGERS TAB ══ -->
-      @if (activeTab === 'managers') {
-        <!-- Toolbar -->
-        <div class="flex items-center gap-3 mb-4">
-          <div class="relative flex-1 max-w-sm">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              [(ngModel)]="managerSearch"
-              type="text"
-              placeholder="Search by name or email…"
-              class="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-            />
-          </div>
-
-          <!-- Manager status filter – custom dropdown -->
-          <div class="relative" (click)="$event.stopPropagation()">
-            <button
-              (click)="managerStatusFilterOpen = !managerStatusFilterOpen"
-              class="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              {{ managerStatusFilterLabel }}
-              <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            @if (managerStatusFilterOpen) {
-              <div class="absolute left-0 top-full mt-1 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
-                <button (click)="applyManagerStatusFilter('all')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer" [class.font-semibold]="managerStatusFilter === 'all'" [class.text-blue-600]="managerStatusFilter === 'all'">All statuses</button>
-                <button (click)="applyManagerStatusFilter('active')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer" [class.font-semibold]="managerStatusFilter === 'active'" [class.text-blue-600]="managerStatusFilter === 'active'">Active</button>
-                <button (click)="applyManagerStatusFilter('inactive')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer" [class.font-semibold]="managerStatusFilter === 'inactive'" [class.text-blue-600]="managerStatusFilter === 'inactive'">Inactive</button>
-              </div>
-            }
-          </div>
-        </div>
-
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          @if (filteredManagers.length === 0) {
-            <div class="flex flex-col items-center justify-center py-16">
-              <p class="text-sm text-gray-500">No managers found</p>
+              }
             </div>
-          } @else {
-            <table class="w-full">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-5 py-3">Manager</th>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Status</th>
-                  <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Assigned Territories</th>
-                  <th class="px-4 py-3 w-10"></th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-50">
-                @for (mgr of filteredManagers; track mgr.id) {
-                  <tr
-                    class="hover:bg-gray-50/50 transition-colors cursor-pointer"
-                    (click)="openManagerDetail(mgr, $event)"
-                  >
-                    <td class="px-5 py-4">
-                      <div class="flex items-center gap-3">
-                        <span
-                          class="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                          [style.background]="mgr.avatarColor"
-                        >{{ mgr.initials }}</span>
-                        <div>
-                          <p class="text-sm font-semibold text-gray-900">{{ mgr.name }}</p>
-                          <p class="text-xs text-gray-400">{{ mgr.email }}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="px-4 py-4">
-                      <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" [class]="statusClass(mgr.status)">
-                        {{ mgr.status }}
-                      </span>
-                    </td>
-                    <td class="px-4 py-4">
-                      @if (mgr.assignedTerritoryIds.length > 0) {
-                        <span class="text-sm text-gray-700">{{ mgr.assignedTerritoryIds.length }} territor{{ mgr.assignedTerritoryIds.length === 1 ? 'y' : 'ies' }}</span>
-                      } @else {
-                        <span class="text-xs text-gray-400 italic">None assigned</span>
-                      }
-                    </td>
-                    <td class="px-4 py-4 relative">
-                      <button
-                        data-action="menu"
-                        (click)="toggleDropdown(mgr.id, $event)"
-                        class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer"
-                      >
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                          <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
           }
         </div>
-      }
 
+        <div class="relative" (click)="$event.stopPropagation()">
+          <button
+            type="button"
+            (click)="sortOpen = !sortOpen"
+            class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18" />
+              <path d="M7 12h10" />
+              <path d="M10 18h4" />
+            </svg>
+            {{ currentSortLabel }}
+            <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          @if (sortOpen) {
+            <div class="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+              @for (option of sortOptions; track option.value) {
+                <button
+                  type="button"
+                  (click)="applySort(option.value)"
+                  class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer"
+                  [class.font-semibold]="sort === option.value"
+                  [class.text-blue-600]="sort === option.value"
+                  [class.bg-blue-50]="sort === option.value"
+                >
+                  {{ option.label }}
+                </button>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        @if (isLoading) {
+          <div class="flex items-center justify-center py-16 text-sm text-gray-400">
+            Loading users...
+          </div>
+        } @else if (!errorMessage && users.length === 0) {
+          <div class="flex flex-col items-center justify-center py-16">
+            <svg class="w-10 h-10 text-gray-200 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <p class="text-sm text-gray-500 font-medium">No {{ activeTabTitle | lowercase }} found</p>
+          </div>
+        } @else if (!errorMessage) {
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="text-left text-xs font-semibold text-gray-500 px-5 py-3">User</th>
+                <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Status</th>
+                <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Reviews</th>
+                <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Reported</th>
+                <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Joined</th>
+                <th class="text-left text-xs font-semibold text-gray-500 px-4 py-3">Last Active</th>
+                <th class="px-4 py-3 w-10"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+              @for (user of users; track user.id) {
+                <tr
+                  class="hover:bg-gray-50/50 transition-colors cursor-pointer focus:outline-none focus:bg-blue-50/40"
+                  [class.opacity-60]="user.status !== 'Active'"
+                  tabindex="0"
+                  role="button"
+                  [attr.aria-label]="'Open account preview for ' + user.displayName"
+                  (click)="openUserPreview(user, $event)"
+                  (keydown.enter)="openUserPreview(user, $event)"
+                  (keydown.space)="$event.preventDefault(); openUserPreview(user, $event)"
+                >
+                  <td class="px-5 py-3.5">
+                    <div class="flex items-center gap-3">
+                      <span
+                        class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden"
+                        [style.background]="user.avatarUrl ? 'transparent' : user.avatarColor"
+                      >
+                        @if (user.avatarUrl) {
+                          <img [src]="user.avatarUrl" [alt]="user.displayName" class="w-full h-full object-cover" />
+                        } @else {
+                          {{ user.avatarInitials }}
+                        }
+                      </span>
+                      <div class="min-w-0">
+                        <p class="text-sm font-semibold text-gray-900 truncate">{{ user.displayName }}</p>
+                        <p class="text-xs text-gray-400 truncate">{{ user.email }}</p>
+                        @if (activeTab === 'territory-managers') {
+                          <p class="text-[11px] text-gray-400 truncate">{{ assignedTerritorySummary(user) }}</p>
+                        }
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3.5">
+                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" [class]="statusClass(user.status)">
+                      {{ user.status }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3.5 text-sm text-gray-700">{{ user.reviewCount }}</td>
+                  <td class="px-4 py-3.5">
+                    @if (user.reportedReviewCount > 0) {
+                      <span class="inline-flex items-center gap-1 text-xs font-semibold text-red-600">
+                        <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="12" />
+                          <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        {{ user.reportedReviewCount }}
+                      </span>
+                    } @else {
+                      <span class="text-xs text-gray-300">0</span>
+                    }
+                  </td>
+                  <td class="px-4 py-3.5 text-xs text-gray-500">{{ formatDate(user.joinedAt) }}</td>
+                  <td class="px-4 py-3.5 text-xs text-gray-500">{{ formatDate(user.lastActiveAt) }}</td>
+                  <td class="px-4 py-3.5 relative" (click)="$event.stopPropagation()">
+                    <button
+                      type="button"
+                      (click)="toggleDropdown(user.id, $event)"
+                      class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer"
+                    >
+                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="5" r="1.5" />
+                        <circle cx="12" cy="12" r="1.5" />
+                        <circle cx="12" cy="19" r="1.5" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+
+          <div class="flex items-center justify-between gap-3 border-t border-gray-50 px-5 py-4">
+            <p class="text-xs text-gray-400">Showing {{ users.length }} of {{ totalCount }} users</p>
+            @if (hasMore) {
+              <button
+                type="button"
+                (click)="loadMore()"
+                [disabled]="isLoadingMore"
+                class="px-5 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors bg-transparent border-0 cursor-pointer disabled:opacity-50"
+              >
+                {{ isLoadingMore ? 'Loading...' : 'Show More' }}
+              </button>
+            } @else {
+              <span class="text-xs text-gray-300">All users loaded</span>
+            }
+          </div>
+        }
+      </div>
     </main>
   </div>
 </div>
 
-<!-- Dropdown for app users -->
-@if (openDropdownId && activeTab === 'appUsers') {
+@if (openDropdownId) {
   <div
-    class="fixed z-50 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 overflow-hidden"
+    class="fixed z-50 w-52 bg-white rounded-xl shadow-lg border border-gray-100 py-1 overflow-hidden"
     [style.top.px]="dropdownPos.top"
     [style.right.px]="dropdownPos.right"
     (click)="$event.stopPropagation()"
   >
-    @for (user of appUsers; track user.id) {
+    @for (user of users; track user.id) {
       @if (user.id === openDropdownId) {
-        @if (!isAlreadyManager(user.id)) {
-          <button
-            (click)="openMakeTerritoryManager(user)"
-            class="w-full text-left px-4 py-2.5 text-xs text-blue-600 hover:bg-blue-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-            </svg>
-            Assign Territory Manager
-          </button>
-          <div class="my-1 border-t border-gray-100"></div>
-        }
-        @if (user.status !== 'Suspended') {
-          <button
-            (click)="openSuspendConfirm(user)"
-            class="w-full text-left px-4 py-2.5 text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/>
-            </svg>
-            Suspend Account
-          </button>
-          <div class="my-1 border-t border-gray-100"></div>
-        }
-        <button
-          (click)="openDeleteAppUser(user)"
-          class="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-        >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-          </svg>
-          Delete Account
-        </button>
-      }
-    }
-  </div>
-}
-
-<!-- Dropdown for managers -->
-@if (openDropdownId && activeTab === 'managers') {
-  <div
-    class="fixed z-50 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 overflow-hidden"
-    [style.top.px]="dropdownPos.top"
-    [style.right.px]="dropdownPos.right"
-    (click)="$event.stopPropagation()"
-  >
-    @for (mgr of managers; track mgr.id) {
-      @if (mgr.id === openDropdownId) {
-        @if (mgr.status === 'Inactive') {
-          <button
-            (click)="openActivateManager(mgr)"
-            class="w-full text-left px-4 py-2.5 text-xs text-emerald-600 hover:bg-emerald-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-            Activate Account
-          </button>
-          <div class="my-0.5 border-t border-gray-100"></div>
-        }
-        @if (mgr.status === 'Active') {
-          <button
-            (click)="openDeactivateManager(mgr)"
-            class="w-full text-left px-4 py-2.5 text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/>
-            </svg>
-            Set to Inactive
-          </button>
-          <div class="my-0.5 border-t border-gray-100"></div>
-        }
-        <button
-          (click)="openRemoveTerritoryManager(mgr)"
-          class="w-full text-left px-4 py-2.5 text-xs text-orange-600 hover:bg-orange-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-        >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-            <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-          </svg>
-          Remove Role
-        </button>
-        <div class="my-0.5 border-t border-gray-100"></div>
-        <button
-          (click)="openDeleteManager(mgr)"
-          class="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
-        >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-          </svg>
-          Delete Account
-        </button>
-      }
-    }
-  </div>
-}
-
-<!-- Suspend confirm -->
-@if (suspendTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeSuspendConfirm()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/>
-          </svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-gray-900">Suspend Account</h2>
-          <p class="text-sm text-gray-500">The user will lose access to the app</p>
-        </div>
-      </div>
-      <p class="text-sm text-gray-700 mb-6">
-        Suspend <strong>{{ suspendTarget.firstName }} {{ suspendTarget.lastName }}</strong>?
-        They will not be able to log in or submit reviews until unsuspended.
-      </p>
-      <div class="flex gap-3 justify-end">
-        <button (click)="closeSuspendConfirm()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">Cancel</button>
-        <button (click)="confirmSuspend()" [disabled]="isSuspending" class="px-5 py-2 text-sm font-semibold text-white bg-amber-500 rounded-xl hover:bg-amber-600 transition-colors border-0 cursor-pointer disabled:opacity-60">
-          {{ isSuspending ? 'Suspending…' : 'Suspend' }}
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- Delete app user confirm -->
-@if (deleteAppUser) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeDeleteAppUser()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-          </svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-gray-900">Delete Account</h2>
-          <p class="text-sm text-gray-500">This action is permanent and cannot be undone</p>
-        </div>
-      </div>
-      <p class="text-sm text-gray-700 mb-6">
-        Permanently delete <strong>{{ deleteAppUser.firstName }} {{ deleteAppUser.lastName }}</strong>'s account?
-        All their reviews and data will be removed.
-      </p>
-      <div class="flex gap-3 justify-end">
-        <button (click)="closeDeleteAppUser()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">Cancel</button>
-        <button (click)="confirmDeleteAppUser()" [disabled]="isDeleting" class="px-5 py-2 text-sm font-semibold text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors border-0 cursor-pointer disabled:opacity-60">
-          {{ isDeleting ? 'Deleting…' : 'Delete Account' }}
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- Delete manager confirm -->
-@if (deleteManager) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeDeleteManager()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-          </svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-gray-900">Delete Manager Account</h2>
-          <p class="text-sm text-gray-500">This will revoke all access and unassign territories</p>
-        </div>
-      </div>
-      <p class="text-sm text-gray-700 mb-2">
-        Permanently delete <strong>{{ deleteManager.name }}</strong>'s account?
-      </p>
-      @if (deleteManager.assignedTerritoryIds.length > 0) {
-        <p class="text-sm text-amber-600 mb-4">
-          ⚠ This manager has {{ deleteManager.assignedTerritoryIds.length }} assigned territor{{ deleteManager.assignedTerritoryIds.length === 1 ? 'y' : 'ies' }} — they will become unassigned.
-        </p>
-      } @else {
-        <div class="mb-4"></div>
-      }
-      <div class="flex gap-3 justify-end">
-        <button (click)="closeDeleteManager()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">Cancel</button>
-        <button (click)="confirmDeleteManager()" [disabled]="isDeleting" class="px-5 py-2 text-sm font-semibold text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors border-0 cursor-pointer disabled:opacity-60">
-          {{ isDeleting ? 'Deleting…' : 'Delete Account' }}
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- Activate manager confirm -->
-@if (activateTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeActivateManager()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-gray-900">Activate Account</h2>
-          <p class="text-sm text-gray-500">The manager will regain full access</p>
-        </div>
-      </div>
-      <p class="text-sm text-gray-700 mb-6">
-        Activate <strong>{{ activateTarget.name }}</strong>'s account? They will be able to manage their assigned territories again.
-      </p>
-      <div class="flex gap-3 justify-end">
-        <button (click)="closeActivateManager()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">Cancel</button>
-        <button (click)="confirmActivateManager()" [disabled]="isChangingStatus" class="px-5 py-2 text-sm font-semibold text-white bg-emerald-500 rounded-xl hover:bg-emerald-600 transition-colors border-0 cursor-pointer disabled:opacity-60">
-          {{ isChangingStatus ? 'Activating…' : 'Activate' }}
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- Deactivate manager confirm -->
-@if (deactivateTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeDeactivateManager()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/>
-          </svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-gray-900">Set to Inactive</h2>
-          <p class="text-sm text-gray-500">The manager will lose access to the platform</p>
-        </div>
-      </div>
-      <p class="text-sm text-gray-700 mb-6">
-        Set <strong>{{ deactivateTarget.name }}</strong> to inactive? Their territories will remain assigned but they won't be able to log in.
-      </p>
-      <div class="flex gap-3 justify-end">
-        <button (click)="closeDeactivateManager()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">Cancel</button>
-        <button (click)="confirmDeactivateManager()" [disabled]="isChangingStatus" class="px-5 py-2 text-sm font-semibold text-white bg-amber-500 rounded-xl hover:bg-amber-600 transition-colors border-0 cursor-pointer disabled:opacity-60">
-          {{ isChangingStatus ? 'Saving…' : 'Set Inactive' }}
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- Make Territory Manager confirm -->
-@if (makeTerritoryManagerTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeMakeTerritoryManager()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-          </svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-gray-900">Assign Territory Manager</h2>
-          <p class="text-sm text-gray-500">This user will appear in the Territory Managers list</p>
-        </div>
-      </div>
-      <p class="text-sm text-gray-700 mb-6">
-        Assign <strong>{{ makeTerritoryManagerTarget.firstName }} {{ makeTerritoryManagerTarget.lastName }}</strong> as a Territory Manager?
-        They will be available to manage and be assigned to territories.
-      </p>
-      <div class="flex gap-3 justify-end">
-        <button (click)="closeMakeTerritoryManager()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">Cancel</button>
-        <button (click)="confirmMakeTerritoryManager()" [disabled]="isMakingManager" class="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors border-0 cursor-pointer disabled:opacity-60">
-          {{ isMakingManager ? 'Assigning…' : 'Confirm' }}
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- Remove Territory Manager role confirm -->
-@if (removeTerritoryManagerTarget) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeRemoveTerritoryManager()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-            <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-          </svg>
-        </div>
-        <div>
-          <h2 class="text-base font-bold text-gray-900">Remove Territory Manager Role</h2>
-          <p class="text-sm text-gray-500">The user will be moved back to App Users</p>
-        </div>
-      </div>
-      <p class="text-sm text-gray-700 mb-2">
-        Remove the Territory Manager role from <strong>{{ removeTerritoryManagerTarget.name }}</strong>?
-      </p>
-      @if (removeTerritoryManagerTarget.assignedTerritoryIds.length > 0) {
-        <p class="text-sm text-amber-600 mb-6">
-          ⚠ This manager has {{ removeTerritoryManagerTarget.assignedTerritoryIds.length }} assigned territor{{ removeTerritoryManagerTarget.assignedTerritoryIds.length === 1 ? 'y' : 'ies' }} — they will become unassigned.
-        </p>
-      } @else {
-        <div class="mb-6"></div>
-      }
-      <div class="flex gap-3 justify-end">
-        <button (click)="closeRemoveTerritoryManager()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">Cancel</button>
-        <button (click)="confirmRemoveTerritoryManager()" [disabled]="isRemovingManagerRole" class="px-5 py-2 text-sm font-semibold text-white bg-orange-500 rounded-xl hover:bg-orange-600 transition-colors border-0 cursor-pointer disabled:opacity-60">
-          {{ isRemovingManagerRole ? 'Removing…' : 'Remove Role' }}
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- ── Manager Detail Modal ───────────────────────────────────────────────── -->
-@if (selectedManager) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeManagerDetail()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col" (click)="$event.stopPropagation()">
-
-      <!-- Header -->
-      <div class="flex items-start justify-between px-6 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
-        <div class="flex items-center gap-3">
-          <span
-            class="w-11 h-11 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-            [style.background]="selectedManager.avatarColor"
-          >{{ selectedManager.initials }}</span>
-          <div>
-            <div class="flex items-center gap-2 mb-0.5">
-              <h2 class="text-base font-bold text-gray-900">{{ selectedManager.name }}</h2>
-              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium flex-shrink-0" [class]="statusClass(selectedManager.status)">
-                {{ selectedManager.status }}
-              </span>
-            </div>
-            <p class="text-xs text-gray-400">{{ selectedManager.email }}</p>
-          </div>
-        </div>
-        <button (click)="closeManagerDetail()" class="p-1.5 text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- Body -->
-      <div class="overflow-y-auto flex-1 px-6 py-4">
-        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-          Assigned Territories
-          <span class="text-gray-400 font-normal normal-case ml-1">({{ selectedManagerTerritories.length }})</span>
-        </p>
-
-        @if (selectedManagerTerritories.length === 0) {
-          <div class="flex flex-col items-center justify-center py-10 text-center">
-            <svg class="w-8 h-8 text-gray-200 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-              <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
-            </svg>
-            <p class="text-sm text-gray-400 italic">No territories assigned</p>
-          </div>
+        @if (hasRowActions(user)) {
+          @if (user.canAssignTerritoryManager) {
+            <button
+              type="button"
+              (click)="openAssignTerritoryManager(user)"
+              class="w-full text-left px-4 py-2.5 text-xs text-blue-600 hover:bg-blue-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
+            >
+              Assign Territory Manager
+            </button>
+          }
+          @if (user.canSuspend) {
+            <button
+              type="button"
+              (click)="openConfirmation('suspend', user)"
+              class="w-full text-left px-4 py-2.5 text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
+            >
+              Suspend Account
+            </button>
+          }
+          @if (user.canUnsuspend) {
+            <button
+              type="button"
+              (click)="openConfirmation('unsuspend', user)"
+              class="w-full text-left px-4 py-2.5 text-xs text-emerald-600 hover:bg-emerald-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
+            >
+              Unsuspend Account
+            </button>
+          }
+          @if (user.canDelete) {
+            <button
+              type="button"
+              (click)="openConfirmation('delete', user)"
+              class="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2.5 bg-transparent border-0 cursor-pointer"
+            >
+              Delete Account
+            </button>
+          }
         } @else {
-          <div class="space-y-3">
-            @for (t of selectedManagerTerritories; track t.id) {
-              <button
-                (click)="openTerritoryFromManager(t, $event)"
-                class="w-full text-left p-4 rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50/30 transition-all bg-gray-50 cursor-pointer"
-              >
-                <div class="flex items-center justify-between mb-2">
-                  <p class="text-sm font-semibold text-gray-900">{{ t.name }}</p>
-                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium" [class]="territoryStatusClass(t.status)">
-                    {{ t.status }}
-                  </span>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  @for (code of t.countries.slice(0, 8); track code) {
-                    <span class="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium bg-white text-gray-600 border border-gray-200">
-                      <span>{{ countryFlag(code) }}</span>
-                      <span>{{ countryName(code) }}</span>
-                    </span>
-                  }
-                  @if (t.countries.length > 8) {
-                    <span class="px-2 py-0.5 rounded-lg text-[11px] text-gray-400 bg-white border border-gray-200">
-                      +{{ t.countries.length - 8 }} more
-                    </span>
-                  }
-                </div>
-                <p class="text-[10px] text-gray-400 mt-2">{{ t.countries.length }} countr{{ t.countries.length === 1 ? 'y' : 'ies' }} · Click to view details</p>
-              </button>
-            }
-          </div>
+          <div class="px-4 py-2.5 text-xs text-gray-400">No actions available</div>
         }
-      </div>
-
-      <!-- Footer -->
-      <div class="px-6 py-4 border-t border-gray-100 flex-shrink-0">
-        <button (click)="closeManagerDetail()" class="w-full py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
-          Close
-        </button>
-      </div>
-    </div>
+      }
+    }
   </div>
 }
 
-<!-- ── Territory Detail Modal (from manager detail) ───────────────────────── -->
-@if (managerTerritoryTarget) {
-  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeTerritoryFromManager()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col" (click)="$event.stopPropagation()">
-
-      <!-- Header -->
-      <div class="flex items-start justify-between px-6 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
-        <div class="flex-1 min-w-0 pr-4">
-          <div class="flex items-center gap-2 mb-1">
-            <h2 class="text-base font-bold text-gray-900 truncate">{{ managerTerritoryTarget.name }}</h2>
-            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium flex-shrink-0" [class]="territoryStatusClass(managerTerritoryTarget.status)">
-              {{ managerTerritoryTarget.status }}
+@if (previewTarget; as target) {
+  <div
+    class="fixed inset-0 z-40 flex justify-end bg-gray-900/35 backdrop-blur-sm"
+    role="presentation"
+    data-testid="user-preview-overlay"
+    (click)="closeUserPreview()"
+  >
+    <aside
+      class="flex h-full w-full max-w-6xl flex-col bg-white shadow-2xl"
+      role="dialog"
+      aria-modal="true"
+      aria-label="User account preview"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="border-b border-gray-100 bg-white px-6 py-5">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div class="flex min-w-0 items-start gap-4">
+            <span
+              class="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-base font-bold text-white"
+              [style.background]="target.avatarUrl ? 'transparent' : target.avatarColor"
+            >
+              @if (target.avatarUrl) {
+                <img [src]="target.avatarUrl" [alt]="target.displayName" class="h-full w-full object-cover" />
+              } @else {
+                {{ target.avatarInitials }}
+              }
             </span>
-          </div>
-          <p class="text-xs text-gray-400">{{ managerTerritoryTarget.id }}</p>
-        </div>
-        <button (click)="closeTerritoryFromManager()" class="p-1.5 text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer rounded-lg hover:bg-gray-100 transition-colors">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- Body -->
-      <div class="overflow-y-auto flex-1 px-6 py-4 space-y-5">
-
-        <!-- Manager -->
-        <div>
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Assigned Manager</p>
-          @if (managerTerritoryTarget.assignedManagerId) {
-            <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-              <span
-                class="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                [style.background]="managerColor(managerTerritoryTarget.assignedManagerId)"
-              >
-                {{ managerInitials(managerTerritoryTarget.assignedManagerId) }}
-              </span>
-              <div>
-                <p class="text-sm font-semibold text-gray-800">{{ managerTerritoryTarget.assignedManagerName }}</p>
-                <p class="text-xs text-gray-400">{{ managerTerritoryTarget.assignedManagerEmail }}</p>
+            <div class="min-w-0">
+              <div class="mb-2 flex flex-wrap items-center gap-2">
+                <h2 class="truncate text-xl font-bold text-gray-900">{{ target.displayName }}</h2>
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" [class]="statusClass(target.status)">
+                  {{ target.status }}
+                </span>
+              </div>
+              <p class="truncate text-sm text-gray-500">{{ target.email }}</p>
+              <div class="mt-3 flex flex-wrap gap-1.5">
+                @for (role of target.roles; track role) {
+                  <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="roleClass(role)">
+                    {{ roleLabel(role) }}
+                  </span>
+                }
               </div>
             </div>
-          } @else {
-            <p class="text-sm text-gray-400 italic">No manager assigned</p>
-          }
-        </div>
+          </div>
 
-        <!-- Countries -->
-        <div>
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            Countries <span class="text-gray-400 font-normal normal-case">({{ managerTerritoryTarget.countries.length }})</span>
-          </p>
-          <div class="flex flex-wrap gap-1.5">
-            @for (code of managerTerritoryTarget.countries; track code) {
-              <span class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
-                <span class="text-sm leading-none">{{ countryFlag(code) }}</span>
-                {{ countryName(code) }}
-              </span>
+          <div class="flex flex-wrap items-center gap-2">
+            @if (preview; as detail) {
+              @if (detail.permissions.canAssignTerritoryManager) {
+                <button
+                  type="button"
+                  (click)="openAssignTerritoryManager(previewActionUser(detail), $event)"
+                  class="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+                >
+                  Assign Territory Manager
+                </button>
+              }
+              @if (detail.permissions.canSuspend) {
+                <button
+                  type="button"
+                  (click)="openConfirmation('suspend', previewActionUser(detail), $event)"
+                  class="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+                >
+                  Suspend Account
+                </button>
+              }
+              @if (detail.permissions.canUnsuspend) {
+                <button
+                  type="button"
+                  (click)="openConfirmation('unsuspend', previewActionUser(detail), $event)"
+                  class="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                >
+                  Unsuspend Account
+                </button>
+              }
+              @if (detail.permissions.canDelete) {
+                <button
+                  type="button"
+                  (click)="openConfirmation('delete', previewActionUser(detail), $event)"
+                  class="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+                >
+                  Delete Account
+                </button>
+              }
             }
-          </div>
-        </div>
-
-        <!-- Dates -->
-        <div class="grid grid-cols-2 gap-3 pt-1">
-          <div class="p-3 bg-gray-50 rounded-xl">
-            <p class="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Created</p>
-            <p class="text-xs font-semibold text-gray-700">{{ formatTerritoryDate(managerTerritoryTarget.createdAt) }}</p>
-          </div>
-          <div class="p-3 bg-gray-50 rounded-xl">
-            <p class="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">Last Updated</p>
-            <p class="text-xs font-semibold text-gray-700">{{ formatTerritoryDate(managerTerritoryTarget.updatedAt) }}</p>
+            <button
+              type="button"
+              (click)="closeUserPreview()"
+              class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+              aria-label="Close user account preview"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- Footer -->
-      <div class="px-6 py-4 border-t border-gray-100 flex-shrink-0">
-        <button (click)="closeTerritoryFromManager()" class="w-full py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">
-          Close
+      @if (preview; as detail) {
+        <div class="border-b border-gray-100 bg-white px-6">
+          <nav class="flex gap-1 overflow-x-auto py-3" aria-label="User preview sections">
+            @for (tab of previewTabs; track tab.value) {
+              <button
+                type="button"
+                (click)="setPreviewTab(tab.value)"
+                class="flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition-colors"
+                [ngClass]="activePreviewTab === tab.value ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'"
+              >
+                {{ tab.label }}
+                @if (previewTabCount(tab.value, detail) > 0) {
+                  <span
+                    class="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                    [class.bg-white]="activePreviewTab === tab.value"
+                    [class.text-gray-900]="activePreviewTab === tab.value"
+                    [class.bg-gray-100]="activePreviewTab !== tab.value"
+                    [class.text-gray-500]="activePreviewTab !== tab.value"
+                  >
+                    {{ previewTabCount(tab.value, detail) }}
+                  </span>
+                }
+              </button>
+            }
+          </nav>
+        </div>
+      }
+
+      <div class="flex-1 overflow-y-auto bg-gray-50 p-6">
+        @if (isPreviewLoading && !preview) {
+          <div class="flex min-h-96 items-center justify-center rounded-2xl border border-gray-100 bg-white text-sm font-medium text-gray-400">
+            Loading user details...
+          </div>
+        } @else if (previewErrorMessage && !isPreviewLoading) {
+          <div class="flex min-h-96 flex-col items-center justify-center rounded-2xl border border-red-100 bg-white px-6 text-center">
+            <p class="text-base font-bold text-gray-900">Details unavailable</p>
+            <p class="mt-2 max-w-md text-sm text-gray-500">{{ previewErrorMessage }}</p>
+            <button
+              type="button"
+              (click)="retryUserPreview()"
+              class="mt-5 rounded-xl bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100"
+            >
+              Retry
+            </button>
+          </div>
+        } @else if (preview; as detail) {
+          @if (activePreviewTab === 'overview') {
+            <div class="space-y-5">
+              <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div class="rounded-xl border border-gray-100 bg-white p-4">
+                  <p class="text-xs font-semibold text-gray-400">Reviews</p>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">{{ detail.accountSummary.reviewsCount }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-100 bg-white p-4">
+                  <p class="text-xs font-semibold text-gray-400">Reports Made</p>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">{{ detail.accountSummary.reportsMadeCount }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-100 bg-white p-4">
+                  <p class="text-xs font-semibold text-gray-400">Reports Against</p>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">{{ detail.accountSummary.reportedContentCount }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-100 bg-white p-4">
+                  <p class="text-xs font-semibold text-gray-400">Pending Risk</p>
+                  <p class="mt-2 text-2xl font-bold text-gray-900">{{ detail.accountSummary.pendingReportsAgainstUserCount }}</p>
+                </div>
+              </div>
+
+              <div class="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+                <section class="rounded-2xl border border-gray-100 bg-white p-5">
+                  <div class="mb-4 flex items-center justify-between gap-3">
+                    <h3 class="text-sm font-bold text-gray-900">Account Overview</h3>
+                    <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">
+                      {{ detail.user.accountType }}
+                    </span>
+                  </div>
+                  <dl class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <dt class="text-xs font-semibold text-gray-400">User Reference</dt>
+                      <dd class="mt-1 text-sm font-medium text-gray-800">#{{ detail.user.userId }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs font-semibold text-gray-400">Email</dt>
+                      <dd class="mt-1 break-all text-sm font-medium text-gray-800">{{ detail.user.email }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs font-semibold text-gray-400">Member Since</dt>
+                      <dd class="mt-1 text-sm font-medium text-gray-800">{{ formatDateTime(detail.user.joinedAt) }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs font-semibold text-gray-400">Last Active</dt>
+                      <dd class="mt-1 text-sm font-medium text-gray-800">{{ formatDateTime(detail.user.lastActiveAt) }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs font-semibold text-gray-400">Last Login</dt>
+                      <dd class="mt-1 text-sm font-medium text-gray-800">{{ formatDateTime(detail.user.lastLoginAt) }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs font-semibold text-gray-400">Status</dt>
+                      <dd class="mt-1">
+                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" [class]="statusClass(detail.user.status)">
+                          {{ detail.user.status }}
+                        </span>
+                      </dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section class="rounded-2xl border border-gray-100 bg-white p-5">
+                  <div class="mb-4 flex items-center justify-between gap-3">
+                    <h3 class="text-sm font-bold text-gray-900">Activity Summary</h3>
+                    <span class="rounded-full px-2.5 py-1 text-xs font-semibold" [class]="riskClass(detail.accountSummary.riskLevel)">
+                      {{ detail.accountSummary.riskLevel }} Risk
+                    </span>
+                  </div>
+                  <p class="mb-4 text-sm text-gray-600">{{ detail.accountSummary.riskSummary }}</p>
+                  <dl class="grid grid-cols-2 gap-3">
+                    <div class="rounded-xl bg-gray-50 p-3">
+                      <dt class="text-[11px] font-semibold text-gray-400">Contributions</dt>
+                      <dd class="mt-1 text-lg font-bold text-gray-900">{{ detail.accountSummary.contributionsCount }}</dd>
+                    </div>
+                    <div class="rounded-xl bg-gray-50 p-3">
+                      <dt class="text-[11px] font-semibold text-gray-400">Pending Contributions</dt>
+                      <dd class="mt-1 text-lg font-bold text-gray-900">{{ detail.accountSummary.pendingContributionsCount }}</dd>
+                    </div>
+                    <div class="rounded-xl bg-gray-50 p-3">
+                      <dt class="text-[11px] font-semibold text-gray-400">Saved Items</dt>
+                      <dd class="mt-1 text-lg font-bold text-gray-900">{{ detail.accountSummary.savedItemsCount }}</dd>
+                    </div>
+                    <div class="rounded-xl bg-gray-50 p-3">
+                      <dt class="text-[11px] font-semibold text-gray-400">Activity Events</dt>
+                      <dd class="mt-1 text-lg font-bold text-gray-900">{{ detail.accountSummary.activityEventsCount }}</dd>
+                    </div>
+                  </dl>
+                  <p class="mt-4 text-xs text-gray-400">
+                    Last known activity: {{ formatDateTime(detail.accountSummary.lastKnownActivityAt) }}
+                  </p>
+                </section>
+              </div>
+
+              <section class="rounded-2xl border border-gray-100 bg-white p-5">
+                <h3 class="mb-4 text-sm font-bold text-gray-900">Roles & Access</h3>
+                @if (detail.roles.length === 0) {
+                  <p class="rounded-xl bg-gray-50 px-4 py-5 text-sm text-gray-400">No roles assigned.</p>
+                } @else {
+                  <div class="grid gap-3 lg:grid-cols-2">
+                    @for (role of detail.roles; track trackByRoleName($index, role)) {
+                      <div class="rounded-xl border border-gray-100 p-4">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="rounded-full px-2.5 py-1 text-xs font-semibold" [class]="roleClass(role.roleName)">
+                            {{ role.displayName }}
+                          </span>
+                          <span class="text-xs font-medium text-gray-400">{{ role.assignedScope }}</span>
+                        </div>
+                        @if (role.scopes.length > 0) {
+                          <div class="mt-3 flex flex-wrap gap-1.5">
+                            @for (scope of role.scopes; track scope.scopeType + '-' + scope.scopeId + '-' + scope.displayName) {
+                              <span class="rounded-full bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                                {{ scope.displayName }}
+                              </span>
+                            }
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+
+                <div class="mt-5 grid gap-3 lg:grid-cols-2">
+                  <div class="rounded-xl bg-gray-50 p-4">
+                    <p class="text-xs font-semibold text-gray-400">Assigned Territories</p>
+                    @if (detail.user.assignedTerritories.length === 0) {
+                      <p class="mt-2 text-sm text-gray-500">No assigned territories.</p>
+                    } @else {
+                      <div class="mt-2 flex flex-wrap gap-1.5">
+                        @for (territory of detail.user.assignedTerritories; track territory.territoryId) {
+                          <span class="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                            {{ territory.displayName || territory.territoryName }}
+                          </span>
+                        }
+                      </div>
+                    }
+                  </div>
+                  <div class="rounded-xl bg-gray-50 p-4">
+                    <p class="text-xs font-semibold text-gray-400">Assigned Regions</p>
+                    @if (detail.user.assignedRegions.length === 0) {
+                      <p class="mt-2 text-sm text-gray-500">No assigned regions.</p>
+                    } @else {
+                      <div class="mt-2 flex flex-wrap gap-1.5">
+                        @for (region of detail.user.assignedRegions; track region.regionId) {
+                          <span class="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                            {{ region.regionName }}
+                          </span>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+              </section>
+            </div>
+          }
+
+          @if (activePreviewTab === 'reports') {
+            <div class="grid gap-5 xl:grid-cols-2">
+              <section class="rounded-2xl border border-gray-100 bg-white p-5">
+                <div class="mb-4 flex items-center justify-between gap-3">
+                  <h3 class="text-sm font-bold text-gray-900">Reports Made By This User</h3>
+                  <span class="text-xs font-semibold text-gray-400">{{ detail.reportsMade.totalCount }} total</span>
+                </div>
+                @if (detail.reportsMade.items.length === 0) {
+                  <p class="rounded-xl bg-gray-50 px-4 py-8 text-center text-sm text-gray-400">This user has not reported content.</p>
+                } @else {
+                  <div class="space-y-3">
+                    @for (report of detail.reportsMade.items; track trackByReportId($index, report)) {
+                      <article class="rounded-xl border border-gray-100 p-4">
+                        <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p class="text-sm font-bold text-gray-900">Report #{{ report.reportId }}</p>
+                            <p class="mt-0.5 text-xs text-gray-400">{{ report.contentType }} on {{ report.entityName }}</p>
+                          </div>
+                          <span class="rounded-full px-2.5 py-1 text-xs font-semibold" [class]="reportStatusClass(report.status)">
+                            {{ report.status }}
+                          </span>
+                        </div>
+                        <p class="text-sm text-gray-700">{{ report.contentExcerpt }}</p>
+                        <dl class="mt-4 grid gap-3 text-xs sm:grid-cols-2">
+                          <div>
+                            <dt class="font-semibold text-gray-400">Reason</dt>
+                            <dd class="mt-1 text-gray-700">{{ roleLabel(report.reason) }}</dd>
+                          </div>
+                          <div>
+                            <dt class="font-semibold text-gray-400">Action Taken</dt>
+                            <dd class="mt-1 text-gray-700">{{ report.actionTaken }}</dd>
+                          </div>
+                          <div>
+                            <dt class="font-semibold text-gray-400">Created</dt>
+                            <dd class="mt-1 text-gray-700">{{ formatDateTime(report.createdAt) }}</dd>
+                          </div>
+                          <div>
+                            <dt class="font-semibold text-gray-400">Decision Date</dt>
+                            <dd class="mt-1 text-gray-700">{{ formatDateTime(report.moderationDecisionDate) }}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    }
+                  </div>
+                  @if (detail.reportsMade.hasMore) {
+                    <p class="mt-4 text-xs text-gray-400">
+                      Showing latest {{ detail.reportsMade.items.length }} of {{ detail.reportsMade.totalCount }} reports.
+                    </p>
+                  }
+                }
+              </section>
+
+              <section class="rounded-2xl border border-gray-100 bg-white p-5">
+                <div class="mb-4 flex items-center justify-between gap-3">
+                  <h3 class="text-sm font-bold text-gray-900">Reports Against This User</h3>
+                  <span class="text-xs font-semibold text-gray-400">{{ detail.reportsAgainstUser.totalCount }} total</span>
+                </div>
+                @if (detail.reportsAgainstUser.items.length === 0) {
+                  <p class="rounded-xl bg-gray-50 px-4 py-8 text-center text-sm text-gray-400">No reports target this user or their content.</p>
+                } @else {
+                  <div class="space-y-3">
+                    @for (report of detail.reportsAgainstUser.items; track trackByReportId($index, report)) {
+                      <article class="rounded-xl border border-gray-100 p-4">
+                        <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p class="text-sm font-bold text-gray-900">Report #{{ report.reportId }}</p>
+                            <p class="mt-0.5 text-xs text-gray-400">{{ report.contentType }} on {{ report.entityName }}</p>
+                          </div>
+                          <span class="rounded-full px-2.5 py-1 text-xs font-semibold" [class]="reportStatusClass(report.status)">
+                            {{ report.status }}
+                          </span>
+                        </div>
+                        <p class="text-sm text-gray-700">{{ report.contentExcerpt }}</p>
+                        <dl class="mt-4 grid gap-3 text-xs sm:grid-cols-2">
+                          <div>
+                            <dt class="font-semibold text-gray-400">Reporter</dt>
+                            <dd class="mt-1 text-gray-700">{{ report.reporterName }}</dd>
+                          </div>
+                          <div>
+                            <dt class="font-semibold text-gray-400">Reason</dt>
+                            <dd class="mt-1 text-gray-700">{{ roleLabel(report.reason) }}</dd>
+                          </div>
+                          <div>
+                            <dt class="font-semibold text-gray-400">Action Taken</dt>
+                            <dd class="mt-1 text-gray-700">{{ report.actionTaken }}</dd>
+                          </div>
+                          <div>
+                            <dt class="font-semibold text-gray-400">Created</dt>
+                            <dd class="mt-1 text-gray-700">{{ formatDateTime(report.createdAt) }}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    }
+                  </div>
+                  @if (detail.reportsAgainstUser.hasMore) {
+                    <p class="mt-4 text-xs text-gray-400">
+                      Showing latest {{ detail.reportsAgainstUser.items.length }} of {{ detail.reportsAgainstUser.totalCount }} reports.
+                    </p>
+                  }
+                }
+              </section>
+            </div>
+          }
+
+          @if (activePreviewTab === 'reviews') {
+            <section class="rounded-2xl border border-gray-100 bg-white p-5">
+              <div class="mb-4 flex items-center justify-between gap-3">
+                <h3 class="text-sm font-bold text-gray-900">Reviews & Content</h3>
+                <span class="text-xs font-semibold text-gray-400">{{ detail.recentReviews.totalCount }} total</span>
+              </div>
+              @if (detail.recentReviews.items.length === 0) {
+                <p class="rounded-xl bg-gray-50 px-4 py-10 text-center text-sm text-gray-400">No reviews found for this user.</p>
+              } @else {
+                <div class="space-y-3">
+                  @for (review of detail.recentReviews.items; track trackByReviewId($index, review)) {
+                    <article class="rounded-xl border border-gray-100 p-4">
+                      <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p class="text-sm font-bold text-gray-900">{{ review.entityName }}</p>
+                          <p class="mt-0.5 text-xs text-gray-400">{{ review.targetType }} review #{{ review.reviewId }}</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                            {{ review.rating | number:'1.0-1' }}/5
+                          </span>
+                          <span class="rounded-full px-2.5 py-1 text-xs font-semibold" [class]="reviewStatusClass(review.status)">
+                            {{ review.status }}
+                          </span>
+                        </div>
+                      </div>
+                      <p class="text-sm text-gray-700">{{ review.commentExcerpt }}</p>
+                      <div class="mt-4 flex flex-wrap gap-4 text-xs text-gray-500">
+                        <span>Created {{ formatDateTime(review.createdAt) }}</span>
+                        <span>{{ review.reportCount }} reports</span>
+                      </div>
+                    </article>
+                  }
+                </div>
+                @if (detail.recentReviews.hasMore) {
+                  <p class="mt-4 text-xs text-gray-400">
+                    Showing latest {{ detail.recentReviews.items.length }} of {{ detail.recentReviews.totalCount }} reviews.
+                  </p>
+                }
+              }
+            </section>
+          }
+
+          @if (activePreviewTab === 'history') {
+            <section class="rounded-2xl border border-gray-100 bg-white p-5">
+              <div class="mb-4 flex items-center justify-between gap-3">
+                <h3 class="text-sm font-bold text-gray-900">Moderation History</h3>
+                <span class="text-xs font-semibold text-gray-400">{{ detail.moderationHistory.totalCount }} total</span>
+              </div>
+              @if (detail.moderationHistory.items.length === 0) {
+                <p class="rounded-xl bg-gray-50 px-4 py-10 text-center text-sm text-gray-400">No moderation history yet.</p>
+              } @else {
+                <div class="space-y-3">
+                  @for (item of detail.moderationHistory.items; track trackByHistoryId($index, item)) {
+                    <article class="rounded-xl border border-gray-100 p-4">
+                      <div class="mb-2 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p class="text-sm font-bold text-gray-900">{{ item.eventType }}</p>
+                          <p class="mt-0.5 text-xs text-gray-400">{{ formatDateTime(item.createdAt) }}</p>
+                        </div>
+                        <span class="rounded-full px-2.5 py-1 text-xs font-semibold" [class]="historyStatusClass(item.status)">
+                          {{ item.status }}
+                        </span>
+                      </div>
+                      <p class="text-sm text-gray-700">{{ item.summary }}</p>
+                      @if (item.actorDisplayName || item.note) {
+                        <div class="mt-3 grid gap-2 text-xs text-gray-500 sm:grid-cols-2">
+                          @if (item.actorDisplayName) {
+                            <p>Moderator: {{ item.actorDisplayName }}</p>
+                          }
+                          @if (item.note) {
+                            <p>Note: {{ item.note }}</p>
+                          }
+                        </div>
+                      }
+                    </article>
+                  }
+                </div>
+                @if (detail.moderationHistory.hasMore) {
+                  <p class="mt-4 text-xs text-gray-400">
+                    Showing latest {{ detail.moderationHistory.items.length }} of {{ detail.moderationHistory.totalCount }} events.
+                  </p>
+                }
+              }
+            </section>
+          }
+        }
+      </div>
+    </aside>
+  </div>
+}
+
+@if (confirmation; as confirm) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeConfirmation()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" (click)="$event.stopPropagation()">
+      <div class="flex items-center gap-3 mb-4">
+        <div
+          class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+          [class.bg-red-100]="confirm.action === 'delete'"
+          [class.bg-amber-100]="confirm.action === 'suspend'"
+          [class.bg-emerald-100]="confirm.action === 'unsuspend'"
+        >
+          <svg
+            class="w-5 h-5"
+            [class.text-red-500]="confirm.action === 'delete'"
+            [class.text-amber-500]="confirm.action === 'suspend'"
+            [class.text-emerald-500]="confirm.action === 'unsuspend'"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-base font-bold text-gray-900">{{ actionTitle(confirm.action) }}</h2>
+          <p class="text-sm text-gray-500">{{ confirm.user.email }}</p>
+        </div>
+      </div>
+      <p class="text-sm text-gray-700 mb-2">
+        {{ actionBody(confirm) }}
+      </p>
+      <p class="text-sm text-gray-700 mb-6">
+        Target account: <strong>{{ confirm.user.displayName }}</strong>
+      </p>
+      <div class="flex gap-3 justify-end">
+        <button
+          type="button"
+          (click)="closeConfirmation()"
+          class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          (click)="confirmAccountAction()"
+          [disabled]="isActionSaving"
+          class="px-5 py-2 text-sm font-semibold text-white rounded-xl transition-colors border-0 cursor-pointer disabled:opacity-60"
+          [ngClass]="{
+            'bg-red-500 hover:bg-red-600': confirm.action === 'delete',
+            'bg-amber-500 hover:bg-amber-600': confirm.action === 'suspend',
+            'bg-emerald-500 hover:bg-emerald-600': confirm.action === 'unsuspend'
+          }"
+        >
+          {{ actionButtonLabel(confirm.action) }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (assignTarget; as target) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" (click)="closeAssignTerritoryManager()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6" (click)="$event.stopPropagation()">
+      <div class="flex items-start gap-3 mb-5">
+        <span
+          class="w-11 h-11 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 overflow-hidden"
+          [style.background]="target.avatarUrl ? 'transparent' : target.avatarColor"
+        >
+          @if (target.avatarUrl) {
+            <img [src]="target.avatarUrl" [alt]="target.displayName" class="w-full h-full object-cover" />
+          } @else {
+            {{ target.avatarInitials }}
+          }
+        </span>
+        <div class="min-w-0">
+          <h2 class="text-base font-bold text-gray-900">Assign Territory Manager</h2>
+          <p class="text-sm font-semibold text-gray-800 truncate">{{ target.displayName }}</p>
+          <p class="text-xs text-gray-400 truncate">{{ target.email }}</p>
+          <div class="mt-2 flex flex-wrap gap-1.5">
+            @for (role of target.roles; track role) {
+              <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">{{ role }}</span>
+            }
+          </div>
+        </div>
+      </div>
+
+      <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2" for="assign-territory">
+        Territory
+      </label>
+      <select
+        id="assign-territory"
+        [(ngModel)]="assignTerritoryId"
+        class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+      >
+        @for (territory of availableTerritories; track territory.id) {
+          <option [ngValue]="territory.territoryId ?? null">{{ territoryOptionLabel(territory) }}</option>
+        }
+      </select>
+
+      @if (isLoadingTerritories) {
+        <p class="mt-3 text-xs text-gray-400">Loading territories...</p>
+      } @else if (availableTerritories.length === 0) {
+        <p class="mt-3 text-xs text-amber-600">No unassigned country territories with boundary geometry are available.</p>
+      }
+
+      <div class="mt-6 flex gap-3 justify-end">
+        <button
+          type="button"
+          (click)="closeAssignTerritoryManager()"
+          class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          (click)="confirmAssignTerritoryManager()"
+          [disabled]="isAssigning || !assignTerritoryId || availableTerritories.length === 0"
+          class="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors border-0 cursor-pointer disabled:opacity-60"
+        >
+          {{ isAssigning ? 'Assigning...' : 'Save' }}
         </button>
       </div>
     </div>

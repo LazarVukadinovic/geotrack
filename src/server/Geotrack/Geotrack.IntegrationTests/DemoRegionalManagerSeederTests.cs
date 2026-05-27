@@ -20,6 +20,8 @@ namespace Geotrack.IntegrationTests;
 
 public sealed class DemoRegionalManagerSeederTests
 {
+    private const string SeedRegionName = "Dubrovnik-Neretva";
+
     [Fact]
     public async Task Development_startup_seed_creates_login_ready_demo_regional_manager()
     {
@@ -48,7 +50,7 @@ public sealed class DemoRegionalManagerSeederTests
                 assignment.RegionId == 1 && assignment.IsActive);
 
             var region = await db.Regions.SingleAsync(existing => existing.Id == 1);
-            Assert.Equal("Dalmatia", region.Name);
+            Assert.Equal(SeedRegionName, region.Name);
 
             var role = await GetRegionalManagerRoleAsync(db);
             Assert.Equal(1, await db.UserRoles.CountAsync(existing =>
@@ -80,7 +82,7 @@ public sealed class DemoRegionalManagerSeederTests
         var regions = await client.GetFromJsonAsync<List<RegionalAssignedRegionDto>>(
             "/api/admin/regional/regions");
         Assert.NotNull(regions);
-        Assert.Contains(regions!, region => region.Id == 1 && region.Name == "Dalmatia");
+        Assert.Contains(regions!, region => region.Id == 1 && region.Name == SeedRegionName);
     }
 
     [Fact]

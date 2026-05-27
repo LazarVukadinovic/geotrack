@@ -10,7 +10,11 @@ describe('UserAppLinkService', () => {
 
     const service = TestBed.inject(UserAppLinkService);
 
+    expect(service.toUserAppUrl('/destinations/7')).toBe('https://user.example/destinations/7');
+    expect(service.toUserAppUrl('/locations/8')).toBe('https://user.example/locations/8');
     expect(service.toUserAppUrl('/places/42')).toBe('https://user.example/places/42');
+    expect(service.toUserAppUrl('/stays/43')).toBe('https://user.example/stays/43');
+    expect(service.toUserAppUrl('/events/9')).toBe('https://user.example/events/9');
     expect(service.toUserAppUrl('/explore?destinationId=7')).toBe('https://user.example/explore?destinationId=7');
   });
 

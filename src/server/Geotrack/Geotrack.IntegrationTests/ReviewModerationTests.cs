@@ -154,11 +154,10 @@ public sealed class ReviewModerationTests
     }
 
     [Fact]
-    public async Task Regional_manager_can_query_keep_and_remove_reported_reviews_in_scope()
+    public async Task Administrator_can_query_keep_and_remove_reported_reviews_and_regional_manager_is_forbidden()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var placeId = await GetFirstPlaceIdAsync(app);
-        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
 
         using var firstAuthor = await RegisterAndLoginAsync(app, "keep-author");
         var reviewToKeep = await CreatePlaceReviewAsync(firstAuthor, placeId, "Useful stop with clear signage.");
@@ -167,11 +166,20 @@ public sealed class ReviewModerationTests
         var keepReport = await ReportReviewAsync(firstReporter, "place", reviewToKeep.Id);
 
         using var managerClient = await LoginAsync(app, "elena@example.com", "password123");
-        var queue = await managerClient.GetFromJsonAsync<GetReviewReportsResponseDto>("/api/reviews/reports");
+        var managerQueueResponse = await managerClient.GetAsync("/api/reviews/reports");
+        Assert.Equal(HttpStatusCode.Forbidden, managerQueueResponse.StatusCode);
+
+        var managerDismissResponse = await managerClient.PostAsJsonAsync(
+            $"/api/reviews/reports/{keepReport.ReportId}/dismiss",
+            new ModerateReviewReportRequestDto { Note = "Regional manager should not moderate." });
+        Assert.Equal(HttpStatusCode.Forbidden, managerDismissResponse.StatusCode);
+
+        using var adminClient = await RegisterAdminAndLoginAsync(app, "report-admin");
+        var queue = await adminClient.GetFromJsonAsync<GetReviewReportsResponseDto>("/api/reviews/reports");
         Assert.NotNull(queue);
         Assert.Contains(queue.Reports, report => report.Id == keepReport.ReportId);
 
-        var dismissResponse = await managerClient.PostAsJsonAsync(
+        var dismissResponse = await adminClient.PostAsJsonAsync(
             $"/api/reviews/reports/{keepReport.ReportId}/dismiss",
             new ModerateReviewReportRequestDto { Note = "Review stays visible." });
         dismissResponse.EnsureSuccessStatusCode();
@@ -187,12 +195,17 @@ public sealed class ReviewModerationTests
         using var secondReporter = await RegisterAndLoginAsync(app, "remove-reporter");
         var removeReport = await ReportReviewAsync(secondReporter, "place", reviewToRemove.Id);
 
-        var removeResponse = await managerClient.PostAsJsonAsync(
+        var managerRemoveResponse = await managerClient.PostAsJsonAsync(
             $"/api/reviews/reports/{removeReport.ReportId}/remove-review",
-            new ModerateReviewReportRequestDto { Note = "Regional manager removal." });
+            new ModerateReviewReportRequestDto { Note = "Regional manager should not remove." });
+        Assert.Equal(HttpStatusCode.Forbidden, managerRemoveResponse.StatusCode);
+
+        var removeResponse = await adminClient.PostAsJsonAsync(
+            $"/api/reviews/reports/{removeReport.ReportId}/remove-review",
+            new ModerateReviewReportRequestDto { Note = "Administrator removal." });
         removeResponse.EnsureSuccessStatusCode();
 
-        var reviewsAfterRemoval = await managerClient.GetFromJsonAsync<PagedReviewsResponseDto>($"/api/reviews/places/{placeId}");
+        var reviewsAfterRemoval = await adminClient.GetFromJsonAsync<PagedReviewsResponseDto>($"/api/reviews/places/{placeId}");
         Assert.NotNull(reviewsAfterRemoval);
         Assert.DoesNotContain(reviewsAfterRemoval.Items, review => review.Id == reviewToRemove.Id);
 

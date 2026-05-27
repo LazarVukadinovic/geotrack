@@ -3,6 +3,7 @@ import { inject } from '@angular/core';
 import { catchError, switchMap, throwError } from 'rxjs';
 import { AuthService } from './auth.service';
 import { TokenRefreshService } from './token-refresh.service';
+import { isApiAuthEndpoint } from './api-url';
 
 /**
  * Handles 401 responses on authenticated requests.
@@ -48,5 +49,5 @@ export const authErrorInterceptor: HttpInterceptorFn = (req, next) => {
 };
 
 function isAuthEndpoint(url: string): boolean {
-  return url.includes('/api/auth/');
+  return isApiAuthEndpoint(url);
 }

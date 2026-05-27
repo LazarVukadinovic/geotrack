@@ -6,6 +6,8 @@ import {
   AdminMapSearchResponse,
   AdminMapViewport,
   AdminMapZone,
+  RegionalEntityLocationValidationRequest,
+  RegionalScopeValidationResult,
 } from '../models/admin-map.model';
 
 @Injectable({ providedIn: 'root' })
@@ -39,5 +41,14 @@ export class AdminMapService {
       .set('query', query);
 
     return this.http.get<AdminMapSearchResponse>(`${this.endpoint}/search`, { params });
+  }
+
+  validateEntityLocation(
+    request: RegionalEntityLocationValidationRequest,
+  ): Observable<RegionalScopeValidationResult> {
+    return this.http.post<RegionalScopeValidationResult>(
+      '/api/admin/regional/validate-entity-location',
+      request,
+    );
   }
 }

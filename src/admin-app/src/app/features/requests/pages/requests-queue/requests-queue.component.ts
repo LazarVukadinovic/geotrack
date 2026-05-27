@@ -9,6 +9,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ReviewRequestsService } from '../../../../core/services/review-requests.service';
+import { RegionalManagerSidebarStateService } from '../../../../core/services/regional-manager-sidebar-state.service';
 import {
   RegionalRequestQueueResponse,
   RegionalRequestQueueCountsByType,
@@ -27,7 +28,6 @@ type QueueTab =
   | 'locations'
   | 'places'
   | 'events'
-  | 'reviews'
   | 'approved'
   | 'rejected';
 
@@ -36,7 +36,6 @@ const EMPTY_COUNTS: RegionalRequestQueueCountsByType = {
   locations: 0,
   places: 0,
   events: 0,
-  reviews: 0,
 };
 
 const TAB_QUERY_MAP: Record<QueueTab, { type: RequestQueueTypeFilter; status: RequestQueueStatusFilter }> = {
@@ -45,7 +44,6 @@ const TAB_QUERY_MAP: Record<QueueTab, { type: RequestQueueTypeFilter; status: Re
   locations: { type: 'location', status: 'pending' },
   places: { type: 'place', status: 'pending' },
   events: { type: 'event', status: 'pending' },
-  reviews: { type: 'review', status: 'pending' },
   approved: { type: 'all', status: 'approved' },
   rejected: { type: 'all', status: 'rejected' },
 };
@@ -115,10 +113,12 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
     private readonly auth: AuthService,
     private readonly dashboardService: DashboardService,
     private readonly requestsService: ReviewRequestsService,
+    private readonly sidebarState: RegionalManagerSidebarStateService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
+    this.applyNavigationFeedback();
     this.loadAssignedRegions();
   }
 
@@ -163,7 +163,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
       { key: 'locations', label: 'Locations', count: counts?.locations ?? 0 },
       { key: 'places', label: 'Places', count: counts?.places ?? 0 },
       { key: 'events', label: 'Events', count: counts?.events ?? 0 },
-      { key: 'reviews', label: 'Reviews', count: counts?.reviews ?? 0 },
       { key: 'approved', label: 'Approved', count: this.queue?.approvedCount ?? this.lastApprovedCount },
       { key: 'rejected', label: 'Rejected', count: this.queue?.rejectedCount ?? this.lastRejectedCount },
     ];
@@ -338,6 +337,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
         next: result => {
           this.feedbackMessage = `${result.succeededCount} request${result.succeededCount === 1 ? '' : 's'} approved.`;
           this.selectedIds.clear();
+          this.refreshSidebarBadge();
           this.loadQueue();
         },
         error: error => this.handleActionError(error),
@@ -364,6 +364,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
         next: () => {
           this.feedbackMessage = 'Request approved.';
           this.selectedIds.delete(request.requestKey);
+          this.refreshSidebarBadge();
           this.loadQueue();
           this.notifyStateChanged();
         },
@@ -397,6 +398,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
           next: () => {
             this.feedbackMessage = 'Request rejected.';
             this.selectedIds.delete(modal.item!.requestKey);
+            this.refreshSidebarBadge();
             this.loadQueue();
             this.notifyStateChanged();
           },
@@ -419,6 +421,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
         next: result => {
           this.feedbackMessage = `${result.succeededCount} request${result.succeededCount === 1 ? '' : 's'} rejected.`;
           this.selectedIds.clear();
+          this.refreshSidebarBadge();
           this.loadQueue();
         },
         error: error => this.handleActionError(error),
@@ -434,8 +437,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
 
   previewRequest(request: RegionalRequestQueueItem): void {
     if (!this.activeRegionId) return;
-    const routeSource = request.source === 'ReviewReport' ? 'review-report' : 'contribution';
-    this.router.navigate(['/request/detail', routeSource, request.requestId], {
+    this.router.navigate(['/request/detail', 'contribution', request.requestId], {
       queryParams: { regionId: this.activeRegionId },
     });
   }
@@ -477,7 +479,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
       Location: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
       Place: 'bg-blue-50 text-blue-700 border border-blue-200',
       Event: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
-      Review: 'bg-rose-50 text-rose-700 border border-rose-200',
     };
     return map[type] ?? 'bg-gray-100 text-gray-600';
   }
@@ -592,6 +593,23 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
       .map(request => request.requestKey);
   }
 
+  private refreshSidebarBadge(): void {
+    if (this.activeRegionId) {
+      this.sidebarState.refresh(this.activeRegionId);
+    }
+  }
+
+  private applyNavigationFeedback(): void {
+    const state = history.state as { feedbackMessage?: unknown } | null;
+    const feedbackMessage = typeof state?.feedbackMessage === 'string'
+      ? state.feedbackMessage.trim()
+      : '';
+
+    if (feedbackMessage) {
+      this.feedbackMessage = feedbackMessage;
+    }
+  }
+
   private setProcessing(request: RegionalRequestQueueItem, value: boolean): void {
     if (value) this.processingIds.add(request.requestKey);
     else this.processingIds.delete(request.requestKey);
@@ -675,7 +693,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
       locations: this.toSafeCount(counts?.locations),
       places: this.toSafeCount(counts?.places),
       events: this.toSafeCount(counts?.events),
-      reviews: this.toSafeCount(counts?.reviews),
     };
   }
 

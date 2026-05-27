@@ -1,10 +1,9 @@
-export type RequestSource = 'Contribution' | 'ReviewReport' | (string & {});
+export type RequestSource = 'Contribution' | (string & {});
 export type RequestEntityType =
   | 'Destination'
   | 'Location'
   | 'Place'
   | 'Event'
-  | 'Review'
   | (string & {});
 export type RequestStatus = 'Pending' | 'Approved' | 'Rejected' | (string & {});
 export type RequestQueueTypeFilter =
@@ -12,8 +11,7 @@ export type RequestQueueTypeFilter =
   | 'destination'
   | 'location'
   | 'place'
-  | 'event'
-  | 'review';
+  | 'event';
 export type RequestQueueStatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
 export type RequestQueueSort = 'newest' | 'oldest' | 'status' | 'type';
 
@@ -44,7 +42,6 @@ export interface RegionalRequestQueueCountsByType {
   locations: number;
   places: number;
   events: number;
-  reviews: number;
 }
 
 export interface RegionalRequestQueueResponse {
@@ -100,13 +97,6 @@ export interface ReviewRequestDetail extends ReviewRequest {
   ownershipProofOriginalFileName?: string | null;
   ownershipProofContentType?: string | null;
   ownershipProofUploadedAt?: string | null;
-  reviewComment?: string | null;
-  reviewRating?: number | null;
-  reviewCreatedAt?: string | null;
-  reviewAuthorDisplayName?: string | null;
-  reportReason?: string | null;
-  reportNote?: string | null;
-  decision?: string | null;
   decisionNote?: string | null;
 }
 

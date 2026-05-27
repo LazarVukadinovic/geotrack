@@ -12,11 +12,19 @@ using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
+using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using Polygon = NetTopologySuite.Geometries.Polygon;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.IntegrationTests;
 
 public sealed class RegionalEventsTests
 {
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 4326);
+
     [Fact]
     public async Task Regional_manager_lists_only_assigned_region_events_with_default_25_item_page()
     {
@@ -466,6 +474,13 @@ public sealed class RegionalEventsTests
 
         var now = DateTime.UtcNow;
         var territory = await db.Territories.OrderBy(item => item.Id).FirstAsync();
+        territory.BoundaryShapeType = "Polygon";
+        territory.BoundarySource = "IntegrationTest";
+        SetBoundary(db, territory, Polygon(
+            (40.0, 15.0),
+            (40.0, 22.0),
+            (47.0, 22.0),
+            (47.0, 15.0)));
         var destinationType = await db.DestinationTypes.OrderBy(item => item.Id).FirstAsync();
         var locationType = await db.LocationTypes.OrderBy(item => item.Id).FirstAsync();
         var placeType = await db.PlaceTypes.OrderBy(item => item.Id).FirstAsync();
@@ -517,6 +532,18 @@ public sealed class RegionalEventsTests
             CreatedAt = now
         };
         db.Regions.AddRange(assignedRegion, unassignedRegion);
+        await db.SaveChangesAsync();
+
+        SetBoundary(db, assignedRegion, Polygon(
+            (41.5, 17.5),
+            (41.5, 20.5),
+            (44.0, 20.5),
+            (44.0, 17.5)));
+        SetBoundary(db, unassignedRegion, Polygon(
+            (44.5, 18.5),
+            (44.5, 19.5),
+            (45.5, 19.5),
+            (45.5, 18.5)));
         await db.SaveChangesAsync();
 
         await GrantRegionalManagerCoverageAsync(db, manager, assignedRegion.Id);
@@ -673,6 +700,36 @@ public sealed class RegionalEventsTests
         }
 
         await db.SaveChangesAsync();
+    }
+
+    private static void SetBoundary(AppDbContext db, Territory territory, Geometry geometry)
+    {
+        db.Entry(territory)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = geometry;
+    }
+
+    private static void SetBoundary(AppDbContext db, Region region, Geometry geometry)
+    {
+        db.Entry(region)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = geometry;
+    }
+
+    private static Polygon Polygon(params (double Latitude, double Longitude)[] points)
+    {
+        var coordinates = points
+            .Select(point => new Coordinate(point.Longitude, point.Latitude))
+            .ToList();
+
+        if (!coordinates[0].Equals2D(coordinates[^1]))
+        {
+            coordinates.Add(new Coordinate(coordinates[0].X, coordinates[0].Y));
+        }
+
+        var polygon = GeometryFactory.CreatePolygon(coordinates.ToArray());
+        polygon.SRID = 4326;
+        return polygon;
     }
 
     private sealed record EventsFixture(

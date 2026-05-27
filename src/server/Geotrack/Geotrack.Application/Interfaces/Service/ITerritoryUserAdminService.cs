@@ -12,6 +12,11 @@ public interface ITerritoryUserAdminService
         int skip,
         int take);
 
+    Task<TerritoryUserListItemDto> GetUserAsync(
+        int currentUserId,
+        int targetUserId,
+        int? territoryId);
+
     Task<TerritoryUserListItemDto> UpdateUserAsync(
         int currentUserId,
         int targetUserId,
@@ -36,6 +41,12 @@ public interface ITerritoryUserAdminService
         int currentUserId,
         int targetUserId,
         TerritoryUserAssignRegionRequestDto request);
+
+    Task<TerritoryUserListItemDto> RemoveRegionAsync(
+        int currentUserId,
+        int targetUserId,
+        int regionId,
+        int? territoryId);
 
     Task<TerritoryUserListItemDto> AddRegionalManagerAsync(
         int currentUserId,

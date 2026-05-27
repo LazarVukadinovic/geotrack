@@ -40,6 +40,7 @@ describe('EditProfile', () => {
     lastName: 'Petrovic',
     phoneNumber: '+381601234567',
     avatarUrl: '/media/uploads/avatars/current-avatar.png',
+    avatarVersion: 101,
     location: 'Belgrade, Serbia',
   };
 
@@ -80,6 +81,7 @@ describe('EditProfile', () => {
     expect(component.phone).toBe('+381601234567');
     expect(component.location).toBe('Belgrade, Serbia');
     expect(component.avatarUrl).toBe('/media/uploads/avatars/current-avatar.png');
+    expect(component.avatarImageUrl).toBe('/media/uploads/avatars/current-avatar.png?v=101');
   });
 
   it('should save the split name and refresh UserService before navigating', () => {
@@ -137,13 +139,30 @@ describe('EditProfile', () => {
 
     request.flush({
       avatarUrl: '/media/uploads/avatars/updated-avatar.png',
+      avatarVersion: 202,
     });
 
     expect(component.avatarUrl).toBe('/media/uploads/avatars/updated-avatar.png');
+    expect(component.avatarImageUrl).toBe('/media/uploads/avatars/updated-avatar.png?v=202');
     expect(component.isUploadingAvatar).toBe(false);
     expect(component.avatarError).toBe('');
     expect(userService.patchProfile).toHaveBeenCalledWith({
       avatarUrl: '/media/uploads/avatars/updated-avatar.png',
+      avatarVersion: 202,
     });
+  });
+
+  it('rejects unsupported mobile image formats before upload', () => {
+    const file = new File([new Uint8Array([1, 2, 3])], 'avatar.heic', { type: 'image/heic' });
+
+    component.onAvatarSelected({
+      target: {
+        files: [file],
+        value: 'C:\\fakepath\\avatar.heic',
+      },
+    } as unknown as Event);
+
+    httpMock.expectNone('/api/user/me/avatar');
+    expect(component.avatarError).toContain('HEIC/HEIF');
   });
 });

@@ -18,6 +18,7 @@ namespace Geotrack.Infrastructure;
 public class AppDbContext : DbContext
 {
     public DbSet<Territory> Territories => Set<Territory>();
+    public DbSet<AdministrativeBoundaryCandidate> AdministrativeBoundaryCandidates => Set<AdministrativeBoundaryCandidate>();
     public DbSet<Region> Regions => Set<Region>();
     public DbSet<RegionalManagerRegion> RegionalManagerRegions => Set<RegionalManagerRegion>();
     public DbSet<TerritoryManager> TerritoryManagers => Set<TerritoryManager>();
@@ -57,6 +58,8 @@ public class AppDbContext : DbContext
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
     public DbSet<SupportRequest> SupportRequests => Set<SupportRequest>();
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
+    public DbSet<AdminNotification> AdminNotifications => Set<AdminNotification>();
+    public DbSet<AdminNotificationReadState> AdminNotificationReadStates => Set<AdminNotificationReadState>();
     public DbSet<UserPlace> UserPlaces => Set<UserPlace>();
     public DbSet<UserAiProviderKey> UserAiProviderKeys => Set<UserAiProviderKey>();
 
@@ -123,6 +126,7 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresExtension("postgis");
 
         ConfigureTerritories(modelBuilder);
+        ConfigureAdministrativeBoundaryCandidates(modelBuilder);
         ConfigureRegions(modelBuilder);
         ConfigureRegionalManagers(modelBuilder);
         ConfigureTerritoryManagers(modelBuilder);
@@ -156,25 +160,147 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.TerritoryKind)
+                .IsRequired()
+                .HasMaxLength(32)
+                .HasDefaultValue(TerritoryKinds.Country);
+
+            entity.Property(x => x.CountryCode)
+                .HasMaxLength(2);
+
+            entity.Property(x => x.CountryIso3)
+                .HasMaxLength(3);
+
             entity.Property(x => x.BoundaryShapeType)
                 .HasMaxLength(32);
+
+            entity.Property(x => x.BoundaryShapeGroup)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.BoundaryShapeId)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.BoundaryExternalKey)
+                .HasMaxLength(300);
 
             entity.Property(x => x.BoundarySource)
                 .HasMaxLength(32);
 
+            entity.Property(x => x.BoundarySourceUrl)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.BoundaryAdmLevel)
+                .HasMaxLength(16);
+
+            entity.Property(x => x.BoundaryReleaseType)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.BoundaryLicense)
+                .HasMaxLength(200);
+
             entity.HasIndex(x => x.Name)
                 .IsUnique();
 
+            entity.HasIndex(x => x.CountryCode)
+                .IsUnique()
+                .HasFilter("\"CountryCode\" IS NOT NULL");
+
+            entity.HasIndex(x => x.CountryIso3)
+                .IsUnique()
+                .HasFilter("\"CountryIso3\" IS NOT NULL");
+
+            entity.HasIndex(x => x.BoundaryExternalKey)
+                .IsUnique()
+                .HasFilter("\"BoundaryExternalKey\" IS NOT NULL");
+
             entity.Property<Geometry?>("BoundaryGeometry")
-                .HasColumnType("geography (geometry)");
+                .HasColumnType("geometry (geometry, 4326)");
 
             entity.HasIndex("BoundaryGeometry")
                 .HasMethod("GIST");
+
+            entity.Property<Geometry?>("BoundaryDisplayGeometry")
+                .HasColumnType("geometry (geometry, 4326)");
 
             entity.HasMany(x => x.Regions)
                 .WithOne(x => x.Territory)
                 .HasForeignKey(x => x.TerritoryId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureAdministrativeBoundaryCandidates(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AdministrativeBoundaryCandidate>(entity =>
+        {
+            entity.ToTable("AdministrativeBoundaryCandidates");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Source)
+                .IsRequired()
+                .HasMaxLength(32);
+
+            entity.Property(x => x.ReleaseType)
+                .IsRequired()
+                .HasMaxLength(32);
+
+            entity.Property(x => x.AdmLevel)
+                .IsRequired()
+                .HasMaxLength(16);
+
+            entity.Property(x => x.ShapeGroup)
+                .IsRequired()
+                .HasMaxLength(128);
+
+            entity.Property(x => x.ShapeId)
+                .IsRequired()
+                .HasMaxLength(128);
+
+            entity.Property(x => x.ShapeName)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(x => x.ShapeType)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.ExternalKey)
+                .IsRequired()
+                .HasMaxLength(300);
+
+            entity.Property(x => x.CountryIso3)
+                .IsRequired()
+                .HasMaxLength(3);
+
+            entity.Property(x => x.ImportedAt)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.CountryTerritory)
+                .WithMany()
+                .HasForeignKey(x => x.CountryTerritoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.ExternalKey)
+                .IsUnique();
+
+            entity.HasIndex(x => new { x.Source, x.AdmLevel, x.ShapeGroup, x.ShapeId })
+                .IsUnique();
+
+            entity.HasIndex(x => new { x.CountryIso3, x.AdmLevel });
+
+            entity.HasIndex(x => x.CountryTerritoryId);
+
+            entity.Property<Geometry?>("BoundaryGeometry")
+                .HasColumnType("geometry (geometry, 4326)");
+
+            entity.HasIndex("BoundaryGeometry")
+                .HasMethod("GIST");
+
+            entity.Property<Geometry?>("BoundaryDisplayGeometry")
+                .HasColumnType("geometry (geometry, 4326)");
         });
     }
 
@@ -193,8 +319,26 @@ public class AppDbContext : DbContext
             entity.Property(x => x.BoundaryShapeType)
                 .HasMaxLength(32);
 
+            entity.Property(x => x.BoundaryShapeGroup)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.BoundaryShapeId)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.BoundaryExternalKey)
+                .HasMaxLength(300);
+
             entity.Property(x => x.BoundarySource)
                 .HasMaxLength(32);
+
+            entity.Property(x => x.BoundaryAdmLevel)
+                .HasMaxLength(16);
+
+            entity.Property(x => x.BoundaryReleaseType)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.BoundaryLicense)
+                .HasMaxLength(200);
 
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
@@ -204,18 +348,36 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.TerritoryId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.BoundaryCandidate)
+                .WithMany()
+                .HasForeignKey(x => x.BoundaryCandidateId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(x => x.TerritoryId);
 
             entity.HasIndex(x => new { x.TerritoryId, x.Name })
                 .IsUnique();
 
+            entity.HasIndex(x => new { x.TerritoryId, x.BoundaryExternalKey })
+                .IsUnique()
+                .HasFilter("\"BoundaryExternalKey\" IS NOT NULL");
+
+            entity.HasIndex(x => new { x.TerritoryId, x.BoundaryCandidateId })
+                .IsUnique()
+                .HasFilter("\"BoundaryCandidateId\" IS NOT NULL");
+
+            entity.HasIndex(x => x.BoundaryCandidateId);
+
             entity.HasIndex(x => x.CreatedByUserId);
 
             entity.Property<Geometry?>("BoundaryGeometry")
-                .HasColumnType("geography (geometry)");
+                .HasColumnType("geometry (geometry, 4326)");
 
             entity.HasIndex("BoundaryGeometry")
                 .HasMethod("GIST");
+
+            entity.Property<Geometry?>("BoundaryDisplayGeometry")
+                .HasColumnType("geometry (geometry, 4326)");
         });
     }
 
@@ -959,6 +1121,20 @@ public class AppDbContext : DbContext
 
             entity.Property(x => x.LastLoginAt);
 
+            entity.Property(x => x.IsSuspended)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.SuspendedAt);
+
+            entity.Property(x => x.SuspendedByUserId);
+
+            entity.Property(x => x.IsDeleted)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.DeletedAt);
+
+            entity.Property(x => x.DeletedByUserId);
+
             entity.Property(x => x.InterfaceLanguage)
                 .IsRequired()
                 .HasMaxLength(10)
@@ -1004,6 +1180,8 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.Email)
                 .IsUnique();
+
+            entity.HasIndex(x => new { x.IsDeleted, x.IsSuspended });
         });
 
         modelBuilder.Entity<UserRole>(entity =>
@@ -1800,6 +1978,35 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Status)
                 .HasMaxLength(40);
 
+            entity.Property(x => x.Priority)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue(SupportRequestPriorities.Normal);
+
+            entity.Property(x => x.PageUrl)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.UserAgent)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.DeviceInfo)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.Browser)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.Platform)
+                .HasMaxLength(120);
+
+            entity.Property(x => x.AttachmentUrl)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.InternalNote)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.ResolutionMessage)
+                .HasMaxLength(2000);
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -1808,7 +2015,21 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(x => x.ResolvedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.ResolvedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.AssignedAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.AssignedAdminId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+            entity.HasIndex(x => new { x.Status, x.CreatedAt });
+            entity.HasIndex(x => x.Priority);
+            entity.HasIndex(x => x.ResolvedByUserId);
+            entity.HasIndex(x => x.AssignedAdminId);
         });
 
         modelBuilder.Entity<UserNotification>(entity =>
@@ -1846,6 +2067,81 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.UserId, x.CreatedAt });
             entity.HasIndex(x => new { x.UserId, x.ReadAt });
             entity.HasIndex(x => new { x.RelatedEntityType, x.RelatedEntityId });
+        });
+
+        modelBuilder.Entity<AdminNotification>(entity =>
+        {
+            entity.ToTable("AdminNotifications");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.AudienceRole)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Type)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Title)
+                .IsRequired()
+                .HasMaxLength(160);
+
+            entity.Property(x => x.Message)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.Severity)
+                .IsRequired()
+                .HasMaxLength(40);
+
+            entity.Property(x => x.TargetType)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.TargetRoute)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.ScopeType)
+                .IsRequired()
+                .HasMaxLength(80)
+                .HasDefaultValue("Global");
+
+            entity.Property(x => x.ScopeLabel)
+                .HasMaxLength(160);
+
+            entity.Property(x => x.MetadataJson)
+                .HasColumnType("jsonb");
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasMany(x => x.ReadStates)
+                .WithOne(x => x.AdminNotification)
+                .HasForeignKey(x => x.AdminNotificationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.AudienceRole, x.CreatedAt });
+            entity.HasIndex(x => new { x.AudienceRole, x.ScopeType, x.ScopeId, x.CreatedAt });
+            entity.HasIndex(x => new { x.AudienceRole, x.Type, x.TargetType, x.TargetId, x.ScopeType, x.ScopeId })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<AdminNotificationReadState>(entity =>
+        {
+            entity.ToTable("AdminNotificationReadStates");
+
+            entity.HasKey(x => new { x.AdminNotificationId, x.UserId });
+
+            entity.Property(x => x.ReadAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.UserId, x.ReadAt });
         });
     }
 

@@ -19,6 +19,7 @@ import { AuthService } from '../../../../../core/services/auth.service';
 import {
   TerritoryAssignableUser,
   TerritoryUser,
+  TerritoryUserAssignedRegion,
   TerritoryUserAvailableRegion,
   UserSortValue,
   UsersService,
@@ -90,6 +91,9 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
   removeTarget: TerritoryUser | null = null;
   isRemovingManagerRole = false;
   removeError: string | null = null;
+  removeRegionTarget: { user: TerritoryUser; region: TerritoryUserAssignedRegion } | null = null;
+  isRemovingRegion = false;
+  removeRegionError: string | null = null;
 
   addRegionalManagerOpen = false;
   regionalManagerUserSearch = '';
@@ -228,13 +232,12 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
   }
 
   get canOpenAddRegionalManager(): boolean {
-    const role = this.auth.getUser()?.role;
     return !!this.activeTerritoryId &&
-      (role === 'Territory Manager' || role === 'Territory Associate');
+      this.auth.canAccessTerritoryAdmin();
   }
 
   get canOpenAddTerritoryAssociate(): boolean {
-    return !!this.activeTerritoryId && this.auth.getUser()?.role === 'Territory Manager';
+    return !!this.activeTerritoryId && this.auth.isTerritoryManager();
   }
 
   get regionalManagerSelectableRegions(): TerritoryUserAvailableRegion[] {
@@ -265,6 +268,7 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
     return this.isSavingEdit ||
       this.isSavingRegionalManager ||
       this.isSavingAssociate ||
+      this.isRemovingRegion ||
       this.isRemovingManagerRole ||
       this.isRemovingAssociate;
   }
@@ -398,6 +402,10 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
     return user.canRemoveRegionalManagerRole ?? user.canRemoveManagerRole;
   }
 
+  canRemoveRegion(user: TerritoryUser, region: TerritoryUserAssignedRegion): boolean {
+    return !!(region.canRemove ?? user.canRemoveRegion ?? this.canRemoveRegionalManagerRole(user));
+  }
+
   openEditModal(user: TerritoryUser, event?: MouseEvent): void {
     event?.stopPropagation();
     if (!this.canEditUser(user)) return;
@@ -458,6 +466,7 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
     event?.stopPropagation();
     if (!user.canAddRegion || !this.activeTerritoryId) return;
 
+    this.viewUser = this.viewUser?.userId === user.userId ? null : this.viewUser;
     this.openEditModal(user);
   }
 
@@ -487,6 +496,57 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
   removePendingRegion(regionId: number): void {
     this.pendingRegions = this.pendingRegions.filter(region => region.regionId !== regionId);
     this.notifyStateChanged();
+  }
+
+  openRemoveRegionConfirm(
+    user: TerritoryUser,
+    region: TerritoryUserAssignedRegion,
+    event?: MouseEvent,
+  ): void {
+    event?.stopPropagation();
+    if (!this.canRemoveRegion(user, region)) return;
+
+    this.openDropdownUserId = null;
+    this.removeRegionTarget = { user, region };
+    this.removeRegionError = null;
+    this.notifyStateChanged();
+  }
+
+  closeRemoveRegionConfirm(): void {
+    if (this.isRemovingRegion) return;
+    this.removeRegionTarget = null;
+    this.removeRegionError = null;
+    this.notifyStateChanged();
+  }
+
+  confirmRemoveRegion(): void {
+    if (!this.removeRegionTarget || !this.activeTerritoryId || this.isRemovingRegion) return;
+
+    const { user, region } = this.removeRegionTarget;
+    this.isRemovingRegion = true;
+    this.removeRegionError = null;
+    this.notifyStateChanged();
+
+    this.svc.removeRegion$(user.userId, this.activeTerritoryId, region.regionId)
+      .pipe(
+        finalize(() => {
+          this.isRemovingRegion = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: updated => {
+          this.syncItemInList(updated);
+          this.editUser = this.editUser?.userId === updated.userId ? updated : this.editUser;
+          this.viewUser = this.viewUser?.userId === updated.userId ? updated : this.viewUser;
+          this.removeRegionTarget = null;
+          this.removeRegionError = null;
+          this.successMessage = `${region.displayName} was removed from ${updated.displayName}.`;
+        },
+        error: error => {
+          this.removeRegionError = this.toSafeMessage(error, 'Unable to remove this region assignment.');
+        },
+      });
   }
 
   openRemoveManagerConfirm(user: TerritoryUser, event?: MouseEvent): void {

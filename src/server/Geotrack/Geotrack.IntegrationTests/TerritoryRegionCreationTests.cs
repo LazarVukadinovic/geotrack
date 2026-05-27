@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
+using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Users;
@@ -205,6 +206,7 @@ public sealed class TerritoryRegionCreationTests
         Assert.False(context.Viewport.IsEmpty);
         Assert.Contains(context.ExistingRegions, item =>
             item.RegionId == fixture.ExistingRegionId &&
+            item.FeatureKind == "ExistingRegion" &&
             item.GeometryGeoJson is not null);
 
         var noBoundaryTerritoryId = await CreateAssignedTerritoryWithoutBoundaryAsync(app);
@@ -218,7 +220,351 @@ public sealed class TerritoryRegionCreationTests
             noBoundaryContext.BoundaryRequiredMessage);
     }
 
+    [Fact]
+    public async Task Import_local_adm1_stores_boundary_candidates_and_rerun_skips_valid_existing()
+    {
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = await WriteAdm1CandidateFileAsync(tempRoot);
+            await using var app = await GeotrackApiFactory.CreateAsync(
+                configurationOverrides: new Dictionary<string, string?>
+                {
+                    ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
+                });
+            await CreateAdm1CandidateFixtureAsync(app);
+
+            var firstRun = await ImportAdmBoundaryCandidatesAsync(app, "ADM1");
+            Assert.Equal(5, firstRun.TotalFeatures);
+            Assert.Equal(5, firstRun.ImportedCount);
+            Assert.Equal(0, firstRun.SkippedCount);
+            Assert.Equal(0, firstRun.FailedCount);
+
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var stored = await db.AdministrativeBoundaryCandidates
+                    .AsNoTracking()
+                    .Where(candidate => candidate.AdmLevel == "ADM1")
+                    .Select(candidate => new
+                    {
+                        candidate.ShapeId,
+                        candidate.ShapeName,
+                        candidate.ShapeGroup,
+                        candidate.CountryIso3,
+                        candidate.CountryTerritoryId,
+                        candidate.ExternalKey,
+                        BoundaryGeometry = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName),
+                        BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
+                    })
+                    .ToListAsync();
+
+                Assert.Equal(5, stored.Count);
+                var inside = Assert.Single(stored, item => item.ShapeId == "INSIDE-1");
+                Assert.Equal("Inside Region", inside.ShapeName);
+                Assert.Equal("TAA", inside.ShapeGroup);
+                Assert.Equal("TAA", inside.CountryIso3);
+                Assert.Equal("geoBoundaries:ADM1:TAA:INSIDE-1", inside.ExternalKey);
+                Assert.NotNull(inside.CountryTerritoryId);
+                Assert.NotNull(inside.BoundaryGeometry);
+                Assert.NotNull(inside.BoundaryDisplayGeometry);
+            }
+
+            var secondRun = await ImportAdmBoundaryCandidatesAsync(app, "ADM1");
+            Assert.Equal(5, secondRun.TotalFeatures);
+            Assert.Equal(0, secondRun.ImportedCount);
+            Assert.Equal(0, secondRun.UpdatedCount);
+            Assert.Equal(5, secondRun.SkippedCount);
+            Assert.Equal(0, secondRun.FailedCount);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Adm1_candidates_are_filtered_to_assigned_country_and_mark_existing_regions()
+    {
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = await WriteAdm1CandidateFileAsync(tempRoot);
+            await using var app = await GeotrackApiFactory.CreateAsync(
+                configurationOverrides: new Dictionary<string, string?>
+                {
+                    ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
+                });
+            var fixture = await CreateAdm1CandidateFixtureAsync(app, createExistingCandidateRegion: true);
+            await ImportAdmBoundaryCandidatesAsync(app, "ADM1");
+
+            using var anonymous = app.CreateClient();
+            var anonymousResponse = await anonymous.GetAsync(
+                $"/api/admin/territory/regions/boundary-candidates?territoryId={fixture.AssignedTerritoryId}&level=ADM1");
+            Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            var forbidden = await manager.GetAsync(
+                $"/api/admin/territory/regions/boundary-candidates?territoryId={fixture.UnassignedTerritoryId}&level=ADM1");
+            Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+            var response = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
+                $"/api/admin/territory/regions/boundary-candidates?territoryId={fixture.AssignedTerritoryId}&level=ADM1&take=10");
+
+            Assert.NotNull(response);
+            Assert.Equal("ADM1", response!.AdmLevel);
+            Assert.Equal("TAA", response.Iso3);
+            Assert.Equal(4, response.Items.Count);
+
+            var inferredResponse = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
+                "/api/admin/territory/regions/boundary-candidates?level=ADM1&take=1");
+            Assert.NotNull(inferredResponse);
+            Assert.Equal("TAA", inferredResponse!.Iso3);
+            Assert.Equal(4, inferredResponse.Items.Count);
+
+            var available = Assert.Single(response.Items, item => item.ShapeId == "INSIDE-1");
+            Assert.Equal("Available", available.Status);
+            Assert.Equal("Adm1Candidate", available.FeatureKind);
+            Assert.True(available.CanSelect);
+            Assert.True(available.HasBoundary);
+            Assert.True(available.HasDisplayBoundary);
+            Assert.Null(available.ExistingRegionId);
+            Assert.Equal("geoBoundaries:ADM1:TAA:INSIDE-1", available.BoundaryExternalKey);
+            Assert.Equal(available.ExternalKey, available.BoundaryExternalKey);
+            Assert.NotNull(available.GeometryGeoJson);
+
+            var existing = Assert.Single(response.Items, item => item.ShapeId == "EXISTING-1");
+            Assert.Equal("ExistingRegion", existing.Status);
+            Assert.False(existing.CanSelect);
+            Assert.Equal(fixture.ExistingRegionId, existing.ExistingRegionId);
+            Assert.Equal("Existing Region", existing.ExistingRegionName);
+            Assert.Equal("This administrative region has already been created.", existing.ValidationMessage);
+
+            var borderMismatch = Assert.Single(response.Items, item => item.ShapeId == "BORDER-MISMATCH-1");
+            Assert.Equal("Available", borderMismatch.Status);
+            Assert.True(borderMismatch.CanSelect);
+            Assert.True(borderMismatch.IsInsideAssignedTerritory);
+
+            var outside = Assert.Single(response.Items, item => item.ShapeId == "OUTSIDE-1");
+            Assert.Equal("InvalidOutsideTerritory", outside.Status);
+            Assert.False(outside.CanSelect);
+            Assert.False(outside.IsInsideAssignedTerritory);
+
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            var diagnostics = await admin.GetFromJsonAsync<BoundaryCandidateDiagnosticsDto>(
+                "/api/admin/territory/regions/boundary-candidates/diagnostics?countryIso3=TAA&level=ADM1");
+            Assert.NotNull(diagnostics);
+            Assert.Equal(4, diagnostics!.TotalCandidatesForIso3);
+            Assert.Equal(4, diagnostics.CandidatesWithDisplayGeometry);
+            Assert.Equal(2, diagnostics.CandidatesPassingStrictCovers);
+            Assert.Equal(3, diagnostics.CandidatesPassingIntersects);
+            Assert.Equal(1, diagnostics.CandidatesFilteredOutBySpatialCheck);
+            Assert.Equal(4, diagnostics.CandidatesReturned);
+            Assert.Equal(1, diagnostics.ExistingRegionMatches);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Create_region_from_adm1_candidate_stores_boundary_metadata_and_rejects_duplicates()
+    {
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = await WriteAdm1CandidateFileAsync(tempRoot);
+            await using var app = await GeotrackApiFactory.CreateAsync(
+                configurationOverrides: new Dictionary<string, string?>
+                {
+                    ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
+                });
+            var fixture = await CreateAdm1CandidateFixtureAsync(app);
+            await ImportAdmBoundaryCandidatesAsync(app, "ADM1");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+            var request = new TerritoryRegionCreateRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                AdmLevel = "ADM1",
+                ShapeGroup = "TAA",
+                CandidateExternalKey = "geoBoundaries:ADM1:TAA:INSIDE-1"
+            };
+
+            var response = await manager.PostAsJsonAsync("/api/admin/territory/regions", request);
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            var created = await response.Content.ReadFromJsonAsync<TerritoryRegionCreateResponseDto>();
+            Assert.NotNull(created);
+            Assert.Equal("Inside Region", created!.Name);
+            Assert.Equal("geoBoundaries", created.BoundarySource);
+            Assert.Equal("ADM1", created.BoundaryAdmLevel);
+            Assert.Equal("TAA", created.BoundaryShapeGroup);
+            Assert.Equal("INSIDE-1", created.BoundaryShapeId);
+            Assert.Equal("geoBoundaries:ADM1:TAA:INSIDE-1", created.BoundaryExternalKey);
+            Assert.Equal("gbOpen", created.BoundaryReleaseType);
+            Assert.NotNull(created.BoundaryCandidateId);
+            Assert.NotNull(created.BoundaryGeometryGeoJson);
+
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var stored = await db.Regions.SingleAsync(region => region.Id == created.RegionId);
+                Assert.Equal("geoBoundaries", stored.BoundarySource);
+                Assert.Equal("ADM1", stored.BoundaryAdmLevel);
+                Assert.Equal("TAA", stored.BoundaryShapeGroup);
+                Assert.Equal("INSIDE-1", stored.BoundaryShapeId);
+                Assert.Equal("geoBoundaries:ADM1:TAA:INSIDE-1", stored.BoundaryExternalKey);
+                Assert.Equal("gbOpen", stored.BoundaryReleaseType);
+                Assert.Equal("CC BY 4.0", stored.BoundaryLicense);
+                Assert.NotNull(stored.BoundaryImportedAt);
+                Assert.NotNull(stored.BoundaryCandidateId);
+                Assert.NotNull(db.Entry(stored).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue);
+            }
+
+            var duplicate = await manager.PostAsJsonAsync("/api/admin/territory/regions", request);
+            Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+
+            var borderMismatch = await manager.PostAsJsonAsync(
+                "/api/admin/territory/regions",
+                new TerritoryRegionCreateRequestDto
+                {
+                    TerritoryId = fixture.AssignedTerritoryId,
+                    Name = "Border Mismatch Region",
+                    AdmLevel = "ADM1",
+                    ShapeGroup = "TAA",
+                    ShapeId = "BORDER-MISMATCH-1"
+                });
+            Assert.Equal(HttpStatusCode.Created, borderMismatch.StatusCode);
+
+            var outside = await manager.PostAsJsonAsync(
+                "/api/admin/territory/regions",
+                new TerritoryRegionCreateRequestDto
+                {
+                    TerritoryId = fixture.AssignedTerritoryId,
+                    AdmLevel = "ADM1",
+                    ShapeGroup = "TAA",
+                    ShapeId = "OUTSIDE-1"
+                });
+            Assert.Equal(HttpStatusCode.BadRequest, outside.StatusCode);
+
+            var otherCountry = await manager.PostAsJsonAsync(
+                "/api/admin/territory/regions",
+                new TerritoryRegionCreateRequestDto
+                {
+                    TerritoryId = fixture.AssignedTerritoryId,
+                    AdmLevel = "ADM1",
+                    ShapeGroup = "TBB",
+                    ShapeId = "OTHER-1"
+                });
+            Assert.Equal(HttpStatusCode.BadRequest, otherCountry.StatusCode);
+
+            var unassigned = await manager.PostAsJsonAsync(
+                "/api/admin/territory/regions",
+                new TerritoryRegionCreateRequestDto
+                {
+                    TerritoryId = fixture.UnassignedTerritoryId,
+                    AdmLevel = "ADM1",
+                    ShapeGroup = "TAA",
+                    ShapeId = "INSIDE-1"
+                });
+            Assert.Equal(HttpStatusCode.Forbidden, unassigned.StatusCode);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string BoundaryDisplayGeometryPropertyName = "BoundaryDisplayGeometry";
+
+    private static string CreateTempBoundaryDirectory()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "geotrack-adm1-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private static async Task<string> WriteAdm1CandidateFileAsync(string tempRoot)
+    {
+        var adm1Path = Path.Combine(tempRoot, "local-adm1.geojson");
+        await File.WriteAllTextAsync(adm1Path, """
+            {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "properties": { "shapeName": "Inside Region", "shapeID": "INSIDE-1", "shapeGroup": "TAA", "shapeType": "ADM1" },
+                  "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0.2,0.2],[0.8,0.2],[0.8,0.8],[0.2,0.8],[0.2,0.2]]]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": { "shapeName": "Existing Region", "shapeID": "EXISTING-1", "shapeGroup": "TAA", "shapeType": "ADM1" },
+                  "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[1.0,1.0],[1.6,1.0],[1.6,1.6],[1.0,1.6],[1.0,1.0]]]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": { "shapeName": "Border Mismatch Region", "shapeID": "BORDER-MISMATCH-1", "shapeGroup": "TAA", "shapeType": "ADM1" },
+                  "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[-0.1,0.2],[0.6,0.2],[0.6,0.8],[-0.1,0.8],[-0.1,0.2]]]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": { "shapeName": "Outside Region", "shapeID": "OUTSIDE-1", "shapeGroup": "TAA", "shapeType": "ADM1" },
+                  "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[5.0,5.0],[6.0,5.0],[6.0,6.0],[5.0,6.0],[5.0,5.0]]]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": { "shapeName": "Other Country", "shapeID": "OTHER-1", "shapeGroup": "TBB", "shapeType": "ADM1" },
+                  "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0.2,0.2],[0.8,0.2],[0.8,0.8],[0.2,0.8],[0.2,0.2]]]
+                  }
+                }
+              ]
+            }
+            """);
+        return adm1Path;
+    }
+
+    private static async Task<BoundaryImportSummaryDto> ImportAdmBoundaryCandidatesAsync(
+        GeotrackApiFactory app,
+        string admLevel)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var import = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
+        return await import.ImportLocalBoundariesAsync(admLevel);
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch
+        {
+            // Temporary test directories are best-effort cleanup.
+        }
+    }
 
     private static TerritoryRegionCreateRequestDto BuildCreateRequest(
         int territoryId,
@@ -348,6 +694,101 @@ public sealed class TerritoryRegionCreationTests
             existingRegion?.Id);
     }
 
+    private static async Task<Adm1CandidateFixture> CreateAdm1CandidateFixtureAsync(
+        GeotrackApiFactory app,
+        bool createExistingCandidateRegion = false)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var now = DateTime.UtcNow;
+        var manager = await db.Users.SingleAsync(user => user.Email == "mika@gmail.com");
+
+        var assignedTerritory = new Territory
+        {
+            Name = $"ADM1 Candidate Assigned {Guid.NewGuid():N}",
+            TerritoryKind = TerritoryKinds.Country,
+            CountryIso3 = "TAA",
+            CreatedAt = now,
+            BoundaryShapeType = "Polygon",
+            BoundarySource = "geoBoundaries",
+            BoundaryAdmLevel = "ADM0"
+        };
+        var unassignedTerritory = new Territory
+        {
+            Name = $"ADM1 Candidate Unassigned {Guid.NewGuid():N}",
+            TerritoryKind = TerritoryKinds.Country,
+            CountryIso3 = "TBB",
+            CreatedAt = now,
+            BoundaryShapeType = "Polygon",
+            BoundarySource = "geoBoundaries",
+            BoundaryAdmLevel = "ADM0"
+        };
+
+        db.Territories.AddRange(assignedTerritory, unassignedTerritory);
+        await db.SaveChangesAsync();
+
+        SetBoundary(db, assignedTerritory, Polygon(
+            (0.0, 0.0),
+            (0.0, 2.0),
+            (2.0, 2.0),
+            (2.0, 0.0)));
+
+        SetBoundary(db, unassignedTerritory, Polygon(
+            (0.0, 0.0),
+            (0.0, 2.0),
+            (2.0, 2.0),
+            (2.0, 0.0)));
+
+        db.TerritoryManagerTerritories.Add(new TerritoryManagerTerritory
+        {
+            UserId = manager.Id,
+            TerritoryId = assignedTerritory.Id,
+            CreatedAt = now
+        });
+
+        Region? existingRegion = null;
+        if (createExistingCandidateRegion)
+        {
+            existingRegion = new Region
+            {
+                Name = "Existing Region",
+                TerritoryId = assignedTerritory.Id,
+                CreatedAt = now,
+                BoundaryShapeType = "Polygon",
+                BoundarySource = "geoBoundaries",
+                BoundaryAdmLevel = "ADM1",
+                BoundaryShapeGroup = "TAA",
+                BoundaryShapeId = "EXISTING-1",
+                BoundaryExternalKey = "geoBoundaries:ADM1:TAA:EXISTING-1",
+                BoundaryReleaseType = "gbOpen",
+                BoundaryLicense = "CC BY 4.0",
+                BoundaryImportedAt = now,
+                CreatedByUserId = manager.Id
+            };
+            db.Regions.Add(existingRegion);
+        }
+
+        await db.SaveChangesAsync();
+
+        if (existingRegion is not null)
+        {
+            db.Entry(existingRegion)
+                .Property<Geometry?>(BoundaryGeometryPropertyName)
+                .CurrentValue = Polygon(
+                    (1.0, 1.0),
+                    (1.0, 1.6),
+                    (1.6, 1.6),
+                    (1.6, 1.0));
+            await db.SaveChangesAsync();
+        }
+
+        return new Adm1CandidateFixture(
+            assignedTerritory.Id,
+            unassignedTerritory.Id,
+            existingRegion?.Id);
+    }
+
     private static async Task<int> CreateAssignedTerritoryWithoutBoundaryAsync(GeotrackApiFactory app)
     {
         await using var scope = app.Services.CreateAsyncScope();
@@ -459,5 +900,10 @@ public sealed class TerritoryRegionCreationTests
         int AssignedTerritoryId,
         int UnassignedTerritoryId,
         int ManagerUserId,
+        int? ExistingRegionId);
+
+    private sealed record Adm1CandidateFixture(
+        int AssignedTerritoryId,
+        int UnassignedTerritoryId,
         int? ExistingRegionId);
 }

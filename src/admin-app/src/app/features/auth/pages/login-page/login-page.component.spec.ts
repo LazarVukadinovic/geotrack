@@ -84,6 +84,33 @@ describe('LoginComponent', () => {
     expect(navigateSpy).toHaveBeenCalledWith('/territory/overview');
   });
 
+  it('redirects admin users to the existing administrator dashboard and not admin overview', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    component.email.set('zika@gmail.com');
+    component.password.set('Proba123!');
+    component.onSubmit();
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'admin-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 46,
+        email: 'zika@gmail.com',
+        displayName: 'Zika',
+        roles: ['Admin'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: false,
+      },
+    });
+
+    expect(navigateSpy).toHaveBeenCalledWith('/admin-dashboard');
+    expect(navigateSpy).not.toHaveBeenCalledWith('/admin/overview');
+  });
+
   it('shows a safe error when login fails', () => {
     component.email.set('regional@example.com');
     component.password.set('wrong-password');

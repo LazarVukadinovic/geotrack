@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Geotrack.Application.Analytics;
 using Geotrack.Application.DTOs.Auth;
@@ -187,6 +188,54 @@ public sealed class AnalyticsTests
             .ToListAsync();
         Assert.Single(events);
         Assert.Null(events[0].UserId);
+    }
+
+    [Fact]
+    public async Task Anonymous_batch_uses_x_anonymous_session_header_when_body_session_is_absent()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var sessionId = Guid.NewGuid();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/analytics/events")
+        {
+            Content = JsonContent.Create(new
+            {
+                events = new object[]
+                {
+                    new
+                    {
+                        eventType = AnalyticsEventTypes.PageView,
+                        route = "/explore",
+                    },
+                },
+            }),
+        };
+        request.Headers.TryAddWithoutValidation("X-Anonymous-Session", sessionId.ToString());
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        Assert.NotNull(await db.AnonymousSessions.FindAsync(sessionId));
+        var row = await db.AnalyticsEvents.SingleAsync(e => e.AnonymousSessionId == sessionId);
+        Assert.Equal(AnalyticsEventTypes.PageView, row.EventType);
+        Assert.Equal("/explore", row.Route);
+        Assert.Null(row.UserId);
+    }
+
+    [Fact]
+    public async Task Malformed_json_returns_bad_request_not_server_error()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+        using var content = new StringContent("{", Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("/api/analytics/events", content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

@@ -55,6 +55,13 @@ describe('RegionsService', () => {
               },
             ],
             healthScore: 82,
+            health: {
+              score: 82,
+              statusLabel: 'Healthy',
+              drivers: [],
+              issues: [],
+              recommendations: [],
+            },
             activityScore: 80,
             imageUrl: null,
             detailRoute: '/territory/regions/11',

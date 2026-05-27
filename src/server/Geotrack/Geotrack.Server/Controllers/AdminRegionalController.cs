@@ -22,6 +22,7 @@ public class AdminRegionalController : ControllerBase
     private readonly IRegionalPlaceService _places;
     private readonly IRegionalEventService _events;
     private readonly IRegionalMapService _map;
+    private readonly IRegionalScopeValidationService _scopeValidation;
     private readonly IRegionalAnalyticsService _analytics;
     private readonly IRegionalMediaService _media;
     private readonly ILogger<AdminRegionalController> _logger;
@@ -35,6 +36,7 @@ public class AdminRegionalController : ControllerBase
         IRegionalPlaceService places,
         IRegionalEventService events,
         IRegionalMapService map,
+        IRegionalScopeValidationService scopeValidation,
         IRegionalAnalyticsService analytics,
         IRegionalMediaService media,
         IContributionMediaStorageService mediaStorage,
@@ -47,6 +49,7 @@ public class AdminRegionalController : ControllerBase
         _places = places;
         _events = events;
         _map = map;
+        _scopeValidation = scopeValidation;
         _analytics = analytics;
         _media = media;
         _logger = logger;
@@ -331,6 +334,37 @@ public class AdminRegionalController : ControllerBase
         try
         {
             return Ok(await _map.SearchAsync(GetCurrentUserId(), regionId, query, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("validate-entity-location")]
+    public async Task<ActionResult<RegionalScopeValidationResultDto>> ValidateEntityLocation(
+        [FromBody] RegionalScopeValidationRequestDto? request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        if (request.RegionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        if (!request.Latitude.HasValue || !request.Longitude.HasValue)
+            return BadRequest(new { message = "latitude and longitude are required." });
+
+        try
+        {
+            return Ok(await _scopeValidation.ValidatePointAsync(
+                GetCurrentUserId(),
+                request.RegionId,
+                request.EntityType ?? "Location",
+                request.Latitude.Value,
+                request.Longitude.Value,
+                request.OperationType ?? "Create",
+                cancellationToken));
         }
         catch (Exception ex)
         {

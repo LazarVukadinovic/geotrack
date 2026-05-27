@@ -29,7 +29,6 @@ public class RegionalRequestQueueCountsByTypeDto
     public int Locations { get; set; }
     public int Places { get; set; }
     public int Events { get; set; }
-    public int Reviews { get; set; }
 }
 
 public class RegionalRequestQueueResponseDto
@@ -71,13 +70,6 @@ public class RegionalRequestQueueDetailDto : RegionalRequestQueueItemDto
     public string? OwnershipProofOriginalFileName { get; set; }
     public string? OwnershipProofContentType { get; set; }
     public DateTime? OwnershipProofUploadedAt { get; set; }
-    public string? ReviewComment { get; set; }
-    public double? ReviewRating { get; set; }
-    public DateTime? ReviewCreatedAt { get; set; }
-    public string? ReviewAuthorDisplayName { get; set; }
-    public string? ReportReason { get; set; }
-    public string? ReportNote { get; set; }
-    public string? Decision { get; set; }
     public string? DecisionNote { get; set; }
 }
 

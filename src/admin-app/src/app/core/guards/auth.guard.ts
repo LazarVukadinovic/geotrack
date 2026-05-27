@@ -37,6 +37,24 @@ export const administratorGuard: CanActivateFn = (_route, state) => {
   );
 };
 
+export const contentModeratorGuard: CanActivateFn = (_route, state) => {
+  const auth   = inject(AuthService);
+  const router = inject(Router);
+
+  if (auth.isContentModerator() && auth.hasValidAccessToken()) return true;
+  if (auth.getUser() && !auth.hasValidAccessToken()) {
+    auth.clearSession();
+    return loginTree(router, state, true);
+  }
+
+  return auth.restoreSession().pipe(
+    map(user => {
+      if (!user) return loginTree(router, state);
+      return auth.isContentModerator() ? true : router.parseUrl(auth.getHomeRoute());
+    }),
+  );
+};
+
 export const territoryManagerGuard: CanActivateFn = (_route, state) => {
   const auth   = inject(AuthService);
   const router = inject(Router);

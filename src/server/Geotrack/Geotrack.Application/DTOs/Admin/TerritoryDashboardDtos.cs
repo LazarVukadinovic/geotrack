@@ -42,6 +42,8 @@ public class TerritoryRegionHealthDto
     public int StaysCount { get; set; }
     public int EventsCount { get; set; }
     public int PendingRequestsCount { get; set; }
+    public int HealthScore { get; set; }
+    public TerritoryHealthDto Health { get; set; } = new();
     public int ActivityScore { get; set; }
     public List<TerritoryRegionManagerDto> AssignedManagers { get; set; } = new();
     public List<string> AssignedManagersPreview { get; set; } = new();
@@ -109,6 +111,7 @@ public class TerritoryRegionDirectoryItemDto
     public string? ManagerDisplayName { get; set; }
     public List<TerritoryRegionManagerDto> AssignedManagers { get; set; } = new();
     public int? HealthScore { get; set; }
+    public TerritoryHealthDto? Health { get; set; }
     public int ActivityScore { get; set; }
     public string? ImageUrl { get; set; }
     public string? DetailRoute { get; set; }
@@ -141,6 +144,12 @@ public class TerritoryRegionCreateRequestDto
 {
     public int TerritoryId { get; set; }
     public string? Name { get; set; }
+    public string? CandidateExternalKey { get; set; }
+    public string? BoundaryCandidateId { get; set; }
+    public string? BoundaryExternalKey { get; set; }
+    public string? ShapeGroup { get; set; }
+    public string? ShapeId { get; set; }
+    public string? AdmLevel { get; set; }
     public string? BoundarySource { get; set; }
     public long? OsmRelationId { get; set; }
     public int? OsmAdminLevel { get; set; }
@@ -158,6 +167,12 @@ public class TerritoryRegionCreateResponseDto
     public string Status { get; set; } = "Inactive";
     public string? BoundarySource { get; set; }
     public string? BoundaryShapeType { get; set; }
+    public string? BoundaryShapeGroup { get; set; }
+    public string? BoundaryShapeId { get; set; }
+    public string? BoundaryExternalKey { get; set; }
+    public string? BoundaryAdmLevel { get; set; }
+    public string? BoundaryReleaseType { get; set; }
+    public int? BoundaryCandidateId { get; set; }
     public TerritoryRegionGeometryDto? BoundaryGeometryGeoJson { get; set; }
     public DateTime CreatedAt { get; set; }
     public string? DetailRoute { get; set; }
@@ -175,6 +190,7 @@ public class TerritoryRegionCreateContextDto
 
 public class TerritoryRegionMapItemDto
 {
+    public string FeatureKind { get; set; } = "ExistingRegion";
     public int Id { get; set; }
     public int RegionId { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -260,16 +276,29 @@ public class TerritoryRegionSummaryDto
 public class TerritoryHealthDto
 {
     public int? Score { get; set; }
+    public string Status { get; set; } = "insufficient_data";
     public string StatusLabel { get; set; } = "Insufficient data";
+    public string? PeriodLabel { get; set; }
+    public DateTime CalculatedAt { get; set; }
     public List<TerritoryHealthInsightDto> Drivers { get; set; } = new();
+    public List<TerritoryHealthInsightDto> Issues { get; set; } = new();
     public List<TerritoryHealthInsightDto> Recommendations { get; set; } = new();
 }
 
 public class TerritoryHealthInsightDto
 {
+    public string? Key { get; set; }
     public string Label { get; set; } = string.Empty;
+    public string? Title { get; set; }
     public string Detail { get; set; } = string.Empty;
+    public string? Message { get; set; }
     public string Severity { get; set; } = "info";
+    public int? ScoreContribution { get; set; }
+    public int? MaxPoints { get; set; }
+    public string? Status { get; set; }
+    public string? RecommendationKey { get; set; }
+    public int? Priority { get; set; }
+    public string? ActionRoute { get; set; }
 }
 
 public class TerritoryRegionContentPreviewDto

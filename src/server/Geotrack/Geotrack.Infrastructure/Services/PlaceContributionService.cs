@@ -37,15 +37,18 @@ public class PlaceContributionService : IPlaceContributionService
     private readonly AppDbContext _db;
     private readonly IContributionMediaStorageService _mediaStorage;
     private readonly IUserNotificationService _notificationService;
+    private readonly IAdminNotificationService _adminNotificationService;
 
     public PlaceContributionService(
         AppDbContext db,
         IContributionMediaStorageService mediaStorage,
-        IUserNotificationService notificationService)
+        IUserNotificationService notificationService,
+        IAdminNotificationService adminNotificationService)
     {
         _db = db;
         _mediaStorage = mediaStorage;
         _notificationService = notificationService;
+        _adminNotificationService = adminNotificationService;
     }
 
     public async Task<GetPlaceContributionsResponseDto> GetForUserAsync(int userId)
@@ -66,7 +69,7 @@ public class PlaceContributionService : IPlaceContributionService
         var contribution = await BaseContributionQuery()
             .SingleOrDefaultAsync(c => c.Id == contributionId && c.UserId == userId);
 
-        return contribution is null ? null : MapDetail(contribution);
+        return contribution is null ? null : MapDetail(contribution, includeReviewNote: false);
     }
 
     public async Task<GetPlaceContributionsResponseDto> GetPendingReviewAsync(int? reviewerUserId = null)
@@ -95,7 +98,7 @@ public class PlaceContributionService : IPlaceContributionService
 
         var contribution = await query.SingleOrDefaultAsync();
 
-        return contribution is null ? null : MapDetail(contribution);
+        return contribution is null ? null : MapDetail(contribution, includeReviewNote: true);
     }
 
     public async Task<List<ContributionPlaceTypeDto>> GetPlaceTypesAsync()
@@ -265,9 +268,11 @@ public class PlaceContributionService : IPlaceContributionService
 
         _db.PlaceContributions.Add(contribution);
         await _db.SaveChangesAsync();
+        await _adminNotificationService.CreateTerritoryContributionPendingReviewNotificationAsync(contribution);
+        await _adminNotificationService.CreateRegionalContributionPendingReviewNotificationAsync(contribution);
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
-        return MapDetail(saved);
+        return MapDetail(saved, includeReviewNote: false);
     }
 
     public async Task<PlaceContributionDetailDto> UpdateAsync(
@@ -434,7 +439,7 @@ public class PlaceContributionService : IPlaceContributionService
         await _db.SaveChangesAsync();
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
-        return MapDetail(saved);
+        return MapDetail(saved, includeReviewNote: false);
     }
 
     public async Task DeleteAsync(int userId, int contributionId)
@@ -519,7 +524,7 @@ public class PlaceContributionService : IPlaceContributionService
         await _db.SaveChangesAsync();
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
-        return MapDetail(saved);
+        return MapDetail(saved, includeReviewNote: true);
     }
 
     public async Task<PlaceContributionDetailDto> RejectAsync(int contributionId, int reviewerUserId, string? note)
@@ -548,7 +553,7 @@ public class PlaceContributionService : IPlaceContributionService
         await _db.SaveChangesAsync();
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
-        return MapDetail(saved);
+        return MapDetail(saved, includeReviewNote: true);
     }
 
     private IQueryable<PlaceContribution> BaseContributionQuery()
@@ -1552,7 +1557,9 @@ public class PlaceContributionService : IPlaceContributionService
         };
     }
 
-    private static PlaceContributionDetailDto MapDetail(PlaceContribution contribution)
+    private static PlaceContributionDetailDto MapDetail(
+        PlaceContribution contribution,
+        bool includeReviewNote)
     {
         var listItem = MapListItem(contribution);
 
@@ -1617,7 +1624,7 @@ public class PlaceContributionService : IPlaceContributionService
                     ImageSize = image.ImageSize
                 })
                 .ToList(),
-            ReviewNote = contribution.ReviewNote,
+            ReviewNote = includeReviewNote ? contribution.ReviewNote : null,
             ReviewedAt = contribution.ReviewedAt,
             OwnershipProofDocumentUrl = contribution.OwnershipProofDocumentUrl,
             OwnershipProofOriginalFileName = contribution.OwnershipProofOriginalFileName,

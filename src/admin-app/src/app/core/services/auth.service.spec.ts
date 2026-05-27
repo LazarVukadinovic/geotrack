@@ -33,6 +33,8 @@ describe('AuthService', () => {
       resolved = true;
       expect(user.email).toBe('regional@example.com');
       expect(user.role).toBe('Regional Manager');
+      expect(user.avatarUrl).toBe('/media/uploads/avatars/regional.png');
+      expect(user.avatarVersion).toBe(101);
     });
 
     const request = http.expectOne('/api/admin/auth/login');
@@ -104,6 +106,173 @@ describe('AuthService', () => {
     expect(service.getHomeRoute()).toBe('/territory/overview');
   });
 
+  it('maps admin roles to the existing administrator dashboard route', () => {
+    service.login('zika@gmail.com', 'Proba123!').subscribe(user => {
+      expect(user.email).toBe('zika@gmail.com');
+      expect(user.role).toBe('Administrator');
+      expect(user.activeRoleCode).toBe('Admin');
+      expect(user.roles).toEqual(['Admin']);
+    });
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'admin-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 46,
+        email: 'zika@gmail.com',
+        displayName: 'Zika',
+        roles: ['Admin'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: false,
+      },
+    });
+
+    expect(service.isAdministrator()).toBe(true);
+    expect(service.isRegionalManager()).toBe(false);
+    expect(service.canAccessTerritoryAdmin()).toBe(false);
+    expect(service.getHomeRoute()).toBe('/admin-dashboard');
+  });
+
+  it('maps content moderator roles to the content moderator dashboard route', () => {
+    service.login('moderator@gmail.com', 'Proba123!').subscribe(user => {
+      expect(user.email).toBe('moderator@gmail.com');
+      expect(user.role).toBe('Content Moderator');
+      expect(user.activeRoleCode).toBe('ContentModerator');
+      expect(user.roles).toEqual(['ContentModerator']);
+    });
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'moderator-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 48,
+        email: 'moderator@gmail.com',
+        displayName: 'Content Moderator',
+        roles: ['ContentModerator'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: false,
+        canAccessContentModeration: true,
+      },
+    });
+
+    expect(service.isContentModerator()).toBe(true);
+    expect(service.isAdministrator()).toBe(false);
+    expect(service.getHomeRoute()).toBe('/content-moderator/dashboard');
+  });
+
+  it('gives admin role priority over a stored non-admin view during login', () => {
+    sessionStorage.setItem('geotrack_admin_active_view', 'RegionalManager');
+
+    service.login('zika@gmail.com', 'Proba123!').subscribe(user => {
+      expect(user.activeRoleCode).toBe('Admin');
+      expect(user.roles).toEqual(['Admin', 'RegionalManager']);
+    });
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'admin-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 47,
+        email: 'zika@gmail.com',
+        displayName: 'Zika',
+        roles: ['RegionalManager', 'Admin'],
+        canAccessRegionalAdmin: true,
+        canAccessTerritoryAdmin: false,
+      },
+    });
+
+    expect(service.getHomeRoute()).toBe('/admin-dashboard');
+    expect(sessionStorage.getItem('geotrack_admin_active_view')).toBe('Admin');
+  });
+
+  it('uses the existing territory-first redirect priority for multi-role admin users', () => {
+    service.login('multi@example.com', 'Proba123!').subscribe(user => {
+      expect(user.email).toBe('multi@example.com');
+      expect(user.role).toBe('Territory Manager');
+      expect(user.roles).toEqual(['TerritoryManager', 'RegionalManager']);
+    });
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'multi-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 44,
+        email: 'multi@example.com',
+        displayName: 'Multi Role',
+        roles: ['RegionalManager', 'TerritoryManager'],
+        canAccessRegionalAdmin: true,
+        canAccessTerritoryAdmin: true,
+      },
+    });
+
+    expect(service.getHomeRoute()).toBe('/territory/overview');
+  });
+
+  it('switches the active admin view only to a role owned by the current user', () => {
+    service.login('multi@example.com', 'Proba123!').subscribe();
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'multi-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 44,
+        email: 'multi@example.com',
+        displayName: 'Multi Role',
+        roles: ['TerritoryManager', 'RegionalManager'],
+        canAccessRegionalAdmin: true,
+        canAccessTerritoryAdmin: true,
+      },
+    });
+
+    expect(service.switchAdminView('RegionalManager')).toBe(true);
+    expect(service.getUser()?.role).toBe('Regional Manager');
+    expect(service.getHomeRoute()).toBe('/dashboard');
+    expect(sessionStorage.getItem('geotrack_admin_active_view')).toBe('RegionalManager');
+
+    expect(service.switchAdminView('Admin')).toBe(false);
+    expect(service.getUser()?.role).toBe('Regional Manager');
+  });
+
+  it('falls back from an invalid stored admin view during session restore', () => {
+    sessionStorage.setItem('geotrack_admin_session', '1');
+    sessionStorage.setItem('geotrack_admin_active_view', 'RegionalManager');
+
+    service.restoreSession().subscribe(user => {
+      expect(user?.role).toBe('Territory Associate');
+      expect(user?.activeRoleCode).toBe('TerritoryAssociate');
+    });
+
+    const request = http.expectOne('/api/admin/auth/refresh');
+    expect(request.request.method).toBe('POST');
+    request.flush({
+      accessToken: 'associate-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 45,
+        email: 'associate@example.com',
+        displayName: 'Associate User',
+        roles: ['TerritoryAssociate'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: true,
+      },
+    });
+
+    expect(sessionStorage.getItem('geotrack_admin_active_view')).toBe('TerritoryAssociate');
+    expect(service.getHomeRoute()).toBe('/territory/overview');
+  });
+
   it('uses a safe message for invalid credentials', () => {
     let message = '';
 
@@ -145,6 +314,8 @@ describe('AuthService', () => {
         id: 7,
         email: 'regional@example.com',
         displayName: 'Regional Manager',
+        avatarUrl: '/media/uploads/avatars/regional.png',
+        avatarVersion: 101,
         roles: ['RegionalManager'],
         canAccessRegionalAdmin: true,
         canAccessTerritoryAdmin: false,

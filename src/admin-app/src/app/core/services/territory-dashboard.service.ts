@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, shareReplay, tap } from 'rxjs';
 import {
+  BoundaryRegionCandidateResponse,
   TerritoryAssignedTerritory,
   TerritoryContentDirectoryResponse,
   TerritoryDashboardResponse,
@@ -89,6 +90,18 @@ export class TerritoryDashboardService {
   getRegionCreateContext(territoryId?: number | null): Observable<TerritoryRegionCreateContext> {
     return this.http.get<TerritoryRegionCreateContext>('/api/admin/territory/regions/create-context', {
       params: this.withTerritoryId(new HttpParams(), territoryId),
+    });
+  }
+
+  getRegionBoundaryCandidates(
+    territoryId?: number | null,
+    level = 'ADM1',
+  ): Observable<BoundaryRegionCandidateResponse> {
+    let params = this.withTerritoryId(new HttpParams(), territoryId)
+      .set('level', level);
+
+    return this.http.get<BoundaryRegionCandidateResponse>('/api/admin/territory/regions/boundary-candidates', {
+      params,
     });
   }
 

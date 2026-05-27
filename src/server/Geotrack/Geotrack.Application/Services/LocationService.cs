@@ -10,6 +10,7 @@ namespace Geotrack.Application.Services;
 public class LocationService : ILocationService
 {
     private const int SectionPreviewLimit = 5;
+    private const string PublishedStatus = "Published";
 
     private readonly ILocationRepository _locationRepository;
 
@@ -22,6 +23,8 @@ public class LocationService : ILocationService
     {
         var location = await _locationRepository.GetWithDetailsAsync(locationId)
             ?? throw new KeyNotFoundException("Locations not found");
+
+        EnsurePublished(location);
 
         var reviewsCount = await _locationRepository.CountReviewsByLocationIdAsync(locationId);
         var averageRating = reviewsCount > 0
@@ -61,6 +64,8 @@ public class LocationService : ILocationService
         var location = await _locationRepository.GetWithDetailsAsync(locationId)
             ?? throw new KeyNotFoundException("Locations not found");
 
+        EnsurePublished(location);
+
         var normalizedKey = sectionKey.Trim().ToLowerInvariant();
 
         var tag = location.LocationTags
@@ -75,12 +80,12 @@ public class LocationService : ILocationService
         if (tag != null)
         {
             places = location.Places
-                .Where(p => p.PlaceTags.Any(pt => pt.TagId == tag.Id))
+                .Where(p => p.Status == PublishedStatus && p.PlaceTags.Any(pt => pt.TagId == tag.Id))
                 .OrderBy(p => p.Name)
                 .ToList();
 
             events = location.Events
-                .Where(e => e.EventTags.Any(et => et.TagId == tag.Id))
+                .Where(e => e.Status == PublishedStatus && e.EventTags.Any(et => et.TagId == tag.Id))
                 .OrderBy(e => e.StartDate)
                 .ToList();
 
@@ -88,14 +93,20 @@ public class LocationService : ILocationService
         }
         else if (normalizedKey == "places")
         {
-            places = location.Places.OrderBy(p => p.Name).ToList();
+            places = location.Places
+                .Where(p => p.Status == PublishedStatus)
+                .OrderBy(p => p.Name)
+                .ToList();
             events = new List<Event>();
             title = "Places";
         }
         else if (normalizedKey == "events")
         {
             places = new List<Place>();
-            events = location.Events.OrderBy(e => e.StartDate).ToList();
+            events = location.Events
+                .Where(e => e.Status == PublishedStatus)
+                .OrderBy(e => e.StartDate)
+                .ToList();
             title = "Events";
         }
         else
@@ -121,6 +132,8 @@ public class LocationService : ILocationService
         var location = await _locationRepository.GetByIdAsync(locationId);
         if (location == null)
             throw new KeyNotFoundException("Locations not found");
+
+        EnsurePublished(location);
 
         var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
         var normalizedTake = ReviewPaging.NormalizeTake(take);
@@ -167,6 +180,8 @@ public class LocationService : ILocationService
         if (location == null)
             throw new KeyNotFoundException("Locations not found");
 
+        EnsurePublished(location);
+
         var alreadyReviewed = await _locationRepository.HasUserReviewedLocationAsync(locationId, userId);
         if (alreadyReviewed)
             throw new InvalidOperationException("User has already reviewed this location");
@@ -211,14 +226,14 @@ public class LocationService : ILocationService
         foreach (var tag in tags)
         {
             var places = location.Places
-                .Where(p => p.PlaceTags.Any(pt => pt.TagId == tag.Id))
+                .Where(p => p.Status == PublishedStatus && p.PlaceTags.Any(pt => pt.TagId == tag.Id))
                 .OrderBy(p => p.Name)
                 .Take(SectionPreviewLimit)
                 .Select(MapPlaceItem)
                 .ToList();
 
             var events = location.Events
-                .Where(e => e.EventTags.Any(et => et.TagId == tag.Id))
+                .Where(e => e.Status == PublishedStatus && e.EventTags.Any(et => et.TagId == tag.Id))
                 .OrderBy(e => e.StartDate)
                 .Take(SectionPreviewLimit)
                 .Select(MapEventItem)
@@ -243,6 +258,7 @@ public class LocationService : ILocationService
                 Key = "places",
                 Title = "Places",
                 Places = location.Places
+                    .Where(p => p.Status == PublishedStatus)
                     .OrderBy(p => p.Name)
                     .Take(SectionPreviewLimit)
                     .Select(MapPlaceItem)
@@ -256,6 +272,7 @@ public class LocationService : ILocationService
                 Title = "Events",
                 Places = new List<LocationSectionPlaceItemDto>(),
                 Events = location.Events
+                    .Where(e => e.Status == PublishedStatus)
                     .OrderBy(e => e.StartDate)
                     .Take(SectionPreviewLimit)
                     .Select(MapEventItem)
@@ -287,5 +304,12 @@ public class LocationService : ILocationService
             StartDate = @event.StartDate,
             EndDate = @event.EndDate
         };
+    }
+
+    private static void EnsurePublished(Location location)
+    {
+        if (location.Status != PublishedStatus ||
+            (location.Destination is not null && location.Destination.Status != PublishedStatus))
+            throw new KeyNotFoundException("Locations not found");
     }
 }

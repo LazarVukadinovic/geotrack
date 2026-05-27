@@ -266,7 +266,7 @@ public static class DemoRegionalManagerSeeder
     private static bool IsExpectedDemoRegionName(string name)
     {
         var normalized = name.Trim().ToLowerInvariant();
-        return normalized is "dalmatia" or "dalmacija";
+        return normalized is "dubrovnik-neretva" or "dubrovnik neretva" or "dalmatia" or "dalmacija";
     }
 }
 

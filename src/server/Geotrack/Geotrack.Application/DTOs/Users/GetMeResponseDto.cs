@@ -15,6 +15,7 @@ public class GetMeResponseDto
     public string LastName { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
     public string? AvatarUrl { get; set; }
+    public long? AvatarVersion { get; set; }
     public string? Location { get; set; }
     public bool NeedsInterestsOnboarding { get; set; }
     public bool AnalyticsEnabled { get; set; }

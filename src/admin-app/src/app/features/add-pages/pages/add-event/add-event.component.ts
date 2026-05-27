@@ -13,13 +13,15 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, Subscription } from 'rxjs';
+import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
+import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
+import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import {
   RegionalEventCreateRequest,
   RegionalEventParentDestinationDto,
@@ -29,6 +31,13 @@ import {
   RegionalEventTypeDto,
 } from '../../../../core/models/event.model';
 import { EventsListService } from '../../../../core/services/events-list.service';
+import {
+  applyAssignedRegionViewport,
+  assignedRegionZone,
+  createRegionalMapPinIcon,
+  isPreciseAssignedRegionBoundary,
+  renderAssignedRegionBoundary,
+} from '../../shared/regional-creation-map';
 
 declare const L: any;
 
@@ -80,6 +89,10 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   isSaving = false;
   errorMessage: string | null = null;
   feedbackMessage: string | null = null;
+  regionBoundaryMissingMessage: string | null = null;
+  scopeValidationMessage: string | null = null;
+  scopeValidationTone: 'success' | 'warning' | 'error' | null = null;
+  scopeValidationPending = false;
 
   eventTitle = '';
   eventTypeId: number | null = null;
@@ -131,13 +144,19 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   classificationExpanded = false;
 
   private miniMap: any = null;
+  private miniRegionBoundaryLayer: any = null;
   private miniMarker: any = null;
   private subscriptions: Subscription[] = [];
+  private regionMapSubscription: Subscription | null = null;
+  private validationSubscription: Subscription | null = null;
   private parentSubscription: Subscription | null = null;
   private tagSearchSubscription: Subscription | null = null;
   private createSubscription: Subscription | null = null;
   private tagSearchHandle: ReturnType<typeof setTimeout> | null = null;
   private readonly knownTags = new Map<number, RegionalEventTagDto>();
+  private regionViewport: AdminMapViewport | null = null;
+  private regionBoundaryZone: AdminMapZone | null = null;
+  private scopeValidationResult: RegionalScopeValidationResult | null = null;
 
   constructor(
     private readonly zone: NgZone,
@@ -148,6 +167,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly auth: AuthService,
     private readonly lightboxService: LightboxService,
     private readonly eventsService: EventsListService,
+    private readonly adminMapService: AdminMapService,
   ) {}
 
   ngOnInit(): void {
@@ -162,6 +182,8 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subscriptions.forEach(subscription => subscription.unsubscribe());
+    this.regionMapSubscription?.unsubscribe();
+    this.validationSubscription?.unsubscribe();
     this.parentSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
@@ -273,7 +295,15 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       Boolean(this.parentDestination) &&
       Boolean(this.cardImageFile) &&
       Boolean(this.coverImageFile) &&
+      !this.regionBoundaryMissingMessage &&
+      !this.scopeValidationPending &&
+      this.scopeValidationResult?.isAllowed === true &&
+      !this.isScopeValidationRejected &&
       this.hasSelectedParent();
+  }
+
+  get isScopeValidationRejected(): boolean {
+    return this.scopeValidationResult?.isAllowed === false;
   }
 
   private get selectedParentGeo(): { latitude?: number | null; longitude?: number | null } | null {
@@ -287,6 +317,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.activeRegionId = regionId;
     sessionStorage.setItem(NewEventComponent.activeRegionStorageKey, String(regionId));
     this.resetParentSelection();
+    this.loadAssignedRegionMap(regionId);
     this.loadParentOptions();
     this.cdr.markForCheck();
   }
@@ -311,6 +342,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.updateMiniMapFromSelection();
+    this.validateSelectedParentLocation();
     this.cdr.markForCheck();
   }
 
@@ -498,6 +530,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
           this.activeRegionId = this.resolveInitialRegionId(this.assignedRegions);
           if (this.activeRegionId) {
             sessionStorage.setItem(NewEventComponent.activeRegionStorageKey, String(this.activeRegionId));
+            this.loadAssignedRegionMap(this.activeRegionId);
             this.loadParentOptions();
           } else {
             this.errorMessage = 'No assigned region is available for this account.';
@@ -512,6 +545,38 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
         },
       });
     this.subscriptions.push(subscription);
+  }
+
+  private loadAssignedRegionMap(regionId: number): void {
+    this.regionMapSubscription?.unsubscribe();
+    this.regionBoundaryMissingMessage = null;
+    this.regionViewport = null;
+    this.regionBoundaryZone = null;
+    this.clearScopeValidation();
+
+    this.regionMapSubscription = forkJoin({
+      viewport: this.adminMapService.getViewport(regionId),
+      zones: this.adminMapService.getZones(regionId),
+    }).subscribe({
+      next: ({ viewport, zones }) => {
+        this.regionViewport = viewport;
+        this.regionBoundaryZone = assignedRegionZone(zones);
+        this.regionBoundaryMissingMessage = isPreciseAssignedRegionBoundary(this.regionBoundaryZone)
+          ? null
+          : 'Assigned region boundary is missing. Please contact an administrator.';
+        this.refreshMiniRegionBoundaryLayer();
+        this.updateMiniMapFromSelection();
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.regionViewport = null;
+        this.regionBoundaryZone = null;
+        this.regionBoundaryMissingMessage = 'Assigned region boundary is missing. Please contact an administrator.';
+        this.refreshMiniRegionBoundaryLayer();
+        this.updateMiniMapFromSelection();
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   private loadEventTypes(): void {
@@ -681,6 +746,18 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
+    if (this.isScopeValidationRejected) {
+      this.errorMessage = this.scopeValidationMessage ?? 'Selected event parent is outside your allowed regional scope.';
+      return null;
+    }
+
+    if (this.scopeValidationPending || this.scopeValidationResult?.isAllowed !== true) {
+      this.errorMessage = this.scopeValidationPending
+        ? 'Event parent validation is still running.'
+        : this.scopeValidationMessage ?? 'Selected event parent could not be validated against your assigned regional scope.';
+      return null;
+    }
+
     const startsAt = this.combineDateTime(this.startDate, this.allDay ? '00:00' : this.startTime);
     const endsAt = this.combineDateTime(this.endDate, this.allDay ? '00:00' : this.endTime);
     if (!startsAt || !endsAt) {
@@ -780,6 +857,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedDestinationId = null;
     this.selectedLocationId = null;
     this.selectedPlaceId = null;
+    this.clearScopeValidation();
     this.updateMiniMapFromSelection();
   }
 
@@ -857,9 +935,19 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       doubleClickZoom: false,
       touchZoom: false,
       attributionControl: false,
-    }).setView([44.0, 20.9], 7);
+    });
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.miniMap);
+    this.refreshMiniRegionBoundaryLayer();
     this.updateMiniMapFromSelection();
+  }
+
+  private refreshMiniRegionBoundaryLayer(): void {
+    this.miniRegionBoundaryLayer = renderAssignedRegionBoundary(
+      typeof L === 'undefined' ? null : L,
+      this.miniMap,
+      this.miniRegionBoundaryLayer,
+      this.regionBoundaryZone,
+    );
   }
 
   private updateMiniMapFromSelection(): void {
@@ -873,12 +961,113 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     const latitude = this.selectedParentLatitude;
     const longitude = this.selectedParentLongitude;
     if (latitude === null || longitude === null) {
-      this.miniMap.setView([44.0, 20.9], 7);
+      applyAssignedRegionViewport(this.miniMap, this.regionViewport, 7, 11);
       return;
     }
 
-    this.miniMarker = L.marker([latitude, longitude], { draggable: false }).addTo(this.miniMap);
+    this.miniMarker = L.marker([latitude, longitude], {
+      draggable: false,
+      icon: createRegionalMapPinIcon(L),
+    }).addTo(this.miniMap);
     this.miniMap.setView([latitude, longitude], this.venueType === 'destination' ? 10 : 13);
+  }
+
+  private validateSelectedParentLocation(): void {
+    const latitude = this.selectedParentLatitude;
+    const longitude = this.selectedParentLongitude;
+    if (!this.activeRegionId || latitude === null || longitude === null) {
+      this.clearScopeValidation();
+      return;
+    }
+
+    this.validationSubscription?.unsubscribe();
+    this.scopeValidationResult = null;
+    this.scopeValidationTone = null;
+    this.scopeValidationMessage = null;
+    this.scopeValidationPending = true;
+    this.cdr.markForCheck();
+    this.validationSubscription = this.adminMapService.validateEntityLocation({
+      regionId: this.activeRegionId,
+      entityType: 'Event',
+      operationType: 'Create',
+      latitude,
+      longitude,
+      destinationId: this.parentDestination?.id ?? null,
+      locationId: this.venueType === 'location'
+        ? this.selectedLocationId
+        : this.venueType === 'place'
+          ? this.selectedPlace?.locationId ?? null
+          : null,
+      placeId: this.venueType === 'place' ? this.selectedPlaceId : null,
+      parentEntityType: this.toBackendParentType(this.venueType),
+    }).subscribe({
+      next: result => {
+        this.scopeValidationPending = false;
+        this.applyScopeValidationResult(result);
+        this.cdr.markForCheck();
+      },
+      error: error => {
+        this.scopeValidationPending = false;
+        this.scopeValidationResult = null;
+        this.scopeValidationTone = 'error';
+        this.scopeValidationMessage = this.extractErrorMessage(
+          error,
+          'Unable to validate this event parent against your assigned region.',
+        );
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  private applyScopeValidationResult(result: RegionalScopeValidationResult): void {
+    this.scopeValidationResult = result;
+
+    if (result.isAllowed) {
+      if (
+        result.validationMode === 'AllowedWithinToleranceInsideAssignedCountry' ||
+        result.validationMode === 'AllowedWithinToleranceOutsideRegion'
+      ) {
+        this.scopeValidationTone = 'success';
+        this.scopeValidationMessage = result.message ||
+          'This location is slightly outside your assigned region but remains inside your assigned country/territory and does not belong to another region, so it is allowed.';
+        return;
+      }
+
+      this.scopeValidationTone = null;
+      this.scopeValidationMessage = null;
+      return;
+    }
+
+    if (result.validationMode === 'RejectedInsideAnotherRegion') {
+      this.scopeValidationTone = 'error';
+      this.scopeValidationMessage = result.message ||
+        'This location belongs to another region and cannot be managed from your account.';
+      return;
+    }
+
+    if (result.validationMode === 'RejectedOutsideAssignedCountry') {
+      this.scopeValidationTone = 'error';
+      this.scopeValidationMessage = result.message || 'This location is outside your assigned country/territory.';
+      return;
+    }
+
+    if (!result.isAllowed) {
+      this.scopeValidationTone = 'error';
+      this.scopeValidationMessage = result.message || 'This event parent is outside your assigned region.';
+      return;
+    }
+
+    this.scopeValidationTone = null;
+    this.scopeValidationMessage = null;
+  }
+
+  private clearScopeValidation(): void {
+    this.scopeValidationResult = null;
+    this.scopeValidationMessage = null;
+    this.scopeValidationTone = null;
+    this.scopeValidationPending = false;
+    this.validationSubscription?.unsubscribe();
+    this.validationSubscription = null;
   }
 
   private extractErrorMessage(error: unknown, fallback: string): string {

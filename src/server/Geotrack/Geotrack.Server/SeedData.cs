@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Geotrack.Application.Services;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
@@ -9,18 +11,39 @@ using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Geometry = NetTopologySuite.Geometries.Geometry;
 
 namespace Geotrack.Server;
 
 public static class SeedData
 {
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string BoundaryDisplayGeometryPropertyName = "BoundaryDisplayGeometry";
+    private const string GeoBoundariesBoundarySource = "geoBoundaries";
+    private const string GeoBoundariesReleaseType = "gbOpen";
+    private const string GeoBoundariesLicense = "CC BY 4.0";
+    private const string Adm1BoundaryLevel = "ADM1";
+    private const string CroatiaIso3 = "HRV";
+    private const string CroatiaSeedRegionName = "Dubrovnik-Neretva";
+    private const string LegacyCroatiaSeedRegionName = "Dalmatia";
     private const string DemoRegionalManagerEmail = "pera@gmail.com";
     private const string DemoRegionalManagerPassword = "Proba123!";
     private const string DemoRegionalManagerUsername = "pera";
     private const string RegionalManagerRoleName = "RegionalManager";
-    private const string DemoRegionalManagerRegionName = "Dalmatia";
+    private const string DemoRegionalManagerRegionName = CroatiaSeedRegionName;
 
     private static readonly SemaphoreSlim InitializationLock = new(1, 1);
+
+    private static readonly Dictionary<string, Dictionary<string, string>> SeedRegionBoundaryAliases =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["HRV"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                // Keep the legacy seed alias for repairing existing development/test databases.
+                ["Dalmatia"] = "Dubrovnik-Neretva",
+                ["Dubrovnik"] = "Dubrovnik-Neretva"
+            }
+        };
 
     private static readonly HashSet<string> ManagedDestinationDiscoveryTagTypeSlugs = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -105,6 +128,7 @@ public static class SeedData
             await EnsureSerbiaDemoDataAsync(db, tagLookup1);
             await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup1);
             await EnsureCoreEntityImagesAsync(db);
+            await EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(db);
             await EnsureDefaultModerationTermsAsync(db);
             return;
         }
@@ -270,24 +294,10 @@ public static class SeedData
             return partner;
         }
 
-        var croatia = new Territory
-        {
-            Name = "Croatia",
-            CreatedAt = now
-        };
-
-        db.Territories.Add(croatia);
+        var croatia = await EnsureCroatiaTerritoryAsync(db, now);
         await db.SaveChangesAsync();
 
-        var dalmatia = new Region
-        {
-            Name = "Dalmatia",
-            TerritoryId = croatia.Id,
-            CreatedAt = now
-        };
-
-        db.Regions.Add(dalmatia);
-        await db.SaveChangesAsync();
+        var croatiaSeedRegion = await EnsureCroatiaSeedRegionAsync(db, croatia, now);
 
         var cityType = await EnsureDestinationTypeAsync("City", "Urban destination");
 
@@ -295,7 +305,7 @@ public static class SeedData
         {
             Name = "Dubrovnik",
             DestinationTypeId = cityType.Id,
-            RegionId = dalmatia.Id,
+            RegionId = croatiaSeedRegion.Id,
             Description = "A compact Adriatic heritage city known for stone walls, coastal views and island escapes.",
             Latitude = 42.6507,
             Longitude = 18.0944,
@@ -938,8 +948,338 @@ public static class SeedData
         await EnsureAdditionalExploreDemoDataAsync(db, tagLookup);
         await EnsureSerbiaDemoDataAsync(db, tagLookup);
         await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup);
+        await EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(db);
         await EnsureDefaultModerationTermsAsync(db);
     }
+
+    private static async Task EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(AppDbContext db)
+    {
+        if (!await db.AdministrativeBoundaryCandidates.AnyAsync())
+        {
+            return;
+        }
+
+        var regions = await db.Regions
+            .Where(region =>
+                region.BoundaryCandidateId == null ||
+                region.BoundaryExternalKey == null ||
+                region.BoundaryShapeGroup == null ||
+                region.BoundaryShapeId == null ||
+                region.BoundaryAdmLevel != Adm1BoundaryLevel ||
+                EF.Property<Geometry?>(region, BoundaryGeometryPropertyName) == null)
+            .Select(region => new SeedRegionBoundaryRow
+            {
+                RegionId = region.Id,
+                RegionName = region.Name,
+                CountryIso3 = region.Territory.CountryIso3
+            })
+            .ToListAsync();
+
+        foreach (var region in regions)
+        {
+            if (string.IsNullOrWhiteSpace(region.CountryIso3))
+            {
+                continue;
+            }
+
+            var candidates = await db.AdministrativeBoundaryCandidates
+                .Where(candidate =>
+                    candidate.Source == GeoBoundariesBoundarySource &&
+                    candidate.AdmLevel == Adm1BoundaryLevel &&
+                    candidate.CountryIso3 == region.CountryIso3)
+                .Select(candidate => new SeedCandidateBoundaryRow
+                {
+                    CandidateId = candidate.Id,
+                    ReleaseType = candidate.ReleaseType,
+                    ShapeGroup = candidate.ShapeGroup,
+                    ShapeId = candidate.ShapeId,
+                    ShapeName = candidate.ShapeName,
+                    ShapeType = candidate.ShapeType,
+                    ExternalKey = candidate.ExternalKey,
+                    BoundaryGeometry = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName),
+                    BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
+                })
+                .ToListAsync();
+
+            var matchedCandidate = ResolveSeedBoundaryCandidate(region, candidates);
+            if (matchedCandidate is null || matchedCandidate.BoundaryGeometry is null)
+            {
+                continue;
+            }
+
+            var matchedGeometry = matchedCandidate.BoundaryGeometry!;
+            var trackedRegion = await db.Regions.SingleAsync(existing => existing.Id == region.RegionId);
+            var now = DateTime.UtcNow;
+            trackedRegion.BoundaryCandidateId = matchedCandidate.CandidateId;
+            trackedRegion.BoundaryExternalKey = matchedCandidate.ExternalKey;
+            trackedRegion.BoundaryShapeGroup = matchedCandidate.ShapeGroup;
+            trackedRegion.BoundaryShapeId = matchedCandidate.ShapeId;
+            trackedRegion.BoundaryShapeType = matchedGeometry.GeometryType;
+            trackedRegion.BoundaryAdmLevel = Adm1BoundaryLevel;
+            trackedRegion.BoundarySource = GeoBoundariesBoundarySource;
+            trackedRegion.BoundaryReleaseType = string.IsNullOrWhiteSpace(matchedCandidate.ReleaseType)
+                ? GeoBoundariesReleaseType
+                : matchedCandidate.ReleaseType;
+            trackedRegion.BoundaryLicense = GeoBoundariesLicense;
+            trackedRegion.BoundaryImportedAt = now;
+            trackedRegion.UpdatedAt = now;
+
+            db.Entry(trackedRegion)
+                .Property<Geometry?>(BoundaryGeometryPropertyName)
+                .CurrentValue = matchedGeometry.Copy();
+
+            if (RegionHasDisplayGeometryProperty(db) && matchedCandidate.BoundaryDisplayGeometry is not null)
+            {
+                db.Entry(trackedRegion)
+                    .Property<Geometry?>(BoundaryDisplayGeometryPropertyName)
+                    .CurrentValue = matchedCandidate.BoundaryDisplayGeometry.Copy();
+            }
+
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task<Territory> EnsureCroatiaTerritoryAsync(AppDbContext db, DateTime now)
+    {
+        var territory = await db.Territories
+            .FirstOrDefaultAsync(item => item.CountryIso3 == "HRV")
+            ?? await db.Territories.FirstOrDefaultAsync(item => item.CountryCode == "HR")
+            ?? await db.Territories.FirstOrDefaultAsync(item => item.Name == "Croatia");
+
+        if (territory is null)
+        {
+            territory = new Territory
+            {
+                Name = "Croatia",
+                CountryCode = "HR",
+                CountryIso3 = "HRV",
+                TerritoryKind = TerritoryKinds.Country,
+                CreatedAt = now
+            };
+
+            db.Territories.Add(territory);
+            return territory;
+        }
+
+        territory.Name = "Croatia";
+        territory.CountryCode = "HR";
+        territory.CountryIso3 = "HRV";
+        territory.TerritoryKind = TerritoryKinds.Country;
+        territory.UpdatedAt ??= now;
+        return territory;
+    }
+
+    private static async Task<Region> EnsureCroatiaSeedRegionAsync(
+        AppDbContext db,
+        Territory croatia,
+        DateTime now)
+    {
+        var region = await db.Regions
+            .FirstOrDefaultAsync(item =>
+                item.TerritoryId == croatia.Id &&
+                item.Name == CroatiaSeedRegionName);
+
+        if (region is null)
+        {
+            var legacySeedRegion = await db.Regions
+                .FirstOrDefaultAsync(item =>
+                    item.TerritoryId == croatia.Id &&
+                    item.Name == LegacyCroatiaSeedRegionName);
+
+            if (legacySeedRegion is not null &&
+                !await db.Regions.AnyAsync(item =>
+                    item.TerritoryId == croatia.Id &&
+                    item.Name == CroatiaSeedRegionName))
+            {
+                region = legacySeedRegion;
+                region.Name = CroatiaSeedRegionName;
+                region.UpdatedAt = now;
+            }
+        }
+
+        if (region is null)
+        {
+            region = new Region
+            {
+                Name = CroatiaSeedRegionName,
+                TerritoryId = croatia.Id,
+                CreatedAt = now
+            };
+
+            db.Regions.Add(region);
+        }
+
+        var candidate = await FindCroatiaSeedAdm1CandidateAsync(db);
+        if (candidate is not null)
+        {
+            ApplySeedBoundaryCandidate(db, region, candidate, now);
+        }
+
+        await db.SaveChangesAsync();
+        return region;
+    }
+
+    private static async Task<SeedCandidateBoundaryRow?> FindCroatiaSeedAdm1CandidateAsync(AppDbContext db)
+    {
+        var candidates = await db.AdministrativeBoundaryCandidates
+            .Where(candidate =>
+                candidate.Source == GeoBoundariesBoundarySource &&
+                candidate.AdmLevel == Adm1BoundaryLevel &&
+                candidate.CountryIso3 == CroatiaIso3)
+            .Select(candidate => new SeedCandidateBoundaryRow
+            {
+                CandidateId = candidate.Id,
+                ReleaseType = candidate.ReleaseType,
+                ShapeGroup = candidate.ShapeGroup,
+                ShapeId = candidate.ShapeId,
+                ShapeName = candidate.ShapeName,
+                ShapeType = candidate.ShapeType,
+                ExternalKey = candidate.ExternalKey,
+                BoundaryGeometry = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName),
+                BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
+            })
+            .ToListAsync();
+
+        return ResolveSeedBoundaryCandidate(
+            new SeedRegionBoundaryRow
+            {
+                RegionName = CroatiaSeedRegionName,
+                CountryIso3 = CroatiaIso3
+            },
+            candidates);
+    }
+
+    private static void ApplySeedBoundaryCandidate(
+        AppDbContext db,
+        Region region,
+        SeedCandidateBoundaryRow candidate,
+        DateTime now)
+    {
+        if (candidate.BoundaryGeometry is null)
+        {
+            return;
+        }
+
+        var boundaryGeometry = candidate.BoundaryGeometry.Copy();
+        region.BoundaryCandidateId = candidate.CandidateId;
+        region.BoundaryExternalKey = candidate.ExternalKey;
+        region.BoundaryShapeGroup = candidate.ShapeGroup;
+        region.BoundaryShapeId = candidate.ShapeId;
+        region.BoundaryShapeType = boundaryGeometry.GeometryType;
+        region.BoundaryAdmLevel = Adm1BoundaryLevel;
+        region.BoundarySource = GeoBoundariesBoundarySource;
+        region.BoundaryReleaseType = string.IsNullOrWhiteSpace(candidate.ReleaseType)
+            ? GeoBoundariesReleaseType
+            : candidate.ReleaseType;
+        region.BoundaryLicense = GeoBoundariesLicense;
+        region.BoundaryImportedAt = now;
+        region.UpdatedAt = region.CreatedAt == now ? null : now;
+
+        db.Entry(region)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = boundaryGeometry;
+
+        if (RegionHasDisplayGeometryProperty(db) && candidate.BoundaryDisplayGeometry is not null)
+        {
+            db.Entry(region)
+                .Property<Geometry?>(BoundaryDisplayGeometryPropertyName)
+                .CurrentValue = candidate.BoundaryDisplayGeometry.Copy();
+        }
+    }
+
+    private static bool RegionHasDisplayGeometryProperty(AppDbContext db) =>
+        db.Model
+            .FindEntityType(typeof(Region))
+            ?.FindProperty(BoundaryDisplayGeometryPropertyName) is not null;
+
+    private static SeedCandidateBoundaryRow? ResolveSeedBoundaryCandidate(
+        SeedRegionBoundaryRow region,
+        List<SeedCandidateBoundaryRow> candidates)
+    {
+        var normalizedRegionName = NormalizeSeedBoundaryName(region.RegionName);
+        var exactMatch = ResolveUniqueSeedCandidate(candidates
+            .Where(candidate => NormalizeSeedBoundaryName(candidate.ShapeName) == normalizedRegionName));
+        if (exactMatch is not null)
+        {
+            return exactMatch;
+        }
+
+        var aliasTarget = ResolveSeedBoundaryAlias(region.CountryIso3, region.RegionName);
+        if (string.IsNullOrWhiteSpace(aliasTarget))
+        {
+            return null;
+        }
+
+        var normalizedAliasTarget = NormalizeSeedBoundaryName(aliasTarget);
+        return ResolveUniqueSeedCandidate(candidates
+            .Where(candidate =>
+                string.Equals(candidate.ExternalKey, aliasTarget, StringComparison.OrdinalIgnoreCase) ||
+                NormalizeSeedBoundaryName(candidate.ShapeName) == normalizedAliasTarget));
+    }
+
+    private static SeedCandidateBoundaryRow? ResolveUniqueSeedCandidate(
+        IEnumerable<SeedCandidateBoundaryRow> candidates)
+    {
+        var matches = candidates
+            .Take(2)
+            .ToList();
+
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    private static string? ResolveSeedBoundaryAlias(string? countryIso3, string regionName)
+    {
+        if (string.IsNullOrWhiteSpace(countryIso3) ||
+            string.IsNullOrWhiteSpace(regionName) ||
+            !SeedRegionBoundaryAliases.TryGetValue(countryIso3, out var countryAliases))
+        {
+            return null;
+        }
+
+        var normalizedRegionName = NormalizeSeedBoundaryName(regionName);
+        return countryAliases
+            .FirstOrDefault(pair => NormalizeSeedBoundaryName(pair.Key) == normalizedRegionName)
+            .Value;
+    }
+
+    private static string NormalizeSeedBoundaryName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var decomposed = value.Trim().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        var previousWasSpace = false;
+
+        foreach (var ch in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch) || ch is '-' or '_' || IsUnicodeDash(ch))
+            {
+                if (!previousWasSpace)
+                {
+                    builder.Append(' ');
+                    previousWasSpace = true;
+                }
+
+                continue;
+            }
+
+            builder.Append(char.ToLowerInvariant(ch));
+            previousWasSpace = false;
+        }
+
+        return builder.ToString().Normalize(NormalizationForm.FormC).Trim();
+    }
+
+    private static bool IsUnicodeDash(char ch) =>
+        ch is '\u2010' or '\u2011' or '\u2012' or '\u2013' or '\u2014';
 
     private static async Task RemoveDeprecatedActivityPlaceTypeAsync(AppDbContext db)
     {
@@ -1125,7 +1465,7 @@ public static class SeedData
         }
 
         await AddTerritoryImagesIfMissingAsync("Croatia", Unsplash("1500530855697-b586d89ba3ee"));
-        await AddRegionImagesIfMissingAsync("Dalmatia", Unsplash("1507525428034-b723cf961d3e"));
+        await AddRegionImagesIfMissingAsync(CroatiaSeedRegionName, Unsplash("1507525428034-b723cf961d3e"));
         await AddDestinationImagesIfMissingAsync("Dubrovnik", Unsplash("1555990793-77610ee3d7c2"), SeedMedia("dubrovnik-old-town"));
 
         await AddLocationImagesIfMissingAsync("Old Town", SeedMedia("dubrovnik-old-town"));
@@ -2189,6 +2529,8 @@ public static class SeedData
             territory = new Territory
             {
                 Name = name,
+                CountryCode = string.Equals(name, "Croatia", StringComparison.OrdinalIgnoreCase) ? "HR" : null,
+                CountryIso3 = string.Equals(name, "Croatia", StringComparison.OrdinalIgnoreCase) ? "HRV" : null,
                 CreatedAt = now
             };
 
@@ -4094,6 +4436,7 @@ public static class SeedData
     private static async Task EnsureRolesAsync(AppDbContext db)
     {
         await EnsureRoleAsync(db, "Admin", "Can manage users and administrative configuration.");
+        await EnsureRoleAsync(db, "ContentModerator", "Can moderate reported reviews and content.");
         await EnsureRoleAsync(db, "RegionalManager", "Can review and approve regional user contributions.");
         await EnsureRoleAsync(db, "TerritoryManager", "Can manage territories and assigned regions.");
         await EnsureRoleAsync(db, "TerritoryAssociate", "Can manage assigned territories except associate assignment and protected role removal.");
@@ -4341,6 +4684,26 @@ public static class SeedData
         {
             await db.SaveChangesAsync();
         }
+    }
+
+    private sealed class SeedRegionBoundaryRow
+    {
+        public int RegionId { get; set; }
+        public string RegionName { get; set; } = string.Empty;
+        public string? CountryIso3 { get; set; }
+    }
+
+    private sealed class SeedCandidateBoundaryRow
+    {
+        public int CandidateId { get; set; }
+        public string ReleaseType { get; set; } = string.Empty;
+        public string ShapeGroup { get; set; } = string.Empty;
+        public string ShapeId { get; set; } = string.Empty;
+        public string ShapeName { get; set; } = string.Empty;
+        public string? ShapeType { get; set; }
+        public string ExternalKey { get; set; } = string.Empty;
+        public Geometry? BoundaryGeometry { get; set; }
+        public Geometry? BoundaryDisplayGeometry { get; set; }
     }
 
     private static string NormalizeKey(string value) =>

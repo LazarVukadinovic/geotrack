@@ -87,6 +87,10 @@ public sealed class TerritoryDashboardTests
         Assert.Equal(1, health.StaysCount);
         Assert.Equal(2, health.EventsCount);
         Assert.Equal(1, health.PendingRequestsCount);
+        Assert.InRange(health.HealthScore, 0, 100);
+        Assert.Equal(health.HealthScore, health.Health.Score);
+        Assert.Equal(health.HealthScore, health.ActivityScore);
+        Assert.NotEmpty(health.Health.Drivers);
         Assert.InRange(health.ActivityScore, 0, 100);
         Assert.False(string.IsNullOrWhiteSpace(health.ManagerDisplayName));
         Assert.Contains(health.AssignedManagers, manager =>
@@ -129,6 +133,9 @@ public sealed class TerritoryDashboardTests
         Assert.Equal(fixture.AssignedRegionId, region.Id);
         Assert.Equal(2, region.DestinationsCount);
         Assert.Equal(1, region.StaysCount);
+        Assert.NotNull(region.Health);
+        Assert.Equal(region.HealthScore, region.Health!.Score);
+        Assert.Equal(region.HealthScore, region.ActivityScore);
         Assert.Contains(region.AssignedManagers, manager =>
             manager.AvatarUrl == "/media/uploads/avatars/elena-territory-test.png");
 
@@ -248,6 +255,22 @@ public sealed class TerritoryDashboardTests
             item.Id == fixture.UpcomingEventId &&
             item.PublicDetailRoute == $"/events/{fixture.UpcomingEventId}");
 
+        var dashboard = await client.GetFromJsonAsync<TerritoryDashboardDto>(
+            $"/api/admin/territory/dashboard?territoryId={fixture.AssignedTerritoryId}");
+        var dashboardHealth = Assert.Single(dashboard!.RegionsHealth);
+        var regionList = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}");
+        var regionRow = Assert.Single(regionList!.Items);
+        var analytics = await client.GetFromJsonAsync<TerritoryAnalyticsOverviewDto>(
+            $"/api/admin/territory/analytics/overview?territoryId={fixture.AssignedTerritoryId}&period=1m&take=5");
+        var analyticsRow = Assert.Single(analytics!.RegionalPerformance.Items);
+
+        Assert.Equal(dashboardHealth.HealthScore, regionRow.HealthScore);
+        Assert.Equal(dashboardHealth.HealthScore, detail.Health.Score);
+        Assert.Equal(dashboardHealth.HealthScore, analyticsRow.HealthScore);
+        Assert.Equal(analyticsRow.HealthScore, analyticsRow.QualityScore);
+        Assert.Equal(dashboardHealth.HealthScore, analytics.TopRegion!.HealthScore);
+
         var destination = await AssertRegionContentContainsAsync(
             client,
             fixture.AssignedTerritoryId,
@@ -304,10 +327,22 @@ public sealed class TerritoryDashboardTests
         var destination = Assert.Single(content!.Items, item => item.Id == fixture.AssignedDestinationId);
         Assert.NotNull(destination.Health);
         Assert.InRange(destination.Health!.Score ?? 0, 0, 100);
+        Assert.Contains(destination.Health.Issues, issue =>
+            issue.Label.Contains("Missing boundary", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(destination.Health.Issues, issue =>
+            issue.Label.Contains("No reviews", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(destination.Health.Recommendations, recommendation =>
-            recommendation.Detail.Contains("hero image", StringComparison.OrdinalIgnoreCase) ||
-            recommendation.Detail.Contains("tags", StringComparison.OrdinalIgnoreCase) ||
-            recommendation.Detail.Contains("boundary", StringComparison.OrdinalIgnoreCase));
+            recommendation.Detail.Contains("boundary", StringComparison.OrdinalIgnoreCase) ||
+            recommendation.Detail.Contains("reviews", StringComparison.OrdinalIgnoreCase));
+
+        var noViewsDestination = Assert.Single(content.Items, item =>
+            item.Name.Contains("Recent Territory Destination", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(noViewsDestination.Health!.Issues, issue =>
+            issue.Label.Contains("No recent views", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(noViewsDestination.Health!.Issues, issue =>
+            issue.Label.Contains("Pending requests", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(noViewsDestination.Health!.Recommendations, recommendation =>
+            recommendation.Detail.Contains("pending", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -332,7 +367,10 @@ public sealed class TerritoryDashboardTests
         Assert.Empty(detail.Content.Places);
         Assert.Empty(detail.Content.Stays);
         Assert.Empty(detail.Content.Events);
-        Assert.True(detail.Health.Score is null or >= 0);
+        Assert.Equal(0, detail.Health.Score);
+        Assert.Equal("Critical", detail.Health.StatusLabel);
+        Assert.Contains(detail.Health.Issues, issue =>
+            issue.Label.Contains("No regional content", StringComparison.OrdinalIgnoreCase));
 
         var content = await client.GetFromJsonAsync<TerritoryRegionContentResponseDto>(
             $"/api/admin/territory/regions/{regionId}/content?territoryId={territoryId}&entityType=destinations&skip=0&take=25");

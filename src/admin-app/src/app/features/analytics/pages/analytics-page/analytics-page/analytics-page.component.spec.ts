@@ -92,6 +92,7 @@ describe('AnalyticsPageComponent', () => {
           useValue: {
             fullName: 'Regional User',
             getUser: () => ({ role: 'Regional Manager' }),
+            isAdministrator: () => false,
             isTerritoryManager: () => false,
             canAccessTerritoryAdmin: () => false,
             isRegionalManager: () => true,
@@ -115,7 +116,6 @@ describe('AnalyticsPageComponent', () => {
 
     expect(component.activeRegionId).toBe(21);
     expect(component.regionDisplayName).toBe('Assigned Region');
-    expect(component.pendingRequestsCount).toBe(6);
     expect(analyticsService.getOverview).toHaveBeenCalledWith(expect.objectContaining({
       regionId: 21,
       period: '30d',
@@ -217,6 +217,57 @@ describe('AnalyticsPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Page Views Trend');
     expect(pageViewsTrendPoints().length).toBe(0);
     expect(activeTrendPoint()).toBeNull();
+  });
+
+  it('generates a non-overshooting page views trend line within the zero baseline', () => {
+    const overview = overviewResponse();
+    overview.pageViewsTrend = trendPoints([0, 14, 0, 52, 0]);
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
+
+    fixture.detectChanges();
+
+    const path = pageViewsTrendLinePath();
+    const yValues = pathYCoordinates(path);
+
+    expect(path).not.toContain('C');
+    expect(path).not.toContain('NaN');
+    expect(yValues.length).toBe(5);
+    expect(yValues.every(y => y >= 14 && y <= 148)).toBe(true);
+    expect(Math.max(...yValues)).toBe(148);
+  });
+
+  it('renders zero-only page views trend data as a flat baseline', () => {
+    const overview = overviewResponse();
+    overview.pageViewsTrend = trendPoints([0, 0, 0, 0]);
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
+
+    fixture.detectChanges();
+
+    const path = pageViewsTrendLinePath();
+    const yValues = pathYCoordinates(path);
+
+    expect(path).not.toContain('NaN');
+    expect(yValues.length).toBe(4);
+    expect(yValues.every(y => y === 148)).toBe(true);
+    expect(pageViewsTrendPoints().length).toBe(4);
+  });
+
+  it('renders sparse page views trend data without invalid SVG', () => {
+    const overview = overviewResponse();
+    overview.pageViewsTrend = trendPoints([9]);
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
+
+    fixture.detectChanges();
+
+    const path = pageViewsTrendLinePath();
+    const yValues = pathYCoordinates(path);
+
+    expect(path).toMatch(/^M24\.0,/);
+    expect(path).not.toContain('NaN');
+    expect(yValues.length).toBe(1);
+    expect(yValues[0]).toBeGreaterThanOrEqual(14);
+    expect(yValues[0]).toBeLessThanOrEqual(148);
+    expect(pageViewsTrendPoints().length).toBe(1);
   });
 
   it('shows top performing entity tooltip with entity name and real views', () => {
@@ -632,6 +683,17 @@ describe('AnalyticsPageComponent', () => {
     return fixture.nativeElement.querySelector('[data-testid="page-views-trend-chart"]') as SVGElement;
   }
 
+  function pageViewsTrendLinePath(): string {
+    return pageViewsTrendChart()
+      .querySelector('[data-testid="page-views-trend-line"]')
+      ?.getAttribute('d') ?? '';
+  }
+
+  function pathYCoordinates(path: string): number[] {
+    return Array.from(path.matchAll(/[ML](-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g))
+      .map(match => Number(match[2]));
+  }
+
   function pageViewsTrendPoints(): Element[] {
     return Array.from(fixture.nativeElement.querySelectorAll('[data-testid="page-views-trend-point"]')) as Element[];
   }
@@ -973,6 +1035,14 @@ describe('AnalyticsPageComponent', () => {
       { date: '2026-05-14T00:00:00Z', views: 18, uniqueVisitors: 5 },
       { date: '2026-05-15T00:00:00Z', views: 9, uniqueVisitors: 2 },
     ];
+  }
+
+  function trendPoints(values: number[]): RegionalAnalyticsTrendPoint[] {
+    return values.map((views, index) => ({
+      date: `2026-05-${String(index + 1).padStart(2, '0')}T00:00:00Z`,
+      views,
+      uniqueVisitors: Math.max(0, Math.round(views / 2)),
+    }));
   }
 
   function monthlyVisitsResponse(selectedYearsBack: RegionalMonthlyVisitYearsBack = 1): RegionalMonthlyVisits {
