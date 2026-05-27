@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import { DestinationService } from '../../../core/services/destination.service';
@@ -52,8 +52,10 @@ export class LocalPlacesService {
   private readonly _hasMore = signal(false);
   private readonly _nextSkip = signal(0);
   private loadedDestinationId: number | null = null;
+  private loadedKey: string | null = null;
   private requestLatitude: number | null = null;
   private requestLongitude: number | null = null;
+  private requestDistanceOrigin: 'current-location' | 'destination-centre' = 'destination-centre';
   private requestVersion = 0;
 
   readonly categories = this._categories.asReadonly();
@@ -67,9 +69,18 @@ export class LocalPlacesService {
     void this.exploreSvc;
     effect(() => {
       const destId = this.destinationSvc.id();
-      if (destId == null || destId === this.loadedDestinationId) return;
-      this.resetForDestination(destId);
-      this.loadPage(destId, 0, FIRST_PAGE_SIZE, false);
+      const mode = this.destinationSvc.mode();
+      const loc = this.locationSvc.location();
+      if (destId == null) return;
+      const key = this.buildLoadKey(destId, mode, loc);
+      if (key === this.loadedKey) return;
+      // If GPS is still resolving, only skip if we already have data for this destination
+      if (key.endsWith(':pending') && (this.loadedKey?.startsWith(`${destId}:`) ?? false)) return;
+      this.loadedKey = key;
+      untracked(() => {
+        this.resetForDestination(destId);
+        this.loadPage(destId, 0, FIRST_PAGE_SIZE, false);
+      });
     });
   }
 
@@ -140,7 +151,8 @@ export class LocalPlacesService {
     let params = new HttpParams()
       .set('destinationId', destinationId)
       .set('skip', skip)
-      .set('take', take);
+      .set('take', take)
+      .set('distanceOrigin', this.requestDistanceOrigin);
 
     if (this.requestLatitude != null && this.requestLongitude != null) {
       params = params
@@ -157,12 +169,22 @@ export class LocalPlacesService {
       this.destinationSvc.longitude() != null) {
       this.requestLatitude = this.destinationSvc.latitude();
       this.requestLongitude = this.destinationSvc.longitude();
+      this.requestDistanceOrigin = 'destination-centre';
       return;
     }
 
     const loc = this.locationSvc.location();
     this.requestLatitude = loc?.latitude ?? null;
     this.requestLongitude = loc?.longitude ?? null;
+    this.requestDistanceOrigin = loc ? 'current-location' : 'destination-centre';
+  }
+
+  private buildLoadKey(destId: number, mode: string, loc: { latitude: number; longitude: number } | null): string {
+    if (mode === 'location') {
+      if (loc) return `${destId}:gps:${loc.latitude.toFixed(4)}:${loc.longitude.toFixed(4)}`;
+      return `${destId}:pending`;
+    }
+    return `${destId}:dest`;
   }
 
   private mergeCategories(current: LocalPlacesCategory[], next: LocalPlacesCategory[]): LocalPlacesCategory[] {

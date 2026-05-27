@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { delay, Observable, of } from 'rxjs';
 import { DestinationService } from '../../../core/services/destination.service';
@@ -53,23 +53,35 @@ export class LocalPlacesCategoryService {
   private readonly _loadedKeys = new Set<string>();
   private readonly _pendingKeys = signal<string[]>([]);
   private loadedDestinationId: number | null = null;
+  private loadedLocationKey: string | null = null;
 
   constructor() {
     void this.exploreSvc;
     effect(() => {
       const destId = this.destinationSvc.id();
+      const mode = this.destinationSvc.mode();
+      const loc = this.locationSvc.location();
       if (destId == null) return;
-      if (destId !== this.loadedDestinationId) {
-        this.resetForDestination(destId);
+      const locationKey = this.buildLocationKey(destId, mode, loc);
+      const destChanged = destId !== this.loadedDestinationId;
+      // Skip if GPS is still resolving AND we already have data for this destination
+      const isPending = locationKey.endsWith(':pending');
+      const alreadyLoadedForDest = this.loadedLocationKey?.startsWith(`${destId}:`) ?? false;
+      const locationChanged = !isPending && locationKey !== this.loadedLocationKey;
+      if (destChanged || locationChanged) {
+        untracked(() => this.resetForDestination(destId));
+        this.loadedLocationKey = isPending && alreadyLoadedForDest ? this.loadedLocationKey : locationKey;
       }
       const pending = this._pendingKeys();
       if (pending.length === 0) return;
-      for (const key of pending) {
-        if (this._loadedKeys.has(key)) continue;
-        this._loadedKeys.add(key);
-        this.fetchCategory(key, destId, 0, FIRST_PAGE_SIZE, false);
-      }
-      this._pendingKeys.set([]);
+      untracked(() => {
+        for (const key of pending) {
+          if (this._loadedKeys.has(key)) continue;
+          this._loadedKeys.add(key);
+          this.fetchCategory(key, destId, 0, FIRST_PAGE_SIZE, false);
+        }
+        this._pendingKeys.set([]);
+      });
     });
   }
 
@@ -161,14 +173,29 @@ export class LocalPlacesCategoryService {
       .set('skip', skip)
       .set('take', take);
 
-    const loc = this.locationSvc.location();
-    if (loc) {
-      params = params
-        .set('latitude', loc.latitude)
-        .set('longitude', loc.longitude);
+    if (this.destinationSvc.mode() === 'location') {
+      const loc = this.locationSvc.location();
+      if (loc) {
+        params = params
+          .set('latitude', loc.latitude)
+          .set('longitude', loc.longitude)
+          .set('distanceOrigin', 'current-location');
+      } else {
+        params = params.set('distanceOrigin', 'destination-centre');
+      }
+    } else {
+      params = params.set('distanceOrigin', 'destination-centre');
     }
 
     return params;
+  }
+
+  private buildLocationKey(destId: number, mode: string, loc: { latitude: number; longitude: number } | null): string {
+    if (mode === 'location') {
+      if (loc) return `${destId}:gps:${loc.latitude.toFixed(4)}:${loc.longitude.toFixed(4)}`;
+      return `${destId}:pending`;
+    }
+    return `${destId}:dest`;
   }
 
   private mapItems(items: ApiPlaceListItem[], startIndex: number): PlaceCategoryItem[] {

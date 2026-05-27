@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectorRef, Component, OnDestroy } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, NgZone, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -150,6 +150,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   constructor(
     public router: Router,
     private readonly cdr: ChangeDetectorRef,
+    private readonly ngZone: NgZone,
     private readonly mapApi: MapApiService,
     private readonly analytics: AnalyticsService,
     private readonly locationSvc: LocationService,
@@ -427,16 +428,16 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.cdr.detectChanges();
 
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => this.handleLocationSuccess(coords.latitude, coords.longitude),
+      ({ coords }) => this.ngZone.run(() => this.handleLocationSuccess(coords.latitude, coords.longitude)),
       (err) => {
         if (err.code === GeolocationPositionError.PERMISSION_DENIED) {
-          void this.handleLocateFallback();
+          this.ngZone.run(() => void this.handleLocateFallback());
           return;
         }
 
         navigator.geolocation.getCurrentPosition(
-          ({ coords }) => this.handleLocationSuccess(coords.latitude, coords.longitude),
-          () => void this.handleLocateFallback(),
+          ({ coords }) => this.ngZone.run(() => this.handleLocationSuccess(coords.latitude, coords.longitude)),
+          () => this.ngZone.run(() => void this.handleLocateFallback()),
           { timeout: 15_000, maximumAge: 0, enableHighAccuracy: true },
         );
       },
@@ -1641,6 +1642,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.routeErrorMessage = ''; this.routeInfoMessage = '';
     this.clearRoute();
     this.noDataModalDismissed = false;
+
+    if (!this.map) return;
 
     this.map.resize();
     this.map.flyTo({

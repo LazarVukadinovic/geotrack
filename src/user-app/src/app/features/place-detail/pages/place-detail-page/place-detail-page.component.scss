@@ -257,6 +257,7 @@
   color: #1a2b4c;
 
   &--open { color: #0d9488; }
+  &--closed { color: #dc2626; }
 }
 
 .pd__stat-sub {
@@ -440,12 +441,6 @@
 
 // ─── Opening Hours ────────────────────────────────────────────────────────────
 
-.pd__hours-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .pd__hours-icon {
   width: 18px;
   height: 18px;
@@ -453,10 +448,16 @@
   color: #e8570a;
 }
 
-.pd__hours-text {
+.pd__hours-24h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pd__hours-24h-text {
   font-size: 14px;
   color: #1a2b4c;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .pd__hours-toggle {
@@ -471,8 +472,6 @@
   font: inherit;
   text-align: left;
   gap: 10px;
-
-  .pd__hours-row { flex: 1; }
 
   &:focus-visible {
     outline: 2px solid #e8570a;

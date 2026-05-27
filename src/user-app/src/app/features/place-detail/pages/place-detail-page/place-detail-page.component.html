@@ -127,7 +127,7 @@
             </div>
           }
 
-          @if (p.openStatus) {
+          @if (computedOpenStatus()) {
             <span class="pd__stat-dot" aria-hidden="true"></span>
 
             <div class="pd__stat">
@@ -136,7 +136,11 @@
                 <path stroke="currentColor" fill="none" stroke-width="2"
                       stroke-linecap="round" d="M12 6v6l4 2"/>
               </svg>
-              <span class="pd__stat-val pd__stat-val--open">{{ p.openStatus }}</span>
+              <span class="pd__stat-val"
+                [class.pd__stat-val--open]="computedOpenStatus() === 'Open now'"
+                [class.pd__stat-val--closed]="computedOpenStatus() === 'Closed now'">
+                {{ computedOpenStatus() }}
+              </span>
             </div>
           }
         </div>
@@ -245,41 +249,48 @@
               <section class="pd__section pd__section--hours">
                 <h2 class="pd__section-title">Opening Hours</h2>
 
-                <button
-                  type="button"
-                  class="pd__hours-toggle"
-                  [class.pd__hours-toggle--open]="hoursExpanded()"
-                  (click)="hoursExpanded.set(!hoursExpanded())"
-                  [attr.aria-expanded]="hoursExpanded()"
-                >
-                  <div class="pd__hours-row">
+                @if (is24Hours()) {
+                  <div class="pd__hours-24h">
                     <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
                       <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
                     </svg>
-                    <span class="pd__hours-text">Opening hours</span>
+                    <span class="pd__hours-24h-text">Open 24 hours</span>
                   </div>
-                  <svg class="pd__hours-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                          stroke-linejoin="round" d="M6 9l6 6 6-6"/>
-                  </svg>
-                </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="pd__hours-toggle"
+                    [class.pd__hours-toggle--open]="hoursExpanded()"
+                    (click)="hoursExpanded.set(!hoursExpanded())"
+                    [attr.aria-expanded]="hoursExpanded()"
+                  >
+                    <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
+                    </svg>
+                    <svg class="pd__hours-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                            stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
 
-                @if (hoursExpanded()) {
-                  <div class="pd__hours-schedule">
-                    @if (p.openingHoursSchedule && p.openingHoursSchedule.length > 0) {
-                      @for (day of p.openingHoursSchedule; track day.day) {
+                  @if (hoursExpanded()) {
+                    <div class="pd__hours-schedule">
+                      @if (p.openingHoursSchedule && p.openingHoursSchedule.length > 0) {
+                        @for (day of p.openingHoursSchedule; track day.day) {
+                          <div class="pd__hours-day">
+                            <span class="pd__hours-day-name">{{ day.day }}</span>
+                            <span class="pd__hours-day-val">{{ day.hours }}</span>
+                          </div>
+                        }
+                      } @else {
                         <div class="pd__hours-day">
-                          <span class="pd__hours-day-name">{{ day.day }}</span>
-                          <span class="pd__hours-day-val">{{ day.hours }}</span>
+                          <span class="pd__hours-day-val">{{ p.openingHours }}</span>
                         </div>
                       }
-                    } @else {
-                      <div class="pd__hours-day">
-                        <span class="pd__hours-day-val">{{ p.openingHours }}</span>
-                      </div>
-                    }
-                  </div>
+                    </div>
+                  }
                 }
               </section>
             }

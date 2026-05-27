@@ -273,7 +273,7 @@
                   </div>
                 </div>
 
-                <div class="ed__info-row">
+                <div class="ed__info-row" [class.ed__info-row--has-ticket-link]="ticketUrl()">
                   <span class="ed__info-icon" aria-hidden="true">
                     <!-- Ticket -->
                     <svg viewBox="0 0 24 24" fill="none">
@@ -285,31 +285,23 @@
                   <div class="ed__info-text">
                     <span class="ed__info-label">Ticket</span>
                     <span class="ed__info-value">{{ ev.info.ticket }}</span>
+                    @if (ticketUrl()) {
+                      <a
+                        class="ed__buy-tickets-inline"
+                        [href]="ticketUrl()"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Buy Tickets
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                        </svg>
+                      </a>
+                    }
                   </div>
                 </div>
-
-                @if (ticketUrl()) {
-                  <div class="ed__buy-tickets-row">
-                    <a
-                      class="ed__cta ed__cta--primary ed__cta--full"
-                      [href]="ticketUrl()"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                              stroke-linejoin="round"
-                              d="M2 9a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4V9Z"/>
-                      </svg>
-                      Buy Tickets
-                      <svg class="ed__cta-external-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                              stroke-linejoin="round"
-                              d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
-                      </svg>
-                    </a>
-                  </div>
-                }
 
                 <div class="ed__info-row">
                   <span class="ed__info-icon" aria-hidden="true">
@@ -317,7 +309,7 @@
                     <svg viewBox="0 0 24 24" fill="none">
                       <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
                             stroke-linejoin="round"
-                            d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12m5 10H7m10-10L12 12M7 22v-4.17a2 2 0 0 1 .59-1.42L12 12M7 2v4.17a2 2 0 0 0 .59 1.42L12 12m-5-10h10"/>
+                            d="M5 2h14M5 22h14M6 2v4.17a2 2 0 0 0 .59 1.42L12 12l-5.41 4.41A2 2 0 0 0 6 17.83V22M18 2v4.17a2 2 0 0 1-.59 1.42L12 12l5.41 4.41A2 2 0 0 1 18 17.83V22"/>
                     </svg>
                   </span>
                   <div class="ed__info-text">
