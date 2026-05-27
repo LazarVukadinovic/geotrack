@@ -85,4 +85,76 @@ describe('AdminNotificationsService', () => {
 
     expect(service.unreadCount()).toBe(0);
   });
+
+  it('passes the active audience role for Territory Manager notifications', () => {
+    service.getNotifications$({
+      audienceRole: 'TerritoryManager',
+      includeRead: true,
+      skip: 0,
+      take: 25,
+    }).subscribe();
+
+    const request = http.expectOne(req =>
+      req.url === '/api/admin/notifications' &&
+      req.params.get('audienceRole') === 'TerritoryManager');
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      items: [],
+      unreadCount: 0,
+      totalCount: 0,
+      skip: 0,
+      take: 25,
+      nextSkip: null,
+      hasMore: false,
+    });
+  });
+
+  it('passes the active region for Regional Manager notification requests and mutations', () => {
+    service.getNotifications$({
+      audienceRole: 'RegionalManager',
+      regionId: 7,
+      includeRead: true,
+      skip: 0,
+      take: 25,
+    }).subscribe();
+
+    const listRequest = http.expectOne(req =>
+      req.url === '/api/admin/notifications' &&
+      req.params.get('audienceRole') === 'RegionalManager' &&
+      req.params.get('regionId') === '7');
+    expect(listRequest.request.method).toBe('GET');
+    listRequest.flush({
+      items: [],
+      unreadCount: 2,
+      totalCount: 0,
+      skip: 0,
+      take: 25,
+      nextSkip: null,
+      hasMore: false,
+    });
+
+    service.getUnreadCount$('RegionalManager', 7).subscribe();
+    const countRequest = http.expectOne(req =>
+      req.url === '/api/admin/notifications/unread-count' &&
+      req.params.get('audienceRole') === 'RegionalManager' &&
+      req.params.get('regionId') === '7');
+    expect(countRequest.request.method).toBe('GET');
+    countRequest.flush({ unreadCount: 2 });
+
+    service.markRead$(11, 'RegionalManager', 7).subscribe();
+    const readRequest = http.expectOne(req =>
+      req.url === '/api/admin/notifications/11/read' &&
+      req.params.get('audienceRole') === 'RegionalManager' &&
+      req.params.get('regionId') === '7');
+    expect(readRequest.request.method).toBe('POST');
+    readRequest.flush({ unreadCount: 1, readAt: '2026-05-26T21:00:00Z' });
+
+    service.markAllRead$('RegionalManager', 7).subscribe();
+    const markAllRequest = http.expectOne(req =>
+      req.url === '/api/admin/notifications/mark-all-read' &&
+      req.params.get('audienceRole') === 'RegionalManager' &&
+      req.params.get('regionId') === '7');
+    expect(markAllRequest.request.method).toBe('POST');
+    markAllRequest.flush({ unreadCount: 0, readAt: '2026-05-26T21:00:00Z' });
+  });
 });

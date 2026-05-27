@@ -40,6 +40,7 @@ describe('TopbarComponent', () => {
   const regionalManagerView = getAdminViewByCode('RegionalManager')!;
 
   beforeEach(async () => {
+    sessionStorage.clear();
     currentUser = buildUser();
     activeView = territoryManagerView;
     availableViews = [territoryManagerView];
@@ -234,6 +235,109 @@ describe('TopbarComponent', () => {
     });
   });
 
+  it('opens the Territory Manager notification drawer from the bell', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({
+        type: 'ContributionPendingReview',
+        title: 'New request pending review',
+        message: 'New place request for Harbor View is pending in Dalmatia.',
+        targetType: 'Contribution',
+        targetId: 77,
+        targetRoute: '/territory/regions/5?highlight=contribution%3A77',
+        scopeLabel: 'Dalmatia, Croatia',
+      }),
+    ], 1)));
+
+    const bell = notificationBell();
+    expect(bell.disabled).toBe(false);
+
+    bell.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#admin-notification-drawer')).toBeTruthy();
+    expect(drawerText()).toContain('New request pending review');
+    expect(drawerText()).toContain('Dalmatia, Croatia');
+    expect(notificationsService.getNotifications$).toHaveBeenCalledWith({
+      audienceRole: 'TerritoryManager',
+      includeRead: true,
+      skip: 0,
+      take: 25,
+    });
+  });
+
+  it('opens the Regional Manager notification drawer for the active region', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({
+        type: 'ContributionPendingReview',
+        title: 'New request pending review',
+        message: 'Place request for Harbor View was submitted in Dalmatia.',
+        targetType: 'Contribution',
+        targetId: 77,
+        targetRoute: '/request/detail/contribution/77?regionId=7',
+        scopeType: 'Region',
+        scopeId: 7,
+        scopeLabel: 'Dalmatia, Croatia',
+      }),
+    ], 1)));
+    createRegionalManagerComponent(7);
+
+    const bell = notificationBell();
+    expect(bell.disabled).toBe(false);
+
+    bell.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#admin-notification-drawer')).toBeTruthy();
+    expect(drawerText()).toContain('New request pending review');
+    expect(drawerText()).toContain('Dalmatia, Croatia');
+    expect(notificationsService.getUnreadCount$).toHaveBeenCalledWith('RegionalManager', 7);
+    expect(notificationsService.getNotifications$).toHaveBeenCalledWith({
+      audienceRole: 'RegionalManager',
+      regionId: 7,
+      includeRead: true,
+      skip: 0,
+      take: 25,
+    });
+  });
+
+  it('navigates Regional Manager request notifications to the regional request detail', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({
+        id: 77,
+        type: 'ContributionPendingReview',
+        title: 'New request pending review',
+        message: 'Place request for Harbor View was submitted in Dalmatia.',
+        targetType: 'Contribution',
+        targetId: 77,
+        targetRoute: null,
+        scopeType: 'Region',
+        scopeId: 7,
+      }),
+    ], 1)));
+    createRegionalManagerComponent(7);
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    notificationBell().click();
+    fixture.detectChanges();
+    notificationItemButton('New request pending review').click();
+    fixture.detectChanges();
+
+    expect(notificationsService.markRead$).toHaveBeenCalledWith(77, 'RegionalManager', 7);
+    expect(navigateSpy).toHaveBeenCalledWith('/request/detail/contribution/77?regionId=7');
+  });
+
+  it('shows the Regional Manager empty state copy', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([], 0)));
+    createRegionalManagerComponent(7);
+
+    notificationBell().click();
+    fixture.detectChanges();
+
+    expect(drawerText()).toContain('No notifications yet');
+    expect(drawerText()).toContain('Regional requests for your selected region will appear here.');
+  });
+
   it('shows skeleton cards while Administrator notifications are loading', () => {
     const pending = new Subject<AdminNotificationPage>();
     notificationsService.getNotifications$.mockReturnValue(pending.asObservable());
@@ -367,6 +471,17 @@ describe('TopbarComponent', () => {
     fixture.detectChanges();
   }
 
+  function createRegionalManagerComponent(regionId: number): void {
+    sessionStorage.setItem('geotrack_admin_active_region_id', String(regionId));
+    useRegionalManagerUser();
+    notificationsService.getUnreadCount$.mockClear();
+    notificationsService.getNotifications$.mockClear();
+    fixture.destroy();
+    fixture = TestBed.createComponent(TopbarComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  }
+
   function notificationBell(): HTMLButtonElement {
     return fixture.nativeElement.querySelector('[aria-controls="admin-notification-drawer"]') as HTMLButtonElement;
   }
@@ -393,6 +508,15 @@ describe('TopbarComponent', () => {
       fixture.nativeElement.querySelectorAll('#admin-notification-drawer button'),
     ) as HTMLButtonElement[];
     return buttons.find(button => button.textContent?.includes(label)) ?? null;
+  }
+
+  function notificationItemButton(label: string): HTMLButtonElement {
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('#admin-notification-drawer button'),
+    ) as HTMLButtonElement[];
+    const button = buttons.find(item => item.textContent?.includes(label));
+    expect(button).toBeTruthy();
+    return button!;
   }
 
   function useMultiRoleUser(view: AdminView = territoryManagerView): void {
@@ -423,6 +547,17 @@ describe('TopbarComponent', () => {
       notifyRequests: true,
       notifyNewReview: true,
       avatarUrl: '/media/uploads/avatars/mika.png',
+    };
+  }
+
+  function useRegionalManagerUser(): void {
+    activeView = regionalManagerView;
+    availableViews = [regionalManagerView];
+    currentUser = {
+      ...currentUser,
+      role: 'Regional Manager',
+      activeRoleCode: 'RegionalManager',
+      roles: ['RegionalManager'],
     };
   }
 

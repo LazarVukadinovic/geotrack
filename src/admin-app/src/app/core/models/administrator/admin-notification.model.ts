@@ -13,6 +13,9 @@ export interface AdminNotification {
   targetType: string;
   targetId?: number | null;
   targetRoute?: string | null;
+  scopeType?: string | null;
+  scopeId?: number | null;
+  scopeLabel?: string | null;
   metadataSummary?: string | null;
 }
 
@@ -31,6 +34,8 @@ export interface AdminNotificationPage extends AdminNotificationListResponse {
 }
 
 export interface AdminNotificationListRequest {
+  audienceRole?: string | null;
+  regionId?: number | null;
   includeRead: boolean;
   skip: number;
   take: number;

@@ -18,6 +18,8 @@ import {
   templateUrl: './topbar.component.html',
 })
 export class TopbarComponent implements OnInit, OnDestroy {
+  private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
+
   @Input() title = '';
   @Input() userName = '';
   @Input() userRole = '';
@@ -50,12 +52,12 @@ export class TopbarComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    if (!this.canUseAdminNotifications) {
+    if (this.canUseAdminNotifications) {
+      this.loadUnreadCount();
+    } else {
       this.notificationsService.reset();
-      return;
     }
 
-    this.loadUnreadCount();
     interval(60000)
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
@@ -125,7 +127,24 @@ export class TopbarComponent implements OnInit, OnDestroy {
   }
 
   get canUseAdminNotifications(): boolean {
-    return this.auth.isAdministrator();
+    const roleCode = this.currentRoleCode();
+    return roleCode === 'Admin'
+      || roleCode === 'TerritoryManager'
+      || roleCode === 'TerritoryAssociate'
+      || roleCode === 'RegionalManager';
+  }
+
+  get notificationAudienceRole(): string | null {
+    const roleCode = this.currentRoleCode();
+    return roleCode === 'TerritoryManager' || roleCode === 'TerritoryAssociate' || roleCode === 'RegionalManager'
+      ? roleCode
+      : null;
+  }
+
+  get notificationRegionId(): number | null {
+    return this.notificationAudienceRole === 'RegionalManager'
+      ? this.readActiveRegionId()
+      : null;
   }
 
   get unreadNotificationCount(): number {
@@ -152,8 +171,16 @@ export class TopbarComponent implements OnInit, OnDestroy {
   }
 
   get notificationEmptyDescription(): string {
-    return this.notificationFilter === 'unread'
-      ? 'You are all caught up.'
+    if (this.notificationFilter === 'unread') {
+      return 'You are all caught up.';
+    }
+
+    if (this.notificationAudienceRole === 'RegionalManager') {
+      return 'Regional requests for your selected region will appear here.';
+    }
+
+    return this.notificationAudienceRole
+      ? 'Territory requests and region updates will appear here.'
       : 'New support reports, review reports, and system alerts will appear here.';
   }
 
@@ -223,7 +250,10 @@ export class TopbarComponent implements OnInit, OnDestroy {
     this.markingAllNotificationsRead = true;
     this.notificationsError = '';
 
-    this.notificationsService.markAllRead$().pipe(
+    const audienceRole = this.notificationAudienceRole;
+    const regionId = this.notificationRegionId;
+
+    this.notificationsService.markAllRead$(audienceRole, regionId).pipe(
       takeUntil(this.destroy$),
       finalize(() => {
         this.markingAllNotificationsRead = false;
@@ -256,7 +286,10 @@ export class TopbarComponent implements OnInit, OnDestroy {
 
     this.markingNotificationReadId = notification.id;
     this.notificationsError = '';
-    this.notificationsService.markRead$(notification.id).pipe(
+    const audienceRole = this.notificationAudienceRole;
+    const regionId = this.notificationRegionId;
+
+    this.notificationsService.markRead$(notification.id, audienceRole, regionId).pipe(
       takeUntil(this.destroy$),
       finalize(() => {
         this.markingNotificationReadId = null;
@@ -329,6 +362,12 @@ export class TopbarComponent implements OnInit, OnDestroy {
     switch (notification.type) {
       case 'SupportTicketCreated':
         return 'bg-blue-50 text-blue-600';
+      case 'ContributionPendingReview':
+        return 'bg-emerald-50 text-emerald-600';
+      case 'RegionCreated':
+      case 'RegionalManagerAssigned':
+      case 'RegionalManagerRemoved':
+        return 'bg-violet-50 text-violet-600';
       case 'ReviewReported':
       case 'CommentReported':
         return 'bg-red-50 text-red-600';
@@ -346,8 +385,14 @@ export class TopbarComponent implements OnInit, OnDestroy {
       case 'ReviewReport':
       case 'Review':
         return 'Review moderation';
+      case 'Contribution':
+        return 'Requests queue';
+      case 'Region':
+        return 'Regional management';
       case 'User':
-        return 'User moderation';
+        return this.notificationAudienceRole === 'RegionalManager'
+          ? 'Regional assignment'
+          : this.notificationAudienceRole ? 'User administration' : 'User moderation';
       default:
         return 'System';
     }
@@ -364,9 +409,15 @@ export class TopbarComponent implements OnInit, OnDestroy {
   selectView(view: AdminView): void {
     const changed = this.auth.switchAdminView(view.roleCode);
     this.closeProfileMenu();
+    this.closeNotifications();
+    this.notificationsService.reset();
 
     if (changed || this.router.url !== view.dashboardRoute) {
       this.router.navigateByUrl(view.dashboardRoute);
+    }
+
+    if (this.canUseAdminNotifications) {
+      this.loadUnreadCount();
     }
   }
 
@@ -415,7 +466,15 @@ export class TopbarComponent implements OnInit, OnDestroy {
   }
 
   private loadUnreadCount(): void {
-    this.notificationsService.getUnreadCount$()
+    const audienceRole = this.notificationAudienceRole;
+    const regionId = this.notificationRegionId;
+
+    if (audienceRole === 'RegionalManager' && regionId === null) {
+      this.notificationsService.reset();
+      return;
+    }
+
+    this.notificationsService.getUnreadCount$(audienceRole, regionId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         error: () => this.notificationsService.reset(),
@@ -440,11 +499,18 @@ export class TopbarComponent implements OnInit, OnDestroy {
       this.notificationsLoadingMore = true;
     }
 
-    this.notificationsService.getNotifications$({
+    const audienceRole = this.notificationAudienceRole;
+    const regionId = this.notificationRegionId;
+
+    const request = {
       includeRead: true,
       skip,
       take: this.notificationPageSize,
-    }).pipe(
+      ...(audienceRole ? { audienceRole } : {}),
+      ...(regionId ? { regionId } : {}),
+    };
+
+    this.notificationsService.getNotifications$(request).pipe(
       takeUntil(this.destroy$),
       finalize(() => {
         if (sequence === this.notificationLoadSequence) {
@@ -488,9 +554,70 @@ export class TopbarComponent implements OnInit, OnDestroy {
     }
 
     if (notification.targetType === 'ReviewReport' || notification.targetType === 'Review') {
-      return '/admin-reviews?status=reported';
+      return this.notificationAudienceRole === 'RegionalManager'
+        ? this.withRegionQuery('/dashboard', notification)
+        : this.notificationAudienceRole
+        ? '/territory/regions'
+        : '/admin-reviews?status=reported';
     }
 
-    return '/admin-dashboard';
+    if (notification.targetType === 'Contribution') {
+      if (this.notificationAudienceRole === 'RegionalManager') {
+        return notification.targetId
+          ? this.withRegionQuery(`/request/detail/contribution/${encodeURIComponent(String(notification.targetId))}`, notification)
+          : this.withRegionQuery('/requests', notification);
+      }
+
+      return '/territory/regions';
+    }
+
+    if (notification.targetType === 'Region' && notification.targetId) {
+      if (this.notificationAudienceRole === 'RegionalManager') {
+        return this.withRegionQuery('/dashboard', notification);
+      }
+
+      return `/territory/regions/${encodeURIComponent(String(notification.targetId))}`;
+    }
+
+    if (notification.targetType === 'User' && this.notificationAudienceRole) {
+      if (this.notificationAudienceRole === 'RegionalManager') {
+        return this.withRegionQuery('/dashboard', notification);
+      }
+
+      return '/territory/users';
+    }
+
+    if (this.notificationAudienceRole === 'RegionalManager') {
+      return this.withRegionQuery('/dashboard', notification);
+    }
+
+    return this.notificationAudienceRole ? '/territory/overview' : '/admin-dashboard';
+  }
+
+  private currentRoleCode(): string | null {
+    return this.auth.getActiveAdminView()?.roleCode ?? this.auth.getUser()?.activeRoleCode ?? null;
+  }
+
+  private readActiveRegionId(): number | null {
+    try {
+      const value = sessionStorage.getItem(TopbarComponent.activeRegionStorageKey);
+      const regionId = Number(value);
+      return Number.isInteger(regionId) && regionId > 0 ? regionId : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private withRegionQuery(route: string, notification: AdminNotification): string {
+    const regionId = notification.scopeType === 'Region' && notification.scopeId
+      ? notification.scopeId
+      : this.notificationRegionId;
+
+    if (!regionId) {
+      return route;
+    }
+
+    const separator = route.includes('?') ? '&' : '?';
+    return `${route}${separator}regionId=${encodeURIComponent(String(regionId))}`;
   }
 }

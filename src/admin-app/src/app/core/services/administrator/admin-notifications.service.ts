@@ -26,30 +26,46 @@ export class AdminNotificationsService {
       .set('skip', String(Math.max(0, request.skip)))
       .set('take', String(Math.max(1, request.take)));
 
-    return this.http.get<AdminNotificationListResponse>(this.endpoint, { params }).pipe(
+    return this.http.get<AdminNotificationListResponse>(this.endpoint, {
+      params: this.withRegionId(this.withAudienceRole(params, request.audienceRole), request.regionId),
+    }).pipe(
       map(response => this.normalizePage(response)),
       tap(page => this._unreadCount.set(page.unreadCount)),
     );
   }
 
-  getUnreadCount$(): Observable<AdminNotificationUnreadCountResponse> {
-    return this.http.get<AdminNotificationUnreadCountResponse>(`${this.endpoint}/unread-count`).pipe(
+  getUnreadCount$(audienceRole?: string | null, regionId?: number | null): Observable<AdminNotificationUnreadCountResponse> {
+    return this.http.get<AdminNotificationUnreadCountResponse>(`${this.endpoint}/unread-count`, {
+      params: this.withRegionId(this.withAudienceRole(new HttpParams(), audienceRole), regionId),
+    }).pipe(
       map(response => ({ unreadCount: this.toNumber(response?.unreadCount) })),
       tap(response => this._unreadCount.set(response.unreadCount)),
     );
   }
 
-  markRead$(notificationId: number): Observable<AdminNotificationMutationResponse> {
+  markRead$(
+    notificationId: number,
+    audienceRole?: string | null,
+    regionId?: number | null,
+  ): Observable<AdminNotificationMutationResponse> {
     return this.http
-      .post<AdminNotificationMutationResponse>(`${this.endpoint}/${encodeURIComponent(String(notificationId))}/read`, {})
+      .post<AdminNotificationMutationResponse>(
+        `${this.endpoint}/${encodeURIComponent(String(notificationId))}/read`,
+        {},
+        { params: this.withRegionId(this.withAudienceRole(new HttpParams(), audienceRole), regionId) },
+      )
       .pipe(
         map(response => this.normalizeMutation(response)),
         tap(response => this._unreadCount.set(response.unreadCount)),
       );
   }
 
-  markAllRead$(): Observable<AdminNotificationMutationResponse> {
-    return this.http.post<AdminNotificationMutationResponse>(`${this.endpoint}/mark-all-read`, {}).pipe(
+  markAllRead$(audienceRole?: string | null, regionId?: number | null): Observable<AdminNotificationMutationResponse> {
+    return this.http.post<AdminNotificationMutationResponse>(
+      `${this.endpoint}/mark-all-read`,
+      {},
+      { params: this.withRegionId(this.withAudienceRole(new HttpParams(), audienceRole), regionId) },
+    ).pipe(
       map(response => this.normalizeMutation(response)),
       tap(response => this._unreadCount.set(response.unreadCount)),
     );
@@ -95,8 +111,22 @@ export class AdminNotificationsService {
       targetType: item.targetType || 'System',
       targetId: this.toNullableNumber(item.targetId),
       targetRoute: this.safeRoute(item.targetRoute),
+      scopeType: item.scopeType || null,
+      scopeId: this.toNullableNumber(item.scopeId),
+      scopeLabel: item.scopeLabel ?? null,
       metadataSummary: item.metadataSummary ?? null,
     };
+  }
+
+  private withAudienceRole(params: HttpParams, audienceRole: string | null | undefined): HttpParams {
+    const normalized = audienceRole?.trim();
+    return normalized ? params.set('audienceRole', normalized) : params;
+  }
+
+  private withRegionId(params: HttpParams, regionId: number | null | undefined): HttpParams {
+    return typeof regionId === 'number' && Number.isFinite(regionId) && regionId > 0
+      ? params.set('regionId', String(Math.trunc(regionId)))
+      : params;
   }
 
   private normalizeMutation(response: AdminNotificationMutationResponse | null | undefined): AdminNotificationMutationResponse {
