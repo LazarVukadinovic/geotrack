@@ -13,11 +13,13 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
+using System.IO.Compression;
 using System.Net;
 using System.Security.Claims;
 using System.Text;
@@ -58,9 +60,31 @@ builder.Services.AddControllers()
     });
 
 builder.Services.AddMemoryCache();
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[]
+    {
+        "application/json",
+        "application/problem+json"
+    });
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("Mcp"));
+builder.Services.Configure<BoundaryImportOptions>(builder.Configuration.GetSection("BoundaryImport"));
+builder.Services.Configure<RegionBoundaryBackfillOptions>(builder.Configuration.GetSection("RegionBoundaryBackfill"));
+builder.Services.Configure<RegionalScopeValidationOptions>(builder.Configuration.GetSection("RegionalScopeValidation"));
 builder.Services.AddDataProtection()
     .SetApplicationName("GeoTrack");
 
@@ -154,11 +178,34 @@ builder.Services.AddScoped<IPlaceContributionRepository, PlaceContributionReposi
 
 builder.Services.AddScoped<IUserNotificationService, UserNotificationService>();
 builder.Services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();
+builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
+builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+builder.Services.AddScoped<IContentModeratorDashboardService, ContentModeratorDashboardService>();
+builder.Services.AddScoped<IContentModeratorEntityReviewService, ContentModeratorEntityReviewService>();
+builder.Services.AddScoped<IAdminUserManagementService, AdminUserManagementService>();
+builder.Services.AddScoped<IAdminReviewManagementService, AdminReviewManagementService>();
+builder.Services.AddScoped<IAdminSupportTicketService, AdminSupportTicketService>();
+builder.Services.AddHttpClient<IGeoBoundariesService, GeoBoundariesService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("GeoTrack/1.0");
+});
+builder.Services.AddScoped<LocalBoundaryImportService>();
+builder.Services.AddScoped<ILocalBoundaryImportService>(serviceProvider =>
+    serviceProvider.GetRequiredService<LocalBoundaryImportService>());
+builder.Services.AddScoped<IAdminTerritoryManagementService, AdminTerritoryManagementService>();
 builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
+builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
 builder.Services.AddScoped<ITerritoryDashboardService, TerritoryDashboardService>();
+builder.Services.AddScoped<IRegionBoundaryBackfillService, RegionBoundaryBackfillService>();
+builder.Services.AddScoped<ITerritoryAnalyticsService, TerritoryAnalyticsService>();
 builder.Services.AddScoped<ITerritoryUserAdminService, TerritoryUserAdminService>();
 builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
+builder.Services.AddScoped<RegionalBoundaryGuard>();
+builder.Services.AddScoped<RegionalScopeValidationService>();
+builder.Services.AddScoped<IRegionalScopeValidationService>(serviceProvider =>
+    serviceProvider.GetRequiredService<RegionalScopeValidationService>());
 builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
 builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();
 builder.Services.AddScoped<IRegionalPlaceService, RegionalPlaceService>();
@@ -225,6 +272,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization(options =>
 {
+    options.AddPolicy("RequireAdmin", policy =>
+        policy.RequireRole(RoleNames.Admin));
+    options.AddPolicy("RequireContentModerator", policy =>
+        policy.RequireRole(RoleNames.ContentModerator));
+    options.AddPolicy("RequireReviewModerator", policy =>
+        policy.RequireRole(RoleNames.Admin, RoleNames.ContentModerator));
     options.AddPolicy("RequireRegionalManager", policy =>
         policy.RequireRole(RoleNames.RegionalManager));
     options.AddPolicy("RequireTerritoryManager", policy =>
@@ -232,6 +285,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("RequireAdminAppUser", policy =>
         policy.RequireRole(
             RoleNames.Admin,
+            RoleNames.ContentModerator,
             RoleNames.TerritoryManager,
             RoleNames.TerritoryAssociate,
             RoleNames.RegionalManager));
@@ -368,14 +422,23 @@ var allowedCorsOrigins = builder.Configuration
 
 if (allowedCorsOrigins.Length == 0)
 {
-    allowedCorsOrigins = new[]
-    {
-        "http://localhost:4200",
-        "http://127.0.0.1:4200",
-        "http://localhost:4300",
-        "http://127.0.0.1:4300",
-        "https://softeng.pmf.kg.ac.rs:10131"
-    };
+    allowedCorsOrigins = builder.Environment.IsDevelopment()
+        ? new[]
+        {
+            "http://localhost:4200",
+            "http://127.0.0.1:4200",
+            "https://localhost:4200",
+            "https://127.0.0.1:4200",
+            "http://localhost:4300",
+            "http://127.0.0.1:4300",
+            "https://localhost:4300",
+            "https://127.0.0.1:4300"
+        }
+        : new[]
+        {
+            "https://softeng.pmf.kg.ac.rs:10131",
+            "https://softeng.pmf.kg.ac.rs:10132"
+        };
 }
 
 builder.Services.AddCors(options =>
@@ -393,24 +456,63 @@ var app = builder.Build();
 
 await PostgisStartup.EnsureReadyAsync(app.Services, app.Environment.IsDevelopment());
 
-var shouldSeedDatabase =
+var seedEnabledForEnvironment = IsSeedEnabledForEnvironment(app.Environment, app.Configuration);
+var shouldSeedDatabase = seedEnabledForEnvironment;
+var shouldAutoMigrate =
     app.Environment.IsDevelopment()
-    || app.Configuration.GetValue<bool>("SeedData:Enabled");
+    || app.Configuration.GetValue<bool>("Database:AutoMigrate")
+    || shouldSeedDatabase;
 var shouldSeedDemoRegionalManager =
-    DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
+    seedEnabledForEnvironment && DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 var shouldSeedDemoTerritoryManager =
-    shouldSeedDatabase || DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
+    seedEnabledForEnvironment && DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
+var shouldSeedDemoAdmin =
+    seedEnabledForEnvironment && DemoAdminSeeder.IsEnabled(app.Environment, app.Configuration);
+var shouldSeedDemoContentModerator =
+    seedEnabledForEnvironment && DemoContentModeratorSeeder.IsEnabled(app.Environment, app.Configuration);
 
-if (shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager)
+if (shouldAutoMigrate || shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager || shouldSeedDemoAdmin || shouldSeedDemoContentModerator)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
     await db.Database.MigrateAsync();
 
+    if (shouldSeedDatabase &&
+        app.Configuration.GetValue<bool>("Seed:ImportLocalBoundaries:Enabled"))
+    {
+        var localBoundaryImport = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
+
+        if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm0", true))
+        {
+            await localBoundaryImport.ImportLocalBoundariesAsync("ADM0");
+        }
+
+        if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm1", true))
+        {
+            await localBoundaryImport.ImportLocalBoundariesAsync("ADM1");
+        }
+    }
+
     if (shouldSeedDatabase)
     {
         await SeedData.InitializeAsync(db);
+    }
+
+    if (shouldSeedDemoAdmin)
+    {
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(nameof(DemoAdminSeeder));
+        await DemoAdminSeeder.EnsureAsync(db, app.Configuration, logger);
+    }
+
+    if (shouldSeedDemoContentModerator)
+    {
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(nameof(DemoContentModeratorSeeder));
+        await DemoContentModeratorSeeder.EnsureAsync(db, app.Configuration, logger);
     }
 
     if (shouldSeedDemoRegionalManager)
@@ -454,9 +556,9 @@ if (forwardedHeadersEnabled)
     app.UseForwardedHeaders();
 }
 
-app.UseHttpsRedirection();
+app.UseCors("ConfiguredOrigins");
 
-app.UseCors("ConfigurationOrigins");
+app.UseResponseCompression();
 
 // HTTPS can be terminated either by Kestrel itself or by a reverse proxy.
 // Keep it config-driven so local HTTP development still works unchanged.
@@ -469,8 +571,6 @@ if (app.Configuration.GetValue<bool>("HttpsRedirection:Enabled"))
 {
     app.UseHttpsRedirection();
 }
-
-app.UseCors("AllowAllOrigins");
 
 app.Use(async (context, next) =>
 {
@@ -583,6 +683,45 @@ app.Use(async (context, next) =>
 });
 
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        var userIdValue = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.User.FindFirstValue("sub")
+            ?? context.User.FindFirstValue("userId");
+
+        if (!int.TryParse(userIdValue, out var userId))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { message = "Invalid user session." });
+            return;
+        }
+
+        var db = context.RequestServices.GetRequiredService<AppDbContext>();
+        var accountState = await db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => new { user.IsSuspended, user.IsDeleted })
+            .SingleOrDefaultAsync(context.RequestAborted);
+
+        if (accountState is null || accountState.IsDeleted)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { message = "Invalid user session." });
+            return;
+        }
+
+        if (accountState.IsSuspended)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { message = "Account is suspended." });
+            return;
+        }
+    }
+
+    await next();
+});
 app.UseAuthorization();
 
 app.UseRateLimiter();
@@ -648,6 +787,22 @@ static string GetUserOrIpRateLimitPartition(HttpContext httpContext)
     }
 
     return $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+}
+
+static bool IsSeedEnabledForEnvironment(IHostEnvironment environment, IConfiguration configuration)
+{
+    var configuredEnabled =
+        configuration.GetValue<bool?>("Seed:Enabled")
+        ?? configuration.GetValue<bool?>("SeedData:Enabled");
+
+    var enabled = configuredEnabled ?? environment.IsDevelopment();
+    if (!enabled)
+    {
+        return false;
+    }
+
+    return environment.IsDevelopment()
+        || configuration.GetValue<bool>("Seed:RunInProduction");
 }
 
 static bool TryParseNetwork(string value, out Microsoft.AspNetCore.HttpOverrides.IPNetwork network)

@@ -20,10 +20,14 @@ public class RegionalDestinationService : IRegionalDestinationService
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
     private readonly AppDbContext _db;
+    private readonly RegionalScopeValidationService _scopeValidation;
 
-    public RegionalDestinationService(AppDbContext db)
+    public RegionalDestinationService(
+        AppDbContext db,
+        RegionalScopeValidationService scopeValidation)
     {
         _db = db;
+        _scopeValidation = scopeValidation;
     }
 
     public async Task<RegionalDestinationListResponseDto> GetDestinationsAsync(
@@ -216,7 +220,24 @@ public class RegionalDestinationService : IRegionalDestinationService
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
         var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
-        var coordinates = ResolveCoordinates(request);
+        var boundary = BuildBoundary(request.Boundary);
+        var coordinates = ResolveCoordinates(request, boundary);
+        await _scopeValidation.EnsurePointAllowedAsync(
+            userId,
+            request.RegionId,
+            "Destination center",
+            coordinates.Latitude,
+            coordinates.Longitude,
+            "Create");
+        if (boundary is not null)
+        {
+            await _scopeValidation.EnsureGeometryAllowedAsync(
+                userId,
+                request.RegionId,
+                "Destination",
+                boundary.Geometry,
+                "Create");
+        }
         var destinationTypeId = await ResolveDestinationTypeIdAsync(request.DestinationTypeId);
         var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
@@ -235,8 +256,8 @@ public class RegionalDestinationService : IRegionalDestinationService
             Longitude = coordinates.Longitude,
             CreatedByUserId = userId,
             PublishedAt = status == PublishedStatus ? now : null,
-            BoundaryNote = null,
-            BoundaryShapeType = null,
+            BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long."),
+            BoundaryShapeType = boundary?.ShapeType,
             CreatedAt = now,
             DestinationTags = tagIds
                 .Select(tagId => new DestinationTag { TagId = tagId })
@@ -244,6 +265,10 @@ public class RegionalDestinationService : IRegionalDestinationService
         };
 
         _db.Destinations.Add(destination);
+        if (boundary is not null)
+        {
+            _db.Entry(destination).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = boundary.Geometry;
+        }
 
         await _db.SaveChangesAsync();
 
@@ -276,6 +301,16 @@ public class RegionalDestinationService : IRegionalDestinationService
         }
 
         ApplyUpdate(destination, request);
+        if (request.Latitude.HasValue || request.Longitude.HasValue)
+        {
+            await _scopeValidation.EnsurePointAllowedAsync(
+                userId,
+                regionId,
+                "Destination center",
+                destination.Latitude,
+                destination.Longitude,
+                "Update");
+        }
 
         if (request.TagIds is not null)
         {
@@ -564,10 +599,20 @@ public class RegionalDestinationService : IRegionalDestinationService
         return new BoundaryResult(shapeType, polygon);
     }
 
-    private static DestinationCoordinates ResolveCoordinates(RegionalDestinationCreateRequestDto request)
+    private static DestinationCoordinates ResolveCoordinates(
+        RegionalDestinationCreateRequestDto request,
+        BoundaryResult? boundary)
     {
         if (!request.Latitude.HasValue || !request.Longitude.HasValue)
+        {
+            if (boundary is not null)
+            {
+                var centroid = boundary.Geometry.Centroid;
+                return new DestinationCoordinates(centroid.Y, centroid.X);
+            }
+
             throw new InvalidOperationException("Destination center coordinates are required.");
+        }
 
         ValidateLatitude(request.Latitude.Value);
         ValidateLongitude(request.Longitude.Value);

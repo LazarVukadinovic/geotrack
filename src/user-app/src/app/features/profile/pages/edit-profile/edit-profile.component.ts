@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { UserService } from '../../../../core/services/user.service';
+import { buildAvatarDisplayUrl } from '../../../../core/utils/avatar-url';
 
 interface MeResponse {
   id: number;
@@ -13,15 +14,18 @@ interface MeResponse {
   lastName: string;
   phoneNumber: string;
   avatarUrl?: string;
+  avatarVersion?: number | null;
   location?: string;
 }
 
 interface UpdateAvatarResponse {
   avatarUrl: string;
+  avatarVersion?: number | null;
   updatedAt?: string;
 }
 
 const MAX_AVATAR_FILE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_AVATAR_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
 
 @Component({
   selector: 'app-edit-profile',
@@ -35,13 +39,14 @@ export class EditProfileComponent {
   phone     = '';
   location  = '';
   avatarUrl = '';
+  avatarVersion: number | null = null;
   isSaving  = false;
   isLoading = true;
   isUploadingAvatar = false;
   saveError = '';
   avatarError = '';
   saveSuccess = false;
-  readonly acceptedAvatarTypes = 'image/jpeg,image/png,image/webp,image/gif';
+  readonly acceptedAvatarTypes = 'image/jpeg,image/png,image/webp';
   private returnTo = '/profile';
 
   constructor(
@@ -62,6 +67,7 @@ export class EditProfileComponent {
         this.phone = res.phoneNumber ?? '';
         this.location = res.location ?? '';
         this.avatarUrl = res.avatarUrl ?? '';
+        this.avatarVersion = res.avatarVersion ?? null;
         this.isLoading = false;
         this.cdr.detectChanges();
       },
@@ -88,8 +94,8 @@ export class EditProfileComponent {
       return;
     }
 
-    if (file.type && !file.type.startsWith('image/')) {
-      this.avatarError = 'Please choose a valid image file.';
+    if (file.type && !ALLOWED_AVATAR_TYPES.has(file.type)) {
+      this.avatarError = 'Only JPG, PNG, or WEBP images are supported. Convert HEIC/HEIF photos before uploading.';
       this.cdr.detectChanges();
       return;
     }
@@ -103,9 +109,13 @@ export class EditProfileComponent {
     this.http.put<UpdateAvatarResponse>('/api/user/me/avatar', formData).subscribe({
       next: (response) => {
         this.avatarUrl = response.avatarUrl ?? '';
+        this.avatarVersion = response.avatarVersion ?? null;
         this.isUploadingAvatar = false;
         this.avatarError = '';
-        this.userService.patchProfile({ avatarUrl: this.avatarUrl });
+        this.userService.patchProfile({
+          avatarUrl: this.avatarUrl,
+          avatarVersion: this.avatarVersion,
+        });
         this.cdr.detectChanges();
       },
       error: (err) => {
@@ -160,5 +170,14 @@ export class EditProfileComponent {
 
   goBack(): void {
     this.router.navigate([this.returnTo]);
+  }
+
+  get avatarImageUrl(): string {
+    return buildAvatarDisplayUrl(this.avatarUrl, this.avatarVersion);
+  }
+
+  clearAvatarPreview(): void {
+    this.avatarUrl = '';
+    this.avatarVersion = null;
   }
 }

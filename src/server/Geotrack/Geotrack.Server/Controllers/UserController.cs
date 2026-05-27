@@ -12,6 +12,14 @@ namespace Geotrack.Server.Controllers;
 public class UserController : ControllerBase
 {
     private const long MaxAvatarFileSizeBytes = 5 * 1024 * 1024;
+    private static readonly HashSet<string> AllowedAvatarContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/webp",
+    };
+
     private readonly IUserService _userService;
 
     public UserController(IUserService userService)
@@ -20,6 +28,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("me")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<ActionResult<GetMeResponseDto>> GetMe()
     {
         try
@@ -57,6 +66,9 @@ public class UserController : ControllerBase
 
             if (avatar.Length > MaxAvatarFileSizeBytes)
                 return BadRequest(new { message = "Profile image must be 5 MB or smaller." });
+
+            if (!IsAllowedAvatarContentType(avatar.ContentType))
+                return BadRequest(new { message = "Only PNG, JPG, JPEG, or WEBP images are supported." });
 
             await using var memoryStream = new MemoryStream();
             await avatar.CopyToAsync(memoryStream);
@@ -394,6 +406,12 @@ public class UserController : ControllerBase
         {
             return HandleException(ex);
         }
+    }
+
+    private static bool IsAllowedAvatarContentType(string? contentType)
+    {
+        return string.IsNullOrWhiteSpace(contentType) ||
+            AllowedAvatarContentTypes.Contains(contentType.Trim());
     }
 
     private int GetUserId()

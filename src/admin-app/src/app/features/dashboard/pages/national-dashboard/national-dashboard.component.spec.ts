@@ -39,6 +39,14 @@ describe('NationalDashboardComponent', () => {
         staysCount: 0,
         eventsCount: 6,
         pendingRequestsCount: 1,
+        healthScore: 82,
+        health: {
+          score: 82,
+          statusLabel: 'Healthy',
+          drivers: [],
+          issues: [],
+          recommendations: [],
+        },
         activityScore: 82,
         assignedManagers: [
           {
@@ -110,6 +118,7 @@ describe('NationalDashboardComponent', () => {
   const authService = {
     fullName: 'Mika Mikic',
     getUser: vi.fn(() => ({ role: 'Territory Manager', region: '' })),
+    isAdministrator: vi.fn(() => false),
     isTerritoryManager: vi.fn(() => true),
     canAccessTerritoryAdmin: vi.fn(() => true),
     logout: vi.fn(),

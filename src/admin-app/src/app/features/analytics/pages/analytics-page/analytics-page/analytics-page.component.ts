@@ -164,6 +164,12 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly searchDebounceMs = 300;
   private static readonly initialTake = 25;
+  private static readonly trendPlotLeft = 24;
+  private static readonly trendPlotRight = 316;
+  private static readonly trendPlotTop = 14;
+  private static readonly trendPlotBottom = 148;
+  private static readonly trendValueAxisStartY = 134;
+  private static readonly trendValuePlotHeight = 120;
 
   private readonly analyticsService = inject(RegionalAnalyticsService);
   private readonly dashboardService = inject(DashboardService);
@@ -174,7 +180,6 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
 
   assignedRegions: RegionalAssignedRegion[] = [];
   activeRegionId: number | null = null;
-  pendingRequestsCount: number | null = null;
   regionLoading = false;
   analyticsLoading = false;
   monthlyVisitsLoading = false;
@@ -186,7 +191,6 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   authRequired = false;
 
   private assignedRegionsSubscription: Subscription | null = null;
-  private sidebarSummarySubscription: Subscription | null = null;
   private analyticsSubscription: Subscription | null = null;
   private monthlyVisitsSubscription: Subscription | null = null;
   private tagViewsSubscription: Subscription | null = null;
@@ -506,7 +510,6 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.assignedRegionsSubscription?.unsubscribe();
-    this.sidebarSummarySubscription?.unsubscribe();
     this.analyticsSubscription?.unsubscribe();
     this.monthlyVisitsSubscription?.unsubscribe();
     this.tagViewsSubscription?.unsubscribe();
@@ -600,7 +603,6 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
 
           if (this.assignedRegions.length === 0) {
             this.activeRegionId = null;
-            this.pendingRequestsCount = null;
             this.clearPersistedRegion();
             this.resetSelectedTagViews();
             this.clearAnalyticsData();
@@ -613,7 +615,6 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
-          this.loadSidebarSummary(selectedRegion.id);
           this.loadAnalytics();
           this.loadMonthlyVisits();
           this.loadTagViews();
@@ -636,7 +637,6 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.resetSelectedTagViews();
     this.tableTake = AnalyticsPageComponent.initialTake;
     this.visibleCount.set(this.tableTake);
-    this.loadSidebarSummary(regionId);
     this.loadAnalytics();
     this.loadMonthlyVisits();
     this.loadTagViews();
@@ -1380,29 +1380,6 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.previousBodyOverflow = null;
   }
 
-  private loadSidebarSummary(regionId: number): void {
-    this.sidebarSummarySubscription?.unsubscribe();
-    this.sidebarSummarySubscription = this.dashboardService
-      .getSidebarSummary(regionId)
-      .subscribe({
-        next: summary => {
-          this.pendingRequestsCount = summary.pendingRequestsCount;
-          if (summary.assignedRegions?.length) {
-            this.assignedRegions = summary.assignedRegions;
-          }
-          if (summary.activeRegion) {
-            this.upsertAssignedRegion(summary.activeRegion);
-            this.setActiveRegion(summary.activeRegion.id, false);
-          }
-          this.notifyStateChanged();
-        },
-        error: () => {
-          this.pendingRequestsCount = null;
-          this.notifyStateChanged();
-        },
-      });
-  }
-
   private loadMonthlyVisits(): void {
     if (!this.activeRegionId) {
       this.clearMonthlyVisitData();
@@ -1494,7 +1471,6 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
           const filter = this.activeFilter();
           this.upsertAssignedRegion(overview.activeRegion);
           this.setActiveRegion(overview.activeRegion.id, false);
-          this.pendingRequestsCount = overview.pendingRequestsCount;
           this.metricsByFilterSig.set(this.analyticsService.asBucket(filter, this.analyticsService.buildMetricCards(overview), [] as MetricCard[]));
           this.entityRowsSig.set(this.analyticsService.mapEntityRows(overview.entityRows));
           this.topPerformersSig.set(this.analyticsService.mapEntityRows(overview.topPerformingEntities));
@@ -2015,17 +1991,26 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       isEmpty: true,
     };
 
-    if (points.length === 0 || points.every(point => point.pageViews === 0 && (point.uniqueVisitors ?? 0) === 0)) {
+    if (points.length === 0) {
       return fallback;
     }
 
     const maxVal = Math.max(...points.map(point => point.pageViews));
     const step = this.niceStep(maxVal);
     const count = points.length;
-    const toX = (index: number) => 24 + (count > 1 ? index / (count - 1) : 0) * 292;
-    const toY = (value: number) => Math.min(148, 134 - ((value - step) / (step * 3)) * 120);
-    const plotLeft = 24;
-    const plotRight = 316;
+    const plotWidth = AnalyticsPageComponent.trendPlotRight - AnalyticsPageComponent.trendPlotLeft;
+    const toX = (index: number) =>
+      AnalyticsPageComponent.trendPlotLeft + (count > 1 ? index / (count - 1) : 0) * plotWidth;
+    const toY = (value: number) => Math.max(
+      AnalyticsPageComponent.trendPlotTop,
+      Math.min(
+        AnalyticsPageComponent.trendPlotBottom,
+        AnalyticsPageComponent.trendValueAxisStartY -
+          ((value - step) / (step * 3)) * AnalyticsPageComponent.trendValuePlotHeight,
+      ),
+    );
+    const plotLeft = AnalyticsPageComponent.trendPlotLeft;
+    const plotRight = AnalyticsPageComponent.trendPlotRight;
     const ptsWithoutHover = points.map((point, index) => ({
       x: toX(index),
       y: toY(point.pageViews),
@@ -2047,8 +2032,10 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
         hoverWidth: +(hoverEnd - hoverStart).toFixed(1),
       };
     });
-    const linePath = this.smoothSVGPath(pts);
-    const areaPath = `${linePath} L${pts[count - 1].x.toFixed(1)},148 L${pts[0].x.toFixed(1)},148 Z`;
+    const linePath = this.lineSVGPath(pts);
+    const areaPath = count >= 2
+      ? `${linePath} L${pts[count - 1].x.toFixed(1)},${AnalyticsPageComponent.trendPlotBottom} L${pts[0].x.toFixed(1)},${AnalyticsPageComponent.trendPlotBottom} Z`
+      : '';
 
     return {
       linePath,
@@ -2201,21 +2188,12 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     return trimmed.length > 14 ? `${trimmed.slice(0, 13)}...` : trimmed;
   }
 
-  private smoothSVGPath(points: { x: number; y: number }[]): string {
+  private lineSVGPath(points: { x: number; y: number }[]): string {
     if (points.length === 0) return '';
     if (points.length === 1) return `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
 
-    let path = `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
-    for (let i = 1; i < points.length; i++) {
-      const p0 = points[i - 2] ?? points[i - 1];
-      const p1 = points[i - 1];
-      const p2 = points[i];
-      const p3 = points[i + 1] ?? points[i];
-      const cp1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
-      const cp2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
-      path += ` C${cp1.x.toFixed(1)},${cp1.y.toFixed(1)} ${cp2.x.toFixed(1)},${cp2.y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
-    }
-
-    return path;
+    return points
+      .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+      .join(' ');
   }
 }

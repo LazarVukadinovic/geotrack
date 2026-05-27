@@ -21,6 +21,7 @@ import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import {
+  AdminMapAssignedRegionBoundary,
   AdminMapMarker,
   AdminMapResponse,
   AdminMapSearchResult,
@@ -71,7 +72,6 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   assignedRegions: RegionalAssignedRegion[] = [];
   activeRegionId: number | null = null;
   regionLoading = false;
-  pendingRequestsCount: number | null = null;
   mapLoading = false;
   searchLoading = false;
   errorMessage: string | null = null;
@@ -94,7 +94,6 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private droppedPinGroup: any = null;
   private droppedPinMarker: any = null;
   private assignedRegionsSubscription: Subscription | null = null;
-  private sidebarSummarySubscription: Subscription | null = null;
   private mapSubscription: Subscription | null = null;
   private searchSubscription: Subscription | null = null;
   private searchHandle: ReturnType<typeof setTimeout> | null = null;
@@ -122,7 +121,6 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.mapRequestSequence++;
     this.assignedRegionsSubscription?.unsubscribe();
-    this.sidebarSummarySubscription?.unsubscribe();
     this.mapSubscription?.unsubscribe();
     this.searchSubscription?.unsubscribe();
 
@@ -162,7 +160,32 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get hasMapContent(): boolean {
-    return Boolean(this.mapData && (this.mapData.markers.length > 0 || this.mapData.zones.length > 0));
+    return Boolean(this.mapData && (
+      this.mapData.markers.length > 0 ||
+      this.hasAssignedRegionBoundary ||
+      this.mapData.zones.some(zone => zone.entityType !== 'Region')
+    ));
+  }
+
+  get assignedRegionBoundary(): AdminMapAssignedRegionBoundary | null {
+    return this.mapData?.assignedRegionBoundary ?? null;
+  }
+
+  get hasAssignedRegionBoundary(): boolean {
+    return Boolean(this.assignedRegionBoundary?.hasBoundary && this.assignedRegionBoundary.geometryGeoJson);
+  }
+
+  get regionBoundaryNotice(): string | null {
+    if (!this.activeRegionId || !this.mapData) return null;
+
+    const boundary = this.assignedRegionBoundary;
+    if (!boundary) {
+      return 'Assigned region boundary geometry is not available yet.';
+    }
+
+    return boundary.hasBoundary
+      ? null
+      : boundary.message ?? 'Assigned region boundary is missing. Please contact a territory manager or administrator.';
   }
 
   loadAssignedRegions(): void {
@@ -200,7 +223,6 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
-          this.loadSidebarSummary(selectedRegion.id);
           this.loadMapData(selectedRegion.id);
         },
         error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
@@ -218,31 +240,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.searchQuery = '';
     this.searchResults = [];
     this.searchDropdownOpen = false;
-    this.loadSidebarSummary(regionId);
     this.loadMapData(regionId);
-  }
-
-  private loadSidebarSummary(regionId: number): void {
-    this.sidebarSummarySubscription?.unsubscribe();
-    this.sidebarSummarySubscription = this.dashboardService
-      .getSidebarSummary(regionId)
-      .subscribe({
-        next: summary => {
-          this.pendingRequestsCount = summary.pendingRequestsCount;
-          if (summary.assignedRegions?.length) {
-            this.assignedRegions = summary.assignedRegions;
-          }
-          if (summary.activeRegion) {
-            this.upsertAssignedRegion(summary.activeRegion);
-            this.setActiveRegion(summary.activeRegion.id, false);
-          }
-          this.notifyStateChanged();
-        },
-        error: () => {
-          this.pendingRequestsCount = null;
-          this.notifyStateChanged();
-        },
-      });
   }
 
   onSearchInput(): void {
@@ -499,7 +497,11 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     const data = this.mapData;
     if (!data) return;
 
-    const zones = [...data.zones].sort((a, b) => this.zoneOrder(a) - this.zoneOrder(b));
+    this.addAssignedRegionBoundary(data.assignedRegionBoundary ?? null);
+
+    const zones = data.zones
+      .filter(zone => zone.entityType !== 'Region')
+      .sort((a, b) => this.zoneOrder(a) - this.zoneOrder(b));
     zones.forEach(zone => this.addZone(zone));
     data.markers.forEach(marker => this.addMarker(marker));
     this.applyViewport(data);
@@ -514,6 +516,18 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.clearSelections();
   }
 
+  private addAssignedRegionBoundary(boundary: AdminMapAssignedRegionBoundary | null): void {
+    if (!boundary?.hasBoundary || !boundary.geometryGeoJson || !this.isSupportedGeometry(boundary.geometryGeoJson.type)) {
+      return;
+    }
+
+    L.geoJSON(boundary.geometryGeoJson, {
+      pane: 'admin-region-zone-pane',
+      interactive: false,
+      style: () => this.assignedRegionBoundaryStyle(),
+    }).addTo(this.regionZoneGroup);
+  }
+
   private addZone(zone: AdminMapZone): void {
     if (!zone.geometryGeoJson || !this.isSupportedGeometry(zone.geometryGeoJson.type)) {
       return;
@@ -521,8 +535,14 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const layer = L.geoJSON(zone.geometryGeoJson, {
       pane: zone.entityType === 'Region' ? 'admin-region-zone-pane' : 'admin-zone-pane',
-      style: () => this.zoneStyle(zone.entityType),
+      interactive: zone.entityType !== 'Region',
+      style: () => this.zoneStyle(zone),
     });
+
+    if (zone.entityType === 'Region') {
+      layer.addTo(this.regionZoneGroup);
+      return;
+    }
 
     layer.on('click', (event: { latlng?: { lat: number; lng: number }; originalEvent?: Event }) => {
       if (event.originalEvent) {
@@ -546,11 +566,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     layer.on('mouseover', () => this.setMapCursor('pointer'));
     layer.on('mouseout', () => this.setMapCursor(''));
 
-    if (zone.entityType === 'Region') {
-      layer.addTo(this.regionZoneGroup);
-    } else {
-      layer.addTo(this.zoneGroup);
-    }
+    layer.addTo(this.zoneGroup);
   }
 
   private addMarker(marker: AdminMapMarker): void {
@@ -774,18 +790,12 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.map.setView([latitude, longitude], zoom, { animate: true });
   }
 
-  private zoneStyle(type: AdminMapZone['entityType']): Record<string, string | number> {
-    if (type === 'Region') {
-      return {
-        color: '#16a34a',
-        fillColor: '#22c55e',
-        fillOpacity: 0.08,
-        weight: 3,
-        opacity: 0.95,
-      };
+  private zoneStyle(zone: AdminMapZone): Record<string, string | number> {
+    if (zone.entityType === 'Region') {
+      return this.assignedRegionBoundaryStyle();
     }
 
-    if (type === 'Destination') {
+    if (zone.entityType === 'Destination') {
       return {
         color: '#7c3aed',
         fillColor: '#a855f7',
@@ -803,6 +813,16 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       weight: 2,
       dashArray: '5 4',
       opacity: 0.8,
+    };
+  }
+
+  private assignedRegionBoundaryStyle(): Record<string, string | number> {
+    return {
+      color: '#047857',
+      fillColor: '#22c55e',
+      fillOpacity: 0.10,
+      weight: 3,
+      opacity: 0.95,
     };
   }
 
@@ -901,16 +921,6 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch {
       // Session persistence is a convenience only.
     }
-  }
-
-  private upsertAssignedRegion(region: RegionalAssignedRegion): void {
-    const existingIndex = this.assignedRegions.findIndex(item => item.id === region.id);
-    if (existingIndex >= 0) {
-      this.assignedRegions = this.assignedRegions.map(item => item.id === region.id ? region : item);
-      return;
-    }
-
-    this.assignedRegions = [region, ...this.assignedRegions];
   }
 
   private handleLoadError(error: unknown, fallback: string): void {

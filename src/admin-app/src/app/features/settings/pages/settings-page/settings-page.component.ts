@@ -8,7 +8,9 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminProfileService } from '../../../../core/services/admin-profile.service';
-import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
+import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
+import { ContentModeratorDashboardService } from '../../../../core/services/content-moderator/content-moderator-dashboard.service';
+import { buildAvatarDisplayUrl } from '../../../../core/utils/avatar-url';
 import {
   AdminProfile,
   AdminProfileAssignment,
@@ -60,6 +62,8 @@ export class SettingsComponent implements OnInit {
   readonly email = signal('');
   readonly bio = signal('');
   readonly avatarUrl = signal('');
+  readonly avatarVersion = signal<number | null>(null);
+  readonly avatarImageUrl = computed(() => buildAvatarDisplayUrl(this.avatarUrl(), this.avatarVersion()));
   readonly bioMaxLength = 300;
   readonly bioLength = computed(() => this.bio().length);
   readonly initials = computed(() => this.buildInitials());
@@ -83,19 +87,28 @@ export class SettingsComponent implements OnInit {
     private readonly router: Router,
     private readonly auth: AuthService,
     private readonly adminProfileService: AdminProfileService,
-    private readonly adminReviewsService: AdminReviewsService,
+    private readonly adminDashboardService: AdminDashboardService,
+    private readonly contentModeratorDashboardService: ContentModeratorDashboardService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
   get isAdmin(): boolean {
-    return this.auth.isAdministrator();
+    return this.auth.isAdministrator() || this.isAdminProfile;
   }
 
-  get reportedReviewsCount(): number {
-    return this.adminReviewsService.getReportedCount();
+  get isContentModerator(): boolean {
+    return this.auth.isContentModerator() || this.isContentModeratorProfile;
   }
+
+  get hasAssignmentAccessLevel(): boolean {
+    return this.assignmentAccessLevel.trim().length > 0;
+  }
+
+  supportReportsCount = 0;
+  reportedReviewsCount = 0;
 
   ngOnInit(): void {
+    this.loadPendingReportsBadge();
     this.loadProfile();
   }
 
@@ -116,14 +129,31 @@ export class SettingsComponent implements OnInit {
   }
 
   get currentRole(): string {
+    const activeRole = this.userRole.trim();
+    if (activeRole) {
+      return activeRole;
+    }
+
     const roleDisplayName = this.lastProfile?.role?.roleDisplayName?.trim();
     if (roleDisplayName) {
-      return roleDisplayName;
+      return this.formatRole(roleDisplayName);
     }
 
     const roles = this.lastProfile?.roles ?? [];
+    if (roles.some(role => this.normalizeRole(role) === 'admin')) {
+      return 'Administrator';
+    }
+
+    if (roles.some(role => this.normalizeRole(role) === 'contentmoderator')) {
+      return 'Content Moderator';
+    }
+
     if (roles.some(role => this.normalizeRole(role) === 'territorymanager')) {
       return 'Territory Manager';
+    }
+
+    if (roles.some(role => this.normalizeRole(role) === 'territoryassociate')) {
+      return 'Territory Associate';
     }
 
     if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {
@@ -146,6 +176,46 @@ export class SettingsComponent implements OnInit {
     return this.lastProfile?.assignment?.displayValue?.trim() || '-';
   }
 
+  get assignmentAccessLevel(): string {
+    return this.lastProfile?.assignment?.accessLevel?.trim() || (this.isAdmin ? 'Full access' : (this.isContentModerator ? 'Review moderation' : ''));
+  }
+
+  get notificationPrimaryLabel(): string {
+    if (this.isContentModerator) {
+      return 'Review reports';
+    }
+
+    return this.isAdmin ? 'Reports' : 'Requests';
+  }
+
+  get notificationPrimaryDescription(): string {
+    if (this.isContentModerator) {
+      return 'Receive an email when a review report needs moderation.';
+    }
+
+    return this.isAdmin
+      ? 'Receive an email when a new report needs administrator review.'
+      : 'Receive an email when someone submits a request.';
+  }
+
+  get notificationSecondaryLabel(): string {
+    if (this.isContentModerator) {
+      return 'Moderation updates';
+    }
+
+    return this.isAdmin ? 'Reviews' : 'New Review';
+  }
+
+  get notificationSecondaryDescription(): string {
+    if (this.isContentModerator) {
+      return 'Get notified about changes to review moderation work.';
+    }
+
+    return this.isAdmin
+      ? 'Get notified about reported reviews requiring moderation.'
+      : 'Get notified when someone leaves a review.';
+  }
+
   get assignedRegion(): string {
     return this.assignmentDisplayValue;
   }
@@ -154,6 +224,21 @@ export class SettingsComponent implements OnInit {
     return this.formatDate(
       this.lastProfile?.assignment?.memberSince ?? this.lastProfile?.regionalManager.memberSince,
     );
+  }
+
+  get hasChanges(): boolean {
+    const profile = this.lastProfile;
+    if (!profile || this.isLoading()) {
+      return false;
+    }
+
+    return this.firstName().trim() !== (profile.user.firstName ?? '').trim()
+      || this.lastName().trim() !== (profile.user.lastName ?? '').trim()
+      || this.normalizeOptionalString(this.bio()) !== this.normalizeOptionalString(profile.user.shortBio)
+      || this.language() !== profile.preferences.interfaceLanguage
+      || this.timezone() !== profile.preferences.timezone
+      || this.notifyRequests() !== profile.preferences.emailRequestsEnabled
+      || this.notifyNewReview() !== profile.preferences.emailNewReviewEnabled;
   }
 
   loadProfile(): void {
@@ -184,6 +269,40 @@ export class SettingsComponent implements OnInit {
           this.notifyStateChanged();
         },
       });
+  }
+
+  private loadPendingReportsBadge(): void {
+    if (this.isContentModerator) {
+      this.supportReportsCount = 0;
+      this.contentModeratorDashboardService.loadDashboard().subscribe({
+        next: dashboard => {
+          this.reportedReviewsCount = dashboard.badges.pendingReviewReportsCount;
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.reportedReviewsCount = 0;
+          this.notifyStateChanged();
+        },
+      });
+      return;
+    }
+
+    if (!this.isAdmin) {
+      this.supportReportsCount = 0;
+      this.reportedReviewsCount = 0;
+      return;
+    }
+
+    this.adminDashboardService.loadDashboard().subscribe({
+      next: dashboard => {
+        this.supportReportsCount = dashboard.badges.supportReportsCount;
+        this.notifyStateChanged();
+      },
+      error: () => {
+        this.supportReportsCount = 0;
+        this.notifyStateChanged();
+      },
+    });
   }
 
   onBioChange(value: string): void {
@@ -229,9 +348,11 @@ export class SettingsComponent implements OnInit {
       .subscribe({
         next: response => {
           const avatarUrl = response.avatarUrl ?? '';
+          const avatarVersion = response.avatarVersion ?? null;
           this.avatarUrl.set(avatarUrl);
-          this.patchLastProfileAvatar(avatarUrl, response.updatedAt ?? null);
-          this.patchAuthUser({ avatarUrl });
+          this.avatarVersion.set(avatarVersion);
+          this.patchLastProfileAvatar(avatarUrl, avatarVersion, response.updatedAt ?? null);
+          this.patchAuthUser({ avatarUrl, avatarVersion });
           this.avatarError.set(null);
           this.notifyStateChanged();
         },
@@ -262,8 +383,9 @@ export class SettingsComponent implements OnInit {
       .subscribe({
         next: response => {
           this.avatarUrl.set('');
-          this.patchLastProfileAvatar('', response.updatedAt ?? null);
-          this.patchAuthUser({ avatarUrl: undefined });
+          this.avatarVersion.set(null);
+          this.patchLastProfileAvatar('', null, response.updatedAt ?? null);
+          this.patchAuthUser({ avatarUrl: undefined, avatarVersion: null });
           this.avatarError.set(null);
           this.notifyStateChanged();
         },
@@ -275,7 +397,7 @@ export class SettingsComponent implements OnInit {
   }
 
   onSave(): void {
-    if (this.isSaving() || this.isLoading()) {
+    if (this.isSaving() || this.isLoading() || !this.hasChanges) {
       return;
     }
 
@@ -317,7 +439,7 @@ export class SettingsComponent implements OnInit {
     if (this.lastProfile) {
       this.applyProfile(this.lastProfile);
     } else {
-      this.router.navigate(['/dashboard']);
+      this.router.navigateByUrl(this.auth.getHomeRoute());
     }
 
     this.saveSuccess.set(false);
@@ -345,6 +467,7 @@ export class SettingsComponent implements OnInit {
     this.email.set(normalizedProfile.user.email ?? '');
     this.bio.set((normalizedProfile.user.shortBio ?? '').slice(0, this.bioMaxLength));
     this.avatarUrl.set(normalizedProfile.user.avatarUrl ?? '');
+    this.avatarVersion.set(normalizedProfile.user.avatarVersion ?? null);
     this.language.set(normalizedProfile.preferences.interfaceLanguage);
     this.timezone.set(normalizedProfile.preferences.timezone);
     this.notifyRequests.set(normalizedProfile.preferences.emailRequestsEnabled);
@@ -367,14 +490,18 @@ export class SettingsComponent implements OnInit {
       notifyRequests: normalizedProfile.preferences.emailRequestsEnabled,
       notifyNewReview: normalizedProfile.preferences.emailNewReviewEnabled,
       avatarUrl: normalizedProfile.user.avatarUrl ?? undefined,
+      avatarVersion: normalizedProfile.user.avatarVersion ?? null,
     });
 
     this.notifyStateChanged();
   }
 
   private normalizeProfile(profile: AdminProfile): AdminProfile {
-    const roles = profile.roles ?? [];
-    const role = profile.role ?? this.buildFallbackRole(roles);
+    const providedRoles = profile.roles ?? [];
+    const role = profile.role ?? this.buildFallbackRole(providedRoles);
+    const roles = providedRoles.length > 0
+      ? providedRoles
+      : (role.roleCode ? [role.roleCode] : []);
     const regionalManager = {
       assignedRegions: profile.regionalManager?.assignedRegions ?? [],
       memberSince: profile.regionalManager?.memberSince ?? null,
@@ -428,6 +555,7 @@ export class SettingsComponent implements OnInit {
         sectionTitle: assignment.sectionTitle?.trim() || this.fallbackAssignmentTitle(roles),
         label: assignment.label?.trim() || this.fallbackAssignmentLabel(roles),
         displayValue,
+        accessLevel: assignment.accessLevel?.trim() || (this.isAdminRoleSet(roles) ? 'Full access' : null),
         assignedItems,
         memberSince: assignment.memberSince ?? null,
       };
@@ -440,6 +568,30 @@ export class SettingsComponent implements OnInit {
     roles: string[],
     regionalManager: AdminProfile['regionalManager'],
   ): AdminProfileAssignment {
+    if (this.isAdminRoleSet(roles)) {
+      return {
+        assignmentType: 'System',
+        sectionTitle: 'System Access',
+        label: 'Scope',
+        displayValue: 'Platform-wide',
+        accessLevel: 'Full access',
+        assignedItems: [],
+        memberSince: null,
+      };
+    }
+
+    if (this.isContentModeratorRoleSet(roles)) {
+      return {
+        assignmentType: 'ContentModeration',
+        sectionTitle: 'Content Moderation Access',
+        label: 'Scope',
+        displayValue: 'Content moderation',
+        accessLevel: 'Review moderation',
+        assignedItems: [],
+        memberSince: null,
+      };
+    }
+
     const isTerritoryManager = roles.some(role => this.normalizeRole(role) === 'territorymanager');
     if (isTerritoryManager) {
       return {
@@ -470,7 +622,9 @@ export class SettingsComponent implements OnInit {
   }
 
   private buildFallbackRole(roles: string[]): AdminProfileRole {
-    const roleCode = roles.find(role => this.normalizeRole(role) === 'territorymanager')
+    const roleCode = roles.find(role => this.normalizeRole(role) === 'admin')
+      ?? roles.find(role => this.normalizeRole(role) === 'contentmoderator')
+      ?? roles.find(role => this.normalizeRole(role) === 'territorymanager')
       ?? roles.find(role => this.normalizeRole(role) === 'regionalmanager')
       ?? roles[0]
       ?? '';
@@ -489,18 +643,42 @@ export class SettingsComponent implements OnInit {
   }
 
   private fallbackAssignmentType(roles: string[]): string {
+    if (this.isAdminRoleSet(roles)) {
+      return 'System';
+    }
+
+    if (this.isContentModeratorRoleSet(roles)) {
+      return 'ContentModeration';
+    }
+
     return roles.some(role => this.normalizeRole(role) === 'territorymanager')
       ? 'Territory'
       : 'Region';
   }
 
   private fallbackAssignmentTitle(roles: string[]): string {
+    if (this.isAdminRoleSet(roles)) {
+      return 'System Access';
+    }
+
+    if (this.isContentModeratorRoleSet(roles)) {
+      return 'Content Moderation Access';
+    }
+
     return roles.some(role => this.normalizeRole(role) === 'territorymanager')
       ? 'Territory Manager Assignment'
       : 'Regional Manager Assignment';
   }
 
   private fallbackAssignmentLabel(roles: string[]): string {
+    if (this.isAdminRoleSet(roles)) {
+      return 'Scope';
+    }
+
+    if (this.isContentModeratorRoleSet(roles)) {
+      return 'Scope';
+    }
+
     return roles.some(role => this.normalizeRole(role) === 'territorymanager')
       ? 'Assigned Territory'
       : 'Assigned Region';
@@ -508,6 +686,14 @@ export class SettingsComponent implements OnInit {
 
   private emptyAssignmentValue(assignmentType: string | null | undefined, roles: string[]): string {
     const normalizedType = (assignmentType ?? this.fallbackAssignmentType(roles)).trim().toLowerCase();
+    if (normalizedType === 'system' || this.isAdminRoleSet(roles)) {
+      return 'Platform-wide';
+    }
+
+    if (normalizedType === 'contentmoderation' || this.isContentModeratorRoleSet(roles)) {
+      return 'Content moderation';
+    }
+
     if (normalizedType === 'country') {
       return 'No assigned countries';
     }
@@ -539,7 +725,7 @@ export class SettingsComponent implements OnInit {
     this.persistRegion(selectedRegion.id);
   }
 
-  private patchLastProfileAvatar(avatarUrl: string, updatedAt: string | null): void {
+  private patchLastProfileAvatar(avatarUrl: string, avatarVersion: number | null, updatedAt: string | null): void {
     if (!this.lastProfile) {
       return;
     }
@@ -549,6 +735,7 @@ export class SettingsComponent implements OnInit {
       user: {
         ...this.lastProfile.user,
         avatarUrl: avatarUrl || null,
+        avatarVersion,
         updatedAt,
       },
     };
@@ -568,11 +755,15 @@ export class SettingsComponent implements OnInit {
     switch (this.normalizeRole(role)) {
       case 'regionalmanager':
         return 'Regional Manager';
+      case 'contentmoderator':
+        return 'Content Moderator';
       case 'territorymanager':
       case 'nationalmanager':
         return 'Territory Manager';
+      case 'territoryassociate':
+        return 'Territory Associate';
       case 'admin':
-        return 'Admin';
+        return 'Administrator';
       default:
         return role;
     }
@@ -580,6 +771,32 @@ export class SettingsComponent implements OnInit {
 
   private normalizeRole(role: string): string {
     return role.replace(/[\s_-]/g, '').toLowerCase();
+  }
+
+  private isAdminRoleSet(roles: readonly string[]): boolean {
+    return roles.some(role => this.normalizeRole(role) === 'admin');
+  }
+
+  private isContentModeratorRoleSet(roles: readonly string[]): boolean {
+    return roles.some(role => this.normalizeRole(role) === 'contentmoderator');
+  }
+
+  private get isAdminProfile(): boolean {
+    const roles = [
+      this.lastProfile?.role?.roleCode,
+      ...(this.lastProfile?.roles ?? []),
+    ].filter((role): role is string => typeof role === 'string');
+
+    return this.isAdminRoleSet(roles);
+  }
+
+  private get isContentModeratorProfile(): boolean {
+    const roles = [
+      this.lastProfile?.role?.roleCode,
+      ...(this.lastProfile?.roles ?? []),
+    ].filter((role): role is string => typeof role === 'string');
+
+    return this.isContentModeratorRoleSet(roles);
   }
 
   private formatDate(value: string | null | undefined): string {
@@ -658,6 +875,10 @@ export class SettingsComponent implements OnInit {
     }
 
     return fallback;
+  }
+
+  private normalizeOptionalString(value: string | null | undefined): string {
+    return value?.trim() ?? '';
   }
 
   private notifyStateChanged(): void {

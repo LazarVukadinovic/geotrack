@@ -20,6 +20,17 @@ export interface AdminMapGeometry {
   coordinates: number[][][] | number[][][][];
 }
 
+export interface AdminMapAssignedRegionBoundary {
+  regionId: number;
+  regionName: string;
+  displayName: string;
+  geometrySource: string;
+  hasBoundary: boolean;
+  geometryGeoJson?: AdminMapGeometry | null;
+  viewport: AdminMapViewport;
+  message?: string | null;
+}
+
 export interface AdminMapZone {
   id: number;
   entityType: Exclude<AdminMapEntityType, 'Place'>;
@@ -27,6 +38,9 @@ export interface AdminMapZone {
   displayName: string;
   status?: string | null;
   geometryGeoJson?: AdminMapGeometry | null;
+  geometrySource?: string | null;
+  isGeometryFallback?: boolean;
+  boundaryNotice?: string | null;
   centerLatitude?: number | null;
   centerLongitude?: number | null;
   detailRoute?: string | null;
@@ -53,6 +67,7 @@ export interface AdminMapMarker {
 
 export interface AdminMapResponse {
   viewport: AdminMapViewport;
+  assignedRegionBoundary?: AdminMapAssignedRegionBoundary | null;
   markers: AdminMapMarker[];
   zones: AdminMapZone[];
   emptyStateMessage?: string | null;
@@ -72,4 +87,41 @@ export interface AdminMapSearchResult {
   longitude: number;
   imageUrl?: string | null;
   detailRoute?: string | null;
+}
+
+export type RegionalScopeValidationMode =
+  | 'InsideAssignedRegion'
+  | 'AllowedWithinToleranceInsideAssignedCountry'
+  | 'RejectedOutsideAssignedCountry'
+  | 'AllowedWithinToleranceOutsideRegion'
+  | 'RejectedInsideAnotherRegion'
+  | 'RejectedTooFarOutsideRegion'
+  | 'RejectedMissingAssignedRegion'
+  | 'RejectedMissingAssignedCountryBoundary'
+  | 'RejectedMissingRegionBoundary'
+  | 'RejectedMissingBoundary';
+
+export interface RegionalEntityLocationValidationRequest {
+  regionId: number;
+  entityType: 'Destination' | 'Location' | 'Place' | 'Event' | string;
+  operationType?: 'Create' | 'Update' | string | null;
+  latitude: number;
+  longitude: number;
+  destinationId?: number | null;
+  locationId?: number | null;
+  placeId?: number | null;
+  parentEntityType?: string | null;
+}
+
+export interface RegionalScopeValidationResult {
+  isAllowed: boolean;
+  validationMode: RegionalScopeValidationMode | string;
+  assignedRegionId?: number | null;
+  assignedRegionName?: string | null;
+  assignedCountryOrTerritoryId?: number | null;
+  assignedCountryOrTerritoryName?: string | null;
+  matchedOtherRegionId?: number | null;
+  matchedOtherRegionName?: string | null;
+  distanceFromAssignedRegionMeters?: number | null;
+  message: string;
 }

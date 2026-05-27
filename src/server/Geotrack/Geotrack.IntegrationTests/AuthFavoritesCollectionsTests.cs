@@ -332,10 +332,13 @@ public sealed class AuthFavoritesCollectionsTests
         var firstAvatar = await firstResponse.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
         Assert.NotNull(firstAvatar);
         Assert.StartsWith("/media/uploads/avatars/", firstAvatar.AvatarUrl);
+        Assert.NotNull(firstAvatar.AvatarVersion);
+        Assert.NotNull(firstAvatar.UpdatedAt);
 
         var meAfterFirstUpload = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
         Assert.NotNull(meAfterFirstUpload);
         Assert.Equal(firstAvatar.AvatarUrl, meAfterFirstUpload.AvatarUrl);
+        Assert.Equal(firstAvatar.AvatarVersion, meAfterFirstUpload.AvatarVersion);
 
         var firstAvatarFile = await client.GetAsync(firstAvatar.AvatarUrl);
         firstAvatarFile.EnsureSuccessStatusCode();
@@ -348,11 +351,13 @@ public sealed class AuthFavoritesCollectionsTests
         var secondAvatar = await secondResponse.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
         Assert.NotNull(secondAvatar);
         Assert.StartsWith("/media/uploads/avatars/", secondAvatar.AvatarUrl);
+        Assert.NotNull(secondAvatar.AvatarVersion);
         Assert.NotEqual(firstAvatar.AvatarUrl, secondAvatar.AvatarUrl);
 
         var meAfterSecondUpload = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
         Assert.NotNull(meAfterSecondUpload);
         Assert.Equal(secondAvatar.AvatarUrl, meAfterSecondUpload.AvatarUrl);
+        Assert.Equal(secondAvatar.AvatarVersion, meAfterSecondUpload.AvatarVersion);
 
         var oldAvatarRequest = await client.GetAsync(firstAvatar.AvatarUrl);
         Assert.Equal(HttpStatusCode.NotFound, oldAvatarRequest.StatusCode);
@@ -360,6 +365,20 @@ public sealed class AuthFavoritesCollectionsTests
         var secondAvatarFile = await client.GetAsync(secondAvatar.AvatarUrl);
         secondAvatarFile.EnsureSuccessStatusCode();
         Assert.Equal("image/png", secondAvatarFile.Content.Headers.ContentType?.MediaType);
+
+        var deleteResponse = await client.DeleteAsync("/api/user/me/avatar");
+        deleteResponse.EnsureSuccessStatusCode();
+
+        var deletedAvatar = await deleteResponse.Content.ReadFromJsonAsync<UpdateAvatarResponseDto>();
+        Assert.NotNull(deletedAvatar);
+        Assert.Equal(string.Empty, deletedAvatar.AvatarUrl);
+        Assert.Null(deletedAvatar.AvatarVersion);
+        Assert.NotNull(deletedAvatar.UpdatedAt);
+
+        var meAfterDelete = await client.GetFromJsonAsync<GetMeResponseDto>("/api/user/me");
+        Assert.NotNull(meAfterDelete);
+        Assert.Null(meAfterDelete.AvatarUrl);
+        Assert.Null(meAfterDelete.AvatarVersion);
     }
 
     [Fact]
@@ -375,7 +394,27 @@ public sealed class AuthFavoritesCollectionsTests
 
         var errorBody = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
         Assert.NotNull(errorBody);
-        Assert.Equal("Only PNG, JPG, GIF, or WEBP images are supported.", errorBody["message"]);
+        Assert.Equal("Only PNG, JPG, JPEG, or WEBP images are supported.", errorBody["message"]);
+
+        using var oversizedUpload = CreateAvatarUploadContent(new byte[(5 * 1024 * 1024) + 1], "avatar.png", "image/png");
+        var oversizedResponse = await client.PutAsync("/api/user/me/avatar", oversizedUpload);
+        Assert.Equal(HttpStatusCode.BadRequest, oversizedResponse.StatusCode);
+
+        var oversizedError = await oversizedResponse.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.NotNull(oversizedError);
+        Assert.Equal("Profile image must be 5 MB or smaller.", oversizedError["message"]);
+    }
+
+    [Fact]
+    public async Task Profile_avatar_upload_requires_authentication()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+        using var upload = CreateAvatarUploadContent(AvatarPngBytes, "avatar.png", "image/png");
+
+        var response = await client.PutAsync("/api/user/me/avatar", upload);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]

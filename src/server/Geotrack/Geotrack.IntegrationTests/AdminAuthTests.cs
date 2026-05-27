@@ -55,6 +55,40 @@ public sealed class AdminAuthTests
     }
 
     [Fact]
+    public async Task Content_moderator_login_succeeds_and_issues_role_claims()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        using var client = app.CreateClient();
+        var response = await client.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new LoginRequestDto
+            {
+                Email = "moderator@gmail.com",
+                Password = "Proba123!",
+                RememberMe = false
+            });
+
+        response.EnsureSuccessStatusCode();
+
+        var session = await response.Content.ReadFromJsonAsync<AdminLoginResponseDto>();
+        Assert.NotNull(session);
+        Assert.Equal("moderator@gmail.com", session!.User.Email);
+        Assert.Contains(RoleNames.ContentModerator, session.User.Roles);
+        Assert.True(session.User.CanAccessContentModeration);
+        Assert.False(session.User.CanAccessRegionalAdmin);
+        Assert.False(session.User.CanAccessTerritoryAdmin);
+
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(session.AccessToken);
+        var roleClaims = token.Claims
+            .Where(claim => claim.Type is "role" or ClaimTypes.Role)
+            .Select(claim => claim.Value)
+            .ToList();
+
+        Assert.Contains(RoleNames.ContentModerator, roleClaims);
+    }
+
+    [Fact]
     public async Task Admin_login_rejects_invalid_credentials_without_revealing_account_existence()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();

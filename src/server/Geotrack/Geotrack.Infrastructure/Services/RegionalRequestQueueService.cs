@@ -2,10 +2,8 @@ using Geotrack.Domain.Entities.Core;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Contributions;
-using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
-using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,20 +14,16 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
     private const int DefaultTake = 10;
     private const int MaxTake = 50;
     private const string ContributionSource = "Contribution";
-    private const string ReviewReportSource = "ReviewReport";
 
     private readonly AppDbContext _db;
     private readonly IPlaceContributionService _placeContributionService;
-    private readonly IReviewReportService _reviewReportService;
 
     public RegionalRequestQueueService(
         AppDbContext db,
-        IPlaceContributionService placeContributionService,
-        IReviewReportService reviewReportService)
+        IPlaceContributionService placeContributionService)
     {
         _db = db;
         _placeContributionService = placeContributionService;
-        _reviewReportService = reviewReportService;
     }
 
     public async Task<RegionalRequestQueueResponseDto> GetQueueAsync(
@@ -52,7 +46,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         var fetchLimit = normalizedSkip + normalizedTake;
 
         var includeContributions = normalizedType is null or "all" or "place";
-        var includeReviewReports = normalizedType is null or "all" or "review";
 
         var contributionQuery = BuildContributionQuery(regionId);
         contributionQuery = ApplyContributionStatus(contributionQuery, normalizedStatus);
@@ -60,24 +53,13 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         if (!includeContributions)
             contributionQuery = contributionQuery.Where(_ => false);
 
-        var reportQuery = BuildReviewReportQuery(regionId);
-        reportQuery = ApplyReviewReportStatus(reportQuery, normalizedStatus);
-        reportQuery = ApplyReviewReportSearch(reportQuery, search);
-        if (!includeReviewReports)
-            reportQuery = reportQuery.Where(_ => false);
-
         var totalContributionCount = await contributionQuery.CountAsync();
-        var totalReportCount = await reportQuery.CountAsync();
 
         var contributionRows = includeContributions
             ? await ProjectContributions(ApplyContributionSort(contributionQuery, normalizedSort), fetchLimit)
             : new List<RegionalRequestQueueItemDto>();
 
-        var reportRows = includeReviewReports
-            ? await ProjectReviewReports(ApplyReviewReportSort(reportQuery, normalizedSort), fetchLimit)
-            : new List<RegionalRequestQueueItemDto>();
-
-        var items = SortItems(contributionRows.Concat(reportRows), normalizedSort)
+        var items = SortItems(contributionRows, normalizedSort)
             .Skip(normalizedSkip)
             .Take(normalizedTake)
             .ToList();
@@ -85,14 +67,13 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         return new RegionalRequestQueueResponseDto
         {
             Items = items,
-            TotalCount = totalContributionCount + totalReportCount,
+            TotalCount = totalContributionCount,
             PendingCount = await CountByStatusAsync(regionId, "pending", search),
             ApprovedCount = await CountByStatusAsync(regionId, "approved", search),
             RejectedCount = await CountByStatusAsync(regionId, "rejected", search),
             CountsByType = new RegionalRequestQueueCountsByTypeDto
             {
-                Places = await CountContributionsAsync(regionId, "pending", search),
-                Reviews = await CountReviewReportsAsync(regionId, "pending", search)
+                Places = await CountContributionsAsync(regionId, "pending", search)
             },
             Skip = normalizedSkip,
             Take = normalizedTake
@@ -110,9 +91,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
 
         if (normalizedSource == ContributionSource)
             return await GetContributionDetailAsync(regionId, requestId);
-
-        if (normalizedSource == ReviewReportSource)
-            return await GetReviewReportDetailAsync(regionId, requestId);
 
         throw new InvalidOperationException("Invalid request source.");
     }
@@ -132,16 +110,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             await EnsureContributionExistsInRegionAsync(regionId, requestId);
             await _placeContributionService.ApproveAsync(requestId, userId, note);
             return await BuildSuccessResultAsync(regionId, ContributionSource, requestId);
-        }
-
-        if (normalizedSource == ReviewReportSource)
-        {
-            await EnsureReviewReportExistsInRegionAsync(regionId, requestId);
-            await _reviewReportService.RemoveReportedReviewAsync(
-                userId,
-                requestId,
-                new ModerateReviewReportRequestDto { Note = note });
-            return await BuildSuccessResultAsync(regionId, ReviewReportSource, requestId);
         }
 
         throw new InvalidOperationException("Invalid request source.");
@@ -164,16 +132,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             await EnsureContributionExistsInRegionAsync(regionId, requestId);
             await _placeContributionService.RejectAsync(requestId, userId, decisionNote);
             return await BuildSuccessResultAsync(regionId, ContributionSource, requestId);
-        }
-
-        if (normalizedSource == ReviewReportSource)
-        {
-            await EnsureReviewReportExistsInRegionAsync(regionId, requestId);
-            await _reviewReportService.DismissReportAsync(
-                userId,
-                requestId,
-                new ModerateReviewReportRequestDto { Note = decisionNote });
-            return await BuildSuccessResultAsync(regionId, ReviewReportSource, requestId);
         }
 
         throw new InvalidOperationException("Invalid request source.");
@@ -252,9 +210,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         string source,
         int requestId)
     {
-        var item = source == ContributionSource
-            ? await GetContributionItemAsync(regionId, requestId)
-            : await GetReviewReportItemAsync(regionId, requestId);
+        var item = await GetContributionItemAsync(regionId, requestId);
 
         return new RegionalRequestActionResultDto
         {
@@ -280,13 +236,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
                   contribution.Place.Location.Destination.RegionId == contribution.Location.Destination.RegionId)));
     }
 
-    private IQueryable<ReviewReport> BuildReviewReportQuery(int regionId)
-    {
-        return _db.ReviewReports
-            .AsNoTracking()
-            .Where(report => report.RegionId == regionId);
-    }
-
     private static IQueryable<PlaceContribution> ApplyContributionStatus(
         IQueryable<PlaceContribution> query,
         string? status)
@@ -296,20 +245,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             null or "pending" => query.Where(contribution => contribution.Status == PlaceContributionStatus.PendingReview),
             "approved" => query.Where(contribution => contribution.Status == PlaceContributionStatus.Approved),
             "rejected" => query.Where(contribution => contribution.Status == PlaceContributionStatus.Rejected),
-            "all" => query,
-            _ => throw new InvalidOperationException("Invalid status filter.")
-        };
-    }
-
-    private static IQueryable<ReviewReport> ApplyReviewReportStatus(
-        IQueryable<ReviewReport> query,
-        string? status)
-    {
-        return status switch
-        {
-            null or "pending" => query.Where(report => report.Status == ReviewReportStatus.Pending),
-            "approved" => query.Where(report => report.Status == ReviewReportStatus.Actioned),
-            "rejected" => query.Where(report => report.Status == ReviewReportStatus.Dismissed),
             "all" => query,
             _ => throw new InvalidOperationException("Invalid status filter.")
         };
@@ -346,32 +281,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             (matchesClaim && contribution.Type == PlaceContributionType.ClaimOwnership));
     }
 
-    private static IQueryable<ReviewReport> ApplyReviewReportSearch(
-        IQueryable<ReviewReport> query,
-        string? search)
-    {
-        var q = search?.Trim();
-        if (string.IsNullOrWhiteSpace(q))
-            return query;
-
-        var like = "%" + q + "%";
-        var normalized = NormalizeToken(q);
-        var numericId = normalized.StartsWith("con", StringComparison.Ordinal)
-            ? null
-            : ExtractNumericSearchTerm(q);
-
-        return query.Where(report =>
-            EF.Functions.ILike(report.EntityName, like) ||
-            EF.Functions.ILike(report.ReviewAuthorName, like) ||
-            EF.Functions.ILike(report.ReviewCommentSnapshot, like) ||
-            EF.Functions.ILike(report.Note, like) ||
-            EF.Functions.ILike(report.ReporterUser.DisplayName ?? string.Empty, like) ||
-            EF.Functions.ILike(report.ReporterUser.FirstName ?? string.Empty, like) ||
-            EF.Functions.ILike(report.ReporterUser.LastName ?? string.Empty, like) ||
-            EF.Functions.ILike(report.ReporterUser.Username, like) ||
-            (numericId.HasValue && report.Id == numericId.Value));
-    }
-
     private static IQueryable<PlaceContribution> ApplyContributionSort(
         IQueryable<PlaceContribution> query,
         string sort)
@@ -382,19 +291,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             "status" => query.OrderBy(contribution => contribution.Status).ThenByDescending(contribution => contribution.SubmittedAt),
             "type" => query.OrderBy(contribution => contribution.Type).ThenByDescending(contribution => contribution.SubmittedAt),
             _ => query.OrderByDescending(contribution => contribution.SubmittedAt).ThenByDescending(contribution => contribution.Id)
-        };
-    }
-
-    private static IQueryable<ReviewReport> ApplyReviewReportSort(
-        IQueryable<ReviewReport> query,
-        string sort)
-    {
-        return sort switch
-        {
-            "oldest" => query.OrderBy(report => report.CreatedAt).ThenBy(report => report.Id),
-            "status" => query.OrderBy(report => report.Status).ThenByDescending(report => report.CreatedAt),
-            "type" => query.OrderBy(report => report.TargetType).ThenByDescending(report => report.CreatedAt),
-            _ => query.OrderByDescending(report => report.CreatedAt).ThenByDescending(report => report.Id)
         };
     }
 
@@ -430,49 +326,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             .ToListAsync();
 
         return rows.Select(MapContributionRow).ToList();
-    }
-
-    private async Task<List<RegionalRequestQueueItemDto>> ProjectReviewReports(
-        IQueryable<ReviewReport> query,
-        int take)
-    {
-        var rows = await query
-            .Take(Math.Max(1, take))
-            .Select(report => new ReviewReportQueueRow
-            {
-                Id = report.Id,
-                TargetType = report.TargetType,
-                Status = report.Status,
-                EntityName = report.EntityName,
-                RegionId = report.RegionId,
-                RegionName = report.RegionName,
-                ReporterUserId = report.ReporterUserId,
-                ReporterDisplayName = report.ReporterUser.DisplayName,
-                ReporterFirstName = report.ReporterUser.FirstName,
-                ReporterLastName = report.ReporterUser.LastName,
-                ReporterUsername = report.ReporterUser.Username,
-                CreatedAt = report.CreatedAt,
-                PreviewText = report.ReviewCommentSnapshot
-            })
-            .ToListAsync();
-
-        var regionIds = rows.Select(row => row.RegionId).Distinct().ToList();
-        var regions = await _db.Regions
-            .AsNoTracking()
-            .Where(region => regionIds.Contains(region.Id))
-            .Select(region => new { region.Id, region.Name, TerritoryName = region.Territory.Name })
-            .ToDictionaryAsync(region => region.Id);
-
-        foreach (var row in rows)
-        {
-            if (regions.TryGetValue(row.RegionId, out var region))
-            {
-                row.RegionName = region.Name;
-                row.TerritoryName = region.TerritoryName;
-            }
-        }
-
-        return rows.Select(MapReviewReportRow).ToList();
     }
 
     private async Task<RegionalRequestQueueDetailDto> GetContributionDetailAsync(int regionId, int requestId)
@@ -559,55 +412,8 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             OwnershipProofDocumentUrl = contribution.OwnershipProofDocumentUrl,
             OwnershipProofOriginalFileName = contribution.OwnershipProofOriginalFileName,
             OwnershipProofContentType = contribution.OwnershipProofContentType,
-            OwnershipProofUploadedAt = contribution.OwnershipProofUploadedAt
-        };
-    }
-
-    private async Task<RegionalRequestQueueDetailDto> GetReviewReportDetailAsync(int regionId, int requestId)
-    {
-        var report = await _db.ReviewReports
-            .AsNoTracking()
-            .Include(item => item.ReporterUser)
-            .Where(item => item.Id == requestId && item.RegionId == regionId)
-            .SingleOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Request not found.");
-
-        var regionDisplayName = await BuildRegionDisplayNameAsync(report.RegionId, report.RegionName);
-        var reporter = BuildDisplayName(
-            report.ReporterUser.DisplayName,
-            report.ReporterUser.FirstName,
-            report.ReporterUser.LastName,
-            report.ReporterUser.Username);
-
-        return new RegionalRequestQueueDetailDto
-        {
-            RequestKey = BuildReviewReportRequestKey(report.Id),
-            RequestId = report.Id,
-            DisplayRequestId = BuildReviewReportDisplayId(report.Id),
-            Source = ReviewReportSource,
-            Title = "Reported review: " + report.EntityName,
-            EntityType = "Review",
-            ContributionType = "ReviewReport",
-            RegionId = report.RegionId,
-            RegionDisplayName = regionDisplayName,
-            SubmittedByUserId = report.ReporterUserId,
-            SubmittedByDisplayName = reporter,
-            SubmittedByInitials = BuildInitials(reporter),
-            SubmittedAt = report.CreatedAt,
-            Status = MapReviewReportStatus(report.Status),
-            PreviewText = report.ReviewCommentSnapshot,
-            DetailRoute = BuildDetailRoute(ReviewReportSource, report.Id),
-            Description = report.Note,
-            TargetEntityId = report.EntityId,
-            TargetEntityName = report.EntityName,
-            ReviewComment = report.ReviewCommentSnapshot,
-            ReviewRating = report.ReviewRating,
-            ReviewCreatedAt = report.ReviewCreatedAt,
-            ReviewAuthorDisplayName = report.ReviewAuthorName,
-            ReportReason = report.Reason.ToString(),
-            ReportNote = report.Note,
-            Decision = report.Decision?.ToString(),
-            DecisionNote = report.DecisionNote
+            OwnershipProofUploadedAt = contribution.OwnershipProofUploadedAt,
+            DecisionNote = contribution.ReviewNote
         };
     }
 
@@ -620,28 +426,10 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         return rows.SingleOrDefault() ?? throw new KeyNotFoundException("Request not found.");
     }
 
-    private async Task<RegionalRequestQueueItemDto> GetReviewReportItemAsync(int regionId, int requestId)
-    {
-        var rows = await ProjectReviewReports(
-            BuildReviewReportQuery(regionId).Where(report => report.Id == requestId),
-            1);
-
-        return rows.SingleOrDefault() ?? throw new KeyNotFoundException("Request not found.");
-    }
-
     private async Task EnsureContributionExistsInRegionAsync(int regionId, int requestId)
     {
         var exists = await BuildContributionQuery(regionId)
             .AnyAsync(contribution => contribution.Id == requestId);
-
-        if (!exists)
-            throw new KeyNotFoundException("Request not found.");
-    }
-
-    private async Task EnsureReviewReportExistsInRegionAsync(int regionId, int requestId)
-    {
-        var exists = await BuildReviewReportQuery(regionId)
-            .AnyAsync(report => report.Id == requestId);
 
         if (!exists)
             throw new KeyNotFoundException("Request not found.");
@@ -679,20 +467,13 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
 
     private async Task<int> CountByStatusAsync(int regionId, string status, string? search)
     {
-        return await CountContributionsAsync(regionId, status, search)
-            + await CountReviewReportsAsync(regionId, status, search);
+        return await CountContributionsAsync(regionId, status, search);
     }
 
     private async Task<int> CountContributionsAsync(int regionId, string status, string? search)
     {
         var query = ApplyContributionStatus(BuildContributionQuery(regionId), status);
         return await ApplyContributionSearch(query, search).CountAsync();
-    }
-
-    private async Task<int> CountReviewReportsAsync(int regionId, string status, string? search)
-    {
-        var query = ApplyReviewReportStatus(BuildReviewReportQuery(regionId), status);
-        return await ApplyReviewReportSearch(query, search).CountAsync();
     }
 
     private static RegionalRequestQueueItemDto MapContributionRow(ContributionQueueRow row)
@@ -721,36 +502,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             Status = MapContributionStatus(row.Status),
             ThumbnailImageUrl = row.ThumbnailImageUrl,
             PreviewText = row.PreviewText,
-            DetailRoute = BuildDetailRoute(ContributionSource, row.Id)
-        };
-    }
-
-    private static RegionalRequestQueueItemDto MapReviewReportRow(ReviewReportQueueRow row)
-    {
-        var displayName = BuildDisplayName(
-            row.ReporterDisplayName,
-            row.ReporterFirstName,
-            row.ReporterLastName,
-            row.ReporterUsername);
-
-        return new RegionalRequestQueueItemDto
-        {
-            RequestKey = BuildReviewReportRequestKey(row.Id),
-            RequestId = row.Id,
-            DisplayRequestId = BuildReviewReportDisplayId(row.Id),
-            Source = ReviewReportSource,
-            Title = "Reported review: " + row.EntityName,
-            EntityType = "Review",
-            ContributionType = row.TargetType + "ReviewReport",
-            RegionId = row.RegionId,
-            RegionDisplayName = BuildRegionDisplayName(row.RegionName, row.TerritoryName),
-            SubmittedByUserId = row.ReporterUserId,
-            SubmittedByDisplayName = displayName,
-            SubmittedByInitials = BuildInitials(displayName),
-            SubmittedAt = row.CreatedAt,
-            Status = MapReviewReportStatus(row.Status),
-            PreviewText = row.PreviewText,
-            DetailRoute = BuildDetailRoute(ReviewReportSource, row.Id)
+            DetailRoute = BuildDetailRoute(row.Id)
         };
     }
 
@@ -787,21 +539,8 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
                 .Select(image => image.Url)
                 .FirstOrDefault(),
             PreviewText = contribution.Description,
-            DetailRoute = BuildDetailRoute(ContributionSource, contribution.Id)
+            DetailRoute = BuildDetailRoute(contribution.Id)
         };
-    }
-
-    private async Task<string> BuildRegionDisplayNameAsync(int regionId, string fallback)
-    {
-        var region = await _db.Regions
-            .AsNoTracking()
-            .Where(item => item.Id == regionId)
-            .Select(item => new { item.Name, TerritoryName = item.Territory.Name })
-            .SingleOrDefaultAsync();
-
-        return region is null
-            ? fallback
-            : BuildRegionDisplayName(region.Name, region.TerritoryName);
     }
 
     private static IOrderedEnumerable<RegionalRequestQueueItemDto> SortItems(
@@ -829,7 +568,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             "location" or "locations" => "location",
             "place" or "places" => "place",
             "event" or "events" => "event",
-            "review" or "reviews" => "review",
             _ => throw new InvalidOperationException("Invalid type filter.")
         };
     }
@@ -866,7 +604,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         return normalized switch
         {
             "contribution" or "contributions" => ContributionSource,
-            "review" or "reviews" or "reviewreport" or "reviewreports" => ReviewReportSource,
             _ => throw new InvalidOperationException("Invalid request source.")
         };
     }
@@ -961,24 +698,12 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
     private static string MapContributionStatus(PlaceContributionStatus status) =>
         status == PlaceContributionStatus.PendingReview ? "Pending" : status.ToString();
 
-    private static string MapReviewReportStatus(ReviewReportStatus status) =>
-        status switch
-        {
-            ReviewReportStatus.Pending => "Pending",
-            ReviewReportStatus.Actioned => "Approved",
-            ReviewReportStatus.Dismissed => "Rejected",
-            _ => status.ToString()
-        };
-
     private static string BuildContributionRequestKey(int id) => "contribution:" + id;
-    private static string BuildReviewReportRequestKey(int id) => "review-report:" + id;
     private static string BuildContributionDisplayId(int id) => "CON-" + id.ToString("D4");
-    private static string BuildReviewReportDisplayId(int id) => "REP-" + id.ToString("D4");
 
-    private static string BuildDetailRoute(string source, int id)
+    private static string BuildDetailRoute(int id)
     {
-        var routeSource = source == ContributionSource ? "contribution" : "review-report";
-        return $"/request/detail/{routeSource}/{id}";
+        return $"/request/detail/contribution/{id}";
     }
 
     private static List<string> DeserializeStringList(string? json)
@@ -1028,24 +753,6 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         public string Username { get; set; } = string.Empty;
         public DateTime SubmittedAt { get; set; }
         public string? ThumbnailImageUrl { get; set; }
-        public string? PreviewText { get; set; }
-    }
-
-    private sealed class ReviewReportQueueRow
-    {
-        public int Id { get; set; }
-        public ReviewReportTargetType TargetType { get; set; }
-        public ReviewReportStatus Status { get; set; }
-        public string EntityName { get; set; } = string.Empty;
-        public int RegionId { get; set; }
-        public string RegionName { get; set; } = string.Empty;
-        public string? TerritoryName { get; set; }
-        public int ReporterUserId { get; set; }
-        public string? ReporterDisplayName { get; set; }
-        public string? ReporterFirstName { get; set; }
-        public string? ReporterLastName { get; set; }
-        public string ReporterUsername { get; set; } = string.Empty;
-        public DateTime CreatedAt { get; set; }
         public string? PreviewText { get; set; }
     }
 }

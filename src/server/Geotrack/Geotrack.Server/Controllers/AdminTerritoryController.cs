@@ -12,15 +12,18 @@ namespace Geotrack.Server.Controllers;
 public sealed class AdminTerritoryController : ControllerBase
 {
     private readonly ITerritoryDashboardService _territoryDashboard;
+    private readonly ITerritoryAnalyticsService _territoryAnalytics;
     private readonly ITerritoryUserAdminService _territoryUsers;
     private readonly ILogger<AdminTerritoryController> _logger;
 
     public AdminTerritoryController(
         ITerritoryDashboardService territoryDashboard,
+        ITerritoryAnalyticsService territoryAnalytics,
         ITerritoryUserAdminService territoryUsers,
         ILogger<AdminTerritoryController> logger)
     {
         _territoryDashboard = territoryDashboard;
+        _territoryAnalytics = territoryAnalytics;
         _territoryUsers = territoryUsers;
         _logger = logger;
     }
@@ -63,6 +66,79 @@ public sealed class AdminTerritoryController : ControllerBase
         try
         {
             return Ok(await _territoryDashboard.GetDashboardAsync(GetCurrentUserId(), territoryId));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("analytics/overview")]
+    public async Task<ActionResult<TerritoryAnalyticsOverviewDto>> GetAnalyticsOverview(
+        [FromQuery] int? territoryId = null,
+        [FromQuery] string? period = null,
+        [FromQuery] List<int>? regionIds = null,
+        [FromQuery] string? status = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 5,
+        [FromQuery] string? sort = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryAnalytics.GetOverviewAsync(
+                GetCurrentUserId(),
+                new TerritoryAnalyticsOverviewQuery
+                {
+                    TerritoryId = territoryId,
+                    Period = period,
+                    RegionIds = regionIds ?? new List<int>(),
+                    Status = status,
+                    Skip = skip,
+                    Take = take,
+                    Sort = sort
+                },
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("analytics/export")]
+    public async Task<IActionResult> ExportAnalytics(
+        [FromQuery] int? territoryId = null,
+        [FromQuery] string? period = null,
+        [FromQuery] List<int>? regionIds = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? sort = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            var csv = await _territoryAnalytics.ExportCsvAsync(
+                GetCurrentUserId(),
+                new TerritoryAnalyticsOverviewQuery
+                {
+                    TerritoryId = territoryId,
+                    Period = period,
+                    RegionIds = regionIds ?? new List<int>(),
+                    Status = status,
+                    Sort = sort
+                },
+                cancellationToken);
+
+            return File(
+                System.Text.Encoding.UTF8.GetBytes(csv),
+                "text/csv",
+                "territory-analytics.csv");
         }
         catch (Exception ex)
         {
@@ -114,6 +190,39 @@ public sealed class AdminTerritoryController : ControllerBase
         }
     }
 
+    [HttpGet("regions/boundary-candidates")]
+    public async Task<ActionResult<BoundaryRegionCandidateResponseDto>> GetRegionBoundaryCandidates(
+        [FromQuery] int? territoryId = null,
+        [FromQuery] string? level = null,
+        [FromQuery] string? search = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int? take = null)
+    {
+        if (territoryId.HasValue && territoryId.Value <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        if (skip < 0)
+            return BadRequest(new { message = "skip must be zero or greater." });
+
+        if (take is <= 0)
+            return BadRequest(new { message = "take must be positive." });
+
+        try
+        {
+            return Ok(await _territoryDashboard.GetRegionBoundaryCandidatesAsync(
+                GetCurrentUserId(),
+                territoryId,
+                level,
+                search,
+                skip,
+                take));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpPost("regions")]
     public async Task<ActionResult<TerritoryRegionCreateResponseDto>> CreateRegion(
         [FromBody] TerritoryRegionCreateRequestDto? request)
@@ -121,7 +230,7 @@ public sealed class AdminTerritoryController : ControllerBase
         if (request is null)
             return BadRequest(new { message = "Request body is required." });
 
-        if (request.TerritoryId <= 0)
+        if (request.TerritoryId <= 0 && !HasBoundaryCandidateRequest(request))
             return BadRequest(new { message = "territoryId is required." });
 
         try
@@ -254,6 +363,30 @@ public sealed class AdminTerritoryController : ControllerBase
         }
     }
 
+    [HttpGet("users/{userId:int}")]
+    public async Task<ActionResult<TerritoryUserListItemDto>> GetUser(
+        [FromRoute] int userId,
+        [FromQuery] int? territoryId = null)
+    {
+        if (userId <= 0)
+            return BadRequest(new { message = "userId must be positive." });
+
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryUsers.GetUserAsync(
+                GetCurrentUserId(),
+                userId,
+                territoryId));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpPut("users/{userId:int}")]
     public async Task<ActionResult<TerritoryUserListItemDto>> UpdateUser(
         [FromRoute] int userId,
@@ -356,6 +489,35 @@ public sealed class AdminTerritoryController : ControllerBase
                 GetCurrentUserId(),
                 userId,
                 request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("users/{userId:int}/regions/{regionId:int}")]
+    public async Task<ActionResult<TerritoryUserListItemDto>> RemoveRegion(
+        [FromRoute] int userId,
+        [FromRoute] int regionId,
+        [FromQuery] int? territoryId = null)
+    {
+        if (userId <= 0)
+            return BadRequest(new { message = "userId must be positive." });
+
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId must be positive." });
+
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryUsers.RemoveRegionAsync(
+                GetCurrentUserId(),
+                userId,
+                regionId,
+                territoryId));
         }
         catch (Exception ex)
         {
@@ -498,8 +660,45 @@ public sealed class AdminTerritoryController : ControllerBase
         {
             UnauthorizedAccessException => StatusCode(StatusCodes.Status403Forbidden, new { message = "Forbidden." }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
+            InvalidOperationException when IsConflict(ex) => Conflict(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
             _ => StatusCode(StatusCodes.Status500InternalServerError, new { message = "An unexpected error occurred." })
         };
     }
+
+    [HttpPost("regions/from-boundary-candidate")]
+    public async Task<ActionResult<TerritoryRegionCreateResponseDto>> CreateRegionFromBoundaryCandidate(
+        [FromBody] TerritoryRegionCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        if (!HasBoundaryCandidateRequest(request))
+            return BadRequest(new { message = "Boundary candidate id is required." });
+
+        try
+        {
+            var created = await _territoryDashboard.CreateRegionAsync(GetCurrentUserId(), request);
+            return CreatedAtAction(
+                nameof(GetRegionDetail),
+                new { regionId = created.RegionId, territoryId = created.TerritoryId },
+                created);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    private static bool IsConflict(Exception ex) =>
+        string.Equals(
+            ex.Message,
+            "This administrative region has already been created.",
+            StringComparison.Ordinal);
+
+    private static bool HasBoundaryCandidateRequest(TerritoryRegionCreateRequestDto request) =>
+        !string.IsNullOrWhiteSpace(request.ShapeId) ||
+        !string.IsNullOrWhiteSpace(request.CandidateExternalKey) ||
+        !string.IsNullOrWhiteSpace(request.BoundaryCandidateId) ||
+        !string.IsNullOrWhiteSpace(request.BoundaryExternalKey);
 }

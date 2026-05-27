@@ -20,6 +20,8 @@ public class AuthService : IAuthService
     private const string AdminAccessDeniedMessage = "You do not have access to the admin app.";
     private static readonly string[] AdminAppRoles =
     [
+        RoleNames.Admin,
+        RoleNames.ContentModerator,
         RoleNames.TerritoryManager,
         RoleNames.TerritoryAssociate,
         RoleNames.RegionalManager
@@ -180,6 +182,8 @@ public class AuthService : IAuthService
         var user = await _userRepository.GetByIdWithRolesAsync(userId)
             ?? throw new UnauthorizedAccessException(InvalidCredentialsMessage);
 
+        EnsureAccountCanAuthenticate(user);
+
         var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
         if (!requiredRoles.Any(requiredRole => roles.Contains(RoleNames.Normalize(requiredRole), StringComparer.Ordinal)))
             throw new ForbiddenAccessException(AdminAccessDeniedMessage);
@@ -192,7 +196,9 @@ public class AuthService : IAuthService
             LastName = user.LastName,
             DisplayName = BuildDisplayName(user),
             AvatarUrl = user.AvatarUrl,
+            AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             Roles = roles,
+            CanAccessContentModeration = roles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal),
             CanAccessRegionalAdmin = roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal),
             CanAccessTerritoryAdmin =
                 roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal) ||
@@ -214,6 +220,8 @@ public class AuthService : IAuthService
         var user = await _userRepository.GetByEmailAsync(normalizedEmail);
         if (user == null)
             throw new UnauthorizedAccessException(invalidCredentialsMessage);
+
+        EnsureAccountCanAuthenticate(user);
 
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
         if (result == PasswordVerificationResult.Failed)
@@ -248,10 +256,12 @@ public class AuthService : IAuthService
         stored.RevokedAt = DateTime.UtcNow;
         await _refreshTokenRepository.SaveChangesAsync();
 
+        var user = await _userRepository.GetByIdWithRolesAsync(stored.UserId)
+            ?? throw new UnauthorizedAccessException("Invalid or expired refresh token");
+        EnsureAccountCanAuthenticate(user);
+
         if (requiredRoles is { Count: > 0 })
         {
-            var user = await _userRepository.GetByIdWithRolesAsync(stored.UserId)
-                ?? throw new UnauthorizedAccessException("Invalid or expired refresh token");
             var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
 
             if (!requiredRoles.Any(requiredRole => roles.Contains(RoleNames.Normalize(requiredRole), StringComparer.Ordinal)))
@@ -279,6 +289,7 @@ public class AuthService : IAuthService
     {
         var user = await _userRepository.GetByIdWithRolesAsync(userId)
             ?? throw new UnauthorizedAccessException("Invalid credentials");
+        EnsureAccountCanAuthenticate(user);
         var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
 
         var accessToken  = _jwtService.GenerateAccessToken(userId, roles);
@@ -349,6 +360,15 @@ public class AuthService : IAuthService
     {
         user.LastLoginAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
+    }
+
+    private static void EnsureAccountCanAuthenticate(User user)
+    {
+        if (user.IsDeleted)
+            throw new UnauthorizedAccessException(InvalidCredentialsMessage);
+
+        if (user.IsSuspended)
+            throw new ForbiddenAccessException("Account is suspended.");
     }
 
     private static bool IsValidEmail(string email)

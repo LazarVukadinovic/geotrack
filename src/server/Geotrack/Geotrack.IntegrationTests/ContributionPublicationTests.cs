@@ -15,11 +15,20 @@ using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
+using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using Polygon = NetTopologySuite.Geometries.Polygon;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.IntegrationTests;
 
 public sealed class ContributionPublicationTests
 {
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string SeedRegionName = "Dubrovnik-Neretva";
+    private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 4326);
+
     [Fact]
     public async Task Approving_a_place_contribution_for_a_stay_preserves_contact_price_type_and_partner_urls()
     {
@@ -34,7 +43,7 @@ public sealed class ContributionPublicationTests
             createdContribution.Contribution.BookingPartners,
             partner => partner.Id == "booking" && partner.Url == "https://partners.example/booking/beta-villa");
 
-        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", SeedRegionName);
 
         using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
         var approvalResponse = await reviewerClient.PostAsJsonAsync(
@@ -94,7 +103,7 @@ public sealed class ContributionPublicationTests
         using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
         var createdContribution = await CreatePlaceContributionAsync(contributorClient);
 
-        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", SeedRegionName);
 
         using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
         var rejectionResponse = await reviewerClient.PostAsJsonAsync(
@@ -128,7 +137,7 @@ public sealed class ContributionPublicationTests
             fixture.PlaceTypeId,
             "Out of scope overwrite");
 
-        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", SeedRegionName);
 
         using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
         var queue = await reviewerClient.GetFromJsonAsync<GetPlaceContributionsResponseDto>(
@@ -169,7 +178,7 @@ public sealed class ContributionPublicationTests
             fixture.PlaceTypeId,
             "Out of region move");
 
-        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", SeedRegionName);
 
         using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
         var approvalResponse = await reviewerClient.PostAsJsonAsync(
@@ -199,7 +208,7 @@ public sealed class ContributionPublicationTests
             fixture.PlaceTypeId,
             "Approved in-region update");
 
-        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", SeedRegionName);
 
         using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
         var approvalResponse = await reviewerClient.PostAsJsonAsync(
@@ -380,7 +389,7 @@ public sealed class ContributionPublicationTests
 
         Assert.Equal(PlaceContributionStatus.PendingReview, saved.Status);
         Assert.False(string.IsNullOrWhiteSpace(saved.OwnershipProofDocumentUrl));
-        Assert.Equal("Dalmatia", saved.Location!.Destination.Region.Name);
+        Assert.Equal(SeedRegionName, saved.Location!.Destination.Region.Name);
     }
 
     [Fact]
@@ -399,12 +408,12 @@ public sealed class ContributionPublicationTests
         Assert.NotNull(created);
         var createdId = created!.Contribution.Id;
 
-        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", "Dalmatia");
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", SeedRegionName);
 
         using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
-        var dalmatiaRegionId = await GetRegionIdAsync(app, "Dalmatia");
+        var seedRegionId = await GetRegionIdAsync(app, SeedRegionName);
         var queue = await reviewerClient.GetFromJsonAsync<RegionalRequestQueueResponseDto>(
-            $"/api/admin/regional/requests?regionId={dalmatiaRegionId}&type=place&status=pending");
+            $"/api/admin/regional/requests?regionId={seedRegionId}&type=place&status=pending");
 
         Assert.NotNull(queue);
         Assert.Contains(queue!.Items, item =>
@@ -414,7 +423,7 @@ public sealed class ContributionPublicationTests
         Assert.True(queue.CountsByType.Places >= 1);
 
         var detail = await reviewerClient.GetFromJsonAsync<RegionalRequestQueueDetailDto>(
-            $"/api/admin/regional/requests/contribution/{createdId}?regionId={dalmatiaRegionId}");
+            $"/api/admin/regional/requests/contribution/{createdId}?regionId={seedRegionId}");
         Assert.NotNull(detail);
         Assert.True(detail!.HasOwnershipProofDocument);
         Assert.Equal("ownership-proof.pdf", detail.OwnershipProofOriginalFileName);
@@ -690,7 +699,7 @@ public sealed class ContributionPublicationTests
             ["stayType"] = "Villa",
             ["address"] = "123 Coast Road",
             ["city"] = "Dubrovnik",
-            ["region"] = "Dalmatia",
+            ["region"] = SeedRegionName,
             ["country"] = "Croatia",
             ["latitude"] = 42.6507,
             ["longitude"] = 18.0944,
@@ -714,7 +723,7 @@ public sealed class ContributionPublicationTests
             ["placeType"] = "Cafe",
             ["address"] = "10 Market Lane",
             ["city"] = "Dubrovnik",
-            ["region"] = "Dalmatia",
+            ["region"] = SeedRegionName,
             ["country"] = "Croatia",
             ["latitude"] = 42.6413,
             ["longitude"] = 18.1089,
@@ -749,7 +758,7 @@ public sealed class ContributionPublicationTests
             stayType = "Villa",
             address = "123 Coast Road",
             city = "Dubrovnik",
-            region = "Dalmatia",
+            region = SeedRegionName,
             country = "Croatia",
             latitude = 42.6507,
             longitude = 18.0944,
@@ -909,7 +918,16 @@ public sealed class ContributionPublicationTests
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var now = DateTime.UtcNow;
 
-        var inScopeRegion = await db.Regions.SingleAsync(region => region.Name == "Dalmatia");
+        var inScopeRegion = await db.Regions.SingleAsync(region => region.Name == SeedRegionName);
+        var territory = await db.Territories.SingleAsync(item => item.Id == inScopeRegion.TerritoryId);
+        territory.BoundaryShapeType = "Polygon";
+        territory.BoundarySource = "IntegrationTest";
+        SetBoundary(db, territory, Polygon(
+            (40.0, 13.0),
+            (40.0, 22.0),
+            (47.0, 22.0),
+            (47.0, 13.0)));
+
         var inScopeLocation = await db.Locations
             .Where(location => location.Destination.RegionId == inScopeRegion.Id)
             .OrderBy(location => location.Id)
@@ -1087,6 +1105,29 @@ public sealed class ContributionPublicationTests
         });
 
         await db.SaveChangesAsync();
+    }
+
+    private static void SetBoundary(AppDbContext db, Territory territory, Geometry geometry)
+    {
+        db.Entry(territory)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = geometry;
+    }
+
+    private static Polygon Polygon(params (double Latitude, double Longitude)[] points)
+    {
+        var coordinates = points
+            .Select(point => new Coordinate(point.Longitude, point.Latitude))
+            .ToList();
+
+        if (!coordinates[0].Equals2D(coordinates[^1]))
+        {
+            coordinates.Add(new Coordinate(coordinates[0].X, coordinates[0].Y));
+        }
+
+        var polygon = GeometryFactory.CreatePolygon(coordinates.ToArray());
+        polygon.SRID = 4326;
+        return polygon;
     }
 
     private sealed record ContributionScopeFixture(

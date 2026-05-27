@@ -76,6 +76,7 @@ public class AdminAuthController : ControllerBase
 
     [Authorize(Policy = "RequireAdminAppUser")]
     [HttpGet("me")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<ActionResult<AdminAuthUserDto>> Me()
     {
         try

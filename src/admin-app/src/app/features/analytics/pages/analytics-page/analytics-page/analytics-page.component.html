@@ -5,7 +5,6 @@
     [region]="regionDisplayName"
     [regions]="assignedRegions"
     [activeRegionId]="activeRegionId"
-    [pendingRequestsCount]="pendingRequestsCount"
     [regionLoading]="regionLoading"
     (regionChange)="onRegionSelected($event)"
   />
@@ -167,7 +166,7 @@
                   <line x1="24" y1="94"  x2="316" y2="94"  stroke="#f3f4f6" stroke-width="1"/>
                   <line x1="24" y1="134" x2="316" y2="134" stroke="#f3f4f6" stroke-width="1"/>
                   <path [attr.d]="chart.areaPath" fill="url(#areaGrad)"/>
-                  <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                  <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-testid="page-views-trend-line"/>
                   <g
                     *ngFor="let point of chart.points; let pointIndex = index"
                     [appAnalyticsTooltip]="trendTooltip(point)"

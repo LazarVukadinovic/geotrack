@@ -4,6 +4,7 @@ import { AnalyticsService } from './analytics.service';
 import { DestinationService } from './destination.service';
 import { LocationService } from './location.service';
 import { TokenStorageService } from './token-storage.service';
+import { resolveApiUrl } from './api-url';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -29,7 +30,7 @@ export class AuthService {
     this.clearClientSessionContext();
 
     this.http
-      .post('/api/auth/logout', {})
+      .post(resolveApiUrl('/api/auth/logout'), {}, { withCredentials: true })
       .subscribe({ error: () => {} });
   }
 

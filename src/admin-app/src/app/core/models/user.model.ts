@@ -1,4 +1,5 @@
-export type UserRole = 'Administrator' | 'Territory Manager' | 'Territory Associate' | 'Regional Manager';
+export type UserRole = 'Administrator' | 'Content Moderator' | 'Territory Manager' | 'Territory Associate' | 'Regional Manager';
+export type AdminRoleCode = 'Admin' | 'ContentModerator' | 'TerritoryManager' | 'TerritoryAssociate' | 'RegionalManager';
 
 export interface User {
   id: string;
@@ -6,6 +7,8 @@ export interface User {
   lastName: string;
   email: string;
   role: UserRole;
+  activeRoleCode: AdminRoleCode;
+  roles: AdminRoleCode[];
   region: string;
   memberSince: string;
   bio: string;
@@ -14,4 +17,5 @@ export interface User {
   notifyRequests: boolean;
   notifyNewReview: boolean;
   avatarUrl?: string;
+  avatarVersion?: number | null;
 }

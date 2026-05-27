@@ -33,6 +33,7 @@ public class TerritoryUserListItemDto
     public bool CanEditUser { get; set; }
     public bool CanAddRegionalManagerRole { get; set; }
     public bool CanAddRegion { get; set; }
+    public bool CanRemoveRegion { get; set; }
     public bool CanRemoveManagerRole { get; set; }
     public bool CanRemoveRegionalManagerRole { get; set; }
     public bool CanAddTerritoryAssociate { get; set; }
@@ -46,6 +47,11 @@ public class TerritoryUserAssignedRegionDto
     public int RegionId { get; set; }
     public string RegionName { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    public int TerritoryId { get; set; }
+    public string TerritoryName { get; set; } = string.Empty;
+    public DateTime AssignedAt { get; set; }
+    public bool IsActive { get; set; }
+    public bool CanRemove { get; set; }
 }
 
 public class TerritoryUserAssignedTerritoryDto

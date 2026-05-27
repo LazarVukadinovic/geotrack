@@ -171,7 +171,7 @@
                         <svg class="w-3 h-3 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                         </svg>
-                        <span class="font-semibold text-blue-600">Activity Score: {{ r.activityScore }}/100</span>
+                        <span class="font-semibold text-blue-600">Region Health Score: {{ r.healthScore }}/100</span>
                       </div>
                       <div class="flex">
                         @for (manager of visibleManagers(r); track manager.userId; let i = $index) {

@@ -45,6 +45,7 @@ export interface RegionListItem {
   imageBg: string;
   pendingRequests: number;
   healthScore?: number | null;
+  health?: TerritoryRegionDirectoryItem['health'];
   activityScore: number;
   detailRoute?: string | null;
 }
@@ -204,8 +205,9 @@ export class RegionsService {
       imageUrl: item.imageUrl,
       imageBg: this.imageBackground(item.regionId ?? item.id),
       pendingRequests: item.pendingRequestsCount,
-      healthScore: item.healthScore,
-      activityScore: item.activityScore,
+      healthScore: item.healthScore ?? item.health?.score ?? null,
+      health: item.health,
+      activityScore: item.healthScore ?? item.health?.score ?? item.activityScore,
       detailRoute: item.detailRoute,
     };
   }

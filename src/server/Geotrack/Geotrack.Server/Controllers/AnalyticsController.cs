@@ -12,6 +12,8 @@ namespace Geotrack.Server.Controllers;
 [EnableRateLimiting("analytics")]
 public class AnalyticsController : ControllerBase
 {
+    private const string AnonymousSessionHeaderName = "X-Anonymous-Session";
+
     private readonly IAnalyticsService _analyticsService;
     private readonly ILogger<AnalyticsController> _logger;
 
@@ -37,9 +39,13 @@ public class AnalyticsController : ControllerBase
             return NoContent();
         }
 
+        var anonymousSessionId =
+            dto.AnonymousSessionId ??
+            ParseAnonymousSessionId(Request.Headers[AnonymousSessionHeaderName].FirstOrDefault());
+
         var context = new AnalyticsContext(
             UserId: int.TryParse(User.FindFirst("userId")?.Value, out var id) ? id : null,
-            AnonymousSessionId: dto.AnonymousSessionId,
+            AnonymousSessionId: anonymousSessionId,
             UserAgentFamily: ParseUserAgentFamily(Request.Headers.UserAgent.ToString()),
             CoarseRegion: TrimToNull(Request.Headers["X-Geo-Region"].FirstOrDefault()),
             CoarseCountry: TrimToNull(Request.Headers["X-Geo-Country"].FirstOrDefault()));
@@ -54,6 +60,11 @@ public class AnalyticsController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    private static Guid? ParseAnonymousSessionId(string? value)
+    {
+        return Guid.TryParse(TrimToNull(value), out var sessionId) ? sessionId : null;
     }
 
     private static string? TrimToNull(string? value)

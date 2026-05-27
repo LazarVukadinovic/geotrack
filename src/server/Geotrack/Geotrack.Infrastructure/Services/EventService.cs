@@ -15,6 +15,7 @@ namespace Geotrack.Infrastructure.Services;
 public class EventService : IEventService
 {
     private const int ListingMaxTake = 50;
+    private const string PublishedStatus = "Published";
 
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
@@ -48,7 +49,7 @@ public class EventService : IEventService
         }
         var destination = await _db.Destinations
             .AsNoTracking()
-            .Where(d => d.Id == destinationId.Value)
+            .Where(d => d.Id == destinationId.Value && d.Status == PublishedStatus)
             .Select(d => new { d.Id, d.Latitude, d.Longitude })
             .SingleOrDefaultAsync();
 
@@ -59,7 +60,13 @@ public class EventService : IEventService
 
         var userPoint = BuildUserPoint(latitude, longitude)
             ?? BuildUserPoint(destination.Latitude, destination.Longitude);
-        var query = _db.Events.AsNoTracking();
+        var query = _db.Events
+            .AsNoTracking()
+            .Where(e =>
+                e.Status == PublishedStatus &&
+                e.Destination.Status == PublishedStatus &&
+                (e.Location == null || e.Location.Status == PublishedStatus) &&
+                (e.Place == null || e.Place.Status == PublishedStatus));
 
         if (upcoming == true)
             query = query.Where(e => e.EndDate >= DateTime.UtcNow);
@@ -226,7 +233,12 @@ public class EventService : IEventService
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
                 .ThenInclude(tag => tag.TagType)
                     .ThenInclude(tagType => tagType!.PlaceTypes)
-            .FirstOrDefaultAsync(e => e.Id == id);
+            .FirstOrDefaultAsync(e =>
+                e.Id == id &&
+                e.Status == PublishedStatus &&
+                e.Destination.Status == PublishedStatus &&
+                (e.Location == null || e.Location.Status == PublishedStatus) &&
+                (e.Place == null || e.Place.Status == PublishedStatus));
 
         if (evt == null) return null;
 
@@ -236,7 +248,13 @@ public class EventService : IEventService
             .AsNoTracking()
             .Include(e => e.EventType)
             .Include(e => e.Images)
-            .Where(e => e.Id != id && e.DestinationId == evt.DestinationId)
+            .Where(e =>
+                e.Id != id &&
+                e.DestinationId == evt.DestinationId &&
+                e.Status == PublishedStatus &&
+                e.Destination.Status == PublishedStatus &&
+                (e.Location == null || e.Location.Status == PublishedStatus) &&
+                (e.Place == null || e.Place.Status == PublishedStatus))
             .Take(5)
             .ToListAsync();
 
@@ -313,7 +331,12 @@ public class EventService : IEventService
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
                 .ThenInclude(tag => tag.TagType)
                     .ThenInclude(tagType => tagType!.PlaceTypes)
-            .FirstOrDefaultAsync(e => e.Id == eventId)
+            .FirstOrDefaultAsync(e =>
+                e.Id == eventId &&
+                e.Status == PublishedStatus &&
+                e.Destination.Status == PublishedStatus &&
+                (e.Location == null || e.Location.Status == PublishedStatus) &&
+                (e.Place == null || e.Place.Status == PublishedStatus))
             ?? throw new KeyNotFoundException("Event not found");
 
         var reviews = evt.EventReviews.ToList();
@@ -368,7 +391,12 @@ public class EventService : IEventService
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
                 .ThenInclude(tag => tag.TagType)
                     .ThenInclude(tagType => tagType!.PlaceTypes)
-            .FirstOrDefaultAsync(e => e.Id == eventId)
+            .FirstOrDefaultAsync(e =>
+                e.Id == eventId &&
+                e.Status == PublishedStatus &&
+                e.Destination.Status == PublishedStatus &&
+                (e.Location == null || e.Location.Status == PublishedStatus) &&
+                (e.Place == null || e.Place.Status == PublishedStatus))
             ?? throw new KeyNotFoundException("Event not found");
 
         var normalizedKey = sectionKey.Trim().ToLowerInvariant();
@@ -437,7 +465,14 @@ public class EventService : IEventService
         int skip = 0,
         int take = ReviewPaging.DefaultTake)
     {
-        var evt = await _db.Events.FindAsync(eventId);
+        var evt = await _db.Events
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e =>
+                e.Id == eventId &&
+                e.Status == PublishedStatus &&
+                e.Destination.Status == PublishedStatus &&
+                (e.Location == null || e.Location.Status == PublishedStatus) &&
+                (e.Place == null || e.Place.Status == PublishedStatus));
         if (evt == null)
             throw new KeyNotFoundException("Event not found");
 
@@ -494,7 +529,12 @@ public class EventService : IEventService
 
         await _contentModeration.EnsureAllowedReviewTextAsync(request.Comment);
 
-        var evt = await _db.Events.FindAsync(eventId);
+        var evt = await _db.Events.FirstOrDefaultAsync(e =>
+            e.Id == eventId &&
+            e.Status == PublishedStatus &&
+            e.Destination.Status == PublishedStatus &&
+            (e.Location == null || e.Location.Status == PublishedStatus) &&
+            (e.Place == null || e.Place.Status == PublishedStatus));
         if (evt == null)
             throw new KeyNotFoundException("Event not found");
 

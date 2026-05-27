@@ -9,6 +9,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ReviewRequestsService } from '../../../../core/services/review-requests.service';
+import { RegionalManagerSidebarStateService } from '../../../../core/services/regional-manager-sidebar-state.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { ReviewRequestDetail } from '../../../../core/models/review-request.model';
 
@@ -16,6 +17,8 @@ interface DetailLoadOptions {
   allowRegionFallback: boolean;
   attemptedRegionIds: number[];
 }
+
+type DecisionAction = 'approve' | 'reject';
 
 @Component({
   selector: 'app-review-request-detail',
@@ -36,7 +39,6 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
   errorMessage: string | null = null;
   authRequired = false;
   reviewerNotes = '';
-  rejectReason = '';
   processing = false;
 
   private detailRequestSequence = 0;
@@ -49,6 +51,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     private readonly auth: AuthService,
     private readonly dashboardService: DashboardService,
     private readonly requestsService: ReviewRequestsService,
+    private readonly sidebarState: RegionalManagerSidebarStateService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
@@ -82,6 +85,22 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     return this.request?.status === 'Pending' && !this.processing && !!this.activeRegionId;
   }
 
+  get decisionCardTitle(): string {
+    return 'Review Decision';
+  }
+
+  get decisionHelperText(): string {
+    return 'Approve applies the submitted contribution. Reject closes it without applying changes.';
+  }
+
+  get approveButtonLabel(): string {
+    return 'Approve Contribution';
+  }
+
+  get rejectButtonLabel(): string {
+    return 'Reject Contribution';
+  }
+
   get primaryImageUrl(): string | null {
     return (
       this.request?.images?.find(image => image.isMain)?.url ??
@@ -109,10 +128,17 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     return url;
   }
 
-  goBack(): void {
-    this.router.navigate(['/requests'], {
-      queryParams: this.activeRegionId ? { regionId: this.activeRegionId } : undefined,
-    });
+  goBack(feedbackMessage?: string): void {
+    const extras: { queryParams?: { regionId: number }; state?: { feedbackMessage: string } } = {};
+    if (this.activeRegionId) {
+      extras.queryParams = { regionId: this.activeRegionId };
+    }
+
+    if (feedbackMessage) {
+      extras.state = { feedbackMessage };
+    }
+
+    this.router.navigate(['/requests'], extras);
   }
 
   onRegionSelected(regionId: number): void {
@@ -121,9 +147,20 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     this.setActiveRegion(regionId, true);
     this.request = null;
     this.reviewerNotes = '';
-    this.rejectReason = '';
     this.loadRequest({ allowRegionFallback: false, attemptedRegionIds: [regionId] });
     this.notifyStateChanged();
+  }
+
+  startApproveDecision(): void {
+    if (!this.canModerate) return;
+
+    this.approveRequest();
+  }
+
+  startRejectDecision(): void {
+    if (!this.canModerate) return;
+
+    this.rejectRequest();
   }
 
   approveRequest(): void {
@@ -145,7 +182,8 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
           if (result.item) {
             this.request = { ...this.request!, ...result.item };
           }
-          this.goBack();
+          this.refreshSidebarBadge();
+          this.goBack(this.actionSuccessMessage('approve'));
         },
         error: error => this.handleActionError(error),
       });
@@ -162,7 +200,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
         this.activeRegionId,
         this.request.source,
         this.request.requestId,
-        this.rejectReason,
+        undefined,
         this.reviewerNotes,
       )
       .pipe(
@@ -176,7 +214,8 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
           if (result.item) {
             this.request = { ...this.request!, ...result.item };
           }
-          this.goBack();
+          this.refreshSidebarBadge();
+          this.goBack(this.actionSuccessMessage('reject'));
         },
         error: error => this.handleActionError(error),
       });
@@ -201,8 +240,6 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
         return 'bg-indigo-50 text-indigo-700 border border-indigo-100';
       case 'Event':
         return 'bg-yellow-50 text-yellow-700 border border-yellow-100';
-      case 'Review':
-        return 'bg-rose-50 text-rose-700 border border-rose-100';
       default:
         return 'bg-blue-50 text-blue-700 border border-blue-100';
     }
@@ -309,7 +346,6 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
 
           this.request = detail;
           this.reviewerNotes = detail.decisionNote ?? '';
-          this.rejectReason = '';
           this.setActiveRegion(detail.regionId, false);
           this.upsertAssignedRegion(detail);
         },
@@ -327,7 +363,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
       });
   }
 
-  private resolveRequestRoute(): { source: 'Contribution' | 'ReviewReport'; requestId: number } | null {
+  private resolveRequestRoute(): { source: 'Contribution'; requestId: number } | null {
     const source = this.normalizeRouteSource(this.route.snapshot.paramMap.get('source') ?? 'contribution');
     const idValue = this.route.snapshot.paramMap.get('id');
     const requestId = Number(idValue);
@@ -454,17 +490,23 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     ];
   }
 
-  private normalizeRouteSource(source: string): 'Contribution' | 'ReviewReport' | null {
+  private normalizeRouteSource(source: string): 'Contribution' | null {
     const normalized = source.trim().replace(/[\s_-]/g, '').toLowerCase();
     if (normalized === 'contribution' || normalized === 'contributions') {
       return 'Contribution';
     }
 
-    if (normalized === 'review' || normalized === 'reviewreport' || normalized === 'reviewreports') {
-      return 'ReviewReport';
-    }
-
     return null;
+  }
+
+  private refreshSidebarBadge(): void {
+    if (this.activeRegionId) {
+      this.sidebarState.refresh(this.activeRegionId);
+    }
+  }
+
+  private actionSuccessMessage(action: DecisionAction): string {
+    return action === 'approve' ? 'Contribution approved.' : 'Contribution rejected.';
   }
 
   private notifyStateChanged(): void {

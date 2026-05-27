@@ -125,10 +125,6 @@ export class ReviewRequestsService {
       return { source: 'Contribution', requestId };
     }
 
-    if (source === 'review-report') {
-      return { source: 'ReviewReport', requestId };
-    }
-
     return null;
   }
 
@@ -137,10 +133,6 @@ export class ReviewRequestsService {
       .trim()
       .replace(/[\s_-]/g, '')
       .toLowerCase();
-
-    if (normalized === 'review' || normalized === 'reviewreport' || normalized === 'reviewreports') {
-      return 'review-report';
-    }
 
     if (normalized === 'contribution' || normalized === 'contributions') {
       return 'contribution';
@@ -209,7 +201,6 @@ export class ReviewRequestsService {
       locations: this.toSafeCount(counts?.locations),
       places: this.toSafeCount(counts?.places),
       events: this.toSafeCount(counts?.events),
-      reviews: this.toSafeCount(counts?.reviews),
     };
   }
 

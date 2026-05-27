@@ -13,4 +13,9 @@ public interface IUserNotificationService
     void AddContributionDecisionNotification(PlaceContribution contribution);
     void AddReviewReportReporterDecisionNotification(ReviewReport report);
     void AddReportedReviewRemovedNotification(ReviewReport report);
+    void AddReviewRemovedByModeratorNotification(
+        int authorUserId,
+        string targetType,
+        int reviewId,
+        DateTime createdAt);
 }

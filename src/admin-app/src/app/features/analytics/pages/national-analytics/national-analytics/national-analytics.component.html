@@ -1,9 +1,13 @@
 <div class="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans" (click)="onDocumentClick()">
-
-  <app-sidebar [region]="region" />
+  <app-sidebar
+    [region]="territoryLabel"
+    [regions]="sidebarTerritories"
+    [activeRegionId]="activeTerritory?.id ?? null"
+    [regionLoading]="isLoading"
+    (regionChange)="onTerritoryChange($event)"
+  />
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-
     <app-topbar
       [userName]="userName"
       [userRole]="userRole"
@@ -13,8 +17,6 @@
     />
 
     <div class="flex-1 overflow-y-auto px-8 py-6">
-
-      <!-- Page header -->
       <div class="mb-5">
         <h1 class="text-2xl font-bold text-gray-900">Territory Analytics & Insights</h1>
         <p class="text-sm text-gray-500 mt-0.5">
@@ -22,11 +24,12 @@
         </p>
       </div>
 
-      <!-- ── Filter bar ── -->
-      <div class="bg-white rounded-xl border border-gray-100 mb-4 shadow-sm" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);" (click)="$event.stopPropagation()">
+      <div
+        class="bg-white rounded-xl border border-gray-100 mb-4 shadow-sm"
+        style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);"
+        (click)="$event.stopPropagation()"
+      >
         <div class="flex items-center gap-3 px-4 py-4 flex-wrap">
-
-          <!-- Period -->
           <div class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
             <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="4" width="18" height="18" rx="2"/>
@@ -36,16 +39,16 @@
             <span class="text-sm text-gray-500">Period:</span>
             <select
               [(ngModel)]="selectedPeriod"
-              (ngModelChange)="onPeriodChange($event)"
+              (ngModelChange)="onPeriodChange()"
               class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer"
             >
-              <option *ngFor="let o of periodOptions">{{ o }}</option>
+              <option *ngFor="let option of periodOptions" [ngValue]="option.value">{{ option.label }}</option>
             </select>
           </div>
 
-          <!-- Regions — multi-select custom dropdown -->
           <div class="relative" (click)="$event.stopPropagation()">
             <button
+              type="button"
               (click)="toggleRegionDropdown()"
               class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0"
             >
@@ -61,628 +64,520 @@
 
             <div
               *ngIf="regionDropdownOpen"
-              class="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 w-52 py-1 overflow-hidden"
+              class="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 w-56 py-1 max-h-72 overflow-y-auto"
             >
-              <!-- All Regions option -->
-              <div
-                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer transition-colors"
+              <button
+                type="button"
+                class="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer transition-colors bg-transparent border-0 text-left"
                 (click)="selectAllRegions()"
               >
                 <span
                   class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0"
-                  [ngClass]="isAllRegions ? 'bg-blue-600 border-blue-600' : 'border-gray-300'"
+                  [ngClass]="selectedRegionIds.length === 0 ? 'bg-blue-600 border-blue-600' : 'border-gray-300'"
                 >
-                  <svg *ngIf="isAllRegions" class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <svg *ngIf="selectedRegionIds.length === 0" class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
                 </span>
                 <span class="text-gray-700 font-medium">All Regions</span>
-              </div>
+              </button>
               <div class="border-t border-gray-100 my-1"></div>
-              <!-- Individual regions -->
-              <div
-                *ngFor="let name of regionNames"
-                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer transition-colors"
-                (click)="toggleRegion(name)"
+              <button
+                *ngFor="let region of availableRegions"
+                type="button"
+                class="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer transition-colors bg-transparent border-0 text-left"
+                (click)="toggleRegion(region.id)"
               >
                 <span
                   class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0"
-                  [ngClass]="isRegionSelected(name) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'"
+                  [ngClass]="isRegionSelected(region.id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'"
                 >
-                  <svg *ngIf="isRegionSelected(name)" class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <svg *ngIf="isRegionSelected(region.id)" class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
                 </span>
-                <span class="text-gray-700">{{ name }}</span>
-              </div>
+                <span class="text-gray-700">{{ region.name }}</span>
+              </button>
             </div>
           </div>
 
-          <!-- Entity type — commented out -->
-          <!--
-          <div class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
-            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-            </svg>
-            <span class="text-sm text-gray-500">Entity Type:</span>
-            <select [(ngModel)]="selectedEntity" class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer">
-              <option *ngFor="let o of entityOptions">{{ o }}</option>
-            </select>
-          </div>
-          -->
-
-          <!-- Status -->
           <div class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-shrink-0">
             <span class="text-sm text-gray-500">Status:</span>
-            <select [(ngModel)]="selectedStatus" class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer">
-              <option *ngFor="let o of statusOptions">{{ o }}</option>
+            <select
+              [(ngModel)]="selectedStatus"
+              (ngModelChange)="onStatusChange()"
+              class="text-sm font-semibold text-gray-700 border-0 bg-transparent outline-none cursor-pointer"
+            >
+              <option *ngFor="let option of statusOptions" [ngValue]="option.value">{{ option.label }}</option>
             </select>
           </div>
 
-          <!-- Export -->
           <button
+            type="button"
             (click)="exportReport()"
-            class="ml-auto flex items-center gap-2 text-sm font-semibold text-white px-4 py-1.5 rounded-lg transition-colors cursor-pointer border-0 bg-[#185FA5] hover:bg-[#0f4f8c]"
+            [disabled]="isExporting || isLoading || !overview"
+            class="ml-auto flex items-center gap-2 text-sm font-semibold text-white px-4 py-1.5 rounded-lg transition-colors cursor-pointer border-0 bg-[#185FA5] hover:bg-[#0f4f8c] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            Export Report
+            {{ isExporting ? 'Exporting...' : 'Export Report' }}
           </button>
         </div>
       </div>
 
-      <!-- ── Main grid: KPIs + right sidebar ── -->
-      <div class="flex gap-5 mb-5">
+      <div *ngIf="errorMessage" class="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {{ errorMessage }}
+      </div>
 
-        <!-- Left: KPIs + charts -->
-        <div class="flex-1 min-w-0 space-y-5">
+      <div *ngIf="isLoading && !overview" class="bg-white rounded-xl border border-gray-100 px-6 py-10 text-center text-sm text-gray-500">
+        Loading territory analytics...
+      </div>
 
-          <!-- KPI cards — dynamic based on selected regions -->
-          <div class="grid grid-cols-3 gap-3">
-            <div
-              *ngFor="let kpi of dynamicKpis"
-              class="bg-white rounded-xl border border-gray-100 px-5 py-4"
-              style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);"
-            >
-              <div class="flex items-center justify-between mb-3">
-                <span class="text-xs font-medium text-gray-400">{{ kpi.label }}</span>
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:#eff6ff;">
-                  <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <ng-container [ngSwitch]="kpi.icon">
-                      <ng-container *ngSwitchCase="'eye'">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+      <div *ngIf="!isLoading && !activeTerritory" class="bg-white rounded-xl border border-gray-100 px-6 py-10 text-center text-sm text-gray-500">
+        No assigned territory is available for this account.
+      </div>
+
+      <ng-container *ngIf="overview">
+        <div class="flex gap-5 mb-5">
+          <div class="flex-1 min-w-0 space-y-5">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              <div
+                *ngFor="let kpi of metricCards"
+                class="bg-white rounded-xl border border-gray-100 px-5 py-4"
+                style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);"
+              >
+                <div class="flex items-center justify-between mb-3">
+                  <span class="text-xs font-medium text-gray-400">{{ kpi.label }}</span>
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:#eff6ff;">
+                    <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <ng-container [ngSwitch]="kpi.icon">
+                        <ng-container *ngSwitchCase="'eye'">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                        </ng-container>
+                        <ng-container *ngSwitchCase="'users'">
+                          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                          <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+                        </ng-container>
+                        <ng-container *ngSwitchCase="'link'">
+                          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                          <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                        </ng-container>
+                        <ng-container *ngSwitchCase="'bookmark'">
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                        </ng-container>
+                        <ng-container *ngSwitchCase="'chat'">
+                          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                        </ng-container>
+                        <ng-container *ngSwitchCase="'star'">
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </ng-container>
                       </ng-container>
-                      <ng-container *ngSwitchCase="'users'">
-                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-                        <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-                      </ng-container>
-                      <ng-container *ngSwitchCase="'link'">
-                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-                        <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-                      </ng-container>
-                      <ng-container *ngSwitchCase="'bookmark'">
-                        <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
-                      </ng-container>
-                      <ng-container *ngSwitchCase="'chat'">
-                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                      </ng-container>
-                      <ng-container *ngSwitchCase="'star'">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                      </ng-container>
+                    </svg>
+                  </div>
+                </div>
+                <p class="text-2xl font-bold text-gray-900 mb-1">{{ kpi.value }}</p>
+                <p class="text-xs" [ngClass]="kpi.up ? 'text-emerald-500' : 'text-red-400'">
+                  {{ kpi.up ? 'up' : 'down' }} {{ kpi.change }} from last period
+                </p>
+              </div>
+            </div>
+
+            <div *ngIf="!hasAnyData" class="bg-white rounded-xl border border-gray-100 px-6 py-8 text-center text-sm text-gray-500">
+              No analytics have been collected for the selected filters yet.
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+              <div class="px-6 py-4 border-b border-gray-50">
+                <h2 class="text-sm font-bold text-gray-900">Page Views Over Time</h2>
+                <p class="text-xs text-gray-400 mt-0.5">{{ chartSubtitleText }}</p>
+              </div>
+              <div class="px-6 py-5" #pageViewsChartFrame>
+                <ng-container *ngIf="computedChartSeries.length > 0; else noChartData">
+                  <svg
+                    viewBox="0 0 680 180"
+                    class="w-full"
+                    style="height:180px;"
+                    role="img"
+                    aria-label="Page views over time line chart"
+                    data-testid="territory-page-views-chart"
+                    (mouseleave)="clearActivePageViewsPoint()"
+                  >
+                    <line x1="40" y1="20" x2="660" y2="20" stroke="#f1f5f9" stroke-width="1"/>
+                    <line x1="40" y1="60" x2="660" y2="60" stroke="#f1f5f9" stroke-width="1"/>
+                    <line x1="40" y1="100" x2="660" y2="100" stroke="#f1f5f9" stroke-width="1"/>
+                    <line x1="40" y1="140" x2="660" y2="140" stroke="#f1f5f9" stroke-width="1"/>
+                    <text *ngFor="let label of chartYLabels" x="34" [attr.y]="label.y" text-anchor="end" font-size="10" fill="#94a3b8">{{ label.text }}</text>
+                    <text *ngFor="let label of chartXLabels" [attr.x]="label.x" y="165" text-anchor="middle" font-size="10" fill="#94a3b8" data-testid="territory-page-views-x-label">{{ label.text }}</text>
+                    <ng-container *ngFor="let series of computedChartSeries">
+                      <path *ngIf="series.areaPath" [attr.d]="series.areaPath" [attr.fill]="series.color" fill-opacity="0.06"/>
                     </ng-container>
+                    <ng-container *ngFor="let series of computedChartSeries">
+                      <path *ngIf="series.linePath" [attr.d]="series.linePath" fill="none" [attr.stroke]="series.color" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-testid="territory-page-views-line"/>
+                      <circle *ngIf="series.lastPt" [attr.cx]="series.lastPt.x" [attr.cy]="series.lastPt.y" r="3" [attr.fill]="series.color"/>
+                    </ng-container>
+                    <ng-container *ngFor="let point of activePageViewsPoints">
+                      <circle
+                        [attr.cx]="point.x"
+                        [attr.cy]="point.y"
+                        r="7"
+                        [attr.fill]="point.color"
+                        opacity="0.14"
+                        aria-hidden="true"
+                        style="pointer-events: none;"
+                      ></circle>
+                      <circle
+                        [attr.cx]="point.x"
+                        [attr.cy]="point.y"
+                        r="4"
+                        fill="#ffffff"
+                        [attr.stroke]="point.color"
+                        stroke-width="2"
+                        aria-hidden="true"
+                        data-testid="territory-page-views-active-point"
+                        style="pointer-events: none;"
+                      ></circle>
+                    </ng-container>
+                    <rect
+                      *ngFor="let target of chartHoverTargets"
+                      [appAnalyticsTooltip]="pageViewsTooltip(target)"
+                      [attr.aria-label]="pageViewsAriaLabel(target)"
+                      [attr.x]="target.hoverX"
+                      y="20"
+                      [attr.width]="target.hoverWidth"
+                      height="120"
+                      fill="transparent"
+                      (mouseenter)="setActivePageViewsPoint(target.index)"
+                      (mousemove)="setActivePageViewsPoint(target.index)"
+                      (mouseleave)="clearActivePageViewsPoint(target.index)"
+                      (focus)="setActivePageViewsPoint(target.index)"
+                      (blur)="clearActivePageViewsPoint(target.index)"
+                      (touchstart)="setActivePageViewsPointFromTouch(target.index)"
+                      tabindex="0"
+                      focusable="true"
+                      role="img"
+                      data-testid="territory-page-views-hover-target"
+                      style="cursor: pointer;"
+                    ></rect>
                   </svg>
-                </div>
-              </div>
-              <p class="text-2xl font-bold text-gray-900 mb-1">{{ kpi.value }}</p>
-              <p class="text-xs" [ngClass]="kpi.up ? 'text-emerald-500' : 'text-red-400'">
-                {{ kpi.up ? '↑' : '↓' }} {{ kpi.change }} from last period
-              </p>
-            </div>
-          </div>
-
-          <!-- Page Views Over Time chart — dynamic -->
-          <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-            <div class="px-6 py-4 border-b border-gray-50">
-              <h2 class="text-sm font-bold text-gray-900">Page Views Over Time</h2>
-              <p class="text-xs text-gray-400 mt-0.5">{{ chartSubtitleText }}</p>
-            </div>
-            <div class="px-6 py-5">
-              <svg viewBox="0 0 680 180" class="w-full" style="height:180px;">
-                <line x1="40" y1="20"  x2="660" y2="20"  stroke="#f1f5f9" stroke-width="1"/>
-                <line x1="40" y1="60"  x2="660" y2="60"  stroke="#f1f5f9" stroke-width="1"/>
-                <line x1="40" y1="100" x2="660" y2="100" stroke="#f1f5f9" stroke-width="1"/>
-                <line x1="40" y1="140" x2="660" y2="140" stroke="#f1f5f9" stroke-width="1"/>
-                <text x="34" y="24"  text-anchor="end" font-size="10" fill="#94a3b8">100K</text>
-                <text x="34" y="64"  text-anchor="end" font-size="10" fill="#94a3b8">75K</text>
-                <text x="34" y="104" text-anchor="end" font-size="10" fill="#94a3b8">50K</text>
-                <text x="34" y="144" text-anchor="end" font-size="10" fill="#94a3b8">25K</text>
-                <text
-                  *ngFor="let lbl of chartXLabels"
-                  [attr.x]="lbl.x" y="165"
-                  text-anchor="middle" font-size="10" fill="#94a3b8"
-                >{{ lbl.text }}</text>
-                <ng-container *ngFor="let s of computedChartSeries">
-                  <path *ngIf="s.areaPath" [attr.d]="s.areaPath" [attr.fill]="s.color" fill-opacity="0.06"/>
-                </ng-container>
-                <ng-container *ngFor="let s of computedChartSeries">
-                  <path *ngIf="s.linePath" [attr.d]="s.linePath" fill="none" [attr.stroke]="s.color" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-                  <circle *ngIf="s.lastPt" [attr.cx]="s.lastPt.x" [attr.cy]="s.lastPt.y" r="3" [attr.fill]="s.color"/>
-                </ng-container>
-              </svg>
-              <div class="flex items-center gap-5 mt-2 flex-wrap">
-                <div *ngFor="let s of computedChartSeries" class="flex items-center gap-1.5">
-                  <span class="w-5 h-0.5 inline-block rounded" [style.background]="s.color"></span>
-                  <span class="text-xs text-gray-500">{{ s.label }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Top sections — 2×2 grid, dynamic per region -->
-          <div class="grid grid-cols-2 gap-4">
-
-            <!-- Top Destinations -->
-            <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-              <div class="px-5 py-4 border-b border-gray-50">
-                <h3 class="text-sm font-bold text-gray-900">Top Destinations{{ topSectionSuffix }}</h3>
-                <p class="text-xs text-gray-400 mt-0.5">By total page views.</p>
-              </div>
-              <div class="px-5 py-4 space-y-3">
-                <ng-container *ngIf="filteredTopDestinations.length > 0; else noData">
-                  <div *ngFor="let d of filteredTopDestinations; let i = index" class="flex items-center gap-3">
-                    <span class="text-xs font-bold text-gray-300 w-4 flex-shrink-0">{{ i + 1 }}</span>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center justify-between mb-1">
-                        <span class="text-xs font-medium text-gray-800 truncate">{{ d.name }}</span>
-                        <span class="text-xs font-semibold text-blue-600 ml-2 flex-shrink-0">{{ d.views }}K</span>
-                      </div>
-                      <div class="w-full bg-gray-100 rounded-full h-1.5">
-                        <div class="h-1.5 rounded-full bg-blue-500" [style.width]="(d.views / 100 * 100) + '%'" [style.opacity]="1 - i * 0.12"></div>
-                      </div>
-                      <span class="text-[10px] text-gray-400">{{ d.region }}</span>
+                  <div class="flex items-center gap-5 mt-2 flex-wrap">
+                    <div *ngFor="let series of computedChartSeries" class="flex items-center gap-1.5">
+                      <span class="w-5 h-0.5 inline-block rounded" [style.background]="series.color"></span>
+                      <span class="text-xs text-gray-500">{{ series.label }}</span>
                     </div>
                   </div>
                 </ng-container>
-              </div>
-            </div>
-
-            <!-- Top Events -->
-            <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-              <div class="px-5 py-4 border-b border-gray-50">
-                <h3 class="text-sm font-bold text-gray-900">Top Events{{ topSectionSuffix }}</h3>
-                <p class="text-xs text-gray-400 mt-0.5">By total user registrations/saves.</p>
-              </div>
-              <div class="px-5 py-4 space-y-3">
-                <ng-container *ngIf="filteredTopEvents.length > 0; else noData">
-                  <div *ngFor="let e of filteredTopEvents; let i = index" class="flex items-center gap-3">
-                    <span class="text-xs font-bold text-gray-300 w-4 flex-shrink-0">{{ i + 1 }}</span>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center justify-between mb-1">
-                        <span class="text-xs font-medium text-gray-800 truncate">{{ e.name }}</span>
-                        <span class="text-xs font-semibold text-emerald-600 ml-2 flex-shrink-0">{{ e.saves }}K</span>
-                      </div>
-                      <div class="w-full bg-gray-100 rounded-full h-1.5">
-                        <div class="h-1.5 rounded-full bg-emerald-500" [style.width]="(e.saves / 45 * 100) + '%'" [style.opacity]="1 - i * 0.12"></div>
-                      </div>
-                      <span class="text-[10px] text-gray-400">{{ e.region }}</span>
-                    </div>
-                  </div>
-                </ng-container>
-              </div>
-            </div>
-
-            <!-- Top Places -->
-            <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-              <div class="px-5 py-4 border-b border-gray-50">
-                <h3 class="text-sm font-bold text-gray-900">Top Places{{ topSectionSuffix }}</h3>
-                <p class="text-xs text-gray-400 mt-0.5">By total page views.</p>
-              </div>
-              <div class="px-5 py-4 space-y-3">
-                <ng-container *ngIf="filteredTopPlaces.length > 0; else noData">
-                  <div *ngFor="let p of filteredTopPlaces; let i = index" class="flex items-center gap-3">
-                    <span class="text-xs font-bold text-gray-300 w-4 flex-shrink-0">{{ i + 1 }}</span>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center justify-between mb-1">
-                        <span class="text-xs font-medium text-gray-800 truncate">{{ p.name }}</span>
-                        <span class="text-xs font-semibold text-violet-600 ml-2 flex-shrink-0">{{ p.views }}K</span>
-                      </div>
-                      <div class="w-full bg-gray-100 rounded-full h-1.5">
-                        <div class="h-1.5 rounded-full bg-violet-500" [style.width]="(p.views / 100 * 100) + '%'" [style.opacity]="1 - i * 0.12"></div>
-                      </div>
-                      <span class="text-[10px] text-gray-400">{{ p.region }}</span>
-                    </div>
-                  </div>
-                </ng-container>
-              </div>
-            </div>
-
-            <!-- Top Locations -->
-            <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-              <div class="px-5 py-4 border-b border-gray-50">
-                <h3 class="text-sm font-bold text-gray-900">Top Locations{{ topSectionSuffix }}</h3>
-                <p class="text-xs text-gray-400 mt-0.5">By total page views.</p>
-              </div>
-              <div class="px-5 py-4 space-y-3">
-                <ng-container *ngIf="filteredTopLocations.length > 0; else noData">
-                  <div *ngFor="let l of filteredTopLocations; let i = index" class="flex items-center gap-3">
-                    <span class="text-xs font-bold text-gray-300 w-4 flex-shrink-0">{{ i + 1 }}</span>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center justify-between mb-1">
-                        <span class="text-xs font-medium text-gray-800 truncate">{{ l.name }}</span>
-                        <span class="text-xs font-semibold text-amber-600 ml-2 flex-shrink-0">{{ l.views }}K</span>
-                      </div>
-                      <div class="w-full bg-gray-100 rounded-full h-1.5">
-                        <div class="h-1.5 rounded-full bg-amber-500" [style.width]="(l.views / 100 * 100) + '%'" [style.opacity]="1 - i * 0.12"></div>
-                      </div>
-                      <span class="text-[10px] text-gray-400">{{ l.region }}</span>
-                    </div>
-                  </div>
-                </ng-container>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Content Quality — dynamic, filtered by selected regions -->
-          <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-            <div class="px-6 py-4 border-b border-gray-50">
-              <h3 class="text-sm font-bold text-gray-900">{{ contentQualityTitle }}</h3>
-              <p class="text-xs text-gray-400 mt-0.5">Total Reviews vs Average User Rating.</p>
-            </div>
-            <div class="px-6 py-5">
-              <ng-container *ngIf="contentQualityChartData as cq">
-                <ng-container *ngIf="!cq.isEmpty; else noQualityData">
-                  <svg viewBox="0 0 640 160" class="w-full" style="height:160px;">
-                    <line x1="60" y1="10" x2="630" y2="10" stroke="#f1f5f9" stroke-width="1"/>
-                    <line x1="60" y1="50" x2="630" y2="50" stroke="#f1f5f9" stroke-width="1"/>
-                    <line x1="60" y1="90" x2="630" y2="90" stroke="#f1f5f9" stroke-width="1"/>
-                    <line x1="60" y1="130" x2="630" y2="130" stroke="#f1f5f9" stroke-width="1"/>
-                    <text x="54" y="14"  text-anchor="end" font-size="10" fill="#94a3b8">600</text>
-                    <text x="54" y="54"  text-anchor="end" font-size="10" fill="#94a3b8">400</text>
-                    <text x="54" y="94"  text-anchor="end" font-size="10" fill="#94a3b8">200</text>
-                    <text x="54" y="134" text-anchor="end" font-size="10" fill="#94a3b8">0</text>
-                    <!-- Bars -->
-                    <rect *ngFor="let b of cq.bars"
-                      [attr.x]="b.x" [attr.y]="b.y" width="40" [attr.height]="b.height"
-                      rx="3" fill="#dbeafe"/>
-                    <!-- Rating dots -->
-                    <circle *ngFor="let d of cq.dots"
-                      [attr.cx]="d.x" [attr.cy]="d.y" r="5" fill="#2563eb"/>
-                    <!-- Connect rating dots -->
-                    <polyline *ngIf="cq.dots.length > 1"
-                      [attr.points]="cq.polyline"
-                      fill="none" stroke="#2563eb" stroke-width="1.5"
-                      stroke-linejoin="round" stroke-linecap="round"
-                      stroke-dasharray="4,3" opacity="0.5"/>
-                    <!-- X labels -->
-                    <text *ngFor="let lbl of cq.labels"
-                      [attr.x]="lbl.x" y="150"
-                      text-anchor="middle" font-size="9" fill="#94a3b8">{{ lbl.text }}</text>
-                  </svg>
-                  <div class="flex items-center gap-6 mt-1">
-                    <div class="flex items-center gap-2">
-                      <span class="w-4 h-3 rounded inline-block" style="background:#dbeafe;"></span>
-                      <span class="text-xs text-gray-500">Total reviews</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span class="w-4 h-0.5 inline-block" style="background:#2563eb; border-top: 2px dashed #2563eb;"></span>
-                      <span class="text-xs text-gray-500">Avg rating</span>
-                    </div>
-                  </div>
-                </ng-container>
-                <ng-template #noQualityData>
-                  <p class="text-sm text-gray-400 text-center py-8">No data for selected region(s)</p>
+                <ng-template #noChartData>
+                  <p class="text-sm text-gray-400 text-center py-8">No page view series for the selected filters.</p>
                 </ng-template>
-              </ng-container>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- ── Right sidebar panel ── -->
-        <div class="flex-shrink-0 space-y-4" style="width: 260px;">
-
-          <!-- Top Region -->
-          <div class="rounded-xl overflow-hidden text-white" style="background: linear-gradient(135deg, #1a3aaf 0%, #1e4fd4 100%);">
-            <div class="px-5 pt-5 pb-4">
-              <div class="flex items-center gap-1.5 mb-3 text-white/70 text-xs font-bold tracking-wider uppercase">
-                <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-                Top Region
-              </div>
-              <h3 class="text-2xl font-bold mb-1">{{ topRegion.name }}</h3>
-              <p class="text-sm text-white/70 leading-snug mb-4">{{ topRegion.note }}</p>
-              <div class="flex items-center justify-between py-2.5 border-t border-white/15">
-                <span class="text-sm font-medium text-white/70">Score</span>
-                <span class="text-base font-bold">{{ topRegion.score }}/100</span>
               </div>
             </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <ng-container
+                *ngTemplateOutlet="topContentList; context: { title: 'Top Destinations' + topSectionSuffix, subtitle: 'By total page views.', items: topDestinations, color: 'blue' }"
+              ></ng-container>
+              <ng-container
+                *ngTemplateOutlet="topEventList; context: { title: 'Top Events' + topSectionSuffix, items: topEvents }"
+              ></ng-container>
+              <ng-container
+                *ngTemplateOutlet="topContentList; context: { title: 'Top Places' + topSectionSuffix, subtitle: 'By total page views.', items: topPlaces, color: 'violet' }"
+              ></ng-container>
+              <ng-container
+                *ngTemplateOutlet="topContentList; context: { title: 'Top Locations' + topSectionSuffix, subtitle: 'By total page views.', items: topLocations, color: 'amber' }"
+              ></ng-container>
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+              <div class="px-6 py-4 border-b border-gray-50">
+                <h3 class="text-sm font-bold text-gray-900">{{ contentQualityTitle }}</h3>
+                <p class="text-xs text-gray-400 mt-0.5">Total reviews vs average user rating.</p>
+              </div>
+              <div class="px-6 py-5">
+                <ng-container *ngIf="contentQualityChartData as cq">
+                  <ng-container *ngIf="!cq.isEmpty; else noQualityData">
+                    <svg viewBox="0 0 640 160" class="w-full" style="height:160px;">
+                      <line x1="60" y1="10" x2="630" y2="10" stroke="#f1f5f9" stroke-width="1"/>
+                      <line x1="60" y1="50" x2="630" y2="50" stroke="#f1f5f9" stroke-width="1"/>
+                      <line x1="60" y1="90" x2="630" y2="90" stroke="#f1f5f9" stroke-width="1"/>
+                      <line x1="60" y1="130" x2="630" y2="130" stroke="#f1f5f9" stroke-width="1"/>
+                      <text *ngFor="let label of cq.yLabels" x="54" [attr.y]="label.y" text-anchor="end" font-size="10" fill="#94a3b8">{{ label.text }}</text>
+                      <rect *ngFor="let bar of cq.bars" [attr.x]="bar.x" [attr.y]="bar.y" width="40" [attr.height]="bar.height" rx="3" fill="#dbeafe">
+                        <title>{{ bar.label }}: {{ bar.value }} reviews</title>
+                      </rect>
+                      <polyline *ngIf="cq.dots.length > 1" [attr.points]="cq.polyline" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4,3" opacity="0.5"/>
+                      <circle *ngFor="let dot of cq.dots" [attr.cx]="dot.x" [attr.cy]="dot.y" r="5" fill="#2563eb">
+                        <title>Average rating: {{ dot.rating | number:'1.1-2' }}</title>
+                      </circle>
+                      <text *ngFor="let label of cq.labels" [attr.x]="label.x" y="150" text-anchor="middle" font-size="9" fill="#94a3b8">{{ label.text }}</text>
+                    </svg>
+                    <div class="flex items-center gap-6 mt-1">
+                      <div class="flex items-center gap-2">
+                        <span class="w-4 h-3 rounded inline-block" style="background:#dbeafe;"></span>
+                        <span class="text-xs text-gray-500">Total reviews</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="w-4 h-0.5 inline-block" style="background:#2563eb; border-top: 2px dashed #2563eb;"></span>
+                        <span class="text-xs text-gray-500">Avg rating</span>
+                      </div>
+                    </div>
+                  </ng-container>
+                  <ng-template #noQualityData>
+                    <p class="text-sm text-gray-400 text-center py-8">No review data for the selected filters.</p>
+                  </ng-template>
+                </ng-container>
+              </div>
+            </div>
           </div>
 
-          <!-- Fastest Growing -->
-          <div class="bg-white rounded-xl border border-gray-100 px-5 py-4" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-            <div class="flex items-center gap-1.5 text-xs font-bold text-gray-400 tracking-wider uppercase mb-2">
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-              </svg>
-              Fastest Growing
-            </div>
-            <p class="text-base font-bold text-gray-900">{{ fastestGrowing.name }}</p>
-            <p class="text-sm text-emerald-500 font-medium mt-0.5">↑ {{ fastestGrowing.change }}</p>
-          </div>
-
-          <!-- Top Entities -->
-          <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-            <div class="px-5 py-4 border-b border-gray-50">
-              <h3 class="text-sm font-bold text-gray-900">Top Entities</h3>
-            </div>
-            <div class="py-2">
-              <div *ngFor="let e of topEntities" class="flex items-center gap-3 px-5 py-2.5 border-b border-gray-50 last:border-0 hover:bg-blue-50/30 transition-colors">
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:#eff6ff;">
-                  <svg class="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
-                    <ng-container [ngSwitch]="e.icon">
-                      <ng-container *ngSwitchCase="'destination'">
-                        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-                        <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="4" y1="22" x2="4" y2="15"/>
-                      </ng-container>
-                      <ng-container *ngSwitchCase="'location'">
-                        <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
-                      </ng-container>
-                      <ng-container *ngSwitchCase="'place'">
-                        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
-                      </ng-container>
-                      <ng-container *ngSwitchCase="'event'">
-                        <path d="M19 4h-1V2h-2v2H8V2H6v2H5C3.895 4 3 4.895 3 6v14c0 1.105.895 2 2 2h14c1.105 0 2-.895 2-2V6c0-1.105-.895-2-2-2zm0 16H5V9h14v11z"/>
-                      </ng-container>
-                    </ng-container>
+          <div class="flex-shrink-0 space-y-4" style="width: 260px;">
+            <div class="rounded-xl overflow-hidden text-white" style="background: linear-gradient(135deg, #1a3aaf 0%, #1e4fd4 100%);">
+              <div class="px-5 pt-5 pb-4" *ngIf="topRegion as region; else noTopRegion">
+                <div class="flex items-center gap-1.5 mb-3 text-white/70 text-xs font-bold tracking-wider uppercase">
+                  <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                   </svg>
+                  Top Region
                 </div>
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm font-semibold text-gray-800 truncate">{{ e.name }}</p>
-                  <p class="text-xs text-gray-400">{{ e.sub }}</p>
+                <h3 class="text-2xl font-bold mb-1">{{ region.regionName }}</h3>
+                <p class="text-sm text-white/70 leading-snug mb-4">{{ region.description }}</p>
+                <div class="flex items-center justify-between py-2.5 border-t border-white/15">
+                  <span class="text-sm font-medium text-white/70">Region Health Score</span>
+                  <span class="text-base font-bold">{{ region.healthScore || region.score }}/100</span>
                 </div>
-                <span class="text-xs font-bold text-blue-600">#{{ e.rank }}</span>
+              </div>
+              <ng-template #noTopRegion>
+                <div class="px-5 py-5">
+                  <div class="text-white/70 text-xs font-bold tracking-wider uppercase mb-3">Top Region</div>
+                  <p class="text-sm text-white/80 leading-snug">No region performance data yet.</p>
+                </div>
+              </ng-template>
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-100 px-5 py-4" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+              <div class="flex items-center gap-1.5 text-xs font-bold text-gray-400 tracking-wider uppercase mb-2">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                Fastest Growing
+              </div>
+              <ng-container *ngIf="fastestGrowing as growing; else noGrowth">
+                <p class="text-base font-bold text-gray-900">{{ growing.regionName }}</p>
+                <p class="text-sm text-emerald-500 font-medium mt-0.5">{{ growing.growthPercent | number:'1.0-1' }}% {{ growing.metricLabel }}</p>
+              </ng-container>
+              <ng-template #noGrowth>
+                <p class="text-sm text-gray-400">No comparable growth data yet.</p>
+              </ng-template>
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+              <div class="px-5 py-4 border-b border-gray-50">
+                <h3 class="text-sm font-bold text-gray-900">Top Entities</h3>
+              </div>
+              <div class="py-2" *ngIf="topEntities.length > 0; else noTopEntities">
+                <div *ngFor="let entity of topEntities" class="flex items-center gap-3 px-5 py-2.5 border-b border-gray-50 last:border-0 hover:bg-blue-50/30 transition-colors">
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:#eff6ff;">
+                    <svg class="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
+                      <ng-container [ngSwitch]="entityIcon(entity.entityType)">
+                        <path *ngSwitchCase="'destination'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                        <path *ngSwitchCase="'location'" d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
+                        <path *ngSwitchCase="'place'" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                        <path *ngSwitchCase="'event'" d="M19 4h-1V2h-2v2H8V2H6v2H5C3.895 4 3 4.895 3 6v14c0 1.105.895 2 2 2h14c1.105 0 2-.895 2-2V6c0-1.105-.895-2-2-2zm0 16H5V9h14v11z"/>
+                      </ng-container>
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-gray-800 truncate">{{ entity.name }}</p>
+                    <p class="text-xs text-gray-400 truncate">{{ entityLabel(entity.entityType) }} - {{ entity.regionName }}</p>
+                  </div>
+                  <span class="text-xs font-bold text-blue-600">#{{ entity.rank }}</span>
+                </div>
+              </div>
+              <ng-template #noTopEntities>
+                <p class="text-sm text-gray-400 text-center py-6 px-4">No top entities for the selected filters.</p>
+              </ng-template>
+              <div class="px-5 py-3 border-t border-gray-50">
+                <button type="button" (click)="navigateToDirectory()" class="w-full text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors bg-transparent border-none cursor-pointer text-center">
+                  View Full Directory
+                </button>
               </div>
             </div>
-            <div class="px-5 py-3 border-t border-gray-50">
-              <button class="w-full text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors bg-transparent border-none cursor-pointer text-center">
-                View Full Directory →
-              </button>
-            </div>
           </div>
-
         </div>
-      </div>
 
-      <!-- ── Regional Performance Comparison Table — dynamic title + filtered ── -->
-      <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-50">
-          <div>
-            <h2 class="text-sm font-bold text-gray-900">{{ tableTitle }}</h2>
-            <p class="text-xs text-gray-400 mt-0.5">Detailed breakdown of all tracked metrics per region.</p>
-          </div>
+        <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-50">
+            <div>
+              <h2 class="text-sm font-bold text-gray-900">{{ tableTitle }}</h2>
+              <p class="text-xs text-gray-400 mt-0.5">Detailed breakdown of all tracked metrics per region.</p>
+            </div>
 
-          <!-- Sort dropdown -->
-          <div class="relative" (click)="$event.stopPropagation()">
-            <button
-              (click)="toggleTableSort()"
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 cursor-pointer transition-colors"
-            >
-              <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-              </svg>
-              Sort: {{ currentTableSortLabel }}
-              <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-            <div
-              *ngIf="tableSortOpen"
-              (click)="$event.stopPropagation()"
-              class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-48 py-1"
-            >
+            <div class="relative" (click)="$event.stopPropagation()">
               <button
-                *ngFor="let opt of tableSortOptions"
-                (click)="applyTableSort(opt)"
-                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer border-none bg-transparent"
-                [ngClass]="currentTableSortLabel === opt.label ? 'font-semibold text-blue-700 bg-blue-50' : ''"
-              >{{ opt.label }}</button>
+                type="button"
+                (click)="toggleTableSort()"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 cursor-pointer transition-colors"
+              >
+                <svg class="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                  <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                Sort: {{ currentTableSortLabel }}
+                <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div *ngIf="tableSortOpen" class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-48 py-1">
+                <button
+                  *ngFor="let option of tableSortOptions"
+                  type="button"
+                  (click)="applyTableSort(option.value)"
+                  class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer border-none bg-transparent"
+                  [ngClass]="selectedSort === option.value ? 'font-semibold text-blue-700 bg-blue-50' : ''"
+                >{{ option.label }}</button>
+              </div>
             </div>
+          </div>
+
+          <div class="grid items-center gap-2 px-6 py-3 bg-gray-50/60 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider"
+               style="grid-template-columns: minmax(140px,1fr) 90px 90px 70px 90px 160px 140px 100px 120px">
+            <span>Region name</span>
+            <span class="text-center">Page<br>Views</span>
+            <span class="text-center">Visitors</span>
+            <span class="text-center">Saves</span>
+            <span class="text-center">Avg<br>Rating</span>
+            <span class="text-center">Entities</span>
+            <span class="text-center">Status</span>
+            <span class="text-center">Health<br>Score</span>
+            <span class="text-center">Manager</span>
+          </div>
+
+          <div *ngIf="visibleRows.length === 0" class="px-6 py-10 text-center text-sm text-gray-400">
+            No regional performance rows match the selected filters.
+          </div>
+
+          <div
+            *ngFor="let row of visibleRows"
+            class="grid items-center gap-2 px-6 py-4 border-b border-gray-50 hover:bg-blue-50/20 transition-colors"
+            style="grid-template-columns: minmax(140px,1fr) 90px 90px 70px 90px 160px 140px 100px 120px"
+          >
+            <div>
+              <p class="text-sm font-semibold text-gray-900">{{ row.regionName }}</p>
+              <p class="text-xs text-gray-400">Region #{{ row.regionId }}</p>
+            </div>
+            <span class="text-center text-sm font-medium text-gray-700">{{ formatNumber(row.pageViews) }}</span>
+            <span class="text-center text-sm font-medium text-gray-700">{{ formatNumber(row.visitors) }}</span>
+            <span class="text-center text-sm font-medium text-gray-700">{{ formatNumber(row.saves) }}</span>
+            <div class="flex items-center justify-center gap-1">
+              <span class="text-sm font-medium text-gray-700">{{ row.averageRating | number:'1.1-2' }}</span>
+              <svg class="w-3 h-3 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </div>
+            <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 mx-auto">
+              <span class="text-xs font-medium text-gray-700">D {{ row.destinationsCount }}</span>
+              <span class="text-xs font-medium text-gray-700">L {{ row.locationsCount }}</span>
+              <span class="text-xs font-medium text-gray-700">P {{ row.placesCount }}</span>
+              <span class="text-xs font-medium text-gray-700">E {{ row.eventsCount }}</span>
+            </div>
+            <div class="flex justify-center">
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold" [ngClass]="statusClass(row.statusLabel)">{{ row.statusLabel }}</span>
+            </div>
+            <div class="flex items-center justify-center gap-2">
+              <svg width="32" height="32" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+                <circle cx="18" cy="18" r="15" fill="none" [attr.stroke]="scoreColor(row.healthScore)" stroke-width="3" stroke-linecap="round" [attr.stroke-dasharray]="(row.healthScore / 100 * 94.25) + ' 94.25'" stroke-dashoffset="23.56" transform="rotate(-90 18 18)"/>
+              </svg>
+              <span class="text-sm font-semibold" [style.color]="scoreColor(row.healthScore)">{{ row.healthScore }}</span>
+            </div>
+            <div class="flex justify-center">
+              <span *ngIf="row.managerStatus === 'Assigned'" class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600" [title]="row.managerNames.join(', ')">
+                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Assigned
+              </span>
+              <span *ngIf="row.managerStatus !== 'Assigned'" class="inline-flex items-center gap-1 text-xs font-semibold text-red-500">
+                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                None
+              </span>
+            </div>
+          </div>
+
+          <div class="flex flex-col items-center gap-3 px-6 py-4 border-t border-gray-100">
+            <p class="text-sm text-gray-500">
+              Showing <span class="font-semibold text-gray-700">{{ Math.min(tableTake, tableTotalCount) }}</span>
+              of <span class="font-semibold text-gray-700">{{ tableTotalCount }}</span> regions
+            </p>
+            <button
+              *ngIf="tableHasMore"
+              type="button"
+              (click)="showMoreTable()"
+              class="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 transition-colors cursor-pointer"
+            >
+              <span>Show More</span>
+              <span class="text-[10px] font-bold bg-blue-100 text-blue-600 rounded-full px-1.5 py-0.5">
+                +{{ tableTotalCount - tableTake }}
+              </span>
+            </button>
+            <span *ngIf="!tableHasMore && tableTotalCount > 0" class="text-xs text-gray-400 italic">All regions loaded</span>
           </div>
         </div>
-
-        <!-- Table header -->
-        <div class="grid items-center gap-2 px-6 py-3 bg-gray-50/60 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider"
-             style="grid-template-columns: minmax(140px,1fr) 90px 90px 70px 90px 160px 140px 100px 90px">
-          <span>Region name</span>
-          <span class="text-center">Page<br>Views</span>
-          <span class="text-center">Visitors</span>
-          <span class="text-center">Saves</span>
-          <span class="text-center">Avg<br>Rating</span>
-          <span class="text-center">Entities</span>
-          <span class="text-center">Status</span>
-          <span class="text-center">Quality<br>Score</span>
-          <span class="text-center">Manager</span>
-        </div>
-
-        <!-- Table rows -->
-        <div
-          *ngFor="let row of visibleRows"
-          class="grid items-center gap-2 px-6 py-4 border-b border-gray-50 hover:bg-blue-50/20 transition-colors cursor-pointer"
-          style="grid-template-columns: minmax(140px,1fr) 90px 90px 70px 90px 160px 140px 100px 90px"
-        >
-          <div>
-            <p class="text-sm font-semibold text-gray-900">{{ row.name }}</p>
-            <p class="text-xs text-gray-400">{{ row.refId }}</p>
-          </div>
-          <span class="text-center text-sm font-medium text-gray-700">{{ row.pageViews }}</span>
-          <span class="text-center text-sm font-medium text-gray-700">{{ row.visitors }}</span>
-          <span class="text-center text-sm font-medium text-gray-700">{{ row.saves }}</span>
-          <div class="flex items-center justify-center gap-1">
-            <span class="text-sm font-medium text-gray-700">{{ row.avgRating }}</span>
-            <svg class="w-3 h-3 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-          </div>
-
-          <!-- Entities: 2x2 icon grid (D / L / P / E) -->
-          <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 mx-auto">
-            <!-- Destinations -->
-            <div class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-                <line x1="4" y1="22" x2="4" y2="15"/>
-              </svg>
-              <span class="text-xs font-medium text-gray-700">{{ parseEntities(row.entities)[0] }}</span>
-            </div>
-            <!-- Locations -->
-            <div class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="10" r="3"/>
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-              </svg>
-              <span class="text-xs font-medium text-gray-700">{{ parseEntities(row.entities)[1] }}</span>
-            </div>
-            <!-- Places -->
-            <div class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-              </svg>
-              <span class="text-xs font-medium text-gray-700">{{ parseEntities(row.entities)[2] }}</span>
-            </div>
-            <!-- Events -->
-            <div class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              <span class="text-xs font-medium text-gray-700">{{ parseEntities(row.entities)[3] }}</span>
-            </div>
-          </div>
-
-          <div class="flex justify-center">
-            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold" [ngClass]="statusClass(row.status)">{{ row.status }}</span>
-          </div>
-          <div class="flex items-center justify-center gap-2">
-            <svg width="32" height="32" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" stroke-width="3"/>
-              <circle cx="18" cy="18" r="15" fill="none"
-                [attr.stroke]="scoreColor(row.qualityScore)"
-                stroke-width="3" stroke-linecap="round"
-                [attr.stroke-dasharray]="(row.qualityScore / 100 * 94.25) + ' 94.25'"
-                stroke-dashoffset="23.56"
-                transform="rotate(-90 18 18)"/>
-            </svg>
-            <span class="text-sm font-semibold" [style.color]="scoreColor(row.qualityScore)">{{ row.qualityScore }}</span>
-          </div>
-          <div class="flex justify-center">
-            <span *ngIf="row.hasManager" class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Assigned
-            </span>
-            <span *ngIf="!row.hasManager" class="inline-flex items-center gap-1 text-xs font-semibold text-red-500">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              None
-            </span>
-          </div>
-        </div>
-
-        <!-- Footer: show more -->
-        <div class="flex flex-col items-center gap-3 px-6 py-4 border-t border-gray-100">
-          <p class="text-sm text-gray-500">
-            Showing
-            <span class="font-semibold text-gray-700">{{ Math.min(tableVisibleCount, sortedAllRows.length) }}</span>
-            of
-            <span class="font-semibold text-gray-700">{{ sortedAllRows.length }}</span>
-            regions
-          </p>
-          <button *ngIf="tableHasMore" (click)="showMoreTable()"
-                  class="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 transition-colors cursor-pointer">
-            <span>Show More</span>
-            <span class="text-[10px] font-bold bg-blue-100 text-blue-600 rounded-full px-1.5 py-0.5">
-              +{{ sortedAllRows.length - tableVisibleCount }}
-            </span>
-          </button>
-          <span *ngIf="!tableHasMore && sortedAllRows.length > 0"
-                class="text-xs text-gray-400 italic">All regions loaded</span>
-        </div>
-      </div>
-
+      </ng-container>
     </div>
   </div>
-
-  <!-- ── Custom date range modal ── -->
-  <div
-    *ngIf="showCustomDateModal"
-    class="fixed inset-0 z-50 flex items-center justify-center"
-    style="background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
-    (click)="cancelCustomRange()"
-  >
-    <div class="bg-white rounded-2xl shadow-2xl overflow-hidden w-[420px] max-w-[92vw]" (click)="$event.stopPropagation()">
-      <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:#eff6ff;">
-            <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-gray-900">Select date range</h3>
-            <p class="text-xs text-gray-400 mt-0.5">Enter start and end date</p>
-          </div>
-        </div>
-        <button (click)="cancelCustomRange()"
-                class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer border-0 bg-transparent">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <div class="px-6 py-6 space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">From</label>
-          <div class="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-blue-400 transition-colors">
-            <svg class="w-4 h-4 text-gray-400 flex-shrink-0 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <input #fromDayRef type="text" maxlength="2" placeholder="DD" [(ngModel)]="fromDay" (input)="onPartInput($event, fromMonthRef)" class="w-7 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"/>
-            <span class="text-gray-300 text-sm">/</span>
-            <input #fromMonthRef type="text" maxlength="2" placeholder="MM" [(ngModel)]="fromMonth" (input)="onPartInput($event, fromYearRef)" class="w-7 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"/>
-            <span class="text-gray-300 text-sm">/</span>
-            <input #fromYearRef type="text" maxlength="4" placeholder="YYYY" [(ngModel)]="fromYear" class="w-12 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"/>
-          </div>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">To</label>
-          <div class="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-blue-400 transition-colors">
-            <svg class="w-4 h-4 text-gray-400 flex-shrink-0 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <input #toDayRef type="text" maxlength="2" placeholder="DD" [(ngModel)]="toDay" (input)="onPartInput($event, toMonthRef)" class="w-7 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"/>
-            <span class="text-gray-300 text-sm">/</span>
-            <input #toMonthRef type="text" maxlength="2" placeholder="MM" [(ngModel)]="toMonth" (input)="onPartInput($event, toYearRef)" class="w-7 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"/>
-            <span class="text-gray-300 text-sm">/</span>
-            <input #toYearRef type="text" maxlength="4" placeholder="YYYY" [(ngModel)]="toYear" class="w-12 bg-transparent outline-none text-sm text-gray-700 text-center placeholder-gray-300"/>
-          </div>
-        </div>
-      </div>
-      <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/40">
-        <button (click)="cancelCustomRange()" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 bg-white hover:bg-gray-50 transition-colors cursor-pointer">Cancel</button>
-        <button (click)="applyCustomRange()" [disabled]="!canApply"
-                class="px-4 py-2 rounded-lg text-sm font-semibold text-white border-0 cursor-pointer transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-                style="background: linear-gradient(135deg, #1565d8 0%, #1a86e8 100%);">Apply</button>
-      </div>
-    </div>
-  </div>
-
 </div>
 
-<!-- noData template -->
-<ng-template #noData>
-  <p class="text-sm text-gray-400 text-center py-4">No data for selected region(s)</p>
+<ng-template #topContentList let-title="title" let-subtitle="subtitle" let-items="items" let-color="color">
+  <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+    <div class="px-5 py-4 border-b border-gray-50">
+      <h3 class="text-sm font-bold text-gray-900">{{ title }}</h3>
+      <p class="text-xs text-gray-400 mt-0.5">{{ subtitle }}</p>
+    </div>
+    <div class="px-5 py-4 space-y-3">
+      <ng-container *ngIf="items.length > 0; else noListData">
+        <div *ngFor="let item of items; let i = index" class="flex items-center gap-3">
+          <span class="text-xs font-bold text-gray-300 w-4 flex-shrink-0">{{ i + 1 }}</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-medium text-gray-800 truncate">{{ item.name }}</span>
+              <span class="text-xs font-semibold ml-2 flex-shrink-0" [ngClass]="color === 'violet' ? 'text-violet-600' : color === 'amber' ? 'text-amber-600' : 'text-blue-600'">{{ formatNumber(item.views) }}</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full" [ngClass]="color === 'violet' ? 'bg-violet-500' : color === 'amber' ? 'bg-amber-500' : 'bg-blue-500'" [style.width]="barWidth(item.views, items)" [style.opacity]="1 - i * 0.12"></div>
+            </div>
+            <span class="text-[10px] text-gray-400">{{ item.regionName }}</span>
+          </div>
+        </div>
+      </ng-container>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #topEventList let-title="title" let-items="items">
+  <div class="bg-white rounded-xl border border-gray-100 overflow-hidden" style="box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+    <div class="px-5 py-4 border-b border-gray-50">
+      <h3 class="text-sm font-bold text-gray-900">{{ title }}</h3>
+      <p class="text-xs text-gray-400 mt-0.5">By total engagement.</p>
+    </div>
+    <div class="px-5 py-4 space-y-3">
+      <ng-container *ngIf="items.length > 0; else noListData">
+        <div *ngFor="let event of items; let i = index" class="flex items-center gap-3">
+          <span class="text-xs font-bold text-gray-300 w-4 flex-shrink-0">{{ i + 1 }}</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-medium text-gray-800 truncate">{{ event.name }}</span>
+              <span class="text-xs font-semibold text-emerald-600 ml-2 flex-shrink-0">{{ eventMetricLabel(event) }}</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full bg-emerald-500" [style.width]="eventBarWidth(event)" [style.opacity]="1 - i * 0.12"></div>
+            </div>
+            <span class="text-[10px] text-gray-400">{{ event.regionName }}</span>
+          </div>
+        </div>
+      </ng-container>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #noListData>
+  <p class="text-sm text-gray-400 text-center py-4">No data for selected filters.</p>
 </ng-template>

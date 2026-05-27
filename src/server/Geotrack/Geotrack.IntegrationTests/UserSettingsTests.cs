@@ -98,7 +98,7 @@ public sealed class UserSettingsTests
         Assert.NotNull(createdSupportRequest);
         Assert.StartsWith("GT-", createdSupportRequest.ReferenceCode);
         Assert.Equal("location-and-maps", createdSupportRequest.Category);
-        Assert.Equal("Received", createdSupportRequest.Status);
+        Assert.Equal("Open", createdSupportRequest.Status);
 
         var supportRequests = await client.GetFromJsonAsync<GetSupportRequestsResponseDto>("/api/user/me/support-requests");
         Assert.NotNull(supportRequests);
