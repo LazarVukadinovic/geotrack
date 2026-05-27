@@ -83,7 +83,7 @@ describe('AnalyticsService', () => {
 
     expect(init.method).toBe('POST');
     expect(init.keepalive).toBe(true);
-    expect(init.credentials).toBe('same-origin');
+    expect(init.credentials).toBe('include');
     expect(headers['Content-Type']).toBe('application/json');
     expect(headers['X-Anonymous-Session']).toBe(body.anonymousSessionId);
     expect(body.events[0].eventType).toBe('page_view');

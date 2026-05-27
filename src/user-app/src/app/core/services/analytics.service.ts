@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { DestinationService } from './destination.service';
 import { AnalyticsPreferencesService } from './analytics-preferences.service';
+import { resolveApiUrl } from './api-url';
 import {
   AnalyticsEventBatch,
   AnalyticsEventEnvelope,
@@ -12,7 +13,7 @@ import {
 } from './analytics.types';
 
 const SESSION_KEY = 'geotrack_anon_session_id';
-const ENDPOINT = '/api/analytics/events';
+const ENDPOINT = resolveApiUrl('/api/analytics/events');
 
 const PERIODIC_FLUSH_INTERVAL_MS = 15_000;
 const NORMAL_FLUSH_DELAY_MS = 2_500;
@@ -518,7 +519,7 @@ export class AnalyticsService {
         },
         body: serialized,
         keepalive: true,
-        credentials: 'same-origin',
+        credentials: 'include',
       }).catch(() => {});
       return true;
     } catch {
