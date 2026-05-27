@@ -8,7 +8,7 @@ namespace Geotrack.Server.Controllers;
 
 [ApiController]
 [Route("api/admin/reviews")]
-[Authorize(Policy = "RequireAdmin")]
+[Authorize(Policy = "RequireReviewModerator")]
 public sealed class AdminReviewsController : ControllerBase
 {
     private readonly IAdminReviewManagementService _reviews;
@@ -208,7 +208,7 @@ public sealed class AdminReviewsController : ControllerBase
     {
         _logger.LogError(
             ex,
-            "Unexpected exception while handling administrator review request {Method} {Path}.",
+            "Unexpected exception while handling review moderation request {Method} {Path}.",
             HttpContext.Request.Method,
             HttpContext.Request.Path.Value);
 

@@ -236,7 +236,7 @@ public class ReviewsController : ControllerBase
 
     // --- Administrator moderation compatibility endpoints ---
 
-    [Authorize(Policy = "RequireAdmin")]
+    [Authorize(Policy = "RequireReviewModerator")]
     [HttpGet("reports")]
     public async Task<IActionResult> GetReviewReports([FromQuery] string? status = null)
     {
@@ -254,7 +254,7 @@ public class ReviewsController : ControllerBase
         }
     }
 
-    [Authorize(Policy = "RequireAdmin")]
+    [Authorize(Policy = "RequireReviewModerator")]
     [HttpPost("reports/{reportId:int}/dismiss")]
     public async Task<IActionResult> DismissReviewReport(
         [FromRoute] int reportId,
@@ -274,7 +274,7 @@ public class ReviewsController : ControllerBase
         }
     }
 
-    [Authorize(Policy = "RequireAdmin")]
+    [Authorize(Policy = "RequireReviewModerator")]
     [HttpPost("reports/{reportId:int}/remove-review")]
     public async Task<IActionResult> RemoveReportedReview(
         [FromRoute] int reportId,

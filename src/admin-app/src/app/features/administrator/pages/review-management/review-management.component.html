@@ -1,8 +1,8 @@
 <div class="flex h-screen overflow-hidden bg-gray-50" (click)="onDocumentClick()">
-  <app-sidebar [supportReportsCount]="supportReportsCount" />
+  <app-sidebar [reportedReviewsCount]="pendingReportsCount" [supportReportsCount]="supportReportsCount" />
 
   <div class="flex flex-col flex-1 min-w-0 overflow-hidden">
-    <app-topbar title="Review Management" [showBack]="true" backRoute="/admin-dashboard" />
+    <app-topbar title="Review Management" [showBack]="true" [backRoute]="backRoute" />
 
     <main class="flex-1 overflow-y-auto px-6 py-6">
       <div class="flex items-center justify-between gap-4 mb-6">
@@ -434,6 +434,12 @@
       <div class="px-6 py-5 border-t border-gray-100 flex gap-3 justify-end">
         <button (click)="closeDetail()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors border-0 cursor-pointer">Close</button>
         @if (detailReview && hasDetailActions(detailReview)) {
+          @if (detailReview.permissions.canRemoveReviewAndSuspendAuthor) {
+            <button (click)="openConfirmation('removeAndSuspend', detailReview, $event)" class="px-4 py-2 text-sm font-semibold text-amber-700 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors border-0 cursor-pointer">Remove &amp; Suspend</button>
+          }
+          @if (detailReview.permissions.canRemoveReviewAndDeleteAuthor) {
+            <button (click)="openConfirmation('removeAndDelete', detailReview, $event)" class="px-4 py-2 text-sm font-semibold text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors border-0 cursor-pointer">Remove &amp; Delete</button>
+          }
           @if (detailReview.permissions.canSuspendAuthor) {
             <button (click)="openConfirmation('suspendAuthor', detailReview, $event)" class="px-4 py-2 text-sm font-semibold text-amber-700 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors border-0 cursor-pointer">Suspend Author</button>
           }

@@ -11,7 +11,7 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
 {
     private const int DefaultTake = 25;
     private const int MaxTake = 50;
-    private const string DefaultModerationNote = "Administrator review moderation action.";
+    private const string DefaultModerationNote = "Content moderation action.";
 
     private readonly AppDbContext _db;
     private readonly IUserNotificationService _notificationService;
@@ -1055,24 +1055,38 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
         IReadOnlyCollection<string> authorRoles,
         bool canDeleteReview)
     {
+        var isAdministrator = currentAdmin.Roles.Contains(RoleNames.Admin, StringComparer.Ordinal);
+        var isContentModerator = currentAdmin.Roles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal);
         var canMutateAuthor =
             currentAdmin.UserId != authorUserId &&
             !authorIsDeleted &&
-            !authorRoles.Contains(RoleNames.Admin, StringComparer.Ordinal);
-        var canSuspend = canMutateAuthor && !authorIsSuspended;
-        var canUnsuspend = canMutateAuthor && authorIsSuspended;
-        var canDeleteAuthor = canMutateAuthor;
+            !authorRoles.Any(IsProtectedAdminAppRole);
+        var canStandaloneSuspend = isAdministrator && canMutateAuthor && !authorIsSuspended;
+        var canUnsuspend = isAdministrator && canMutateAuthor && authorIsSuspended;
+        var canDeleteAuthor = isAdministrator && canMutateAuthor;
+        var canRemoveReviewAndSuspendAuthor =
+            canDeleteReview &&
+            canMutateAuthor &&
+            !authorIsSuspended &&
+            (isAdministrator || isContentModerator);
 
         return new AdminReviewPermissionsDto
         {
             CanDeleteReview = canDeleteReview,
-            CanSuspendAuthor = canSuspend,
+            CanSuspendAuthor = canStandaloneSuspend,
             CanUnsuspendAuthor = canUnsuspend,
             CanDeleteAuthor = canDeleteAuthor,
-            CanRemoveReviewAndSuspendAuthor = canDeleteReview && canSuspend,
+            CanRemoveReviewAndSuspendAuthor = canRemoveReviewAndSuspendAuthor,
             CanRemoveReviewAndDeleteAuthor = canDeleteReview && canDeleteAuthor
         };
     }
+
+    private static bool IsProtectedAdminAppRole(string role) =>
+        role is RoleNames.Admin
+            or RoleNames.ContentModerator
+            or RoleNames.TerritoryManager
+            or RoleNames.TerritoryAssociate
+            or RoleNames.RegionalManager;
 
     private async Task<UserSecurityRow> EnsureCurrentAdminAsync(
         int currentUserId,
@@ -1095,8 +1109,9 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
             ?? throw new UnauthorizedAccessException("Invalid admin session.");
 
         var roles = NormalizeRoles(currentUser.Roles);
-        if (!roles.Contains(RoleNames.Admin, StringComparer.Ordinal))
-            throw new UnauthorizedAccessException("Admin role is required.");
+        if (!roles.Contains(RoleNames.Admin, StringComparer.Ordinal) &&
+            !roles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal))
+            throw new UnauthorizedAccessException("Review moderator role is required.");
 
         if (currentUser.IsDeleted || currentUser.IsSuspended)
             throw new UnauthorizedAccessException("Admin account is not active.");
@@ -1111,11 +1126,14 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
         string action)
     {
         if (currentAdmin.UserId == author.Id)
-            throw new InvalidOperationException($"Administrators cannot {action} their own account.");
+            throw new InvalidOperationException($"Review moderators cannot {action} their own account.");
 
         var roles = NormalizeRoles(author.UserRoles.Select(userRole => userRole.Role.Name));
-        if (roles.Contains(RoleNames.Admin, StringComparer.Ordinal))
-            throw new InvalidOperationException("Administrator author accounts cannot be changed from Review Management.");
+        if (action == "delete" && !currentAdmin.Roles.Contains(RoleNames.Admin, StringComparer.Ordinal))
+            throw new InvalidOperationException("Content Moderators cannot deactivate author accounts.");
+
+        if (roles.Any(IsProtectedAdminAppRole))
+            throw new InvalidOperationException("Admin app author accounts cannot be changed from Review Management.");
     }
 
     private async Task RevokeRefreshTokensAsync(

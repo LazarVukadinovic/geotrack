@@ -88,18 +88,18 @@ public class ReviewReportService : IReviewReportService
 
         await _adminNotificationService.CreateReviewReportedNotificationAsync(report);
 
-        return new ReportReviewResponseDto
-        {
-            ReportId = report.Id,
-            AlreadyReported = false,
-            Status = report.Status.ToString(),
-            Message = "Thanks. This review has been queued for administrator moderation."
+            return new ReportReviewResponseDto
+            {
+                ReportId = report.Id,
+                AlreadyReported = false,
+                Status = report.Status.ToString(),
+            Message = "Thanks. This review has been queued for content moderation."
         };
     }
 
     public async Task<GetReviewReportsResponseDto> GetReviewQueueAsync(int reviewerUserId, string? status)
     {
-        await EnsureAdministratorAsync(reviewerUserId);
+        await EnsureReviewModeratorAsync(reviewerUserId);
 
         IQueryable<ReviewReport> query = _db.ReviewReports
             .AsNoTracking()
@@ -126,7 +126,7 @@ public class ReviewReportService : IReviewReportService
         ModerateReviewReportRequestDto request)
     {
         var report = await LoadReportForModerationAsync(reportId);
-        await EnsureAdministratorAsync(reviewerUserId);
+        await EnsureReviewModeratorAsync(reviewerUserId);
 
         if (report.Status != ReviewReportStatus.Pending)
             throw new InvalidOperationException("This report has already been reviewed.");
@@ -150,7 +150,7 @@ public class ReviewReportService : IReviewReportService
         ModerateReviewReportRequestDto request)
     {
         var report = await LoadReportForModerationAsync(reportId);
-        await EnsureAdministratorAsync(reviewerUserId);
+        await EnsureReviewModeratorAsync(reviewerUserId);
 
         if (report.Status != ReviewReportStatus.Pending)
             throw new InvalidOperationException("This report has already been reviewed.");
@@ -317,15 +317,20 @@ public class ReviewReportService : IReviewReportService
             ?? throw new KeyNotFoundException("Review report not found.");
     }
 
-    private async Task EnsureAdministratorAsync(int reviewerUserId)
+    private async Task EnsureReviewModeratorAsync(int reviewerUserId)
     {
         var reviewer = await _db.Users
             .Include(user => user.UserRoles).ThenInclude(userRole => userRole.Role)
             .FirstOrDefaultAsync(user => user.Id == reviewerUserId)
             ?? throw new UnauthorizedAccessException("Invalid user token.");
 
-        if (!reviewer.UserRoles.Any(userRole => RoleNames.Normalize(userRole.Role.Name) == RoleNames.Admin))
-            throw new UnauthorizedAccessException("Administrator role is required.");
+        var roles = reviewer.UserRoles
+            .Select(userRole => RoleNames.Normalize(userRole.Role.Name))
+            .ToList();
+
+        if (!roles.Contains(RoleNames.Admin, StringComparer.Ordinal) &&
+            !roles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal))
+            throw new UnauthorizedAccessException("Review moderator role is required.");
     }
 
     private async Task<bool> HasDuplicateReportAsync(

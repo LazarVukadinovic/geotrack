@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
+using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure;
@@ -20,7 +21,7 @@ public sealed class AdminReviewManagementTests
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
-    public async Task Review_management_requires_admin_and_lists_real_paginated_reviews()
+    public async Task Review_management_requires_review_moderator_and_lists_real_paginated_reviews()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var prefix = $"admin-review-page-{Guid.NewGuid():N}";
@@ -59,6 +60,26 @@ public sealed class AdminReviewManagementTests
             Assert.True(item.Author.UserId > 0);
             Assert.False(string.IsNullOrWhiteSpace(item.ReviewKey));
         });
+
+        using var moderator = await LoginModeratorAsync(app);
+        var moderatorResponse = await moderator.Client.GetAsync(
+            $"/api/admin/reviews?status=active&type=place&search={Uri.EscapeDataString(prefix)}&sort=newest&skip=0&take=25");
+        moderatorResponse.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task Review_management_blocks_regional_and_territory_roles()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await GrantUserRoleAsync(app, "elena@example.com", RoleNames.RegionalManager);
+
+        using var regionalManager = await LoginAdminAppAsync(app, "elena@example.com", "password123");
+        var regionalResponse = await regionalManager.Client.GetAsync("/api/admin/reviews");
+        Assert.Equal(HttpStatusCode.Forbidden, regionalResponse.StatusCode);
+
+        using var territoryManager = await LoginAdminAppAsync(app, "mika@gmail.com", "Proba123!");
+        var territoryResponse = await territoryManager.Client.GetAsync("/api/admin/reviews");
+        Assert.Equal(HttpStatusCode.Forbidden, territoryResponse.StatusCode);
     }
 
     [Fact]
@@ -131,14 +152,17 @@ public sealed class AdminReviewManagementTests
             });
         }
 
-        var dashboard = await admin.Client.GetFromJsonAsync<AdminDashboardDto>("/api/admin/dashboard", JsonOptions);
-        var reported = await admin.Client.GetFromJsonAsync<AdminReviewListResponseDto>(
+        using var moderator = await LoginModeratorAsync(app);
+        var dashboard = await moderator.Client.GetFromJsonAsync<ContentModeratorDashboardDto>(
+            "/api/admin/content-moderator/dashboard",
+            JsonOptions);
+        var reported = await moderator.Client.GetFromJsonAsync<AdminReviewListResponseDto>(
             "/api/admin/reviews?status=reported&skip=0&take=25",
             JsonOptions);
 
         Assert.NotNull(dashboard);
         Assert.NotNull(reported);
-        Assert.Equal(dashboard!.Badges.PendingReportsCount, reported!.Counts.ReportedCount);
+        Assert.Equal(dashboard!.Badges.PendingReviewReportsCount, reported!.Counts.ReportedCount);
     }
 
     [Fact]
@@ -174,6 +198,39 @@ public sealed class AdminReviewManagementTests
         Assert.False(deletedAuthor.IsSuspended);
         Assert.Equal(admin.UserId, deletedAuthor.DeletedByUserId);
         Assert.False(await db.PlaceReviews.AnyAsync(review => review.Id == deleteFixture.ReviewId));
+    }
+
+    [Fact]
+    public async Task Content_moderator_can_remove_and_suspend_but_cannot_delete_author()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var suspendFixture = await AddReportedPlaceReviewAsync(app, reportCount: 1);
+        var deleteFixture = await AddReportedPlaceReviewAsync(app, reportCount: 1);
+
+        using var moderator = await LoginModeratorAsync(app);
+
+        var suspendResponse = await moderator.Client.PostAsJsonAsync(
+            $"/api/admin/reviews/{Uri.EscapeDataString(suspendFixture.ReviewKey)}/remove-and-suspend-author",
+            new AdminReviewModerationRequestDto { Note = "Moderator suspend author." });
+        suspendResponse.EnsureSuccessStatusCode();
+
+        var deleteResponse = await moderator.Client.PostAsJsonAsync(
+            $"/api/admin/reviews/{Uri.EscapeDataString(deleteFixture.ReviewKey)}/remove-and-delete-author",
+            new AdminReviewModerationRequestDto { Note = "Moderator delete author." });
+        Assert.Equal(HttpStatusCode.BadRequest, deleteResponse.StatusCode);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var suspendedAuthor = await db.Users.SingleAsync(user => user.Id == suspendFixture.AuthorUserId);
+        Assert.True(suspendedAuthor.IsSuspended);
+        Assert.False(suspendedAuthor.IsDeleted);
+        Assert.Equal(moderator.UserId, suspendedAuthor.SuspendedByUserId);
+        Assert.False(await db.PlaceReviews.AnyAsync(review => review.Id == suspendFixture.ReviewId));
+
+        var protectedAuthor = await db.Users.SingleAsync(user => user.Id == deleteFixture.AuthorUserId);
+        Assert.False(protectedAuthor.IsDeleted);
+        Assert.True(await db.PlaceReviews.AnyAsync(review => review.Id == deleteFixture.ReviewId));
     }
 
     [Fact]
@@ -338,13 +395,26 @@ public sealed class AdminReviewManagementTests
 
     private static async Task<AuthenticatedClient> LoginAdminAsync(GeotrackApiFactory app)
     {
+        return await LoginAdminAppAsync(app, "zika@gmail.com", "Proba123!");
+    }
+
+    private static async Task<AuthenticatedClient> LoginModeratorAsync(GeotrackApiFactory app)
+    {
+        return await LoginAdminAppAsync(app, "moderator@gmail.com", "Proba123!");
+    }
+
+    private static async Task<AuthenticatedClient> LoginAdminAppAsync(
+        GeotrackApiFactory app,
+        string email,
+        string password)
+    {
         var client = app.CreateClient();
         var response = await client.PostAsJsonAsync(
             "/api/admin/auth/login",
             new LoginRequestDto
             {
-                Email = "zika@gmail.com",
-                Password = "Proba123!",
+                Email = email,
+                Password = password,
                 RememberMe = false
             });
         response.EnsureSuccessStatusCode();
@@ -355,6 +425,29 @@ public sealed class AdminReviewManagementTests
             new AuthenticationHeaderValue("Bearer", session!.AccessToken);
 
         return new AuthenticatedClient(client, session.User.Id);
+    }
+
+    private static async Task GrantUserRoleAsync(GeotrackApiFactory app, string email, string roleName)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync(existing => existing.Email == email);
+        var role = await db.Roles.SingleAsync(existing => existing.Name == roleName);
+
+        var hasRole = await db.UserRoles.AnyAsync(userRole =>
+            userRole.UserId == user.Id &&
+            userRole.RoleId == role.Id);
+
+        if (!hasRole)
+        {
+            db.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = role.Id
+            });
+
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task<AuthenticatedClient> RegisterAndLoginAsync(

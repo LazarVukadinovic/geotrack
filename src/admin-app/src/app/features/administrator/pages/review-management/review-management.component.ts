@@ -17,6 +17,8 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
 import { AppUsersService } from '../../../../core/services/administrator/app-users.service';
 import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
+import { ContentModeratorDashboardService } from '../../../../core/services/content-moderator/content-moderator-dashboard.service';
+import { AuthService } from '../../../../core/services/auth.service';
 import {
   AdminReviewActionResult,
   AdminReviewDetail,
@@ -56,6 +58,8 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
   private readonly reviewsSvc = inject(AdminReviewsService);
   private readonly usersSvc = inject(AppUsersService);
   private readonly dashboardSvc = inject(AdminDashboardService);
+  private readonly contentModeratorDashboardSvc = inject(ContentModeratorDashboardService);
+  private readonly auth = inject(AuthService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -215,6 +219,12 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
 
   get reportedCount(): number {
     return this.counts.reportedCount || this.pendingReportsCount;
+  }
+
+  get backRoute(): string {
+    return this.auth.isContentModerator()
+      ? '/content-moderator/dashboard'
+      : '/admin-dashboard';
   }
 
   onSearchChange(): void {
@@ -728,6 +738,27 @@ export class ReviewManagementComponent implements OnInit, OnDestroy {
   }
 
   private loadPendingReportsBadge(): void {
+    if (this.auth.isContentModerator()) {
+      this.contentModeratorDashboardSvc.loadDashboard()
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: dashboard => {
+            this.pendingReportsCount = dashboard.badges.pendingReviewReportsCount;
+            this.supportReportsCount = 0;
+            if (!this.counts.reportedCount) {
+              this.counts = { ...this.counts, reportedCount: dashboard.badges.pendingReviewReportsCount };
+            }
+            this.cdr.markForCheck();
+          },
+          error: () => {
+            this.pendingReportsCount = 0;
+            this.supportReportsCount = 0;
+            this.cdr.markForCheck();
+          },
+        });
+      return;
+    }
+
     this.dashboardSvc.loadDashboard()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
