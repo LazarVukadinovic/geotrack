@@ -4,6 +4,7 @@ import { catchError, switchMap, throwError } from 'rxjs';
 import { AuthService } from './auth.service';
 import { TokenStorageService } from './token-storage.service';
 import { TokenRefreshService } from './token-refresh.service';
+import { isApiAuthEndpoint, isConfiguredApiUrl } from './api-url';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const tokenStorage    = inject(TokenStorageService);
@@ -39,15 +40,9 @@ function attachBearer(req: HttpRequest<unknown>, token: string): HttpRequest<unk
 }
 
 function isAuthEndpoint(url: string): boolean {
-  return url.includes('/api/auth/');
+  return isApiAuthEndpoint(url);
 }
 
 function isOwnApiRequest(url: string): boolean {
-  try {
-    const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
-    const parsed = new URL(url, origin);
-    return parsed.origin === origin && parsed.pathname.startsWith('/api/');
-  } catch {
-    return url.startsWith('/api/');
-  }
+  return isConfiguredApiUrl(url);
 }
