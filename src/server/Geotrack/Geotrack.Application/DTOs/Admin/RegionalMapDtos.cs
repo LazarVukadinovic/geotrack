@@ -52,6 +52,9 @@ public class RegionalMapZoneDto
     public string DisplayName { get; set; } = string.Empty;
     public string? Status { get; set; }
     public RegionalMapGeometryDto? GeometryGeoJson { get; set; }
+    public string? GeometrySource { get; set; }
+    public bool IsGeometryFallback { get; set; }
+    public string? BoundaryNotice { get; set; }
     public double? CenterLatitude { get; set; }
     public double? CenterLongitude { get; set; }
     public string? DetailRoute { get; set; }

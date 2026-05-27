@@ -15,6 +15,11 @@ public class RegionalMapService : IRegionalMapService
     private const int MaxSearchResults = 30;
     private const string PublishedStatus = "Published";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string BoundaryDisplayGeometryPropertyName = "BoundaryDisplayGeometry";
+    private const string RegionBoundaryGeometrySource = "RegionBoundaryGeometry";
+    private const string RegionBoundaryDisplayGeometrySource = "RegionBoundaryDisplayGeometry";
+    private const string BoundaryCandidateGeometrySource = "BoundaryCandidateGeometry";
+    private const string BoundaryCandidateDisplayGeometrySource = "BoundaryCandidateDisplayGeometry";
 
     private static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -38,7 +43,7 @@ public class RegionalMapService : IRegionalMapService
     {
         var data = await LoadMapDataAsync(userId, regionId, cancellationToken);
         var normalizedTypes = NormalizeTypes(types);
-        var zones = BuildZones(data.Region, data.Destinations, data.Locations);
+        var zones = BuildZones(data.Region);
         var markers = BuildMarkers(data, normalizedTypes);
 
         return new RegionalMapResponseDto
@@ -58,7 +63,7 @@ public class RegionalMapService : IRegionalMapService
         CancellationToken cancellationToken = default)
     {
         var data = await LoadMapDataAsync(userId, regionId, cancellationToken);
-        var zones = BuildZones(data.Region, data.Destinations, data.Locations);
+        var zones = BuildZones(data.Region);
         var markers = BuildMarkers(data, NormalizeTypes(null));
         return BuildViewport(zones, markers);
     }
@@ -69,7 +74,7 @@ public class RegionalMapService : IRegionalMapService
         CancellationToken cancellationToken = default)
     {
         var data = await LoadMapDataAsync(userId, regionId, cancellationToken);
-        return BuildZones(data.Region, data.Destinations, data.Locations);
+        return BuildZones(data.Region);
     }
 
     public async Task<RegionalMapSearchResponseDto> SearchAsync(
@@ -108,7 +113,7 @@ public class RegionalMapService : IRegionalMapService
                 Longitude = destination.Longitude,
                 ImageUrl = destination.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Destination)
-                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                    .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -138,7 +143,7 @@ public class RegionalMapService : IRegionalMapService
                 Longitude = location.Longitude,
                 ImageUrl = location.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Location)
-                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                    .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -169,7 +174,7 @@ public class RegionalMapService : IRegionalMapService
                 Longitude = place.Longitude,
                 ImageUrl = place.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Place)
-                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                    .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -214,10 +219,9 @@ public class RegionalMapService : IRegionalMapService
                 DestinationTypeName = destination.DestinationType.Name,
                 Latitude = destination.Latitude,
                 Longitude = destination.Longitude,
-                BoundaryGeometry = EF.Property<Geometry?>(destination, BoundaryGeometryPropertyName),
                 ImageUrl = destination.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Destination)
-                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                    .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -243,10 +247,9 @@ public class RegionalMapService : IRegionalMapService
                 Longitude = location.Longitude,
                 DestinationId = location.DestinationId,
                 DestinationName = location.Destination.Name,
-                BoundaryGeometry = EF.Property<Geometry?>(location, BoundaryGeometryPropertyName),
                 ImageUrl = location.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Location)
-                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                    .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -275,7 +278,7 @@ public class RegionalMapService : IRegionalMapService
                 DestinationId = place.Location.DestinationId,
                 ImageUrl = place.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Place)
-                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                    .OrderByDescending(image => image.IsMain)
                     .ThenBy(image => image.SortOrder)
                     .ThenBy(image => image.CreatedAt)
                     .ThenBy(image => image.Id)
@@ -307,7 +310,15 @@ public class RegionalMapService : IRegionalMapService
             {
                 Id = assignment.RegionId,
                 Name = assignment.Region.Name,
-                TerritoryName = assignment.Region.Territory.Name
+                TerritoryName = assignment.Region.Territory.Name,
+                BoundaryGeometry = EF.Property<Geometry?>(assignment.Region, BoundaryGeometryPropertyName),
+                BoundaryDisplayGeometry = EF.Property<Geometry?>(assignment.Region, BoundaryDisplayGeometryPropertyName),
+                BoundaryCandidateBoundaryGeometry = assignment.Region.BoundaryCandidate == null
+                    ? null
+                    : EF.Property<Geometry?>(assignment.Region.BoundaryCandidate, BoundaryGeometryPropertyName),
+                BoundaryCandidateDisplayGeometry = assignment.Region.BoundaryCandidate == null
+                    ? null
+                    : EF.Property<Geometry?>(assignment.Region.BoundaryCandidate, BoundaryDisplayGeometryPropertyName)
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -409,14 +420,73 @@ public class RegionalMapService : IRegionalMapService
             .ToList();
     }
 
-    private static List<RegionalMapZoneDto> BuildZones(
-        RegionMapProjection region,
-        List<DestinationMapProjection> destinations,
-        List<LocationMapProjection> locations)
+    private static List<RegionalMapZoneDto> BuildZones(RegionMapProjection region)
     {
-        // Destinations and locations are managed by center points only.
-        // Do not expose old polygon/boundary zones on the regional map.
-        return new List<RegionalMapZoneDto>();
+        var zone = BuildRegionZone(region);
+        return zone is null
+            ? new List<RegionalMapZoneDto>()
+            : new List<RegionalMapZoneDto> { zone };
+    }
+
+    private static RegionalMapZoneDto? BuildRegionZone(RegionMapProjection region)
+    {
+        var boundary = ResolveRegionBoundary(region);
+        if (boundary is null)
+            return null;
+
+        var zone = BuildZone(
+            region.Id,
+            "Region",
+            region.Name,
+            BuildRegionDisplayName(region.Name, region.TerritoryName),
+            boundary.IsFallback ? "Fallback boundary" : "Assigned boundary",
+            boundary.Geometry,
+            detailRoute: null,
+            editRoute: null);
+
+        if (zone is null)
+            return null;
+
+        zone.GeometrySource = boundary.Source;
+        zone.IsGeometryFallback = boundary.IsFallback;
+        zone.BoundaryNotice = boundary.Notice;
+        return zone;
+    }
+
+    private static RegionBoundaryRenderGeometry? ResolveRegionBoundary(RegionMapProjection region)
+    {
+        var regionGeometry = ToPolygonalGeometry(region.BoundaryGeometry);
+        if (regionGeometry is not null)
+        {
+            var displayGeometry = ToPolygonalGeometry(region.BoundaryDisplayGeometry);
+            return new RegionBoundaryRenderGeometry(
+                displayGeometry ?? regionGeometry,
+                displayGeometry is null ? RegionBoundaryGeometrySource : RegionBoundaryDisplayGeometrySource,
+                IsFallback: false,
+                Notice: null);
+        }
+
+        var candidateGeometry = ToPolygonalGeometry(region.BoundaryCandidateBoundaryGeometry);
+        if (candidateGeometry is not null)
+        {
+            return new RegionBoundaryRenderGeometry(
+                candidateGeometry,
+                BoundaryCandidateGeometrySource,
+                IsFallback: true,
+                Notice: "Using the linked administrative boundary because the region boundary geometry is missing.");
+        }
+
+        var candidateDisplayGeometry = ToPolygonalGeometry(region.BoundaryCandidateDisplayGeometry);
+        if (candidateDisplayGeometry is not null)
+        {
+            return new RegionBoundaryRenderGeometry(
+                candidateDisplayGeometry,
+                BoundaryCandidateDisplayGeometrySource,
+                IsFallback: true,
+                Notice: "Using display boundary geometry because the precise region boundary is missing.");
+        }
+
+        return null;
     }
 
     private static RegionalMapZoneDto? BuildZone(
@@ -426,8 +496,8 @@ public class RegionalMapService : IRegionalMapService
         string displayName,
         string? status,
         Geometry? geometry,
-        string detailRoute,
-        string editRoute)
+        string? detailRoute,
+        string? editRoute)
     {
         var polygonalGeometry = ToPolygonalGeometry(geometry);
         var geoJson = ToGeoJson(polygonalGeometry);
@@ -450,38 +520,19 @@ public class RegionalMapService : IRegionalMapService
         };
     }
 
-    private static Geometry? BuildRegionGeometry(
-        List<DestinationMapProjection> destinations,
-        List<LocationMapProjection> locations)
-    {
-        var geometries = destinations
-            .Select(destination => destination.BoundaryGeometry)
-            .Concat(locations.Select(location => location.BoundaryGeometry))
-            .Select(ToPolygonalGeometry)
-            .Where(geometry => geometry is not null)
-            .Select(geometry => geometry!)
-            .ToList();
-
-        if (geometries.Count == 0)
-            return null;
-
-        if (geometries.Count == 1)
-            return geometries[0];
-
-        try
-        {
-            return ToPolygonalGeometry(UnaryUnionOp.Union(geometries));
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     private static RegionalMapViewportDto BuildViewport(
         List<RegionalMapZoneDto> zones,
         List<RegionalMapMarkerDto> markers)
     {
+        var regionAccumulator = new BoundsAccumulator();
+        foreach (var zone in zones.Where(zone => zone.EntityType == "Region"))
+        {
+            IncludeGeometry(regionAccumulator, zone.GeometryGeoJson);
+        }
+
+        if (regionAccumulator.HasValue)
+            return BuildViewport(regionAccumulator);
+
         var accumulator = new BoundsAccumulator();
 
         foreach (var zone in zones)
@@ -494,14 +545,16 @@ public class RegionalMapService : IRegionalMapService
             accumulator.Include(marker.Latitude, marker.Longitude);
         }
 
-        if (!accumulator.HasValue)
-        {
-            return new RegionalMapViewportDto
+        return accumulator.HasValue
+            ? BuildViewport(accumulator)
+            : new RegionalMapViewportDto
             {
                 IsEmpty = true
             };
-        }
+    }
 
+    private static RegionalMapViewportDto BuildViewport(BoundsAccumulator accumulator)
+    {
         var centerLatitude = (accumulator.North + accumulator.South) / 2d;
         var centerLongitude = (accumulator.East + accumulator.West) / 2d;
         var latitudeSpan = Math.Abs(accumulator.North - accumulator.South);
@@ -700,7 +753,17 @@ public class RegionalMapService : IRegionalMapService
         public int Id { get; init; }
         public string Name { get; init; } = string.Empty;
         public string? TerritoryName { get; init; }
+        public Geometry? BoundaryGeometry { get; init; }
+        public Geometry? BoundaryDisplayGeometry { get; init; }
+        public Geometry? BoundaryCandidateBoundaryGeometry { get; init; }
+        public Geometry? BoundaryCandidateDisplayGeometry { get; init; }
     }
+
+    private sealed record RegionBoundaryRenderGeometry(
+        Geometry Geometry,
+        string Source,
+        bool IsFallback,
+        string? Notice);
 
     private sealed class DestinationMapProjection
     {
@@ -711,7 +774,6 @@ public class RegionalMapService : IRegionalMapService
         public string? DestinationTypeName { get; init; }
         public double Latitude { get; init; }
         public double Longitude { get; init; }
-        public Geometry? BoundaryGeometry { get; init; }
         public string? ImageUrl { get; init; }
     }
 
@@ -726,7 +788,6 @@ public class RegionalMapService : IRegionalMapService
         public double Longitude { get; init; }
         public int DestinationId { get; init; }
         public string DestinationName { get; init; } = string.Empty;
-        public Geometry? BoundaryGeometry { get; init; }
         public string? ImageUrl { get; init; }
     }
 

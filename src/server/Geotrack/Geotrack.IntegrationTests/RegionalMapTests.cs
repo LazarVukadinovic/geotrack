@@ -53,19 +53,13 @@ public sealed class RegionalMapTests
         Assert.Equal("/media/test/map-main.svg", placeMarker.ImageUrl);
         Assert.DoesNotContain(map.Markers, marker => marker.Id == fixture.UnassignedPlaceId);
 
-        Assert.Contains(map.Zones, zone =>
-            zone.EntityType == "Region" &&
-            zone.Id == fixture.AssignedRegionId &&
-            zone.GeometryGeoJson?.Type is "Polygon" or "MultiPolygon");
-        Assert.Contains(map.Zones, zone =>
-            zone.EntityType == "Destination" &&
-            zone.Id == fixture.AssignedDestinationId &&
-            zone.GeometryGeoJson?.Type == "Polygon");
-        Assert.Contains(map.Zones, zone =>
-            zone.EntityType == "Location" &&
-            zone.Id == fixture.AssignedLocationId &&
-            zone.GeometryGeoJson?.Type == "Polygon");
-        Assert.DoesNotContain(map.Zones, zone => zone.Id == fixture.UnassignedLocationId);
+        var regionZone = Assert.Single(map.Zones);
+        Assert.Equal("Region", regionZone.EntityType);
+        Assert.Equal(fixture.AssignedRegionId, regionZone.Id);
+        Assert.Equal("Polygon", regionZone.GeometryGeoJson?.Type);
+        Assert.Equal("RegionBoundaryGeometry", regionZone.GeometrySource);
+        Assert.False(regionZone.IsGeometryFallback);
+        Assert.Null(regionZone.BoundaryNotice);
     }
 
     [Fact]
@@ -131,6 +125,79 @@ public sealed class RegionalMapTests
     }
 
     [Fact]
+    public async Task Regional_map_handles_multipolygon_region_boundary()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var regionId = await CreateBoundaryOnlyMapFixtureAsync(app, MultiPolygon(
+            Polygon(
+                (10.0, 20.0),
+                (11.0, 20.0),
+                (11.0, 21.0),
+                (10.0, 21.0)),
+            Polygon(
+                (10.0, 21.2),
+                (11.0, 21.2),
+                (11.0, 22.2),
+                (10.0, 22.2))));
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var map = await manager.GetFromJsonAsync<RegionalMapResponseDto>(
+            $"/api/admin/regional/map/entities?regionId={regionId}");
+
+        Assert.NotNull(map);
+        var regionZone = Assert.Single(map!.Zones);
+        Assert.Equal("Region", regionZone.EntityType);
+        Assert.Equal("MultiPolygon", regionZone.GeometryGeoJson?.Type);
+        Assert.False(regionZone.IsGeometryFallback);
+        Assert.False(map.Viewport.IsEmpty);
+        Assert.NotNull(map.Viewport.Bounds);
+    }
+
+    [Fact]
+    public async Task Regional_map_uses_linked_display_boundary_as_explicit_fallback()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var regionId = await CreateDisplayFallbackMapFixtureAsync(app);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var map = await manager.GetFromJsonAsync<RegionalMapResponseDto>(
+            $"/api/admin/regional/map/entities?regionId={regionId}");
+
+        Assert.NotNull(map);
+        var regionZone = Assert.Single(map!.Zones);
+        Assert.Equal("Region", regionZone.EntityType);
+        Assert.Equal("Polygon", regionZone.GeometryGeoJson?.Type);
+        Assert.Equal("BoundaryCandidateDisplayGeometry", regionZone.GeometrySource);
+        Assert.True(regionZone.IsGeometryFallback);
+        Assert.Equal(
+            "Using display boundary geometry because the precise region boundary is missing.",
+            regionZone.BoundaryNotice);
+    }
+
+    [Fact]
+    public async Task Regional_manager_without_assigned_region_gets_empty_regions_response()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var manager = await db.Users.SingleAsync(item => item.Email == "elena@example.com");
+            await EnsureRegionalManagerRoleAsync(db, manager);
+            db.RegionalManagerRegions.RemoveRange(
+                db.RegionalManagerRegions.Where(item => item.UserId == manager.Id));
+            await db.SaveChangesAsync();
+        }
+
+        using var managerClient = await LoginAsync(app, "elena@example.com", "password123");
+        var regions = await managerClient.GetFromJsonAsync<List<RegionalAssignedRegionDto>>(
+            "/api/admin/regional/regions");
+
+        Assert.NotNull(regions);
+        Assert.Empty(regions!);
+    }
+
+    [Fact]
     public async Task Create_place_rejects_coordinates_outside_parent_location_boundary()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -183,6 +250,18 @@ public sealed class RegionalMapTests
             CreatedAt = now
         };
         db.Regions.AddRange(assignedRegion, unassignedRegion);
+        await db.SaveChangesAsync();
+
+        SetBoundary(db, assignedRegion, Polygon(
+            (10.0, 20.0),
+            (11.0, 20.0),
+            (11.0, 21.0),
+            (10.0, 21.0)));
+        SetBoundary(db, unassignedRegion, Polygon(
+            (30.0, 40.0),
+            (31.0, 40.0),
+            (31.0, 41.0),
+            (30.0, 41.0)));
         await db.SaveChangesAsync();
 
         await GrantRegionalManagerCoverageAsync(db, manager, assignedRegion.Id);
@@ -359,6 +438,85 @@ public sealed class RegionalMapTests
         return region.Id;
     }
 
+    private static async Task<int> CreateBoundaryOnlyMapFixtureAsync(GeotrackApiFactory app, Geometry boundary)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var now = DateTime.UtcNow;
+        var territory = await db.Territories.OrderBy(item => item.Id).FirstAsync();
+        var manager = await db.Users.SingleAsync(item => item.Email == "elena@example.com");
+
+        var region = new Region
+        {
+            Name = $"Boundary Map Assigned {Guid.NewGuid():N}",
+            TerritoryId = territory.Id,
+            CreatedAt = now
+        };
+        db.Regions.Add(region);
+        await db.SaveChangesAsync();
+
+        SetBoundary(db, region, boundary);
+        await GrantRegionalManagerCoverageAsync(db, manager, region.Id);
+
+        return region.Id;
+    }
+
+    private static async Task<int> CreateDisplayFallbackMapFixtureAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var now = DateTime.UtcNow;
+        var territory = await db.Territories.OrderBy(item => item.Id).FirstAsync();
+        var manager = await db.Users.SingleAsync(item => item.Email == "elena@example.com");
+
+        var candidate = new AdministrativeBoundaryCandidate
+        {
+            Source = "geoBoundaries",
+            ReleaseType = "gbOpen",
+            AdmLevel = "ADM1",
+            ShapeGroup = "TAA",
+            ShapeId = $"FALLBACK-{Guid.NewGuid():N}",
+            ShapeName = "Fallback Region",
+            ShapeType = "ADM1",
+            ExternalKey = $"geoBoundaries:ADM1:TAA:FALLBACK-{Guid.NewGuid():N}",
+            CountryIso3 = "TAA",
+            CountryTerritoryId = territory.Id,
+            ImportedAt = now,
+            CreatedAt = now
+        };
+        db.AdministrativeBoundaryCandidates.Add(candidate);
+        await db.SaveChangesAsync();
+
+        db.Entry(candidate)
+            .Property<Geometry?>("BoundaryDisplayGeometry")
+            .CurrentValue = Polygon(
+                (12.0, 22.0),
+                (13.0, 22.0),
+                (13.0, 23.0),
+                (12.0, 23.0));
+
+        var region = new Region
+        {
+            Name = $"Fallback Map Assigned {Guid.NewGuid():N}",
+            TerritoryId = territory.Id,
+            BoundaryCandidateId = candidate.Id,
+            BoundarySource = "geoBoundaries",
+            BoundaryAdmLevel = "ADM1",
+            BoundaryShapeGroup = candidate.ShapeGroup,
+            BoundaryShapeId = candidate.ShapeId,
+            BoundaryExternalKey = candidate.ExternalKey,
+            CreatedAt = now
+        };
+        db.Regions.Add(region);
+        await db.SaveChangesAsync();
+
+        await GrantRegionalManagerCoverageAsync(db, manager, region.Id);
+
+        return region.Id;
+    }
+
     private static Polygon Polygon(params (double Latitude, double Longitude)[] points)
     {
         var coordinates = points
@@ -375,18 +533,23 @@ public sealed class RegionalMapTests
         return polygon;
     }
 
+    private static MultiPolygon MultiPolygon(params Polygon[] polygons)
+    {
+        var multiPolygon = GeometryFactory.CreateMultiPolygon(polygons);
+        multiPolygon.SRID = 4326;
+        return multiPolygon;
+    }
+
+    private static void SetBoundary(AppDbContext db, Region region, Geometry geometry)
+    {
+        db.Entry(region)
+            .Property<Geometry?>("BoundaryGeometry")
+            .CurrentValue = geometry;
+    }
+
     private static async Task GrantRegionalManagerCoverageAsync(AppDbContext db, User manager, int regionId)
     {
-        var role = await db.Roles.SingleAsync(item => item.Name == "RegionalManager");
-
-        if (!await db.UserRoles.AnyAsync(item => item.UserId == manager.Id && item.RoleId == role.Id))
-        {
-            db.UserRoles.Add(new UserRole
-            {
-                UserId = manager.Id,
-                RoleId = role.Id
-            });
-        }
+        await EnsureRegionalManagerRoleAsync(db, manager);
 
         if (!await db.RegionalManagerRegions.AnyAsync(item => item.UserId == manager.Id && item.RegionId == regionId))
         {
@@ -400,6 +563,20 @@ public sealed class RegionalMapTests
         }
 
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureRegionalManagerRoleAsync(AppDbContext db, User manager)
+    {
+        var role = await db.Roles.SingleAsync(item => item.Name == "RegionalManager");
+
+        if (!await db.UserRoles.AnyAsync(item => item.UserId == manager.Id && item.RoleId == role.Id))
+        {
+            db.UserRoles.Add(new UserRole
+            {
+                UserId = manager.Id,
+                RoleId = role.Id
+            });
+        }
     }
 
     private static async Task<HttpClient> LoginAsync(GeotrackApiFactory app, string email, string password)

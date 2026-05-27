@@ -26,31 +26,32 @@ public sealed class RegionalRequestQueueTests
         using var client = await LoginAsync(app, "elena@example.com", "password123");
         var queue = await GetQueueAsync(client, fixture.AssignedRegionId);
 
-        Assert.Equal(4, queue.TotalCount);
-        Assert.Equal(4, queue.PendingCount);
-        Assert.Equal(2, queue.ApprovedCount);
-        Assert.Equal(2, queue.RejectedCount);
+        Assert.Equal(2, queue.TotalCount);
+        Assert.Equal(2, queue.PendingCount);
+        Assert.Equal(1, queue.ApprovedCount);
+        Assert.Equal(1, queue.RejectedCount);
         Assert.Equal(2, queue.CountsByType.Places);
-        Assert.Equal(2, queue.CountsByType.Reviews);
         Assert.Equal(0, queue.CountsByType.Destinations);
         Assert.Equal(0, queue.CountsByType.Locations);
         Assert.Equal(0, queue.CountsByType.Events);
         Assert.All(queue.Items, item => Assert.Equal(fixture.AssignedRegionId, item.RegionId));
         Assert.DoesNotContain(queue.Items, item => item.RequestId == fixture.OutOfRegionContributionId);
         Assert.Contains(queue.Items, item => item.RequestKey == $"contribution:{fixture.PendingContributionId}");
-        Assert.Contains(queue.Items, item => item.RequestKey == $"review-report:{fixture.PendingReportToApproveId}");
+        Assert.DoesNotContain(queue.Items, item => item.Source == "ReviewReport");
+        Assert.DoesNotContain(queue.Items, item => item.EntityType == "Review");
+
+        var sidebar = await client.GetFromJsonAsync<RegionalSidebarSummaryDto>(
+            $"/api/admin/regional/sidebar-summary?regionId={fixture.AssignedRegionId}");
+        Assert.NotNull(sidebar);
+        Assert.Equal(2, sidebar!.PendingRequestsCount);
 
         var places = await GetQueueAsync(client, fixture.AssignedRegionId, type: "place");
         Assert.Equal(2, places.TotalCount);
         Assert.All(places.Items, item => Assert.Equal("Place", item.EntityType));
 
-        var reviews = await GetQueueAsync(client, fixture.AssignedRegionId, type: "review");
-        Assert.Equal(2, reviews.TotalCount);
-        Assert.All(reviews.Items, item =>
-        {
-            Assert.Equal("ReviewReport", item.Source);
-            Assert.Equal("Review", item.EntityType);
-        });
+        var reviewTypeResponse = await client.GetAsync(
+            $"/api/admin/regional/requests?regionId={fixture.AssignedRegionId}&type=review");
+        Assert.Equal(HttpStatusCode.BadRequest, reviewTypeResponse.StatusCode);
 
         foreach (var unsupportedType in new[] { "destination", "location", "event" })
         {
@@ -60,11 +61,11 @@ public sealed class RegionalRequestQueueTests
         }
 
         var approved = await GetQueueAsync(client, fixture.AssignedRegionId, status: "approved");
-        Assert.Equal(2, approved.TotalCount);
+        Assert.Equal(1, approved.TotalCount);
         Assert.All(approved.Items, item => Assert.Equal("Approved", item.Status));
 
         var rejected = await GetQueueAsync(client, fixture.AssignedRegionId, status: "rejected");
-        Assert.Equal(2, rejected.TotalCount);
+        Assert.Equal(1, rejected.TotalCount);
         Assert.All(rejected.Items, item => Assert.Equal("Rejected", item.Status));
 
         var searchedByTitle = await GetQueueAsync(client, fixture.AssignedRegionId, search: "Queue Beta");
@@ -75,21 +76,20 @@ public sealed class RegionalRequestQueueTests
             client,
             fixture.AssignedRegionId,
             search: $"REP-{fixture.PendingReportToRejectId:D4}");
-        Assert.Single(searchedByDisplayId.Items);
-        Assert.Equal($"review-report:{fixture.PendingReportToRejectId}", searchedByDisplayId.Items[0].RequestKey);
+        Assert.Empty(searchedByDisplayId.Items);
 
         var oldest = await GetQueueAsync(client, fixture.AssignedRegionId, sort: "oldest");
         Assert.Equal("Queue Beta Place", oldest.Items[0].Title);
 
         var page = await GetQueueAsync(client, fixture.AssignedRegionId, skip: 1, take: 1);
-        Assert.Equal(4, page.TotalCount);
+        Assert.Equal(2, page.TotalCount);
         Assert.Equal(1, page.Skip);
         Assert.Equal(1, page.Take);
         Assert.Single(page.Items);
     }
 
     [Fact]
-    public async Task Queue_detail_returns_contribution_and_review_report_preview_data()
+    public async Task Queue_detail_returns_contribution_preview_data_and_rejects_review_report_source()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateQueueFixtureAsync(app);
@@ -109,14 +109,9 @@ public sealed class RegionalRequestQueueTests
         Assert.Equal("application/pdf", contribution.OwnershipProofContentType);
         Assert.StartsWith("/media/uploads/contributions/", contribution.OwnershipProofDocumentUrl);
 
-        var report = await client.GetFromJsonAsync<RegionalRequestQueueDetailDto>(
+        var reportResponse = await client.GetAsync(
             $"/api/admin/regional/requests/review-report/{fixture.PendingReportToApproveId}?regionId={fixture.AssignedRegionId}");
-        Assert.NotNull(report);
-        Assert.Equal("ReviewReport", report!.Source);
-        Assert.Equal("Review", report.EntityType);
-        Assert.Equal("Queue Assigned Place", report.TargetEntityName);
-        Assert.Equal("Report comment for accepted moderation.", report.ReviewComment);
-        Assert.Equal("Spam", report.ReportReason);
+        Assert.Equal(HttpStatusCode.BadRequest, reportResponse.StatusCode);
     }
 
     [Fact]
@@ -151,6 +146,21 @@ public sealed class RegionalRequestQueueTests
             $"/api/admin/regional/requests/contribution/{fixture.ApprovedContributionId}/approve",
             new RegionalRequestDecisionRequestDto { RegionId = fixture.AssignedRegionId });
         Assert.Equal(HttpStatusCode.Conflict, alreadyProcessed.StatusCode);
+
+        var reviewReportDetail = await manager.GetAsync(
+            $"/api/admin/regional/requests/review-report/{fixture.PendingReportToApproveId}?regionId={fixture.AssignedRegionId}");
+        Assert.Equal(HttpStatusCode.BadRequest, reviewReportDetail.StatusCode);
+
+        var reviewReportAction = await manager.PostAsJsonAsync(
+            $"/api/admin/regional/requests/review-report/{fixture.PendingReportToApproveId}/approve",
+            new RegionalRequestDecisionRequestDto { RegionId = fixture.AssignedRegionId });
+        Assert.Equal(HttpStatusCode.BadRequest, reviewReportAction.StatusCode);
+
+        var legacyReviewReports = await manager.GetAsync("/api/reviews/reports");
+        Assert.Equal(HttpStatusCode.Forbidden, legacyReviewReports.StatusCode);
+
+        var adminReviewManagement = await manager.GetAsync("/api/admin/reviews");
+        Assert.Equal(HttpStatusCode.Forbidden, adminReviewManagement.StatusCode);
     }
 
     [Fact]
@@ -218,71 +228,6 @@ public sealed class RegionalRequestQueueTests
     }
 
     [Fact]
-    public async Task Approve_and_reject_review_reports_from_queue_moderate_review_and_notify_users()
-    {
-        await using var app = await GeotrackApiFactory.CreateAsync();
-        var fixture = await CreateQueueFixtureAsync(app);
-
-        using var manager = await LoginAsync(app, "elena@example.com", "password123");
-        var approveResponse = await manager.PostAsJsonAsync(
-            $"/api/admin/regional/requests/review-report/{fixture.PendingReportToApproveId}/approve",
-            new RegionalRequestDecisionRequestDto
-            {
-                RegionId = fixture.AssignedRegionId,
-                Note = "Remove unsafe review."
-            });
-        approveResponse.EnsureSuccessStatusCode();
-
-        var rejectResponse = await manager.PostAsJsonAsync(
-            $"/api/admin/regional/requests/review-report/{fixture.PendingReportToRejectId}/reject",
-            new RegionalRequestDecisionRequestDto
-            {
-                RegionId = fixture.AssignedRegionId,
-                Note = "Keep review internal note."
-            });
-        rejectResponse.EnsureSuccessStatusCode();
-
-        await using var scope = app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var acceptedReport = await db.ReviewReports.SingleAsync(item => item.Id == fixture.PendingReportToApproveId);
-        var rejectedReport = await db.ReviewReports.SingleAsync(item => item.Id == fixture.PendingReportToRejectId);
-
-        Assert.Equal(ReviewReportStatus.Actioned, acceptedReport.Status);
-        Assert.Equal(ReviewReportDecision.RemoveReview, acceptedReport.Decision);
-        Assert.Equal("Remove unsafe review.", acceptedReport.DecisionNote);
-        Assert.False(await db.PlaceReviews.AnyAsync(review => review.Id == fixture.ReviewToRemoveId));
-
-        Assert.Equal(ReviewReportStatus.Dismissed, rejectedReport.Status);
-        Assert.Equal(ReviewReportDecision.KeepReview, rejectedReport.Decision);
-        Assert.Equal("Keep review internal note.", rejectedReport.DecisionNote);
-        Assert.True(await db.PlaceReviews.AnyAsync(review => review.Id == fixture.ReviewToKeepId));
-
-        var acceptedReportNotification = await db.UserNotifications.SingleAsync(notification =>
-            notification.UserId == fixture.ContributorUserId &&
-            notification.Type == "review_report_accepted" &&
-            notification.RelatedEntityId == fixture.PendingReportToApproveId);
-        Assert.Equal(
-            "Your report was reviewed and the reported content was removed from public view.",
-            acceptedReportNotification.Message);
-        Assert.DoesNotContain("Remove unsafe review", acceptedReportNotification.Message, StringComparison.OrdinalIgnoreCase);
-
-        var rejectedReportNotification = await db.UserNotifications.SingleAsync(notification =>
-            notification.UserId == fixture.ContributorUserId &&
-            notification.Type == "review_report_rejected" &&
-            notification.RelatedEntityId == fixture.PendingReportToRejectId);
-        Assert.Equal(
-            "Your report was reviewed and the content will remain visible.",
-            rejectedReportNotification.Message);
-        Assert.DoesNotContain("Keep review internal note", rejectedReportNotification.Message, StringComparison.OrdinalIgnoreCase);
-
-        var authorNotification = await db.UserNotifications.SingleAsync(notification =>
-            notification.UserId == fixture.ReviewAuthorUserId &&
-            notification.Type == "reported_review_removed" &&
-            notification.RelatedEntityId == fixture.ReviewToRemoveId);
-        Assert.Equal("Your review was removed after moderation.", authorNotification.Message);
-    }
-
-    [Fact]
     public async Task Bulk_actions_return_per_item_results_and_validate_each_request()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -341,8 +286,16 @@ public sealed class RegionalRequestQueueTests
 
         var reject = await rejectResponse.Content.ReadFromJsonAsync<RegionalRequestBulkActionResponseDto>();
         Assert.NotNull(reject);
-        Assert.Equal(2, reject!.SucceededCount);
-        Assert.Equal(0, reject.FailedCount);
+        Assert.Equal(1, reject!.SucceededCount);
+        Assert.Equal(1, reject.FailedCount);
+        Assert.Contains(reject.Results, result =>
+            result.RequestKey == $"contribution:{fixture.SecondPendingContributionId}" &&
+            result.Success &&
+            result.Status == "Rejected");
+        Assert.Contains(reject.Results, result =>
+            result.RequestKey == $"review-report:{fixture.PendingReportToRejectId}" &&
+            !result.Success &&
+            result.Message == "Invalid request id.");
 
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -350,7 +303,7 @@ public sealed class RegionalRequestQueueTests
             PlaceContributionStatus.Rejected,
             (await db.PlaceContributions.SingleAsync(item => item.Id == fixture.SecondPendingContributionId)).Status);
         Assert.Equal(
-            ReviewReportStatus.Dismissed,
+            ReviewReportStatus.Pending,
             (await db.ReviewReports.SingleAsync(item => item.Id == fixture.PendingReportToRejectId)).Status);
     }
 
