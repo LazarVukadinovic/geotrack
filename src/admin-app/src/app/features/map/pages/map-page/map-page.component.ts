@@ -21,6 +21,7 @@ import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import {
+  AdminMapAssignedRegionBoundary,
   AdminMapMarker,
   AdminMapResponse,
   AdminMapSearchResult,
@@ -159,22 +160,32 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get hasMapContent(): boolean {
-    return Boolean(this.mapData && (this.mapData.markers.length > 0 || this.mapData.zones.length > 0));
+    return Boolean(this.mapData && (
+      this.mapData.markers.length > 0 ||
+      this.hasAssignedRegionBoundary ||
+      this.mapData.zones.some(zone => zone.entityType !== 'Region')
+    ));
   }
 
-  get assignedRegionZone(): AdminMapZone | null {
-    return this.mapData?.zones.find(zone => zone.entityType === 'Region') ?? null;
+  get assignedRegionBoundary(): AdminMapAssignedRegionBoundary | null {
+    return this.mapData?.assignedRegionBoundary ?? null;
+  }
+
+  get hasAssignedRegionBoundary(): boolean {
+    return Boolean(this.assignedRegionBoundary?.hasBoundary && this.assignedRegionBoundary.geometryGeoJson);
   }
 
   get regionBoundaryNotice(): string | null {
     if (!this.activeRegionId || !this.mapData) return null;
 
-    const regionZone = this.assignedRegionZone;
-    if (regionZone?.isGeometryFallback) {
-      return regionZone.boundaryNotice ?? 'Displaying fallback boundary geometry for this assigned region.';
+    const boundary = this.assignedRegionBoundary;
+    if (!boundary) {
+      return 'Assigned region boundary geometry is not available yet.';
     }
 
-    return regionZone ? null : 'Assigned region boundary geometry is not available yet.';
+    return boundary.hasBoundary
+      ? null
+      : boundary.message ?? 'Assigned region boundary is missing. Please contact a territory manager or administrator.';
   }
 
   loadAssignedRegions(): void {
@@ -486,7 +497,11 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     const data = this.mapData;
     if (!data) return;
 
-    const zones = [...data.zones].sort((a, b) => this.zoneOrder(a) - this.zoneOrder(b));
+    this.addAssignedRegionBoundary(data.assignedRegionBoundary ?? null);
+
+    const zones = data.zones
+      .filter(zone => zone.entityType !== 'Region')
+      .sort((a, b) => this.zoneOrder(a) - this.zoneOrder(b));
     zones.forEach(zone => this.addZone(zone));
     data.markers.forEach(marker => this.addMarker(marker));
     this.applyViewport(data);
@@ -499,6 +514,18 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.markerGroup?.clearLayers();
     this.clearDroppedPin();
     this.clearSelections();
+  }
+
+  private addAssignedRegionBoundary(boundary: AdminMapAssignedRegionBoundary | null): void {
+    if (!boundary?.hasBoundary || !boundary.geometryGeoJson || !this.isSupportedGeometry(boundary.geometryGeoJson.type)) {
+      return;
+    }
+
+    L.geoJSON(boundary.geometryGeoJson, {
+      pane: 'admin-region-zone-pane',
+      interactive: false,
+      style: () => this.assignedRegionBoundaryStyle(),
+    }).addTo(this.regionZoneGroup);
   }
 
   private addZone(zone: AdminMapZone): void {
@@ -765,24 +792,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private zoneStyle(zone: AdminMapZone): Record<string, string | number> {
     if (zone.entityType === 'Region') {
-      if (zone.isGeometryFallback) {
-        return {
-          color: '#d97706',
-          fillColor: '#fbbf24',
-          fillOpacity: 0.10,
-          weight: 2.6,
-          dashArray: '7 5',
-          opacity: 0.95,
-        };
-      }
-
-      return {
-        color: '#047857',
-        fillColor: '#22c55e',
-        fillOpacity: 0.10,
-        weight: 3.2,
-        opacity: 0.95,
-      };
+      return this.assignedRegionBoundaryStyle();
     }
 
     if (zone.entityType === 'Destination') {
@@ -803,6 +813,16 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       weight: 2,
       dashArray: '5 4',
       opacity: 0.8,
+    };
+  }
+
+  private assignedRegionBoundaryStyle(): Record<string, string | number> {
+    return {
+      color: '#047857',
+      fillColor: '#22c55e',
+      fillOpacity: 0.10,
+      weight: 3,
+      opacity: 0.95,
     };
   }
 

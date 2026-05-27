@@ -40,7 +40,8 @@ describe('MapPageComponent', () => {
     expect(component.regionDisplayName).toBe('North Region');
     expect(component.mapLoading).toBe(false);
     expect(component.mapData?.markers[0].title).toBe('Real Place');
-    expect(component.mapData?.zones[0].entityType).toBe('Region');
+    expect(component.mapData?.assignedRegionBoundary?.hasBoundary).toBe(true);
+    expect(component.mapData?.assignedRegionBoundary?.geometrySource).toBe('Region.BoundaryGeometry');
     expect(sessionStorage.getItem('geotrack_admin_active_region_id')).toBe('17');
   });
 
@@ -74,16 +75,31 @@ describe('MapPageComponent', () => {
 
   it('renders the assigned region boundary as a non-blocking overlay and keeps markers visible', () => {
     const leaflet = installLeafletStub();
+    const candidateLikeGeometry = {
+      type: 'Polygon' as const,
+      coordinates: [[
+        [17.0, 46.0],
+        [17.4, 46.0],
+        [17.4, 46.4],
+        [17.0, 46.4],
+        [17.0, 46.0],
+      ]],
+    };
 
     fixture.detectChanges();
     flushRegions([{ id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' }]);
-    flushMap(17, mapResponse(17));
+    flushMap(17, mapResponse(17, 'Real Place', {}, {
+      geometryGeoJson: candidateLikeGeometry,
+      geometrySource: 'BoundaryCandidateDisplayGeometry',
+      isGeometryFallback: true,
+    }));
 
-    const regionLayer = leaflet.geoJsonLayers.find(layer =>
-      layer.geometry === component.mapData?.zones[0].geometryGeoJson,
-    );
+    const regionLayers = leaflet.geoJsonLayers.filter(layer => layer.options.pane === 'admin-region-zone-pane');
+    const regionLayer = regionLayers[0];
 
-    expect(regionLayer).toBeTruthy();
+    expect(regionLayers).toHaveLength(1);
+    expect(regionLayer.geometry).toBe(component.mapData?.assignedRegionBoundary?.geometryGeoJson);
+    expect(regionLayer.geometry).not.toBe(component.mapData?.zones[0].geometryGeoJson);
     expect(regionLayer?.options.pane).toBe('admin-region-zone-pane');
     expect(regionLayer?.options.interactive).toBe(false);
     expect(leaflet.marker).toHaveBeenCalled();
@@ -100,22 +116,46 @@ describe('MapPageComponent', () => {
     );
   });
 
-  it('shows an intentional fallback notice when fallback boundary geometry is returned', () => {
-    installLeafletStub();
+  it('clears the old assigned region boundary when the active region changes', () => {
+    const leaflet = installLeafletStub();
+
+    fixture.detectChanges();
+    flushRegions([
+      { id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' },
+      { id: 18, name: 'South', displayName: 'South Region', territoryName: 'Testland' },
+    ]);
+    flushMap(17, mapResponse(17));
+
+    component.onRegionSelected(18);
+    flushMap(18, mapResponse(18, 'Other Place'));
+
+    const regionLayerGroup = leaflet.layerGroups[0];
+    expect(regionLayerGroup.clearLayers).toHaveBeenCalled();
+    expect(regionLayerGroup.layers).toHaveLength(1);
+    expect(regionLayerGroup.layers[0].geometry).toBe(component.mapData?.assignedRegionBoundary?.geometryGeoJson);
+  });
+
+  it('shows a missing boundary setup notice without drawing fallback geometry', () => {
+    const leaflet = installLeafletStub();
 
     fixture.detectChanges();
     flushRegions([{ id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' }]);
-    flushMap(17, mapResponse(17, 'Real Place', {
-      isGeometryFallback: true,
-      geometrySource: 'BoundaryCandidateDisplayGeometry',
-      boundaryNotice: 'Using display boundary geometry because the precise region boundary is missing.',
-    }));
+    const response = mapResponse(17, 'Real Place', {
+      hasBoundary: false,
+      geometryGeoJson: null,
+      viewport: { isEmpty: true },
+      message: 'Assigned region boundary is missing. Please contact a territory manager or administrator.',
+    });
+    response.zones = [];
+    flushMap(17, response);
     fixture.detectChanges();
 
     expect(component.regionBoundaryNotice).toBe(
-      'Using display boundary geometry because the precise region boundary is missing.',
+      'Assigned region boundary is missing. Please contact a territory manager or administrator.',
     );
-    expect(fixture.nativeElement.textContent).toContain('precise region boundary is missing');
+    expect(leaflet.geoJsonLayers.filter(layer => layer.options.pane === 'admin-region-zone-pane')).toHaveLength(0);
+    expect(leaflet.marker).toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Assigned region boundary is missing');
   });
 
   it('shows a clean error state when map loading fails', () => {
@@ -256,8 +296,20 @@ describe('MapPageComponent', () => {
   function mapResponse(
     regionId: number,
     placeTitle = 'Real Place',
+    boundaryOverrides: Partial<NonNullable<AdminMapResponse['assignedRegionBoundary']>> = {},
     zoneOverrides: Partial<AdminMapResponse['zones'][number]> = {},
   ): AdminMapResponse {
+    const assignedRegionGeometry = {
+      type: 'Polygon' as const,
+      coordinates: [[
+        [16.0, 45.0],
+        [16.4, 45.0],
+        [16.4, 45.4],
+        [16.0, 45.4],
+        [16.0, 45.0],
+      ]],
+    };
+
     return {
       viewport: {
         centerLatitude: 45.1,
@@ -270,6 +322,28 @@ describe('MapPageComponent', () => {
           east: 16.4,
         },
         isEmpty: false,
+      },
+      assignedRegionBoundary: {
+        regionId,
+        regionName: 'North',
+        displayName: 'North Region',
+        geometrySource: 'Region.BoundaryGeometry',
+        hasBoundary: true,
+        geometryGeoJson: assignedRegionGeometry,
+        viewport: {
+          centerLatitude: 45.2,
+          centerLongitude: 16.2,
+          zoom: 10,
+          bounds: {
+            south: 45.0,
+            west: 16.0,
+            north: 45.4,
+            east: 16.4,
+          },
+          isEmpty: false,
+        },
+        message: null,
+        ...boundaryOverrides,
       },
       markers: [
         {
@@ -293,16 +367,7 @@ describe('MapPageComponent', () => {
           entityType: 'Region',
           name: 'North',
           displayName: 'North Region',
-          geometryGeoJson: {
-            type: 'Polygon',
-            coordinates: [[
-              [16.0, 45.0],
-              [16.4, 45.0],
-              [16.4, 45.4],
-              [16.0, 45.4],
-              [16.0, 45.0],
-            ]],
-          },
+          geometryGeoJson: assignedRegionGeometry,
           centerLatitude: 45.2,
           centerLongitude: 16.2,
           detailRoute: '/regions/detail/17',
@@ -317,9 +382,11 @@ describe('MapPageComponent', () => {
     geoJSON: ReturnType<typeof vi.fn>;
     marker: ReturnType<typeof vi.fn>;
     geoJsonLayers: any[];
+    layerGroups: any[];
   } {
     const panes = new Map<string, HTMLElement>();
     const geoJsonLayers: any[] = [];
+    const layerGroups: any[] = [];
 
     const map = {
       fitWorld: vi.fn(),
@@ -350,6 +417,7 @@ describe('MapPageComponent', () => {
           return group;
         }),
       };
+      layerGroups.push(group);
       return group;
     });
 
@@ -394,6 +462,6 @@ describe('MapPageComponent', () => {
       },
     });
 
-    return { map, geoJSON, marker, geoJsonLayers };
+    return { map, geoJSON, marker, geoJsonLayers, layerGroups };
   }
 });

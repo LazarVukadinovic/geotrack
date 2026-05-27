@@ -15,11 +15,9 @@ public class RegionalMapService : IRegionalMapService
     private const int MaxSearchResults = 30;
     private const string PublishedStatus = "Published";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
-    private const string BoundaryDisplayGeometryPropertyName = "BoundaryDisplayGeometry";
-    private const string RegionBoundaryGeometrySource = "RegionBoundaryGeometry";
-    private const string RegionBoundaryDisplayGeometrySource = "RegionBoundaryDisplayGeometry";
-    private const string BoundaryCandidateGeometrySource = "BoundaryCandidateGeometry";
-    private const string BoundaryCandidateDisplayGeometrySource = "BoundaryCandidateDisplayGeometry";
+    private const string RegionBoundaryGeometrySource = "Region.BoundaryGeometry";
+    private const string MissingRegionBoundaryMessage =
+        "Assigned region boundary is missing. Please contact a territory manager or administrator.";
 
     private static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -43,15 +41,17 @@ public class RegionalMapService : IRegionalMapService
     {
         var data = await LoadMapDataAsync(userId, regionId, cancellationToken);
         var normalizedTypes = NormalizeTypes(types);
+        var assignedRegionBoundary = BuildAssignedRegionBoundary(data.Region);
         var zones = BuildZones(data.Region);
         var markers = BuildMarkers(data, normalizedTypes);
 
         return new RegionalMapResponseDto
         {
-            Viewport = BuildViewport(zones, markers),
+            Viewport = BuildViewport(assignedRegionBoundary, zones, markers),
+            AssignedRegionBoundary = assignedRegionBoundary,
             Markers = markers,
             Zones = zones,
-            EmptyStateMessage = markers.Count == 0 && zones.Count == 0
+            EmptyStateMessage = markers.Count == 0 && !assignedRegionBoundary.HasBoundary && zones.Count == 0
                 ? "This assigned region does not have mapped entities or saved boundaries yet."
                 : null
         };
@@ -63,9 +63,10 @@ public class RegionalMapService : IRegionalMapService
         CancellationToken cancellationToken = default)
     {
         var data = await LoadMapDataAsync(userId, regionId, cancellationToken);
+        var assignedRegionBoundary = BuildAssignedRegionBoundary(data.Region);
         var zones = BuildZones(data.Region);
         var markers = BuildMarkers(data, NormalizeTypes(null));
-        return BuildViewport(zones, markers);
+        return BuildViewport(assignedRegionBoundary, zones, markers);
     }
 
     public async Task<List<RegionalMapZoneDto>> GetZonesAsync(
@@ -311,14 +312,7 @@ public class RegionalMapService : IRegionalMapService
                 Id = assignment.RegionId,
                 Name = assignment.Region.Name,
                 TerritoryName = assignment.Region.Territory.Name,
-                BoundaryGeometry = EF.Property<Geometry?>(assignment.Region, BoundaryGeometryPropertyName),
-                BoundaryDisplayGeometry = EF.Property<Geometry?>(assignment.Region, BoundaryDisplayGeometryPropertyName),
-                BoundaryCandidateBoundaryGeometry = assignment.Region.BoundaryCandidate == null
-                    ? null
-                    : EF.Property<Geometry?>(assignment.Region.BoundaryCandidate, BoundaryGeometryPropertyName),
-                BoundaryCandidateDisplayGeometry = assignment.Region.BoundaryCandidate == null
-                    ? null
-                    : EF.Property<Geometry?>(assignment.Region.BoundaryCandidate, BoundaryDisplayGeometryPropertyName)
+                BoundaryGeometry = EF.Property<Geometry?>(assignment.Region, BoundaryGeometryPropertyName)
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -428,10 +422,46 @@ public class RegionalMapService : IRegionalMapService
             : new List<RegionalMapZoneDto> { zone };
     }
 
+    private static RegionalMapAssignedRegionBoundaryDto BuildAssignedRegionBoundary(RegionMapProjection region)
+    {
+        var displayName = BuildRegionDisplayName(region.Name, region.TerritoryName);
+        var boundaryGeometry = ToPolygonalGeometry(region.BoundaryGeometry);
+        var geoJson = ToGeoJson(boundaryGeometry);
+        if (boundaryGeometry is null || geoJson is null)
+        {
+            return new RegionalMapAssignedRegionBoundaryDto
+            {
+                RegionId = region.Id,
+                RegionName = region.Name,
+                DisplayName = displayName,
+                GeometrySource = RegionBoundaryGeometrySource,
+                HasBoundary = false,
+                Message = MissingRegionBoundaryMessage,
+                Viewport = new RegionalMapViewportDto { IsEmpty = true }
+            };
+        }
+
+        var viewportAccumulator = new BoundsAccumulator();
+        IncludeGeometry(viewportAccumulator, geoJson);
+
+        return new RegionalMapAssignedRegionBoundaryDto
+        {
+            RegionId = region.Id,
+            RegionName = region.Name,
+            DisplayName = displayName,
+            GeometrySource = RegionBoundaryGeometrySource,
+            HasBoundary = true,
+            GeometryGeoJson = geoJson,
+            Viewport = viewportAccumulator.HasValue
+                ? BuildViewport(viewportAccumulator)
+                : new RegionalMapViewportDto { IsEmpty = true }
+        };
+    }
+
     private static RegionalMapZoneDto? BuildRegionZone(RegionMapProjection region)
     {
-        var boundary = ResolveRegionBoundary(region);
-        if (boundary is null)
+        var boundaryGeometry = ToPolygonalGeometry(region.BoundaryGeometry);
+        if (boundaryGeometry is null)
             return null;
 
         var zone = BuildZone(
@@ -439,54 +469,18 @@ public class RegionalMapService : IRegionalMapService
             "Region",
             region.Name,
             BuildRegionDisplayName(region.Name, region.TerritoryName),
-            boundary.IsFallback ? "Fallback boundary" : "Assigned boundary",
-            boundary.Geometry,
+            "Assigned boundary",
+            boundaryGeometry,
             detailRoute: null,
             editRoute: null);
 
         if (zone is null)
             return null;
 
-        zone.GeometrySource = boundary.Source;
-        zone.IsGeometryFallback = boundary.IsFallback;
-        zone.BoundaryNotice = boundary.Notice;
+        zone.GeometrySource = RegionBoundaryGeometrySource;
+        zone.IsGeometryFallback = false;
+        zone.BoundaryNotice = null;
         return zone;
-    }
-
-    private static RegionBoundaryRenderGeometry? ResolveRegionBoundary(RegionMapProjection region)
-    {
-        var regionGeometry = ToPolygonalGeometry(region.BoundaryGeometry);
-        if (regionGeometry is not null)
-        {
-            var displayGeometry = ToPolygonalGeometry(region.BoundaryDisplayGeometry);
-            return new RegionBoundaryRenderGeometry(
-                displayGeometry ?? regionGeometry,
-                displayGeometry is null ? RegionBoundaryGeometrySource : RegionBoundaryDisplayGeometrySource,
-                IsFallback: false,
-                Notice: null);
-        }
-
-        var candidateGeometry = ToPolygonalGeometry(region.BoundaryCandidateBoundaryGeometry);
-        if (candidateGeometry is not null)
-        {
-            return new RegionBoundaryRenderGeometry(
-                candidateGeometry,
-                BoundaryCandidateGeometrySource,
-                IsFallback: true,
-                Notice: "Using the linked administrative boundary because the region boundary geometry is missing.");
-        }
-
-        var candidateDisplayGeometry = ToPolygonalGeometry(region.BoundaryCandidateDisplayGeometry);
-        if (candidateDisplayGeometry is not null)
-        {
-            return new RegionBoundaryRenderGeometry(
-                candidateDisplayGeometry,
-                BoundaryCandidateDisplayGeometrySource,
-                IsFallback: true,
-                Notice: "Using display boundary geometry because the precise region boundary is missing.");
-        }
-
-        return null;
     }
 
     private static RegionalMapZoneDto? BuildZone(
@@ -521,9 +515,16 @@ public class RegionalMapService : IRegionalMapService
     }
 
     private static RegionalMapViewportDto BuildViewport(
+        RegionalMapAssignedRegionBoundaryDto? assignedRegionBoundary,
         List<RegionalMapZoneDto> zones,
         List<RegionalMapMarkerDto> markers)
     {
+        if (assignedRegionBoundary?.HasBoundary == true &&
+            assignedRegionBoundary.Viewport is { IsEmpty: false } boundaryViewport)
+        {
+            return boundaryViewport;
+        }
+
         var regionAccumulator = new BoundsAccumulator();
         foreach (var zone in zones.Where(zone => zone.EntityType == "Region"))
         {
@@ -754,16 +755,7 @@ public class RegionalMapService : IRegionalMapService
         public string Name { get; init; } = string.Empty;
         public string? TerritoryName { get; init; }
         public Geometry? BoundaryGeometry { get; init; }
-        public Geometry? BoundaryDisplayGeometry { get; init; }
-        public Geometry? BoundaryCandidateBoundaryGeometry { get; init; }
-        public Geometry? BoundaryCandidateDisplayGeometry { get; init; }
     }
-
-    private sealed record RegionBoundaryRenderGeometry(
-        Geometry Geometry,
-        string Source,
-        bool IsFallback,
-        string? Notice);
 
     private sealed class DestinationMapProjection
     {

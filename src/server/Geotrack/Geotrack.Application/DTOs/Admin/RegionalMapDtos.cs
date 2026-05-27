@@ -3,6 +3,7 @@ namespace Geotrack.Application.DTOs.Admin;
 public class RegionalMapResponseDto
 {
     public RegionalMapViewportDto Viewport { get; set; } = new();
+    public RegionalMapAssignedRegionBoundaryDto? AssignedRegionBoundary { get; set; }
     public List<RegionalMapMarkerDto> Markers { get; set; } = new();
     public List<RegionalMapZoneDto> Zones { get; set; } = new();
     public string? EmptyStateMessage { get; set; }
@@ -23,6 +24,18 @@ public class RegionalMapBoundsDto
     public double South { get; set; }
     public double East { get; set; }
     public double West { get; set; }
+}
+
+public class RegionalMapAssignedRegionBoundaryDto
+{
+    public int RegionId { get; set; }
+    public string RegionName { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string GeometrySource { get; set; } = "Region.BoundaryGeometry";
+    public bool HasBoundary { get; set; }
+    public RegionalMapGeometryDto? GeometryGeoJson { get; set; }
+    public RegionalMapViewportDto Viewport { get; set; } = new();
+    public string? Message { get; set; }
 }
 
 public class RegionalMapMarkerDto

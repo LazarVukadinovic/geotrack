@@ -20,6 +20,17 @@ export interface AdminMapGeometry {
   coordinates: number[][][] | number[][][][];
 }
 
+export interface AdminMapAssignedRegionBoundary {
+  regionId: number;
+  regionName: string;
+  displayName: string;
+  geometrySource: string;
+  hasBoundary: boolean;
+  geometryGeoJson?: AdminMapGeometry | null;
+  viewport: AdminMapViewport;
+  message?: string | null;
+}
+
 export interface AdminMapZone {
   id: number;
   entityType: Exclude<AdminMapEntityType, 'Place'>;
@@ -56,6 +67,7 @@ export interface AdminMapMarker {
 
 export interface AdminMapResponse {
   viewport: AdminMapViewport;
+  assignedRegionBoundary?: AdminMapAssignedRegionBoundary | null;
   markers: AdminMapMarker[];
   zones: AdminMapZone[];
   emptyStateMessage?: string | null;
