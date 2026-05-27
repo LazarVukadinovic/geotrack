@@ -2765,6 +2765,32 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
+        async Task ForceSetPlaceImageAsync(Place place, string url)
+        {
+            var existing = await db.EntityImages.Where(x =>
+                x.TargetType == EntityImageTargetType.Place &&
+                x.PlaceId == place.Id).ToListAsync();
+
+            if (existing.Count == 1 && existing[0].Url == url) return;
+
+            db.EntityImages.RemoveRange(existing);
+
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = place.Id,
+                Url = url,
+                Caption = place.Name,
+                AltText = place.Name,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 0,
+                CreatedAt = now
+            });
+
+            await db.SaveChangesAsync();
+        }
+
         async Task RemoveEventIfExistsAsync(string name)
         {
             var evt = await db.Events.FirstOrDefaultAsync(x => x.Name == name);
@@ -2911,8 +2937,8 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(kafeterija, "specialty-coffee", "casual", "budget", "local-favorite");
         await AddPlaceTagsIfMissingAsync(adaLake, "waterfront", "swimming", "family-friendly", "nature", "walking-route");
         await AddPlaceTagsIfMissingAsync(hotelMoskva, "boutique-stay", "old-town-nearby", "premium", "history");
-        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kalemegdan.Name, placeId: kalemegdan.Id, urls: new[] { SeedWebp("kalemegdan") });
-        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, adaLake.Name, placeId: adaLake.Id, urls: new[] { SeedWebp("ada-ciganlija") });
+        await ForceSetPlaceImageAsync(kalemegdan, SeedWebp("kalemegdan"));
+        await ForceSetPlaceImageAsync(adaLake, SeedWebp("ada-ciganlija"));
 
         var noviSad = await EnsureDestinationAsync("Novi Sad", "Danube-side city known for Petrovaradin Fortress, relaxed streets, cafes and festival culture.", cityType, vojvodina, 45.2671, 19.8335);
         await AddDestinationTagsIfMissingAsync(noviSad,
@@ -3097,6 +3123,8 @@ public static class SeedData
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, fortress.Name, placeId: fortress.Id, urls: new[] { SeedWebp("petrovaradin") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, strand.Name, placeId: strand.Id, urls: new[] { SeedWebp("strand-dunav") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, fishZelenish.Name, placeId: fishZelenish.Id, urls: new[] { SeedWebp("fish-and-zelenish") });
+        await ForceSetPlaceImageAsync(goldGondola, SeedWebp("gondola"));
+        await ForceSetPlaceImageAsync(tornikViewpoint, SeedWebp("tornik"));
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, skiCenterPlace.Name, placeId: skiCenterPlace.Id, urls: new[] { SeedWebp("kop-ski") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelGrand.Name, placeId: hotelGrand.Id, urls: new[] { SeedWebp("grand-kopaonik") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, banjskaStena.Name, placeId: banjskaStena.Id, urls: new[] { SeedWebp("banjska-stena") });
