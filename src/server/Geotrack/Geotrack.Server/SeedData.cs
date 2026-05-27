@@ -2911,8 +2911,8 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(kafeterija, "specialty-coffee", "casual", "budget", "local-favorite");
         await AddPlaceTagsIfMissingAsync(adaLake, "waterfront", "swimming", "family-friendly", "nature", "walking-route");
         await AddPlaceTagsIfMissingAsync(hotelMoskva, "boutique-stay", "old-town-nearby", "premium", "history");
-        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kalemegdan.Name, placeId: kalemegdan.Id, urls: new[] { Unsplash("1558005530-a7958896ec60") });
-        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, adaLake.Name, placeId: adaLake.Id, urls: new[] { Unsplash("1500530855697-b586d89ba3ee") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kalemegdan.Name, placeId: kalemegdan.Id, urls: new[] { SeedWebp("kalemegdan") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, adaLake.Name, placeId: adaLake.Id, urls: new[] { SeedWebp("ada-ciganlija") });
 
         var noviSad = await EnsureDestinationAsync("Novi Sad", "Danube-side city known for Petrovaradin Fortress, relaxed streets, cafes and festival culture.", cityType, vojvodina, 45.2671, 19.8335);
         await AddDestinationTagsIfMissingAsync(noviSad,
@@ -3091,6 +3091,16 @@ public static class SeedData
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, knjazTeatar.Name, placeId: knjazTeatar.Id, urls: new[] { SeedWebp("pozoriste") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelSumariceKg.Name, placeId: hotelSumariceKg.Id, urls: new[] { SeedWebp("hotel-sumarice") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelZelengora.Name, placeId: hotelZelengora.Id, urls: new[] { SeedWebp("hotel-zelengora") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelMoskva.Name, placeId: hotelMoskva.Id, urls: new[] { SeedWebp("hotel-moskva") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kafeterija.Name, placeId: kafeterija.Id, urls: new[] { SeedWebp("kafeterija-dorcol") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, skadarlija.Name, placeId: skadarlija.Id, urls: new[] { SeedWebp("restoran_velika_skadarlija") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, fortress.Name, placeId: fortress.Id, urls: new[] { SeedWebp("petrovaradin") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, strand.Name, placeId: strand.Id, urls: new[] { SeedWebp("strand-dunav") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, fishZelenish.Name, placeId: fishZelenish.Id, urls: new[] { SeedWebp("fish-and-zelenish") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, skiCenterPlace.Name, placeId: skiCenterPlace.Id, urls: new[] { SeedWebp("kop-ski") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelGrand.Name, placeId: hotelGrand.Id, urls: new[] { SeedWebp("grand-kopaonik") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, banjskaStena.Name, placeId: banjskaStena.Id, urls: new[] { SeedWebp("banjska-stena") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, zaovineLake.Name, placeId: zaovineLake.Id, urls: new[] { SeedWebp("lake-zaovine") });
 
         var belgradeSummer = await EnsureEventAsync("Belgrade Summer Nights", festivalType, beograd, savamala, "Open-air summer program with music, food and riverfront evening walks.", now.Date.AddDays(14).AddHours(19), now.Date.AddDays(14).AddHours(23), "Free", "4h", "City cultural venues");
         var taraNatureWalk = await EnsureEventAsync("Tara Nature Walk", outdoorType, tara, mitrovac, "Guided forest walk for viewpoints and nature stories inside the national park.", now.Date.AddDays(21).AddHours(10), now.Date.AddDays(21).AddHours(13), "1200 RSD", "3h", "Tara local guides", banjskaStena);
