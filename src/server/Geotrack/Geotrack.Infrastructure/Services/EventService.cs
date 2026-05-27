@@ -272,8 +272,13 @@ public class EventService : IEventService
             About = evt.Description,
             Info = new EventDetailInfoDto
             {
-                Date = evt.StartDate.ToString("d MMMM yyyy"),
-                TimeRange = evt.IsAllDay ? "All day" : $"{evt.StartDate:HH:mm} - {evt.EndDate:HH:mm}",
+                Date = evt.StartDate.Date == evt.EndDate.Date
+                    ? evt.StartDate.ToString("d MMMM yyyy")
+                    : $"{evt.StartDate:d MMM} – {evt.EndDate:d MMM yyyy}",
+                TimeRange = evt.IsAllDay ? "All day"
+                    : string.Equals(evt.EventType?.Name, "Festival", StringComparison.OrdinalIgnoreCase)
+                        ? $"From {evt.StartDate:HH:mm}"
+                        : $"{evt.StartDate:HH:mm} – {evt.EndDate:HH:mm}",
                 Venue = evt.VenueName ?? evt.Place?.Name ?? evt.Location?.Name ?? evt.Destination.Name,
                 Ticket = evt.IsFree ? "Free" : evt.TicketPrice ?? "Ticket info TBA",
                 Duration = evt.Duration ?? FormatDuration(evt.StartDate, evt.EndDate),
@@ -293,7 +298,8 @@ public class EventService : IEventService
                 Image = GetMainImageUrl(s.Images),
                 IsSaved = favoriteIds.Contains(s.Id)
             }).ToList(),
-            IsSaved = isSaved
+            IsSaved = isSaved,
+            ExternalTicketLink = evt.ExternalTicketLink
         };
     }
 

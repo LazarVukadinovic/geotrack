@@ -1165,19 +1165,51 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.renderMarkers(this.filterMarkersByMoreFilters(this.rawViewportMarkers), response.mode);
   }
 
+  private spreadOverlappingMarkers(markers: MapEntityMarker[]): MapEntityMarker[] {
+    const COORD_PRECISION = 5;
+    const SPREAD_RADIUS = 0.00025;
+    const groups = new Map<string, MapEntityMarker[]>();
+    for (const marker of markers) {
+      const key = `${marker.latitude.toFixed(COORD_PRECISION)},${marker.longitude.toFixed(COORD_PRECISION)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(marker);
+    }
+    const result: MapEntityMarker[] = [];
+    for (const group of groups.values()) {
+      if (group.length === 1) {
+        result.push(group[0]);
+      } else {
+        group.forEach((marker, i) => {
+          const angle = (2 * Math.PI * i) / group.length - Math.PI / 2;
+          result.push({
+            ...marker,
+            latitude: marker.latitude + SPREAD_RADIUS * Math.cos(angle),
+            longitude: marker.longitude + SPREAD_RADIUS * Math.sin(angle),
+          });
+        });
+      }
+    }
+    return result;
+  }
+
   private renderMarkers(markers: MapEntityMarker[], mode: MapMarkersMode): void {
     const newKeys = new Set<string>();
+    const spreadPositions = new Map<string, { latitude: number; longitude: number }>();
+    for (const m of this.spreadOverlappingMarkers(markers)) {
+      spreadPositions.set(`${m.entityType}:${m.entityId}`, { latitude: m.latitude, longitude: m.longitude });
+    }
 
     for (const marker of markers) {
       const key = this.getMarkerKey(marker);
       newKeys.add(key);
+      const pos = spreadPositions.get(key) ?? marker;
       const existing = this.markersByKey.get(key);
       if (existing) {
         existing.data = marker;
-        existing.marker.setLngLat([marker.longitude, marker.latitude]);
+        existing.marker.setLngLat([pos.longitude, pos.latitude]);
         this.refreshMarkerDom(existing, marker);
       } else {
-        const entry = this.createMarkerEntry(marker);
+        const entry = this.createMarkerEntry(marker, pos.latitude, pos.longitude);
         this.markersByKey.set(key, entry);
       }
     }
@@ -1222,7 +1254,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private createMarkerEntry(marker: MapEntityMarker): MarkerEntry {
+  private createMarkerEntry(marker: MapEntityMarker, displayLat?: number, displayLon?: number): MarkerEntry {
     const button = document.createElement('button');
     button.type = 'button';
 
@@ -1241,8 +1273,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     button.addEventListener('pointerup', (event) => this.onMarkerPointerUp(event, key, marker));
     button.addEventListener('click', (event) => this.onMarkerDomClick(event, key, marker));
 
+    const pinLat = displayLat ?? marker.latitude;
+    const pinLon = displayLon ?? marker.longitude;
     const mapMarker = new maplibregl.Marker({ element: button, anchor: 'center' })
-      .setLngLat([marker.longitude, marker.latitude])
+      .setLngLat([pinLon, pinLat])
       .addTo(this.map);
     mapMarker.on('click', (event) => this.onMapLibreMarkerClick(event as { originalEvent?: MouseEvent }, key, marker));
 

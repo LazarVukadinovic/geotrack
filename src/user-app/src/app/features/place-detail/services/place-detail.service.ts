@@ -7,7 +7,7 @@ import { LocationService } from '../../../core/services/location.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
-import type { PlaceDetail } from '../../../core/models/place.model';
+import type { PlaceDetail, PlaceRelatedEvent } from '../../../core/models/place.model';
 
 export type DetailLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
 
@@ -26,8 +26,12 @@ interface ApiPlaceDetail {
   reviewCount?: string;
   distance?: string;
   openStatus?: string;
+  openingHours?: string | null;
+  openingHoursSchedule?: { day: string; hours: string }[] | null;
+  website?: string | null;
   about?: string;
   reviews: { id: number; authorUserId?: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean; isOwnReview?: boolean }[];
+  relatedEvents?: { id: number; title: string; subtitle?: string | null; image?: string | null }[] | null;
   similar?: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[] | null;
   isSaved: boolean;
   isOwnable?: boolean;
@@ -100,7 +104,16 @@ export class PlaceDetailService {
           reviewCount: dto.reviewCount,
           distance: dto.distance ?? '',
           openStatus: dto.openStatus ?? '',
+          openingHours: dto.openingHours ?? null,
+          openingHoursSchedule: dto.openingHoursSchedule ?? null,
+          website: dto.website ?? null,
           about: dto.about ?? '',
+          relatedEvents: (dto.relatedEvents ?? []).map((e): PlaceRelatedEvent => ({
+            id: String(e.id),
+            title: e.title,
+            subtitle: e.subtitle ?? null,
+            image: e.image ?? null,
+          })),
           reviews: dto.reviews.map(r => ({
             id: String(r.id),
             authorUserId: r.authorUserId ?? 0,

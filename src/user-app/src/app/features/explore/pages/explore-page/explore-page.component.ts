@@ -319,11 +319,19 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.exactLocationError.set(null);
 
     this.destinationSvc.useLocationMode();
-    void this.locationSvc.ensureIpFallback().then((loc) => {
-      if (loc) {
-        void this.explore.loadForLocation(loc.latitude, loc.longitude);
-      }
-    });
+
+    void this.locationSvc.requestGps()
+      .then(({ latitude, longitude }) => {
+        return this.explore.loadForLocation(latitude, longitude);
+      })
+      .catch(() => {
+        return this.locationSvc.ensureIpFallback().then((loc) => {
+          if (loc) {
+            return this.explore.loadForLocation(loc.latitude, loc.longitude);
+          }
+          return;
+        });
+      });
 
     void this.router.navigate(['/explore'], { replaceUrl: true });
   }

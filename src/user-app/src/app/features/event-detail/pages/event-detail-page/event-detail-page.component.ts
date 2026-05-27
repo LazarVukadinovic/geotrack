@@ -51,6 +51,8 @@ export class EventDetailPageComponent {
     this.event()?.longitude ?? null,
   ));
 
+  protected readonly ticketUrl = computed(() => this.event()?.ticketUrl ?? null);
+
   private readonly locationRequestKey = computed(() => {
     const loc = this.locationSvc.location();
     if (!loc) return 'none';

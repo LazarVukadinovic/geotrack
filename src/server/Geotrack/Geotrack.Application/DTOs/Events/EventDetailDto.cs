@@ -23,6 +23,7 @@ public class EventDetailDto
     public EventVenueInfoDto VenueInfo { get; set; } = new();
     public List<EventSimilarDto> Similar { get; set; } = new();
     public bool IsSaved { get; set; }
+    public string? ExternalTicketLink { get; set; }
 }
 
 public class EventDetailInfoDto

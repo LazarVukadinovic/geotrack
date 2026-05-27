@@ -29,6 +29,7 @@ interface ApiEventDetail {
   venueInfo: { description?: string; arrivalTips?: string; accessibility?: string };
   similar: { id: number; title: string; subtitle?: string; image?: string; isSaved: boolean }[];
   isSaved: boolean;
+  externalTicketLink?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -113,6 +114,7 @@ export class EventDetailService {
             isSaved: s.isSaved,
           })),
           isSaved: dto.isSaved,
+          ticketUrl: dto.externalTicketLink ?? null,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');

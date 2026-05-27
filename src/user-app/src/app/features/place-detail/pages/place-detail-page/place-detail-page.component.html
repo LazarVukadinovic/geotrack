@@ -142,7 +142,7 @@
         </div>
 
         <!-- CTA buttons -->
-        @if (directionsUrl() || hasMapCoordinates()) {
+        @if (directionsUrl() || hasMapCoordinates() || p.website) {
           <div class="pd__ctas">
             @if (directionsUrl(); as directionsHref) {
               <a
@@ -177,6 +177,26 @@
                 </svg>
                 View on Map
               </button>
+            }
+            @if (p.website) {
+              <a
+                class="pd__cta pd__cta--outline"
+                [href]="p.website"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                Website
+                <svg class="pd__cta-external-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                </svg>
+              </a>
             }
           </div>
         }
@@ -218,6 +238,93 @@
               <h2 class="pd__section-title">About this place</h2>
               <p class="pd__about">{{ p.about }}</p>
             </section>
+
+            @if (p.openingHours || (p.openingHoursSchedule && p.openingHoursSchedule.length > 0)) {
+              <div class="pd__divider pd__divider--hours"></div>
+
+              <section class="pd__section pd__section--hours">
+                <h2 class="pd__section-title">Opening Hours</h2>
+
+                <button
+                  type="button"
+                  class="pd__hours-toggle"
+                  [class.pd__hours-toggle--open]="hoursExpanded()"
+                  (click)="hoursExpanded.set(!hoursExpanded())"
+                  [attr.aria-expanded]="hoursExpanded()"
+                >
+                  <div class="pd__hours-row">
+                    <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
+                    </svg>
+                    <span class="pd__hours-text">Opening hours</span>
+                  </div>
+                  <svg class="pd__hours-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                          stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+
+                @if (hoursExpanded()) {
+                  <div class="pd__hours-schedule">
+                    @if (p.openingHoursSchedule && p.openingHoursSchedule.length > 0) {
+                      @for (day of p.openingHoursSchedule; track day.day) {
+                        <div class="pd__hours-day">
+                          <span class="pd__hours-day-name">{{ day.day }}</span>
+                          <span class="pd__hours-day-val">{{ day.hours }}</span>
+                        </div>
+                      }
+                    } @else {
+                      <div class="pd__hours-day">
+                        <span class="pd__hours-day-val">{{ p.openingHours }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              </section>
+            }
+
+            @if (p.relatedEvents.length > 0) {
+              <div class="pd__divider pd__divider--events"></div>
+
+              <section class="pd__section pd__section--events">
+                <app-section-header
+                  title="Events"
+                />
+
+                <div class="pd__similar-viewport">
+                  <div class="pd__similar-track" role="list">
+                    @for (ev of p.relatedEvents; track ev.id) {
+                      <article
+                        class="pd__similar-card"
+                        role="listitem"
+                        (click)="navigateToEvent(ev.id)"
+                      >
+                        <div class="pd__similar-media">
+                          <img
+                            appImageFallback
+                            class="pd__similar-img"
+                            [src]="ev.image || ''"
+                            [alt]="ev.title"
+                            width="160"
+                            height="110"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </div>
+
+                        <div class="pd__similar-body">
+                          <h3 class="pd__similar-title">{{ ev.title }}</h3>
+                          @if (ev.subtitle) {
+                            <p class="pd__similar-sub">{{ ev.subtitle }}</p>
+                          }
+                        </div>
+                      </article>
+                    }
+                  </div>
+                </div>
+              </section>
+            }
 
             @if (p.similar.length > 0) {
               <div class="pd__divider pd__divider--similar"></div>

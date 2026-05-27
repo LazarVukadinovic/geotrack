@@ -43,13 +43,13 @@
         [countryRoute]="countryDetailRoute()"
       />
 
-      @if (isDestinationMode()) {
-        <div class="explore-page__destination-links">
-          <button type="button" class="explore-page__destination-link" (click)="openDestinationDiscovery()">Explore another destination</button>
+      <div class="explore-page__destination-links">
+        <button type="button" class="explore-page__destination-link" (click)="openDestinationDiscovery()">Explore another destination</button>
+        @if (isDestinationMode()) {
           <span class="explore-page__destination-links-sep" aria-hidden="true">·</span>
           <button type="button" class="explore-page__destination-link" (click)="useCurrentLocation()">Use current location</button>
-        </div>
-      }
+        }
+      </div>
 
       @if (canUseExploreSearch()) {
         <div class="explore-page__search">

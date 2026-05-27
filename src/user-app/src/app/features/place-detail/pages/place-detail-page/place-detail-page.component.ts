@@ -53,6 +53,7 @@ export class PlaceDetailPageComponent {
   );
 
   protected readonly scrollProgress = signal(0);
+  protected readonly hoursExpanded = signal(false);
   protected readonly galleryOpen = signal(false);
   protected readonly selectedImageUrl = signal<string | null>(null);
   protected readonly ownershipClaimOpen = signal(false);
@@ -98,6 +99,7 @@ export class PlaceDetailPageComponent {
     effect(() => {
       this.placeId();
       this.scrollProgress.set(0);
+      this.hoursExpanded.set(false);
       this.galleryOpen.set(false);
       this.selectedImageUrl.set(null);
       const el = this.pdScroll()?.nativeElement;
@@ -141,6 +143,10 @@ export class PlaceDetailPageComponent {
 
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/places', id]);
+  }
+
+  protected navigateToEvent(id: string): void {
+    this.router.navigate(['/events', id]);
   }
 
   protected selectGalleryImage(url: string): void {

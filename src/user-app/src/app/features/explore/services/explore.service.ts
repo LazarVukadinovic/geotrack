@@ -403,7 +403,9 @@ export class ExploreService {
   private distanceOriginForSource(
     source?: 'gps' | 'approximate' | 'manual' | 'destination' | 'default' | 'unknown' | null,
   ): 'current-location' | 'destination-centre' {
-    return source === 'gps' ? 'current-location' : 'destination-centre';
+    return (source === 'gps' || source === 'approximate' || source === 'manual')
+      ? 'current-location'
+      : 'destination-centre';
   }
 
   private loadFromApi(

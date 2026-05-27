@@ -10,6 +10,7 @@ using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
+using System.Text.Json;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -175,6 +176,14 @@ public class PlaceService : IPlaceService
             .Take(5)
             .ToListAsync();
 
+        var relatedEvents = await _db.Events
+            .AsNoTracking()
+            .Include(e => e.Images)
+            .Where(e => e.PlaceId == id)
+            .OrderBy(e => e.StartDate)
+            .Take(5)
+            .ToListAsync();
+
         var favoriteIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
@@ -217,6 +226,9 @@ public class PlaceService : IPlaceService
             ReviewCount = FormatReviewCountLabel(reviewCount),
             Distance = detailDistance,
             OpenStatus = DeriveOpenStatus(place.OpeningHours),
+            OpeningHours = DisplayTextSafety.CleanOptional(place.OpeningHours),
+            OpeningHoursSchedule = ParseOpeningHoursSchedule(place.OperatingHoursJson),
+            Website = DisplayTextSafety.CleanOptional(place.Website),
             About = DisplayTextSafety.CleanOptional(place.Description),
             Reviews = previewReviews
                 .Select(r => new ReviewDto
@@ -231,6 +243,15 @@ public class PlaceService : IPlaceService
                     HelpfulCount = 0,
                     ReportedByCurrentUser = reportedReviewIds.Contains(r.Id),
                     IsOwnReview = userId.HasValue && r.UserId == userId.Value
+                })
+                .ToList(),
+            RelatedEvents = relatedEvents
+                .Select(e => new PlaceRelatedEventDto
+                {
+                    Id = e.Id,
+                    Title = DisplayTextSafety.CleanRequired(e.Name, "Event"),
+                    Subtitle = DisplayTextSafety.CleanOptional(e.Summary ?? e.Description),
+                    Image = GetCoverImageUrl(e.Images),
                 })
                 .ToList(),
             Similar = similar
@@ -991,6 +1012,20 @@ public class PlaceService : IPlaceService
 
     private static string? DeriveOpenStatus(string? hours) =>
         string.IsNullOrWhiteSpace(hours) ? null : "Open";
+
+    private static List<OpeningHoursDayDto>? ParseOpeningHoursSchedule(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<List<OpeningHoursDayDto>>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static string? TrimDescription(string? description, int maxLength)
     {

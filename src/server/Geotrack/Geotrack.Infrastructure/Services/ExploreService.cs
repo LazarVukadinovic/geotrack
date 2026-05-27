@@ -39,7 +39,6 @@ public class ExploreService : IExploreService
 
     private static readonly string[] WhereToEatExcludedTypeNames =
     [
-        "cafe",
         "bar"
     ];
 
@@ -1777,17 +1776,37 @@ public class ExploreService : IExploreService
         return score;
     }
 
+    private static readonly Dictionary<string, string> DynamicSectionSubtitles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["swimming"] = "Swimming spots and water activities nearby",
+        ["kayaking"] = "Kayaking and water sports nearby",
+        ["fishing"] = "Fishing spots nearby",
+        ["walking-route"] = "Scenic walks and sightseeing routes nearby",
+        ["culture"] = "Culture and arts venues nearby",
+        ["history"] = "Historic sites and heritage nearby",
+        ["art"] = "Art galleries and exhibitions nearby",
+        ["nature"] = "Nature spots and parks nearby",
+        ["architecture"] = "Architecture and historic buildings nearby",
+        ["monastery"] = "Monasteries and religious heritage nearby",
+        ["religious-site"] = "Religious sites and heritage nearby",
+        ["garden"] = "Gardens and botanical spaces nearby",
+        ["park"] = "Parks and green spaces nearby",
+        ["gallery"] = "Art galleries and exhibition spaces nearby",
+        ["hiking"] = "Hiking trails and outdoor routes nearby",
+        ["boat-tour"] = "Boat tours and water excursions nearby",
+        ["island-hopping"] = "Island hopping and sea trips nearby",
+        ["photo-walk"] = "Photography spots and scenic walks nearby",
+        ["diving-snorkeling"] = "Diving and snorkeling spots nearby",
+        ["cable-car"] = "Cable car and panoramic rides nearby",
+        ["guided-tour"] = "Guided tours and experiences nearby",
+        ["skiing"] = "Ski slopes and winter sports nearby",
+    };
+
     private static string? BuildDynamicSectionSubtitle(DynamicSectionAccumulator section)
     {
-        var count = section.Items.Count;
-        if (count == 0)
-        {
-            return null;
-        }
-
-        return count == 1
-            ? "1 matching place nearby"
-            : $"{count} matching places nearby";
+        if (section.Items.Count == 0) return null;
+        if (DynamicSectionSubtitles.TryGetValue(section.Key, out var subtitle)) return subtitle;
+        return $"Places and experiences nearby";
     }
 
     private async Task<List<ExploreLandmarkCategoryDto>> BuildLandmarkCategoriesAsync(Point userPoint, int destinationId)
