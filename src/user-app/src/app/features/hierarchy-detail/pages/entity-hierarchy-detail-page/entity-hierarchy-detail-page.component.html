@@ -54,24 +54,54 @@
 
     @if (d.sections.length > 0) {
       <section class="ehd__panel">
-        <h2 class="ehd__section-title">Related content</h2>
-        <div class="ehd__section-list">
-          @for (section of d.sections; track $index) {
-            <div class="ehd__section-card">
+      <h2 class="ehd__section-title">
+  {{ d.sections.length === 1 && d.sections[0].sectionTitle ? d.sections[0].sectionTitle : 'Related content' }}
+    </h2>
+      <div class="ehd__section-list">
+        @for (section of d.sections; track $index) {
+          <div
+            class="ehd__section-card"
+            [class.ehd__section-card--open]="expandedSectionIndex() === $index"
+            (click)="toggleSection($index)"
+          >
+            <div class="ehd__section-card-header">
               <h3>{{ section.sectionTitle || section.title || section.name || 'Section' }}</h3>
-              @if (section.places) {
-                <span>{{ section.places.length }} places</span>
-              }
-              @if (section.events) {
-                <span>{{ section.events.length }} events</span>
-              }
-              @if (section.locations) {
-                <span>{{ section.locations.length }} locations</span>
-              }
+              <div class="ehd__section-card-right">
+                @if (sectionCount(section) > 0) {
+                  <span class="ehd__section-count">{{ sectionCount(section) }}</span>
+                }
+                <svg class="ehd__section-chevron" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
             </div>
-          }
-        </div>
-      </section>
+
+            @if (expandedSectionIndex() === $index && sectionCount(section) > 0) {
+              <div class="ehd__section-items">
+                @for (item of (isFullExpanded($index) ? sectionItems(section) : sectionItems(section).slice(0, 5)); track $index) {
+                  @if (item.route) {
+                    <a class="ehd__section-item" [routerLink]="item.route" (click)="expandedSectionIndex.set(null)">{{ item.name }}</a>
+                  } @else {
+                    <div class="ehd__section-item">{{ item.name }}</div>
+                  }
+                }
+                @if (sectionCount(section) > 5) {
+                  <button class="ehd__section-see-all" (click)="toggleFullExpand($index, $event)">
+                    {{ isFullExpanded($index) ? 'See less' : 'See more (' + (sectionCount(section) - 5) + ' more)' }}
+                  </button>
+                }
+            </div>
+            }
+
+            @if (expandedSectionIndex() === $index && sectionCount(section) === 0) {
+              <div class="ehd__section-items">
+                <p class="ehd__section-empty">No items yet.</p>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </section>
     }
   }
 </article>

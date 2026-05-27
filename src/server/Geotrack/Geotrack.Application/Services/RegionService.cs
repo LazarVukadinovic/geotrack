@@ -1,4 +1,5 @@
-﻿using Geotrack.Application.DTOs.Region;
+﻿using Geotrack.Application.DTOs.Destinations;
+using Geotrack.Application.DTOs.Region;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
@@ -34,7 +35,6 @@ namespace Geotrack.Application.Services
         public async Task<GetRegionDetailsResponseDto> GetRegionDetailsAsync(int regionId)
         {
             var region = await _regionRepository.GetByIdWithManagersAsync(regionId);
-
             if (region == null)
                 throw new KeyNotFoundException($"Region with id '{regionId}' was not found.");
 
@@ -50,6 +50,14 @@ namespace Geotrack.Application.Services
                     {
                         Id = ror.User.Id,
                         Email = ror.User.Email
+                    })
+                    .ToList(),
+                Destinations = region.Destinations
+                    .OrderBy(d => d.Name)
+                    .Select(d => new DestinationSummaryDto
+                    {
+                        Id = d.Id,
+                        Name = d.Name
                     })
                     .ToList()
             };
