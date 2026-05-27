@@ -2,6 +2,7 @@ using System.Text.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
@@ -13,16 +14,38 @@ public sealed class AdminNotificationService : IAdminNotificationService
     private const int DefaultTake = 25;
     private const int MaxTake = 50;
     private const int MessageSummaryLength = 120;
+
     private const string AdminAudienceRole = RoleNames.Admin;
+    private const string TerritoryAudienceRole = RoleNames.TerritoryManager;
+    private const string RegionalAudienceRole = RoleNames.RegionalManager;
+
+    private const string GlobalScopeType = "Global";
+    private const string TerritoryScopeType = "Territory";
+    private const string RegionScopeType = "Region";
 
     private const string SupportTicketCreatedType = "SupportTicketCreated";
     private const string ReviewReportedType = "ReviewReported";
+    private const string ContributionPendingReviewType = "ContributionPendingReview";
+    private const string RegionCreatedType = "RegionCreated";
+    private const string RegionalManagerAssignedType = "RegionalManagerAssigned";
+    private const string RegionalManagerRemovedType = "RegionalManagerRemoved";
 
     private const string InfoSeverity = "Info";
     private const string WarningSeverity = "Warning";
 
     private const string SupportTicketTargetType = "SupportTicket";
     private const string ReviewReportNotificationTargetType = "ReviewReport";
+    private const string ContributionTargetType = "Contribution";
+    private const string RegionTargetType = "Region";
+    private const string UserTargetType = "User";
+
+    private static readonly HashSet<string> SupportedAudienceRoles = new(StringComparer.Ordinal)
+    {
+        RoleNames.Admin,
+        RoleNames.TerritoryManager,
+        RoleNames.TerritoryAssociate,
+        RoleNames.RegionalManager
+    };
 
     private readonly AppDbContext _db;
 
@@ -36,25 +59,17 @@ public sealed class AdminNotificationService : IAdminNotificationService
         AdminNotificationListRequestDto request,
         CancellationToken cancellationToken = default)
     {
-        await EnsureCurrentAdminAsync(currentUserId, cancellationToken);
+        var context = await ResolveAudienceContextAsync(
+            currentUserId,
+            request.AudienceRole,
+            cancellationToken,
+            request.RegionId);
 
         var skip = Math.Max(0, request.Skip);
         var take = Math.Clamp(request.Take <= 0 ? DefaultTake : request.Take, 1, MaxTake);
         var readCutoff = DateTime.UtcNow.AddMonths(-2);
 
-        var query =
-            from notification in _db.AdminNotifications.AsNoTracking()
-            where notification.AudienceRole == AdminAudienceRole
-            join state in _db.AdminNotificationReadStates.AsNoTracking()
-                    .Where(readState => readState.UserId == currentUserId)
-                on notification.Id equals state.AdminNotificationId into readStates
-            from readState in readStates.DefaultIfEmpty()
-            select new
-            {
-                Notification = notification,
-                ReadAt = readState == null ? null : (DateTime?)readState.ReadAt
-            };
-
+        var query = BuildVisibleNotificationRows(currentUserId, context);
         query = request.IncludeRead
             ? query.Where(row => row.ReadAt == null || row.ReadAt >= readCutoff)
             : query.Where(row => row.ReadAt == null);
@@ -72,7 +87,7 @@ public sealed class AdminNotificationService : IAdminNotificationService
             Items = rows
                 .Select(row => MapNotification(row.Notification, row.ReadAt))
                 .ToList(),
-            UnreadCount = await CountUnreadAsync(currentUserId, cancellationToken),
+            UnreadCount = await CountUnreadAsync(currentUserId, context, cancellationToken),
             TotalCount = totalCount,
             Skip = skip,
             Take = take,
@@ -83,33 +98,32 @@ public sealed class AdminNotificationService : IAdminNotificationService
 
     public async Task<AdminNotificationUnreadCountDto> GetUnreadCountAsync(
         int currentUserId,
+        string? audienceRole = null,
+        int? regionId = null,
         CancellationToken cancellationToken = default)
     {
-        await EnsureCurrentAdminAsync(currentUserId, cancellationToken);
+        var context = await ResolveAudienceContextAsync(currentUserId, audienceRole, cancellationToken, regionId);
 
         return new AdminNotificationUnreadCountDto
         {
-            UnreadCount = await CountUnreadAsync(currentUserId, cancellationToken)
+            UnreadCount = await CountUnreadAsync(currentUserId, context, cancellationToken)
         };
     }
 
     public async Task<AdminNotificationMutationDto> MarkReadAsync(
         int currentUserId,
         int notificationId,
+        string? audienceRole = null,
+        int? regionId = null,
         CancellationToken cancellationToken = default)
     {
-        await EnsureCurrentAdminAsync(currentUserId, cancellationToken);
+        var context = await ResolveAudienceContextAsync(currentUserId, audienceRole, cancellationToken, regionId);
 
         if (notificationId <= 0)
             throw new InvalidOperationException("notificationId must be positive.");
 
-        var exists = await _db.AdminNotifications
-            .AsNoTracking()
-            .AnyAsync(
-                notification =>
-                    notification.Id == notificationId &&
-                    notification.AudienceRole == AdminAudienceRole,
-                cancellationToken);
+        var exists = await BuildVisibleNotificationRows(currentUserId, context)
+            .AnyAsync(row => row.Notification.Id == notificationId, cancellationToken);
 
         if (!exists)
             throw new KeyNotFoundException("Notification was not found.");
@@ -137,24 +151,21 @@ public sealed class AdminNotificationService : IAdminNotificationService
         return new AdminNotificationMutationDto
         {
             ReadAt = readAt,
-            UnreadCount = await CountUnreadAsync(currentUserId, cancellationToken)
+            UnreadCount = await CountUnreadAsync(currentUserId, context, cancellationToken)
         };
     }
 
     public async Task<AdminNotificationMutationDto> MarkAllReadAsync(
         int currentUserId,
+        string? audienceRole = null,
+        int? regionId = null,
         CancellationToken cancellationToken = default)
     {
-        await EnsureCurrentAdminAsync(currentUserId, cancellationToken);
+        var context = await ResolveAudienceContextAsync(currentUserId, audienceRole, cancellationToken, regionId);
 
-        var unreadNotificationIds = await _db.AdminNotifications
-            .AsNoTracking()
-            .Where(notification =>
-                notification.AudienceRole == AdminAudienceRole &&
-                !_db.AdminNotificationReadStates.Any(state =>
-                    state.AdminNotificationId == notification.Id &&
-                    state.UserId == currentUserId))
-            .Select(notification => notification.Id)
+        var unreadNotificationIds = await BuildVisibleNotificationRows(currentUserId, context)
+            .Where(row => row.ReadAt == null)
+            .Select(row => row.Notification.Id)
             .ToListAsync(cancellationToken);
 
         var readAt = DateTime.UtcNow;
@@ -191,6 +202,7 @@ public sealed class AdminNotificationService : IAdminNotificationService
             : $"{categoryLabel}: {subject}";
 
         await AddNotificationIfMissingAsync(
+            audienceRole: AdminAudienceRole,
             type: SupportTicketCreatedType,
             title: "New support report",
             message: message,
@@ -202,6 +214,9 @@ public sealed class AdminNotificationService : IAdminNotificationService
             targetRoute: $"/admin-support-tickets?ticketId={ticket.Id}",
             metadataSummary: categoryLabel,
             createdAt: ticket.CreatedAt == default ? DateTime.UtcNow : ticket.CreatedAt,
+            scopeType: GlobalScopeType,
+            scopeId: null,
+            scopeLabel: null,
             cancellationToken);
     }
 
@@ -221,6 +236,7 @@ public sealed class AdminNotificationService : IAdminNotificationService
             : $"{TitleCase(targetLabel)} review reported for {reason} on {entityName}.";
 
         await AddNotificationIfMissingAsync(
+            audienceRole: AdminAudienceRole,
             type: ReviewReportedType,
             title: "New reported review",
             message: message,
@@ -230,10 +246,417 @@ public sealed class AdminNotificationService : IAdminNotificationService
             targetRoute: $"/admin-reviews?status=reported&highlight={Uri.EscapeDataString(reviewKey)}",
             metadataSummary: reason,
             createdAt: report.CreatedAt == default ? DateTime.UtcNow : report.CreatedAt,
+            scopeType: GlobalScopeType,
+            scopeId: null,
+            scopeLabel: null,
             cancellationToken);
     }
 
+    public async Task CreateTerritoryContributionPendingReviewNotificationAsync(
+        PlaceContribution contribution,
+        CancellationToken cancellationToken = default)
+    {
+        if (contribution.Id <= 0)
+            return;
+
+        var row = await _db.PlaceContributions
+            .AsNoTracking()
+            .Where(item => item.Id == contribution.Id && item.LocationId.HasValue)
+            .Select(item => new
+            {
+                item.Id,
+                item.Name,
+                item.Type,
+                item.SubmittedAt,
+                RegionId = item.Location!.Destination.RegionId,
+                RegionName = item.Location.Destination.Region.Name,
+                TerritoryId = item.Location.Destination.Region.TerritoryId,
+                TerritoryName = item.Location.Destination.Region.Territory.Name
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+            return;
+
+        var title = "New request pending review";
+        var message = $"{ContributionTypeLabel(row.Type)} request for {TrimForMessage(row.Name, 80)} is pending in {row.RegionName}.";
+        var requestKey = Uri.EscapeDataString($"contribution:{row.Id}");
+
+        await AddNotificationIfMissingAsync(
+            audienceRole: TerritoryAudienceRole,
+            type: ContributionPendingReviewType,
+            title: title,
+            message: message,
+            severity: InfoSeverity,
+            targetType: ContributionTargetType,
+            targetId: row.Id,
+            targetRoute: $"/territory/regions/{row.RegionId}?highlight={requestKey}",
+            metadataSummary: row.RegionName,
+            createdAt: row.SubmittedAt == default ? DateTime.UtcNow : row.SubmittedAt,
+            scopeType: RegionScopeType,
+            scopeId: row.RegionId,
+            scopeLabel: BuildScopeLabel(row.RegionName, row.TerritoryName),
+            cancellationToken);
+    }
+
+    public async Task CreateRegionalContributionPendingReviewNotificationAsync(
+        PlaceContribution contribution,
+        CancellationToken cancellationToken = default)
+    {
+        if (contribution.Id <= 0)
+            return;
+
+        var row = await _db.PlaceContributions
+            .AsNoTracking()
+            .Where(item =>
+                item.Id == contribution.Id &&
+                item.LocationId.HasValue &&
+                item.Location != null &&
+                (item.Type != PlaceContributionType.UpdatePlace ||
+                 (item.PlaceId.HasValue &&
+                  item.Place != null &&
+                  item.Place.Location.Destination.RegionId == item.Location.Destination.RegionId)))
+            .Select(item => new
+            {
+                item.Id,
+                item.Name,
+                item.Type,
+                item.SubmittedAt,
+                RegionId = item.Location!.Destination.RegionId,
+                RegionName = item.Location.Destination.Region.Name,
+                TerritoryName = item.Location.Destination.Region.Territory.Name
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+            return;
+
+        var title = "New request pending review";
+        var message = $"{ContributionTypeLabel(row.Type)} request for {TrimForMessage(row.Name, 80)} was submitted in {row.RegionName}.";
+
+        await AddNotificationIfMissingAsync(
+            audienceRole: RegionalAudienceRole,
+            type: ContributionPendingReviewType,
+            title: title,
+            message: message,
+            severity: InfoSeverity,
+            targetType: ContributionTargetType,
+            targetId: row.Id,
+            targetRoute: $"/request/detail/contribution/{row.Id}?regionId={row.RegionId}",
+            metadataSummary: row.RegionName,
+            createdAt: row.SubmittedAt == default ? DateTime.UtcNow : row.SubmittedAt,
+            scopeType: RegionScopeType,
+            scopeId: row.RegionId,
+            scopeLabel: BuildScopeLabel(row.RegionName, row.TerritoryName),
+            cancellationToken);
+    }
+
+    public async Task CreateTerritoryRegionCreatedNotificationAsync(
+        int territoryId,
+        int regionId,
+        string regionName,
+        DateTime createdAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId <= 0 || regionId <= 0)
+            return;
+
+        var row = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.Id == regionId && region.TerritoryId == territoryId)
+            .Select(region => new
+            {
+                RegionName = region.Name,
+                TerritoryName = region.Territory.Name
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+            return;
+
+        var safeRegionName = string.IsNullOrWhiteSpace(regionName) ? row.RegionName : regionName.Trim();
+
+        await AddNotificationIfMissingAsync(
+            audienceRole: TerritoryAudienceRole,
+            type: RegionCreatedType,
+            title: "Region created",
+            message: $"{TrimForMessage(safeRegionName, 80)} was added to {row.TerritoryName}.",
+            severity: InfoSeverity,
+            targetType: RegionTargetType,
+            targetId: regionId,
+            targetRoute: $"/territory/regions/{regionId}",
+            metadataSummary: row.TerritoryName,
+            createdAt: createdAt == default ? DateTime.UtcNow : createdAt,
+            scopeType: RegionScopeType,
+            scopeId: regionId,
+            scopeLabel: BuildScopeLabel(safeRegionName, row.TerritoryName),
+            cancellationToken);
+    }
+
+    public async Task CreateTerritoryRegionalManagerAssignedNotificationAsync(
+        int territoryId,
+        int regionId,
+        int managerUserId,
+        DateTime createdAt,
+        CancellationToken cancellationToken = default)
+    {
+        await CreateTerritoryRegionalManagerChangedNotificationAsync(
+            territoryId,
+            regionId,
+            managerUserId,
+            RegionalManagerAssignedType,
+            "Regional manager assigned",
+            "assigned to",
+            createdAt,
+            cancellationToken);
+    }
+
+    public async Task CreateTerritoryRegionalManagerRemovedNotificationAsync(
+        int territoryId,
+        int regionId,
+        int managerUserId,
+        DateTime createdAt,
+        CancellationToken cancellationToken = default)
+    {
+        await CreateTerritoryRegionalManagerChangedNotificationAsync(
+            territoryId,
+            regionId,
+            managerUserId,
+            RegionalManagerRemovedType,
+            "Regional manager removed",
+            "removed from",
+            createdAt,
+            cancellationToken);
+    }
+
+    private async Task CreateTerritoryRegionalManagerChangedNotificationAsync(
+        int territoryId,
+        int regionId,
+        int managerUserId,
+        string type,
+        string title,
+        string action,
+        DateTime createdAt,
+        CancellationToken cancellationToken)
+    {
+        if (territoryId <= 0 || regionId <= 0 || managerUserId <= 0)
+            return;
+
+        var region = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.Id == regionId && region.TerritoryId == territoryId)
+            .Select(region => new
+            {
+                RegionName = region.Name,
+                TerritoryName = region.Territory.Name
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var manager = await _db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == managerUserId)
+            .Select(user => new
+            {
+                user.DisplayName,
+                user.FirstName,
+                user.LastName,
+                user.Username,
+                user.Email
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (region is null || manager is null)
+            return;
+
+        var managerName = BuildDisplayName(
+            manager.DisplayName,
+            manager.FirstName,
+            manager.LastName,
+            manager.Username,
+            manager.Email);
+
+        await AddNotificationIfMissingAsync(
+            audienceRole: TerritoryAudienceRole,
+            type: type,
+            title: title,
+            message: $"{TrimForMessage(managerName, 80)} was {action} {region.RegionName}.",
+            severity: InfoSeverity,
+            targetType: UserTargetType,
+            targetId: managerUserId,
+            targetRoute: $"/territory/users?regionId={regionId}&userId={managerUserId}",
+            metadataSummary: region.RegionName,
+            createdAt: createdAt == default ? DateTime.UtcNow : createdAt,
+            scopeType: RegionScopeType,
+            scopeId: regionId,
+            scopeLabel: BuildScopeLabel(region.RegionName, region.TerritoryName),
+            cancellationToken);
+
+        if (type == RegionalManagerAssignedType)
+        {
+            await AddNotificationIfMissingAsync(
+                audienceRole: RegionalAudienceRole,
+                type: RegionalManagerAssignedType,
+                title: "Region assigned",
+                message: $"You were assigned to {region.RegionName}.",
+                severity: InfoSeverity,
+                targetType: UserTargetType,
+                targetId: managerUserId,
+                targetRoute: $"/dashboard?regionId={regionId}",
+                metadataSummary: region.RegionName,
+                createdAt: createdAt == default ? DateTime.UtcNow : createdAt,
+                scopeType: RegionScopeType,
+                scopeId: regionId,
+                scopeLabel: BuildScopeLabel(region.RegionName, region.TerritoryName),
+                cancellationToken);
+        }
+    }
+
+    private IQueryable<NotificationVisibilityRow> BuildVisibleNotificationRows(
+        int currentUserId,
+        NotificationAudienceContext context)
+    {
+        var query =
+            from notification in _db.AdminNotifications.AsNoTracking()
+            where notification.AudienceRole == context.StoredAudienceRole
+            join state in _db.AdminNotificationReadStates.AsNoTracking()
+                    .Where(readState => readState.UserId == currentUserId)
+                on notification.Id equals state.AdminNotificationId into readStates
+            from readState in readStates.DefaultIfEmpty()
+            select new NotificationVisibilityRow
+            {
+                Notification = notification,
+                ReadAt = readState == null ? null : (DateTime?)readState.ReadAt
+            };
+
+        if (context.RequestedRole == RoleNames.Admin)
+            return query;
+
+        if (context.RequestedRole == RoleNames.RegionalManager)
+        {
+            if (!context.RegionId.HasValue)
+                return query.Where(_ => false);
+
+            var assignedRegionIds = _db.RegionalManagerRegions
+                .AsNoTracking()
+                .Where(assignment =>
+                    assignment.UserId == currentUserId &&
+                    assignment.IsActive)
+                .Select(assignment => assignment.RegionId);
+
+            return query.Where(row =>
+                row.Notification.ScopeType == RegionScopeType &&
+                row.Notification.ScopeId.HasValue &&
+                row.Notification.ScopeId == context.RegionId.Value &&
+                assignedRegionIds.Contains(row.Notification.ScopeId.Value) &&
+                row.Notification.Type != ReviewReportedType &&
+                row.Notification.TargetType != ReviewReportNotificationTargetType &&
+                (row.Notification.Type != RegionalManagerAssignedType ||
+                 (row.Notification.TargetType == UserTargetType &&
+                  row.Notification.TargetId == currentUserId)));
+        }
+
+        var assignedTerritoryIds = _db.TerritoryManagerTerritories
+            .AsNoTracking()
+            .Where(assignment => assignment.UserId == currentUserId)
+            .Select(assignment => assignment.TerritoryId);
+
+        query = query.Where(row =>
+            (row.Notification.ScopeType == TerritoryScopeType &&
+             row.Notification.ScopeId.HasValue &&
+             assignedTerritoryIds.Contains(row.Notification.ScopeId.Value)) ||
+            (row.Notification.ScopeType == RegionScopeType &&
+             row.Notification.ScopeId.HasValue &&
+             _db.Regions.Any(region =>
+                 region.Id == row.Notification.ScopeId.Value &&
+                 assignedTerritoryIds.Contains(region.TerritoryId))));
+
+        if (context.RequestedRole == RoleNames.TerritoryAssociate)
+        {
+            query = query.Where(row =>
+                row.Notification.Type != RegionalManagerAssignedType &&
+                row.Notification.Type != RegionalManagerRemovedType);
+        }
+
+        query = query.Where(row =>
+            row.Notification.Type != ReviewReportedType &&
+            row.Notification.TargetType != ReviewReportNotificationTargetType);
+
+        return query;
+    }
+
+    private async Task<NotificationAudienceContext> ResolveAudienceContextAsync(
+        int currentUserId,
+        string? requestedAudienceRole,
+        CancellationToken cancellationToken,
+        int? regionId = null)
+    {
+        var userExists = await _db.Users
+            .AsNoTracking()
+            .AnyAsync(user => user.Id == currentUserId, cancellationToken);
+
+        if (!userExists)
+            throw new KeyNotFoundException("Admin app user was not found.");
+
+        var roles = await _db.UserRoles
+            .AsNoTracking()
+            .Where(userRole => userRole.UserId == currentUserId)
+            .Select(userRole => userRole.Role.Name)
+            .ToListAsync(cancellationToken);
+
+        var normalizedRoles = roles
+            .Select(RoleNames.Normalize)
+            .Where(role => !string.IsNullOrWhiteSpace(role))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var requestedRole = ResolveRequestedAudienceRole(requestedAudienceRole, normalizedRoles);
+        if (!SupportedAudienceRoles.Contains(requestedRole))
+            throw new UnauthorizedAccessException("Notification audience is not available.");
+
+        if (!normalizedRoles.Contains(requestedRole, StringComparer.Ordinal))
+            throw new UnauthorizedAccessException("Notification audience is not assigned to the current user.");
+
+        var storedAudienceRole = requestedRole == RoleNames.TerritoryAssociate
+            ? TerritoryAudienceRole
+            : requestedRole;
+
+        return new NotificationAudienceContext(requestedRole, storedAudienceRole, NormalizeRegionId(regionId));
+    }
+
+    private static string ResolveRequestedAudienceRole(
+        string? requestedAudienceRole,
+        IReadOnlyCollection<string> normalizedRoles)
+    {
+        var requestedRole = RoleNames.Normalize(requestedAudienceRole);
+        if (!string.IsNullOrWhiteSpace(requestedRole))
+            return requestedRole;
+
+        if (normalizedRoles.Contains(RoleNames.Admin, StringComparer.Ordinal))
+            return RoleNames.Admin;
+
+        if (normalizedRoles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
+            return RoleNames.TerritoryManager;
+
+        if (normalizedRoles.Contains(RoleNames.TerritoryAssociate, StringComparer.Ordinal))
+            return RoleNames.TerritoryAssociate;
+
+        if (normalizedRoles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal))
+            return RoleNames.RegionalManager;
+
+        return string.Empty;
+    }
+
+    private async Task<int> CountUnreadAsync(
+        int currentUserId,
+        NotificationAudienceContext context,
+        CancellationToken cancellationToken)
+    {
+        return await BuildVisibleNotificationRows(currentUserId, context)
+            .CountAsync(row => row.ReadAt == null, cancellationToken);
+    }
+
     private async Task AddNotificationIfMissingAsync(
+        string audienceRole,
         string type,
         string title,
         string message,
@@ -243,13 +666,22 @@ public sealed class AdminNotificationService : IAdminNotificationService
         string targetRoute,
         string metadataSummary,
         DateTime createdAt,
+        string scopeType,
+        int? scopeId,
+        string? scopeLabel,
         CancellationToken cancellationToken)
     {
+        var normalizedAudienceRole = RoleNames.Normalize(audienceRole);
+        var normalizedScopeType = NormalizeScopeType(scopeType);
+
         var exists = await _db.AdminNotifications.AnyAsync(
             notification =>
+                notification.AudienceRole == normalizedAudienceRole &&
                 notification.Type == type &&
                 notification.TargetType == targetType &&
-                notification.TargetId == targetId,
+                notification.TargetId == targetId &&
+                notification.ScopeType == normalizedScopeType &&
+                notification.ScopeId == scopeId,
             cancellationToken);
 
         if (exists)
@@ -257,14 +689,17 @@ public sealed class AdminNotificationService : IAdminNotificationService
 
         _db.AdminNotifications.Add(new AdminNotification
         {
-            AudienceRole = AdminAudienceRole,
+            AudienceRole = normalizedAudienceRole,
             Type = type,
-            Title = title,
+            Title = TrimForMessage(title, 160),
             Message = TrimForMessage(message, 1000),
             Severity = NormalizeSeverity(severity),
             TargetType = targetType,
             TargetId = targetId,
             TargetRoute = NormalizeTargetRoute(targetRoute),
+            ScopeType = normalizedScopeType,
+            ScopeId = scopeId,
+            ScopeLabel = NormalizeOptionalText(scopeLabel, 160),
             MetadataJson = JsonSerializer.Serialize(new { summary = metadataSummary }),
             CreatedAt = createdAt
         });
@@ -278,48 +713,17 @@ public sealed class AdminNotificationService : IAdminNotificationService
             _db.ChangeTracker.Clear();
             var wasCreatedConcurrently = await _db.AdminNotifications.AsNoTracking().AnyAsync(
                 notification =>
+                    notification.AudienceRole == normalizedAudienceRole &&
                     notification.Type == type &&
                     notification.TargetType == targetType &&
-                    notification.TargetId == targetId,
+                    notification.TargetId == targetId &&
+                    notification.ScopeType == normalizedScopeType &&
+                    notification.ScopeId == scopeId,
                 cancellationToken);
 
             if (!wasCreatedConcurrently)
                 throw;
         }
-    }
-
-    private async Task<int> CountUnreadAsync(int currentUserId, CancellationToken cancellationToken)
-    {
-        return await _db.AdminNotifications
-            .AsNoTracking()
-            .CountAsync(
-                notification =>
-                    notification.AudienceRole == AdminAudienceRole &&
-                    !_db.AdminNotificationReadStates.Any(state =>
-                        state.AdminNotificationId == notification.Id &&
-                        state.UserId == currentUserId),
-                cancellationToken);
-    }
-
-    private async Task EnsureCurrentAdminAsync(int currentUserId, CancellationToken cancellationToken)
-    {
-        var userExists = await _db.Users
-            .AsNoTracking()
-            .AnyAsync(user => user.Id == currentUserId, cancellationToken);
-
-        if (!userExists)
-            throw new KeyNotFoundException("Admin user was not found.");
-
-        var isAdmin = await _db.UserRoles
-            .AsNoTracking()
-            .AnyAsync(
-                userRole =>
-                    userRole.UserId == currentUserId &&
-                    userRole.Role.Name == RoleNames.Admin,
-                cancellationToken);
-
-        if (!isAdmin)
-            throw new UnauthorizedAccessException("Admin role is required.");
     }
 
     private static AdminNotificationDto MapNotification(AdminNotification notification, DateTime? readAt)
@@ -337,6 +741,9 @@ public sealed class AdminNotificationService : IAdminNotificationService
             TargetType = notification.TargetType,
             TargetId = notification.TargetId,
             TargetRoute = notification.TargetRoute,
+            ScopeType = NormalizeScopeType(notification.ScopeType),
+            ScopeId = notification.ScopeId,
+            ScopeLabel = notification.ScopeLabel,
             MetadataSummary = ExtractMetadataSummary(notification.MetadataJson)
         };
     }
@@ -380,6 +787,19 @@ public sealed class AdminNotificationService : IAdminNotificationService
         };
     }
 
+    private static string NormalizeScopeType(string? value)
+    {
+        return value?.Trim() switch
+        {
+            TerritoryScopeType => TerritoryScopeType,
+            RegionScopeType => RegionScopeType,
+            _ => GlobalScopeType
+        };
+    }
+
+    private static int? NormalizeRegionId(int? value) =>
+        value.HasValue && value.Value > 0 ? value.Value : null;
+
     private static string CategoryLabel(string? category)
     {
         return category?.Trim() switch
@@ -406,6 +826,16 @@ public sealed class AdminNotificationService : IAdminNotificationService
         };
     }
 
+    private static string ContributionTypeLabel(PlaceContributionType type)
+    {
+        return type switch
+        {
+            PlaceContributionType.UpdatePlace => "Update",
+            PlaceContributionType.ClaimOwnership => "Ownership claim",
+            _ => "New place"
+        };
+    }
+
     private static string TitleCase(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -421,5 +851,52 @@ public sealed class AdminNotificationService : IAdminNotificationService
             return trimmed;
 
         return trimmed[..maxLength].TrimEnd() + "...";
+    }
+
+    private static string? NormalizeOptionalText(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength].TrimEnd();
+    }
+
+    private static string BuildScopeLabel(string regionName, string? territoryName)
+    {
+        return string.IsNullOrWhiteSpace(territoryName)
+            ? regionName
+            : $"{regionName}, {territoryName}";
+    }
+
+    private static string BuildDisplayName(
+        string? displayName,
+        string? firstName,
+        string? lastName,
+        string? username,
+        string email)
+    {
+        if (!string.IsNullOrWhiteSpace(displayName))
+            return displayName.Trim();
+
+        var fullName = string.Join(" ", new[] { firstName, lastName }
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Select(part => part!.Trim()));
+
+        if (!string.IsNullOrWhiteSpace(fullName))
+            return fullName;
+
+        if (!string.IsNullOrWhiteSpace(username))
+            return username.Trim();
+
+        return email;
+    }
+
+    private sealed record NotificationAudienceContext(string RequestedRole, string StoredAudienceRole, int? RegionId);
+
+    private sealed class NotificationVisibilityRow
+    {
+        public AdminNotification Notification { get; set; } = null!;
+        public DateTime? ReadAt { get; set; }
     }
 }

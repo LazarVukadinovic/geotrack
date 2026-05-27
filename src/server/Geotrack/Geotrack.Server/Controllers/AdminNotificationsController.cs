@@ -8,7 +8,7 @@ namespace Geotrack.Server.Controllers;
 
 [ApiController]
 [Route("api/admin/notifications")]
-[Authorize(Policy = "RequireAdmin")]
+[Authorize(Policy = "RequireAdminAppUser")]
 public sealed class AdminNotificationsController : ControllerBase
 {
     private readonly IAdminNotificationService _notifications;
@@ -40,11 +40,14 @@ public sealed class AdminNotificationsController : ControllerBase
 
     [HttpGet("unread-count")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-    public async Task<ActionResult<AdminNotificationUnreadCountDto>> GetUnreadCount(CancellationToken cancellationToken)
+    public async Task<ActionResult<AdminNotificationUnreadCountDto>> GetUnreadCount(
+        [FromQuery] string? audienceRole,
+        [FromQuery] int? regionId,
+        CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await _notifications.GetUnreadCountAsync(GetCurrentUserId(), cancellationToken));
+            return Ok(await _notifications.GetUnreadCountAsync(GetCurrentUserId(), audienceRole, regionId, cancellationToken));
         }
         catch (Exception ex)
         {
@@ -55,11 +58,13 @@ public sealed class AdminNotificationsController : ControllerBase
     [HttpPost("{notificationId:int}/read")]
     public async Task<ActionResult<AdminNotificationMutationDto>> MarkRead(
         [FromRoute] int notificationId,
+        [FromQuery] string? audienceRole,
+        [FromQuery] int? regionId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await _notifications.MarkReadAsync(GetCurrentUserId(), notificationId, cancellationToken));
+            return Ok(await _notifications.MarkReadAsync(GetCurrentUserId(), notificationId, audienceRole, regionId, cancellationToken));
         }
         catch (Exception ex)
         {
@@ -68,11 +73,14 @@ public sealed class AdminNotificationsController : ControllerBase
     }
 
     [HttpPost("mark-all-read")]
-    public async Task<ActionResult<AdminNotificationMutationDto>> MarkAllRead(CancellationToken cancellationToken)
+    public async Task<ActionResult<AdminNotificationMutationDto>> MarkAllRead(
+        [FromQuery] string? audienceRole,
+        [FromQuery] int? regionId,
+        CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await _notifications.MarkAllReadAsync(GetCurrentUserId(), cancellationToken));
+            return Ok(await _notifications.MarkAllReadAsync(GetCurrentUserId(), audienceRole, regionId, cancellationToken));
         }
         catch (Exception ex)
         {

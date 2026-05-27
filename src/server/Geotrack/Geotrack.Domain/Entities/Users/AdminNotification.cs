@@ -13,6 +13,9 @@ public class AdminNotification
     public string TargetType { get; set; } = "System";
     public int? TargetId { get; set; }
     public string? TargetRoute { get; set; }
+    public string ScopeType { get; set; } = "Global";
+    public int? ScopeId { get; set; }
+    public string? ScopeLabel { get; set; }
     public string? MetadataJson { get; set; }
 
     public DateTime CreatedAt { get; set; }

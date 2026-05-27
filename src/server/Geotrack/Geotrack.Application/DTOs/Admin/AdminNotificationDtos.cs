@@ -2,6 +2,8 @@ namespace Geotrack.Application.DTOs.Admin;
 
 public class AdminNotificationListRequestDto
 {
+    public string? AudienceRole { get; set; }
+    public int? RegionId { get; set; }
     public bool IncludeRead { get; set; } = true;
     public int Skip { get; set; }
     public int Take { get; set; } = 25;
@@ -31,6 +33,9 @@ public class AdminNotificationDto
     public string TargetType { get; set; } = string.Empty;
     public int? TargetId { get; set; }
     public string? TargetRoute { get; set; }
+    public string ScopeType { get; set; } = string.Empty;
+    public int? ScopeId { get; set; }
+    public string? ScopeLabel { get; set; }
     public string? MetadataSummary { get; set; }
 }
 
