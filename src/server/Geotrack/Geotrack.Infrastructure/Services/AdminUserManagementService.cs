@@ -357,6 +357,14 @@ public sealed class AdminUserManagementService : IAdminUserManagementService
                             DisplayName = "All administrator areas"
                         }
                     },
+                    RoleNames.ContentModerator => new List<AdminUserAccessScopeDto>
+                    {
+                        new()
+                        {
+                            ScopeType = "Global",
+                            DisplayName = "Review moderation"
+                        }
+                    },
                     RoleNames.TerritoryManager => territoryScopes,
                     RoleNames.RegionalManager => regionScopes,
                     RoleNames.TerritoryAssociate => new List<AdminUserAccessScopeDto>
@@ -1225,6 +1233,7 @@ public sealed class AdminUserManagementService : IAdminUserManagementService
         {
             var normalized = RoleNames.Normalize(role);
             return normalized == RoleNames.Admin ||
+                   normalized == RoleNames.ContentModerator ||
                    normalized == RoleNames.TerritoryManager ||
                    normalized == RoleNames.TerritoryAssociate ||
                    normalized == RoleNames.RegionalManager;
@@ -1235,6 +1244,9 @@ public sealed class AdminUserManagementService : IAdminUserManagementService
         var normalizedRoles = NormalizeRoles(roles);
         if (normalizedRoles.Contains(RoleNames.Admin, StringComparer.Ordinal))
             return "Administrator";
+
+        if (normalizedRoles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal))
+            return "Content Moderator";
 
         if (normalizedRoles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
             return "Territory Manager";
@@ -1251,6 +1263,7 @@ public sealed class AdminUserManagementService : IAdminUserManagementService
     private static string RoleDisplayName(string role) => RoleNames.Normalize(role) switch
     {
         RoleNames.Admin => "Administrator",
+        RoleNames.ContentModerator => "Content Moderator",
         RoleNames.TerritoryManager => "Territory Manager",
         RoleNames.TerritoryAssociate => "Territory Associate",
         RoleNames.RegionalManager => "Regional Manager",
@@ -1265,6 +1278,9 @@ public sealed class AdminUserManagementService : IAdminUserManagementService
     {
         if (role == RoleNames.Admin)
             return "Global";
+
+        if (role == RoleNames.ContentModerator)
+            return "Review moderation";
 
         if (scopes.Count == 0)
             return "No assigned scope";
