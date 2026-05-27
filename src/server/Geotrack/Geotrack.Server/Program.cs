@@ -83,6 +83,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("Mcp"));
 builder.Services.Configure<BoundaryImportOptions>(builder.Configuration.GetSection("BoundaryImport"));
+builder.Services.Configure<RegionBoundaryBackfillOptions>(builder.Configuration.GetSection("RegionBoundaryBackfill"));
+builder.Services.Configure<RegionalScopeValidationOptions>(builder.Configuration.GetSection("RegionalScopeValidation"));
 builder.Services.AddDataProtection()
     .SetApplicationName("GeoTrack");
 
@@ -194,10 +196,14 @@ builder.Services.AddScoped<IAdminTerritoryManagementService, AdminTerritoryManag
 builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>();
 builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
 builder.Services.AddScoped<ITerritoryDashboardService, TerritoryDashboardService>();
+builder.Services.AddScoped<IRegionBoundaryBackfillService, RegionBoundaryBackfillService>();
 builder.Services.AddScoped<ITerritoryAnalyticsService, TerritoryAnalyticsService>();
 builder.Services.AddScoped<ITerritoryUserAdminService, TerritoryUserAdminService>();
 builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
 builder.Services.AddScoped<RegionalBoundaryGuard>();
+builder.Services.AddScoped<RegionalScopeValidationService>();
+builder.Services.AddScoped<IRegionalScopeValidationService>(serviceProvider =>
+    serviceProvider.GetRequiredService<RegionalScopeValidationService>());
 builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
 builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();
 builder.Services.AddScoped<IRegionalPlaceService, RegionalPlaceService>();
@@ -437,6 +443,9 @@ await PostgisStartup.EnsureReadyAsync(app.Services, app.Environment.IsDevelopmen
 var shouldSeedDatabase =
     app.Environment.IsDevelopment()
     || app.Configuration.GetValue<bool>("SeedData:Enabled");
+var shouldAutoMigrate =
+    app.Environment.IsDevelopment()
+    || app.Configuration.GetValue<bool>("Database:AutoMigrate");
 var shouldSeedDemoRegionalManager =
     DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 var shouldSeedDemoTerritoryManager =
@@ -444,12 +453,28 @@ var shouldSeedDemoTerritoryManager =
 var shouldSeedDemoAdmin =
     shouldSeedDatabase || DemoAdminSeeder.IsEnabled(app.Environment, app.Configuration);
 
-if (shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager || shouldSeedDemoAdmin)
+if (shouldAutoMigrate || shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager || shouldSeedDemoAdmin)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
     await db.Database.MigrateAsync();
+
+    if (shouldSeedDatabase &&
+        app.Configuration.GetValue<bool>("Seed:ImportLocalBoundaries:Enabled"))
+    {
+        var localBoundaryImport = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
+
+        if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm0", true))
+        {
+            await localBoundaryImport.ImportLocalBoundariesAsync("ADM0");
+        }
+
+        if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm1", true))
+        {
+            await localBoundaryImport.ImportLocalBoundariesAsync("ADM1");
+        }
+    }
 
     if (shouldSeedDatabase)
     {

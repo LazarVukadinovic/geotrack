@@ -196,15 +196,15 @@ public sealed class AdminTerritoryController : ControllerBase
         [FromQuery] string? level = null,
         [FromQuery] string? search = null,
         [FromQuery] int skip = 0,
-        [FromQuery] int take = 50)
+        [FromQuery] int? take = null)
     {
-        if (territoryId is <= 0)
+        if (territoryId.HasValue && territoryId.Value <= 0)
             return BadRequest(new { message = "territoryId must be positive." });
 
         if (skip < 0)
             return BadRequest(new { message = "skip must be zero or greater." });
 
-        if (take <= 0)
+        if (take is <= 0)
             return BadRequest(new { message = "take must be positive." });
 
         try
@@ -230,7 +230,7 @@ public sealed class AdminTerritoryController : ControllerBase
         if (request is null)
             return BadRequest(new { message = "Request body is required." });
 
-        if (request.TerritoryId <= 0)
+        if (request.TerritoryId <= 0 && !HasBoundaryCandidateRequest(request))
             return BadRequest(new { message = "territoryId is required." });
 
         try
@@ -607,8 +607,45 @@ public sealed class AdminTerritoryController : ControllerBase
         {
             UnauthorizedAccessException => StatusCode(StatusCodes.Status403Forbidden, new { message = "Forbidden." }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
+            InvalidOperationException when IsConflict(ex) => Conflict(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
             _ => StatusCode(StatusCodes.Status500InternalServerError, new { message = "An unexpected error occurred." })
         };
     }
+
+    [HttpPost("regions/from-boundary-candidate")]
+    public async Task<ActionResult<TerritoryRegionCreateResponseDto>> CreateRegionFromBoundaryCandidate(
+        [FromBody] TerritoryRegionCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        if (!HasBoundaryCandidateRequest(request))
+            return BadRequest(new { message = "Boundary candidate id is required." });
+
+        try
+        {
+            var created = await _territoryDashboard.CreateRegionAsync(GetCurrentUserId(), request);
+            return CreatedAtAction(
+                nameof(GetRegionDetail),
+                new { regionId = created.RegionId, territoryId = created.TerritoryId },
+                created);
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    private static bool IsConflict(Exception ex) =>
+        string.Equals(
+            ex.Message,
+            "This administrative region has already been created.",
+            StringComparison.Ordinal);
+
+    private static bool HasBoundaryCandidateRequest(TerritoryRegionCreateRequestDto request) =>
+        !string.IsNullOrWhiteSpace(request.ShapeId) ||
+        !string.IsNullOrWhiteSpace(request.CandidateExternalKey) ||
+        !string.IsNullOrWhiteSpace(request.BoundaryCandidateId) ||
+        !string.IsNullOrWhiteSpace(request.BoundaryExternalKey);
 }

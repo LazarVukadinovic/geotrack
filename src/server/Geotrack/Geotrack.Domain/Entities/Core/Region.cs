@@ -12,7 +12,16 @@ public class Region
     public int Id { get; set; } // PRIMARY KEY
     public string Name { get; set; } = string.Empty;
     public string? BoundaryShapeType { get; set; }
+    public string? BoundaryShapeGroup { get; set; }
+    public string? BoundaryShapeId { get; set; }
+    public string? BoundaryExternalKey { get; set; }
     public string? BoundarySource { get; set; }
+    public string? BoundaryAdmLevel { get; set; }
+    public string? BoundaryReleaseType { get; set; }
+    public string? BoundaryLicense { get; set; }
+    public DateTime? BoundaryImportedAt { get; set; }
+    public int? BoundaryCandidateId { get; set; }
+    public AdministrativeBoundaryCandidate? BoundaryCandidate { get; set; }
     public long? OsmRelationId { get; set; }
     public int? OsmAdminLevel { get; set; }
     public int? CreatedByUserId { get; set; }

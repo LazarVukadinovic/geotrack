@@ -11,4 +11,9 @@ public interface ILocalBoundaryImportService
 
     Task<BoundaryReconciliationReportDto> GetAdm0ReconciliationAsync(
         CancellationToken cancellationToken = default);
+
+    Task<BoundaryCandidateDiagnosticsDto> GetRegionCandidateDiagnosticsAsync(
+        string countryIso3,
+        string admLevel,
+        CancellationToken cancellationToken = default);
 }

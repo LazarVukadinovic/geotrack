@@ -476,11 +476,45 @@ public class BoundaryRegionCandidateResponseDto
 
 public class BoundaryRegionCandidateDto
 {
+    public string FeatureKind { get; set; } = "Adm1Candidate";
+    public string CandidateId { get; set; } = string.Empty;
+    public int BoundaryCandidateId { get; set; }
+    public string ExternalKey { get; set; } = string.Empty;
+    public string BoundaryExternalKey { get; set; } = string.Empty;
     public string AdmLevel { get; set; } = string.Empty;
     public string Iso3 { get; set; } = string.Empty;
+    public string CountryIso3 { get; set; } = string.Empty;
+    public string? ShapeGroup { get; set; }
     public string? ShapeId { get; set; }
+    public string ShapeName { get; set; } = string.Empty;
+    public string ShapeType { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Status { get; set; } = "Available";
+    public bool HasBoundary { get; set; }
+    public bool HasDisplayBoundary { get; set; }
+    public bool CanSelect { get; set; }
+    public int? ExistingRegionId { get; set; }
+    public string? ExistingRegionName { get; set; }
     public bool IsInsideAssignedTerritory { get; set; }
     public string? ValidationMessage { get; set; }
+    public TerritoryRegionMapViewportDto Viewport { get; set; } = new();
     public TerritoryRegionGeometryDto? GeometryGeoJson { get; set; }
+}
+
+public class BoundaryCandidateDiagnosticsDto
+{
+    public string Source { get; set; } = "geoBoundaries";
+    public string AdmLevel { get; set; } = "ADM1";
+    public string CountryIso3 { get; set; } = string.Empty;
+    public int? TerritoryId { get; set; }
+    public string? TerritoryName { get; set; }
+    public int TotalCandidatesForIso3 { get; set; }
+    public int CandidatesWithBoundaryGeometry { get; set; }
+    public int CandidatesWithDisplayGeometry { get; set; }
+    public int CandidatesPassingStrictCovers { get; set; }
+    public int CandidatesPassingIntersects { get; set; }
+    public int CandidatesFilteredOutBySpatialCheck { get; set; }
+    public int CandidatesReturned { get; set; }
+    public int ExistingRegionMatches { get; set; }
 }

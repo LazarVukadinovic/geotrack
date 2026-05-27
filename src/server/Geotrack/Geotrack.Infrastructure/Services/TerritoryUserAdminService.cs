@@ -14,10 +14,14 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
     private const int MaxRegionIdsToAdd = 100;
 
     private readonly AppDbContext _db;
+    private readonly IAdminNotificationService _adminNotificationService;
 
-    public TerritoryUserAdminService(AppDbContext db)
+    public TerritoryUserAdminService(
+        AppDbContext db,
+        IAdminNotificationService adminNotificationService)
     {
         _db = db;
+        _adminNotificationService = adminNotificationService;
     }
 
     public async Task<TerritoryUserListResponseDto> GetUsersAsync(
@@ -290,6 +294,11 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
         user.UpdatedAt = now;
 
         await _db.SaveChangesAsync();
+        await _adminNotificationService.CreateTerritoryRegionalManagerAssignedNotificationAsync(
+            activeTerritory.Id,
+            request.RegionId,
+            targetUserId,
+            now);
         return await BuildSingleRowAsync(context, targetUserId);
     }
 
@@ -315,6 +324,10 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
         EnsureTargetCanBeManaged(user);
 
         var now = DateTime.UtcNow;
+        var existingActiveRegionIds = user.RegionalManagerRegions
+            .Where(assignment => assignment.IsActive && assignment.Region.TerritoryId == activeTerritory.Id)
+            .Select(assignment => assignment.RegionId)
+            .ToHashSet();
         var regionalRole = await EnsureRoleAsync(RoleNames.RegionalManager);
         await AddRegionsToUserAsync(user, activeTerritory.Id, regionIds, now, ignoreActiveDuplicates: true);
         EnsureRoleOnUser(user, regionalRole, RoleNames.RegionalManager);
@@ -329,6 +342,15 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
 
         user.UpdatedAt = now;
         await _db.SaveChangesAsync();
+        foreach (var regionId in regionIds.Where(regionId => !existingActiveRegionIds.Contains(regionId)))
+        {
+            await _adminNotificationService.CreateTerritoryRegionalManagerAssignedNotificationAsync(
+                activeTerritory.Id,
+                regionId,
+                targetUserId,
+                now);
+        }
+
         return await BuildSingleRowAsync(context, targetUserId);
     }
 
@@ -395,6 +417,9 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
             throw new InvalidOperationException("User has no active manager assignments in this territory.");
 
         var now = DateTime.UtcNow;
+        var removedRegionIds = activeAssignmentsInTerritory
+            .Select(assignment => assignment.RegionId)
+            .ToList();
         foreach (var assignment in activeAssignmentsInTerritory)
         {
             assignment.IsActive = false;
@@ -408,6 +433,14 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
 
         user.UpdatedAt = now;
         await _db.SaveChangesAsync();
+        foreach (var regionId in removedRegionIds)
+        {
+            await _adminNotificationService.CreateTerritoryRegionalManagerRemovedNotificationAsync(
+                activeTerritory.Id,
+                regionId,
+                targetUserId,
+                now);
+        }
 
         return await BuildSingleRowAsync(context, targetUserId);
     }

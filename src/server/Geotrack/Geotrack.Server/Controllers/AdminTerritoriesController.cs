@@ -13,15 +13,18 @@ public sealed class AdminTerritoriesController : ControllerBase
 {
     private readonly IAdminTerritoryManagementService _territories;
     private readonly ILocalBoundaryImportService _localBoundaryImport;
+    private readonly IRegionBoundaryBackfillService _regionBoundaryBackfill;
     private readonly ILogger<AdminTerritoriesController> _logger;
 
     public AdminTerritoriesController(
         IAdminTerritoryManagementService territories,
         ILocalBoundaryImportService localBoundaryImport,
+        IRegionBoundaryBackfillService regionBoundaryBackfill,
         ILogger<AdminTerritoriesController> logger)
     {
         _territories = territories;
         _localBoundaryImport = localBoundaryImport;
+        _regionBoundaryBackfill = regionBoundaryBackfill;
         _logger = logger;
     }
 
@@ -246,11 +249,12 @@ public sealed class AdminTerritoriesController : ControllerBase
 
     [HttpPost("boundaries/import-local-adm1")]
     public async Task<ActionResult<BoundaryImportSummaryDto>> ImportLocalAdm1Boundaries(
+        [FromQuery] bool force = false,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            return Ok(await _localBoundaryImport.ImportLocalBoundariesAsync("ADM1", forceRefresh: false, cancellationToken));
+            return Ok(await ImportLocalBoundariesAndBackfillRegionsAsync("ADM1", force, cancellationToken));
         }
         catch (Exception ex)
         {
@@ -260,11 +264,12 @@ public sealed class AdminTerritoriesController : ControllerBase
 
     [HttpPost("boundaries/import-local-adm2")]
     public async Task<ActionResult<BoundaryImportSummaryDto>> ImportLocalAdm2Boundaries(
+        [FromQuery] bool force = false,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            return Ok(await _localBoundaryImport.ImportLocalBoundariesAsync("ADM2", forceRefresh: false, cancellationToken));
+            return Ok(await _localBoundaryImport.ImportLocalBoundariesAsync("ADM2", force, cancellationToken));
         }
         catch (Exception ex)
         {
@@ -283,7 +288,48 @@ public sealed class AdminTerritoriesController : ControllerBase
 
         try
         {
-            return Ok(await _localBoundaryImport.ImportLocalBoundariesAsync(level, force, cancellationToken));
+            return Ok(await ImportLocalBoundariesAndBackfillRegionsAsync(level, force, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    private async Task<BoundaryImportSummaryDto> ImportLocalBoundariesAndBackfillRegionsAsync(
+        string level,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        var summary = await _localBoundaryImport.ImportLocalBoundariesAsync(level, force, cancellationToken);
+
+        if (string.Equals(level.Trim(), "ADM1", StringComparison.OrdinalIgnoreCase))
+        {
+            await _regionBoundaryBackfill.BackfillBoundaryCandidatesAsync(
+                countryIso3: null,
+                dryRun: false,
+                force: force,
+                cancellationToken: cancellationToken);
+        }
+
+        return summary;
+    }
+
+    [HttpGet("/api/admin/territory/regions/boundary-candidates/diagnostics")]
+    public async Task<ActionResult<BoundaryCandidateDiagnosticsDto>> GetBoundaryCandidateDiagnostics(
+        [FromQuery] string? countryIso3 = null,
+        [FromQuery] string? level = "ADM1",
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(countryIso3))
+            return BadRequest(new { message = "countryIso3 query parameter is required." });
+
+        try
+        {
+            return Ok(await _localBoundaryImport.GetRegionCandidateDiagnosticsAsync(
+                countryIso3,
+                level ?? "ADM1",
+                cancellationToken));
         }
         catch (Exception ex)
         {

@@ -3,7 +3,6 @@ using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Core;
-using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -21,6 +20,12 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private const string ManualDrawBoundarySource = "ManualDraw";
     private const string OsmBoundarySource = "OsmBoundary";
+    private const string GeoBoundariesBoundarySource = "geoBoundaries";
+    private const string GeoBoundariesReleaseType = "gbOpen";
+    private const string GeoBoundariesLicense = "CC BY 4.0";
+    private const string Adm1Level = "ADM1";
+    private const string DuplicateAdministrativeRegionMessage =
+        "This administrative region has already been created.";
     private const string MissingTerritoryBoundaryMessage =
         "Assigned country/territory must have a boundary before adding regions.";
 
@@ -47,15 +52,18 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
     private readonly AppDbContext _db;
     private readonly IHealthScoreService _healthScores;
     private readonly LocalBoundaryImportService _localBoundaryImport;
+    private readonly IAdminNotificationService _adminNotificationService;
 
     public TerritoryDashboardService(
         AppDbContext db,
         IHealthScoreService healthScores,
-        LocalBoundaryImportService localBoundaryImport)
+        LocalBoundaryImportService localBoundaryImport,
+        IAdminNotificationService adminNotificationService)
     {
         _db = db;
         _healthScores = healthScores;
         _localBoundaryImport = localBoundaryImport;
+        _adminNotificationService = adminNotificationService;
     }
 
     public async Task<List<TerritoryAssignedTerritoryDto>> GetAssignedTerritoriesAsync(int userId)
@@ -363,7 +371,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         string? admLevel,
         string? search,
         int skip,
-        int take)
+        int? take)
     {
         await EnsureTerritoryManagerOnlyRoleAsync(userId);
 
@@ -373,17 +381,37 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         if (territoryGeometry is null)
             throw new InvalidOperationException(MissingTerritoryBoundaryMessage);
 
-        var iso3 = CountryRegistry.NormalizeIso3(activeTerritory.CountryIso3)
+        var iso3 = CountryRegistry.NormalizeIso3ForBoundaryImport(activeTerritory.CountryIso3)
+            ?? CountryRegistry.NormalizeIso3ForBoundaryImport(activeTerritory.CountryCode)
             ?? CountryRegistry.ToIso3(activeTerritory.CountryCode)
             ?? throw new InvalidOperationException("Assigned country/territory must have an ISO3 country code before loading boundary candidates.");
+        var requestedAdmLevel = NormalizeAdm1CandidateLevel(admLevel);
 
-        return await _localBoundaryImport.GetRegionCandidatesAsync(
-            string.IsNullOrWhiteSpace(admLevel) ? "ADM1" : admLevel,
+        var response = await _localBoundaryImport.GetRegionCandidatesAsync(
+            requestedAdmLevel,
             iso3,
             territoryGeometry,
             search,
             skip,
             take);
+
+        var existingRows = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.TerritoryId == activeTerritory.Id)
+            .Select(region => new RegionBoundaryMetadataRow
+            {
+                Id = region.Id,
+                Name = region.Name,
+                BoundaryCandidateId = region.BoundaryCandidateId,
+                BoundaryExternalKey = region.BoundaryExternalKey,
+                BoundaryShapeGroup = region.BoundaryShapeGroup,
+                BoundaryShapeId = region.BoundaryShapeId,
+                BoundaryAdmLevel = region.BoundaryAdmLevel
+            })
+            .ToListAsync();
+
+        MarkExistingRegionCandidates(response.Items, existingRows);
+        return response;
     }
 
     public async Task<TerritoryRegionCreateResponseDto> CreateRegionAsync(
@@ -392,15 +420,25 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
     {
         await EnsureTerritoryManagerOnlyRoleAsync(userId);
 
-        if (request.TerritoryId <= 0)
+        if (request.TerritoryId <= 0 && !HasBoundaryCandidateRequest(request))
             throw new InvalidOperationException("territoryId is required.");
 
-        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, request.TerritoryId)
+        var requestedTerritoryId = request.TerritoryId > 0 ? request.TerritoryId : (int?)null;
+        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, requestedTerritoryId)
             ?? throw new UnauthorizedAccessException("Territory is not assigned to the current territory manager.");
 
         var territoryGeometry = ToPolygonalGeometry(activeTerritory.BoundaryGeometry);
         if (territoryGeometry is null)
             throw new InvalidOperationException(MissingTerritoryBoundaryMessage);
+
+        if (HasBoundaryCandidateRequest(request))
+        {
+            return await CreateRegionFromBoundaryCandidateAsync(
+                userId,
+                activeTerritory,
+                territoryGeometry,
+                request);
+        }
 
         var name = NormalizeRequiredRegionName(request.Name);
         var normalizedName = name.ToLowerInvariant();
@@ -437,6 +475,11 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             .CurrentValue = boundary.Geometry;
 
         await _db.SaveChangesAsync();
+        await _adminNotificationService.CreateTerritoryRegionCreatedNotificationAsync(
+            activeTerritory.Id,
+            region.Id,
+            region.Name,
+            region.CreatedAt);
 
         return new TerritoryRegionCreateResponseDto
         {
@@ -450,6 +493,155 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             BoundarySource = source,
             BoundaryShapeType = region.BoundaryShapeType,
             BoundaryGeometryGeoJson = ToGeoJson(boundary.Geometry),
+            CreatedAt = region.CreatedAt,
+            DetailRoute = $"/territory/regions/{region.Id}"
+        };
+    }
+
+    private async Task<TerritoryRegionCreateResponseDto> CreateRegionFromBoundaryCandidateAsync(
+        int userId,
+        TerritoryBoundaryRow activeTerritory,
+        Geometry territoryGeometry,
+        TerritoryRegionCreateRequestDto request)
+    {
+        var admLevel = NormalizeAdm1CandidateLevel(request.AdmLevel);
+        var iso3 = CountryRegistry.NormalizeIso3ForBoundaryImport(activeTerritory.CountryIso3)
+            ?? CountryRegistry.NormalizeIso3ForBoundaryImport(activeTerritory.CountryCode)
+            ?? CountryRegistry.ToIso3(activeTerritory.CountryCode)
+            ?? throw new InvalidOperationException("Assigned country/territory must have an ISO3 country code before creating regions from boundary candidates.");
+        var shapeId = NormalizeOptional(request.ShapeId);
+        var requestedBoundaryCandidateId = NormalizeOptional(request.BoundaryCandidateId);
+        var requestedCandidateRecordId = TryParseBoundaryCandidateId(requestedBoundaryCandidateId);
+        var requestedExternalKey = FirstNonEmptyNullable(
+            request.CandidateExternalKey,
+            request.BoundaryExternalKey,
+            requestedCandidateRecordId.HasValue ? null : requestedBoundaryCandidateId);
+        if (!requestedCandidateRecordId.HasValue &&
+            string.IsNullOrWhiteSpace(shapeId) &&
+            string.IsNullOrWhiteSpace(requestedExternalKey))
+        {
+            throw new InvalidOperationException("Boundary candidate id is required.");
+        }
+
+        var requestedShapeGroup = NormalizeOptional(request.ShapeGroup);
+        if (!string.IsNullOrWhiteSpace(requestedShapeGroup) &&
+            !BoundaryIsoCodesMatch(requestedShapeGroup, iso3))
+        {
+            throw new InvalidOperationException("Boundary candidate is not available for the assigned country/territory.");
+        }
+
+        var candidateResult = await _localBoundaryImport.FindRegionCandidateGeometryAsync(
+            admLevel,
+            iso3,
+            requestedCandidateRecordId,
+            shapeId,
+            requestedExternalKey,
+            territoryGeometry);
+        if (candidateResult is null)
+            throw new InvalidOperationException("Boundary candidate is not available for the assigned country/territory.");
+
+        var candidate = candidateResult.Candidate;
+        if (requestedCandidateRecordId.HasValue &&
+            requestedCandidateRecordId.Value != candidate.BoundaryCandidateId)
+        {
+            throw new InvalidOperationException("Boundary candidate is not available for the assigned country/territory.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(requestedExternalKey) &&
+            !string.Equals(requestedExternalKey, candidate.BoundaryExternalKey, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(requestedExternalKey, candidate.ExternalKey, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Boundary candidate is not available for the assigned country/territory.");
+        }
+
+        var boundaryGeometry = ToPolygonalGeometry(candidateResult.Geometry)
+            ?? throw new InvalidOperationException("Boundary candidate geometry is invalid.");
+        if (!candidate.IsInsideAssignedTerritory)
+            throw new InvalidOperationException("Region boundary must be inside the assigned country/territory.");
+
+        var duplicateCandidateExists = await _db.Regions
+            .AsNoTracking()
+            .AnyAsync(region =>
+                region.TerritoryId == activeTerritory.Id &&
+                ((region.BoundaryCandidateId != null &&
+                  region.BoundaryCandidateId == candidate.BoundaryCandidateId) ||
+                 (region.BoundaryExternalKey != null &&
+                  region.BoundaryExternalKey.ToLower() == candidate.BoundaryExternalKey.ToLower()) ||
+                 (region.BoundaryAdmLevel == Adm1Level &&
+                  region.BoundaryShapeGroup != null &&
+                  region.BoundaryShapeId != null &&
+                  candidate.ShapeGroup != null &&
+                  candidate.ShapeId != null &&
+                  region.BoundaryShapeGroup.ToLower() == candidate.ShapeGroup.ToLower() &&
+                  region.BoundaryShapeId.ToLower() == candidate.ShapeId.ToLower()) ||
+                 (region.BoundaryCandidateId == null &&
+                  region.BoundaryExternalKey == null &&
+                  region.BoundaryShapeId == null &&
+                  region.Name.ToLower() == candidate.DisplayName.ToLower())));
+
+        if (duplicateCandidateExists)
+            throw new InvalidOperationException(DuplicateAdministrativeRegionMessage);
+
+        var name = NormalizeCandidateRegionName(request.Name, candidate.DisplayName);
+        var normalizedName = name.ToLowerInvariant();
+        var duplicateNameExists = await _db.Regions
+            .AsNoTracking()
+            .AnyAsync(region =>
+                region.TerritoryId == activeTerritory.Id &&
+                region.Name.ToLower() == normalizedName);
+
+        if (duplicateNameExists)
+            throw new InvalidOperationException($"Region with name '{name}' already exists in this territory.");
+
+        var now = DateTime.UtcNow;
+        var region = new Region
+        {
+            Name = name,
+            TerritoryId = activeTerritory.Id,
+            CreatedAt = now,
+            CreatedByUserId = userId,
+            BoundaryShapeType = boundaryGeometry.GeometryType,
+            BoundarySource = GeoBoundariesBoundarySource,
+            BoundaryAdmLevel = Adm1Level,
+            BoundaryShapeGroup = candidate.ShapeGroup,
+            BoundaryShapeId = candidate.ShapeId,
+            BoundaryExternalKey = candidate.BoundaryExternalKey,
+            BoundaryReleaseType = GeoBoundariesReleaseType,
+            BoundaryLicense = GeoBoundariesLicense,
+            BoundaryImportedAt = now,
+            BoundaryCandidateId = candidate.BoundaryCandidateId
+        };
+
+        _db.Regions.Add(region);
+        _db.Entry(region)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = boundaryGeometry;
+
+        await _db.SaveChangesAsync();
+        await _adminNotificationService.CreateTerritoryRegionCreatedNotificationAsync(
+            activeTerritory.Id,
+            region.Id,
+            region.Name,
+            region.CreatedAt);
+
+        return new TerritoryRegionCreateResponseDto
+        {
+            Id = region.Id,
+            RegionId = region.Id,
+            Name = region.Name,
+            DisplayName = region.Name,
+            TerritoryId = region.TerritoryId,
+            TerritoryDisplayName = activeTerritory.Name,
+            Status = "Inactive",
+            BoundarySource = region.BoundarySource,
+            BoundaryShapeType = region.BoundaryShapeType,
+            BoundaryShapeGroup = region.BoundaryShapeGroup,
+            BoundaryShapeId = region.BoundaryShapeId,
+            BoundaryExternalKey = region.BoundaryExternalKey,
+            BoundaryAdmLevel = region.BoundaryAdmLevel,
+            BoundaryReleaseType = region.BoundaryReleaseType,
+            BoundaryCandidateId = region.BoundaryCandidateId,
+            BoundaryGeometryGeoJson = ToGeoJson(boundaryGeometry),
             CreatedAt = region.CreatedAt,
             DetailRoute = $"/territory/regions/{region.Id}"
         };
@@ -1302,18 +1494,9 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             .Select(group => new { RegionId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(row => row.RegionId, row => row.Count);
 
-        var reviewReportCounts = await _db.ReviewReports
-            .AsNoTracking()
-            .Where(report =>
-                report.Status == ReviewReportStatus.Pending &&
-                regionIds.Contains(report.RegionId))
-            .GroupBy(report => report.RegionId)
-            .Select(group => new { RegionId = group.Key, Count = group.Count() })
-            .ToDictionaryAsync(row => row.RegionId, row => row.Count);
-
         return regionIds.ToDictionary(
             regionId => regionId,
-            regionId => contributionCounts.GetValueOrDefault(regionId) + reviewReportCounts.GetValueOrDefault(regionId));
+            regionId => contributionCounts.GetValueOrDefault(regionId));
     }
 
     private async Task<Dictionary<int, List<ManagerRow>>> GetRegionManagersAsync(List<int> regionIds)
@@ -2337,7 +2520,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
 
     private async Task<TerritoryBoundaryRow?> GetAuthorizedTerritoryBoundaryAsync(int userId, int? territoryId)
     {
-        if (territoryId is <= 0)
+        if (territoryId.HasValue && territoryId.Value <= 0)
             throw new InvalidOperationException("territoryId must be positive.");
 
         var query = _db.TerritoryManagerTerritories
@@ -2390,6 +2573,155 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             CenterLongitude = centroid?.X
         };
     }
+
+    private static void MarkExistingRegionCandidates(
+        List<BoundaryRegionCandidateDto> candidates,
+        List<RegionBoundaryMetadataRow> existingRows)
+    {
+        var byExternalKey = existingRows
+            .Where(row => !string.IsNullOrWhiteSpace(row.BoundaryExternalKey))
+            .GroupBy(row => row.BoundaryExternalKey!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var byCandidateId = existingRows
+            .Where(row => row.BoundaryCandidateId.HasValue)
+            .GroupBy(row => row.BoundaryCandidateId!.Value)
+            .ToDictionary(group => group.Key, group => group.First());
+        var byShapeKey = existingRows
+            .Where(row =>
+                string.Equals(row.BoundaryAdmLevel, Adm1Level, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(row.BoundaryShapeGroup) &&
+                !string.IsNullOrWhiteSpace(row.BoundaryShapeId))
+            .GroupBy(row => BuildShapeCandidateKey(row.BoundaryShapeGroup, row.BoundaryShapeId), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var byPendingExactName = existingRows
+            .Where(row =>
+                row.BoundaryCandidateId is null &&
+                string.IsNullOrWhiteSpace(row.BoundaryExternalKey) &&
+                string.IsNullOrWhiteSpace(row.BoundaryShapeId))
+            .GroupBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in candidates)
+        {
+            RegionBoundaryMetadataRow? existing = null;
+            if (candidate.BoundaryCandidateId > 0)
+            {
+                byCandidateId.TryGetValue(candidate.BoundaryCandidateId, out existing);
+            }
+
+            if (existing is null &&
+                !string.IsNullOrWhiteSpace(candidate.BoundaryExternalKey))
+            {
+                byExternalKey.TryGetValue(candidate.BoundaryExternalKey, out existing);
+            }
+
+            if (existing is null &&
+                !string.IsNullOrWhiteSpace(candidate.ShapeGroup) &&
+                !string.IsNullOrWhiteSpace(candidate.ShapeId))
+            {
+                byShapeKey.TryGetValue(
+                    BuildShapeCandidateKey(candidate.ShapeGroup, candidate.ShapeId),
+                    out existing);
+            }
+
+            if (existing is null &&
+                !string.IsNullOrWhiteSpace(candidate.DisplayName))
+            {
+                byPendingExactName.TryGetValue(candidate.DisplayName, out existing);
+            }
+
+            if (existing is null)
+            {
+                candidate.Status = candidate.IsInsideAssignedTerritory ? "Available" : "InvalidOutsideTerritory";
+                candidate.CanSelect = candidate.HasBoundary &&
+                    candidate.HasDisplayBoundary &&
+                    candidate.IsInsideAssignedTerritory &&
+                    candidate.Status == "Available";
+                continue;
+            }
+
+            candidate.Status = "ExistingRegion";
+            candidate.CanSelect = false;
+            candidate.ExistingRegionId = existing.Id;
+            candidate.ExistingRegionName = existing.Name;
+            candidate.ValidationMessage = DuplicateAdministrativeRegionMessage;
+        }
+    }
+
+    private static string BuildShapeCandidateKey(string? shapeGroup, string? shapeId) =>
+        $"{shapeGroup?.Trim().ToUpperInvariant()}::{shapeId?.Trim().ToUpperInvariant()}";
+
+    private static bool HasBoundaryCandidateRequest(TerritoryRegionCreateRequestDto request) =>
+        !string.IsNullOrWhiteSpace(request.ShapeId) ||
+        !string.IsNullOrWhiteSpace(request.CandidateExternalKey) ||
+        !string.IsNullOrWhiteSpace(request.BoundaryCandidateId) ||
+        !string.IsNullOrWhiteSpace(request.BoundaryExternalKey);
+
+    private static string NormalizeAdm1CandidateLevel(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? Adm1Level
+            : value.Trim().Replace(" ", string.Empty).Replace("-", string.Empty).ToUpperInvariant();
+
+        return normalized == Adm1Level
+            ? normalized
+            : throw new InvalidOperationException("Boundary candidate must be an ADM1 administrative region.");
+    }
+
+    private static string NormalizeRequiredBoundaryCandidateShapeId(string? value)
+    {
+        var shapeId = value?.Trim() ?? string.Empty;
+        if (shapeId.Length == 0)
+            throw new InvalidOperationException("Boundary candidate shape id is required.");
+
+        return shapeId;
+    }
+
+    private static int? TryParseBoundaryCandidateId(string? value)
+    {
+        return int.TryParse(value, out var candidateId) && candidateId > 0
+            ? candidateId
+            : null;
+    }
+
+    private static string NormalizeCandidateRegionName(string? requestedName, string candidateName)
+    {
+        var name = string.IsNullOrWhiteSpace(requestedName)
+            ? candidateName.Trim()
+            : requestedName.Trim();
+
+        if (name.Length == 0)
+            throw new InvalidOperationException("Region name is required.");
+
+        if (name.Length > 200)
+            throw new InvalidOperationException("Region name is too long.");
+
+        return name;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static string? FirstNonEmptyNullable(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return null;
+    }
+
+    private static bool BoundaryIsoCodesMatch(string first, string second) =>
+        string.Equals(
+            CountryRegistry.NormalizeIso3ForBoundaryImport(first),
+            CountryRegistry.NormalizeIso3ForBoundaryImport(second),
+            StringComparison.OrdinalIgnoreCase) ||
+        CountryRegistry.AreBoundaryImportIsoAliases(first, second);
 
     private static BoundaryResult BuildRegionBoundary(TerritoryRegionBoundaryDto? boundary)
     {
@@ -2978,6 +3310,17 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public Geometry? BoundaryGeometry { get; set; }
+    }
+
+    private sealed class RegionBoundaryMetadataRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int? BoundaryCandidateId { get; set; }
+        public string? BoundaryExternalKey { get; set; }
+        public string? BoundaryShapeGroup { get; set; }
+        public string? BoundaryShapeId { get; set; }
+        public string? BoundaryAdmLevel { get; set; }
     }
 
     private sealed class BoundsAccumulator

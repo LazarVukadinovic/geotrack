@@ -1422,6 +1422,14 @@ public sealed class AdminTerritoryManagementTests
                     },
                     {
                       "type": "Feature",
+                      "properties": { "shapeName": "Border Mismatch Region", "shapeID": "BORDER-MISMATCH-1", "shapeGroup": "TAA", "shapeType": "ADM1" },
+                      "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[-0.1,0.2],[0.6,0.2],[0.6,0.8],[-0.1,0.8],[-0.1,0.2]]]
+                      }
+                    },
+                    {
+                      "type": "Feature",
                       "properties": { "shapeName": "Outside Region", "shapeID": "OUTSIDE-1", "shapeGroup": "TAA", "shapeType": "ADM1" },
                       "geometry": {
                         "type": "Polygon",
@@ -1444,9 +1452,17 @@ public sealed class AdminTerritoryManagementTests
                 configurationOverrides: new Dictionary<string, string?>
                 {
                     ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
-                });
+            });
 
             var territoryId = await CreateAssignedTerritoryForCandidateTestAsync(app, "TAA");
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var import = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
+                var importSummary = await import.ImportLocalBoundariesAsync("ADM1");
+                Assert.Equal(4, importSummary.ImportedCount);
+                Assert.Equal(0, importSummary.FailedCount);
+            }
+
             using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
             var response = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
                 $"/api/admin/territory/regions/boundary-candidates?territoryId={territoryId}&level=ADM1&take=10");
@@ -1454,12 +1470,22 @@ public sealed class AdminTerritoryManagementTests
             Assert.NotNull(response);
             Assert.Equal("ADM1", response!.AdmLevel);
             Assert.Equal("TAA", response.Iso3);
-            var candidate = Assert.Single(response.Items);
+            Assert.Equal(3, response.Items.Count);
+            var candidate = Assert.Single(response.Items, item => item.ShapeId == "INSIDE-1");
             Assert.Equal("INSIDE-1", candidate.ShapeId);
             Assert.Equal("Inside Region", candidate.Name);
             Assert.True(candidate.IsInsideAssignedTerritory);
             Assert.NotNull(candidate.GeometryGeoJson);
             Assert.Equal("Polygon", candidate.GeometryGeoJson!.Type);
+
+            var borderMismatch = Assert.Single(response.Items, item => item.ShapeId == "BORDER-MISMATCH-1");
+            Assert.Equal("Available", borderMismatch.Status);
+            Assert.True(borderMismatch.CanSelect);
+            Assert.True(borderMismatch.IsInsideAssignedTerritory);
+
+            var outside = Assert.Single(response.Items, item => item.ShapeId == "OUTSIDE-1");
+            Assert.Equal("InvalidOutsideTerritory", outside.Status);
+            Assert.False(outside.CanSelect);
         }
         finally
         {

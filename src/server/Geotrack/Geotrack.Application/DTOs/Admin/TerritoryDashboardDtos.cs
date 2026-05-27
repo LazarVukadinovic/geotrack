@@ -144,6 +144,12 @@ public class TerritoryRegionCreateRequestDto
 {
     public int TerritoryId { get; set; }
     public string? Name { get; set; }
+    public string? CandidateExternalKey { get; set; }
+    public string? BoundaryCandidateId { get; set; }
+    public string? BoundaryExternalKey { get; set; }
+    public string? ShapeGroup { get; set; }
+    public string? ShapeId { get; set; }
+    public string? AdmLevel { get; set; }
     public string? BoundarySource { get; set; }
     public long? OsmRelationId { get; set; }
     public int? OsmAdminLevel { get; set; }
@@ -161,6 +167,12 @@ public class TerritoryRegionCreateResponseDto
     public string Status { get; set; } = "Inactive";
     public string? BoundarySource { get; set; }
     public string? BoundaryShapeType { get; set; }
+    public string? BoundaryShapeGroup { get; set; }
+    public string? BoundaryShapeId { get; set; }
+    public string? BoundaryExternalKey { get; set; }
+    public string? BoundaryAdmLevel { get; set; }
+    public string? BoundaryReleaseType { get; set; }
+    public int? BoundaryCandidateId { get; set; }
     public TerritoryRegionGeometryDto? BoundaryGeometryGeoJson { get; set; }
     public DateTime CreatedAt { get; set; }
     public string? DetailRoute { get; set; }
@@ -178,6 +190,7 @@ public class TerritoryRegionCreateContextDto
 
 public class TerritoryRegionMapItemDto
 {
+    public string FeatureKind { get; set; } = "ExistingRegion";
     public int Id { get; set; }
     public int RegionId { get; set; }
     public string Name { get; set; } = string.Empty;
