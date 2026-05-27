@@ -93,22 +93,17 @@ public class ReviewReportService : IReviewReportService
             ReportId = report.Id,
             AlreadyReported = false,
             Status = report.Status.ToString(),
-            Message = "Thanks. This review has been queued for regional manager moderation."
+            Message = "Thanks. This review has been queued for administrator moderation."
         };
     }
 
     public async Task<GetReviewReportsResponseDto> GetReviewQueueAsync(int reviewerUserId, string? status)
     {
-        await EnsureRegionalManagerAsync(reviewerUserId);
-        var assignedRegionIds = await GetAssignedRegionIdsAsync(reviewerUserId);
+        await EnsureAdministratorAsync(reviewerUserId);
 
-        if (assignedRegionIds.Count == 0)
-            return new GetReviewReportsResponseDto();
-
-        var query = _db.ReviewReports
+        IQueryable<ReviewReport> query = _db.ReviewReports
             .AsNoTracking()
-            .Include(report => report.ReporterUser)
-            .Where(report => assignedRegionIds.Contains(report.RegionId));
+            .Include(report => report.ReporterUser);
 
         if (!string.Equals(status?.Trim(), "all", StringComparison.OrdinalIgnoreCase))
         {
@@ -131,7 +126,7 @@ public class ReviewReportService : IReviewReportService
         ModerateReviewReportRequestDto request)
     {
         var report = await LoadReportForModerationAsync(reportId);
-        await EnsureRegionalManagerCanReviewAsync(reviewerUserId, report);
+        await EnsureAdministratorAsync(reviewerUserId);
 
         if (report.Status != ReviewReportStatus.Pending)
             throw new InvalidOperationException("This report has already been reviewed.");
@@ -155,7 +150,7 @@ public class ReviewReportService : IReviewReportService
         ModerateReviewReportRequestDto request)
     {
         var report = await LoadReportForModerationAsync(reportId);
-        await EnsureRegionalManagerCanReviewAsync(reviewerUserId, report);
+        await EnsureAdministratorAsync(reviewerUserId);
 
         if (report.Status != ReviewReportStatus.Pending)
             throw new InvalidOperationException("This report has already been reviewed.");
@@ -322,27 +317,15 @@ public class ReviewReportService : IReviewReportService
             ?? throw new KeyNotFoundException("Review report not found.");
     }
 
-    private async Task EnsureRegionalManagerCanReviewAsync(int reviewerUserId, ReviewReport report)
-    {
-        await EnsureRegionalManagerAsync(reviewerUserId);
-        var assignedRegionIds = await GetAssignedRegionIdsAsync(reviewerUserId);
-
-        if (assignedRegionIds.Count == 0)
-            throw new UnauthorizedAccessException("Regional manager has no assigned regions.");
-
-        if (!assignedRegionIds.Contains(report.RegionId))
-            throw new UnauthorizedAccessException("Regional manager is not assigned to this review's region.");
-    }
-
-    private async Task EnsureRegionalManagerAsync(int reviewerUserId)
+    private async Task EnsureAdministratorAsync(int reviewerUserId)
     {
         var reviewer = await _db.Users
             .Include(user => user.UserRoles).ThenInclude(userRole => userRole.Role)
             .FirstOrDefaultAsync(user => user.Id == reviewerUserId)
             ?? throw new UnauthorizedAccessException("Invalid user token.");
 
-        if (!reviewer.UserRoles.Any(userRole => RoleNames.Normalize(userRole.Role.Name) == RoleNames.RegionalManager))
-            throw new UnauthorizedAccessException("Regional manager role is required.");
+        if (!reviewer.UserRoles.Any(userRole => RoleNames.Normalize(userRole.Role.Name) == RoleNames.Admin))
+            throw new UnauthorizedAccessException("Administrator role is required.");
     }
 
     private async Task<bool> HasDuplicateReportAsync(
@@ -353,14 +336,6 @@ public class ReviewReportService : IReviewReportService
             report.ReporterUserId == reporterUserId &&
             report.TargetType == targetType &&
             report.ReviewId == reviewId);
-
-    private async Task<List<int>> GetAssignedRegionIdsAsync(int reviewerUserId) =>
-        await _db.RegionalManagerRegions
-            .AsNoTracking()
-            .Where(link => link.UserId == reviewerUserId && link.IsActive)
-            .Select(link => link.RegionId)
-            .Distinct()
-            .ToListAsync();
 
     private static ReviewReportTargetType ParseTargetType(string value)
     {

@@ -37,15 +37,18 @@ public class PlaceContributionService : IPlaceContributionService
     private readonly AppDbContext _db;
     private readonly IContributionMediaStorageService _mediaStorage;
     private readonly IUserNotificationService _notificationService;
+    private readonly IAdminNotificationService _adminNotificationService;
 
     public PlaceContributionService(
         AppDbContext db,
         IContributionMediaStorageService mediaStorage,
-        IUserNotificationService notificationService)
+        IUserNotificationService notificationService,
+        IAdminNotificationService adminNotificationService)
     {
         _db = db;
         _mediaStorage = mediaStorage;
         _notificationService = notificationService;
+        _adminNotificationService = adminNotificationService;
     }
 
     public async Task<GetPlaceContributionsResponseDto> GetForUserAsync(int userId)
@@ -265,6 +268,8 @@ public class PlaceContributionService : IPlaceContributionService
 
         _db.PlaceContributions.Add(contribution);
         await _db.SaveChangesAsync();
+        await _adminNotificationService.CreateTerritoryContributionPendingReviewNotificationAsync(contribution);
+        await _adminNotificationService.CreateRegionalContributionPendingReviewNotificationAsync(contribution);
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
         return MapDetail(saved, includeReviewNote: false);

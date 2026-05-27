@@ -23,10 +23,14 @@ public class RegionalLocationService : IRegionalLocationService
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
     private readonly AppDbContext _db;
+    private readonly RegionalScopeValidationService _scopeValidation;
 
-    public RegionalLocationService(AppDbContext db)
+    public RegionalLocationService(
+        AppDbContext db,
+        RegionalScopeValidationService scopeValidation)
     {
         _db = db;
+        _scopeValidation = scopeValidation;
     }
 
     public async Task<RegionalLocationListResponseDto> GetLocationsAsync(
@@ -242,19 +246,25 @@ public class RegionalLocationService : IRegionalLocationService
             EnsureLocationBoundaryInsideParentDestination(boundary.Geometry, destination.BoundaryGeometry);
         }
         var coordinates = ResolveCoordinates(request, boundary);
-        var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, request.RegionId);
-        RegionalBoundaryGuard.EnsurePointInsideScope(
+        await _scopeValidation.EnsurePointAllowedAsync(
+            userId,
+            request.RegionId,
+            "Location center",
             coordinates.Latitude,
             coordinates.Longitude,
-            boundaryScope,
-            "Location center");
+            "Create");
         EnsurePointInsideParentDestination(
             coordinates.Latitude,
             coordinates.Longitude,
             destination.BoundaryGeometry);
         if (boundary is not null)
         {
-            RegionalBoundaryGuard.EnsureGeometryInsideScope(boundary.Geometry, boundaryScope, "Location");
+            await _scopeValidation.EnsureGeometryAllowedAsync(
+                userId,
+                request.RegionId,
+                "Location",
+                boundary.Geometry,
+                "Create");
         }
         var locationTypeId = await ResolveLocationTypeIdAsync(request.LocationTypeId);
         var tagIds = await ValidateLocationTagIdsAsync(request.TagIds);
@@ -334,12 +344,13 @@ public class RegionalLocationService : IRegionalLocationService
         ApplyUpdate(location, request);
         if (parentDestinationChanged || request.Latitude.HasValue || request.Longitude.HasValue)
         {
-            var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, regionId);
-            RegionalBoundaryGuard.EnsurePointInsideScope(
+            await _scopeValidation.EnsurePointAllowedAsync(
+                userId,
+                regionId,
+                "Location center",
                 location.Latitude,
                 location.Longitude,
-                boundaryScope,
-                "Location center");
+                "Update");
             var parentDestinationBoundary = await _db.Destinations
                 .AsNoTracking()
                 .Where(item => item.Id == location.DestinationId)

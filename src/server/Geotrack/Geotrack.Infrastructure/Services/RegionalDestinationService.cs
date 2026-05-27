@@ -20,10 +20,14 @@ public class RegionalDestinationService : IRegionalDestinationService
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
     private readonly AppDbContext _db;
+    private readonly RegionalScopeValidationService _scopeValidation;
 
-    public RegionalDestinationService(AppDbContext db)
+    public RegionalDestinationService(
+        AppDbContext db,
+        RegionalScopeValidationService scopeValidation)
     {
         _db = db;
+        _scopeValidation = scopeValidation;
     }
 
     public async Task<RegionalDestinationListResponseDto> GetDestinationsAsync(
@@ -218,15 +222,21 @@ public class RegionalDestinationService : IRegionalDestinationService
         var status = NormalizeCreateStatus(request.Status);
         var boundary = BuildBoundary(request.Boundary);
         var coordinates = ResolveCoordinates(request, boundary);
-        var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, request.RegionId);
-        RegionalBoundaryGuard.EnsurePointInsideScope(
+        await _scopeValidation.EnsurePointAllowedAsync(
+            userId,
+            request.RegionId,
+            "Destination center",
             coordinates.Latitude,
             coordinates.Longitude,
-            boundaryScope,
-            "Destination center");
+            "Create");
         if (boundary is not null)
         {
-            RegionalBoundaryGuard.EnsureGeometryInsideScope(boundary.Geometry, boundaryScope, "Destination");
+            await _scopeValidation.EnsureGeometryAllowedAsync(
+                userId,
+                request.RegionId,
+                "Destination",
+                boundary.Geometry,
+                "Create");
         }
         var destinationTypeId = await ResolveDestinationTypeIdAsync(request.DestinationTypeId);
         var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
@@ -293,12 +303,13 @@ public class RegionalDestinationService : IRegionalDestinationService
         ApplyUpdate(destination, request);
         if (request.Latitude.HasValue || request.Longitude.HasValue)
         {
-            var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, regionId);
-            RegionalBoundaryGuard.EnsurePointInsideScope(
+            await _scopeValidation.EnsurePointAllowedAsync(
+                userId,
+                regionId,
+                "Destination center",
                 destination.Latitude,
                 destination.Longitude,
-                boundaryScope,
-                "Destination center");
+                "Update");
         }
 
         if (request.TagIds is not null)

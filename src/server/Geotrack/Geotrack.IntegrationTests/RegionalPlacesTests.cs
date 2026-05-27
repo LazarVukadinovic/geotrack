@@ -572,6 +572,18 @@ public sealed class RegionalPlacesTests
         db.Regions.AddRange(assignedRegion, unassignedRegion);
         await db.SaveChangesAsync();
 
+        SetBoundary(db, assignedRegion, Polygon(
+            (41.5, 17.5),
+            (41.5, 20.5),
+            (44.0, 20.5),
+            (44.0, 17.5)));
+        SetBoundary(db, unassignedRegion, Polygon(
+            (44.5, 18.5),
+            (44.5, 19.5),
+            (45.5, 19.5),
+            (45.5, 18.5)));
+        await db.SaveChangesAsync();
+
         await GrantRegionalManagerCoverageAsync(db, manager, assignedRegion.Id);
 
         var assignedDestination = new Destination
@@ -716,6 +728,13 @@ public sealed class RegionalPlacesTests
     private static void SetBoundary(AppDbContext db, Territory territory, Geometry geometry)
     {
         db.Entry(territory)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = geometry;
+    }
+
+    private static void SetBoundary(AppDbContext db, Region region, Geometry geometry)
+    {
+        db.Entry(region)
             .Property<Geometry?>(BoundaryGeometryPropertyName)
             .CurrentValue = geometry;
     }

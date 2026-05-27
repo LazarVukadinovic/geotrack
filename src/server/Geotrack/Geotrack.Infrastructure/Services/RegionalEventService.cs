@@ -18,10 +18,14 @@ public class RegionalEventService : IRegionalEventService
     private const string ArchivedStatus = "Archived";
 
     private readonly AppDbContext _db;
+    private readonly RegionalScopeValidationService _scopeValidation;
 
-    public RegionalEventService(AppDbContext db)
+    public RegionalEventService(
+        AppDbContext db,
+        RegionalScopeValidationService scopeValidation)
     {
         _db = db;
+        _scopeValidation = scopeValidation;
     }
 
     public async Task<RegionalEventListResponseDto> GetEventsAsync(
@@ -251,7 +255,7 @@ public class RegionalEventService : IRegionalEventService
         var status = NormalizeCreateStatus(request.Status);
         var eventTypeId = await ResolveEventTypeIdAsync(request.EventTypeId);
         var parent = await ResolveParentAsync(request.RegionId, request);
-        await EnsureEventParentInsideScopeAsync(request.RegionId, parent);
+        await EnsureEventParentInsideScopeAsync(userId, request.RegionId, parent);
         var schedule = NormalizeSchedule(request.StartsAt, request.EndsAt, request.IsAllDay);
         var tagIds = await ValidateEventTagIdsAsync(request.TagIds);
         var ticketPrice = request.IsFree
@@ -390,7 +394,7 @@ public class RegionalEventService : IRegionalEventService
         }
 
         ApplyUpdate(@event, request);
-        await EnsureCurrentEventParentInsideScopeAsync(regionId, @event);
+        await EnsureCurrentEventParentInsideScopeAsync(userId, regionId, @event);
         @event.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -857,26 +861,28 @@ public class RegionalEventService : IRegionalEventService
         }
     }
 
-    private async Task EnsureEventParentInsideScopeAsync(int regionId, ResolvedEventParent parent)
+    private async Task EnsureEventParentInsideScopeAsync(int userId, int regionId, ResolvedEventParent parent)
     {
         var coordinates = ResolveParentCoordinates(parent);
-        var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, regionId);
-        RegionalBoundaryGuard.EnsurePointInsideScope(
+        await _scopeValidation.EnsurePointAllowedAsync(
+            userId,
+            regionId,
+            "Event parent",
             coordinates.Latitude,
             coordinates.Longitude,
-            boundaryScope,
-            "Event parent");
+            "Create");
     }
 
-    private async Task EnsureCurrentEventParentInsideScopeAsync(int regionId, Event @event)
+    private async Task EnsureCurrentEventParentInsideScopeAsync(int userId, int regionId, Event @event)
     {
         var coordinates = await ResolveCurrentParentCoordinatesAsync(regionId, @event);
-        var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, regionId);
-        RegionalBoundaryGuard.EnsurePointInsideScope(
+        await _scopeValidation.EnsurePointAllowedAsync(
+            userId,
+            regionId,
+            "Event parent",
             coordinates.Latitude,
             coordinates.Longitude,
-            boundaryScope,
-            "Event parent");
+            "Update");
     }
 
     private static EventParentCoordinates ResolveParentCoordinates(ResolvedEventParent parent)

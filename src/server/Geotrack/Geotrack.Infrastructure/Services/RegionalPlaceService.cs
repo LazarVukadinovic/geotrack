@@ -21,10 +21,14 @@ public class RegionalPlaceService : IRegionalPlaceService
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
 
     private readonly AppDbContext _db;
+    private readonly RegionalScopeValidationService _scopeValidation;
 
-    public RegionalPlaceService(AppDbContext db)
+    public RegionalPlaceService(
+        AppDbContext db,
+        RegionalScopeValidationService scopeValidation)
     {
         _db = db;
+        _scopeValidation = scopeValidation;
     }
 
     public async Task<RegionalPlaceListResponseDto> GetPlacesAsync(
@@ -304,12 +308,13 @@ public class RegionalPlaceService : IRegionalPlaceService
         var status = NormalizeCreateStatus(request.Status);
         var coordinates = ResolveRequiredCoordinates(request.Latitude, request.Longitude);
         ValidateCoordinatesWithinBoundaries(coordinates, location.LocationBoundaryGeometry, location.DestinationBoundaryGeometry);
-        var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, request.RegionId);
-        RegionalBoundaryGuard.EnsurePointInsideScope(
+        await _scopeValidation.EnsurePointAllowedAsync(
+            userId,
+            request.RegionId,
+            "Place coordinates",
             coordinates.Latitude,
             coordinates.Longitude,
-            boundaryScope,
-            "Place coordinates");
+            "Create");
         var tagIds = await ValidatePlaceTagIdsAsync(request.TagIds);
         var operatingHours = NormalizeOperatingHours(request.OperatingHoursEnabled, request.OperatingHours);
         var now = DateTime.UtcNow;
@@ -420,12 +425,13 @@ public class RegionalPlaceService : IRegionalPlaceService
                 coordinates,
                 parentBoundaries.LocationBoundaryGeometry,
                 parentBoundaries.DestinationBoundaryGeometry);
-            var boundaryScope = await RegionalBoundaryGuard.GetScopeAsync(_db, regionId);
-            RegionalBoundaryGuard.EnsurePointInsideScope(
+            await _scopeValidation.EnsurePointAllowedAsync(
+                userId,
+                regionId,
+                "Place coordinates",
                 coordinates.Latitude,
                 coordinates.Longitude,
-                boundaryScope,
-                "Place coordinates");
+                "Update");
         }
 
         if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
