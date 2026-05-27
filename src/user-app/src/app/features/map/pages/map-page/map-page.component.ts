@@ -428,7 +428,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.cdr.detectChanges();
 
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => this.ngZone.run(() => this.handleLocationSuccess(coords.latitude, coords.longitude)),
+      ({ coords }) => this.scheduleLocationSuccess(coords.latitude, coords.longitude),
       (err) => {
         if (err.code === GeolocationPositionError.PERMISSION_DENIED) {
           this.ngZone.run(() => void this.handleLocateFallback());
@@ -436,7 +436,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         }
 
         navigator.geolocation.getCurrentPosition(
-          ({ coords }) => this.ngZone.run(() => this.handleLocationSuccess(coords.latitude, coords.longitude)),
+          ({ coords }) => this.scheduleLocationSuccess(coords.latitude, coords.longitude),
           () => this.ngZone.run(() => void this.handleLocateFallback()),
           { timeout: 15_000, maximumAge: 0, enableHighAccuracy: true },
         );
@@ -1688,7 +1688,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
 
     if (loc.source === 'gps') {
-      this.handleLocationSuccess(loc.latitude, loc.longitude);
+      this.scheduleLocationSuccess(loc.latitude, loc.longitude);
       return;
     }
 
@@ -1740,6 +1740,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         isUserLocation: true,
       }));
     }
+  }
+
+  private scheduleLocationSuccess(lat: number, lon: number): void {
+    setTimeout(() => {
+      if (this.isDestroyed) return;
+      this.ngZone.run(() => this.handleLocationSuccess(lat, lon));
+    }, 0);
   }
 
   private readSessionJson<T>(key: string): T | null {

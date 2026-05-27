@@ -117,8 +117,11 @@ public class ExploreController : ControllerBase
     public async Task<ActionResult> GetExploreSectionPage(
         [FromRoute] string sectionKey,
         [FromQuery] int destinationId,
+        [FromQuery] double? latitude,
+        [FromQuery] double? longitude,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20,
+        [FromQuery] string? distanceOrigin = null,
         [FromQuery] int[]? tagIds = null)
     {
         if (string.IsNullOrWhiteSpace(sectionKey))
@@ -146,12 +149,29 @@ public class ExploreController : ControllerBase
             return BadRequest(new { error = "take must be greater than zero." });
         }
 
+        var useCurrentLocationDistance = UseCurrentLocationDistance(distanceOrigin);
+        if (useCurrentLocationDistance)
+        {
+            if (!latitude.HasValue || !longitude.HasValue)
+            {
+                return BadRequest(new { error = "latitude and longitude are required when using current-location distance." });
+            }
+
+            if (!HasValidCoordinates(latitude.Value, longitude.Value))
+            {
+                return BadRequest(new { error = "latitude and longitude must be finite values in valid coordinate ranges." });
+            }
+        }
+
         var result = await _exploreService.GetExploreSectionPageAsync(
             sectionKey,
             destinationId,
+            latitude,
+            longitude,
             GetUserId(),
             skip,
             take,
+            useCurrentLocationDistance,
             tagIds);
 
         if (result.SelectedDestination is null)

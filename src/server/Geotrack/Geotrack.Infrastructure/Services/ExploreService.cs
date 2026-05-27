@@ -105,9 +105,12 @@ public class ExploreService : IExploreService
     public async Task<ExploreSectionPageDto> GetExploreSectionPageAsync(
         string sectionKey,
         int destinationId,
+        double? latitude = null,
+        double? longitude = null,
         int? userId = null,
         int skip = 0,
         int take = SectionPageDefaultTake,
+        bool useCurrentLocationDistance = false,
         IReadOnlyCollection<int>? tagIds = null)
     {
         var normalizedKey = ToCategoryKey(sectionKey ?? string.Empty);
@@ -129,6 +132,10 @@ public class ExploreService : IExploreService
         }
 
         var destinationPoint = SpatialPointFactory.Create(destination.Latitude, destination.Longitude);
+        var useCurrentDistanceLabel = useCurrentLocationDistance && HasUsableCoordinates(latitude, longitude);
+        var distancePoint = useCurrentDistanceLabel
+            ? SpatialPointFactory.Create(latitude!.Value, longitude!.Value)
+            : destinationPoint;
         var placeFavoriteIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
@@ -142,47 +149,53 @@ public class ExploreService : IExploreService
         {
             "curated-for-you" => await BuildCuratedForYouPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 userId,
                 placeFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             "top-stays" or "stays" or "hotels" => await BuildTopStaysPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 placeFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             "where-to-eat" or "food" or "food-and-music" => await BuildWhereToEatPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 placeFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             "drinks" or "cafes" or "bars" or "coffee" => await BuildDrinksPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 placeFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             "events" => await BuildEventsPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 eventFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             _ => await BuildDynamicSectionPageAsync(
                 normalizedKey,
                 destination,
-                destinationPoint,
+                distancePoint,
                 placeFavoriteIds,
                 0,
-                candidateTake)
+                candidateTake,
+                useCurrentDistanceLabel)
         };
 
         return await ApplySectionFiltersAndPagingAsync(
@@ -425,7 +438,8 @@ public class ExploreService : IExploreService
         int? userId,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         if (!userId.HasValue)
         {
@@ -464,7 +478,7 @@ public class ExploreService : IExploreService
         var pageItems = rankedPlaces
             .Skip(skip)
             .Take(take)
-            .Select(place => MapRankedCuratedPlace(place, placeFavoriteIds))
+            .Select(place => MapRankedCuratedPlace(place, placeFavoriteIds, useCurrentLocationDistance))
             .ToList();
 
         return SectionPage(
@@ -484,7 +498,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var query = _db.Places
             .AsNoTracking()
@@ -541,7 +556,7 @@ public class ExploreService : IExploreService
             "Top Stays",
             "Highly rated accommodation nearby",
             "stay-card",
-            items.Select(item => MapPlaceProjection(item, "stay", "stay-card", placeFavoriteIds)).ToList(),
+            items.Select(item => MapPlaceProjection(item, "stay", "stay-card", placeFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -552,7 +567,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var query = _db.Places
             .AsNoTracking()
@@ -620,7 +636,7 @@ public class ExploreService : IExploreService
             "Where to eat",
             "Restaurants and local food nearby",
             "place-card",
-            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
+            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -631,7 +647,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var query = _db.Places
             .AsNoTracking()
@@ -694,7 +711,7 @@ public class ExploreService : IExploreService
             "Drinks & coffee",
             "Cafes, bars and places for drinks nearby",
             "place-card",
-            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
+            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -705,7 +722,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> eventFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var nowUtc = DateTime.UtcNow;
 
@@ -761,7 +779,7 @@ public class ExploreService : IExploreService
             "Events",
             "What's happening around town",
             "event-card",
-            items.Select(item => MapEventProjection(item, eventFavoriteIds)).ToList(),
+            items.Select(item => MapEventProjection(item, eventFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -773,7 +791,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var possibleTags = await _db.Tags
             .AsNoTracking()
@@ -865,7 +884,7 @@ public class ExploreService : IExploreService
             title,
             totalCount == 1 ? "1 matching place" : $"{totalCount} matching places",
             "place-card",
-            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
+            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -1116,7 +1135,8 @@ public class ExploreService : IExploreService
         SectionPlaceProjection item,
         string entityType,
         string cardType,
-        ISet<int> placeFavoriteIds)
+        ISet<int> placeFavoriteIds,
+        bool useCurrentLocationDistance = false)
     {
         return new ExploreFeedSectionItemDto
         {
@@ -1131,7 +1151,7 @@ public class ExploreService : IExploreService
             Image = item.Image,
             Rating = item.AverageRating.HasValue ? Math.Round(item.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(item.ReviewCount),
-            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
+            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance),
             OpeningHours = item.OpeningHours,
             StatusBadge = cardType == "stay-card" ? null : BuildPlaceStatusBadge(item.OperatingHoursEnabled, item.OperatingHoursJson),
             PricePerNight = cardType == "stay-card" ? item.PricePerNight : null,
@@ -1142,7 +1162,8 @@ public class ExploreService : IExploreService
 
     private static ExploreFeedSectionItemDto MapEventProjection(
         SectionEventProjection item,
-        ISet<int> eventFavoriteIds)
+        ISet<int> eventFavoriteIds,
+        bool useCurrentLocationDistance = false)
     {
         return new ExploreFeedSectionItemDto
         {
@@ -1156,7 +1177,7 @@ public class ExploreService : IExploreService
             StatusBadge = BuildEventStatusBadge(item.IsHappeningNow, item.IsUpcoming),
             Description = TrimDescription(item.Description, 170),
             Image = item.Image,
-            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
+            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance),
             DateLabel = FormatDateLabel(item.StartDate, item.EndDate),
             IsSaved = eventFavoriteIds.Contains(item.Id),
             Tags = item.Tags
@@ -1165,7 +1186,8 @@ public class ExploreService : IExploreService
 
     private static ExploreFeedSectionItemDto MapRankedCuratedPlace(
         RankedCuratedPlace place,
-        ISet<int> placeFavoriteIds)
+        ISet<int> placeFavoriteIds,
+        bool useCurrentLocationDistance = false)
     {
         return new ExploreFeedSectionItemDto
         {
@@ -1180,7 +1202,7 @@ public class ExploreService : IExploreService
             Image = place.Image,
             Rating = place.AverageRating.HasValue ? Math.Round(place.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(place.ReviewCount),
-            Distance = FormatDistanceLabel(place.DistanceMeters, useCurrentLocationDistance: false),
+            Distance = FormatDistanceLabel(place.DistanceMeters, useCurrentLocationDistance),
             OpeningHours = place.OpeningHours,
             StatusBadge = BuildPlaceStatusBadge(place.OperatingHoursEnabled, place.OperatingHoursJson),
             IsSaved = placeFavoriteIds.Contains(place.Id),
