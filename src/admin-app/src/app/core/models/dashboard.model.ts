@@ -216,7 +216,13 @@ export interface TerritoryRegionBoundary {
 
 export interface TerritoryRegionCreateRequest {
   territoryId: number;
-  name: string;
+  name?: string | null;
+  candidateExternalKey?: string | null;
+  boundaryCandidateId?: string | null;
+  boundaryExternalKey?: string | null;
+  shapeGroup?: string | null;
+  shapeId?: string | null;
+  admLevel?: string | null;
   boundarySource?: 'ManualDraw' | 'OsmBoundary' | string | null;
   osmRelationId?: number | null;
   osmAdminLevel?: number | null;
@@ -233,6 +239,12 @@ export interface TerritoryRegionCreateResponse {
   status: string;
   boundarySource?: string | null;
   boundaryShapeType?: string | null;
+  boundaryShapeGroup?: string | null;
+  boundaryShapeId?: string | null;
+  boundaryExternalKey?: string | null;
+  boundaryAdmLevel?: string | null;
+  boundaryReleaseType?: string | null;
+  boundaryCandidateId?: number | null;
   boundaryGeometryGeoJson?: TerritoryRegionGeometry | null;
   createdAt: string;
   detailRoute?: string | null;
@@ -248,6 +260,7 @@ export interface TerritoryRegionCreateContext {
 }
 
 export interface TerritoryRegionMapItem {
+  featureKind?: 'ExistingRegion' | string;
   id: number;
   regionId: number;
   name: string;
@@ -275,6 +288,44 @@ export interface TerritoryRegionMapViewport {
   zoom?: number | null;
   bounds?: TerritoryRegionMapBounds | null;
   isEmpty: boolean;
+}
+
+export interface BoundaryRegionCandidateResponse {
+  source: string;
+  admLevel: string;
+  iso3: string;
+  scannedFeatures: number;
+  matchedFeatures: number;
+  returnedCount: number;
+  items: BoundaryRegionCandidate[];
+  attribution?: string | null;
+}
+
+export interface BoundaryRegionCandidate {
+  featureKind?: 'Adm1Candidate' | string;
+  candidateId: string;
+  boundaryCandidateId: number;
+  externalKey: string;
+  boundaryExternalKey: string;
+  admLevel: string;
+  iso3: string;
+  countryIso3: string;
+  shapeGroup?: string | null;
+  shapeId?: string | null;
+  shapeName: string;
+  shapeType: string;
+  name: string;
+  displayName: string;
+  status: 'Available' | 'ExistingRegion' | 'InvalidOutsideTerritory' | string;
+  hasBoundary: boolean;
+  hasDisplayBoundary: boolean;
+  canSelect: boolean;
+  existingRegionId?: number | null;
+  existingRegionName?: string | null;
+  isInsideAssignedTerritory: boolean;
+  validationMessage?: string | null;
+  viewport?: TerritoryRegionMapViewport | null;
+  geometryGeoJson?: TerritoryRegionGeometry | null;
 }
 
 export interface TerritoryContentDirectoryItem {

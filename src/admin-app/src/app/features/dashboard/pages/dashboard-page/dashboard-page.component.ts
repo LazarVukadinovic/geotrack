@@ -202,8 +202,7 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
-    const routeSource = item.source === 'ReviewReport' ? 'review-report' : 'contribution';
-    this.navigate(`/request/detail/${routeSource}/${item.requestId}`);
+    this.navigate(`/request/detail/contribution/${item.requestId}`);
   }
 
   navigateToActivityHistory(): void {

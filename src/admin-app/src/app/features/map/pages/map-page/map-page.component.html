@@ -126,8 +126,8 @@
         <p class="text-[10px] font-bold tracking-widest text-gray-500 mb-2">LEGEND</p>
         <div class="flex flex-col gap-1.5">
           <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#16a34a;"></span>
-            <span class="text-xs text-gray-600">Region</span>
+            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#047857;"></span>
+            <span class="text-xs text-gray-600">Assigned region</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#2563eb;"></span>
@@ -162,10 +162,24 @@
         <div class="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] max-w-md bg-white border border-red-100 rounded-xl px-4 py-3 shadow-xl">
           <p class="text-sm font-semibold text-red-600">{{ errorMessage }}</p>
         </div>
+      } @else if (!regionLoading && !activeRegionId) {
+        <div class="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] max-w-md bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-xl">
+          <p class="text-sm font-semibold text-gray-800">No assigned region</p>
+          <p class="text-xs text-gray-500 mt-1">This Regional Manager account does not have a region assigned yet.</p>
+        </div>
       } @else if (!mapLoading && activeRegionId && mapData && !hasMapContent) {
         <div class="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] max-w-md bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-xl">
           <p class="text-sm font-semibold text-gray-800">{{ emptyMessage }}</p>
           <p class="text-xs text-gray-500 mt-1">Saved boundaries and mapped entities will appear here when they exist for {{ regionDisplayName }}.</p>
+          @if (regionBoundaryNotice) {
+            <p class="text-xs text-amber-700 mt-2">{{ regionBoundaryNotice }}</p>
+          }
+        </div>
+      }
+
+      @if (!errorMessage && !mapLoading && activeRegionId && mapData && hasMapContent && regionBoundaryNotice) {
+        <div class="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] max-w-md bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 shadow-xl">
+          <p class="text-xs font-semibold text-amber-800">{{ regionBoundaryNotice }}</p>
         </div>
       }
 

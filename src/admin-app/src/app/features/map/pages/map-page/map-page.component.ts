@@ -162,6 +162,21 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     return Boolean(this.mapData && (this.mapData.markers.length > 0 || this.mapData.zones.length > 0));
   }
 
+  get assignedRegionZone(): AdminMapZone | null {
+    return this.mapData?.zones.find(zone => zone.entityType === 'Region') ?? null;
+  }
+
+  get regionBoundaryNotice(): string | null {
+    if (!this.activeRegionId || !this.mapData) return null;
+
+    const regionZone = this.assignedRegionZone;
+    if (regionZone?.isGeometryFallback) {
+      return regionZone.boundaryNotice ?? 'Displaying fallback boundary geometry for this assigned region.';
+    }
+
+    return regionZone ? null : 'Assigned region boundary geometry is not available yet.';
+  }
+
   loadAssignedRegions(): void {
     this.regionLoading = true;
     this.errorMessage = null;
@@ -493,8 +508,14 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const layer = L.geoJSON(zone.geometryGeoJson, {
       pane: zone.entityType === 'Region' ? 'admin-region-zone-pane' : 'admin-zone-pane',
-      style: () => this.zoneStyle(zone.entityType),
+      interactive: zone.entityType !== 'Region',
+      style: () => this.zoneStyle(zone),
     });
+
+    if (zone.entityType === 'Region') {
+      layer.addTo(this.regionZoneGroup);
+      return;
+    }
 
     layer.on('click', (event: { latlng?: { lat: number; lng: number }; originalEvent?: Event }) => {
       if (event.originalEvent) {
@@ -518,11 +539,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     layer.on('mouseover', () => this.setMapCursor('pointer'));
     layer.on('mouseout', () => this.setMapCursor(''));
 
-    if (zone.entityType === 'Region') {
-      layer.addTo(this.regionZoneGroup);
-    } else {
-      layer.addTo(this.zoneGroup);
-    }
+    layer.addTo(this.zoneGroup);
   }
 
   private addMarker(marker: AdminMapMarker): void {
@@ -746,18 +763,29 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.map.setView([latitude, longitude], zoom, { animate: true });
   }
 
-  private zoneStyle(type: AdminMapZone['entityType']): Record<string, string | number> {
-    if (type === 'Region') {
+  private zoneStyle(zone: AdminMapZone): Record<string, string | number> {
+    if (zone.entityType === 'Region') {
+      if (zone.isGeometryFallback) {
+        return {
+          color: '#d97706',
+          fillColor: '#fbbf24',
+          fillOpacity: 0.10,
+          weight: 2.6,
+          dashArray: '7 5',
+          opacity: 0.95,
+        };
+      }
+
       return {
-        color: '#16a34a',
+        color: '#047857',
         fillColor: '#22c55e',
-        fillOpacity: 0.08,
-        weight: 3,
+        fillOpacity: 0.10,
+        weight: 3.2,
         opacity: 0.95,
       };
     }
 
-    if (type === 'Destination') {
+    if (zone.entityType === 'Destination') {
       return {
         color: '#7c3aed',
         fillColor: '#a855f7',
