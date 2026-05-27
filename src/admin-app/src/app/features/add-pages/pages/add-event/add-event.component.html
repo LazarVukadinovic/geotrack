@@ -363,6 +363,26 @@
                 </div>
               }
             </div>
+            @if (regionBoundaryMissingMessage) {
+              <p class="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+                {{ regionBoundaryMissingMessage }}
+              </p>
+            }
+            @if (scopeValidationMessage) {
+              <p
+                class="text-xs border rounded-lg px-3 py-2 mb-3"
+                [class.text-emerald-700]="scopeValidationTone === 'success'"
+                [class.bg-emerald-50]="scopeValidationTone === 'success'"
+                [class.border-emerald-200]="scopeValidationTone === 'success'"
+                [class.text-amber-700]="scopeValidationTone === 'warning'"
+                [class.bg-amber-50]="scopeValidationTone === 'warning'"
+                [class.border-amber-200]="scopeValidationTone === 'warning'"
+                [class.text-red-700]="scopeValidationTone === 'error'"
+                [class.bg-red-50]="scopeValidationTone === 'error'"
+                [class.border-red-200]="scopeValidationTone === 'error'">
+                {{ scopeValidationMessage }}
+              </p>
+            }
             @if (venueType === 'place' && selectedPlace) {
               <div class="grid grid-cols-2 gap-2">
                 <div>

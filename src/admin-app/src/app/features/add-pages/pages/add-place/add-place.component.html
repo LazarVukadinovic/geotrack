@@ -562,6 +562,24 @@
                 </div>
               }
             </div>
+            @if (regionBoundaryMissingMessage) {
+              <p class="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5 mb-3">
+                {{ regionBoundaryMissingMessage }}
+              </p>
+            }
+            @if (scopeValidationMessage) {
+              <p
+                class="text-xs rounded-lg px-3 py-2 mb-3 border"
+                [class.bg-green-50]="scopeValidationTone === 'success'"
+                [class.text-green-700]="scopeValidationTone === 'success'"
+                [class.border-green-200]="scopeValidationTone === 'success'"
+                [class.bg-red-50]="scopeValidationTone === 'error'"
+                [class.text-red-700]="scopeValidationTone === 'error'"
+                [class.border-red-200]="scopeValidationTone === 'error'"
+              >
+                {{ scopeValidationMessage }}
+              </p>
+            }
 
             <div class="grid grid-cols-2 gap-2 mb-3">
               <div>
@@ -740,6 +758,15 @@
       } @else {
         <span class="text-xs text-gray-400">No pin placed yet. Click on the map.</span>
       }
+      @if (scopeValidationMessage) {
+        <span
+          class="text-xs"
+          [class.text-green-700]="scopeValidationTone === 'success'"
+          [class.text-red-700]="scopeValidationTone === 'error'"
+        >
+          {{ scopeValidationMessage }}
+        </span>
+      }
     </div>
 
     <div class="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200">
@@ -751,7 +778,8 @@
       <button
         type="button"
         (click)="confirmPin()"
-        class="text-sm text-white font-semibold px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer"
+        [disabled]="!canConfirmPin"
+        class="text-sm text-white font-semibold px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
       >Confirm Pin</button>
     </div>
   </div>

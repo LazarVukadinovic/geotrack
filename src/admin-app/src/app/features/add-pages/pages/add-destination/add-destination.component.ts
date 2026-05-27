@@ -13,19 +13,28 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, Subscription } from 'rxjs';
+import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { DestinationsListService } from '../../../../core/services/destinations-list.service';
 import { AuthService } from '../../../../core/services/auth.service';
+import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
+import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import {
   RegionalDestinationCreateRequest,
   RegionalDestinationTagDto,
   RegionalDestinationUpdateRequest,
 } from '../../../../core/models/destination.model';
+import {
+  applyAssignedRegionViewport,
+  assignedRegionZone,
+  createRegionalMapPinIcon,
+  isPreciseAssignedRegionBoundary,
+  renderAssignedRegionBoundary,
+} from '../../shared/regional-creation-map';
 
 declare const L: any;
 
@@ -78,6 +87,10 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   isEditMode = false;
   errorMessage: string | null = null;
   feedbackMessage: string | null = null;
+  regionBoundaryMissingMessage: string | null = null;
+  scopeValidationMessage: string | null = null;
+  scopeValidationTone: 'success' | 'warning' | 'error' | null = null;
+  scopeValidationPending = false;
 
   destinationName = '';
   summary = '';
@@ -110,9 +123,13 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   private miniMap: any = null;
   private modalMap: any = null;
+  private miniRegionBoundaryLayer: any = null;
+  private modalRegionBoundaryLayer: any = null;
   private miniMapCenterMarker: any = null;
   private modalCenterMarker: any = null;
   private assignedRegionsSubscription: Subscription | null = null;
+  private regionMapSubscription: Subscription | null = null;
+  private validationSubscription: Subscription | null = null;
   private tagsSubscription: Subscription | null = null;
   private tagSearchSubscription: Subscription | null = null;
   private createSubscription: Subscription | null = null;
@@ -120,6 +137,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private originalLatitude: number | null = null;
   private originalLongitude: number | null = null;
   private tagSearchHandle: ReturnType<typeof setTimeout> | null = null;
+  private regionViewport: AdminMapViewport | null = null;
+  private regionBoundaryZone: AdminMapZone | null = null;
+  private scopeValidationResult: RegionalScopeValidationResult | null = null;
 
   constructor(
     private readonly zone: NgZone,
@@ -130,6 +150,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     private readonly lightboxService: LightboxService,
     private readonly destinationsService: DestinationsListService,
     private readonly auth: AuthService,
+    private readonly adminMapService: AdminMapService,
   ) {}
 
   ngOnInit(): void {
@@ -147,6 +168,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   ngOnDestroy(): void {
     this.assignedRegionsSubscription?.unsubscribe();
+    this.regionMapSubscription?.unsubscribe();
+    this.validationSubscription?.unsubscribe();
     this.tagsSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
@@ -182,6 +205,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       Boolean(this.activeRegionId) &&
       this.destinationName.trim().length > 0 &&
       this.hasValidCenter() &&
+      this.zoneConfirmed &&
+      !this.regionBoundaryMissingMessage &&
+      !this.isScopeValidationRejected &&
       mediaReady &&
       !this.regionLoading &&
       !this.tagsLoading &&
@@ -224,6 +250,16 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       : 'Click the map to place the destination center point. No polygon is drawn.';
   }
 
+  get isScopeValidationRejected(): boolean {
+    return this.scopeValidationResult?.isAllowed === false;
+  }
+
+  get canConfirmZone(): boolean {
+    return this.hasValidCenter() &&
+      !this.scopeValidationPending &&
+      this.scopeValidationResult?.isAllowed === true;
+  }
+
   loadAssignedRegions(): void {
     this.regionLoading = true;
     this.errorMessage = null;
@@ -260,6 +296,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
+          this.loadAssignedRegionMap(selectedRegion.id);
           this.loadDestinationForEditIfNeeded();
         },
         error: (error) => this.handleLoadError(error, 'Unable to load assigned regions.'),
@@ -271,6 +308,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
     this.setActiveRegion(regionId, true);
     this.resetZone();
+    this.loadAssignedRegionMap(regionId);
     this.feedbackMessage = 'Region changed. Destination center was cleared.';
     this.notifyStateChanged();
   }
@@ -522,6 +560,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.zoneModalOpen = true;
     this.notifyStateChanged();
     setTimeout(() => this.initModalMap(this.modalMapContainerRef.nativeElement), 50);
+    if (this.hasValidCenter()) {
+      this.validateSelectedPoint(this.centerLat as number, this.centerLng as number);
+    }
   }
 
   closeZoneModal(): void {
@@ -539,14 +580,30 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.centerLng = null;
     this.zoneConfirmed = false;
     this.errorMessage = null;
+    this.clearScopeValidation();
     this.showCenterOnModalMap();
     this.removeMiniMapCenterMarker();
+    this.applyRegionViewportToMiniMap();
     this.notifyStateChanged();
   }
 
   confirmZone(): void {
     if (!this.hasValidCenter()) {
       this.errorMessage = 'Choose a destination center point before confirming.';
+      this.notifyStateChanged();
+      return;
+    }
+
+    if (this.isScopeValidationRejected) {
+      this.errorMessage = this.scopeValidationMessage ?? 'Selected location is outside your allowed regional scope.';
+      this.notifyStateChanged();
+      return;
+    }
+
+    if (this.scopeValidationPending || this.scopeValidationResult?.isAllowed !== true) {
+      this.errorMessage = this.scopeValidationPending
+        ? 'Location validation is still running.'
+        : this.scopeValidationMessage ?? 'Selected location could not be validated against your assigned regional scope.';
       this.notifyStateChanged();
       return;
     }
@@ -666,6 +723,18 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
+    if (!this.zoneConfirmed) {
+      this.errorMessage = 'Confirm the destination center point before publishing.';
+      return null;
+    }
+
+    if (this.scopeValidationPending || this.scopeValidationResult?.isAllowed !== true) {
+      this.errorMessage = this.scopeValidationPending
+        ? 'Location validation is still running.'
+        : this.scopeValidationMessage ?? 'Selected location could not be validated against your assigned regional scope.';
+      return null;
+    }
+
     const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
 
     return {
@@ -701,6 +770,18 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
+    if (!this.zoneConfirmed) {
+      this.errorMessage = 'Confirm the destination center point before updating.';
+      return null;
+    }
+
+    if (this.scopeValidationPending || this.isScopeValidationRejected) {
+      this.errorMessage = this.scopeValidationPending
+        ? 'Location validation is still running.'
+        : this.scopeValidationMessage ?? 'Selected location is outside your allowed regional scope.';
+      return null;
+    }
+
     const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
 
     return {
@@ -717,6 +798,38 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     return [44.0, 20.9];
   }
 
+  private loadAssignedRegionMap(regionId: number): void {
+    this.regionMapSubscription?.unsubscribe();
+    this.regionBoundaryMissingMessage = null;
+    this.regionViewport = null;
+    this.regionBoundaryZone = null;
+    this.clearScopeValidation();
+
+    this.regionMapSubscription = forkJoin({
+      viewport: this.adminMapService.getViewport(regionId),
+      zones: this.adminMapService.getZones(regionId),
+    }).subscribe({
+      next: ({ viewport, zones }) => {
+        this.regionViewport = viewport;
+        this.regionBoundaryZone = assignedRegionZone(zones);
+        this.regionBoundaryMissingMessage = isPreciseAssignedRegionBoundary(this.regionBoundaryZone)
+          ? null
+          : 'Assigned region boundary is missing. Please contact an administrator.';
+        this.refreshRegionBoundaryLayers();
+        this.applyRegionViewportToMiniMap();
+        this.notifyStateChanged();
+      },
+      error: () => {
+        this.regionViewport = null;
+        this.regionBoundaryZone = null;
+        this.regionBoundaryMissingMessage = 'Assigned region boundary is missing. Please contact an administrator.';
+        this.refreshRegionBoundaryLayers();
+        this.applyRegionViewportToMiniMap();
+        this.notifyStateChanged();
+      },
+    });
+  }
+
   private initMiniMap(): void {
     if (this.miniMap) return;
     const el = this.miniMapContainer?.nativeElement;
@@ -729,28 +842,30 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       doubleClickZoom: false,
       touchZoom: false,
       attributionControl: false,
-    }).setView(this.loadMapCenter(), 8);
+    });
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.miniMap);
+
+    this.refreshMiniRegionBoundaryLayer();
+    this.applyRegionViewportToMiniMap();
   }
 
   private initModalMap(el: HTMLDivElement): void {
     if (this.modalMap || typeof L === 'undefined') return;
 
-    const initialCenter = this.hasValidCenter()
-      ? [this.centerLat as number, this.centerLng as number]
-      : this.loadMapCenter();
-
     this.modalMap = L.map(el, {
       zoomControl: true,
       attributionControl: false,
-    }).setView(initialCenter, this.hasValidCenter() ? 12 : 9);
+    });
 
     L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(this.modalMap);
+
+    this.refreshModalRegionBoundaryLayer();
+    applyAssignedRegionViewport(this.modalMap, this.regionViewport, 9, 11);
 
     this.modalMap.on('click', (event: any) => {
       this.zone.run(() => {
@@ -758,6 +873,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         this.centerLng = event.latlng.lng;
         this.zoneConfirmed = false;
         this.errorMessage = null;
+        this.validateSelectedPoint(event.latlng.lat, event.latlng.lng);
         this.showCenterOnModalMap();
         this.notifyStateChanged();
       });
@@ -772,7 +888,36 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       this.modalMap.remove();
       this.modalMap = null;
       this.modalCenterMarker = null;
+      this.modalRegionBoundaryLayer = null;
     }
+  }
+
+  private refreshRegionBoundaryLayers(): void {
+    this.refreshMiniRegionBoundaryLayer();
+    this.refreshModalRegionBoundaryLayer();
+  }
+
+  private refreshMiniRegionBoundaryLayer(): void {
+    this.miniRegionBoundaryLayer = renderAssignedRegionBoundary(
+      typeof L === 'undefined' ? null : L,
+      this.miniMap,
+      this.miniRegionBoundaryLayer,
+      this.regionBoundaryZone,
+    );
+  }
+
+  private refreshModalRegionBoundaryLayer(): void {
+    this.modalRegionBoundaryLayer = renderAssignedRegionBoundary(
+      typeof L === 'undefined' ? null : L,
+      this.modalMap,
+      this.modalRegionBoundaryLayer,
+      this.regionBoundaryZone,
+    );
+  }
+
+  private applyRegionViewportToMiniMap(): void {
+    if (!this.miniMap || this.hasValidCenter()) return;
+    applyAssignedRegionViewport(this.miniMap, this.regionViewport, 8, 11);
   }
 
   private showZoneOnMiniMap(): void {
@@ -781,7 +926,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
     this.removeMiniMapCenterMarker();
 
-    this.miniMapCenterMarker = L.marker([this.centerLat as number, this.centerLng as number]);
+    this.miniMapCenterMarker = L.marker([this.centerLat as number, this.centerLng as number], {
+      icon: this.makePinIcon(),
+    });
     this.miniMapCenterMarker.addTo(this.miniMap);
     this.miniMap.setView([this.centerLat as number, this.centerLng as number], 12);
   }
@@ -796,8 +943,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
     if (!this.hasValidCenter()) return;
 
-    this.modalCenterMarker = L.marker([this.centerLat as number, this.centerLng as number]);
+    this.modalCenterMarker = L.marker([this.centerLat as number, this.centerLng as number], {
+      icon: this.makePinIcon(),
+    });
     this.modalCenterMarker.addTo(this.modalMap);
+  }
+
+  private makePinIcon(): any {
+    return createRegionalMapPinIcon(L);
   }
 
   private removeMiniMapCenterMarker(): void {
@@ -832,7 +985,97 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.zoneConfirmed = false;
     this.centerLat = null;
     this.centerLng = null;
+    this.clearScopeValidation();
     this.removeMiniMapCenterMarker();
+    this.applyRegionViewportToMiniMap();
+  }
+
+  private validateSelectedPoint(latitude: number, longitude: number): void {
+    if (!this.activeRegionId || !this.hasValidCoordinatePair(latitude, longitude)) {
+      this.clearScopeValidation();
+      return;
+    }
+
+    this.validationSubscription?.unsubscribe();
+    this.scopeValidationResult = null;
+    this.scopeValidationTone = null;
+    this.scopeValidationMessage = null;
+    this.scopeValidationPending = true;
+    this.notifyStateChanged();
+    this.validationSubscription = this.adminMapService.validateEntityLocation({
+      regionId: this.activeRegionId,
+      entityType: 'Destination',
+      operationType: this.isEditMode ? 'Update' : 'Create',
+      latitude,
+      longitude,
+    }).subscribe({
+      next: result => {
+        this.scopeValidationPending = false;
+        this.applyScopeValidationResult(result);
+        this.notifyStateChanged();
+      },
+      error: error => {
+        this.scopeValidationPending = false;
+        this.scopeValidationResult = null;
+        this.scopeValidationTone = 'error';
+        this.scopeValidationMessage = this.extractErrorMessage(
+          error,
+          'Unable to validate this location against your assigned region.',
+        );
+        this.notifyStateChanged();
+      },
+    });
+  }
+
+  private applyScopeValidationResult(result: RegionalScopeValidationResult): void {
+    this.scopeValidationResult = result;
+
+    if (result.isAllowed) {
+      if (
+        result.validationMode === 'AllowedWithinToleranceInsideAssignedCountry' ||
+        result.validationMode === 'AllowedWithinToleranceOutsideRegion'
+      ) {
+        this.scopeValidationTone = 'success';
+        this.scopeValidationMessage = result.message ||
+          'This location is slightly outside your assigned region but remains inside your assigned country/territory and does not belong to another region, so it is allowed.';
+        return;
+      }
+
+      this.scopeValidationTone = null;
+      this.scopeValidationMessage = null;
+      return;
+    }
+
+    if (result.validationMode === 'RejectedInsideAnotherRegion') {
+      this.scopeValidationTone = 'error';
+      this.scopeValidationMessage = result.message ||
+        'This location belongs to another region and cannot be managed from your account.';
+      return;
+    }
+
+    if (result.validationMode === 'RejectedOutsideAssignedCountry') {
+      this.scopeValidationTone = 'error';
+      this.scopeValidationMessage = result.message || 'This location is outside your assigned country/territory.';
+      return;
+    }
+
+    if (!result.isAllowed) {
+      this.scopeValidationTone = 'error';
+      this.scopeValidationMessage = result.message || 'This location is outside your assigned region.';
+      return;
+    }
+
+    this.scopeValidationTone = null;
+    this.scopeValidationMessage = null;
+  }
+
+  private clearScopeValidation(): void {
+    this.scopeValidationResult = null;
+    this.scopeValidationMessage = null;
+    this.scopeValidationTone = null;
+    this.scopeValidationPending = false;
+    this.validationSubscription?.unsubscribe();
+    this.validationSubscription = null;
   }
 
   private searchTags(query: string): void {
@@ -964,6 +1207,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.isItalic = document.queryCommandState('italic');
     this.isUnderline = document.queryCommandState('underline');
     this.notifyStateChanged();
+  }
+
+  private extractErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse) {
+      return error.error?.message ?? fallback;
+    }
+
+    return fallback;
   }
 
   private handleLoadError(error: unknown, fallback: string): void {
