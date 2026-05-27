@@ -3,6 +3,7 @@ namespace Geotrack.Application.Security;
 public static class RoleNames
 {
     public const string Admin = "Admin";
+    public const string ContentModerator = "ContentModerator";
     public const string RegionalManager = "RegionalManager";
     public const string TerritoryManager = "TerritoryManager";
     public const string TerritoryAssociate = "TerritoryAssociate";
@@ -20,6 +21,8 @@ public static class RoleNames
         return compact.ToLowerInvariant() switch
         {
             "admin" => Admin,
+            "contentmoderator" => ContentModerator,
+            "moderator" => ContentModerator,
             "regionalmanager" => RegionalManager,
             "nationalmanager" => TerritoryManager,
             "territorymanager" => TerritoryManager,

@@ -4436,6 +4436,7 @@ public static class SeedData
     private static async Task EnsureRolesAsync(AppDbContext db)
     {
         await EnsureRoleAsync(db, "Admin", "Can manage users and administrative configuration.");
+        await EnsureRoleAsync(db, "ContentModerator", "Can moderate reported reviews and content.");
         await EnsureRoleAsync(db, "RegionalManager", "Can review and approve regional user contributions.");
         await EnsureRoleAsync(db, "TerritoryManager", "Can manage territories and assigned regions.");
         await EnsureRoleAsync(db, "TerritoryAssociate", "Can manage assigned territories except associate assignment and protected role removal.");

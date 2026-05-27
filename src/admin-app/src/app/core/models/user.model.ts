@@ -1,5 +1,5 @@
-export type UserRole = 'Administrator' | 'Territory Manager' | 'Territory Associate' | 'Regional Manager';
-export type AdminRoleCode = 'Admin' | 'TerritoryManager' | 'TerritoryAssociate' | 'RegionalManager';
+export type UserRole = 'Administrator' | 'Content Moderator' | 'Territory Manager' | 'Territory Associate' | 'Regional Manager';
+export type AdminRoleCode = 'Admin' | 'ContentModerator' | 'TerritoryManager' | 'TerritoryAssociate' | 'RegionalManager';
 
 export interface User {
   id: string;

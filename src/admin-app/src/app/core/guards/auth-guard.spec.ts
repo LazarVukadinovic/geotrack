@@ -4,7 +4,7 @@ import { provideRouter, Router } from '@angular/router';
 import { lastValueFrom, Observable, of } from 'rxjs';
 import { vi } from 'vitest';
 
-import { administratorGuard, authGuard, regionalManagerGuard, territoryManagerGuard } from './auth.guard';
+import { administratorGuard, authGuard, contentModeratorGuard, regionalManagerGuard, territoryManagerGuard } from './auth.guard';
 import { AuthService } from '../services/auth.service';
 
 describe('authGuard', () => {
@@ -16,6 +16,8 @@ describe('authGuard', () => {
     TestBed.runInInjectionContext(() => territoryManagerGuard(...guardParameters));
   const executeAdministratorGuard: CanActivateFn = (...guardParameters) =>
     TestBed.runInInjectionContext(() => administratorGuard(...guardParameters));
+  const executeContentModeratorGuard: CanActivateFn = (...guardParameters) =>
+    TestBed.runInInjectionContext(() => contentModeratorGuard(...guardParameters));
 
   const authService = {
     isLoggedIn: vi.fn(),
@@ -23,6 +25,7 @@ describe('authGuard', () => {
     getUser: vi.fn(),
     clearSession: vi.fn(),
     isAdministrator: vi.fn(),
+    isContentModerator: vi.fn(),
     isRegionalManager: vi.fn(),
     isTerritoryManager: vi.fn(),
     canAccessTerritoryAdmin: vi.fn(),
@@ -37,6 +40,7 @@ describe('authGuard', () => {
     authService.getUser.mockReturnValue(null);
     authService.clearSession.mockReturnValue(undefined);
     authService.isAdministrator.mockReturnValue(false);
+    authService.isContentModerator.mockReturnValue(false);
     authService.isRegionalManager.mockReturnValue(false);
     authService.isTerritoryManager.mockReturnValue(false);
     authService.canAccessTerritoryAdmin.mockReturnValue(false);
@@ -93,6 +97,28 @@ describe('authGuard', () => {
     const result = executeAdministratorGuard({} as never, { url: '/admin-dashboard' } as never);
 
     expect(result).toBe(true);
+  });
+
+  it('allows authenticated content moderators on moderation routes', () => {
+    authService.isContentModerator.mockReturnValue(true);
+    authService.hasValidAccessToken.mockReturnValue(true);
+
+    const result = executeContentModeratorGuard({} as never, { url: '/content-moderator/dashboard' } as never);
+
+    expect(result).toBe(true);
+  });
+
+  it('redirects authenticated non-moderators away from moderation routes', async () => {
+    authService.isContentModerator.mockReturnValue(false);
+    authService.restoreSession.mockReturnValue(of({ role: 'Administrator' }));
+    authService.getHomeRoute.mockReturnValue('/admin-dashboard');
+
+    const router = TestBed.inject(Router);
+    const result = await lastValueFrom(
+      executeContentModeratorGuard({} as never, { url: '/content-moderator/dashboard' } as never) as Observable<boolean | UrlTree>,
+    );
+
+    expect(router.serializeUrl(result as UrlTree)).toBe('/admin-dashboard');
   });
 
   it('redirects authenticated non-admin users away from administrator routes', async () => {

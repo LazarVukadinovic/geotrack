@@ -21,6 +21,7 @@ interface AdminAuthUserResponse {
   roles: string[];
   canAccessRegionalAdmin: boolean;
   canAccessTerritoryAdmin?: boolean;
+  canAccessContentModeration?: boolean;
 }
 
 interface LoginResponse {
@@ -46,6 +47,7 @@ export class AuthService {
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
   readonly isAdministrator = computed(() => this._currentUser()?.activeRoleCode === 'Admin');
+  readonly isContentModerator = computed(() => this._currentUser()?.activeRoleCode === 'ContentModerator');
   readonly isTerritoryManager = computed(() => this._currentUser()?.activeRoleCode === 'TerritoryManager');
   readonly isTerritoryAssociate = computed(() => this._currentUser()?.activeRoleCode === 'TerritoryAssociate');
   readonly isNationalManager = computed(() => this._currentUser()?.activeRoleCode === 'TerritoryManager');

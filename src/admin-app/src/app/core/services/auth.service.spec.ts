@@ -135,6 +135,35 @@ describe('AuthService', () => {
     expect(service.getHomeRoute()).toBe('/admin-dashboard');
   });
 
+  it('maps content moderator roles to the content moderator dashboard route', () => {
+    service.login('moderator@gmail.com', 'Proba123!').subscribe(user => {
+      expect(user.email).toBe('moderator@gmail.com');
+      expect(user.role).toBe('Content Moderator');
+      expect(user.activeRoleCode).toBe('ContentModerator');
+      expect(user.roles).toEqual(['ContentModerator']);
+    });
+
+    http.expectOne('/api/admin/auth/login').flush({
+      accessToken: 'moderator-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 48,
+        email: 'moderator@gmail.com',
+        displayName: 'Content Moderator',
+        roles: ['ContentModerator'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: false,
+        canAccessContentModeration: true,
+      },
+    });
+
+    expect(service.isContentModerator()).toBe(true);
+    expect(service.isAdministrator()).toBe(false);
+    expect(service.getHomeRoute()).toBe('/content-moderator/dashboard');
+  });
+
   it('gives admin role priority over a stored non-admin view during login', () => {
     sessionStorage.setItem('geotrack_admin_active_view', 'RegionalManager');
 

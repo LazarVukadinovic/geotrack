@@ -15,6 +15,12 @@ export const ADMIN_VIEW_DEFINITIONS: readonly AdminView[] = [
     settingsRoute: '/settings',
   },
   {
+    roleCode: 'ContentModerator',
+    label: 'Content Moderator',
+    dashboardRoute: '/content-moderator/dashboard',
+    settingsRoute: '/settings',
+  },
+  {
     roleCode: 'TerritoryManager',
     label: 'Territory Manager',
     dashboardRoute: '/territory/overview',
@@ -43,6 +49,9 @@ export function normalizeAdminRoleCode(role: string | null | undefined): AdminRo
     case 'superadmin':
     case 'sysadmin':
       return 'Admin';
+    case 'contentmoderator':
+    case 'moderator':
+      return 'ContentModerator';
     case 'nationalmanager':
     case 'territorymanager':
       return 'TerritoryManager';

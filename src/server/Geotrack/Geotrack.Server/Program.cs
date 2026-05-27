@@ -181,6 +181,8 @@ builder.Services.AddScoped<IUserNotificationRepository, UserNotificationReposito
 builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+builder.Services.AddScoped<IContentModeratorDashboardService, ContentModeratorDashboardService>();
+builder.Services.AddScoped<IContentModeratorEntityReviewService, ContentModeratorEntityReviewService>();
 builder.Services.AddScoped<IAdminUserManagementService, AdminUserManagementService>();
 builder.Services.AddScoped<IAdminReviewManagementService, AdminReviewManagementService>();
 builder.Services.AddScoped<IAdminSupportTicketService, AdminSupportTicketService>();
@@ -272,6 +274,10 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequireAdmin", policy =>
         policy.RequireRole(RoleNames.Admin));
+    options.AddPolicy("RequireContentModerator", policy =>
+        policy.RequireRole(RoleNames.ContentModerator));
+    options.AddPolicy("RequireReviewModerator", policy =>
+        policy.RequireRole(RoleNames.Admin, RoleNames.ContentModerator));
     options.AddPolicy("RequireRegionalManager", policy =>
         policy.RequireRole(RoleNames.RegionalManager));
     options.AddPolicy("RequireTerritoryManager", policy =>
@@ -279,6 +285,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("RequireAdminAppUser", policy =>
         policy.RequireRole(
             RoleNames.Admin,
+            RoleNames.ContentModerator,
             RoleNames.TerritoryManager,
             RoleNames.TerritoryAssociate,
             RoleNames.RegionalManager));
@@ -452,8 +459,10 @@ var shouldSeedDemoTerritoryManager =
     shouldSeedDatabase || DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
 var shouldSeedDemoAdmin =
     shouldSeedDatabase || DemoAdminSeeder.IsEnabled(app.Environment, app.Configuration);
+var shouldSeedDemoContentModerator =
+    shouldSeedDatabase || DemoContentModeratorSeeder.IsEnabled(app.Environment, app.Configuration);
 
-if (shouldAutoMigrate || shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager || shouldSeedDemoAdmin)
+if (shouldAutoMigrate || shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager || shouldSeedDemoAdmin || shouldSeedDemoContentModerator)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -487,6 +496,14 @@ if (shouldAutoMigrate || shouldSeedDatabase || shouldSeedDemoRegionalManager || 
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger(nameof(DemoAdminSeeder));
         await DemoAdminSeeder.EnsureAsync(db, app.Configuration, logger);
+    }
+
+    if (shouldSeedDemoContentModerator)
+    {
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(nameof(DemoContentModeratorSeeder));
+        await DemoContentModeratorSeeder.EnsureAsync(db, app.Configuration, logger);
     }
 
     if (shouldSeedDemoRegionalManager)

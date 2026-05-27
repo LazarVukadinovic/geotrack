@@ -14,6 +14,7 @@ public class AdminAuthUserDto
     public List<string> Roles { get; set; } = new();
     public bool CanAccessRegionalAdmin { get; set; }
     public bool CanAccessTerritoryAdmin { get; set; }
+    public bool CanAccessContentModeration { get; set; }
 }
 
 public class AdminLoginResponseDto

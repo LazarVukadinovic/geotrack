@@ -21,6 +21,7 @@ public class AuthService : IAuthService
     private static readonly string[] AdminAppRoles =
     [
         RoleNames.Admin,
+        RoleNames.ContentModerator,
         RoleNames.TerritoryManager,
         RoleNames.TerritoryAssociate,
         RoleNames.RegionalManager
@@ -197,6 +198,7 @@ public class AuthService : IAuthService
             AvatarUrl = user.AvatarUrl,
             AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             Roles = roles,
+            CanAccessContentModeration = roles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal),
             CanAccessRegionalAdmin = roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal),
             CanAccessTerritoryAdmin =
                 roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal) ||
