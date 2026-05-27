@@ -106,14 +106,6 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
         icon: 'support',
         route: quickLinks?.supportTicketsRoute ?? '/admin-support-tickets',
       },
-      {
-        label: 'Review Reports',
-        value: stats.pendingReportsCount,
-        sub: stats.pendingReportsCount > 0 ? 'Need moderation' : 'No pending review reports',
-        color: '#ef4444',
-        icon: 'alert',
-        route: quickLinks?.pendingReportsRoute ?? '/admin-reviews?status=reported',
-      },
     ];
   }
 

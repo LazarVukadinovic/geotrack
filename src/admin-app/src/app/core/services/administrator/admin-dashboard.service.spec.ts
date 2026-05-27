@@ -58,19 +58,19 @@ describe('AdminDashboardService', () => {
       quickLinks: {
         territoryManagementRoute: '/admin-territories',
         userManagementRoute: '/admin-users',
-        reviewManagementRoute: '/admin-reviews',
+        reviewManagementRoute: '',
         supportTicketsRoute: '/admin-support-tickets',
-        pendingReportsRoute: '/admin-reviews?status=reported',
+        pendingReportsRoute: '',
       },
       badges: {
-        pendingReportsCount: 7,
+        pendingReportsCount: 0,
         supportReportsCount: 5,
       },
     });
 
-    expect(pendingReportsCount).toBe(7);
+    expect(pendingReportsCount).toBe(0);
     expect(supportReportsCount).toBe(5);
-    expect(service.getPendingReportsCount()).toBe(7);
+    expect(service.getPendingReportsCount()).toBe(0);
     expect(service.getSupportReportsCount()).toBe(5);
   });
 
@@ -82,7 +82,7 @@ describe('AdminDashboardService', () => {
       expect(dashboard.stats.unresolvedSupportTicketsCount).toBe(0);
       expect(dashboard.badges.pendingReportsCount).toBe(0);
       expect(dashboard.badges.supportReportsCount).toBe(0);
-      expect(dashboard.quickLinks.pendingReportsRoute).toBe('/admin-reviews?status=reported');
+      expect(dashboard.quickLinks.pendingReportsRoute).toBe('');
       expect(dashboard.quickLinks.supportTicketsRoute).toBe('/admin-support-tickets');
     });
 

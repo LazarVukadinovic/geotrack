@@ -1,7 +1,6 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
-using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -64,14 +63,6 @@ public class AdminDashboardService : IAdminDashboardService
             await _db.DestinationReviews.AsNoTracking().CountAsync(cancellationToken) +
             await _db.LocationReviews.AsNoTracking().CountAsync(cancellationToken);
 
-        var reportedReviewsCount = await _db.ReviewReports
-            .AsNoTracking()
-            .CountAsync(cancellationToken);
-
-        var pendingReportsCount = await _db.ReviewReports
-            .AsNoTracking()
-            .CountAsync(report => report.Status == ReviewReportStatus.Pending, cancellationToken);
-
         var supportTicketsCount = await _db.SupportRequests
             .AsNoTracking()
             .CountAsync(cancellationToken);
@@ -133,8 +124,8 @@ public class AdminDashboardService : IAdminDashboardService
                 AppUsersCount = appUsersCount,
                 SuspendedUsersCount = suspendedUsersCount,
                 ReviewsCount = reviewsCount,
-                ReportedReviewsCount = reportedReviewsCount,
-                PendingReportsCount = pendingReportsCount,
+                ReportedReviewsCount = 0,
+                PendingReportsCount = 0,
                 SupportTicketsCount = supportTicketsCount,
                 OpenSupportTicketsCount = openSupportTicketsCount,
                 InProgressSupportTicketsCount = inProgressSupportTicketsCount,
@@ -146,7 +137,7 @@ public class AdminDashboardService : IAdminDashboardService
             QuickLinks = new AdminDashboardQuickLinksDto(),
             Badges = new AdminDashboardBadgesDto
             {
-                PendingReportsCount = pendingReportsCount,
+                PendingReportsCount = 0,
                 SupportReportsCount = unresolvedSupportTicketsCount
             }
         };

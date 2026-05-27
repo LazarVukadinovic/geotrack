@@ -87,9 +87,8 @@ describe('AdminDashboardComponent', () => {
     expect(text).toContain('Support Reports');
     expect(text).toContain('5');
     expect(text).toContain('1 high priority');
-    expect(text).toContain('Review Reports');
-    expect(text).toContain('7');
-    expect(text).toContain('Need moderation');
+    expect(text).not.toContain('Review Reports');
+    expect(text).not.toContain('Need moderation');
     expect(text).not.toContain('20');
     expect(text).not.toContain('8 reported');
   });
@@ -186,12 +185,12 @@ describe('AdminDashboardComponent', () => {
       quickLinks: {
         territoryManagementRoute: '/admin-territories',
         userManagementRoute: '/admin-users',
-        reviewManagementRoute: '/admin-reviews',
+        reviewManagementRoute: '',
         supportTicketsRoute: '/admin-support-tickets',
-        pendingReportsRoute: '/admin-reviews?status=reported',
+        pendingReportsRoute: '',
       },
       badges: {
-        pendingReportsCount: 7,
+        pendingReportsCount: 0,
         supportReportsCount: 5,
       },
     };

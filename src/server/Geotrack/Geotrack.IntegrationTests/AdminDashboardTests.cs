@@ -29,9 +29,9 @@ public sealed class AdminDashboardTests
         Assert.Equal("Administrator", dashboard.CurrentUser.RoleDisplayName);
         Assert.Equal("/admin-territories", dashboard.QuickLinks.TerritoryManagementRoute);
         Assert.Equal("/admin-users", dashboard.QuickLinks.UserManagementRoute);
-        Assert.Equal("/admin-reviews", dashboard.QuickLinks.ReviewManagementRoute);
+        Assert.Equal(string.Empty, dashboard.QuickLinks.ReviewManagementRoute);
         Assert.Equal("/admin-support-tickets", dashboard.QuickLinks.SupportTicketsRoute);
-        Assert.Equal("/admin-reviews?status=reported", dashboard.QuickLinks.PendingReportsRoute);
+        Assert.Equal(string.Empty, dashboard.QuickLinks.PendingReportsRoute);
     }
 
     [Fact]
@@ -51,6 +51,65 @@ public sealed class AdminDashboardTests
         using var territoryManager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
         var territoryManagerResponse = await territoryManager.GetAsync("/api/admin/dashboard");
         Assert.Equal(HttpStatusCode.Forbidden, territoryManagerResponse.StatusCode);
+
+        using var contentModerator = await LoginAdminAsync(app, "moderator@gmail.com", "Proba123!");
+        var contentModeratorResponse = await contentModerator.GetAsync("/api/admin/dashboard");
+        Assert.Equal(HttpStatusCode.Forbidden, contentModeratorResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Content_moderator_dashboard_requires_content_moderator_and_reports_entity_counts()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await EnsureDashboardReviewReportsAsync(app);
+
+        using var anonymousClient = app.CreateClient();
+        var anonymous = await anonymousClient.GetAsync("/api/admin/content-moderator/dashboard");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        var adminResponse = await admin.GetAsync("/api/admin/content-moderator/dashboard");
+        Assert.Equal(HttpStatusCode.Forbidden, adminResponse.StatusCode);
+
+        await GrantUserRoleAsync(app, "elena@example.com", RoleNames.RegionalManager);
+        using var regionalManager = await LoginAdminAsync(app, "elena@example.com", "password123");
+        var regionalManagerResponse = await regionalManager.GetAsync("/api/admin/content-moderator/dashboard");
+        Assert.Equal(HttpStatusCode.Forbidden, regionalManagerResponse.StatusCode);
+
+        using var territoryManager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var territoryManagerResponse = await territoryManager.GetAsync("/api/admin/content-moderator/dashboard");
+        Assert.Equal(HttpStatusCode.Forbidden, territoryManagerResponse.StatusCode);
+
+        using var moderator = await LoginAdminAsync(app, "moderator@gmail.com", "Proba123!");
+        var dashboard = await moderator.GetFromJsonAsync<ContentModeratorDashboardDto>("/api/admin/content-moderator/dashboard");
+        var expected = await GetExpectedCountsAsync(app);
+
+        Assert.NotNull(dashboard);
+        Assert.Equal("moderator@gmail.com", dashboard!.CurrentUser.Email);
+        Assert.Equal("Content Moderator", dashboard.CurrentUser.RoleDisplayName);
+        Assert.Equal("/content-moderator/destinations", dashboard.QuickLinks.DestinationsReviewRoute);
+        Assert.Equal("/content-moderator/locations", dashboard.QuickLinks.LocationsReviewRoute);
+        Assert.Equal("/content-moderator/places", dashboard.QuickLinks.PlacesReviewRoute);
+        Assert.Equal("/content-moderator/events", dashboard.QuickLinks.EventsReviewRoute);
+        Assert.Equal("/content-moderator/review-management", dashboard.QuickLinks.ReviewManagementRoute);
+        Assert.Equal("/content-moderator/review-management?status=reported", dashboard.QuickLinks.PendingReportsRoute);
+        Assert.Equal(expected.DestinationsCount, dashboard.Stats.DestinationsCount);
+        Assert.Equal(expected.LocationsCount, dashboard.Stats.LocationsCount);
+        Assert.Equal(expected.PlacesCount, dashboard.Stats.PlacesCount);
+        Assert.Equal(expected.EventsCount, dashboard.Stats.EventsCount);
+        Assert.Equal(expected.SuspendedDestinationsCount, dashboard.Stats.SuspendedDestinationsCount);
+        Assert.Equal(expected.SuspendedLocationsCount, dashboard.Stats.SuspendedLocationsCount);
+        Assert.Equal(expected.SuspendedPlacesCount, dashboard.Stats.SuspendedPlacesCount);
+        Assert.Equal(expected.SuspendedEventsCount, dashboard.Stats.SuspendedEventsCount);
+        Assert.Equal(expected.DeletedDestinationsCount, dashboard.Stats.DeletedDestinationsCount);
+        Assert.Equal(expected.DeletedLocationsCount, dashboard.Stats.DeletedLocationsCount);
+        Assert.Equal(expected.DeletedPlacesCount, dashboard.Stats.DeletedPlacesCount);
+        Assert.Equal(expected.DeletedEventsCount, dashboard.Stats.DeletedEventsCount);
+        Assert.Equal(expected.PendingReportsCount, dashboard.Stats.PendingReviewReportsCount);
+        Assert.Equal(expected.PendingReportsCount, dashboard.Badges.PendingReviewReportsCount);
+        Assert.True(dashboard.Stats.ReportedReviewsCount > 0);
+        Assert.True(dashboard.Stats.ActiveReviewsCount >= 0);
+        Assert.Equal(expected.ReportedReviewsCount - expected.PendingReportsCount, dashboard.Stats.ResolvedReportsCount);
     }
 
     [Fact]
@@ -71,8 +130,8 @@ public sealed class AdminDashboardTests
         Assert.Equal(expected.AppUsersCount, dashboard.Stats.AppUsersCount);
         Assert.Equal(expected.SuspendedUsersCount, dashboard.Stats.SuspendedUsersCount);
         Assert.Equal(expected.ReviewsCount, dashboard.Stats.ReviewsCount);
-        Assert.Equal(expected.ReportedReviewsCount, dashboard.Stats.ReportedReviewsCount);
-        Assert.Equal(expected.PendingReportsCount, dashboard.Stats.PendingReportsCount);
+        Assert.Equal(0, dashboard.Stats.ReportedReviewsCount);
+        Assert.Equal(0, dashboard.Stats.PendingReportsCount);
         Assert.Equal(expected.SupportTicketsCount, dashboard.Stats.SupportTicketsCount);
         Assert.Equal(expected.OpenSupportTicketsCount, dashboard.Stats.OpenSupportTicketsCount);
         Assert.Equal(expected.InProgressSupportTicketsCount, dashboard.Stats.InProgressSupportTicketsCount);
@@ -80,10 +139,9 @@ public sealed class AdminDashboardTests
         Assert.Equal(expected.DismissedSupportTicketsCount, dashboard.Stats.DismissedSupportTicketsCount);
         Assert.Equal(expected.UnresolvedSupportTicketsCount, dashboard.Stats.UnresolvedSupportTicketsCount);
         Assert.Equal(expected.HighPrioritySupportTicketsCount, dashboard.Stats.HighPrioritySupportTicketsCount);
-        Assert.Equal(expected.PendingReportsCount, dashboard.Badges.PendingReportsCount);
+        Assert.Equal(0, dashboard.Badges.PendingReportsCount);
         Assert.Equal(expected.UnresolvedSupportTicketsCount, dashboard.Badges.SupportReportsCount);
-        Assert.True(dashboard.Stats.ReportedReviewsCount >= dashboard.Stats.PendingReportsCount);
-        Assert.True(dashboard.Stats.PendingReportsCount > 0);
+        Assert.True(expected.PendingReportsCount > 0);
         Assert.True(dashboard.Stats.UnresolvedSupportTicketsCount > 0);
     }
 
@@ -355,7 +413,19 @@ public sealed class AdminDashboardTests
                     (
                         ticket.Priority == SupportRequestPriorities.High ||
                         ticket.Priority == SupportRequestPriorities.Critical
-                    )));
+                    )),
+            DestinationsCount: await db.Destinations.AsNoTracking().CountAsync(entity => entity.Status != "Archived"),
+            LocationsCount: await db.Locations.AsNoTracking().CountAsync(entity => entity.Status != "Archived"),
+            PlacesCount: await db.Places.AsNoTracking().CountAsync(entity => entity.Status != "Archived"),
+            EventsCount: await db.Events.AsNoTracking().CountAsync(entity => entity.Status != "Archived"),
+            SuspendedDestinationsCount: await db.Destinations.AsNoTracking().CountAsync(entity => entity.Status == "Draft"),
+            SuspendedLocationsCount: await db.Locations.AsNoTracking().CountAsync(entity => entity.Status == "Draft"),
+            SuspendedPlacesCount: await db.Places.AsNoTracking().CountAsync(entity => entity.Status == "Draft"),
+            SuspendedEventsCount: await db.Events.AsNoTracking().CountAsync(entity => entity.Status == "Draft"),
+            DeletedDestinationsCount: await db.Destinations.AsNoTracking().CountAsync(entity => entity.Status == "Archived"),
+            DeletedLocationsCount: await db.Locations.AsNoTracking().CountAsync(entity => entity.Status == "Archived"),
+            DeletedPlacesCount: await db.Places.AsNoTracking().CountAsync(entity => entity.Status == "Archived"),
+            DeletedEventsCount: await db.Events.AsNoTracking().CountAsync(entity => entity.Status == "Archived"));
     }
 
     private static async Task ClearReportReviewAndAssignmentTablesAsync(GeotrackApiFactory app)
@@ -386,5 +456,17 @@ public sealed class AdminDashboardTests
         int ResolvedSupportTicketsCount,
         int DismissedSupportTicketsCount,
         int UnresolvedSupportTicketsCount,
-        int HighPrioritySupportTicketsCount);
+        int HighPrioritySupportTicketsCount,
+        int DestinationsCount,
+        int LocationsCount,
+        int PlacesCount,
+        int EventsCount,
+        int SuspendedDestinationsCount,
+        int SuspendedLocationsCount,
+        int SuspendedPlacesCount,
+        int SuspendedEventsCount,
+        int DeletedDestinationsCount,
+        int DeletedLocationsCount,
+        int DeletedPlacesCount,
+        int DeletedEventsCount);
 }

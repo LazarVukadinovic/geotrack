@@ -87,9 +87,9 @@ export class AdminDashboardService {
     return {
       territoryManagementRoute: value?.territoryManagementRoute || '/admin-territories',
       userManagementRoute: value?.userManagementRoute || '/admin-users',
-      reviewManagementRoute: value?.reviewManagementRoute || '/admin-reviews',
+      reviewManagementRoute: value?.reviewManagementRoute || '',
       supportTicketsRoute: value?.supportTicketsRoute || '/admin-support-tickets',
-      pendingReportsRoute: value?.pendingReportsRoute || '/admin-reviews?status=reported',
+      pendingReportsRoute: value?.pendingReportsRoute || '',
     };
   }
 
