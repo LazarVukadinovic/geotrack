@@ -36,6 +36,7 @@ public class UserService : IUserService
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IUserAvatarStorageService _userAvatarStorageService;
     private readonly IFavoriteService _favoriteService;
+    private readonly IAdminNotificationService _adminNotificationService;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public UserService(
@@ -46,7 +47,8 @@ public class UserService : IUserService
         IEventRepository eventRepository,
         IRefreshTokenRepository refreshTokenRepository,
         IUserAvatarStorageService userAvatarStorageService,
-        IFavoriteService favoriteService)
+        IFavoriteService favoriteService,
+        IAdminNotificationService adminNotificationService)
     {
         _userRepository = userRepository;
         _destinationRepository = destinationRepository;
@@ -56,6 +58,7 @@ public class UserService : IUserService
         _refreshTokenRepository = refreshTokenRepository;
         _userAvatarStorageService = userAvatarStorageService;
         _favoriteService = favoriteService;
+        _adminNotificationService = adminNotificationService;
     }
 
     public async Task<GetMeResponseDto> GetMeAsync(int userId)
@@ -87,6 +90,7 @@ public class UserService : IUserService
             LastName = user.LastName,
             PhoneNumber = user.PhoneNumber,
             AvatarUrl = user.AvatarUrl,
+            AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             Location = user.Location,
             NeedsInterestsOnboarding = user.NeedsInterestsOnboarding,
             AnalyticsEnabled = user.AnalyticsEnabled,
@@ -120,6 +124,7 @@ public class UserService : IUserService
             LastName = user.LastName,
             PhoneNumber = user.PhoneNumber,
             AvatarUrl = user.AvatarUrl,
+            AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             Location = user.Location,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt
@@ -155,6 +160,7 @@ public class UserService : IUserService
         return new UpdateAvatarResponseDto
         {
             AvatarUrl = user.AvatarUrl ?? string.Empty,
+            AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             UpdatedAt = user.UpdatedAt,
         };
     }
@@ -179,6 +185,7 @@ public class UserService : IUserService
         return new UpdateAvatarResponseDto
         {
             AvatarUrl = string.Empty,
+            AvatarVersion = null,
             UpdatedAt = user.UpdatedAt,
         };
     }
@@ -390,12 +397,20 @@ public class UserService : IUserService
             Category = NormalizeSupportCategory(request.Category),
             Subject = request.Subject.Trim(),
             Message = request.Message.Trim(),
-            Status = "Received",
+            Status = SupportRequestStatuses.Open,
+            Priority = SupportRequestPriorities.Normal,
+            PageUrl = NormalizeOptionalSupportField(request.PageUrl, 500, "Support request page URL is too long"),
+            UserAgent = NormalizeOptionalSupportField(request.UserAgent, 500, "Support request user agent is too long"),
+            DeviceInfo = NormalizeOptionalSupportField(request.DeviceInfo, 300, "Support request device info is too long"),
+            Browser = NormalizeOptionalSupportField(request.Browser, 120, "Support request browser is too long"),
+            Platform = NormalizeOptionalSupportField(request.Platform, 120, "Support request platform is too long"),
+            AttachmentUrl = NormalizeOptionalSupportField(request.AttachmentUrl, 1000, "Support request attachment URL is too long"),
             CreatedAt = DateTime.UtcNow
         };
 
         await _userRepository.AddSupportRequestAsync(supportRequest);
         await _userRepository.SaveChangesAsync();
+        await _adminNotificationService.CreateSupportTicketCreatedNotificationAsync(supportRequest);
 
         return MapCreatedSupportRequest(supportRequest);
     }
@@ -1145,5 +1160,17 @@ public class UserService : IUserService
             throw new InvalidOperationException("Invalid support request category");
 
         return normalized;
+    }
+
+    private static string? NormalizeOptionalSupportField(string? value, int maxLength, string tooLongMessage)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        if (trimmed.Length > maxLength)
+            throw new InvalidOperationException(tooLongMessage);
+
+        return trimmed;
     }
 }

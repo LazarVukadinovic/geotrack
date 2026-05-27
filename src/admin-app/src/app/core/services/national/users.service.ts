@@ -16,6 +16,11 @@ export interface TerritoryUserAssignedRegion {
   regionId: number;
   regionName: string;
   displayName: string;
+  territoryId?: number;
+  territoryName?: string;
+  assignedAt?: string;
+  isActive?: boolean;
+  canRemove?: boolean;
 }
 
 export interface TerritoryUserAssignedTerritory {
@@ -46,6 +51,7 @@ export interface TerritoryUser {
   canEditUser?: boolean;
   canAddRegionalManagerRole?: boolean;
   canAddRegion: boolean;
+  canRemoveRegion?: boolean;
   canRemoveManagerRole: boolean;
   canRemoveRegionalManagerRole?: boolean;
   canAddTerritoryAssociate?: boolean;
@@ -143,6 +149,11 @@ export class UsersService {
     return this.http.put<TerritoryUser>(`/api/admin/territory/users/${userId}`, request);
   }
 
+  getUser$(userId: number, territoryId: number): Observable<TerritoryUser> {
+    const params = new HttpParams().set('territoryId', String(territoryId));
+    return this.http.get<TerritoryUser>(`/api/admin/territory/users/${userId}`, { params });
+  }
+
   searchAssignableUsers$(
     territoryId: number,
     query?: string | null,
@@ -197,6 +208,14 @@ export class UsersService {
       territoryId,
       regionId,
     });
+  }
+
+  removeRegion$(userId: number, territoryId: number, regionId: number): Observable<TerritoryUser> {
+    const params = new HttpParams().set('territoryId', String(territoryId));
+    return this.http.delete<TerritoryUser>(
+      `/api/admin/territory/users/${userId}/regions/${regionId}`,
+      { params },
+    );
   }
 
   addRegionalManager$(userId: number, territoryId: number, regionIds: number[]): Observable<TerritoryUser> {

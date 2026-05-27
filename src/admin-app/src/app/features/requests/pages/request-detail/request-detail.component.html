@@ -11,7 +11,7 @@
     <app-topbar
       [userName]="userName"
       [userRole]="userRole"
-      title="Review Request"
+      title="Request Details"
       [showBack]="true"
       backRoute="/requests"
     />
@@ -178,52 +178,12 @@
               </div>
             </section>
 
-            <section *ngIf="request.source === 'ReviewReport'" class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h2 class="text-sm font-bold text-gray-800 mb-4">Reported Review</h2>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-                <div class="detail-field">
-                  <span>Target</span>
-                  <strong>{{ request.targetEntityName || 'Review target' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Review Author</span>
-                  <strong>{{ request.reviewAuthorDisplayName || 'User' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Rating</span>
-                  <strong>{{ request.reviewRating !== null && request.reviewRating !== undefined ? request.reviewRating + '/5' : 'Not rated' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Review Date</span>
-                  <strong>{{ request.reviewCreatedAt ? (request.reviewCreatedAt | date:'mediumDate') : 'Not specified' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Report Reason</span>
-                  <strong>{{ request.reportReason || 'Not specified' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Decision</span>
-                  <strong>{{ request.decision || request.status }}</strong>
-                </div>
-              </div>
-
-              <div class="border border-gray-100 rounded-xl p-4 bg-gray-50">
-                <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Review Text</p>
-                <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                  {{ request.reviewComment || 'No review text is available.' }}
-                </p>
-              </div>
-
-              <div *ngIf="request.reportNote" class="border border-gray-100 rounded-xl p-4 bg-white mt-4">
-                <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Reporter Note</p>
-                <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ request.reportNote }}</p>
-              </div>
-            </section>
           </div>
 
           <aside class="flex flex-col gap-4">
             <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-              <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Review Decision</h2>
+              <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{{ decisionCardTitle }}</h2>
+              <p class="text-sm text-gray-600 leading-relaxed mb-4">{{ decisionHelperText }}</p>
 
               <label class="block text-xs font-semibold text-gray-500 mb-1">Moderator Note</label>
               <textarea
@@ -231,34 +191,26 @@
                 rows="4"
                 [disabled]="request.status !== 'Pending' || processing"
                 class="w-full border border-gray-200 rounded-lg p-3 text-sm outline-none resize-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
-                placeholder="Optional internal note"
+                placeholder="Optional internal moderation note"
               ></textarea>
-
-              <label class="block text-xs font-semibold text-gray-500 mb-1 mt-3">Reject Reason</label>
-              <input
-                [(ngModel)]="rejectReason"
-                [disabled]="request.status !== 'Pending' || processing"
-                type="text"
-                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
-                placeholder="Optional reason shown safely to the user"
-              />
+              <p class="text-xs text-gray-400 mt-1">This note is visible only to admins/moderators.</p>
 
               <div class="flex gap-2 mt-4">
                 <button
                   type="button"
-                  (click)="approveRequest()"
+                  (click)="startApproveDecision()"
                   [disabled]="!canModerate"
                   class="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-blue-700 hover:bg-blue-800 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed border-none cursor-pointer"
                 >
-                  {{ processing ? 'Working...' : 'Approve' }}
+                  {{ processing ? 'Working...' : approveButtonLabel }}
                 </button>
                 <button
                   type="button"
-                  (click)="rejectRequest()"
+                  (click)="startRejectDecision()"
                   [disabled]="!canModerate"
-                  class="flex-1 py-2.5 rounded-lg text-sm font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 disabled:text-gray-300 disabled:border-gray-100 disabled:cursor-not-allowed cursor-pointer"
+                  class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white border text-red-600 border-red-200 hover:bg-red-50 disabled:text-gray-300 disabled:border-gray-100 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  Reject
+                  {{ processing ? 'Working...' : rejectButtonLabel }}
                 </button>
               </div>
 

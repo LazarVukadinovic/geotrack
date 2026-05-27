@@ -18,10 +18,14 @@ public class RegionalEventService : IRegionalEventService
     private const string ArchivedStatus = "Archived";
 
     private readonly AppDbContext _db;
+    private readonly RegionalScopeValidationService _scopeValidation;
 
-    public RegionalEventService(AppDbContext db)
+    public RegionalEventService(
+        AppDbContext db,
+        RegionalScopeValidationService scopeValidation)
     {
         _db = db;
+        _scopeValidation = scopeValidation;
     }
 
     public async Task<RegionalEventListResponseDto> GetEventsAsync(
@@ -251,6 +255,7 @@ public class RegionalEventService : IRegionalEventService
         var status = NormalizeCreateStatus(request.Status);
         var eventTypeId = await ResolveEventTypeIdAsync(request.EventTypeId);
         var parent = await ResolveParentAsync(request.RegionId, request);
+        await EnsureEventParentInsideScopeAsync(userId, request.RegionId, parent);
         var schedule = NormalizeSchedule(request.StartsAt, request.EndsAt, request.IsAllDay);
         var tagIds = await ValidateEventTagIdsAsync(request.TagIds);
         var ticketPrice = request.IsFree
@@ -389,6 +394,7 @@ public class RegionalEventService : IRegionalEventService
         }
 
         ApplyUpdate(@event, request);
+        await EnsureCurrentEventParentInsideScopeAsync(userId, regionId, @event);
         @event.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -853,6 +859,77 @@ public class RegionalEventService : IRegionalEventService
             default:
                 throw new InvalidOperationException("Event parent type is required.");
         }
+    }
+
+    private async Task EnsureEventParentInsideScopeAsync(int userId, int regionId, ResolvedEventParent parent)
+    {
+        var coordinates = ResolveParentCoordinates(parent);
+        await _scopeValidation.EnsurePointAllowedAsync(
+            userId,
+            regionId,
+            "Event parent",
+            coordinates.Latitude,
+            coordinates.Longitude,
+            "Create");
+    }
+
+    private async Task EnsureCurrentEventParentInsideScopeAsync(int userId, int regionId, Event @event)
+    {
+        var coordinates = await ResolveCurrentParentCoordinatesAsync(regionId, @event);
+        await _scopeValidation.EnsurePointAllowedAsync(
+            userId,
+            regionId,
+            "Event parent",
+            coordinates.Latitude,
+            coordinates.Longitude,
+            "Update");
+    }
+
+    private static EventParentCoordinates ResolveParentCoordinates(ResolvedEventParent parent)
+    {
+        if (parent.Place is not null)
+            return new EventParentCoordinates(parent.Place.Latitude, parent.Place.Longitude);
+
+        if (parent.Location is not null)
+            return new EventParentCoordinates(parent.Location.Latitude, parent.Location.Longitude);
+
+        return new EventParentCoordinates(parent.Destination.Latitude, parent.Destination.Longitude);
+    }
+
+    private async Task<EventParentCoordinates> ResolveCurrentParentCoordinatesAsync(int regionId, Event @event)
+    {
+        if (@event.PlaceId.HasValue)
+        {
+            return await _db.Places
+                .AsNoTracking()
+                .Where(place =>
+                    place.Id == @event.PlaceId.Value &&
+                    place.Location.Destination.RegionId == regionId)
+                .Select(place => new EventParentCoordinates(place.Latitude, place.Longitude))
+                .SingleOrDefaultAsync()
+                ?? throw new InvalidOperationException("Place is invalid for the selected region.");
+        }
+
+        if (@event.LocationId.HasValue)
+        {
+            return await _db.Locations
+                .AsNoTracking()
+                .Where(location =>
+                    location.Id == @event.LocationId.Value &&
+                    location.Destination.RegionId == regionId)
+                .Select(location => new EventParentCoordinates(location.Latitude, location.Longitude))
+                .SingleOrDefaultAsync()
+                ?? throw new InvalidOperationException("Location is invalid for the selected region.");
+        }
+
+        return await _db.Destinations
+            .AsNoTracking()
+            .Where(destination =>
+                destination.Id == @event.DestinationId &&
+                destination.RegionId == regionId)
+            .Select(destination => new EventParentCoordinates(destination.Latitude, destination.Longitude))
+            .SingleOrDefaultAsync()
+            ?? throw new InvalidOperationException("Destination is invalid for the selected region.");
     }
 
     private void ReplaceImages(
@@ -1494,6 +1571,8 @@ public class RegionalEventService : IRegionalEventService
         Location? Location,
         int? PlaceId,
         Place? Place);
+
+    private sealed record EventParentCoordinates(double Latitude, double Longitude);
 
     private sealed record NormalizedSchedule(DateTime StartsAt, DateTime EndsAt);
 }

@@ -20,6 +20,7 @@ namespace Geotrack.IntegrationTests;
 
 public sealed class RegionalLocationsTests
 {
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 4326);
 
     [Fact]
@@ -568,6 +569,13 @@ public sealed class RegionalLocationsTests
 
         var now = DateTime.UtcNow;
         var territory = await db.Territories.OrderBy(item => item.Id).FirstAsync();
+        territory.BoundaryShapeType = "Polygon";
+        territory.BoundarySource = "IntegrationTest";
+        SetBoundary(db, territory, Polygon(
+            (40.0, 15.0),
+            (40.0, 22.0),
+            (47.0, 22.0),
+            (47.0, 15.0)));
         var destinationType = await db.DestinationTypes.OrderBy(item => item.Id).FirstAsync();
         var locationType = await db.LocationTypes.OrderBy(item => item.Id).FirstAsync();
         var placeType = await db.PlaceTypes.OrderBy(item => item.Id).FirstAsync();
@@ -586,6 +594,18 @@ public sealed class RegionalLocationsTests
             CreatedAt = now
         };
         db.Regions.AddRange(assignedRegion, unassignedRegion);
+        await db.SaveChangesAsync();
+
+        SetBoundary(db, assignedRegion, Polygon(
+            (41.5, 17.5),
+            (41.5, 20.5),
+            (44.0, 20.5),
+            (44.0, 17.5)));
+        SetBoundary(db, unassignedRegion, Polygon(
+            (44.5, 18.5),
+            (44.5, 19.5),
+            (45.5, 19.5),
+            (45.5, 18.5)));
         await db.SaveChangesAsync();
 
         await GrantRegionalManagerCoverageAsync(db, manager, assignedRegion.Id);
@@ -621,7 +641,7 @@ public sealed class RegionalLocationsTests
         await db.SaveChangesAsync();
 
         db.Entry(assignedDestinations[0])
-            .Property<Geometry?>("BoundaryGeometry")
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
             .CurrentValue = Polygon(
                 (42.9, 18.9),
                 (43.3, 18.9),
@@ -721,6 +741,20 @@ public sealed class RegionalLocationsTests
         var image = Assert.Single(uploaded!.Images);
         Assert.StartsWith("/media/uploads/regional/", image.Url);
         return image;
+    }
+
+    private static void SetBoundary(AppDbContext db, Territory territory, Geometry geometry)
+    {
+        db.Entry(territory)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = geometry;
+    }
+
+    private static void SetBoundary(AppDbContext db, Region region, Geometry geometry)
+    {
+        db.Entry(region)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = geometry;
     }
 
     private static Polygon Polygon(params (double Latitude, double Longitude)[] points)

@@ -123,13 +123,17 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
 
   get healthInsights(): TerritoryHealthInsight[] {
     const drivers = this.detail?.health.drivers ?? [];
+    const issues = this.detail?.health.issues ?? [];
     const recommendations = this.detail?.health.recommendations ?? [];
-    const all = [...drivers, ...recommendations];
+    const all = [...drivers, ...issues, ...recommendations];
     return this.showAllHealthDetails ? all : all.slice(0, 5);
   }
 
   get hiddenHealthInsightCount(): number {
-    const all = (this.detail?.health.drivers.length ?? 0) + (this.detail?.health.recommendations.length ?? 0);
+    const all =
+      (this.detail?.health.drivers.length ?? 0) +
+      (this.detail?.health.issues.length ?? 0) +
+      (this.detail?.health.recommendations.length ?? 0);
     return Math.max(0, all - this.healthInsights.length);
   }
 

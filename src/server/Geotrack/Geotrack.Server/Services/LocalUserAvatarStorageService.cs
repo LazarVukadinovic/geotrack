@@ -26,7 +26,7 @@ public sealed class LocalUserAvatarStorageService : IUserAvatarStorageService
             throw new InvalidOperationException("Profile image must be 5 MB or smaller.");
 
         var detectedImage = DetectImageType(fileBytes)
-            ?? throw new InvalidOperationException("Only PNG, JPG, GIF, or WEBP images are supported.");
+            ?? throw new InvalidOperationException("Only PNG, JPG, JPEG, or WEBP images are supported.");
 
         Directory.CreateDirectory(_avatarDirectory);
 
@@ -106,17 +106,6 @@ public sealed class LocalUserAvatarStorageService : IUserAvatarStorageService
             fileBytes[2] == 0xFF)
         {
             return new DetectedImage(".jpg");
-        }
-
-        if (fileBytes.Length >= 6 &&
-            fileBytes[0] == 0x47 &&
-            fileBytes[1] == 0x49 &&
-            fileBytes[2] == 0x46 &&
-            fileBytes[3] == 0x38 &&
-            (fileBytes[4] == 0x37 || fileBytes[4] == 0x39) &&
-            fileBytes[5] == 0x61)
-        {
-            return new DetectedImage(".gif");
         }
 
         if (fileBytes.Length >= 12 &&

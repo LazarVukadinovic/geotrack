@@ -31,6 +31,7 @@ describe('AnalyticsService', () => {
   afterEach(() => {
     httpMock.verify();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     TestBed.resetTestingModule();
   });
 
@@ -56,6 +57,37 @@ describe('AnalyticsService', () => {
     expect(req.request.headers.get('X-Anonymous-Session')).toBe(body.anonymousSessionId);
     expect(service.queueSize()).toBe(0);
     req.flush(null);
+  });
+
+  it('uses keepalive fetch with X-Anonymous-Session when the page is hidden', () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    service.track('page_view');
+    expect(service.queueSize()).toBe(1);
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+
+    httpMock.expectNone('/api/analytics/events');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/analytics/events');
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    const body = JSON.parse(init.body as string) as {
+      anonymousSessionId: string;
+      events: { eventType: string }[];
+    };
+
+    expect(init.method).toBe('POST');
+    expect(init.keepalive).toBe(true);
+    expect(init.credentials).toBe('include');
+    expect(headers['Content-Type']).toBe('application/json');
+    expect(headers['X-Anonymous-Session']).toBe(body.anonymousSessionId);
+    expect(body.events[0].eventType).toBe('page_view');
+    expect(service.queueSize()).toBe(0);
   });
 
   it('flushNow is a no-op when the queue is empty', () => {

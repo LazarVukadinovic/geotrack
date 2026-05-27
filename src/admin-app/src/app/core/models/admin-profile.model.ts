@@ -6,6 +6,7 @@ export interface AdminProfileUser {
   email: string;
   shortBio?: string | null;
   avatarUrl?: string | null;
+  avatarVersion?: number | null;
   createdAt: string;
   updatedAt?: string | null;
 }
@@ -40,6 +41,7 @@ export interface AdminProfileAssignment {
   sectionTitle: string;
   label: string;
   displayValue: string;
+  accessLevel?: string | null;
   assignedItems: AdminProfileAssignmentItem[];
   memberSince?: string | null;
 }
@@ -72,5 +74,6 @@ export interface UpdateAdminProfileRequest {
 
 export interface AdminProfileAvatarResponse {
   avatarUrl: string;
+  avatarVersion?: number | null;
   updatedAt?: string | null;
 }

@@ -977,6 +977,95 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("PlaceTypes", (string)null);
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Core.AdministrativeBoundaryCandidate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdmLevel")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Geometry>("BoundaryDisplayGeometry")
+                        .HasColumnType("geometry (geometry, 4326)");
+
+                    b.Property<Geometry>("BoundaryGeometry")
+                        .HasColumnType("geometry (geometry, 4326)");
+
+                    b.Property<string>("CountryIso3")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<int?>("CountryTerritoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalKey")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReleaseType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ShapeGroup")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ShapeId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ShapeName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ShapeType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoundaryGeometry");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("BoundaryGeometry"), "GIST");
+
+                    b.HasIndex("CountryTerritoryId");
+
+                    b.HasIndex("ExternalKey")
+                        .IsUnique();
+
+                    b.HasIndex("CountryIso3", "AdmLevel");
+
+                    b.HasIndex("Source", "AdmLevel", "ShapeGroup", "ShapeId")
+                        .IsUnique();
+
+                    b.ToTable("AdministrativeBoundaryCandidates", (string)null);
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Core.Region", b =>
                 {
                     b.Property<int>("Id")
@@ -986,7 +1075,40 @@ namespace Geotrack.Infrastructure.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<Geometry>("BoundaryGeometry")
-                        .HasColumnType("geography (geometry)");
+                        .HasColumnType("geometry (geometry, 4326)");
+
+                    b.Property<Geometry>("BoundaryDisplayGeometry")
+                        .HasColumnType("geometry (geometry, 4326)");
+
+                    b.Property<string>("BoundaryAdmLevel")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("BoundaryCandidateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BoundaryExternalKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("BoundaryImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BoundaryLicense")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BoundaryReleaseType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("BoundaryShapeGroup")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("BoundaryShapeId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<string>("BoundaryShapeType")
                         .HasMaxLength(32)
@@ -1025,9 +1147,19 @@ namespace Geotrack.Infrastructure.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("BoundaryGeometry"), "GIST");
 
+                    b.HasIndex("BoundaryCandidateId");
+
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("TerritoryId");
+
+                    b.HasIndex("TerritoryId", "BoundaryCandidateId")
+                        .IsUnique()
+                        .HasFilter("\"BoundaryCandidateId\" IS NOT NULL");
+
+                    b.HasIndex("TerritoryId", "BoundaryExternalKey")
+                        .IsUnique()
+                        .HasFilter("\"BoundaryExternalKey\" IS NOT NULL");
 
                     b.HasIndex("TerritoryId", "Name")
                         .IsUnique();
@@ -1218,8 +1350,38 @@ namespace Geotrack.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BoundaryAdmLevel")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Geometry>("BoundaryDisplayGeometry")
+                        .HasColumnType("geometry (geometry, 4326)");
+
+                    b.Property<string>("BoundaryExternalKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
                     b.Property<Geometry>("BoundaryGeometry")
-                        .HasColumnType("geography (geometry)");
+                        .HasColumnType("geometry (geometry, 4326)");
+
+                    b.Property<DateTime?>("BoundaryImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BoundaryLicense")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BoundaryReleaseType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("BoundaryShapeGroup")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("BoundaryShapeId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<string>("BoundaryShapeType")
                         .HasMaxLength(32)
@@ -1228,6 +1390,18 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<string>("BoundarySource")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<string>("BoundarySourceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("CountryIso3")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1243,14 +1417,33 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<long?>("OsmRelationId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("TerritoryKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Country");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BoundaryExternalKey")
+                        .IsUnique()
+                        .HasFilter("\"BoundaryExternalKey\" IS NOT NULL");
+
                     b.HasIndex("BoundaryGeometry");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("BoundaryGeometry"), "GIST");
+
+                    b.HasIndex("CountryCode")
+                        .IsUnique()
+                        .HasFilter("\"CountryCode\" IS NOT NULL");
+
+                    b.HasIndex("CountryIso3")
+                        .IsUnique()
+                        .HasFilter("\"CountryIso3\" IS NOT NULL");
 
                     b.HasIndex("Name")
                         .IsUnique();
@@ -2422,6 +2615,17 @@ namespace Geotrack.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("AssignedAdminId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AttachmentUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Browser")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -2430,10 +2634,43 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DeviceInfo")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("InternalNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<string>("Message")
                         .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("PageUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Platform")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Normal");
+
+                    b.Property<string>("ResolutionMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ResolvedByUserId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -2448,10 +2685,22 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AssignedAdminId");
+
+                    b.HasIndex("Priority");
+
+                    b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("Status", "CreatedAt");
 
                     b.HasIndex("UserId", "CreatedAt");
 
@@ -2514,6 +2763,12 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DeletedByUserId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("DisplayName")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -2555,13 +2810,23 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasColumnType("character varying(10)")
                         .HasDefaultValue("en-US");
 
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsSuspended")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime?>("LastLoginAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Location")
                         .HasMaxLength(200)
@@ -2591,6 +2856,12 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<DateTime?>("SuspendedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("SuspendedByUserId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Timezone")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2619,7 +2890,126 @@ namespace Geotrack.Infrastructure.Migrations
                     b.HasIndex("Username")
                         .IsUnique();
 
+                    b.HasIndex("IsDeleted", "IsSuspended");
+
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.AdminNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AudienceRole")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int?>("ScopeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ScopeLabel")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("ScopeType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasDefaultValue("Global");
+
+                    b.Property<int?>("TargetId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetRoute")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AudienceRole", "CreatedAt");
+
+                    b.HasIndex("AudienceRole", "ScopeType", "ScopeId", "CreatedAt");
+
+                    b.HasIndex("AudienceRole", "Type", "TargetType", "TargetId", "ScopeType", "ScopeId")
+                        .IsUnique();
+
+                    b.ToTable("AdminNotifications", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.AdminNotificationReadState", b =>
+                {
+                    b.Property<int>("AdminNotificationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AdminNotificationId", "UserId");
+
+                    b.HasIndex("UserId", "ReadAt");
+
+                    b.ToTable("AdminNotificationReadStates", (string)null);
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.AdminNotificationReadState", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Users.AdminNotification", "AdminNotification")
+                        .WithMany("ReadStates")
+                        .HasForeignKey("AdminNotificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AdminNotification");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.UserAiProviderKey", b =>
@@ -2997,13 +3387,30 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("Place");
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Core.AdministrativeBoundaryCandidate", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Core.Territory", "CountryTerritory")
+                        .WithMany()
+                        .HasForeignKey("CountryTerritoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CountryTerritory");
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Core.Region", b =>
                 {
+                    b.HasOne("Geotrack.Domain.Entities.Core.AdministrativeBoundaryCandidate", "BoundaryCandidate")
+                        .WithMany()
+                        .HasForeignKey("BoundaryCandidateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Geotrack.Domain.Entities.Core.Territory", "Territory")
                         .WithMany("Regions")
                         .HasForeignKey("TerritoryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("BoundaryCandidate");
 
                     b.Navigation("Territory");
                 });
@@ -3520,11 +3927,25 @@ namespace Geotrack.Infrastructure.Migrations
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.SupportRequest", b =>
                 {
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "AssignedAdmin")
+                        .WithMany()
+                        .HasForeignKey("AssignedAdminId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "ResolvedByUser")
+                        .WithMany()
+                        .HasForeignKey("ResolvedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Geotrack.Domain.Entities.Users.User", "User")
                         .WithMany("SupportRequests")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("AssignedAdmin");
+
+                    b.Navigation("ResolvedByUser");
 
                     b.Navigation("User");
                 });
@@ -3777,6 +4198,11 @@ namespace Geotrack.Infrastructure.Migrations
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.PlaceContribution", b =>
                 {
                     b.Navigation("Images");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Users.AdminNotification", b =>
+                {
+                    b.Navigation("ReadStates");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.Role", b =>

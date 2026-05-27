@@ -39,9 +39,17 @@ public sealed class TerritoryUserAdministrationTests
         Assert.Equal("Active", manager.Status);
         Assert.True(manager.CanEdit);
         Assert.True(manager.CanAddRegion);
+        Assert.True(manager.CanRemoveRegion);
         Assert.True(manager.CanRemoveManagerRole);
         Assert.NotNull(manager.LastLoginAt);
         Assert.NotEqual("Never", manager.LastLoginDisplay);
+        var assignedRegion = Assert.Single(manager.AssignedRegions);
+        Assert.Equal(fixture.AssignedRegionOneId, assignedRegion.RegionId);
+        Assert.Equal(fixture.AssignedTerritoryId, assignedRegion.TerritoryId);
+        Assert.False(string.IsNullOrWhiteSpace(assignedRegion.TerritoryName));
+        Assert.True(assignedRegion.IsActive);
+        Assert.True(assignedRegion.CanRemove);
+        Assert.True(assignedRegion.AssignedAt <= DateTime.UtcNow);
 
         var viewer = Assert.Single(users.Items, item => item.UserId == fixture.ViewerUserId);
         Assert.Equal(RoleNames.RegisteredUser, viewer.RoleCode);
@@ -70,6 +78,10 @@ public sealed class TerritoryUserAdministrationTests
         var unassigned = await territoryClient.GetAsync(
             $"/api/admin/territory/users?territoryId={fixture.UnassignedTerritoryId}");
         Assert.Equal(HttpStatusCode.Forbidden, unassigned.StatusCode);
+
+        var outOfScopeDetails = await territoryClient.GetAsync(
+            $"/api/admin/territory/users/{fixture.OutOfTerritoryUserId}?territoryId={fixture.AssignedTerritoryId}");
+        Assert.Equal(HttpStatusCode.Forbidden, outOfScopeDetails.StatusCode);
     }
 
     [Fact]
@@ -154,6 +166,83 @@ public sealed class TerritoryUserAdministrationTests
                 RegionId = fixture.UnassignedRegionId
             });
         Assert.Equal(HttpStatusCode.Forbidden, outside.StatusCode);
+    }
+
+    [Fact]
+    public async Task Territory_manager_can_get_user_details_and_remove_one_region_assignment()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+
+        var add = await client.PostAsJsonAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}/regions",
+            new TerritoryUserAssignRegionRequestDto
+            {
+                TerritoryId = fixture.AssignedTerritoryId,
+                RegionId = fixture.AssignedRegionTwoId
+            });
+        add.EnsureSuccessStatusCode();
+
+        var details = await client.GetFromJsonAsync<TerritoryUserListItemDto>(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}?territoryId={fixture.AssignedTerritoryId}");
+        Assert.NotNull(details);
+        Assert.Equal(
+            new[] { fixture.AssignedRegionOneId, fixture.AssignedRegionTwoId },
+            details!.AssignedRegions.Select(region => region.RegionId).OrderBy(id => id).ToArray());
+        Assert.All(details.AssignedRegions, region =>
+        {
+            Assert.Equal(fixture.AssignedTerritoryId, region.TerritoryId);
+            Assert.True(region.IsActive);
+            Assert.True(region.CanRemove);
+        });
+
+        var removeOne = await client.DeleteAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}/regions/{fixture.AssignedRegionOneId}?territoryId={fixture.AssignedTerritoryId}");
+        removeOne.EnsureSuccessStatusCode();
+
+        var afterOne = await removeOne.Content.ReadFromJsonAsync<TerritoryUserListItemDto>();
+        Assert.NotNull(afterOne);
+        Assert.DoesNotContain(afterOne!.AssignedRegions, region => region.RegionId == fixture.AssignedRegionOneId);
+        Assert.Contains(afterOne.AssignedRegions, region => region.RegionId == fixture.AssignedRegionTwoId);
+        Assert.Contains(RoleNames.RegionalManager, afterOne.Roles);
+
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var removedAssignment = await db.RegionalManagerRegions.SingleAsync(assignment =>
+                assignment.UserId == fixture.ActiveManagerUserId &&
+                assignment.RegionId == fixture.AssignedRegionOneId);
+            Assert.False(removedAssignment.IsActive);
+            Assert.NotNull(removedAssignment.UpdatedAt);
+
+            Assert.True(await db.RegionalManagerRegions.AnyAsync(assignment =>
+                assignment.UserId == fixture.ActiveManagerUserId &&
+                assignment.RegionId == fixture.AssignedRegionTwoId &&
+                assignment.IsActive));
+            Assert.True(await db.UserRoles.AnyAsync(role =>
+                role.UserId == fixture.ActiveManagerUserId &&
+                role.Role.Name == RoleNames.RegionalManager));
+        }
+
+        var removeTwo = await client.DeleteAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}/regions/{fixture.AssignedRegionTwoId}?territoryId={fixture.AssignedTerritoryId}");
+        removeTwo.EnsureSuccessStatusCode();
+
+        var afterTwo = await removeTwo.Content.ReadFromJsonAsync<TerritoryUserListItemDto>();
+        Assert.NotNull(afterTwo);
+        Assert.Empty(afterTwo!.AssignedRegions);
+        Assert.DoesNotContain(RoleNames.RegionalManager, afterTwo.Roles);
+
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            Assert.True(await db.Users.AnyAsync(user => user.Id == fixture.ActiveManagerUserId));
+            Assert.False(await db.UserRoles.AnyAsync(role =>
+                role.UserId == fixture.ActiveManagerUserId &&
+                role.Role.Name == RoleNames.RegionalManager));
+        }
     }
 
     [Fact]
@@ -424,6 +513,10 @@ public sealed class TerritoryUserAdministrationTests
                 TerritoryId = fixture.AssignedTerritoryId
             });
         Assert.Equal(HttpStatusCode.Forbidden, removeRegionalManager.StatusCode);
+
+        var removeRegion = await associateClient.DeleteAsync(
+            $"/api/admin/territory/users/{fixture.ActiveManagerUserId}/regions/{fixture.AssignedRegionOneId}?territoryId={fixture.AssignedTerritoryId}");
+        Assert.Equal(HttpStatusCode.Forbidden, removeRegion.StatusCode);
 
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

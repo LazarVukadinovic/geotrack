@@ -124,6 +124,8 @@ export interface TerritoryRegionHealth {
   staysCount: number;
   eventsCount: number;
   pendingRequestsCount: number;
+  healthScore: number;
+  health: TerritoryHealth;
   activityScore: number;
   assignedManagers: TerritoryRegionManager[];
   assignedManagersPreview: string[];
@@ -186,6 +188,7 @@ export interface TerritoryRegionDirectoryItem {
   managerDisplayName?: string | null;
   assignedManagers: TerritoryRegionManager[];
   healthScore?: number | null;
+  health?: TerritoryHealth | null;
   activityScore: number;
   imageUrl?: string | null;
   detailRoute?: string | null;
@@ -213,7 +216,13 @@ export interface TerritoryRegionBoundary {
 
 export interface TerritoryRegionCreateRequest {
   territoryId: number;
-  name: string;
+  name?: string | null;
+  candidateExternalKey?: string | null;
+  boundaryCandidateId?: string | null;
+  boundaryExternalKey?: string | null;
+  shapeGroup?: string | null;
+  shapeId?: string | null;
+  admLevel?: string | null;
   boundarySource?: 'ManualDraw' | 'OsmBoundary' | string | null;
   osmRelationId?: number | null;
   osmAdminLevel?: number | null;
@@ -230,6 +239,12 @@ export interface TerritoryRegionCreateResponse {
   status: string;
   boundarySource?: string | null;
   boundaryShapeType?: string | null;
+  boundaryShapeGroup?: string | null;
+  boundaryShapeId?: string | null;
+  boundaryExternalKey?: string | null;
+  boundaryAdmLevel?: string | null;
+  boundaryReleaseType?: string | null;
+  boundaryCandidateId?: number | null;
   boundaryGeometryGeoJson?: TerritoryRegionGeometry | null;
   createdAt: string;
   detailRoute?: string | null;
@@ -245,6 +260,7 @@ export interface TerritoryRegionCreateContext {
 }
 
 export interface TerritoryRegionMapItem {
+  featureKind?: 'ExistingRegion' | string;
   id: number;
   regionId: number;
   name: string;
@@ -274,6 +290,44 @@ export interface TerritoryRegionMapViewport {
   isEmpty: boolean;
 }
 
+export interface BoundaryRegionCandidateResponse {
+  source: string;
+  admLevel: string;
+  iso3: string;
+  scannedFeatures: number;
+  matchedFeatures: number;
+  returnedCount: number;
+  items: BoundaryRegionCandidate[];
+  attribution?: string | null;
+}
+
+export interface BoundaryRegionCandidate {
+  featureKind?: 'Adm1Candidate' | string;
+  candidateId: string;
+  boundaryCandidateId: number;
+  externalKey: string;
+  boundaryExternalKey: string;
+  admLevel: string;
+  iso3: string;
+  countryIso3: string;
+  shapeGroup?: string | null;
+  shapeId?: string | null;
+  shapeName: string;
+  shapeType: string;
+  name: string;
+  displayName: string;
+  status: 'Available' | 'ExistingRegion' | 'InvalidOutsideTerritory' | string;
+  hasBoundary: boolean;
+  hasDisplayBoundary: boolean;
+  canSelect: boolean;
+  existingRegionId?: number | null;
+  existingRegionName?: string | null;
+  isInsideAssignedTerritory: boolean;
+  validationMessage?: string | null;
+  viewport?: TerritoryRegionMapViewport | null;
+  geometryGeoJson?: TerritoryRegionGeometry | null;
+}
+
 export interface TerritoryContentDirectoryItem {
   id: number;
   entityType: string;
@@ -301,15 +355,28 @@ export interface TerritoryContentDirectoryResponse {
 }
 
 export interface TerritoryHealthInsight {
+  key?: string | null;
   label: string;
+  title?: string | null;
   detail: string;
+  message?: string | null;
   severity: 'info' | 'positive' | 'warning' | 'action' | string;
+  scoreContribution?: number | null;
+  maxPoints?: number | null;
+  status?: string | null;
+  recommendationKey?: string | null;
+  priority?: number | null;
+  actionRoute?: string | null;
 }
 
 export interface TerritoryHealth {
   score?: number | null;
+  status?: string | null;
   statusLabel: string;
+  periodLabel?: string | null;
+  calculatedAt?: string | null;
   drivers: TerritoryHealthInsight[];
+  issues: TerritoryHealthInsight[];
   recommendations: TerritoryHealthInsight[];
 }
 

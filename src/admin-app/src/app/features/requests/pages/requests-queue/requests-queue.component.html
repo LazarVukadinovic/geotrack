@@ -3,19 +3,18 @@
     [regions]="assignedRegions"
     [region]="regionDisplayName"
     [activeRegionId]="activeRegionId"
-    [pendingRequestsCount]="queue?.pendingCount ?? null"
     [regionLoading]="regionLoading"
     (regionChange)="onRegionSelected($event)"
   />
 
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-    <app-topbar [userName]="userName" [userRole]="userRole" title="Review Queue" [showBack]="true" backRoute="/dashboard" />
+    <app-topbar [userName]="userName" [userRole]="userRole" title="Request Queue" [showBack]="true" backRoute="/dashboard" />
 
     <div class="flex-1 overflow-y-auto px-8 py-6">
       <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">Review Requests Queue</h1>
+        <h1 class="text-2xl font-bold text-gray-900">Requests Queue</h1>
         <p class="text-sm text-gray-500 mt-0.5">
-          Manage and process incoming content submissions and reported reviews for the active region.
+          Manage and process incoming content submissions for the active region.
         </p>
       </div>
 

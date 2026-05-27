@@ -3,14 +3,15 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { finalize, takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
-import { TerritoryService } from '../../../../core/services/administrator/territory.service';
-import { AppUsersService } from '../../../../core/services/administrator/app-users.service';
-import { AdminReviewsService } from '../../../../core/services/administrator/admin-reviews.service';
-import { ReviewNotification } from '../../../../core/models/administrator/admin-review.model';
+import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
+import {
+  AdminDashboard,
+  AdminDashboardStats,
+} from '../../../../core/models/administrator/admin-dashboard.model';
 
 @Component({
   selector: 'app-admin-dashboard',
@@ -20,100 +21,111 @@ import { ReviewNotification } from '../../../../core/models/administrator/admin-
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AdminDashboardComponent implements OnInit, OnDestroy {
-  private readonly auth    = inject(AuthService);
-  private readonly terrSvc = inject(TerritoryService);
-  private readonly userSvc = inject(AppUsersService);
-  private readonly revSvc  = inject(AdminReviewsService);
-  private readonly cdr     = inject(ChangeDetectorRef);
-  private readonly router  = inject(Router);
+  private readonly auth = inject(AuthService);
+  private readonly dashboardService = inject(AdminDashboardService);
+  private readonly cdr = inject(ChangeDetectorRef);
+  private readonly router = inject(Router);
 
   private destroy$ = new Subject<void>();
 
-  get userName(): string { return this.auth.fullName; }
-  get userRole(): string { return this.auth.getUser()?.role ?? ''; }
+  dashboard: AdminDashboard | null = null;
+  isLoading = false;
+  errorMessage: string | null = null;
+  supportReportsCount = 0;
 
-  totalTerritories = 0;
-  assignedTerritories = 0;
-  totalAppUsers = 0;
-  suspendedUsers = 0;
-  totalReviews = 0;
-  reportedReviews = 0;
-  notifications: ReviewNotification[] = [];
-  unreadCount = 0;
-  showNotifications = false;
+  get userName(): string {
+    return this.dashboard?.currentUser.displayName || this.auth.fullName || 'Administrator';
+  }
+
+  get userRole(): string {
+    return this.dashboard?.currentUser.roleDisplayName || this.auth.getUser()?.role || 'Administrator';
+  }
 
   stats: { label: string; value: number; sub: string; color: string; icon: string; route: string }[] = [];
 
   ngOnInit(): void {
-    this.terrSvc.getPage$({ page: 1, pageSize: 100, search: '', sortField: 'createdAt', sortDir: 'desc', countryFilter: [] }).pipe(takeUntil(this.destroy$)).subscribe(page => {
-      this.totalTerritories   = page.total;
-      this.assignedTerritories = page.items.filter(t => t.status === 'Active').length;
-      this.buildStats();
-      this.cdr.detectChanges();
-    });
-
-    this.totalAppUsers    = this.userSvc.getTotalCount();
-    this.suspendedUsers   = this.userSvc.getSuspendedCount();
-    this.totalReviews     = this.revSvc.getTotalCount();
-    this.reportedReviews  = this.revSvc.getReportedCount();
-    this.notifications    = this.revSvc.getNotifications();
-    this.unreadCount      = this.revSvc.getUnreadCount();
-
-    this.revSvc.notifications$.pipe(takeUntil(this.destroy$)).subscribe(notifs => {
-      this.notifications = [...notifs].sort((a, b) => b.reportedAt.localeCompare(a.reportedAt));
-      this.unreadCount   = notifs.filter(n => !n.isRead).length;
-      this.cdr.detectChanges();
-    });
-
-    this.buildStats();
-    this.cdr.detectChanges();
+    this.loadDashboard();
   }
 
   ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
 
-  private buildStats(): void {
+  loadDashboard(): void {
+    this.isLoading = true;
+    this.errorMessage = null;
+    this.cdr.markForCheck();
+
+    this.dashboardService.loadDashboard()
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.isLoading = false;
+          this.cdr.markForCheck();
+        }),
+      )
+      .subscribe({
+        next: dashboard => {
+          this.dashboard = dashboard;
+          this.supportReportsCount = dashboard.badges.supportReportsCount;
+          this.buildStats(dashboard.stats);
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.dashboard = null;
+          this.supportReportsCount = 0;
+          this.stats = [];
+          this.errorMessage = 'Unable to load administrator dashboard data.';
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private buildStats(stats: AdminDashboardStats): void {
+    const quickLinks = this.dashboard?.quickLinks;
     this.stats = [
-      { label: 'Territories', value: this.totalTerritories, sub: `${this.assignedTerritories} assigned`, color: '#3b82f6', icon: 'globe', route: '/admin-territories' },
-      { label: 'App Users', value: this.totalAppUsers, sub: `${this.suspendedUsers} suspended`, color: '#10b981', icon: 'users', route: '/admin-users' },
-      { label: 'Reviews', value: this.totalReviews, sub: `${this.reportedReviews} reported`, color: '#8b5cf6', icon: 'review', route: '/admin-reviews' },
-      { label: 'Pending Reports', value: this.reportedReviews, sub: 'Need attention', color: '#ef4444', icon: 'alert', route: '/admin-reviews' },
+      {
+        label: 'Territories',
+        value: stats.territoriesCount,
+        sub: `${stats.assignedTerritoriesCount} assigned`,
+        color: '#3b82f6',
+        icon: 'globe',
+        route: quickLinks?.territoryManagementRoute ?? '/admin-territories',
+      },
+      {
+        label: 'App Users',
+        value: stats.appUsersCount,
+        sub: `${stats.suspendedUsersCount} suspended`,
+        color: '#10b981',
+        icon: 'users',
+        route: quickLinks?.userManagementRoute ?? '/admin-users',
+      },
+      {
+        label: 'Support Reports',
+        value: stats.unresolvedSupportTicketsCount,
+        sub: this.supportReportsSubtitle(stats),
+        color: '#8b5cf6',
+        icon: 'support',
+        route: quickLinks?.supportTicketsRoute ?? '/admin-support-tickets',
+      },
     ];
   }
 
-  toggleNotifications(event: MouseEvent): void {
-    event.stopPropagation();
-    this.showNotifications = !this.showNotifications;
-    if (this.showNotifications && this.unreadCount > 0) {
-      this.revSvc.markAllRead();
-    }
-    this.cdr.detectChanges();
-  }
-
-  closeNotifications(): void {
-    this.showNotifications = false;
-    this.cdr.detectChanges();
-  }
-
-  goToReview(reviewId: string): void {
-    this.showNotifications = false;
-    this.router.navigate(['/admin-reviews'], { queryParams: { highlight: reviewId } });
+  openPendingReports(): void {
+    this.navigateTo(this.dashboard?.quickLinks.supportTicketsRoute ?? '/admin-support-tickets');
   }
 
   navigateTo(route: string): void {
-    this.router.navigate([route]);
+    this.router.navigateByUrl(route);
   }
 
-  formatDatetime(iso: string): string {
-    return this.revSvc.formatDatetime(iso);
-  }
+  private supportReportsSubtitle(stats: AdminDashboardStats): string {
+    if (stats.highPrioritySupportTicketsCount > 0) {
+      return `${stats.highPrioritySupportTicketsCount} high priority`;
+    }
 
-  targetTypeClass(type: string): string {
-    const map: Record<string, string> = {
-      Destination: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',
-      Place:       'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-      Location:    'bg-violet-50 text-violet-700 ring-1 ring-violet-200',
-      Event:       'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-    };
-    return map[type] ?? 'bg-gray-50 text-gray-600 ring-1 ring-gray-200';
+    if (stats.unresolvedSupportTicketsCount === 0) {
+      return 'No unresolved tickets';
+    }
+
+    return `${stats.openSupportTicketsCount} open, ${stats.inProgressSupportTicketsCount} in progress`;
   }
 }

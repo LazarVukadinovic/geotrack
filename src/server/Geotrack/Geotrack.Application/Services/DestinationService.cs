@@ -9,6 +9,7 @@ namespace Geotrack.Application.Services;
 public class DestinationService : IDestinationService
 {
     private const int SectionPreviewLimit = 5;
+    private const string PublishedStatus = "Published";
 
     private readonly IDestinationRepository _destinationRepository;
     private static readonly HashSet<string> AllTypes = new() { "location", "place", "event" };
@@ -22,6 +23,8 @@ public class DestinationService : IDestinationService
     {
         var destination = await _destinationRepository.GetWithDetailsAsync(destinationId)
             ?? throw new KeyNotFoundException("Destination not found");
+
+        EnsurePublished(destination);
 
         var reviewsCount = await _destinationRepository.CountReviewsByDestinationIdAsync(destinationId);
         var averageRating = reviewsCount > 0
@@ -62,6 +65,8 @@ public class DestinationService : IDestinationService
         var destination = await _destinationRepository.GetWithDetailsAsync(destinationId)
             ?? throw new KeyNotFoundException("Destination not found");
 
+        EnsurePublished(destination);
+
         var normalizedKey = sectionKey.Trim().ToLowerInvariant();
 
         var tag = destination.DestinationTags
@@ -76,13 +81,14 @@ public class DestinationService : IDestinationService
         if (tag != null)
         {
             locations = destination.Locations
-                .Where(l => l.LocationTags.Any(lt => lt.TagId == tag.Id))
+                .Where(l => l.Status == PublishedStatus && l.LocationTags.Any(lt => lt.TagId == tag.Id))
                 .OrderBy(l => l.Name)
                 .ToList();
 
             places = destination.Locations
+                .Where(l => l.Status == PublishedStatus)
                 .SelectMany(l => l.Places)
-                .Where(p => p.PlaceTags.Any(pt => pt.TagId == tag.Id))
+                .Where(p => p.Status == PublishedStatus && p.PlaceTags.Any(pt => pt.TagId == tag.Id))
                 .OrderBy(p => p.Name)
                 .ToList();
 
@@ -91,11 +97,14 @@ public class DestinationService : IDestinationService
         else if (normalizedKey == "locations")
         {
             locations = destination.Locations
+                .Where(l => l.Status == PublishedStatus)
                 .OrderBy(l => l.Name)
                 .ToList();
 
             places = destination.Locations
+                .Where(l => l.Status == PublishedStatus)
                 .SelectMany(l => l.Places)
+                .Where(p => p.Status == PublishedStatus)
                 .OrderBy(p => p.Name)
                 .ToList();
 
@@ -124,6 +133,8 @@ public class DestinationService : IDestinationService
         var destination = await _destinationRepository.GetByIdAsync(destinationId);
         if (destination == null)
             throw new KeyNotFoundException("Destination not found");
+
+        EnsurePublished(destination);
 
         var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
         var normalizedTake = ReviewPaging.NormalizeTake(take);
@@ -170,6 +181,8 @@ public class DestinationService : IDestinationService
         if (destination == null)
             throw new KeyNotFoundException("Destination not found");
 
+        EnsurePublished(destination);
+
         var alreadyReviewed = await _destinationRepository.HasUserReviewedDestinationAsync(destinationId, userId);
         if (alreadyReviewed)
             throw new InvalidOperationException("User has already reviewed this destination");
@@ -215,14 +228,16 @@ public class DestinationService : IDestinationService
         {
             var locations = destination.Locations
                 .Where(l => l.LocationTags.Any(lt => lt.TagId == tag.Id))
+                .Where(l => l.Status == PublishedStatus)
                 .OrderBy(l => l.Name)
                 .Take(SectionPreviewLimit)
                 .Select(MapDestinationLocationItem)
                 .ToList();
 
             var places = destination.Locations
+                .Where(l => l.Status == PublishedStatus)
                 .SelectMany(l => l.Places)
-                .Where(p => p.PlaceTags.Any(pt => pt.TagId == tag.Id))
+                .Where(p => p.Status == PublishedStatus && p.PlaceTags.Any(pt => pt.TagId == tag.Id))
                 .OrderBy(p => p.Name)
                 .Take(SectionPreviewLimit)
                 .Select(MapDestinationPlaceItem)
@@ -247,12 +262,15 @@ public class DestinationService : IDestinationService
                 Key = "locations",
                 Title = "Locations",
                 Locations = destination.Locations
+                    .Where(l => l.Status == PublishedStatus)
                     .OrderBy(l => l.Name)
                     .Take(SectionPreviewLimit)
                     .Select(MapDestinationLocationItem)
                     .ToList(),
                 Places = destination.Locations
+                    .Where(l => l.Status == PublishedStatus)
                     .SelectMany(l => l.Places)
+                    .Where(p => p.Status == PublishedStatus)
                     .OrderBy(p => p.Name)
                     .Take(SectionPreviewLimit)
                     .Select(MapDestinationPlaceItem)
@@ -291,7 +309,9 @@ public class DestinationService : IDestinationService
 
         var destinations = await _destinationRepository.SearchByNameAsync(query);
 
-        return destinations.Select(d => new DestinationSearchResultDto
+        return destinations
+            .Where(d => d.Status == PublishedStatus)
+            .Select(d => new DestinationSearchResultDto
         {
             Id = d.Id,
             Name = d.Name,
@@ -306,9 +326,9 @@ public class DestinationService : IDestinationService
         if (string.IsNullOrWhiteSpace(query))
             return new List<DestinationSearchItemDto>();
 
-        var exists = await _destinationRepository.ExistsAsync(destinationId);
+        var destination = await _destinationRepository.GetByIdAsync(destinationId);
 
-        if (!exists)
+        if (destination is null || destination.Status != PublishedStatus)
             throw new KeyNotFoundException($"Destinacija {destinationId} nije pronadjena.");
 
         var typesToSearch = types?.Select(t => t.ToLower().Trim()).Where(t => AllTypes.Contains(t)).ToHashSet();
@@ -321,7 +341,9 @@ public class DestinationService : IDestinationService
         if (typesToSearch.Contains("location"))
         {
             var locations = await _destinationRepository.SearchLocationsAsync(destinationId, query);
-            results.AddRange(locations.Select(l => new DestinationSearchItemDto
+            results.AddRange(locations
+                .Where(l => l.Status == PublishedStatus)
+                .Select(l => new DestinationSearchItemDto
             {
                 Id = l.Id,
                 Type = "location",
@@ -335,7 +357,9 @@ public class DestinationService : IDestinationService
         if (typesToSearch.Contains("place"))
         {
             var places = await _destinationRepository.SearchPlacesAsync(destinationId, query);
-            results.AddRange(places.Select(p => new DestinationSearchItemDto
+            results.AddRange(places
+                .Where(p => p.Status == PublishedStatus && p.Location?.Status == PublishedStatus)
+                .Select(p => new DestinationSearchItemDto
             {
                 Id = p.Id,
                 Type = "place",
@@ -350,7 +374,12 @@ public class DestinationService : IDestinationService
         if (typesToSearch.Contains("event"))
         {
             var events = await _destinationRepository.SearchEventsAsync(destinationId, query);
-            results.AddRange(events.Select(e => new DestinationSearchItemDto
+            results.AddRange(events
+                .Where(e =>
+                    e.Status == PublishedStatus &&
+                    (e.Location == null || e.Location.Status == PublishedStatus) &&
+                    (e.Place == null || e.Place.Status == PublishedStatus))
+                .Select(e => new DestinationSearchItemDto
             {
                 Id = e.Id,
                 Type = "event",
@@ -363,6 +392,12 @@ public class DestinationService : IDestinationService
         }
 
         return results;
+    }
+
+    private static void EnsurePublished(Destination destination)
+    {
+        if (destination.Status != PublishedStatus)
+            throw new KeyNotFoundException("Destination not found");
     }
 
 }

@@ -20,7 +20,7 @@
       <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Add Region</h1>
         <p class="text-sm text-gray-500 mt-0.5">
-          Create a bounded region in the active assigned country/territory.
+          Select an ADM1 administrative boundary inside the assigned country/territory.
         </p>
       </div>
 
@@ -32,6 +32,11 @@
       <div *ngIf="feedbackMessage"
            class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         {{ feedbackMessage }}
+      </div>
+
+      <div *ngIf="candidateNoticeMessage"
+           class="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        {{ candidateNoticeMessage }}
       </div>
 
       <div class="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)] items-start">
@@ -50,15 +55,24 @@
               </div>
 
               <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Selected Region</label>
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-500 bg-gray-100 outline-none"
+                  [value]="selectedRegionDisplayName"
+                  readonly
+                />
+              </div>
+
+              <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">
                   Region Name <span class="text-red-500">*</span>
                 </label>
                 <input
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-500 disabled:bg-gray-100"
-                  placeholder="Enter region name"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+                  placeholder="Select a region from the map"
                   maxlength="200"
                   [(ngModel)]="regionName"
-                  [disabled]="!context?.canCreate || contextLoading || isSaving"
+                  [disabled]="!selectedCandidate || !context?.canCreate || contextLoading || candidateLoading || isSaving"
                 />
               </div>
 
@@ -81,67 +95,53 @@
               </span>
             </div>
 
-            <div class="grid grid-cols-2 gap-2 mb-3">
-              <button
-                type="button"
-                (click)="setDrawTool('polygon')"
-                [disabled]="!canDrawBoundary"
-                class="text-xs font-semibold px-3 py-2 rounded-lg border transition-colors cursor-pointer disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-                [class.bg-blue-700]="drawTool === 'polygon'"
-                [class.text-white]="drawTool === 'polygon'"
-                [class.border-blue-700]="drawTool === 'polygon'"
-                [class.bg-white]="drawTool !== 'polygon'"
-                [class.text-gray-700]="drawTool !== 'polygon'"
-                [class.border-gray-300]="drawTool !== 'polygon'"
-              >
-                Polygon
-              </button>
-              <button
-                type="button"
-                (click)="setDrawTool('rectangle')"
-                [disabled]="!canDrawBoundary"
-                class="text-xs font-semibold px-3 py-2 rounded-lg border transition-colors cursor-pointer disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-                [class.bg-blue-700]="drawTool === 'rectangle'"
-                [class.text-white]="drawTool === 'rectangle'"
-                [class.border-blue-700]="drawTool === 'rectangle'"
-                [class.bg-white]="drawTool !== 'rectangle'"
-                [class.text-gray-700]="drawTool !== 'rectangle'"
-                [class.border-gray-300]="drawTool !== 'rectangle'"
-              >
-                Rectangle
-              </button>
+            <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+              Select an ADM1 region from the map.
+            </div>
+
+            <div class="mt-4 space-y-2 text-xs text-gray-600">
+              <div class="flex justify-between gap-3">
+                <span>Source</span>
+                <span class="font-semibold text-gray-900">geoBoundaries ADM1</span>
+              </div>
+              <div class="flex justify-between gap-3">
+                <span>Selected boundary</span>
+                <span class="font-semibold text-gray-900 text-right">{{ selectedBoundaryDisplayName }}</span>
+              </div>
+              <div class="flex justify-between gap-3">
+                <span>Existing created regions</span>
+                <span class="font-semibold text-gray-900">{{ existingRegionBoundaryCount }}</span>
+              </div>
+              <div class="flex justify-between gap-3">
+                <span>Available ADM1 regions</span>
+                <span class="font-semibold text-gray-900">{{ availableCandidateCount }}</span>
+              </div>
             </div>
 
             <button
               type="button"
-              (click)="clearBoundary()"
-              [disabled]="!boundaryConfirmed && !boundaryValidationMessage"
-              class="w-full text-xs font-semibold px-3 py-2 rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
+              (click)="clearSelection()"
+              [disabled]="!selectedCandidate || isSaving"
+              class="w-full mt-4 text-xs font-semibold px-3 py-2 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
             >
-              Clear Boundary
+              Clear Selection
             </button>
 
-            <p class="mt-3 text-xs text-gray-500">{{ drawHint }}</p>
-
-            <div *ngIf="boundaryValidationMessage"
+            <div *ngIf="candidateErrorMessage"
                  class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {{ boundaryValidationMessage }}
+              <div>{{ candidateErrorMessage }}</div>
+              <button
+                type="button"
+                (click)="retryCandidates()"
+                class="mt-2 text-xs font-semibold text-red-700 underline"
+              >
+                Retry
+              </button>
             </div>
 
-            <div *ngIf="boundaryConfirmed && boundaryAreaKm2 !== null"
-                 class="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-              Area: <strong>{{ boundaryAreaKm2 | number:'1.2-2' }} km2</strong>
-            </div>
-
-            <div class="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-500 space-y-1">
-              <div class="flex justify-between gap-3">
-                <span>Existing bounded regions</span>
-                <span class="font-semibold text-gray-900">{{ existingRegionBoundaryCount }}</span>
-              </div>
-              <div class="flex justify-between gap-3">
-                <span>Boundary source</span>
-                <span class="font-semibold text-gray-900">Manual draw</span>
-              </div>
+            <div *ngIf="hasMissingAdm1Data"
+                 class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              ADM1 boundary data is not available for this territory. Ask an administrator to import ADM1 boundary data.
             </div>
           </div>
 
@@ -169,26 +169,28 @@
         <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
           <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
             <div>
-              <h3 class="text-sm font-bold text-gray-900">Map Boundary</h3>
+              <h3 class="text-sm font-bold text-gray-900">ADM1 Boundary Selection</h3>
               <p class="text-xs text-gray-500 mt-0.5">{{ activeTerritoryDisplayName }}</p>
             </div>
-            <button
-              type="button"
-              (click)="startDrawing()"
-              [disabled]="!canDrawBoundary"
-              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
-            >
-              Draw
-            </button>
+            <div class="flex items-center gap-2 text-[11px] font-semibold text-gray-500">
+              <span class="inline-flex items-center gap-1">
+                <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                Available
+              </span>
+              <span class="inline-flex items-center gap-1">
+                <span class="h-2 w-2 rounded-full bg-blue-500"></span>
+                Existing
+              </span>
+            </div>
           </div>
 
           <div class="region-map relative h-[620px] min-h-[420px]">
             <div #mapContainer class="w-full h-full"></div>
 
-            <div *ngIf="territoryLoading || contextLoading"
+            <div *ngIf="territoryLoading || contextLoading || candidateLoading"
                  class="absolute inset-0 flex items-center justify-center bg-white/70">
               <span class="rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-600 shadow-sm border border-gray-200">
-                Loading map...
+                {{ candidateLoading ? 'Loading ADM1 boundaries...' : 'Loading map...' }}
               </span>
             </div>
 
@@ -196,6 +198,27 @@
                  class="absolute inset-0 flex items-center justify-center bg-gray-50/80 px-5">
               <div class="max-w-md rounded-xl bg-white border border-amber-200 shadow-sm px-4 py-3 text-sm text-amber-800">
                 {{ context?.boundaryRequiredMessage || 'Assigned country/territory must have a boundary before adding regions.' }}
+              </div>
+            </div>
+
+            <div *ngIf="!territoryLoading && !contextLoading && !candidateLoading && candidateErrorMessage"
+                 class="absolute inset-0 flex items-center justify-center bg-gray-50/80 px-5">
+              <div class="max-w-md rounded-xl bg-white border border-red-200 shadow-sm px-4 py-3 text-sm text-red-700">
+                <p>{{ candidateErrorMessage }}</p>
+                <button
+                  type="button"
+                  (click)="retryCandidates()"
+                  class="mt-3 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+
+            <div *ngIf="hasMissingAdm1Data"
+                 class="absolute inset-0 flex items-center justify-center bg-gray-50/80 px-5">
+              <div class="max-w-md rounded-xl bg-white border border-amber-200 shadow-sm px-4 py-3 text-sm text-amber-800">
+                ADM1 boundary data is not available for this territory. Ask an administrator to import ADM1 boundary data.
               </div>
             </div>
           </div>
@@ -206,13 +229,13 @@
               <p class="mt-1 text-gray-900 font-semibold truncate">{{ activeTerritoryDisplayName }}</p>
             </div>
             <div class="px-5 py-3 border-r border-gray-100">
-              <p class="text-gray-400 font-semibold uppercase">Existing</p>
+              <p class="text-gray-400 font-semibold uppercase">Existing Regions</p>
               <p class="mt-1 text-gray-900 font-semibold">{{ existingRegionBoundaryCount }} shown</p>
             </div>
             <div class="px-5 py-3">
-              <p class="text-gray-400 font-semibold uppercase">New Boundary</p>
-              <p class="mt-1 font-semibold" [class.text-emerald-700]="boundaryConfirmed" [class.text-gray-900]="!boundaryConfirmed">
-                {{ boundaryConfirmed ? 'Ready' : 'Required' }}
+              <p class="text-gray-400 font-semibold uppercase">Selected Region</p>
+              <p class="mt-1 font-semibold truncate" [class.text-emerald-700]="selectedCandidate" [class.text-gray-900]="!selectedCandidate">
+                {{ selectionStateLabel }}
               </p>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { Observable, of } from 'rxjs';
 import { finalize, shareReplay, tap } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 import { AnalyticsPreferencesService } from './analytics-preferences.service';
+import { buildAvatarDisplayUrl } from '../utils/avatar-url';
 
 export interface UserProfile {
   id: number;
@@ -13,6 +14,7 @@ export interface UserProfile {
   lastName: string;
   phoneNumber?: string;
   avatarUrl?: string;
+  avatarVersion?: number | null;
   location?: string;
   needsInterestsOnboarding: boolean;
   analyticsEnabled?: boolean;
@@ -38,7 +40,10 @@ export class UserService {
   readonly profile = computed(() => this._profile());
   readonly needsInterestsOnboarding = computed(() => this._profile()?.needsInterestsOnboarding ?? false);
   readonly analyticsEnabled = computed(() => this._profile()?.analyticsEnabled ?? true);
-  readonly avatarUrl = computed(() => this._profile()?.avatarUrl ?? '');
+  readonly avatarUrl = computed(() => {
+    const profile = this._profile();
+    return buildAvatarDisplayUrl(profile?.avatarUrl, profile?.avatarVersion);
+  });
 
   /** Display name: "First Last", falling back to email if names are blank. */
   readonly fullName = computed(() => {

@@ -1,29 +1,29 @@
 import { ReviewRequest } from './review-request.model';
 
 describe('ReviewRequest model', () => {
-  it('supports the unified regional moderation queue shape', () => {
+  it('supports the regional content request queue shape', () => {
     const request: ReviewRequest = {
-      requestKey: 'review-report:12',
+      requestKey: 'contribution:12',
       requestId: 12,
-      displayRequestId: 'REP-0012',
-      source: 'ReviewReport',
-      title: 'Reported review: Example place',
-      entityType: 'Review',
-      contributionType: 'PlaceReviewReport',
+      displayRequestId: 'CON-0012',
+      source: 'Contribution',
+      title: 'Example place',
+      entityType: 'Place',
+      contributionType: 'CreatePlace',
       regionId: 7,
       regionDisplayName: 'Backend Region',
       submittedByUserId: 3,
-      submittedByDisplayName: 'Reporter',
-      submittedByInitials: 'R',
+      submittedByDisplayName: 'Contributor',
+      submittedByInitials: 'C',
       submittedAt: '2026-05-12T10:00:00Z',
       status: 'Pending',
       thumbnailImageUrl: null,
-      previewText: 'Review excerpt',
-      detailRoute: '/request/detail/review-report/12',
+      previewText: 'Contribution excerpt',
+      detailRoute: '/request/detail/contribution/12',
     };
 
-    expect(request.requestKey).toBe('review-report:12');
-    expect(request.source).toBe('ReviewReport');
-    expect(request.entityType).toBe('Review');
+    expect(request.requestKey).toBe('contribution:12');
+    expect(request.source).toBe('Contribution');
+    expect(request.entityType).toBe('Place');
   });
 });

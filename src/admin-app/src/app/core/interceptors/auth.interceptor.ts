@@ -3,6 +3,7 @@ import { HttpErrorResponse, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest
 import { Router } from '@angular/router';
 import { Observable, catchError, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { isAdminAuthEndpoint, isConfiguredApiUrl, resolveApiUrl } from './api-url';
 
 @Injectable()
 export class AuthInterceptor implements HttpInterceptor {
@@ -11,24 +12,26 @@ export class AuthInterceptor implements HttpInterceptor {
   constructor(private readonly injector: Injector) {}
 
   intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
-    if (!this.shouldHandle(request.url)) {
+    const url = resolveApiUrl(request.url);
+    if (!this.shouldHandle(url)) {
       return next.handle(request);
     }
 
     const auth = this.injector.get(AuthService);
     const token = auth.getAccessToken();
-    const headers = token && this.shouldAttachToken(request.url)
+    const headers = token && this.shouldAttachToken(url)
       ? request.headers.set('Authorization', `Bearer ${token}`)
       : request.headers;
 
     const authorizedRequest = request.clone({
+      url,
       headers,
       withCredentials: true,
     });
 
     return next.handle(authorizedRequest).pipe(
       catchError(error => {
-        if (error instanceof HttpErrorResponse && error.status === 401 && this.shouldRedirectOnUnauthorized(request.url)) {
+        if (error instanceof HttpErrorResponse && error.status === 401 && this.shouldRedirectOnUnauthorized(url)) {
           this.redirectToLogin(auth);
         }
 
@@ -38,21 +41,15 @@ export class AuthInterceptor implements HttpInterceptor {
   }
 
   private shouldHandle(url: string): boolean {
-    return url.startsWith('/api/');
+    return isConfiguredApiUrl(url);
   }
 
   private shouldAttachToken(url: string): boolean {
-    return !url.startsWith('/api/auth/') &&
-      !url.startsWith('/api/admin/auth/login') &&
-      !url.startsWith('/api/admin/auth/refresh') &&
-      !url.startsWith('/api/admin/auth/logout');
+    return !isAdminAuthEndpoint(url);
   }
 
   private shouldRedirectOnUnauthorized(url: string): boolean {
-    return !url.startsWith('/api/auth/') &&
-      !url.startsWith('/api/admin/auth/login') &&
-      !url.startsWith('/api/admin/auth/refresh') &&
-      !url.startsWith('/api/admin/auth/logout');
+    return !isAdminAuthEndpoint(url);
   }
 
   private redirectToLogin(auth: AuthService): void {

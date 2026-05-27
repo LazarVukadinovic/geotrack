@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, administratorGuard, regionalManagerGuard, territoryManagerGuard } from './core/guards/auth.guard';
+import { authGuard, administratorGuard, contentModeratorGuard, regionalManagerGuard, territoryManagerGuard } from './core/guards/auth.guard';
 export const routes: Routes = [
   // Redirect root → login
   { path: '', redirectTo: 'login', pathMatch: 'full' },
@@ -41,8 +41,56 @@ export const routes: Routes = [
             .then(m => m.UserManagementComponent),
       },
       {
-        path: 'admin-reviews',
+        path: 'admin-support-tickets',
         canActivate: [administratorGuard],
+        loadComponent: () =>
+          import('./features/administrator/pages/support-tickets/support-tickets.component')
+            .then(m => m.SupportTicketsComponent),
+      },
+
+      // Content Moderator routes
+      {
+        path: 'content-moderator/dashboard',
+        canActivate: [contentModeratorGuard],
+        loadComponent: () =>
+          import('./features/content-moderator/pages/content-moderator-dashboard/content-moderator-dashboard.component')
+            .then(m => m.ContentModeratorDashboardComponent),
+      },
+      {
+        path: 'content-moderator/destinations',
+        canActivate: [contentModeratorGuard],
+        data: { entityType: 'destination' },
+        loadComponent: () =>
+          import('./features/content-moderator/pages/entity-review/entity-review.component')
+            .then(m => m.ContentModeratorEntityReviewComponent),
+      },
+      {
+        path: 'content-moderator/locations',
+        canActivate: [contentModeratorGuard],
+        data: { entityType: 'location' },
+        loadComponent: () =>
+          import('./features/content-moderator/pages/entity-review/entity-review.component')
+            .then(m => m.ContentModeratorEntityReviewComponent),
+      },
+      {
+        path: 'content-moderator/places',
+        canActivate: [contentModeratorGuard],
+        data: { entityType: 'place' },
+        loadComponent: () =>
+          import('./features/content-moderator/pages/entity-review/entity-review.component')
+            .then(m => m.ContentModeratorEntityReviewComponent),
+      },
+      {
+        path: 'content-moderator/events',
+        canActivate: [contentModeratorGuard],
+        data: { entityType: 'event' },
+        loadComponent: () =>
+          import('./features/content-moderator/pages/entity-review/entity-review.component')
+            .then(m => m.ContentModeratorEntityReviewComponent),
+      },
+      {
+        path: 'content-moderator/review-management',
+        canActivate: [contentModeratorGuard],
         loadComponent: () =>
           import('./features/administrator/pages/review-management/review-management.component')
             .then(m => m.ReviewManagementComponent),

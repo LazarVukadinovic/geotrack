@@ -14,6 +14,7 @@ public class UserNotificationService : IUserNotificationService
     private const string ReviewReportAcceptedType = "review_report_accepted";
     private const string ReviewReportRejectedType = "review_report_rejected";
     private const string ReportedReviewRemovedType = "reported_review_removed";
+    private const string ReviewRemovedByModeratorType = "review_removed_by_moderator";
 
     private readonly IUserNotificationRepository _notificationRepository;
 
@@ -93,8 +94,8 @@ public class UserNotificationService : IUserNotificationService
             Type = isApproved ? ContributionApprovedType : ContributionRejectedType,
             Title = isApproved ? "Contribution approved" : "Contribution rejected",
             Message = isApproved
-                ? $"Your place contribution \"{contribution.Name}\" was approved and is now published."
-                : $"Your place contribution \"{contribution.Name}\" was rejected. Review the feedback and update it when you are ready.",
+                ? "Your contribution was approved."
+                : "Your contribution was reviewed but was not approved.",
             RelatedEntityType = "contribution",
             RelatedEntityId = contribution.Id,
             ActionUrl = $"/contributions/{contribution.Id}",
@@ -117,8 +118,8 @@ public class UserNotificationService : IUserNotificationService
             Type = accepted ? ReviewReportAcceptedType : ReviewReportRejectedType,
             Title = accepted ? "Review report accepted" : "Review report reviewed",
             Message = accepted
-                ? $"Thanks for helping keep GeoTrack safe. The reported review for \"{report.EntityName}\" was removed."
-                : $"Your report for a review on \"{report.EntityName}\" was reviewed. The review will remain visible.",
+                ? "Your report was reviewed and the reported content was removed from public view."
+                : "Your report was reviewed and the content will remain visible.",
             RelatedEntityType = "review_report",
             RelatedEntityId = report.Id,
             ActionUrl = null,
@@ -139,11 +140,37 @@ public class UserNotificationService : IUserNotificationService
             UserId = report.ReviewAuthorUserId,
             Type = ReportedReviewRemovedType,
             Title = "Review removed",
-            Message = $"A review you posted for \"{report.EntityName}\" was removed after moderation.",
+            Message = "Your review was removed after moderation.",
             RelatedEntityType = "review",
             RelatedEntityId = report.ReviewId,
             ActionUrl = null,
             CreatedAt = report.ReviewedAt ?? DateTime.UtcNow
+        });
+    }
+
+    public void AddReviewRemovedByModeratorNotification(
+        int authorUserId,
+        string targetType,
+        int reviewId,
+        DateTime createdAt)
+    {
+        if (authorUserId <= 0 || reviewId <= 0)
+        {
+            return;
+        }
+
+        _notificationRepository.Add(new UserNotification
+        {
+            UserId = authorUserId,
+            Type = ReviewRemovedByModeratorType,
+            Title = "Review removed",
+            Message = "Your review was removed after moderation.",
+            RelatedEntityType = string.IsNullOrWhiteSpace(targetType)
+                ? "review"
+                : $"{targetType.Trim().ToLowerInvariant()}_review",
+            RelatedEntityId = reviewId,
+            ActionUrl = null,
+            CreatedAt = createdAt
         });
     }
 

@@ -9,6 +9,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { catchError, firstValueFrom, of, switchMap } from 'rxjs';
 
 import { routes } from './app.routes';
+import { apiUrlInterceptor } from './core/services/api-url.interceptor';
 import { authInterceptor } from './core/services/auth.interceptor';
 import { authErrorInterceptor } from './core/services/auth-error.interceptor';
 import { TokenStorageService } from './core/services/token-storage.service';
@@ -28,7 +29,7 @@ export const appConfig: ApplicationConfig = {
 
     // authInterceptor first (attaches Authorization header / proactive refresh);
     // authErrorInterceptor second (retries with a fresh token on 401).
-    provideHttpClient(withInterceptors([authInterceptor, authErrorInterceptor])),
+    provideHttpClient(withInterceptors([apiUrlInterceptor, authInterceptor, authErrorInterceptor])),
 
     // ── Startup session restore ─────────────────────────────────────────────
     // On every cold start:

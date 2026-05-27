@@ -3,7 +3,6 @@ using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Core;
-using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -21,6 +20,12 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private const string ManualDrawBoundarySource = "ManualDraw";
     private const string OsmBoundarySource = "OsmBoundary";
+    private const string GeoBoundariesBoundarySource = "geoBoundaries";
+    private const string GeoBoundariesReleaseType = "gbOpen";
+    private const string GeoBoundariesLicense = "CC BY 4.0";
+    private const string Adm1Level = "ADM1";
+    private const string DuplicateAdministrativeRegionMessage =
+        "This administrative region has already been created.";
     private const string MissingTerritoryBoundaryMessage =
         "Assigned country/territory must have a boundary before adding regions.";
 
@@ -45,10 +50,20 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
     };
 
     private readonly AppDbContext _db;
+    private readonly IHealthScoreService _healthScores;
+    private readonly LocalBoundaryImportService _localBoundaryImport;
+    private readonly IAdminNotificationService _adminNotificationService;
 
-    public TerritoryDashboardService(AppDbContext db)
+    public TerritoryDashboardService(
+        AppDbContext db,
+        IHealthScoreService healthScores,
+        LocalBoundaryImportService localBoundaryImport,
+        IAdminNotificationService adminNotificationService)
     {
         _db = db;
+        _healthScores = healthScores;
+        _localBoundaryImport = localBoundaryImport;
+        _adminNotificationService = adminNotificationService;
     }
 
     public async Task<List<TerritoryAssignedTerritoryDto>> GetAssignedTerritoriesAsync(int userId)
@@ -58,6 +73,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         return await _db.TerritoryManagerTerritories
             .AsNoTracking()
             .Where(assignment => assignment.UserId == userId)
+            .Where(assignment => assignment.Territory.TerritoryKind == TerritoryKinds.Country)
             .OrderBy(assignment => assignment.Territory.Name)
             .ThenBy(assignment => assignment.TerritoryId)
             .Select(assignment => new TerritoryAssignedTerritoryDto
@@ -65,6 +81,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 Id = assignment.TerritoryId,
                 Name = assignment.Territory.Name,
                 DisplayName = assignment.Territory.Name,
+                CountryCode = assignment.Territory.CountryCode,
                 StatusLabel = "Assigned"
             })
             .ToListAsync();
@@ -90,8 +107,9 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             return new TerritoryDashboardDto();
         }
 
-        var now = DateTime.UtcNow;
-        var currentPeriodStart = now.AddDays(-30);
+        var healthPeriod = _healthScores.ResolvePeriod("1m");
+        var now = healthPeriod.End;
+        var currentPeriodStart = healthPeriod.Start;
         var previousPeriodStart = currentPeriodStart.AddDays(-30);
 
         var currentHits = await GetTerritoryAnalyticsHitsAsync(
@@ -129,7 +147,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 currentPeriodStart,
                 currentActiveUsers,
                 previousActiveUsers),
-            RegionsHealth = await BuildRegionsHealthAsync(activeTerritory.Id, currentRegionVisitCounts),
+            RegionsHealth = await BuildRegionsHealthAsync(activeTerritory.Id, healthPeriod),
             TopPerformingRegions = await BuildTopPerformingRegionsAsync(
                 activeTerritory.Id,
                 currentRegionVisitCounts,
@@ -201,42 +219,16 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         var contentCounts = await GetRegionContentCountsAsync(regionIds);
         var pendingCounts = await GetRegionPendingRequestCountsAsync(regionIds);
         var managers = await GetRegionManagersAsync(regionIds);
-        var quality = await GetRegionQualityAggregatesAsync(regionIds);
-
-        var now = DateTime.UtcNow;
-        var periodStart = now.AddDays(-30);
-        var hits = await GetTerritoryAnalyticsHitsAsync(activeTerritory.Id, periodStart, now, visitOnly: false);
-        var visitCounts = hits
-            .Where(hit => VisitEventTypes.Contains(hit.EventType))
-            .GroupBy(hit => hit.RegionId)
-            .ToDictionary(group => group.Key, group => group.Count());
-        var saveCounts = hits
-            .Where(hit => SaveEventTypes.Contains(hit.EventType))
-            .GroupBy(hit => hit.RegionId)
-            .ToDictionary(group => group.Key, group => group.Count());
-        var reviewCounts = await GetRegionReviewCountsAsync(regionIds);
-
-        var maxVisits = Math.Max(1, visitCounts.Values.DefaultIfEmpty(0).Max());
-        var maxContent = Math.Max(1, contentCounts.Values
-            .Select(counts => counts.Destinations + counts.Locations + counts.Places + counts.Stays + counts.Events)
-            .DefaultIfEmpty(0)
-            .Max());
+        var healthPeriod = _healthScores.ResolvePeriod("1m");
+        var healthScores = await _healthScores.GetRegionHealthScoresAsync(regionIds, healthPeriod);
 
         var items = rows.Select(row =>
         {
             var counts = contentCounts.GetValueOrDefault(row.Id, RegionContentCounts.Empty);
             var managerRows = managers.GetValueOrDefault(row.Id, new List<ManagerRow>());
             var pendingRequests = pendingCounts.GetValueOrDefault(row.Id);
-            var visits = visitCounts.GetValueOrDefault(row.Id);
-            var regionQuality = quality.GetValueOrDefault(row.Id, RegionQualityAggregate.Empty);
-            var regionReviews = reviewCounts.GetValueOrDefault(row.Id) ?? new RegionReviewAggregate();
-            var health = CalculateRegionHealth(
-                counts,
-                regionQuality,
-                visits,
-                saveCounts.GetValueOrDefault(row.Id),
-                regionReviews.Count,
-                pendingRequests);
+            var health = healthScores.GetValueOrDefault(row.Id);
+            var healthScore = health?.Score ?? 0;
 
             var status = managerRows.Count > 0 ? "Active" : "Inactive";
 
@@ -263,13 +255,9 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 ManagerDisplayName = BuildManagerDisplayName(managerRows),
                 ManagerNames = managerRows.Select(manager => manager.DisplayName).ToList(),
                 AssignedManagers = managerRows.Select(BuildManagerDto).ToList(),
-                HealthScore = health.Score,
-                ActivityScore = CalculateActivityScore(
-                    visits,
-                    maxVisits,
-                    counts.Destinations + counts.Locations + counts.Places + counts.Stays + counts.Events,
-                    maxContent,
-                    pendingRequests),
+                HealthScore = health?.Score,
+                Health = health,
+                ActivityScore = healthScore,
                 ImageUrl = row.ImageUrl,
                 DetailRoute = $"/territory/regions/{row.Id}"
             };
@@ -364,6 +352,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 Id = activeTerritory.Id,
                 Name = activeTerritory.Name,
                 DisplayName = activeTerritory.Name,
+                CountryCode = activeTerritory.CountryCode,
                 StatusLabel = "Assigned"
             },
             TerritoryBoundaryGeoJson = ToGeoJson(territoryGeometry),
@@ -376,21 +365,80 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         };
     }
 
+    public async Task<BoundaryRegionCandidateResponseDto> GetRegionBoundaryCandidatesAsync(
+        int userId,
+        int? territoryId,
+        string? admLevel,
+        string? search,
+        int skip,
+        int? take)
+    {
+        await EnsureTerritoryManagerOnlyRoleAsync(userId);
+
+        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, territoryId)
+            ?? throw new UnauthorizedAccessException("Territory is not assigned to the current territory manager.");
+        var territoryGeometry = ToPolygonalGeometry(activeTerritory.BoundaryGeometry);
+        if (territoryGeometry is null)
+            throw new InvalidOperationException(MissingTerritoryBoundaryMessage);
+
+        var iso3 = CountryRegistry.NormalizeIso3ForBoundaryImport(activeTerritory.CountryIso3)
+            ?? CountryRegistry.NormalizeIso3ForBoundaryImport(activeTerritory.CountryCode)
+            ?? CountryRegistry.ToIso3(activeTerritory.CountryCode)
+            ?? throw new InvalidOperationException("Assigned country/territory must have an ISO3 country code before loading boundary candidates.");
+        var requestedAdmLevel = NormalizeAdm1CandidateLevel(admLevel);
+
+        var response = await _localBoundaryImport.GetRegionCandidatesAsync(
+            requestedAdmLevel,
+            iso3,
+            territoryGeometry,
+            search,
+            skip,
+            take);
+
+        var existingRows = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.TerritoryId == activeTerritory.Id)
+            .Select(region => new RegionBoundaryMetadataRow
+            {
+                Id = region.Id,
+                Name = region.Name,
+                BoundaryCandidateId = region.BoundaryCandidateId,
+                BoundaryExternalKey = region.BoundaryExternalKey,
+                BoundaryShapeGroup = region.BoundaryShapeGroup,
+                BoundaryShapeId = region.BoundaryShapeId,
+                BoundaryAdmLevel = region.BoundaryAdmLevel
+            })
+            .ToListAsync();
+
+        MarkExistingRegionCandidates(response.Items, existingRows);
+        return response;
+    }
+
     public async Task<TerritoryRegionCreateResponseDto> CreateRegionAsync(
         int userId,
         TerritoryRegionCreateRequestDto request)
     {
         await EnsureTerritoryManagerOnlyRoleAsync(userId);
 
-        if (request.TerritoryId <= 0)
+        if (request.TerritoryId <= 0 && !HasBoundaryCandidateRequest(request))
             throw new InvalidOperationException("territoryId is required.");
 
-        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, request.TerritoryId)
+        var requestedTerritoryId = request.TerritoryId > 0 ? request.TerritoryId : (int?)null;
+        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, requestedTerritoryId)
             ?? throw new UnauthorizedAccessException("Territory is not assigned to the current territory manager.");
 
         var territoryGeometry = ToPolygonalGeometry(activeTerritory.BoundaryGeometry);
         if (territoryGeometry is null)
             throw new InvalidOperationException(MissingTerritoryBoundaryMessage);
+
+        if (HasBoundaryCandidateRequest(request))
+        {
+            return await CreateRegionFromBoundaryCandidateAsync(
+                userId,
+                activeTerritory,
+                territoryGeometry,
+                request);
+        }
 
         var name = NormalizeRequiredRegionName(request.Name);
         var normalizedName = name.ToLowerInvariant();
@@ -427,6 +475,11 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             .CurrentValue = boundary.Geometry;
 
         await _db.SaveChangesAsync();
+        await _adminNotificationService.CreateTerritoryRegionCreatedNotificationAsync(
+            activeTerritory.Id,
+            region.Id,
+            region.Name,
+            region.CreatedAt);
 
         return new TerritoryRegionCreateResponseDto
         {
@@ -445,6 +498,155 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         };
     }
 
+    private async Task<TerritoryRegionCreateResponseDto> CreateRegionFromBoundaryCandidateAsync(
+        int userId,
+        TerritoryBoundaryRow activeTerritory,
+        Geometry territoryGeometry,
+        TerritoryRegionCreateRequestDto request)
+    {
+        var admLevel = NormalizeAdm1CandidateLevel(request.AdmLevel);
+        var iso3 = CountryRegistry.NormalizeIso3ForBoundaryImport(activeTerritory.CountryIso3)
+            ?? CountryRegistry.NormalizeIso3ForBoundaryImport(activeTerritory.CountryCode)
+            ?? CountryRegistry.ToIso3(activeTerritory.CountryCode)
+            ?? throw new InvalidOperationException("Assigned country/territory must have an ISO3 country code before creating regions from boundary candidates.");
+        var shapeId = NormalizeOptional(request.ShapeId);
+        var requestedBoundaryCandidateId = NormalizeOptional(request.BoundaryCandidateId);
+        var requestedCandidateRecordId = TryParseBoundaryCandidateId(requestedBoundaryCandidateId);
+        var requestedExternalKey = FirstNonEmptyNullable(
+            request.CandidateExternalKey,
+            request.BoundaryExternalKey,
+            requestedCandidateRecordId.HasValue ? null : requestedBoundaryCandidateId);
+        if (!requestedCandidateRecordId.HasValue &&
+            string.IsNullOrWhiteSpace(shapeId) &&
+            string.IsNullOrWhiteSpace(requestedExternalKey))
+        {
+            throw new InvalidOperationException("Boundary candidate id is required.");
+        }
+
+        var requestedShapeGroup = NormalizeOptional(request.ShapeGroup);
+        if (!string.IsNullOrWhiteSpace(requestedShapeGroup) &&
+            !BoundaryIsoCodesMatch(requestedShapeGroup, iso3))
+        {
+            throw new InvalidOperationException("Boundary candidate is not available for the assigned country/territory.");
+        }
+
+        var candidateResult = await _localBoundaryImport.FindRegionCandidateGeometryAsync(
+            admLevel,
+            iso3,
+            requestedCandidateRecordId,
+            shapeId,
+            requestedExternalKey,
+            territoryGeometry);
+        if (candidateResult is null)
+            throw new InvalidOperationException("Boundary candidate is not available for the assigned country/territory.");
+
+        var candidate = candidateResult.Candidate;
+        if (requestedCandidateRecordId.HasValue &&
+            requestedCandidateRecordId.Value != candidate.BoundaryCandidateId)
+        {
+            throw new InvalidOperationException("Boundary candidate is not available for the assigned country/territory.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(requestedExternalKey) &&
+            !string.Equals(requestedExternalKey, candidate.BoundaryExternalKey, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(requestedExternalKey, candidate.ExternalKey, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Boundary candidate is not available for the assigned country/territory.");
+        }
+
+        var boundaryGeometry = ToPolygonalGeometry(candidateResult.Geometry)
+            ?? throw new InvalidOperationException("Boundary candidate geometry is invalid.");
+        if (!candidate.IsInsideAssignedTerritory)
+            throw new InvalidOperationException("Region boundary must be inside the assigned country/territory.");
+
+        var duplicateCandidateExists = await _db.Regions
+            .AsNoTracking()
+            .AnyAsync(region =>
+                region.TerritoryId == activeTerritory.Id &&
+                ((region.BoundaryCandidateId != null &&
+                  region.BoundaryCandidateId == candidate.BoundaryCandidateId) ||
+                 (region.BoundaryExternalKey != null &&
+                  region.BoundaryExternalKey.ToLower() == candidate.BoundaryExternalKey.ToLower()) ||
+                 (region.BoundaryAdmLevel == Adm1Level &&
+                  region.BoundaryShapeGroup != null &&
+                  region.BoundaryShapeId != null &&
+                  candidate.ShapeGroup != null &&
+                  candidate.ShapeId != null &&
+                  region.BoundaryShapeGroup.ToLower() == candidate.ShapeGroup.ToLower() &&
+                  region.BoundaryShapeId.ToLower() == candidate.ShapeId.ToLower()) ||
+                 (region.BoundaryCandidateId == null &&
+                  region.BoundaryExternalKey == null &&
+                  region.BoundaryShapeId == null &&
+                  region.Name.ToLower() == candidate.DisplayName.ToLower())));
+
+        if (duplicateCandidateExists)
+            throw new InvalidOperationException(DuplicateAdministrativeRegionMessage);
+
+        var name = NormalizeCandidateRegionName(request.Name, candidate.DisplayName);
+        var normalizedName = name.ToLowerInvariant();
+        var duplicateNameExists = await _db.Regions
+            .AsNoTracking()
+            .AnyAsync(region =>
+                region.TerritoryId == activeTerritory.Id &&
+                region.Name.ToLower() == normalizedName);
+
+        if (duplicateNameExists)
+            throw new InvalidOperationException($"Region with name '{name}' already exists in this territory.");
+
+        var now = DateTime.UtcNow;
+        var region = new Region
+        {
+            Name = name,
+            TerritoryId = activeTerritory.Id,
+            CreatedAt = now,
+            CreatedByUserId = userId,
+            BoundaryShapeType = boundaryGeometry.GeometryType,
+            BoundarySource = GeoBoundariesBoundarySource,
+            BoundaryAdmLevel = Adm1Level,
+            BoundaryShapeGroup = candidate.ShapeGroup,
+            BoundaryShapeId = candidate.ShapeId,
+            BoundaryExternalKey = candidate.BoundaryExternalKey,
+            BoundaryReleaseType = GeoBoundariesReleaseType,
+            BoundaryLicense = GeoBoundariesLicense,
+            BoundaryImportedAt = now,
+            BoundaryCandidateId = candidate.BoundaryCandidateId
+        };
+
+        _db.Regions.Add(region);
+        _db.Entry(region)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = boundaryGeometry;
+
+        await _db.SaveChangesAsync();
+        await _adminNotificationService.CreateTerritoryRegionCreatedNotificationAsync(
+            activeTerritory.Id,
+            region.Id,
+            region.Name,
+            region.CreatedAt);
+
+        return new TerritoryRegionCreateResponseDto
+        {
+            Id = region.Id,
+            RegionId = region.Id,
+            Name = region.Name,
+            DisplayName = region.Name,
+            TerritoryId = region.TerritoryId,
+            TerritoryDisplayName = activeTerritory.Name,
+            Status = "Inactive",
+            BoundarySource = region.BoundarySource,
+            BoundaryShapeType = region.BoundaryShapeType,
+            BoundaryShapeGroup = region.BoundaryShapeGroup,
+            BoundaryShapeId = region.BoundaryShapeId,
+            BoundaryExternalKey = region.BoundaryExternalKey,
+            BoundaryAdmLevel = region.BoundaryAdmLevel,
+            BoundaryReleaseType = region.BoundaryReleaseType,
+            BoundaryCandidateId = region.BoundaryCandidateId,
+            BoundaryGeometryGeoJson = ToGeoJson(boundaryGeometry),
+            CreatedAt = region.CreatedAt,
+            DetailRoute = $"/territory/regions/{region.Id}"
+        };
+    }
+
     public async Task<TerritoryRegionDetailDto> GetRegionDetailAsync(
         int userId,
         int regionId,
@@ -452,25 +654,26 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         string? period)
     {
         var scope = await GetAuthorizedRegionAsync(userId, regionId, territoryId);
-        var periodRange = ResolveRegionPeriod(period);
+        var healthPeriod = _healthScores.ResolvePeriod(period);
+        var periodRange = new RegionPeriodRange(healthPeriod.Start, healthPeriod.End, healthPeriod.Key, healthPeriod.Label);
         var regionIds = new List<int> { scope.RegionId };
 
         var contentCounts = await GetRegionContentCountsAsync(regionIds);
         var counts = contentCounts.GetValueOrDefault(scope.RegionId, RegionContentCounts.Empty);
         var pendingCounts = await GetRegionPendingRequestCountsAsync(regionIds);
         var pendingRequests = pendingCounts.GetValueOrDefault(scope.RegionId);
-        var quality = (await GetRegionQualityAggregatesAsync(regionIds))
-            .GetValueOrDefault(scope.RegionId, RegionQualityAggregate.Empty);
         var managers = await GetDetailedRegionManagersAsync(scope.RegionId);
         var hits = await GetRegionAnalyticsHitsAsync(scope.RegionId, periodRange.Start, periodRange.End, visitOnly: false);
         var reviewAggregate = await GetRegionReviewAggregateAsync(scope.RegionId);
-        var health = BuildRegionHealthDto(
-            counts,
-            quality,
-            hits.Count(hit => VisitEventTypes.Contains(hit.EventType)),
-            hits.Count(hit => SaveEventTypes.Contains(hit.EventType)),
-            reviewAggregate.Count,
-            pendingRequests);
+        var regionHealth = await _healthScores.GetRegionHealthScoresAsync(regionIds, healthPeriod);
+        var health = regionHealth.GetValueOrDefault(scope.RegionId) ?? new TerritoryHealthDto
+        {
+            Score = 0,
+            Status = "critical",
+            StatusLabel = "Critical",
+            PeriodLabel = healthPeriod.Label,
+            CalculatedAt = healthPeriod.End
+        };
 
         return new TerritoryRegionDetailDto
         {
@@ -573,7 +776,8 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         take = Math.Clamp(take, 1, DirectoryMaxTake);
 
         var normalizedType = NormalizeRegionContentType(entityType);
-        var periodRange = ResolveRegionPeriod(null);
+        var healthPeriod = _healthScores.ResolvePeriod(null);
+        var periodRange = new RegionPeriodRange(healthPeriod.Start, healthPeriod.End, healthPeriod.Key, healthPeriod.Label);
         var items = await GetRegionContentItemsAsync(
             scope.RegionId,
             normalizedType,
@@ -713,7 +917,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
 
     private async Task<List<TerritoryRegionHealthDto>> BuildRegionsHealthAsync(
         int territoryId,
-        IReadOnlyDictionary<int, int> regionVisitCounts)
+        HealthScorePeriod healthPeriod)
     {
         var regions = await _db.Regions
             .AsNoTracking()
@@ -733,19 +937,15 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         var contentCounts = await GetRegionContentCountsAsync(regionIds);
         var pendingCounts = await GetRegionPendingRequestCountsAsync(regionIds);
         var managers = await GetRegionManagersAsync(regionIds);
-
-        var maxVisits = Math.Max(1, regionVisitCounts.Values.DefaultIfEmpty(0).Max());
-        var maxContent = Math.Max(1, contentCounts.Values
-            .Select(counts => counts.Destinations + counts.Locations + counts.Places + counts.Stays + counts.Events)
-            .DefaultIfEmpty(0)
-            .Max());
+        var healthScores = await _healthScores.GetRegionHealthScoresAsync(regionIds, healthPeriod);
 
         return regions.Select(region =>
             {
                 var counts = contentCounts.GetValueOrDefault(region.Id, RegionContentCounts.Empty);
                 var managerRows = managers.GetValueOrDefault(region.Id, new List<ManagerRow>());
                 var pendingRequests = pendingCounts.GetValueOrDefault(region.Id);
-                var visits = regionVisitCounts.GetValueOrDefault(region.Id);
+                var health = healthScores.GetValueOrDefault(region.Id);
+                var healthScore = health?.Score ?? 0;
 
                 return new TerritoryRegionHealthDto
                 {
@@ -764,12 +964,16 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                     StaysCount = counts.Stays,
                     EventsCount = counts.Events,
                     PendingRequestsCount = pendingRequests,
-                    ActivityScore = CalculateActivityScore(
-                        visits,
-                        maxVisits,
-                        counts.Destinations + counts.Locations + counts.Places + counts.Stays + counts.Events,
-                        maxContent,
-                        pendingRequests)
+                    HealthScore = healthScore,
+                    Health = health ?? new TerritoryHealthDto
+                    {
+                        Score = healthScore,
+                        Status = "critical",
+                        StatusLabel = "Critical",
+                        PeriodLabel = healthPeriod.Label,
+                        CalculatedAt = healthPeriod.End
+                    },
+                    ActivityScore = healthScore
                 };
             })
             .ToList();
@@ -1290,18 +1494,9 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             .Select(group => new { RegionId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(row => row.RegionId, row => row.Count);
 
-        var reviewReportCounts = await _db.ReviewReports
-            .AsNoTracking()
-            .Where(report =>
-                report.Status == ReviewReportStatus.Pending &&
-                regionIds.Contains(report.RegionId))
-            .GroupBy(report => report.RegionId)
-            .Select(group => new { RegionId = group.Key, Count = group.Count() })
-            .ToDictionaryAsync(row => row.RegionId, row => row.Count);
-
         return regionIds.ToDictionary(
             regionId => regionId,
-            regionId => contributionCounts.GetValueOrDefault(regionId) + reviewReportCounts.GetValueOrDefault(regionId));
+            regionId => contributionCounts.GetValueOrDefault(regionId));
     }
 
     private async Task<Dictionary<int, List<ManagerRow>>> GetRegionManagersAsync(List<int> regionIds)
@@ -1628,7 +1823,12 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
 
         if (destinationIds.Count > 0)
         {
-            var health = await BuildDestinationHealthMapAsync(destinationIds, regionId, periodRange);
+            var healthPeriod = new HealthScorePeriod(
+                periodRange.Key,
+                periodRange.Label,
+                periodRange.Start,
+                periodRange.End);
+            var health = await _healthScores.GetDestinationHealthScoresAsync(destinationIds, regionId, healthPeriod);
             foreach (var item in items.Where(item => item.EntityType == "destination"))
             {
                 item.Health = health.GetValueOrDefault(item.Id);
@@ -2064,444 +2264,6 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         return ordered.ToList();
     }
 
-    private async Task<Dictionary<int, TerritoryHealthDto>> BuildDestinationHealthMapAsync(
-        List<int> destinationIds,
-        int regionId,
-        RegionPeriodRange periodRange)
-    {
-        var rows = await _db.Destinations
-            .AsNoTracking()
-            .Where(destination => destination.RegionId == regionId && destinationIds.Contains(destination.Id))
-            .Select(destination => new DestinationHealthSource
-            {
-                Id = destination.Id,
-                Name = destination.Name,
-                HasHeroImage = destination.Images.Any(image => image.TargetType == EntityImageTargetType.Destination),
-                HasDescription = destination.Description != string.Empty || destination.Summary != null,
-                HasTags = destination.DestinationTags.Any(),
-                HasCoordinates = destination.Latitude != 0 || destination.Longitude != 0,
-                HasBoundary = destination.BoundaryShapeType != null || destination.BoundaryNote != null,
-                LocationsCount = destination.Locations.Count,
-                PlacesCount = destination.Locations
-                    .SelectMany(location => location.Places)
-                    .Count(place => place.Stay == null),
-                StaysCount = destination.Locations
-                    .SelectMany(location => location.Places)
-                    .Count(place => place.Stay != null),
-                EventsCount = destination.Events.Count,
-                CreatedAt = destination.CreatedAt,
-                UpdatedAt = destination.UpdatedAt
-            })
-            .ToListAsync();
-
-        var views = await GetEntityMetricCountsAsync(
-            destinationIds,
-            new[] { AnalyticsEntityTypes.Destination },
-            VisitEventTypes,
-            periodRange);
-        var saves = await GetEntityMetricCountsAsync(
-            destinationIds,
-            new[] { AnalyticsEntityTypes.Destination },
-            SaveEventTypes,
-            periodRange);
-        var reviews = await _db.DestinationReviews
-            .AsNoTracking()
-            .Where(review => destinationIds.Contains(review.DestinationId))
-            .GroupBy(review => review.DestinationId)
-            .Select(group => new { Id = group.Key, Count = group.Count(), Average = group.Average(review => review.Rating) })
-            .ToDictionaryAsync(row => row.Id);
-        var pending = await GetDestinationPendingRequestCountsAsync(destinationIds);
-
-        return rows.ToDictionary(
-            row => row.Id,
-            row => BuildDestinationHealth(
-                row,
-                views.GetValueOrDefault(row.Id),
-                saves.GetValueOrDefault(row.Id),
-                reviews.TryGetValue(row.Id, out var review) ? review.Count : 0,
-                reviews.TryGetValue(row.Id, out var rating) ? rating.Average : 0,
-                pending.GetValueOrDefault(row.Id)));
-    }
-
-    private async Task<Dictionary<int, int>> GetEntityMetricCountsAsync(
-        List<int> entityIds,
-        IReadOnlyCollection<string> entityTypes,
-        IReadOnlyCollection<string> eventTypes,
-        RegionPeriodRange periodRange)
-    {
-        if (entityIds.Count == 0)
-            return new Dictionary<int, int>();
-
-        return await _db.AnalyticsEvents
-            .AsNoTracking()
-            .Where(evt =>
-                evt.OccurredAt >= periodRange.Start &&
-                evt.OccurredAt < periodRange.End &&
-                evt.EntityId.HasValue &&
-                evt.EntityType != null &&
-                entityTypes.Contains(evt.EntityType) &&
-                eventTypes.Contains(evt.EventType) &&
-                entityIds.Contains(evt.EntityId.Value))
-            .GroupBy(evt => evt.EntityId!.Value)
-            .Select(group => new { Id = group.Key, Count = group.Count() })
-            .ToDictionaryAsync(row => row.Id, row => row.Count);
-    }
-
-    private async Task<Dictionary<int, int>> GetDestinationPendingRequestCountsAsync(List<int> destinationIds)
-    {
-        if (destinationIds.Count == 0)
-            return new Dictionary<int, int>();
-
-        return await _db.PlaceContributions
-            .AsNoTracking()
-            .Where(contribution =>
-                contribution.Status == PlaceContributionStatus.PendingReview &&
-                ((contribution.LocationId.HasValue &&
-                  contribution.Location != null &&
-                  destinationIds.Contains(contribution.Location.DestinationId)) ||
-                 (contribution.PlaceId.HasValue &&
-                  contribution.Place != null &&
-                  destinationIds.Contains(contribution.Place.Location.DestinationId))))
-            .GroupBy(contribution => contribution.LocationId.HasValue
-                ? contribution.Location!.DestinationId
-                : contribution.Place!.Location.DestinationId)
-            .Select(group => new { DestinationId = group.Key, Count = group.Count() })
-            .ToDictionaryAsync(row => row.DestinationId, row => row.Count);
-    }
-
-    private static TerritoryHealthDto BuildDestinationHealth(
-        DestinationHealthSource source,
-        int views,
-        int saves,
-        int reviews,
-        double averageRating,
-        int pendingRequests)
-    {
-        var drivers = new List<TerritoryHealthInsightDto>();
-        var recommendations = new List<TerritoryHealthInsightDto>();
-
-        var completenessScore = 0;
-        AddSignal(source.HasHeroImage, 8, "Hero image", "Destination has a hero image.", "Add a hero image to improve map and card visibility.");
-        AddSignal(source.HasDescription, 8, "Description", "Destination has descriptive copy.", "Add a concise destination description for visitors and reviewers.");
-        AddSignal(source.HasTags, 7, "Tags", "Destination has discovery tags.", "Add tags so this destination can appear in dynamic Explore sections.");
-        AddSignal(source.HasCoordinates, 7, "Coordinates", "Destination has coordinates.", "Verify destination coordinates for better map filtering.");
-        AddSignal(source.HasBoundary, 10, "Boundary", "Destination has boundary metadata.", "Add or verify boundary geometry for better map filtering.");
-
-        var coverageScore = 0;
-        if (source.LocationsCount > 0)
-            coverageScore += 8;
-        else
-            recommendations.Add(HealthRecommendation("Add at least one location to improve regional structure."));
-
-        if (source.PlacesCount + source.StaysCount >= 3)
-            coverageScore += 10;
-        else if (source.PlacesCount + source.StaysCount > 0)
-            coverageScore += 5;
-        else
-            recommendations.Add(HealthRecommendation("Add more places or stays to improve content coverage."));
-
-        if (source.EventsCount > 0)
-            coverageScore += 7;
-        else
-            recommendations.Add(HealthRecommendation("Add upcoming events when this destination has seasonal or local activity."));
-
-        var engagementScore =
-            Math.Min(8, views) +
-            Math.Min(5, saves * 2) +
-            Math.Min(7, reviews * 2);
-
-        if (views == 0)
-        {
-            drivers.Add(HealthDriver("No recent views", "No destination views were recorded in the selected period.", "warning"));
-            recommendations.Add(HealthRecommendation("Improve imagery, tags, and content depth to increase destination discovery."));
-        }
-
-        if (reviews == 0)
-        {
-            drivers.Add(HealthDriver("No reviews", "No destination reviews are available yet.", "warning"));
-            recommendations.Add(HealthRecommendation("Encourage reviews to improve confidence score."));
-        }
-        else if (averageRating < 3.5)
-        {
-            drivers.Add(HealthDriver("Low rating", $"Average rating is {Math.Round(averageRating, 1)}.", "warning"));
-            recommendations.Add(HealthRecommendation("Review recent visitor feedback and prioritize quality improvements."));
-        }
-
-        var moderationScore = Math.Max(0, 10 - Math.Min(10, pendingRequests * 2));
-        if (pendingRequests > 0)
-        {
-            drivers.Add(HealthDriver("Pending requests", $"{pendingRequests} pending request(s) need review.", "warning"));
-            recommendations.Add(HealthRecommendation("Review pending contributions for this destination."));
-        }
-
-        var lastTouched = source.UpdatedAt ?? source.CreatedAt;
-        var recencyScore = lastTouched >= DateTime.UtcNow.AddDays(-180) ? 5 : 0;
-        if (recencyScore == 0)
-        {
-            recommendations.Add(HealthRecommendation("Refresh stale content so visitors see current destination information."));
-        }
-
-        var score = Math.Clamp(
-            completenessScore + coverageScore + engagementScore + moderationScore + recencyScore,
-            0,
-            100);
-
-        if (drivers.Count == 0)
-        {
-            drivers.Add(HealthDriver("Healthy baseline", "Core destination content and activity signals are present.", "positive"));
-        }
-
-        return new TerritoryHealthDto
-        {
-            Score = score,
-            StatusLabel = BuildHealthStatusLabel(score),
-            Drivers = drivers,
-            Recommendations = recommendations.Take(6).ToList()
-        };
-
-        void AddSignal(bool present, int points, string label, string presentDetail, string recommendation)
-        {
-            if (present)
-            {
-                completenessScore += points;
-                return;
-            }
-
-            drivers.Add(HealthDriver($"Missing {label.ToLowerInvariant()}", $"{label} is not present.", "warning"));
-            recommendations.Add(HealthRecommendation(recommendation));
-        }
-    }
-
-    private TerritoryHealthDto BuildRegionHealthDto(
-        RegionContentCounts counts,
-        RegionQualityAggregate quality,
-        int visits,
-        int saves,
-        int reviews,
-        int pendingRequests)
-    {
-        var health = CalculateRegionHealth(counts, quality, visits, saves, reviews, pendingRequests);
-
-        if (!health.Score.HasValue)
-        {
-            health.Recommendations.Add(HealthRecommendation("Add at least one destination before calculating region health."));
-            return health;
-        }
-
-        if (counts.Destinations == 0)
-            health.Recommendations.Add(HealthRecommendation("Add destinations to establish region coverage."));
-        if (counts.Locations == 0)
-            health.Recommendations.Add(HealthRecommendation("Add locations under destinations to improve geographic coverage."));
-        if (counts.Places + counts.Stays == 0)
-            health.Recommendations.Add(HealthRecommendation("Add places or stays to make the region useful for visitors."));
-        if (counts.Events == 0)
-            health.Recommendations.Add(HealthRecommendation("Add events when the region has current local activity."));
-        if (quality.QualityRatio < 0.65)
-            health.Recommendations.Add(HealthRecommendation("Fill missing images, descriptions, tags, and coordinates across low-completeness content."));
-        if (pendingRequests > 0)
-            health.Recommendations.Add(HealthRecommendation("Review pending contributions and reports to reduce moderation backlog."));
-        if (visits == 0)
-            health.Recommendations.Add(HealthRecommendation("Improve content completeness and discovery tags to increase region engagement."));
-        if (reviews == 0)
-            health.Recommendations.Add(HealthRecommendation("Encourage reviews on destination, place, and event pages."));
-
-        health.Recommendations = health.Recommendations.Take(6).ToList();
-        return health;
-    }
-
-    private static TerritoryHealthDto CalculateRegionHealth(
-        RegionContentCounts counts,
-        RegionQualityAggregate quality,
-        int visits,
-        int saves,
-        int reviews,
-        int pendingRequests)
-    {
-        var totalContent = counts.Destinations + counts.Locations + counts.Places + counts.Stays + counts.Events;
-        if (totalContent == 0)
-        {
-            return new TerritoryHealthDto
-            {
-                Score = null,
-                StatusLabel = "Insufficient data",
-                Drivers = new List<TerritoryHealthInsightDto>
-                {
-                    HealthDriver("No regional content", "Health is not calculated until content exists in the region.", "info")
-                }
-            };
-        }
-
-        // Region health uses only stored signals:
-        // 25 pts content coverage, 25 pts content completeness,
-        // 25 pts engagement, and 25 pts operational freshness/moderation.
-        var coverageScore = 0;
-        if (counts.Destinations > 0) coverageScore += 7;
-        if (counts.Locations > 0) coverageScore += 6;
-        if (counts.Places + counts.Stays > 0) coverageScore += 7;
-        if (counts.Events > 0) coverageScore += 5;
-
-        var completenessScore = quality.PossibleSignals <= 0
-            ? 0
-            : (int)Math.Round(25.0 * quality.CompletedSignals / quality.PossibleSignals);
-
-        var engagementScore =
-            Math.Min(10, visits) +
-            Math.Min(7, saves * 2) +
-            Math.Min(8, reviews * 2);
-
-        var freshnessScore = quality.TotalItems <= 0
-            ? 0
-            : (int)Math.Round(10.0 * quality.RecentlyUpdatedItems / quality.TotalItems);
-        var moderationScore = Math.Max(0, 15 - Math.Min(15, pendingRequests * 3));
-
-        var score = Math.Clamp(
-            coverageScore + completenessScore + engagementScore + freshnessScore + moderationScore,
-            0,
-            100);
-
-        var drivers = new List<TerritoryHealthInsightDto>
-        {
-            HealthDriver("Content coverage", $"{totalContent} content item(s) are present in the region.", "info"),
-            HealthDriver("Completeness", $"{Math.Round(quality.QualityRatio * 100)}% of tracked quality signals are complete.", "info")
-        };
-
-        if (pendingRequests > 0)
-        {
-            drivers.Add(HealthDriver("Moderation backlog", $"{pendingRequests} pending request(s) reduce operational health.", "warning"));
-        }
-
-        if (visits == 0)
-        {
-            drivers.Add(HealthDriver("Low engagement", "No visits were recorded in the selected period.", "warning"));
-        }
-
-        return new TerritoryHealthDto
-        {
-            Score = score,
-            StatusLabel = BuildHealthStatusLabel(score),
-            Drivers = drivers
-        };
-    }
-
-    private static TerritoryHealthInsightDto HealthDriver(string label, string detail, string severity) =>
-        new()
-        {
-            Label = label,
-            Detail = detail,
-            Severity = severity
-        };
-
-    private static TerritoryHealthInsightDto HealthRecommendation(string detail) =>
-        new()
-        {
-            Label = "Recommendation",
-            Detail = detail,
-            Severity = "action"
-        };
-
-    private static string BuildHealthStatusLabel(int score)
-    {
-        if (score >= 85)
-            return "Healthy";
-        if (score >= 70)
-            return "Stable";
-        if (score >= 50)
-            return "Needs attention";
-
-        return "Critical";
-    }
-
-    private async Task<Dictionary<int, RegionQualityAggregate>> GetRegionQualityAggregatesAsync(List<int> regionIds)
-    {
-        if (regionIds.Count == 0)
-            return new Dictionary<int, RegionQualityAggregate>();
-
-        var recentCutoff = DateTime.UtcNow.AddDays(-180);
-        var rows = new List<QualitySignalRow>();
-
-        rows.AddRange(await _db.Destinations
-            .AsNoTracking()
-            .Where(destination => regionIds.Contains(destination.RegionId))
-            .Select(destination => new QualitySignalRow
-            {
-                RegionId = destination.RegionId,
-                PossibleSignals = 5,
-                CompletedSignals =
-                    (destination.Images.Any(image => image.TargetType == EntityImageTargetType.Destination) ? 1 : 0) +
-                    ((destination.Description != string.Empty || destination.Summary != null) ? 1 : 0) +
-                    (destination.DestinationTags.Any() ? 1 : 0) +
-                    ((destination.Latitude != 0 || destination.Longitude != 0) ? 1 : 0) +
-                    ((destination.BoundaryShapeType != null || destination.BoundaryNote != null) ? 1 : 0),
-                RecentlyUpdated = (destination.UpdatedAt ?? destination.CreatedAt) >= recentCutoff
-            })
-            .ToListAsync());
-
-        rows.AddRange(await _db.Locations
-            .AsNoTracking()
-            .Where(location => regionIds.Contains(location.Destination.RegionId))
-            .Select(location => new QualitySignalRow
-            {
-                RegionId = location.Destination.RegionId,
-                PossibleSignals = 5,
-                CompletedSignals =
-                    (location.Images.Any(image => image.TargetType == EntityImageTargetType.Location) ? 1 : 0) +
-                    ((location.Description != string.Empty || location.Summary != null) ? 1 : 0) +
-                    (location.LocationTags.Any() ? 1 : 0) +
-                    ((location.Latitude != 0 || location.Longitude != 0) ? 1 : 0) +
-                    ((location.BoundaryShapeType != null || location.BoundaryNote != null) ? 1 : 0),
-                RecentlyUpdated = (location.UpdatedAt ?? location.CreatedAt) >= recentCutoff
-            })
-            .ToListAsync());
-
-        rows.AddRange(await _db.Places
-            .AsNoTracking()
-            .Where(place => regionIds.Contains(place.Location.Destination.RegionId))
-            .Select(place => new QualitySignalRow
-            {
-                RegionId = place.Location.Destination.RegionId,
-                PossibleSignals = 5,
-                CompletedSignals =
-                    (place.Images.Any(image => image.TargetType == EntityImageTargetType.Place) ? 1 : 0) +
-                    ((place.Description != string.Empty || place.Subtitle != null) ? 1 : 0) +
-                    (place.PlaceTags.Any() ? 1 : 0) +
-                    ((place.Latitude != 0 || place.Longitude != 0 || place.Address != null) ? 1 : 0) +
-                    (place.PlaceTypeId > 0 ? 1 : 0),
-                RecentlyUpdated = (place.UpdatedAt ?? place.CreatedAt) >= recentCutoff
-            })
-            .ToListAsync());
-
-        rows.AddRange(await _db.Events
-            .AsNoTracking()
-            .Where(evt => regionIds.Contains(evt.Destination.RegionId))
-            .Select(evt => new QualitySignalRow
-            {
-                RegionId = evt.Destination.RegionId,
-                PossibleSignals = 5,
-                CompletedSignals =
-                    (evt.Images.Any(image => image.TargetType == EntityImageTargetType.Event) ? 1 : 0) +
-                    ((evt.Description != string.Empty || evt.Summary != null) ? 1 : 0) +
-                    (evt.EventTags.Any() ? 1 : 0) +
-                    (evt.StartDate != default ? 1 : 0) +
-                    ((evt.LocationId.HasValue || evt.PlaceId.HasValue || evt.DestinationId > 0) ? 1 : 0),
-                RecentlyUpdated = (evt.UpdatedAt ?? evt.CreatedAt) >= recentCutoff
-            })
-            .ToListAsync());
-
-        var grouped = rows
-            .GroupBy(row => row.RegionId)
-            .ToDictionary(
-                group => group.Key,
-                group => new RegionQualityAggregate(
-                    group.Count(),
-                    group.Sum(row => row.CompletedSignals),
-                    group.Sum(row => row.PossibleSignals),
-                    group.Count(row => row.RecentlyUpdated)));
-
-        return regionIds.ToDictionary(
-            regionId => regionId,
-            regionId => grouped.GetValueOrDefault(regionId, RegionQualityAggregate.Empty));
-    }
-
     private async Task<Dictionary<int, RegionReviewAggregate>> GetRegionReviewCountsAsync(List<int> regionIds)
     {
         if (regionIds.Count == 0)
@@ -2640,23 +2402,6 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         return region;
     }
 
-    private static RegionPeriodRange ResolveRegionPeriod(string? period)
-    {
-        var now = DateTime.UtcNow;
-        var normalized = string.IsNullOrWhiteSpace(period)
-            ? "30d"
-            : period.Trim().ToLowerInvariant();
-
-        return normalized switch
-        {
-            "7d" or "week" => new RegionPeriodRange(now.AddDays(-7), now),
-            "90d" or "quarter" => new RegionPeriodRange(now.AddDays(-90), now),
-            "all" or "all-time" => new RegionPeriodRange(DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc), now),
-            "30d" or "month" => new RegionPeriodRange(now.AddDays(-30), now),
-            _ => throw new InvalidOperationException("Unsupported period.")
-        };
-    }
-
     private async Task<List<AnalyticsRegionHit>> GetRegionAnalyticsHitsAsync(
         int regionId,
         DateTime periodStart,
@@ -2775,12 +2520,14 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
 
     private async Task<TerritoryBoundaryRow?> GetAuthorizedTerritoryBoundaryAsync(int userId, int? territoryId)
     {
-        if (territoryId is <= 0)
+        if (territoryId.HasValue && territoryId.Value <= 0)
             throw new InvalidOperationException("territoryId must be positive.");
 
         var query = _db.TerritoryManagerTerritories
             .AsNoTracking()
-            .Where(assignment => assignment.UserId == userId);
+            .Where(assignment =>
+                assignment.UserId == userId &&
+                assignment.Territory.TerritoryKind == TerritoryKinds.Country);
 
         if (territoryId.HasValue)
         {
@@ -2794,6 +2541,8 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             {
                 Id = assignment.TerritoryId,
                 Name = assignment.Territory.Name,
+                CountryCode = assignment.Territory.CountryCode,
+                CountryIso3 = assignment.Territory.CountryIso3,
                 BoundaryShapeType = assignment.Territory.BoundaryShapeType,
                 BoundarySource = assignment.Territory.BoundarySource,
                 BoundaryGeometry = EF.Property<Geometry?>(
@@ -2824,6 +2573,155 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             CenterLongitude = centroid?.X
         };
     }
+
+    private static void MarkExistingRegionCandidates(
+        List<BoundaryRegionCandidateDto> candidates,
+        List<RegionBoundaryMetadataRow> existingRows)
+    {
+        var byExternalKey = existingRows
+            .Where(row => !string.IsNullOrWhiteSpace(row.BoundaryExternalKey))
+            .GroupBy(row => row.BoundaryExternalKey!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var byCandidateId = existingRows
+            .Where(row => row.BoundaryCandidateId.HasValue)
+            .GroupBy(row => row.BoundaryCandidateId!.Value)
+            .ToDictionary(group => group.Key, group => group.First());
+        var byShapeKey = existingRows
+            .Where(row =>
+                string.Equals(row.BoundaryAdmLevel, Adm1Level, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(row.BoundaryShapeGroup) &&
+                !string.IsNullOrWhiteSpace(row.BoundaryShapeId))
+            .GroupBy(row => BuildShapeCandidateKey(row.BoundaryShapeGroup, row.BoundaryShapeId), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var byPendingExactName = existingRows
+            .Where(row =>
+                row.BoundaryCandidateId is null &&
+                string.IsNullOrWhiteSpace(row.BoundaryExternalKey) &&
+                string.IsNullOrWhiteSpace(row.BoundaryShapeId))
+            .GroupBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in candidates)
+        {
+            RegionBoundaryMetadataRow? existing = null;
+            if (candidate.BoundaryCandidateId > 0)
+            {
+                byCandidateId.TryGetValue(candidate.BoundaryCandidateId, out existing);
+            }
+
+            if (existing is null &&
+                !string.IsNullOrWhiteSpace(candidate.BoundaryExternalKey))
+            {
+                byExternalKey.TryGetValue(candidate.BoundaryExternalKey, out existing);
+            }
+
+            if (existing is null &&
+                !string.IsNullOrWhiteSpace(candidate.ShapeGroup) &&
+                !string.IsNullOrWhiteSpace(candidate.ShapeId))
+            {
+                byShapeKey.TryGetValue(
+                    BuildShapeCandidateKey(candidate.ShapeGroup, candidate.ShapeId),
+                    out existing);
+            }
+
+            if (existing is null &&
+                !string.IsNullOrWhiteSpace(candidate.DisplayName))
+            {
+                byPendingExactName.TryGetValue(candidate.DisplayName, out existing);
+            }
+
+            if (existing is null)
+            {
+                candidate.Status = candidate.IsInsideAssignedTerritory ? "Available" : "InvalidOutsideTerritory";
+                candidate.CanSelect = candidate.HasBoundary &&
+                    candidate.HasDisplayBoundary &&
+                    candidate.IsInsideAssignedTerritory &&
+                    candidate.Status == "Available";
+                continue;
+            }
+
+            candidate.Status = "ExistingRegion";
+            candidate.CanSelect = false;
+            candidate.ExistingRegionId = existing.Id;
+            candidate.ExistingRegionName = existing.Name;
+            candidate.ValidationMessage = DuplicateAdministrativeRegionMessage;
+        }
+    }
+
+    private static string BuildShapeCandidateKey(string? shapeGroup, string? shapeId) =>
+        $"{shapeGroup?.Trim().ToUpperInvariant()}::{shapeId?.Trim().ToUpperInvariant()}";
+
+    private static bool HasBoundaryCandidateRequest(TerritoryRegionCreateRequestDto request) =>
+        !string.IsNullOrWhiteSpace(request.ShapeId) ||
+        !string.IsNullOrWhiteSpace(request.CandidateExternalKey) ||
+        !string.IsNullOrWhiteSpace(request.BoundaryCandidateId) ||
+        !string.IsNullOrWhiteSpace(request.BoundaryExternalKey);
+
+    private static string NormalizeAdm1CandidateLevel(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? Adm1Level
+            : value.Trim().Replace(" ", string.Empty).Replace("-", string.Empty).ToUpperInvariant();
+
+        return normalized == Adm1Level
+            ? normalized
+            : throw new InvalidOperationException("Boundary candidate must be an ADM1 administrative region.");
+    }
+
+    private static string NormalizeRequiredBoundaryCandidateShapeId(string? value)
+    {
+        var shapeId = value?.Trim() ?? string.Empty;
+        if (shapeId.Length == 0)
+            throw new InvalidOperationException("Boundary candidate shape id is required.");
+
+        return shapeId;
+    }
+
+    private static int? TryParseBoundaryCandidateId(string? value)
+    {
+        return int.TryParse(value, out var candidateId) && candidateId > 0
+            ? candidateId
+            : null;
+    }
+
+    private static string NormalizeCandidateRegionName(string? requestedName, string candidateName)
+    {
+        var name = string.IsNullOrWhiteSpace(requestedName)
+            ? candidateName.Trim()
+            : requestedName.Trim();
+
+        if (name.Length == 0)
+            throw new InvalidOperationException("Region name is required.");
+
+        if (name.Length > 200)
+            throw new InvalidOperationException("Region name is too long.");
+
+        return name;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static string? FirstNonEmptyNullable(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return null;
+    }
+
+    private static bool BoundaryIsoCodesMatch(string first, string second) =>
+        string.Equals(
+            CountryRegistry.NormalizeIso3ForBoundaryImport(first),
+            CountryRegistry.NormalizeIso3ForBoundaryImport(second),
+            StringComparison.OrdinalIgnoreCase) ||
+        CountryRegistry.AreBoundaryImportIsoAliases(first, second);
 
     private static BoundaryResult BuildRegionBoundary(TerritoryRegionBoundaryDto? boundary)
     {
@@ -2895,6 +2793,18 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             "osm" or "osmboundary" => OsmBoundarySource,
             _ => throw new InvalidOperationException("Boundary source is invalid.")
         };
+    }
+
+    private static string? ExtractCountryCode(string? boundarySource)
+    {
+        if (string.IsNullOrWhiteSpace(boundarySource) ||
+            !boundarySource.StartsWith("CountryGeoJson:", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var code = boundarySource["CountryGeoJson:".Length..].Trim().ToUpperInvariant();
+        return code.Length == 2 ? code : null;
     }
 
     private static string NormalizeRegionShapeType(string? value)
@@ -3231,22 +3141,6 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         return string.IsNullOrWhiteSpace(initials) ? "?" : initials;
     }
 
-    private static int CalculateActivityScore(
-        int visits,
-        int maxVisits,
-        int contentCount,
-        int maxContent,
-        int pendingRequests)
-    {
-        // Real-data score: baseline 50, up to 25 relative-visit points,
-        // up to 15 relative-inventory points, minus up to 20 backlog points.
-        var visitScore = maxVisits <= 0 ? 0 : (int)Math.Round(25.0 * visits / maxVisits);
-        var contentScore = maxContent <= 0 ? 0 : (int)Math.Round(15.0 * contentCount / maxContent);
-        var backlogPenalty = Math.Min(20, pendingRequests * 4);
-
-        return Math.Clamp(50 + visitScore + contentScore - backlogPenalty, 0, 100);
-    }
-
     private static double CalculateChangePercent(int current, int previous)
     {
         if (previous <= 0)
@@ -3370,27 +3264,9 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public static RegionContentCounts Empty { get; } = new(0, 0, 0, 0, 0);
     }
 
-    private sealed record RegionPeriodRange(DateTime Start, DateTime End);
+    private sealed record RegionPeriodRange(DateTime Start, DateTime End, string Key, string Label);
 
     private sealed record EntityKey(string EntityType, int EntityId);
-
-    private sealed record RegionQualityAggregate(
-        int TotalItems,
-        int CompletedSignals,
-        int PossibleSignals,
-        int RecentlyUpdatedItems)
-    {
-        public static RegionQualityAggregate Empty { get; } = new(0, 0, 0, 0);
-        public double QualityRatio => PossibleSignals <= 0 ? 0 : (double)CompletedSignals / PossibleSignals;
-    }
-
-    private sealed class QualitySignalRow
-    {
-        public int RegionId { get; set; }
-        public int CompletedSignals { get; set; }
-        public int PossibleSignals { get; set; }
-        public bool RecentlyUpdated { get; set; }
-    }
 
     private sealed class RegionReviewAggregate
     {
@@ -3416,29 +3292,14 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public double? CenterLongitude { get; set; }
     }
 
-    private sealed class DestinationHealthSource
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public bool HasHeroImage { get; set; }
-        public bool HasDescription { get; set; }
-        public bool HasTags { get; set; }
-        public bool HasCoordinates { get; set; }
-        public bool HasBoundary { get; set; }
-        public int LocationsCount { get; set; }
-        public int PlacesCount { get; set; }
-        public int StaysCount { get; set; }
-        public int EventsCount { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime? UpdatedAt { get; set; }
-    }
-
     private sealed record BoundaryResult(string ShapeType, Geometry Geometry);
 
     private sealed class TerritoryBoundaryRow
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string? CountryCode { get; set; }
+        public string? CountryIso3 { get; set; }
         public string? BoundaryShapeType { get; set; }
         public string? BoundarySource { get; set; }
         public Geometry? BoundaryGeometry { get; set; }
@@ -3449,6 +3310,17 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public Geometry? BoundaryGeometry { get; set; }
+    }
+
+    private sealed class RegionBoundaryMetadataRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int? BoundaryCandidateId { get; set; }
+        public string? BoundaryExternalKey { get; set; }
+        public string? BoundaryShapeGroup { get; set; }
+        public string? BoundaryShapeId { get; set; }
+        public string? BoundaryAdmLevel { get; set; }
     }
 
     private sealed class BoundsAccumulator

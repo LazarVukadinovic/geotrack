@@ -9,6 +9,7 @@ public class AdminProfileUserDto
     public string Email { get; set; } = string.Empty;
     public string? ShortBio { get; set; }
     public string? AvatarUrl { get; set; }
+    public long? AvatarVersion { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -48,6 +49,7 @@ public class AdminProfileAssignmentDto
     public string SectionTitle { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
     public string DisplayValue { get; set; } = string.Empty;
+    public string? AccessLevel { get; set; }
     public List<AdminProfileAssignmentItemDto> AssignedItems { get; set; } = new();
     public DateTime? MemberSince { get; set; }
 }

@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -96,6 +97,7 @@ public class AdminProfileService : IAdminProfileService
                 Email = user.Email,
                 ShortBio = user.ShortBio,
                 AvatarUrl = user.AvatarUrl,
+                AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
                 CreatedAt = user.CreatedAt,
                 UpdatedAt = user.UpdatedAt,
             },
@@ -179,7 +181,9 @@ public class AdminProfileService : IAdminProfileService
 
     private static void EnsureAdminRole(IReadOnlyCollection<string> roles)
     {
-        if (!roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal) &&
+        if (!roles.Contains(RoleNames.Admin, StringComparer.Ordinal) &&
+            !roles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal) &&
+            !roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal) &&
             !roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal) &&
             !roles.Contains(RoleNames.TerritoryAssociate, StringComparer.Ordinal))
             throw new UnauthorizedAccessException("Admin role is required.");
@@ -187,6 +191,12 @@ public class AdminProfileService : IAdminProfileService
 
     private static string ResolvePrimaryAdminRole(IReadOnlyCollection<string> roles)
     {
+        if (roles.Contains(RoleNames.Admin, StringComparer.Ordinal))
+            return RoleNames.Admin;
+
+        if (roles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal))
+            return RoleNames.ContentModerator;
+
         if (roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
             return RoleNames.TerritoryManager;
 
@@ -203,7 +213,8 @@ public class AdminProfileService : IAdminProfileService
             RoleNames.TerritoryManager => "Territory Manager",
             RoleNames.TerritoryAssociate => "Territory Associate",
             RoleNames.RegionalManager => "Regional Manager",
-            RoleNames.Admin => "Admin",
+            RoleNames.ContentModerator => "Content Moderator",
+            RoleNames.Admin => "Administrator",
             _ => roleCode
         };
     }
@@ -239,6 +250,34 @@ public class AdminProfileService : IAdminProfileService
         IReadOnlyCollection<TerritoryManagerTerritory> territoryAssignments,
         DateTime userCreatedAt)
     {
+        if (roleCode == RoleNames.Admin)
+        {
+            return new AdminProfileAssignmentDto
+            {
+                AssignmentType = "System",
+                SectionTitle = "System Access",
+                Label = "Scope",
+                DisplayValue = "Platform-wide",
+                AccessLevel = "Full access",
+                AssignedItems = new List<AdminProfileAssignmentItemDto>(),
+                MemberSince = userCreatedAt == default ? null : userCreatedAt,
+            };
+        }
+
+        if (roleCode == RoleNames.ContentModerator)
+        {
+            return new AdminProfileAssignmentDto
+            {
+                AssignmentType = "ContentModeration",
+                SectionTitle = "Content Moderation Access",
+                Label = "Scope",
+                DisplayValue = "Content moderation",
+                AccessLevel = "Review moderation",
+                AssignedItems = new List<AdminProfileAssignmentItemDto>(),
+                MemberSince = userCreatedAt == default ? null : userCreatedAt,
+            };
+        }
+
         if (roleCode is RoleNames.TerritoryManager or RoleNames.TerritoryAssociate)
         {
             var items = territoryAssignments

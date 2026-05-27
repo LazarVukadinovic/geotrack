@@ -1,7 +1,14 @@
 import { Injectable, Optional, computed, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, catchError, finalize, map, of, shareReplay, tap, throwError } from 'rxjs';
-import { User, UserRole } from '../models/user.model';
+import { AdminRoleCode, User } from '../models/user.model';
+import {
+  AdminView,
+  getAdminViewByCode,
+  getAdminViewsForRoles,
+  normalizeAdminRoleCode,
+  resolveAdminViewForRoles,
+} from '../models/admin-view.model';
 
 interface AdminAuthUserResponse {
   id: number;
@@ -10,9 +17,11 @@ interface AdminAuthUserResponse {
   lastName?: string;
   displayName: string;
   avatarUrl?: string | null;
+  avatarVersion?: number | null;
   roles: string[];
   canAccessRegionalAdmin: boolean;
   canAccessTerritoryAdmin?: boolean;
+  canAccessContentModeration?: boolean;
 }
 
 interface LoginResponse {
@@ -28,6 +37,7 @@ export class AuthService {
   private static readonly sessionHintKey = 'geotrack_admin_session';
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly activeTerritoryStorageKey = 'geotrack_admin_active_territory_id';
+  private static readonly activeViewStorageKey = 'geotrack_admin_active_view';
 
   private accessToken: string | null = null;
   private accessTokenExpiresAtMs: number | null = null;
@@ -36,14 +46,17 @@ export class AuthService {
 
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
-  readonly isAdministrator = computed(() => this._currentUser()?.role === 'Administrator');
-  readonly isTerritoryManager = computed(() => this._currentUser()?.role === 'Territory Manager');
-  readonly isTerritoryAssociate = computed(() => this._currentUser()?.role === 'Territory Associate');
-  readonly isNationalManager = computed(() => this._currentUser()?.role === 'Territory Manager');
+  readonly isAdministrator = computed(() => this._currentUser()?.activeRoleCode === 'Admin');
+  readonly isContentModerator = computed(() => this._currentUser()?.activeRoleCode === 'ContentModerator');
+  readonly isTerritoryManager = computed(() => this._currentUser()?.activeRoleCode === 'TerritoryManager');
+  readonly isTerritoryAssociate = computed(() => this._currentUser()?.activeRoleCode === 'TerritoryAssociate');
+  readonly isNationalManager = computed(() => this._currentUser()?.activeRoleCode === 'TerritoryManager');
   readonly canAccessTerritoryAdmin = computed(() =>
-    this._currentUser()?.role === 'Territory Manager' ||
-    this._currentUser()?.role === 'Territory Associate');
-  readonly isRegionalManager = computed(() => this._currentUser()?.role === 'Regional Manager');
+    this._currentUser()?.activeRoleCode === 'TerritoryManager' ||
+    this._currentUser()?.activeRoleCode === 'TerritoryAssociate');
+  readonly isRegionalManager = computed(() => this._currentUser()?.activeRoleCode === 'RegionalManager');
+  readonly availableAdminViews = computed(() => getAdminViewsForRoles(this._currentUser()?.roles ?? []));
+  readonly activeAdminView = computed(() => getAdminViewByCode(this._currentUser()?.activeRoleCode));
 
   constructor(@Optional() private readonly http: HttpClient | null) {}
 
@@ -53,6 +66,14 @@ export class AuthService {
 
   getAccessToken(): string | null {
     return this.accessToken;
+  }
+
+  getAvailableAdminViews(): AdminView[] {
+    return this.availableAdminViews();
+  }
+
+  getActiveAdminView(): AdminView | null {
+    return this.activeAdminView();
   }
 
   hasValidAccessToken(): boolean {
@@ -75,7 +96,7 @@ export class AuthService {
       )
       .pipe(
         tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
-        map(response => this.mapAdminUser(response.user)),
+        map(response => this.mapAdminUser(response.user, false)),
         tap(user => {
           this._currentUser.set(user);
           this.setSessionHint();
@@ -131,6 +152,27 @@ export class AuthService {
     return of(updated);
   }
 
+  switchAdminView(roleCode: AdminRoleCode): boolean {
+    const current = this._currentUser();
+    const requestedView = getAdminViewByCode(roleCode);
+    if (!current || !requestedView) {
+      return false;
+    }
+
+    const allowedViews = getAdminViewsForRoles(current.roles);
+    if (!allowedViews.some(view => view.roleCode === requestedView.roleCode)) {
+      return false;
+    }
+
+    this._currentUser.set({
+      ...current,
+      activeRoleCode: requestedView.roleCode,
+      role: requestedView.label,
+    });
+    this.persistActiveViewCode(requestedView.roleCode);
+    return true;
+  }
+
   logout(): void {
     this.httpClient.post('/api/admin/auth/logout', {}, { withCredentials: true }).subscribe({
       error: () => undefined,
@@ -143,18 +185,7 @@ export class AuthService {
   }
 
   getHomeRoute(): string {
-    const role: UserRole | undefined = this._currentUser()?.role;
-    switch (role) {
-      case 'Administrator':
-        return '/admin-dashboard';
-      case 'Territory Manager':
-      case 'Territory Associate':
-        return '/territory/overview';
-      case 'Regional Manager':
-        return '/dashboard';
-      default:
-        return '/login';
-    }
+    return this.getActiveAdminView()?.dashboardRoute ?? '/login';
   }
 
   loadCurrentUser(): Observable<User> {
@@ -164,8 +195,16 @@ export class AuthService {
     );
   }
 
-  private mapAdminUser(response: AdminAuthUserResponse): User {
-    const role = this.resolveAdminRole(response.roles);
+  private mapAdminUser(response: AdminAuthUserResponse, preferStoredView = true): User {
+    const roleCodes = this.resolveAdminRoleCodes(response.roles);
+    const preferredRoleCode = preferStoredView ? this.readActiveViewCode() : null;
+    const activeView = resolveAdminViewForRoles(roleCodes, preferredRoleCode);
+    if (!activeView) {
+      throw new Error('This account is not assigned to an admin role.');
+    }
+
+    this.persistActiveViewCode(activeView.roleCode);
+
     const displayName = response.displayName?.trim() || response.email;
     const nameParts = displayName.split(/\s+/).filter(Boolean);
     const firstName = response.firstName?.trim() || nameParts[0] || displayName;
@@ -176,7 +215,9 @@ export class AuthService {
       firstName,
       lastName,
       email: response.email,
-      role,
+      role: activeView.label,
+      activeRoleCode: activeView.roleCode,
+      roles: roleCodes,
       region: '',
       memberSince: '',
       bio: '',
@@ -185,6 +226,7 @@ export class AuthService {
       notifyRequests: true,
       notifyNewReview: true,
       avatarUrl: response.avatarUrl ?? undefined,
+      avatarVersion: response.avatarVersion ?? null,
     };
   }
 
@@ -196,24 +238,13 @@ export class AuthService {
     return this.http;
   }
 
-  private resolveAdminRole(roles: string[]): UserRole {
-    if (roles.some(role => ['admin', 'administrator', 'superadmin', 'sysadmin'].includes(this.normalizeRole(role)))) {
-      return 'Administrator';
+  private resolveAdminRoleCodes(roles: string[]): AdminRoleCode[] {
+    const roleCodes = getAdminViewsForRoles(roles).map(view => view.roleCode);
+    if (roleCodes.length === 0) {
+      throw new Error('This account is not assigned to an admin role.');
     }
 
-    if (roles.some(role => ['territorymanager', 'nationalmanager'].includes(this.normalizeRole(role)))) {
-      return 'Territory Manager';
-    }
-
-    if (roles.some(role => this.normalizeRole(role) === 'territoryassociate')) {
-      return 'Territory Associate';
-    }
-
-    if (roles.some(role => this.normalizeRole(role) === 'regionalmanager')) {
-      return 'Regional Manager';
-    }
-
-    throw new Error('This account is not assigned to an admin role.');
+    return roleCodes;
   }
 
   private setToken(token: string, expiresAt?: string | null, expiresIn?: number | null): void {
@@ -232,10 +263,6 @@ export class AuthService {
     }
 
     return null;
-  }
-
-  private normalizeRole(role: string): string {
-    return role.replace(/[\s_-]/g, '').toLowerCase();
   }
 
   private toSafeAuthError(error: unknown): Error {
@@ -278,8 +305,25 @@ export class AuthService {
       sessionStorage.removeItem(AuthService.sessionHintKey);
       sessionStorage.removeItem(AuthService.activeRegionStorageKey);
       sessionStorage.removeItem(AuthService.activeTerritoryStorageKey);
+      sessionStorage.removeItem(AuthService.activeViewStorageKey);
     } catch {
       // Session restore is a convenience only.
+    }
+  }
+
+  private readActiveViewCode(): AdminRoleCode | null {
+    try {
+      return normalizeAdminRoleCode(sessionStorage.getItem(AuthService.activeViewStorageKey));
+    } catch {
+      return null;
+    }
+  }
+
+  private persistActiveViewCode(roleCode: AdminRoleCode): void {
+    try {
+      sessionStorage.setItem(AuthService.activeViewStorageKey, roleCode);
+    } catch {
+      // Active view persistence is only a session convenience.
     }
   }
 }
