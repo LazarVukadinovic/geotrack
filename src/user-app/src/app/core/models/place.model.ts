@@ -18,6 +18,11 @@ export interface PlaceTag {
   label: string;
 }
 
+export interface OpeningHoursDay {
+  day: string;
+  hours: string;
+}
+
 export interface PlaceReview {
   id: string;
   authorUserId: number;
@@ -29,6 +34,13 @@ export interface PlaceReview {
   helpfulCount: number;
   reportedByCurrentUser: boolean;
   isOwnReview: boolean;
+}
+
+export interface PlaceRelatedEvent {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  image?: string | null;
 }
 
 export interface PlaceSimilar {
@@ -56,8 +68,12 @@ export interface PlaceDetail {
   reviewCount?: string;
   distance: string;
   openStatus: string;
+  openingHours?: string | null;
+  openingHoursSchedule?: OpeningHoursDay[] | null;
+  website?: string | null;
   about: string;
   reviews: PlaceReview[];
+  relatedEvents: PlaceRelatedEvent[];
   similar: PlaceSimilar[];
   isSaved: boolean;
   isOwnable: boolean;

@@ -17,7 +17,7 @@ public class MapController : ControllerBase
     private const double MaxEntityViewportLatitudeSpan = 10d;
     private const double MaxEntityViewportLongitudeSpan = 10d;
     private const double MaxRadiusKm = 25d;
-    private const double MaxRouteStraightLineDistanceKm = 100d;
+    private const double MaxRouteStraightLineDistanceKm = 500d;
     private const double MinRouteDistanceMeters = 5d;
 
     private static readonly HashSet<string> AllowedCategories = new(StringComparer.OrdinalIgnoreCase)
@@ -135,6 +135,53 @@ public class MapController : ControllerBase
         }
 
         var route = await _mapService.GetWalkingRouteAsync(
+            originLatitude.Value,
+            originLongitude.Value,
+            destinationLatitude.Value,
+            destinationLongitude.Value,
+            cancellationToken);
+
+        if (route is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Routing is unavailable right now." });
+
+        return Ok(route);
+    }
+
+    [HttpGet("driving-route")]
+    [EnableRateLimiting("mapExternalLookup")]
+    public async Task<IActionResult> GetDrivingRoute(
+        [FromQuery] double? originLatitude,
+        [FromQuery] double? originLongitude,
+        [FromQuery] double? destinationLatitude,
+        [FromQuery] double? destinationLongitude,
+        CancellationToken cancellationToken)
+    {
+        if (!originLatitude.HasValue ||
+            !originLongitude.HasValue ||
+            !destinationLatitude.HasValue ||
+            !destinationLongitude.HasValue ||
+            !HasValidCoordinates(originLatitude.Value, originLongitude.Value) ||
+            !HasValidCoordinates(destinationLatitude.Value, destinationLongitude.Value))
+        {
+            return BadRequest(new { message = "Valid origin and destination coordinates are required." });
+        }
+
+        var routeDistanceMeters = HaversineMeters(
+            originLatitude.Value,
+            originLongitude.Value,
+            destinationLatitude.Value,
+            destinationLongitude.Value);
+        if (routeDistanceMeters < MinRouteDistanceMeters)
+        {
+            return BadRequest(new { message = "Origin and destination must be different." });
+        }
+
+        if (routeDistanceMeters > MaxRouteStraightLineDistanceKm * 1000d)
+        {
+            return BadRequest(new { message = $"Driving routes are limited to {MaxRouteStraightLineDistanceKm:0} km." });
+        }
+
+        var route = await _mapService.GetDrivingRouteAsync(
             originLatitude.Value,
             originLongitude.Value,
             destinationLatitude.Value,

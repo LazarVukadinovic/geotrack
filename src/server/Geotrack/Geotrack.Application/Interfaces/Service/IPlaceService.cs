@@ -19,12 +19,14 @@ public interface IPlaceService
         int id,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null);
+        double? longitude = null,
+        bool useCurrentLocationDistance = false);
     Task<HotelDetailDto?> GetHotelDetailAsync(
         int id,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null);
+        double? longitude = null,
+        bool useCurrentLocationDistance = false);
     Task<DestinationScopedResult<PlaceListingResponseDto>> GetHotelsAsync(
         int? destinationId,
         string? tag = null,

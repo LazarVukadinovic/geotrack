@@ -21,6 +21,20 @@
         <button
           type="button"
           class="pd__hero-btn"
+          aria-label="Share"
+          (click)="share()"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="2"/>
+            <circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+            <circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="2"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="pd__hero-btn"
           [class.pd__hero-btn--saved]="p.isSaved"
           [attr.aria-label]="p.isSaved ? 'Saved. Choose collection' : 'Save place to collection'"
           (click)="toggleSaved()"
@@ -113,7 +127,7 @@
             </div>
           }
 
-          @if (p.openStatus) {
+          @if (computedOpenStatus()) {
             <span class="pd__stat-dot" aria-hidden="true"></span>
 
             <div class="pd__stat">
@@ -122,13 +136,17 @@
                 <path stroke="currentColor" fill="none" stroke-width="2"
                       stroke-linecap="round" d="M12 6v6l4 2"/>
               </svg>
-              <span class="pd__stat-val pd__stat-val--open">{{ p.openStatus }}</span>
+              <span class="pd__stat-val"
+                [class.pd__stat-val--open]="computedOpenStatus() === 'Open now'"
+                [class.pd__stat-val--closed]="computedOpenStatus() === 'Closed now'">
+                {{ computedOpenStatus() }}
+              </span>
             </div>
           }
         </div>
 
         <!-- CTA buttons -->
-        @if (directionsUrl() || hasMapCoordinates()) {
+        @if (directionsUrl() || hasMapCoordinates() || p.website) {
           <div class="pd__ctas">
             @if (directionsUrl(); as directionsHref) {
               <a
@@ -163,6 +181,26 @@
                 </svg>
                 View on Map
               </button>
+            }
+            @if (p.website) {
+              <a
+                class="pd__cta pd__cta--outline"
+                [href]="p.website"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                Website
+                <svg class="pd__cta-external-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                </svg>
+              </a>
             }
           </div>
         }
@@ -204,6 +242,100 @@
               <h2 class="pd__section-title">About this place</h2>
               <p class="pd__about">{{ p.about }}</p>
             </section>
+
+            @if (p.openingHours || (p.openingHoursSchedule && p.openingHoursSchedule.length > 0)) {
+              <div class="pd__divider pd__divider--hours"></div>
+
+              <section class="pd__section pd__section--hours">
+                <h2 class="pd__section-title">Opening Hours</h2>
+
+                @if (is24Hours()) {
+                  <div class="pd__hours-24h">
+                    <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
+                    </svg>
+                    <span class="pd__hours-24h-text">Open 24 hours</span>
+                  </div>
+                } @else {
+                  <button
+                    type="button"
+                    class="pd__hours-toggle"
+                    [class.pd__hours-toggle--open]="hoursExpanded()"
+                    (click)="hoursExpanded.set(!hoursExpanded())"
+                    [attr.aria-expanded]="hoursExpanded()"
+                  >
+                    <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
+                    </svg>
+                    <svg class="pd__hours-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                            stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+
+                  @if (hoursExpanded()) {
+                    <div class="pd__hours-schedule">
+                      @if (p.openingHoursSchedule && p.openingHoursSchedule.length > 0) {
+                        @for (day of p.openingHoursSchedule; track day.day) {
+                          <div class="pd__hours-day">
+                            <span class="pd__hours-day-name">{{ day.day }}</span>
+                            <span class="pd__hours-day-val">{{ day.hours }}</span>
+                          </div>
+                        }
+                      } @else {
+                        <div class="pd__hours-day">
+                          <span class="pd__hours-day-val">{{ p.openingHours }}</span>
+                        </div>
+                      }
+                    </div>
+                  }
+                }
+              </section>
+            }
+
+            @if (p.relatedEvents.length > 0) {
+              <div class="pd__divider pd__divider--events"></div>
+
+              <section class="pd__section pd__section--events">
+                <app-section-header
+                  title="Events"
+                />
+
+                <div class="pd__similar-viewport">
+                  <div class="pd__similar-track" role="list">
+                    @for (ev of p.relatedEvents; track ev.id) {
+                      <article
+                        class="pd__similar-card"
+                        role="listitem"
+                        (click)="navigateToEvent(ev.id)"
+                      >
+                        <div class="pd__similar-media">
+                          <img
+                            appImageFallback
+                            class="pd__similar-img"
+                            [src]="ev.image || ''"
+                            [alt]="ev.title"
+                            width="160"
+                            height="110"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </div>
+
+                        <div class="pd__similar-body">
+                          <h3 class="pd__similar-title">{{ ev.title }}</h3>
+                          @if (ev.subtitle) {
+                            <p class="pd__similar-sub">{{ ev.subtitle }}</p>
+                          }
+                        </div>
+                      </article>
+                    }
+                  </div>
+                </div>
+              </section>
+            }
 
             @if (p.similar.length > 0) {
               <div class="pd__divider pd__divider--similar"></div>
@@ -415,26 +547,30 @@
     }
 
     @if (ownershipClaimOpen()) {
-      <div class="pd__claim-modal" style="position: fixed; inset: 0; z-index: 350; display: grid; place-items: center; padding: 24px;" role="dialog" aria-modal="true" aria-label="Request ownership">
-        <button type="button" class="pd__claim-backdrop" style="position: absolute; inset: 0; border: 0; background: rgba(0,0,0,.68);" aria-label="Close ownership request" (click)="closeOwnershipClaim()"></button>
-        <section class="pd__claim-panel" style="position: relative; width: min(440px, 100%); border-radius: 24px; background: #070b12; color: #f8fafc; box-shadow: 0 30px 90px rgba(0,0,0,.55); overflow: hidden;">
-          <header class="pd__claim-head" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,.08);">
-            <h2 style="margin: 0; font-size: 18px;">Request ownership</h2>
-            <button type="button" class="pd__claim-close" style="width: 34px; height: 34px; border: 0; border-radius: 999px; background: rgba(255,255,255,.08); color: #f8fafc; font-size: 24px; cursor: pointer;" aria-label="Close" (click)="closeOwnershipClaim()">×</button>
+      <div class="pd__claim-modal" role="dialog" aria-modal="true" aria-label="Request ownership">
+        <button type="button" class="pd__claim-backdrop" aria-label="Close ownership request" (click)="closeOwnershipClaim()"></button>
+        <section class="pd__claim-panel">
+          <header class="pd__claim-head">
+            <h2>Request ownership</h2>
+            <button type="button" class="pd__claim-close" aria-label="Close" (click)="closeOwnershipClaim()">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6 6 18M6 6l12 12"/>
+              </svg>
+            </button>
           </header>
-          <div class="pd__claim-body" style="padding: 18px 20px;">
-            <p style="margin: 0 0 14px; color: #cbd5e1; font-size: 14px;">Upload a PDF document that proves you own or manage this place.</p>
-            <label class="pd__claim-upload" style="display: flex; justify-content: center; align-items: center; min-height: 96px; border: 1px dashed rgba(255,255,255,.24); border-radius: 18px; background: rgba(255,255,255,.04); cursor: pointer; padding: 16px; text-align: center; font-weight: 800;">
+          <div class="pd__claim-body">
+            <p>Upload a PDF document that proves you own or manage this place.</p>
+            <label class="pd__claim-upload">
               <span>{{ ownershipProofFileName() || 'Choose PDF document' }}</span>
               <input style="display: none;" type="file" accept="application/pdf" (change)="onOwnershipProofSelected($event)" />
             </label>
             @if (ownershipClaimError()) {
-              <p class="pd__claim-error" style="margin-top: 10px; color: #fca5a5; font-size: 13px; font-weight: 800;" role="alert">{{ ownershipClaimError() }}</p>
+              <p class="pd__claim-error" role="alert">{{ ownershipClaimError() }}</p>
             }
           </div>
-          <footer class="pd__claim-actions" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-top: 1px solid rgba(255,255,255,.08);">
-            <button type="button" class="pd__claim-cancel" style="border: 0; border-radius: 999px; padding: 11px 16px; background: rgba(255,255,255,.08); color: #f8fafc; font-weight: 800; cursor: pointer;" [disabled]="ownershipClaimSubmitting()" (click)="closeOwnershipClaim()">Cancel</button>
-            <button type="button" class="pd__claim-submit" style="border: 0; border-radius: 999px; padding: 11px 16px; background: #e8570a; color: #fff; font-weight: 800; cursor: pointer;" [disabled]="ownershipClaimSubmitting()" (click)="submitOwnershipClaim()">
+          <footer class="pd__claim-actions">
+            <button type="button" class="pd__claim-cancel" [disabled]="ownershipClaimSubmitting()" (click)="closeOwnershipClaim()">Cancel</button>
+            <button type="button" class="pd__claim-submit" [disabled]="ownershipClaimSubmitting()" (click)="submitOwnershipClaim()">
               {{ ownershipClaimSubmitting() ? 'Submitting...' : 'Submit request' }}
             </button>
           </footer>

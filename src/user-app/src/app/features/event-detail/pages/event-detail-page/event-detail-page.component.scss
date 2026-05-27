@@ -69,6 +69,8 @@
   color: #1a2b4c;
   cursor: pointer;
   flex-shrink: 0;
+  pointer-events: auto;
+  touch-action: manipulation;
   transition: background 0.15s ease, transform 0.1s ease;
 
   svg {
@@ -161,11 +163,6 @@
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
-
-  &:first-child {
-    background: #e8570a;
-    color: #ffffff;
-  }
 }
 
 // ─── Location ─────────────────────────────────────────────────────────────────
@@ -456,6 +453,30 @@
   font-weight: 700;
   color: #1a2b4c;
   line-height: 1.4;
+}
+
+.ed__buy-tickets-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 50px;
+  background: #e8570a;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+
+  svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+  }
+
+  &:hover { opacity: 0.88; }
+  &:active { opacity: 0.75; }
 }
 
 // ─── Venue Info card ──────────────────────────────────────────────────────────

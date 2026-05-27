@@ -10,6 +10,7 @@ using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
+using System.Text.Json;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -132,12 +133,14 @@ public class PlaceService : IPlaceService
         int id,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        bool useCurrentLocationDistance = false)
     {
         var place = await _db.Places
             .AsNoTracking()
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
+                .ThenInclude(l => l.Destination)
             .Include(p => p.Images)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
@@ -180,6 +183,14 @@ public class PlaceService : IPlaceService
             .Take(5)
             .ToListAsync();
 
+        var relatedEvents = await _db.Events
+            .AsNoTracking()
+            .Include(e => e.Images)
+            .Where(e => e.PlaceId == id)
+            .OrderBy(e => e.StartDate)
+            .Take(5)
+            .ToListAsync();
+
         var favoriteIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
@@ -194,11 +205,14 @@ public class PlaceService : IPlaceService
             ReviewReportTargetType.Place,
             previewReviews.Select(r => r.Id));
 
+        var (originLat, originLng) = ResolveDistanceOrigin(
+            useCurrentLocationDistance, latitude, longitude,
+            place.Location?.Destination?.Latitude, place.Location?.Destination?.Longitude);
+
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
-            latitude,
-            longitude,
-            place.Latitude,
-            place.Longitude);
+            originLat, originLng,
+            place.Latitude, place.Longitude,
+            useCurrentLocationDistance);
         var images = ToImageDtos(place.Images);
 
         return new PlaceDetailDto
@@ -219,6 +233,9 @@ public class PlaceService : IPlaceService
             ReviewCount = FormatReviewCountLabel(reviewCount),
             Distance = detailDistance,
             OpenStatus = DeriveOpenStatus(place.OpeningHours),
+            OpeningHours = DisplayTextSafety.CleanOptional(place.OpeningHours),
+            OpeningHoursSchedule = ParseOpeningHoursSchedule(place.OperatingHoursJson),
+            Website = DisplayTextSafety.CleanOptional(place.Website),
             About = DisplayTextSafety.CleanOptional(place.Description),
             Reviews = previewReviews
                 .Select(r => new ReviewDto
@@ -235,6 +252,15 @@ public class PlaceService : IPlaceService
                     IsOwnReview = userId.HasValue && r.UserId == userId.Value
                 })
                 .ToList(),
+            RelatedEvents = relatedEvents
+                .Select(e => new PlaceRelatedEventDto
+                {
+                    Id = e.Id,
+                    Title = DisplayTextSafety.CleanRequired(e.Name, "Event"),
+                    Subtitle = DisplayTextSafety.CleanOptional(e.Summary ?? e.Description),
+                    Image = GetCoverImageUrl(e.Images),
+                })
+                .ToList(),
             Similar = similar
                 .Select(s => new SimilarPlaceDto
                 {
@@ -243,10 +269,9 @@ public class PlaceService : IPlaceService
                     Image = GetMainImageUrl(s.Images),
                     Rating = CalculateAverageRating(s.PlaceReviews),
                     Distance = SpatialDistanceFormatter.FormatBetween(
-                        latitude,
-                        longitude,
-                        s.Latitude,
-                        s.Longitude),
+                        originLat, originLng,
+                        s.Latitude, s.Longitude,
+                        useCurrentLocationDistance),
                     IsSaved = favoriteIds.Contains(s.Id)
                 })
                 .ToList(),
@@ -263,12 +288,14 @@ public class PlaceService : IPlaceService
         int id,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        bool useCurrentLocationDistance = false)
     {
         var place = await _db.Places
             .AsNoTracking()
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
+                .ThenInclude(l => l.Destination)
             .Include(p => p.Images)
             .Include(p => p.Stay)
                 .ThenInclude(s => s!.StayType)
@@ -332,11 +359,14 @@ public class PlaceService : IPlaceService
             ReviewReportTargetType.Place,
             previewReviews.Select(r => r.Id));
 
+        var (originLat, originLng) = ResolveDistanceOrigin(
+            useCurrentLocationDistance, latitude, longitude,
+            place.Location?.Destination?.Latitude, place.Location?.Destination?.Longitude);
+
         var detailDistance = SpatialDistanceFormatter.FormatBetween(
-            latitude,
-            longitude,
-            place.Latitude,
-            place.Longitude);
+            originLat, originLng,
+            place.Latitude, place.Longitude,
+            useCurrentLocationDistance);
 
         var stayAmenities = place.Stay?.StayAmenities
             .Select(sa => new AmenityDto
@@ -404,10 +434,9 @@ public class PlaceService : IPlaceService
                     Image = GetMainImageUrl(s.Images),
                     Rating = CalculateAverageRating(s.PlaceReviews),
                     Distance = SpatialDistanceFormatter.FormatBetween(
-                        latitude,
-                        longitude,
-                        s.Latitude,
-                        s.Longitude),
+                        originLat, originLng,
+                        s.Latitude, s.Longitude,
+                        useCurrentLocationDistance),
                     IsSaved = favoriteIds.Contains(s.Id)
                 })
                 .ToList(),
@@ -968,6 +997,14 @@ public class PlaceService : IPlaceService
         terms.Add(normalized + "s");
     }
 
+    private static (double? lat, double? lng) ResolveDistanceOrigin(
+        bool useCurrentLocationDistance,
+        double? userLat, double? userLng,
+        double? destinationLat, double? destinationLng) =>
+        useCurrentLocationDistance
+            ? (userLat, userLng)
+            : (destinationLat, destinationLng);
+
     private static bool HasUsableCoordinates(double latitude, double longitude) =>
         !double.IsNaN(latitude) &&
         !double.IsNaN(longitude) &&
@@ -1008,6 +1045,20 @@ public class PlaceService : IPlaceService
 
     private static string? DeriveOpenStatus(string? hours) =>
         string.IsNullOrWhiteSpace(hours) ? null : "Open";
+
+    private static List<OpeningHoursDayDto>? ParseOpeningHoursSchedule(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<List<OpeningHoursDayDto>>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static string? TrimDescription(string? description, int maxLength)
     {

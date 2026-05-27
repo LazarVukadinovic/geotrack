@@ -1,12 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
-import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
+import { LocationService } from '../../../core/services/location.service';
+import { DestinationService } from '../../../core/services/destination.service';
 import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
-import type { PlaceDetail } from '../../../core/models/place.model';
+import type { PlaceDetail, PlaceRelatedEvent } from '../../../core/models/place.model';
 
 export type DetailLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
 
@@ -25,8 +26,12 @@ interface ApiPlaceDetail {
   reviewCount?: string;
   distance?: string;
   openStatus?: string;
+  openingHours?: string | null;
+  openingHoursSchedule?: { day: string; hours: string }[] | null;
+  website?: string | null;
   about?: string;
   reviews: { id: number; authorUserId?: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean; isOwnReview?: boolean }[];
+  relatedEvents?: { id: number; title: string; subtitle?: string | null; image?: string | null }[] | null;
   similar?: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[] | null;
   isSaved: boolean;
   isOwnable?: boolean;
@@ -41,9 +46,10 @@ export class PlaceDetailService {
 
   private readonly http = inject(HttpClient);
   private readonly favoriteState = inject(FavoriteStateService);
-  private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly locationSvc = inject(LocationService);
+  private readonly destinationSvc = inject(DestinationService);
   private readonly _cache = signal<Record<string, PlaceDetail>>({});
   private readonly _loadState = signal<Record<string, DetailLoadState>>({});
   private readonly lastRequestKeyById = new Map<string, string>();
@@ -98,7 +104,16 @@ export class PlaceDetailService {
           reviewCount: dto.reviewCount,
           distance: dto.distance ?? '',
           openStatus: dto.openStatus ?? '',
+          openingHours: dto.openingHours ?? null,
+          openingHoursSchedule: dto.openingHoursSchedule ?? null,
+          website: dto.website ?? null,
           about: dto.about ?? '',
+          relatedEvents: (dto.relatedEvents ?? []).map((e): PlaceRelatedEvent => ({
+            id: String(e.id),
+            title: e.title,
+            subtitle: e.subtitle ?? null,
+            image: e.image ?? null,
+          })),
           reviews: dto.reviews.map(r => ({
             id: String(r.id),
             authorUserId: r.authorUserId ?? 0,
@@ -141,9 +156,13 @@ export class PlaceDetailService {
   }
 
   private buildLocationQuery(): string {
-    const loc = this.locationSvc.location();
-    if (!loc) return '';
-    return `?latitude=${loc.latitude}&longitude=${loc.longitude}`;
+    if (this.destinationSvc.mode() === 'location') {
+      const loc = this.locationSvc.location();
+      if (loc) {
+        return `?latitude=${loc.latitude}&longitude=${loc.longitude}&distanceOrigin=current-location`;
+      }
+    }
+    return '?distanceOrigin=destination-centre';
   }
 
   private setLoadState(id: string, state: DetailLoadState): void {

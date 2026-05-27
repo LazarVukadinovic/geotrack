@@ -1,9 +1,10 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FavoriteStateService } from '../../../core/services/favorite-state.service';
-import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
+import { LocationService } from '../../../core/services/location.service';
+import { DestinationService } from '../../../core/services/destination.service';
 import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { EventDetail } from '../models/event-detail.model';
@@ -28,15 +29,17 @@ interface ApiEventDetail {
   venueInfo: { description?: string; arrivalTips?: string; accessibility?: string };
   similar: { id: number; title: string; subtitle?: string; image?: string; isSaved: boolean }[];
   isSaved: boolean;
+  externalTicketLink?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
 export class EventDetailService {
   private readonly http = inject(HttpClient);
   private readonly favoriteState = inject(FavoriteStateService);
-  private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly locationSvc = inject(LocationService);
+  private readonly destinationSvc = inject(DestinationService);
   private readonly _cache = signal<Record<string, EventDetail>>({});
   private readonly _loadState = signal<Record<string, DetailLoadState>>({});
   private readonly lastRequestKeyById = new Map<string, string>();
@@ -111,6 +114,7 @@ export class EventDetailService {
             isSaved: s.isSaved,
           })),
           isSaved: dto.isSaved,
+          ticketUrl: dto.externalTicketLink ?? null,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');
@@ -127,9 +131,13 @@ export class EventDetailService {
   }
 
   private buildLocationQuery(): string {
-    const loc = this.locationSvc.location();
-    if (!loc) return '';
-    return `?latitude=${loc.latitude}&longitude=${loc.longitude}`;
+    if (this.destinationSvc.mode() === 'location') {
+      const loc = this.locationSvc.location();
+      if (loc) {
+        return `?latitude=${loc.latitude}&longitude=${loc.longitude}&distanceOrigin=current-location`;
+      }
+    }
+    return '?distanceOrigin=destination-centre';
   }
 
   private setLoadState(id: string, state: DetailLoadState): void {

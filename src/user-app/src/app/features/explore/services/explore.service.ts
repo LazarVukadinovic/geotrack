@@ -23,7 +23,7 @@ import type {
 } from '../models/explore-extras.model';
 
 interface ExploreApiResponse {
-  selectedDestination?: { id: number; name: string; latitude: number; longitude: number };
+  selectedDestination?: { id: number; name: string; latitude: number; longitude: number; territoryId?: number; territoryName?: string };
   sections?: ApiExploreSection[];
 
   // Legacy payload support while backend/frontend are being switched together.
@@ -302,6 +302,11 @@ export class ExploreService {
     });
   }
 
+  invalidate(): void {
+    this.loadedRequestKey = null;
+    this._loaded.set(false);
+  }
+
   useCurrentLocation(): void {
     this.destinationSvc.useLocationMode();
     const loc = this.locationSvc.location();
@@ -325,7 +330,18 @@ export class ExploreService {
   toggleSaved(item: ExploreSectionItem, sectionKey = 'section'): void {
     const numericId = parseInt(item.id, 10);
     if (isNaN(numericId)) return;
-    if (item.entityType === 'event') return;
+
+    if (item.entityType === 'event') {
+      this.saveToCollection.open({
+        entityType: 'event',
+        entityId: numericId,
+        title: item.title,
+        imageUrl: item.image,
+        surface: `explore_${sectionKey}`,
+        analyticsEntityType: 'event',
+      });
+      return;
+    }
 
     const saveEntityType = item.entityType === 'stay' ? 'place' : item.entityType;
     if (saveEntityType !== 'place') return;
@@ -387,7 +403,9 @@ export class ExploreService {
   private distanceOriginForSource(
     source?: 'gps' | 'approximate' | 'manual' | 'destination' | 'default' | 'unknown' | null,
   ): 'current-location' | 'destination-centre' {
-    return source === 'gps' ? 'current-location' : 'destination-centre';
+    return (source === 'gps' || source === 'approximate' || source === 'manual')
+      ? 'current-location'
+      : 'destination-centre';
   }
 
   private loadFromApi(

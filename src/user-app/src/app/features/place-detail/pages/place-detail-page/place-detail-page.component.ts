@@ -12,6 +12,8 @@ import { ImageFallbackDirective } from '../../../../shared/directives/image-fall
 import { HttpClient } from '@angular/common/http';
 import { PlaceDetailService } from '../../services/place-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
+import { ExploreService } from '../../../explore/services/explore.service';
+import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { PlaceDetail } from '../../../../core/models/place.model';
 import type { MapEntityMarker, MapEntityType } from '../../../../core/services/map-api.service';
@@ -32,6 +34,8 @@ export class PlaceDetailPageComponent {
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly http     = inject(HttpClient);
+  private readonly exploreService = inject(ExploreService);
+  private readonly listingService = inject(ExploreSectionListingService);
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
@@ -49,6 +53,7 @@ export class PlaceDetailPageComponent {
   );
 
   protected readonly scrollProgress = signal(0);
+  protected readonly hoursExpanded = signal(false);
   protected readonly galleryOpen = signal(false);
   protected readonly selectedImageUrl = signal<string | null>(null);
   protected readonly ownershipClaimOpen = signal(false);
@@ -69,6 +74,23 @@ export class PlaceDetailPageComponent {
     this.place()?.latitude ?? null,
     this.place()?.longitude ?? null,
   ));
+
+  protected readonly is24Hours = computed(() => {
+    const p = this.place();
+    if (!p) return false;
+    if (p.openingHoursSchedule && p.openingHoursSchedule.length > 0) return false;
+    const hours = (p.openingHours ?? '').toLowerCase().trim();
+    return hours.includes('24');
+  });
+
+  protected readonly computedOpenStatus = computed(() => {
+    const p = this.place();
+    if (!p) return '';
+    if (this.is24Hours()) return 'Open now';
+    const schedule = p.openingHoursSchedule;
+    if (!schedule || schedule.length === 0) return p.openStatus ?? '';
+    return this.calculateCurrentOpenStatus(schedule, p.openStatus ?? '');
+  });
 
   private readonly locationRequestKey = computed(() => {
     const loc = this.locationSvc.location();
@@ -94,6 +116,7 @@ export class PlaceDetailPageComponent {
     effect(() => {
       this.placeId();
       this.scrollProgress.set(0);
+      this.hoursExpanded.set(false);
       this.galleryOpen.set(false);
       this.selectedImageUrl.set(null);
       const el = this.pdScroll()?.nativeElement;
@@ -125,8 +148,22 @@ export class PlaceDetailPageComponent {
     if (id) this.service.toggleSaved(id);
   }
 
+  protected share(): void {
+    const title = this.place()?.title ?? '';
+    const url = globalThis.location.href;
+    if (navigator.share) {
+      navigator.share({ title, text: title, url }).catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      });
+    }
+  }
+
   protected navigateToSimilar(id: string): void {
     this.router.navigate(['/places', id]);
+  }
+
+  protected navigateToEvent(id: string): void {
+    this.router.navigate(['/events', id]);
   }
 
   protected selectGalleryImage(url: string): void {
@@ -268,6 +305,8 @@ export class PlaceDetailPageComponent {
       this.analytics.track('review_created', { entityType: 'place', entityId: numId });
     }
     this.service.loadPlaceDetail(id);
+    this.exploreService.invalidate();
+    this.listingService.invalidate();
   }
 
   protected onDirectionsClick(): void {
@@ -321,5 +360,40 @@ export class PlaceDetailPageComponent {
 
   private getReviewEntityType(place: PlaceDetail): 'place' | 'stay' {
     return place.contentType === 'hotel' ? 'stay' : 'place';
+  }
+
+  private calculateCurrentOpenStatus(schedule: { day: string; hours: string }[], fallback: string): string {
+    const now = new Date();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const todayName = dayNames[now.getDay()];
+
+    const todayEntry = schedule.find(d =>
+      d.day.toLowerCase() === todayName.toLowerCase() ||
+      d.day.toLowerCase().startsWith(todayName.toLowerCase().slice(0, 3)),
+    );
+
+    if (!todayEntry) return fallback;
+
+    const hoursStr = todayEntry.hours.toLowerCase();
+    if (hoursStr.includes('closed')) return 'Closed now';
+    if (hoursStr.includes('24') || hoursStr === 'always open') return 'Open now';
+
+    const timeMatch = hoursStr.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
+    if (!timeMatch) return fallback;
+
+    const openH = parseInt(timeMatch[1], 10);
+    const openM = parseInt(timeMatch[2], 10);
+    const closeH = parseInt(timeMatch[3], 10);
+    const closeM = parseInt(timeMatch[4], 10);
+
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const openMins = openH * 60 + openM;
+    const closeMins = closeH * 60 + closeM;
+
+    const isOpen = closeMins === 0
+      ? currentMins >= openMins
+      : currentMins >= openMins && currentMins < closeMins;
+
+    return isOpen ? 'Open now' : 'Closed now';
   }
 }

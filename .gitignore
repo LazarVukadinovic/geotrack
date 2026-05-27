@@ -97,6 +97,26 @@ docker-data/
 docker-compose.override.yml
 
 # =========================
+# Media uploads (user-uploaded files - not for version control)
+# =========================
+src/server/Geotrack/Geotrack.Server/media/uploads/avatars/*
+src/server/Geotrack/Geotrack.Server/media/uploads/contributions/*
+src/server/Geotrack/Geotrack.Server/media/uploads/regional/*
+!src/server/Geotrack/Geotrack.Server/media/uploads/avatars/.gitkeep
+!src/server/Geotrack/Geotrack.Server/media/uploads/contributions/.gitkeep
+!src/server/Geotrack/Geotrack.Server/media/uploads/regional/.gitkeep
+
+# =========================
+# Media source (originalne slike pre konverzije - mogu biti velike)
+# Konvertovane .webp u media/seed/ se commituju (mali fajlovi)
+# =========================
+src/server/Geotrack/Geotrack.Server/media/source/
+
+# Scripts dependencies
+scripts/node_modules/
+scripts/package-lock.json
+
+# =========================
 # OS files
 # =========================
 .DS_Store

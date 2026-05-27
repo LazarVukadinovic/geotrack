@@ -66,6 +66,14 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected readonly isDestinationMode = computed(() => this.destinationSvc.isDestinationMode());
   protected readonly sections = computed(() => this.explore.sections());
   protected readonly selectedDestination = computed(() => this.explore.selectedDestination());
+  protected readonly destinationDetailRoute = computed(() => {
+    const dest = this.selectedDestination();
+    return dest?.id ? `/destinations/${dest.id}` : null;
+  });
+  protected readonly countryDetailRoute = computed(() => {
+    const dest = this.selectedDestination();
+    return dest?.territoryId ? `/territories/${dest.territoryId}` : null;
+  });
 
   protected readonly canUseExploreSearch = computed(() => {
     if (this.destinationSvc.isDestinationMode()) {
@@ -172,9 +180,10 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   private readonly heroLocation = computed(() => {
     if (this.destinationSvc.isDestinationMode()) {
+      const dest = this.selectedDestination();
       return {
-        city: this.destinationSvc.name() || 'Explore',
-        country: '',
+        city: dest?.name || this.destinationSvc.name() || 'Explore',
+        country: dest?.territoryName ?? '',
       };
     }
 
@@ -212,10 +221,6 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected readonly showLocationUpgrade = computed(() =>
     !this.destinationSvc.isDestinationMode() &&
     this.locationSvc.location()?.source !== 'gps',
-  );
-
-  protected readonly useLocationModeActionLabel = computed(() =>
-    this.locationSvc.location()?.source === 'gps' ? 'Use location' : 'Use IP location',
   );
 
   protected readonly displayedDestinationActionLabel = computed(() => {
@@ -314,11 +319,19 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.exactLocationError.set(null);
 
     this.destinationSvc.useLocationMode();
-    void this.locationSvc.ensureIpFallback().then((loc) => {
-      if (loc) {
-        void this.explore.loadForLocation(loc.latitude, loc.longitude);
-      }
-    });
+
+    void this.locationSvc.requestGps()
+      .then(({ latitude, longitude }) => {
+        return this.explore.loadForLocation(latitude, longitude);
+      })
+      .catch(() => {
+        return this.locationSvc.ensureIpFallback().then((loc) => {
+          if (loc) {
+            return this.explore.loadForLocation(loc.latitude, loc.longitude);
+          }
+          return;
+        });
+      });
 
     void this.router.navigate(['/explore'], { replaceUrl: true });
   }

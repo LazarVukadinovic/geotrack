@@ -110,6 +110,7 @@ public sealed class MapLocationAbuseProtectionTests
         AssertRateLimitPolicy<MapController>(nameof(MapController.Search), "mapSearch");
         AssertRateLimitPolicy<MapController>(nameof(MapController.ReverseGeocode), "mapExternalLookup");
         AssertRateLimitPolicy<MapController>(nameof(MapController.GetWalkingRoute), "mapExternalLookup");
+        AssertRateLimitPolicy<MapController>(nameof(MapController.GetDrivingRoute), "mapExternalLookup");
         AssertRateLimitPolicy<MapController>(nameof(MapController.GetMarkers), "map");
         AssertRateLimitPolicy<MapController>(nameof(MapController.GetEntities), "map");
         AssertRateLimitPolicy<LocationController>(nameof(LocationController.GetApproximateLocation), "approximateLocation");
@@ -279,6 +280,24 @@ public sealed class MapLocationAbuseProtectionTests
         }
 
         public Task<MapRouteResponseDto?> GetWalkingRouteAsync(
+            double originLatitude,
+            double originLongitude,
+            double destinationLatitude,
+            double destinationLongitude,
+            CancellationToken cancellationToken = default)
+        {
+            RouteCalls++;
+            return Task.FromResult<MapRouteResponseDto?>(new MapRouteResponseDto
+            {
+                Coordinates = new List<MapCoordinateDto>
+                {
+                    new() { Latitude = originLatitude, Longitude = originLongitude },
+                    new() { Latitude = destinationLatitude, Longitude = destinationLongitude },
+                }
+            });
+        }
+
+        public Task<MapRouteResponseDto?> GetDrivingRouteAsync(
             double originLatitude,
             double originLongitude,
             double destinationLatitude,

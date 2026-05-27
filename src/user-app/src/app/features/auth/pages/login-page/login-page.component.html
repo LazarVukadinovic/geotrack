@@ -30,7 +30,10 @@
   </div>
 
   <!-- Off-white card overlapping header -->
-  <div class="auth-login__card mx-4 -mt-14 bg-[#fafaf9] rounded-[2rem] px-7 pt-8 pb-10 flex flex-col gap-2 shadow-sm">
+  <form
+    class="auth-login__card mx-4 -mt-14 bg-[#fafaf9] rounded-[2rem] px-7 pt-8 pb-10 flex flex-col gap-2 shadow-sm"
+    novalidate
+    (ngSubmit)="onSignIn()">
 
     <!-- Centered heading -->
     <div class="text-center mb-2">
@@ -135,8 +138,7 @@
 
     <!-- Sign in button -->
     <button
-      type="button"
-      (click)="onSignIn()"
+      type="submit"
       [disabled]="isLoading"
       class="w-full py-3.5 bg-[#e8570a] hover:bg-[#d4621f] active:scale-[0.98] rounded-3xl text-white font-bold text-base tracking-wide flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-60 disabled:pointer-events-none">
       @if (isLoading) {
@@ -159,7 +161,7 @@
       Don't have an account?
       <button type="button" (click)="goToRegister()">Create one</button>
     </p>
-  </div>
+  </form>
 
   <!-- Create account -->
   <p class="auth-login__footer text-center text-base text-slate-400 mt-6 mb-4">

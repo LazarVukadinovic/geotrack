@@ -51,6 +51,8 @@ export class EventDetailPageComponent {
     this.event()?.longitude ?? null,
   ));
 
+  protected readonly ticketUrl = computed(() => this.event()?.ticketUrl ?? null);
+
   private readonly locationRequestKey = computed(() => {
     const loc = this.locationSvc.location();
     if (!loc) return 'none';
@@ -87,6 +89,16 @@ export class EventDetailPageComponent {
   protected toggleSaved(): void {
     const id = this.eventId();
     if (id) this.service.toggleSaved(id);
+  }
+
+  protected share(): void {
+    const title = this.event()?.title ?? '';
+    const url = globalThis.location.href;
+    if (navigator.share) {
+      navigator.share({ title, text: title, url }).catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      });
+    }
   }
 
   protected navigateToSimilar(id: string): void {

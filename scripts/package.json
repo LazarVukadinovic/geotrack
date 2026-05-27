@@ -1,0 +1,11 @@
+{
+  "name": "geotrack-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "convert": "node convert-images.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5"
+  }
+}

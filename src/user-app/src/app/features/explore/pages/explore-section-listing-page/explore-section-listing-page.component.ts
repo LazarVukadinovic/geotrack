@@ -1,8 +1,9 @@
-import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import { DestinationService } from '../../../../core/services/destination.service';
+import { LocationService } from '../../../../core/services/location.service';
 import { ExploreSectionListingService } from '../../services/explore-section-listing.service';
 import { PageTopNavComponent } from '../../../../shared/components/page-top-nav/page-top-nav.component';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
@@ -21,7 +22,16 @@ export class ExploreSectionListingPageComponent {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly destinationSvc = inject(DestinationService);
+  private readonly locationSvc = inject(LocationService);
   private readonly listing = inject(ExploreSectionListingService);
+
+  private readonly locationRequestKey = computed(() => {
+    const mode = this.destinationSvc.mode();
+    const destId = this.destinationSvc.id();
+    const loc = this.locationSvc.location();
+    if (!loc) return `${mode}:${destId ?? 'none'}:none`;
+    return `${mode}:${destId ?? 'none'}:${loc.latitude.toFixed(4)}:${loc.longitude.toFixed(4)}:${loc.source}`;
+  });
 
   protected readonly title = this.listing.title;
   protected readonly subtitle = this.listing.subtitle;
@@ -35,6 +45,8 @@ export class ExploreSectionListingPageComponent {
   protected readonly emptyReason = this.listing.emptyReason;
   protected readonly filters = this.listing.filters;
   protected readonly hasActiveFilters = this.listing.hasActiveFilters;
+  protected readonly activeFilterCount = computed(() => this.listing.selectedTagIds().length);
+  protected readonly filtersExpanded = signal(false);
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -47,6 +59,11 @@ export class ExploreSectionListingPageComponent {
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.loadFromRoute());
+
+    effect(() => {
+      this.locationRequestKey();
+      untracked(() => this.loadFromRoute());
+    });
 
     effect(() => {
       const next: Record<string, string> = {};
@@ -66,6 +83,10 @@ export class ExploreSectionListingPageComponent {
     this.listing.loadMore();
   }
 
+  protected toggleFilters(): void {
+    this.filtersExpanded.update(v => !v);
+  }
+
   protected toggleFilter(tagId: number): void {
     this.listing.toggleTagFilter(tagId);
   }
@@ -83,7 +104,7 @@ export class ExploreSectionListingPageComponent {
   }
 
   protected canSave(item: ExploreSectionItem): boolean {
-    return item.entityType === 'place' || item.entityType === 'stay';
+    return item.entityType === 'place' || item.entityType === 'stay' || item.entityType === 'event';
   }
 
   protected itemKey(item: ExploreSectionItem): string {

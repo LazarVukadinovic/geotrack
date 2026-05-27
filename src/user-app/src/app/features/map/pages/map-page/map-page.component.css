@@ -41,6 +41,12 @@
   animation: map-bottom-card-enter 160ms ease-out both;
 }
 
+.map-page__pin-to-pin-banner {
+  bottom: var(--map-bottom-gap);
+  z-index: var(--map-layer-preview);
+  animation: map-bottom-card-enter 160ms ease-out both;
+}
+
 .map-page__locate-button {
   bottom: var(--map-bottom-gap);
   z-index: var(--map-layer-floating-control);
@@ -88,6 +94,7 @@
 }
 
 .map-page__no-data-overlay {
+  z-index: var(--map-layer-preview);
   background: rgba(15, 23, 42, 0.35);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);

@@ -13,4 +13,6 @@ public class ExploreDestinationDto
     public string Description { get; set; } = string.Empty;
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+    public int? TerritoryId { get; set; }
+    public string? TerritoryName { get; set; }
 }

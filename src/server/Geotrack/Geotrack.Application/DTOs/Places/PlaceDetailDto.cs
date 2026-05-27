@@ -19,8 +19,12 @@ public class PlaceDetailDto
     public string? ReviewCount { get; set; }
     public string? Distance { get; set; }
     public string? OpenStatus { get; set; }
+    public string? OpeningHours { get; set; }
+    public List<OpeningHoursDayDto>? OpeningHoursSchedule { get; set; }
+    public string? Website { get; set; }
     public string? About { get; set; }
     public List<ReviewDto> Reviews { get; set; } = new();
+    public List<PlaceRelatedEventDto> RelatedEvents { get; set; } = new();
     public List<SimilarPlaceDto> Similar { get; set; } = new();
     public bool IsSaved { get; set; }
     public bool IsOwnable { get; set; }
@@ -30,9 +34,23 @@ public class PlaceDetailDto
     public string? Category { get; set; }
 }
 
+public class OpeningHoursDayDto
+{
+    public string Day { get; set; } = string.Empty;
+    public string Hours { get; set; } = string.Empty;
+}
+
 public class TagLabelDto
 {
     public string Label { get; set; } = string.Empty;
+}
+
+public class PlaceRelatedEventDto
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Subtitle { get; set; }
+    public string? Image { get; set; }
 }
 
 public class SimilarPlaceDto

@@ -66,6 +66,8 @@
   color: #1a2b4c;
   cursor: pointer;
   flex-shrink: 0;
+  pointer-events: auto;
+  touch-action: manipulation;
   transition: background 0.15s ease, transform 0.1s ease;
 
   svg {
@@ -953,6 +955,161 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
+
+// ─── Ownership status ──────────────────────────────────────────────────────────
+
+.hd__ownership-cta { margin-top: 14px; margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 10px; }
+.hd__ownership-status { border-radius: 999px; padding: 10px 14px; font-size: 13px; font-weight: 800; }
+.hd__ownership-status--owned { background: rgba(16, 185, 129, 0.12); color: #065f46; }
+.hd__ownership-status--pending { background: rgba(245, 158, 11, 0.14); color: #92400e; }
+.hd__ownership-message { margin: 10px 0 0; color: #065f46; font-size: 13px; font-weight: 800; }
+
+// ─── Ownership claim modal ─────────────────────────────────────────────────────
+
+.hd__claim-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.hd__claim-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.hd__claim-panel {
+  position: relative;
+  width: min(440px, 100%);
+  border-radius: 24px;
+  background: #ffffff;
+  color: #1a2b4c;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.hd__claim-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #edeef2;
+
+  h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    color: #1a2b4c;
+  }
+}
+
+.hd__claim-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #f0f1f5;
+  color: #1a2b4c;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover { background: #e2e4ea; }
+}
+
+.hd__claim-body {
+  padding: 18px 20px;
+
+  p {
+    margin: 0 0 14px;
+    color: #6b7280;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+}
+
+.hd__claim-upload {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 96px;
+  border: 1.5px dashed rgba(26, 43, 76, 0.24);
+  border-radius: 14px;
+  background: #f8f9fa;
+  cursor: pointer;
+  padding: 16px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #1a2b4c;
+  transition: border-color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    border-color: #e8570a;
+    background: #fff8f5;
+  }
+}
+
+.hd__claim-error {
+  margin-top: 10px;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hd__claim-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid #edeef2;
+}
+
+.hd__claim-cancel {
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 11px 18px;
+  background: none;
+  color: #4b5563;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover { background: #f0f1f5; }
+  &:disabled { opacity: 0.5; cursor: default; }
+}
+
+.hd__claim-submit {
+  border: none;
+  border-radius: 999px;
+  padding: 11px 18px;
+  background: #e8570a;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+
+  &:hover { opacity: 0.9; }
+  &:disabled { opacity: 0.5; cursor: default; }
 }
 
 // ─── Report modal ──────────────────────────────────────────────────────────────

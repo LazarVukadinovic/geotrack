@@ -46,4 +46,5 @@ export interface EventDetail {
   venueInfo: EventVenueInfo;
   similar: EventSimilar[];
   isSaved: boolean;
+  ticketUrl?: string | null;
 }

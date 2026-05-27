@@ -106,6 +106,21 @@ export class MapApiService {
     });
   }
 
+  getDrivingRoute(
+    originLatitude: number,
+    originLongitude: number,
+    destinationLatitude: number,
+    destinationLongitude: number,
+  ): Observable<MapRouteResult> {
+    return this.http.get<MapRouteResult>('/api/map/driving-route', {
+      params: new HttpParams()
+        .set('originLatitude', String(originLatitude))
+        .set('originLongitude', String(originLongitude))
+        .set('destinationLatitude', String(destinationLatitude))
+        .set('destinationLongitude', String(destinationLongitude)),
+    });
+  }
+
   getEntities(
     latitude: number,
     longitude: number,

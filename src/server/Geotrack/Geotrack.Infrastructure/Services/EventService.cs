@@ -220,7 +220,8 @@ public class EventService : IEventService
         int id,
         int? userId = null,
         double? latitude = null,
-        double? longitude = null)
+        double? longitude = null,
+        bool useCurrentLocationDistance = false)
     {
         var evt = await _db.Events
             .AsNoTracking()
@@ -263,6 +264,9 @@ public class EventService : IEventService
         var (eventLatitude, eventLongitude) = ResolveCoordinates(evt);
         var images = ToImageDtos(evt.Images);
 
+        var originLat = useCurrentLocationDistance ? latitude : evt.Destination?.Latitude;
+        var originLng = useCurrentLocationDistance ? longitude : evt.Destination?.Longitude;
+
         return new EventDetailDto
         {
             Id = evt.Id,
@@ -278,15 +282,21 @@ public class EventService : IEventService
             Images = images,
             Tags = evt.EventTags.Select(et => new TagLabelDto { Label = et.Tag.Name }).ToList(),
             Distance = SpatialDistanceFormatter.FormatBetween(
-                latitude,
-                longitude,
+                originLat,
+                originLng,
                 eventLatitude,
-                eventLongitude),
+                eventLongitude,
+                useCurrentLocationDistance),
             About = evt.Description,
             Info = new EventDetailInfoDto
             {
-                Date = evt.StartDate.ToString("d MMMM yyyy"),
-                TimeRange = evt.IsAllDay ? "All day" : $"{evt.StartDate:HH:mm} - {evt.EndDate:HH:mm}",
+                Date = evt.StartDate.Date == evt.EndDate.Date
+                    ? evt.StartDate.ToString("d MMMM yyyy")
+                    : $"{evt.StartDate:d MMM} – {evt.EndDate:d MMM yyyy}",
+                TimeRange = evt.IsAllDay ? "All day"
+                    : string.Equals(evt.EventType?.Name, "Festival", StringComparison.OrdinalIgnoreCase)
+                        ? $"From {evt.StartDate:HH:mm}"
+                        : $"{evt.StartDate:HH:mm} – {evt.EndDate:HH:mm}",
                 Venue = evt.VenueName ?? evt.Place?.Name ?? evt.Location?.Name ?? evt.Destination.Name,
                 Ticket = evt.IsFree ? "Free" : evt.TicketPrice ?? "Ticket info TBA",
                 Duration = evt.Duration ?? FormatDuration(evt.StartDate, evt.EndDate),
@@ -306,7 +316,8 @@ public class EventService : IEventService
                 Image = GetMainImageUrl(s.Images),
                 IsSaved = favoriteIds.Contains(s.Id)
             }).ToList(),
-            IsSaved = isSaved
+            IsSaved = isSaved,
+            ExternalTicketLink = evt.ExternalTicketLink
         };
     }
 

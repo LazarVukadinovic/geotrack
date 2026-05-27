@@ -39,7 +39,6 @@ public class ExploreService : IExploreService
 
     private static readonly string[] WhereToEatExcludedTypeNames =
     [
-        "cafe",
         "bar"
     ];
 
@@ -106,9 +105,12 @@ public class ExploreService : IExploreService
     public async Task<ExploreSectionPageDto> GetExploreSectionPageAsync(
         string sectionKey,
         int destinationId,
+        double? latitude = null,
+        double? longitude = null,
         int? userId = null,
         int skip = 0,
         int take = SectionPageDefaultTake,
+        bool useCurrentLocationDistance = false,
         IReadOnlyCollection<int>? tagIds = null)
     {
         var normalizedKey = ToCategoryKey(sectionKey ?? string.Empty);
@@ -130,6 +132,10 @@ public class ExploreService : IExploreService
         }
 
         var destinationPoint = SpatialPointFactory.Create(destination.Latitude, destination.Longitude);
+        var useCurrentDistanceLabel = useCurrentLocationDistance && HasUsableCoordinates(latitude, longitude);
+        var distancePoint = useCurrentDistanceLabel
+            ? SpatialPointFactory.Create(latitude!.Value, longitude!.Value)
+            : destinationPoint;
         var placeFavoriteIds = userId.HasValue
             ? await _favoriteService.GetFavoriteIdsAsync(userId.Value, "place")
             : new HashSet<int>();
@@ -143,47 +149,53 @@ public class ExploreService : IExploreService
         {
             "curated-for-you" => await BuildCuratedForYouPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 userId,
                 placeFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             "top-stays" or "stays" or "hotels" => await BuildTopStaysPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 placeFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             "where-to-eat" or "food" or "food-and-music" => await BuildWhereToEatPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 placeFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             "drinks" or "cafes" or "bars" or "coffee" => await BuildDrinksPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 placeFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             "events" => await BuildEventsPageAsync(
                 destination,
-                destinationPoint,
+                distancePoint,
                 eventFavoriteIds,
                 0,
-                candidateTake),
+                candidateTake,
+                useCurrentDistanceLabel),
 
             _ => await BuildDynamicSectionPageAsync(
                 normalizedKey,
                 destination,
-                destinationPoint,
+                distancePoint,
                 placeFavoriteIds,
                 0,
-                candidateTake)
+                candidateTake,
+                useCurrentDistanceLabel)
         };
 
         return await ApplySectionFiltersAndPagingAsync(
@@ -399,7 +411,9 @@ public class ExploreService : IExploreService
                 Name = DisplayTextSafety.CleanRequired(resolvedDestination.Name, "Nearby"),
                 Description = DisplayTextSafety.CleanOptional(resolvedDestination.Description) ?? string.Empty,
                 Latitude = resolvedDestination.Latitude,
-                Longitude = resolvedDestination.Longitude
+                Longitude = resolvedDestination.Longitude,
+                TerritoryId = resolvedDestination.TerritoryId,
+                TerritoryName = resolvedDestination.TerritoryName
             },
             Sections = sections
                 .Where(section => section.Items.Count > 0)
@@ -424,7 +438,8 @@ public class ExploreService : IExploreService
         int? userId,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         if (!userId.HasValue)
         {
@@ -463,7 +478,7 @@ public class ExploreService : IExploreService
         var pageItems = rankedPlaces
             .Skip(skip)
             .Take(take)
-            .Select(place => MapRankedCuratedPlace(place, placeFavoriteIds))
+            .Select(place => MapRankedCuratedPlace(place, placeFavoriteIds, useCurrentLocationDistance))
             .ToList();
 
         return SectionPage(
@@ -483,7 +498,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var query = _db.Places
             .AsNoTracking()
@@ -540,7 +556,7 @@ public class ExploreService : IExploreService
             "Top Stays",
             "Highly rated accommodation nearby",
             "stay-card",
-            items.Select(item => MapPlaceProjection(item, "stay", "stay-card", placeFavoriteIds)).ToList(),
+            items.Select(item => MapPlaceProjection(item, "stay", "stay-card", placeFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -551,7 +567,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var query = _db.Places
             .AsNoTracking()
@@ -619,7 +636,7 @@ public class ExploreService : IExploreService
             "Where to eat",
             "Restaurants and local food nearby",
             "place-card",
-            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
+            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -630,7 +647,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var query = _db.Places
             .AsNoTracking()
@@ -693,7 +711,7 @@ public class ExploreService : IExploreService
             "Drinks & coffee",
             "Cafes, bars and places for drinks nearby",
             "place-card",
-            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
+            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -704,7 +722,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> eventFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var nowUtc = DateTime.UtcNow;
 
@@ -760,7 +779,7 @@ public class ExploreService : IExploreService
             "Events",
             "What's happening around town",
             "event-card",
-            items.Select(item => MapEventProjection(item, eventFavoriteIds)).ToList(),
+            items.Select(item => MapEventProjection(item, eventFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -772,7 +791,8 @@ public class ExploreService : IExploreService
         Point destinationPoint,
         ISet<int> placeFavoriteIds,
         int skip,
-        int take)
+        int take,
+        bool useCurrentLocationDistance)
     {
         var possibleTags = await _db.Tags
             .AsNoTracking()
@@ -864,7 +884,7 @@ public class ExploreService : IExploreService
             title,
             totalCount == 1 ? "1 matching place" : $"{totalCount} matching places",
             "place-card",
-            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds)).ToList(),
+            items.Select(item => MapPlaceProjection(item, "place", "place-card", placeFavoriteIds, useCurrentLocationDistance)).ToList(),
             totalCount,
             skip,
             take);
@@ -1051,7 +1071,9 @@ public class ExploreService : IExploreService
                 Latitude = d.Latitude,
                 Longitude = d.Longitude,
                 DistanceMeters = 0,
-                Priority = -1
+                Priority = -1,
+                TerritoryId = d.Region.TerritoryId,
+                TerritoryName = d.Region.Territory.Name
             })
             .SingleOrDefaultAsync();
     }
@@ -1113,7 +1135,8 @@ public class ExploreService : IExploreService
         SectionPlaceProjection item,
         string entityType,
         string cardType,
-        ISet<int> placeFavoriteIds)
+        ISet<int> placeFavoriteIds,
+        bool useCurrentLocationDistance = false)
     {
         return new ExploreFeedSectionItemDto
         {
@@ -1128,7 +1151,7 @@ public class ExploreService : IExploreService
             Image = item.Image,
             Rating = item.AverageRating.HasValue ? Math.Round(item.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(item.ReviewCount),
-            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
+            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance),
             OpeningHours = item.OpeningHours,
             StatusBadge = cardType == "stay-card" ? null : BuildPlaceStatusBadge(item.OperatingHoursEnabled, item.OperatingHoursJson),
             PricePerNight = cardType == "stay-card" ? item.PricePerNight : null,
@@ -1139,7 +1162,8 @@ public class ExploreService : IExploreService
 
     private static ExploreFeedSectionItemDto MapEventProjection(
         SectionEventProjection item,
-        ISet<int> eventFavoriteIds)
+        ISet<int> eventFavoriteIds,
+        bool useCurrentLocationDistance = false)
     {
         return new ExploreFeedSectionItemDto
         {
@@ -1153,7 +1177,7 @@ public class ExploreService : IExploreService
             StatusBadge = BuildEventStatusBadge(item.IsHappeningNow, item.IsUpcoming),
             Description = TrimDescription(item.Description, 170),
             Image = item.Image,
-            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance: false),
+            Distance = FormatDistanceLabel(item.DistanceMeters, useCurrentLocationDistance),
             DateLabel = FormatDateLabel(item.StartDate, item.EndDate),
             IsSaved = eventFavoriteIds.Contains(item.Id),
             Tags = item.Tags
@@ -1162,7 +1186,8 @@ public class ExploreService : IExploreService
 
     private static ExploreFeedSectionItemDto MapRankedCuratedPlace(
         RankedCuratedPlace place,
-        ISet<int> placeFavoriteIds)
+        ISet<int> placeFavoriteIds,
+        bool useCurrentLocationDistance = false)
     {
         return new ExploreFeedSectionItemDto
         {
@@ -1177,7 +1202,7 @@ public class ExploreService : IExploreService
             Image = place.Image,
             Rating = place.AverageRating.HasValue ? Math.Round(place.AverageRating.Value, 1) : null,
             ReviewCount = FormatReviewCountLabel(place.ReviewCount),
-            Distance = FormatDistanceLabel(place.DistanceMeters, useCurrentLocationDistance: false),
+            Distance = FormatDistanceLabel(place.DistanceMeters, useCurrentLocationDistance),
             OpeningHours = place.OpeningHours,
             StatusBadge = BuildPlaceStatusBadge(place.OperatingHoursEnabled, place.OperatingHoursJson),
             IsSaved = placeFavoriteIds.Contains(place.Id),
@@ -1773,17 +1798,37 @@ public class ExploreService : IExploreService
         return score;
     }
 
+    private static readonly Dictionary<string, string> DynamicSectionSubtitles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["swimming"] = "Swimming spots and water activities nearby",
+        ["kayaking"] = "Kayaking and water sports nearby",
+        ["fishing"] = "Fishing spots nearby",
+        ["walking-route"] = "Scenic walks and sightseeing routes nearby",
+        ["culture"] = "Culture and arts venues nearby",
+        ["history"] = "Historic sites and heritage nearby",
+        ["art"] = "Art galleries and exhibitions nearby",
+        ["nature"] = "Nature spots and parks nearby",
+        ["architecture"] = "Architecture and historic buildings nearby",
+        ["monastery"] = "Monasteries and religious heritage nearby",
+        ["religious-site"] = "Religious sites and heritage nearby",
+        ["garden"] = "Gardens and botanical spaces nearby",
+        ["park"] = "Parks and green spaces nearby",
+        ["gallery"] = "Art galleries and exhibition spaces nearby",
+        ["hiking"] = "Hiking trails and outdoor routes nearby",
+        ["boat-tour"] = "Boat tours and water excursions nearby",
+        ["island-hopping"] = "Island hopping and sea trips nearby",
+        ["photo-walk"] = "Photography spots and scenic walks nearby",
+        ["diving-snorkeling"] = "Diving and snorkeling spots nearby",
+        ["cable-car"] = "Cable car and panoramic rides nearby",
+        ["guided-tour"] = "Guided tours and experiences nearby",
+        ["skiing"] = "Ski slopes and winter sports nearby",
+    };
+
     private static string? BuildDynamicSectionSubtitle(DynamicSectionAccumulator section)
     {
-        var count = section.Items.Count;
-        if (count == 0)
-        {
-            return null;
-        }
-
-        return count == 1
-            ? "1 matching place nearby"
-            : $"{count} matching places nearby";
+        if (section.Items.Count == 0) return null;
+        if (DynamicSectionSubtitles.TryGetValue(section.Key, out var subtitle)) return subtitle;
+        return $"Places and experiences nearby";
     }
 
     private async Task<List<ExploreLandmarkCategoryDto>> BuildLandmarkCategoriesAsync(Point userPoint, int destinationId)
@@ -2063,7 +2108,9 @@ public class ExploreService : IExploreService
                 Latitude = d.Latitude,
                 Longitude = d.Longitude,
                 DistanceMeters = EF.Property<Point>(d, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint),
-                Priority = 0
+                Priority = 0,
+                TerritoryId = d.Region.TerritoryId,
+                TerritoryName = d.Region.Territory.Name
             })
             .OrderBy(d => d.DistanceMeters)
             .ThenBy(d => d.Name)
@@ -2097,7 +2144,9 @@ public class ExploreService : IExploreService
                 DistanceMeters = EF.Property<Point?>(d, SpatialPointFactory.CoordinatesPropertyName) != null
                     ? EF.Property<Point>(d, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
                     : 0,
-                Priority = -1
+                Priority = -1,
+                TerritoryId = d.Region.TerritoryId,
+                TerritoryName = d.Region.Territory.Name
             })
             .SingleOrDefaultAsync();
     }
@@ -2184,7 +2233,9 @@ public class ExploreService : IExploreService
             Name = DisplayTextSafety.CleanRequired(destination.Name, "Nearby"),
             Description = DisplayTextSafety.CleanOptional(destination.Description) ?? string.Empty,
             Latitude = destination.Latitude,
-            Longitude = destination.Longitude
+            Longitude = destination.Longitude,
+            TerritoryId = destination.TerritoryId,
+            TerritoryName = destination.TerritoryName
         };
     }
 
@@ -2339,6 +2390,8 @@ public class ExploreService : IExploreService
         public double Longitude { get; set; }
         public double DistanceMeters { get; set; }
         public int Priority { get; set; }
+        public int? TerritoryId { get; set; }
+        public string? TerritoryName { get; set; }
     }
 
     private sealed class CuratedInterestSignal

@@ -2,6 +2,8 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { FavoriteEntityType, FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
+import { LocationService } from '../../../core/services/location.service';
+import { DestinationService } from '../../../core/services/destination.service';
 import type { ExploreSectionItem } from '../models/explore-extras.model';
 import type { ExploreSectionFilterGroup, ExploreSectionListingResponse } from '../models/explore-section-listing.model';
 
@@ -73,6 +75,8 @@ export class ExploreSectionListingService {
   private readonly http = inject(HttpClient);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly locationSvc = inject(LocationService);
+  private readonly destinationSvc = inject(DestinationService);
 
   private readonly _page = signal<ExploreSectionListingResponse | null>(null);
   private readonly _items = signal<ExploreSectionItem[]>([]);
@@ -87,6 +91,7 @@ export class ExploreSectionListingService {
 
   private currentSectionKey: string | null = null;
   private currentDestinationId: number | null = null;
+  private currentLocationKey: string | null = null;
   private requestVersion = 0;
 
   readonly page = computed(() => this._page());
@@ -105,6 +110,14 @@ export class ExploreSectionListingService {
 
   readonly items = computed(() => this._items().map(item => this.resolveSavedState(item)));
 
+  invalidate(): void {
+    this.currentSectionKey = null;
+    this.currentDestinationId = null;
+    this.currentLocationKey = null;
+    this._page.set(null);
+    this._items.set([]);
+  }
+
   load(sectionKey: string, destinationId: number): void {
     const normalizedKey = sectionKey.trim();
     if (!normalizedKey || !Number.isFinite(destinationId) || destinationId <= 0) {
@@ -112,12 +125,19 @@ export class ExploreSectionListingService {
       return;
     }
 
-    if (this.currentSectionKey === normalizedKey && this.currentDestinationId === destinationId && this._page()) {
+    const locationKey = this.buildLocationKey();
+    if (
+      this.currentSectionKey === normalizedKey &&
+      this.currentDestinationId === destinationId &&
+      this.currentLocationKey === locationKey &&
+      this._page()
+    ) {
       return;
     }
 
     this.currentSectionKey = normalizedKey;
     this.currentDestinationId = destinationId;
+    this.currentLocationKey = locationKey;
     this._page.set(null);
     this._items.set([]);
     this._filters.set([]);
@@ -174,7 +194,18 @@ export class ExploreSectionListingService {
   toggleSaved(item: ExploreSectionItem): void {
     const numericId = parseInt(item.id, 10);
     if (isNaN(numericId)) return;
-    if (item.entityType === 'event') return;
+
+    if (item.entityType === 'event') {
+      this.saveToCollection.open({
+        entityType: 'event',
+        entityId: numericId,
+        title: item.title,
+        imageUrl: item.image,
+        surface: `explore_section_${this.currentSectionKey ?? 'unknown'}`,
+        analyticsEntityType: 'event',
+      });
+      return;
+    }
 
     const saveEntityType = item.entityType === 'stay' ? 'place' : item.entityType;
     if (saveEntityType !== 'place') return;
@@ -205,6 +236,20 @@ export class ExploreSectionListingService {
       .set('destinationId', destinationId)
       .set('skip', skip)
       .set('take', take);
+
+    if (this.destinationSvc.mode() === 'location') {
+      const loc = this.locationSvc.location();
+      if (loc) {
+        params = params
+          .set('latitude', loc.latitude)
+          .set('longitude', loc.longitude)
+          .set('distanceOrigin', 'current-location');
+      } else {
+        params = params.set('distanceOrigin', 'destination-centre');
+      }
+    } else {
+      params = params.set('distanceOrigin', 'destination-centre');
+    }
 
     for (const tagId of this._selectedTagIds()) {
       params = params.append('tagIds', tagId);
@@ -341,5 +386,16 @@ export class ExploreSectionListingService {
     if (entityType === 'stay') return `/stays/${id}`;
     if (entityType === 'destination') return `/explore?destinationId=${id}`;
     return `/places/${id}`;
+  }
+
+  private buildLocationKey(): string {
+    if (this.destinationSvc.mode() === 'location') {
+      const loc = this.locationSvc.location();
+      if (loc) {
+        return `gps:${loc.latitude.toFixed(4)}:${loc.longitude.toFixed(4)}`;
+      }
+      return 'location-pending';
+    }
+    return 'dest-centre';
   }
 }

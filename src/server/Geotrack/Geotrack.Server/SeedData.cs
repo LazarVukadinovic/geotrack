@@ -98,6 +98,10 @@ public static class SeedData
 
     private static string SeedMedia(string fileName) => $"/media/seed/{fileName}.svg";
 
+    // Koristi se za slike konvertovane Sharp skriptom (scripts/convert-images.mjs)
+    // Primer: SeedWebp("kopaonik-vrh")  →  /media/seed/kopaonik-vrh.webp
+    private static string SeedWebp(string fileName) => $"/media/seed/{fileName}.webp";
+
     public static async Task InitializeAsync(AppDbContext db)
     {
         await InitializationLock.WaitAsync();
@@ -2462,6 +2466,18 @@ public static class SeedData
             "dest-local-food",
             "dest-family-stays",
             "dest-mountain-lodges");
+
+        await SyncByNameAsync("Kragujevac",
+            "dest-culture",
+            "dest-museums",
+            "dest-sightseeing",
+            "dest-urban",
+            "dest-relaxed",
+            "dest-local-food",
+            "dest-grill",
+            "dest-cafe-culture",
+            "dest-budget-stays",
+            "dest-river-walks");
     }
 
     private static async Task SyncDestinationDiscoveryTagsAsync(
@@ -2701,6 +2717,14 @@ public static class SeedData
             var destination = await db.Destinations.FirstOrDefaultAsync(x => x.Name == name);
             if (destination is not null)
             {
+                var changed = false;
+                if (Math.Abs(destination.Latitude - latitude) > 1e-9 || Math.Abs(destination.Longitude - longitude) > 1e-9)
+                {
+                    destination.Latitude = latitude;
+                    destination.Longitude = longitude;
+                    changed = true;
+                }
+                if (changed) await db.SaveChangesAsync();
                 return destination;
             }
 
@@ -2725,6 +2749,14 @@ public static class SeedData
             var location = await db.Locations.FirstOrDefaultAsync(x => x.DestinationId == destination.Id && x.Name == name);
             if (location is not null)
             {
+                var changed = false;
+                if (Math.Abs(location.Latitude - latitude) > 1e-9 || Math.Abs(location.Longitude - longitude) > 1e-9)
+                {
+                    location.Latitude = latitude;
+                    location.Longitude = longitude;
+                    changed = true;
+                }
+                if (changed) await db.SaveChangesAsync();
                 return location;
             }
 
@@ -2752,7 +2784,7 @@ public static class SeedData
             string description,
             double latitude,
             double longitude,
-            string openingHours,
+            string? openingHours,
             double rating,
             int reviewCount,
             string? contactEmail = null,
@@ -2772,6 +2804,13 @@ public static class SeedData
                 if (place.LocationId != location.Id)
                 {
                     place.LocationId = location.Id;
+                    changed = true;
+                }
+
+                if (Math.Abs(place.Latitude - latitude) > 1e-9 || Math.Abs(place.Longitude - longitude) > 1e-9)
+                {
+                    place.Latitude = latitude;
+                    place.Longitude = longitude;
                     changed = true;
                 }
 
@@ -2850,11 +2889,21 @@ public static class SeedData
             string ticketPrice,
             string duration,
             string hostedBy,
-            Place? place = null)
+            Place? place = null,
+            string? externalTicketLink = null,
+            string? summary = null,
+            string? venueDescription = null,
+            string? arrivalTips = null,
+            string? accessibility = null)
         {
             var eventEntity = await db.Events.FirstOrDefaultAsync(x => x.Name == name);
             if (eventEntity is not null)
             {
+                if (externalTicketLink != null && eventEntity.ExternalTicketLink != externalTicketLink)
+                {
+                    eventEntity.ExternalTicketLink = externalTicketLink;
+                    await db.SaveChangesAsync();
+                }
                 return eventEntity;
             }
 
@@ -2865,15 +2914,17 @@ public static class SeedData
                 DestinationId = destination.Id,
                 LocationId = location.Id,
                 PlaceId = place?.Id,
+                Summary = summary,
                 Description = description,
                 StartDate = startDate,
                 EndDate = endDate,
                 TicketPrice = ticketPrice,
                 Duration = duration,
                 HostedBy = hostedBy,
-                VenueDescription = place is null ? location.Name : place.Name,
-                ArrivalTips = "Use public transport where possible and check local schedules before visiting.",
-                Accessibility = "Check official venue information before attending.",
+                ExternalTicketLink = externalTicketLink,
+                VenueDescription = venueDescription ?? (place is null ? location.Name : place.Name),
+                ArrivalTips = arrivalTips ?? "Use public transport where possible and check local schedules before visiting.",
+                Accessibility = accessibility ?? "Check official venue information before attending.",
                 CreatedAt = now
             };
 
@@ -2972,6 +3023,139 @@ public static class SeedData
 
             await db.SaveChangesAsync();
         }
+
+        async Task<BookingPartner> EnsureBookingPartnerAsync(string name, string variant)
+        {
+            var partner = await db.BookingPartners.FirstOrDefaultAsync(x => x.Name == name);
+            if (partner is not null)
+            {
+                return partner;
+            }
+
+            partner = new BookingPartner { Name = name, Variant = variant };
+            db.BookingPartners.Add(partner);
+            await db.SaveChangesAsync();
+            return partner;
+        }
+
+        async Task AddBookingPartnerIfMissingAsync(Place place, BookingPartner partner, string url)
+        {
+            var exists = await db.PlaceBookingPartners.AnyAsync(x =>
+                x.PlaceId == place.Id &&
+                x.BookingPartnerId == partner.Id);
+
+            if (exists)
+            {
+                return;
+            }
+
+            db.PlaceBookingPartners.Add(new PlaceBookingPartner
+            {
+                PlaceId = place.Id,
+                BookingPartnerId = partner.Id,
+                Url = url
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task RemoveBookingPartnerIfExistsAsync(Place place, BookingPartner partner)
+        {
+            var entry = await db.PlaceBookingPartners.FirstOrDefaultAsync(x =>
+                x.PlaceId == place.Id &&
+                x.BookingPartnerId == partner.Id);
+
+            if (entry is null) return;
+
+            db.PlaceBookingPartners.Remove(entry);
+            await db.SaveChangesAsync();
+        }
+
+        async Task UpdatePlaceHoursAsync(Place place, string? openingHours, string? operatingHoursJson)
+        {
+            var changed = false;
+            if (place.OpeningHours != openingHours) { place.OpeningHours = openingHours; changed = true; }
+            var shouldBeEnabled = operatingHoursJson != null;
+            if (place.OperatingHoursJson != operatingHoursJson) { place.OperatingHoursJson = operatingHoursJson; changed = true; }
+            if (place.OperatingHoursEnabled != shouldBeEnabled) { place.OperatingHoursEnabled = shouldBeEnabled; changed = true; }
+            if (changed) await db.SaveChangesAsync();
+        }
+
+        async Task ForceSetDestinationImageAsync(Destination destination, string url)
+        {
+            var existing = await db.EntityImages.Where(x =>
+                x.TargetType == EntityImageTargetType.Destination &&
+                x.DestinationId == destination.Id).ToListAsync();
+
+            if (existing.Count == 1 && existing[0].Url == url) return;
+
+            db.EntityImages.RemoveRange(existing);
+
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = destination.Id,
+                Url = url,
+                Caption = destination.Name,
+                AltText = destination.Name,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 0,
+                CreatedAt = now
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task ForceSetPlaceImageAsync(Place place, string url)
+        {
+            var existing = await db.EntityImages.Where(x =>
+                x.TargetType == EntityImageTargetType.Place &&
+                x.PlaceId == place.Id).ToListAsync();
+
+            if (existing.Count == 1 && existing[0].Url == url) return;
+
+            db.EntityImages.RemoveRange(existing);
+
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = place.Id,
+                Url = url,
+                Caption = place.Name,
+                AltText = place.Name,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 0,
+                CreatedAt = now
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task RemoveEventIfExistsAsync(string name)
+        {
+            var evt = await db.Events.FirstOrDefaultAsync(x => x.Name == name);
+            if (evt is null) return;
+
+            var tags = await db.EventTags.Where(x => x.EventId == evt.Id).ToListAsync();
+            db.EventTags.RemoveRange(tags);
+
+            var images = await db.EntityImages.Where(x => x.EventId == evt.Id).ToListAsync();
+            db.EntityImages.RemoveRange(images);
+
+            db.Events.Remove(evt);
+            await db.SaveChangesAsync();
+        }
+
+        static string BuildHoursJson(params (string days, string hours)[] schedule)
+        {
+            var entries = schedule.Select(s => $"{{\"day\":\"{s.days}\",\"hours\":\"{s.hours}\"}}");
+            return "[" + string.Join(",", entries) + "]";
+        }
+
+        static string BuildDailyHoursJson(string hours)
+            => BuildHoursJson(("Mon", hours), ("Tue", hours), ("Wed", hours), ("Thu", hours), ("Fri", hours), ("Sat", hours), ("Sun", hours));
 
         async Task AddEntityImagesIfMissingAsync(EntityImageTargetType targetType, string title, int? destinationId = null, int? placeId = null, int? eventId = null, params string[] urls)
         {
@@ -3095,8 +3279,8 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(kafeterija, "specialty-coffee", "casual", "budget", "local-favorite");
         await AddPlaceTagsIfMissingAsync(adaLake, "waterfront", "swimming", "family-friendly", "nature", "walking-route");
         await AddPlaceTagsIfMissingAsync(hotelMoskva, "boutique-stay", "old-town-nearby", "premium", "history");
-        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kalemegdan.Name, placeId: kalemegdan.Id, urls: new[] { Unsplash("1558005530-a7958896ec60") });
-        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, adaLake.Name, placeId: adaLake.Id, urls: new[] { Unsplash("1500530855697-b586d89ba3ee") });
+        await ForceSetPlaceImageAsync(kalemegdan, SeedWebp("kalemegdan"));
+        await ForceSetPlaceImageAsync(adaLake, SeedWebp("ada-ciganlija"));
 
         var noviSad = await EnsureDestinationAsync("Novi Sad", "Danube-side city known for Petrovaradin Fortress, relaxed streets, cafes and festival culture.", cityType, vojvodina, 45.2671, 19.8335);
         await AddDestinationTagsIfMissingAsync(noviSad,
@@ -3195,12 +3379,361 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(banjskaStena, "panoramic-view", "hiking", "nature", "walking-route");
         await AddPlaceTagsIfMissingAsync(zaovineLake, "waterfront", "quiet-area", "nature", "family-friendly");
 
+        var kragujevac = await EnsureDestinationAsync("Kragujevac", "Serbia's former royal capital and cultural heart of Šumadija, known for its first Serbian theatre, Šumarice Memorial Park and Bubanj lake.", cityType, centralSerbia, 44.010590360886276, 20.915278268657637);
+        await AddDestinationTagsIfMissingAsync(kragujevac,
+            "dest-culture",
+            "dest-museums",
+            "dest-sightseeing",
+            "dest-urban",
+            "dest-relaxed",
+            "dest-local-food",
+            "dest-grill",
+            "dest-cafe-culture",
+            "dest-budget-stays",
+            "dest-river-walks");
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Destination, "Kragujevac", destinationId: kragujevac.Id, urls: new[] { Unsplash("1558019174-f9f5cb3b11a9") });
+        var kgCenter = await EnsureLocationAsync(kragujevac, "Centar", districtType, 44.010590360886276, 20.915278268657637);
+        var kgSumarice = await EnsureLocationAsync(kragujevac, "Šumarice", parkType, 44.01608378833523, 20.885842264686087);
+        var kgBubanj = await EnsureLocationAsync(kragujevac, "Bubanj", waterfrontType, 44.01709232834811, 20.925827920265036);
+        await AddLocationTagsIfMissingAsync(kgCenter, "walkable-area", "local-area");
+        await AddLocationTagsIfMissingAsync(kgSumarice, "nature", "history", "family-friendly");
+        await AddLocationTagsIfMissingAsync(kgBubanj, "waterfront", "nature", "quiet-area");
+        var spomenPark = await EnsurePlaceAsync("Spomen park Šumarice", "Memorial park dedicated to the victims of the 1941 massacre", "Park Šumarice, Kragujevac", ptLandmark, kgSumarice, "Šumarice Memorial Park is one of the most significant memorial parks in Serbia, dedicated to the 2,778 victims shot on 21 October 1941. The park covers 352 hectares and is adorned with monumental sculptures and memorials. The Museum of October 21 is also located within the park.", 44.01592, 20.88570, "Open 24h", 4.9, 420);
+        var muzej21 = await EnsurePlaceAsync("Muzej 21. oktobar", "Memorial museum dedicated to the victims of 21 October 1941", "Park Šumarice, Kragujevac", ptMuseum, kgSumarice, "The Museum of October 21 in Šumarice Memorial Park is dedicated to the memory of 2,778 Kragujevac civilians, including students and teachers, shot on 21 October 1941. The moving exhibition of photographs, documents and personal belongings leaves a lasting impression on every visitor.", 44.0215005480748, 20.894342132628374, "09:00 - 18:00", 4.9, 378);
+        var knezevansenal = await EnsurePlaceAsync("Knežev Arsenal", "National museum in a historic 1836 building", "Vojvode Putnika 1, Kragujevac", ptMuseum, kgCenter, "Knežev Arsenal, also known as the National Museum of Kragujevac, is housed in the historic 1836 Prince's Office building. The fourth-oldest national museum in Serbia preserves a rich collection of artefacts from the history, art and industrial heritage of Šumadija.", 44.00709093991931, 20.912182474605068, null, 4.6, 280);
+        var jezeroBubanj = await EnsurePlaceAsync("Jezero Bubanj", "Artificial lake with fitness trails in the eastern part of the city", "Bubanj, Kragujevac", ptNature, kgBubanj, "Bubanj Lake is located in the eastern part of Kragujevac and is a popular spot for recreation, morning runs and lakeside walks. Surrounded by maintained fitness trails, benches and greenery, it is ideal for family outings and relaxation.", 44.01722, 20.92595, "Open 24h", 4.7, 312);
+        var ambasadorRestoran = await EnsurePlaceAsync("Ambasador House", "Local and international cuisine restaurant in the city centre", "Centar, Kragujevac", ptRestaurant, kgCenter, "Ambasador House restaurant in the heart of Kragujevac is known for its wide menu of local and international cuisine, warm atmosphere and affordable prices. A favourite meeting place for locals and visitors alike for many years.", 44.02155482409981, 20.904514054554962, "08:00–00:00", 4.5, 187);
+        var kafanaBalkan = await EnsurePlaceAsync("Kafana Balkan", "Traditional Serbian kafana with live music", "Centar, Kragujevac", ptRestaurant, kgCenter, "Kafana Balkan is an authentic Serbian kafana known for its home-style cooking, live music and warm atmosphere. One of the favourite spots in Kragujevac for an evening out in the spirit of traditional kafana culture, with sevdalinka and Serbian folk songs.", 44.01205768483894, 20.912913519847535, "08:00–00:00", 4.4, 145);
+        var toroRestoran = await EnsurePlaceAsync("Toro", "Modern restaurant with premium grill and steaks", "Centar, Kragujevac", ptRestaurant, kgCenter, "Toro restaurant in central Kragujevac offers a premium grill experience — from carefully selected cuts of meat and steaks to a fine wine list. The modern interior and attentive service make it a favourite for special occasions and business dinners.", 44.02734826110409, 20.911625141325484, "08:00–00:00", 4.6, 203);
+        var prvaGimnazija = await EnsurePlaceAsync("Prva kragujevačka gimnazija", "Oldest secondary school in Serbia, founded in 1833", "Kralja Petra I, Kragujevac", ptLandmark, kgCenter, "Prva Kragujevačka Gymnasium, founded in 1833 during the reign of Prince Miloš Obrenović, is the oldest secondary school in Serbia. The monumental building in the centre of Kragujevac stands as a symbol of the educational and cultural tradition of Šumadija.", 44.01068292385318, 20.9111652644484, "Mon–Fri 07:00–20:00", 4.6, 156);
+        var knjazTeatar = await EnsurePlaceAsync("Knjazevsko-srpski teatar", "Cultural institution, heir to the first Serbian theatre of 1835", "Trg Topolivaca, Kragujevac", ptLandmark, kgCenter, "The National Theatre in Kragujevac is the heir of the Princely Serbian Theatre, established in 1835 when Kragujevac was the capital of the Principality of Serbia. One of the oldest theatres in the region, it remains an active cultural venue with a rich programme of theatrical and musical performances.", 44.01084434184476, 20.910283891424807, "Mon–Sat 10:00–14:00, 18:00–20:00", 4.7, 234);
+        var hotelSumariceKg = await EnsurePlaceAsync("Hotel Šumarice", "Comfortable hotel near Šumarice Park", "Šumarice, Kragujevac", ptStay, kgSumarice, "Hotel Šumarice is situated near the Šumarice Memorial Park and offers comfortable accommodation with all necessary amenities. An ideal base for exploring the park, the nearby lake and the historic centre of Kragujevac.", 44.02119482532432, 20.87695101261244, "Open 24h", 4.4, 165);
+        var hotelZelengora = await EnsurePlaceAsync("Hotel Zelengora", "Hotel in the centre of Kragujevac", "Centar, Kragujevac", ptStay, kgCenter, "Hotel Zelengora offers accessible accommodation in the central part of Kragujevac, suitable for family trips and short stays. Its proximity to the city centre and cultural attractions makes it a practical choice for visitors to Kragujevac.", 44.01261245597674, 20.91399511256099, "Open 24h", 4.3, 120);
+        var hotelSumariceStay = await EnsureStayAsync(hotelSumariceKg, hotelStayType, 68m, "14:00", "11:00");
+        var hotelZelengoraStay = await EnsureStayAsync(hotelZelengora, hotelStayType, 55m, "14:00", "11:00");
+        await AddStayAmenitiesIfMissingAsync(hotelSumariceStay, wifi, parking, breakfast);
+        await AddStayAmenitiesIfMissingAsync(hotelZelengoraStay, wifi, parking);
+        var kgBpBooking = await EnsureBookingPartnerAsync("Booking.com", "dark");
+        await RemoveBookingPartnerIfExistsAsync(hotelSumariceKg, kgBpBooking);
+        await RemoveBookingPartnerIfExistsAsync(hotelZelengora, kgBpBooking);
+        await EnsureRestaurantAsync(ambasadorRestoran);
+        await EnsureRestaurantAsync(kafanaBalkan);
+        await EnsureRestaurantAsync(toroRestoran);
+        await AddPlaceTagsIfMissingAsync(spomenPark, "history", "culture", "nature", "walking-route", "family-friendly");
+        await AddPlaceTagsIfMissingAsync(muzej21, "history", "culture", "museum", "family-friendly");
+        await AddPlaceTagsIfMissingAsync(knezevansenal, "history", "culture", "museum", "architecture");
+        await AddPlaceTagsIfMissingAsync(jezeroBubanj, "waterfront", "nature", "quiet-area", "walking-route", "family-friendly");
+        await AddPlaceTagsIfMissingAsync(ambasadorRestoran, "local-food", "local-favorite", "casual");
+        await AddPlaceTagsIfMissingAsync(kafanaBalkan, "local-food", "local-favorite", "traditional", "live-music");
+        await AddPlaceTagsIfMissingAsync(toroRestoran, "local-food", "grill", "fine-dining", "local-favorite");
+        await AddPlaceTagsIfMissingAsync(prvaGimnazija, "history", "culture", "architecture", "local-area");
+        await AddPlaceTagsIfMissingAsync(knjazTeatar, "history", "culture", "local-favorite", "architecture");
+        await AddPlaceTagsIfMissingAsync(hotelSumariceKg, "family-stay", "budget");
+        await AddPlaceTagsIfMissingAsync(hotelZelengora, "family-stay", "budget");
+        await UpdatePlaceHoursAsync(muzej21, "09:00–18:00",
+            BuildHoursJson(("Mon", "09:00–18:00"), ("Tue", "08:00–18:00"), ("Wed", "08:00–18:00"), ("Thu", "08:00–18:00"), ("Fri", "09:00–18:00"), ("Sat", "09:00–16:00"), ("Sun", "09:00–16:00")));
+        await UpdatePlaceHoursAsync(ambasadorRestoran, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
+        await UpdatePlaceHoursAsync(kafanaBalkan, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
+        await UpdatePlaceHoursAsync(toroRestoran, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
+        await UpdatePlaceHoursAsync(prvaGimnazija, "Mon–Fri 07:00–20:00",
+            BuildHoursJson(("Mon", "07:00–20:00"), ("Tue", "07:00–20:00"), ("Wed", "07:00–20:00"), ("Thu", "07:00–20:00"), ("Fri", "07:00–20:00"), ("Sat", "Closed"), ("Sun", "Closed")));
+        await UpdatePlaceHoursAsync(knjazTeatar, "Mon–Sat 10:00–14:00, 18:00–20:00",
+            BuildHoursJson(("Mon", "10:00–14:00, 18:00–20:00"), ("Tue", "10:00–14:00, 18:00–20:00"), ("Wed", "10:00–14:00, 18:00–20:00"), ("Thu", "10:00–14:00, 18:00–20:00"), ("Fri", "10:00–14:00, 18:00–20:00"), ("Sat", "10:00–14:00, 18:00–20:00"), ("Sun", "Closed")));
+        await ForceSetDestinationImageAsync(kragujevac, SeedWebp("kg"));
+        await ForceSetDestinationImageAsync(beograd, SeedWebp("bg"));
+        await ForceSetDestinationImageAsync(noviSad, SeedWebp("ns"));
+        await ForceSetDestinationImageAsync(kopaonik, SeedWebp("kop"));
+        await ForceSetDestinationImageAsync(tara, SeedWebp("tara"));
+        await ForceSetDestinationImageAsync(zlatibor, SeedWebp("zlatibor"));
+        var dubrovnikDest = await db.Destinations.FirstOrDefaultAsync(d => d.Name == "Dubrovnik");
+        if (dubrovnikDest is not null)
+            await ForceSetDestinationImageAsync(dubrovnikDest, SeedWebp("dubrovnik"));
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, spomenPark.Name, placeId: spomenPark.Id, urls: new[] { SeedWebp("spomen-park-sumarice") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, muzej21.Name, placeId: muzej21.Id, urls: new[] { SeedWebp("muzej21") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, knezevansenal.Name, placeId: knezevansenal.Id, urls: new[] { SeedWebp("knezev-arsenal"), SeedWebp("knezev-arsenal") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, jezeroBubanj.Name, placeId: jezeroBubanj.Id, urls: new[] { SeedWebp("jezero-bubanj") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, ambasadorRestoran.Name, placeId: ambasadorRestoran.Id, urls: new[] { SeedWebp("ambasador") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kafanaBalkan.Name, placeId: kafanaBalkan.Id, urls: new[] { SeedWebp("kafana-balkan") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, toroRestoran.Name, placeId: toroRestoran.Id, urls: new[] { SeedWebp("toro") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, prvaGimnazija.Name, placeId: prvaGimnazija.Id, urls: new[] { SeedWebp("pkg") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, knjazTeatar.Name, placeId: knjazTeatar.Id, urls: new[] { SeedWebp("pozoriste") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelSumariceKg.Name, placeId: hotelSumariceKg.Id, urls: new[] { SeedWebp("hotel-sumarice") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelZelengora.Name, placeId: hotelZelengora.Id, urls: new[] { SeedWebp("hotel-zelengora") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelMoskva.Name, placeId: hotelMoskva.Id, urls: new[] { SeedWebp("hotel-moskva") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kafeterija.Name, placeId: kafeterija.Id, urls: new[] { SeedWebp("kafeterija-dorcol") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, skadarlija.Name, placeId: skadarlija.Id, urls: new[] { SeedWebp("restoran_velika_skadarlija") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, fortress.Name, placeId: fortress.Id, urls: new[] { SeedWebp("petrovaradin") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, strand.Name, placeId: strand.Id, urls: new[] { SeedWebp("strand-dunav") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, fishZelenish.Name, placeId: fishZelenish.Id, urls: new[] { SeedWebp("fish-and-zelenish") });
+        await ForceSetPlaceImageAsync(goldGondola, SeedWebp("gondola"));
+        await ForceSetPlaceImageAsync(tornikViewpoint, SeedWebp("tornik"));
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, skiCenterPlace.Name, placeId: skiCenterPlace.Id, urls: new[] { SeedWebp("kop-ski") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelGrand.Name, placeId: hotelGrand.Id, urls: new[] { SeedWebp("grand-kopaonik") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, banjskaStena.Name, placeId: banjskaStena.Id, urls: new[] { SeedWebp("banjska-stena") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, zaovineLake.Name, placeId: zaovineLake.Id, urls: new[] { SeedWebp("lake-zaovine") });
+
         var belgradeSummer = await EnsureEventAsync("Belgrade Summer Nights", festivalType, beograd, savamala, "Open-air summer program with music, food and riverfront evening walks.", now.Date.AddDays(14).AddHours(19), now.Date.AddDays(14).AddHours(23), "Free", "4h", "City cultural venues");
         var taraNatureWalk = await EnsureEventAsync("Tara Nature Walk", outdoorType, tara, mitrovac, "Guided forest walk for viewpoints and nature stories inside the national park.", now.Date.AddDays(21).AddHours(10), now.Date.AddDays(21).AddHours(13), "1200 RSD", "3h", "Tara local guides", banjskaStena);
         var noviSadMarket = await EnsureEventAsync("Novi Sad Local Food Market", marketType, noviSad, nsCenter, "Weekend food and craft market with local producers and casual tastings.", now.Date.AddDays(10).AddHours(9), now.Date.AddDays(10).AddHours(15), "Free", "6h", "Novi Sad tourism board", fishZelenish);
+        await RemoveEventIfExistsAsync("Šumarice Park Guided Walk");
         await AddEventTagsIfMissingAsync(belgradeSummer, "summer-event", "live-music-event", "local-event", "free-entry-event");
         await AddEventTagsIfMissingAsync(taraNatureWalk, "nature-walk-event", "guided-event", "outdoor-tour-event");
         await AddEventTagsIfMissingAsync(noviSadMarket, "food-market-event", "local-event", "free-entry-event");
+
+        // ─── New Kragujevac places, hotels and events ──────────────────────────────
+
+        var ptShopping = await EnsurePlaceTypeAsync("Shopping", "Shopping centres and retail areas");
+
+        // Official Website booking partner for Zelengora and Šumarice
+        var officialSite = await EnsureBookingPartnerAsync("Official Website", "muted");
+        await AddBookingPartnerIfMissingAsync(hotelZelengora, officialSite, "https://www.hotelzelengora.com/");
+        await AddBookingPartnerIfMissingAsync(hotelSumariceKg, officialSite, "https://hotelsumarice.com/");
+
+        // New hotels
+        var hotelPresidentDeL = await EnsurePlaceAsync(
+            "Hotel President De Luxe",
+            "Contemporary garni hotel in the city centre",
+            "Centar, Kragujevac",
+            ptStay,
+            kgCenter,
+            "Hotel President De Luxe is a contemporary garni hotel in the heart of Kragujevac. The hotel offers modern, well-appointed rooms and suites with city views, complimentary Wi-Fi and air conditioning throughout. Its central location makes it an ideal base for exploring the city's historical sights, restaurants and cultural venues.",
+            44.01695589014767,
+            20.915319210164554,
+            "Open 24h",
+            4.6,
+            142);
+        var hotelPresidentStay = await EnsureStayAsync(hotelPresidentDeL, hotelStayType, 80m, "14:00", "11:00");
+        await AddStayAmenitiesIfMissingAsync(hotelPresidentStay, wifi, airConditioning, parking);
+        await AddBookingPartnerIfMissingAsync(hotelPresidentDeL, kgBpBooking, "https://www.booking.com/hotel/rs/president-de-luxe-doo.html");
+        await AddPlaceTagsIfMissingAsync(hotelPresidentDeL, "family-stay", "budget");
+
+        var hotelIndustrial = await EnsurePlaceAsync(
+            "Industrial 1853",
+            "Design hotel in a restored historic building",
+            "Kragujevac",
+            ptStay,
+            kgCenter,
+            "Industrial 1853 is a design hotel housed in a beautifully restored historic building, blending industrial heritage with contemporary comfort. Each room is uniquely designed with exposed brick and premium furnishings. Located within easy reach of Kragujevac's landmarks, the hotel is popular with travellers seeking character and style.",
+            44.00413643424874,
+            20.91286120866569,
+            "Open 24h",
+            4.7,
+            89);
+        var hotelIndustrialStay = await EnsureStayAsync(hotelIndustrial, hotelStayType, 95m, "15:00", "11:00");
+        await AddStayAmenitiesIfMissingAsync(hotelIndustrialStay, wifi, airConditioning, breakfast);
+        await AddBookingPartnerIfMissingAsync(hotelIndustrial, kgBpBooking, "https://www.booking.com/hotel/rs/industrial-1853.html");
+        await AddPlaceTagsIfMissingAsync(hotelIndustrial, "family-stay", "premium");
+
+        var hotelKragujevac = await EnsurePlaceAsync(
+            "Hotel Kragujevac",
+            "Central hotel with a long tradition",
+            "Centar, Kragujevac",
+            ptStay,
+            kgCenter,
+            "Hotel Kragujevac is a well-established hotel in the centre of the city, offering comfortable rooms and a full range of hotel services. A popular choice for both business travellers and tourists, the hotel combines a convenient central location with reliable service and easy access to Kragujevac's main attractions.",
+            44.010119399470184,
+            20.917077311019384,
+            "Open 24h",
+            4.4,
+            215);
+        var hotelKragujevacStay = await EnsureStayAsync(hotelKragujevac, hotelStayType, 72m, "14:00", "11:00");
+        await AddStayAmenitiesIfMissingAsync(hotelKragujevacStay, wifi, parking, airConditioning);
+        await AddBookingPartnerIfMissingAsync(hotelKragujevac, kgBpBooking, "https://www.booking.com/hotel/rs/kragujevac.html");
+        await AddPlaceTagsIfMissingAsync(hotelKragujevac, "family-stay", "budget");
+
+        // New restaurants / cafes / pastry shops
+        var peron = await EnsurePlaceAsync(
+            "Peron",
+            "Popular pancake and crêpe restaurant",
+            "Centar, Kragujevac",
+            ptRestaurant,
+            kgCenter,
+            "Peron is a beloved pancake and crêpe restaurant in central Kragujevac, known for its extensive menu of sweet and savoury crêpes, waffles and desserts. A favourite among locals for quick sweet treats, afternoon snacks or casual dessert outings.",
+            44.01033346991599,
+            20.917272596738187,
+            "Mon–Sat 08:00–00:00",
+            4.5,
+            167);
+        await EnsureRestaurantAsync(peron);
+        await AddPlaceTagsIfMissingAsync(peron, "local-food", "casual", "local-favorite", "dessert");
+        await UpdatePlaceHoursAsync(peron, "Mon–Sat 08:00–00:00",
+            BuildHoursJson(("Mon", "08:00–00:00"), ("Tue", "08:00–00:00"), ("Wed", "08:00–00:00"), ("Thu", "08:00–00:00"), ("Fri", "08:00–00:00"), ("Sat", "08:00–00:00"), ("Sun", "10:00–00:00")));
+
+        var velikPark = await EnsurePlaceAsync(
+            "Veliki Park",
+            "Large central park for walks and relaxation",
+            "Centar, Kragujevac",
+            ptNature,
+            kgCenter,
+            "Veliki Park (Great Park) is a spacious urban green space in the heart of Kragujevac, ideal for leisurely strolls, morning jogs and family outings. Lined with mature trees and walkways, the park offers a peaceful retreat in the city with benches, seasonal flowers and pleasant scenery.",
+            44.01721017188732,
+            20.905147810517068,
+            "Open 24h",
+            4.7,
+            298);
+        await AddPlaceTagsIfMissingAsync(velikPark, "nature", "walking-route", "family-friendly", "quiet-area");
+
+        var sumarickoJezero = await EnsurePlaceAsync(
+            "Šumaričko jezero",
+            "Natural lake inside Šumarice Memorial Park",
+            "Park Šumarice, Kragujevac",
+            ptNature,
+            kgSumarice,
+            "Šumaričko Lake is a serene natural lake nestled within Šumarice Memorial Park. Surrounded by forests and parkland, it is a tranquil spot for walks along the shoreline, birdwatching and quiet reflection. The lake area is popular with families, joggers and nature lovers visiting the broader memorial park complex.",
+            44.02947408248394,
+            20.877459346904196,
+            "Open 24h",
+            4.8,
+            211);
+        await AddPlaceTagsIfMissingAsync(sumarickoJezero, "waterfront", "nature", "quiet-area", "walking-route", "family-friendly");
+
+        var srce = await EnsurePlaceAsync(
+            "Poslastičarnica Srce",
+            "Traditional Serbian pastry shop and cake house",
+            "Centar, Kragujevac",
+            ptCafe,
+            kgCenter,
+            "Poslastičarnica Srce is a well-loved pastry shop in the centre of Kragujevac, offering a wide selection of traditional Serbian cakes, pastries, tortes and sweet treats. A go-to spot for locals with a sweet tooth, known for its home-style recipes and reliably delicious cakes.",
+            44.01318592662767,
+            20.91249812400943,
+            "Mon–Thu 08:00–00:00",
+            4.6,
+            134);
+        await AddPlaceTagsIfMissingAsync(srce, "dessert", "casual", "local-favorite", "local-food");
+        await UpdatePlaceHoursAsync(srce, "Mon–Thu 08:00–00:00",
+            BuildHoursJson(("Mon", "08:00–00:00"), ("Tue", "08:00–00:00"), ("Wed", "08:00–00:00"), ("Thu", "08:00–00:00"), ("Fri", "08:00–01:00"), ("Sat", "08:00–01:00"), ("Sun", "11:00–00:00")));
+
+        var nocciola = await EnsurePlaceAsync(
+            "Nocciola",
+            "Artisan ice cream and dessert shop",
+            "Centar, Kragujevac",
+            ptCafe,
+            kgCenter,
+            "Nocciola is a popular artisan ice cream and dessert shop in Kragujevac, known for its creative flavours and high-quality ingredients. The warm, welcoming interior makes it a pleasant stop for ice cream, creamy desserts and coffee, enjoyed by both locals and visitors throughout the year.",
+            44.01132485906991,
+            20.914450117129455,
+            "09:00–23:00",
+            4.7,
+            189);
+        await AddPlaceTagsIfMissingAsync(nocciola, "dessert", "ice-cream", "casual", "local-favorite", "local-food");
+        await UpdatePlaceHoursAsync(nocciola, "09:00–23:00", BuildDailyHoursJson("09:00–23:00"));
+
+        var mademoiselle = await EnsurePlaceAsync(
+            "Mademoiselle",
+            "French-inspired café and pastry shop",
+            "Centar, Kragujevac",
+            ptCafe,
+            kgCenter,
+            "Mademoiselle is a charming French-inspired café and pastry shop in Kragujevac, offering freshly baked croissants, cakes and specialty coffee. The elegant interior and carefully curated sweet selection make it a favourite spot for a refined breakfast or afternoon coffee break in the city centre.",
+            44.01761090881236,
+            20.912911308802148,
+            "Mon–Sat 08:00–00:00",
+            4.6,
+            156);
+        await AddPlaceTagsIfMissingAsync(mademoiselle, "dessert", "specialty-coffee", "casual", "local-favorite", "local-food");
+        await UpdatePlaceHoursAsync(mademoiselle, "Mon–Sat 08:00–00:00",
+            BuildHoursJson(("Mon", "08:00–00:00"), ("Tue", "08:00–00:00"), ("Wed", "08:00–00:00"), ("Thu", "08:00–00:00"), ("Fri", "08:00–00:00"), ("Sat", "08:00–00:00"), ("Sun", "Closed")));
+
+        var kafemat27 = await EnsurePlaceAsync(
+            "Kafemat 27",
+            "Cosy neighbourhood café",
+            "Centar, Kragujevac",
+            ptCafe,
+            kgCenter,
+            "Kafemat 27 is a cosy neighbourhood café in the heart of Kragujevac, popular for its relaxed atmosphere, good coffee and light bites. A regular stop for locals on their morning routine or afternoon break, known for its friendly service and comfortable seating.",
+            44.01375433075671,
+            20.912939901465172,
+            "Mon–Thu 07:00–00:00",
+            4.4,
+            118);
+        await AddPlaceTagsIfMissingAsync(kafemat27, "specialty-coffee", "casual", "local-favorite");
+        await UpdatePlaceHoursAsync(kafemat27, "Mon–Thu 07:00–00:00",
+            BuildHoursJson(("Mon", "07:00–00:00"), ("Tue", "07:00–00:00"), ("Wed", "07:00–00:00"), ("Thu", "07:00–00:00"), ("Fri", "07:00–01:00"), ("Sat", "07:00–01:00"), ("Sun", "08:00–00:00")));
+
+        var cafeteria = await EnsurePlaceAsync(
+            "Cafeteria",
+            "City centre café with a wide menu",
+            "Centar, Kragujevac",
+            ptCafe,
+            kgCenter,
+            "Cafeteria is a well-positioned café in central Kragujevac, offering a varied selection of coffee, soft drinks, juices and light snacks. A popular meeting spot for locals, it is known for its accessible prices, relaxed vibe and convenient central location.",
+            44.01046094483562,
+            20.915536038992816,
+            "Mon–Thu 07:30–00:00",
+            4.3,
+            102);
+        await AddPlaceTagsIfMissingAsync(cafeteria, "specialty-coffee", "casual", "local-area");
+        await UpdatePlaceHoursAsync(cafeteria, "Mon–Thu 07:30–00:00",
+            BuildHoursJson(("Mon", "07:30–00:00"), ("Tue", "07:30–00:00"), ("Wed", "07:30–00:00"), ("Thu", "07:30–00:00"), ("Fri", "07:30–01:00"), ("Sat", "07:30–01:00"), ("Sun", "07:30–00:00")));
+
+        var bigFashion = await EnsurePlaceAsync(
+            "Big Fashion Kragujevac",
+            "Modern shopping centre on the edge of the city",
+            "Kragujevac",
+            ptShopping,
+            kgCenter,
+            "Big Fashion Kragujevac is a modern shopping centre located on the western side of the city. The mall houses a wide range of international and domestic fashion brands, a food court and entertainment facilities. A popular destination for family shopping trips and leisure outings.",
+            44.008706935951636,
+            20.895814154695795,
+            "09:00 - 22:00",
+            4.2,
+            324);
+        await AddPlaceTagsIfMissingAsync(bigFashion, "family-friendly", "local-area");
+
+        // New Kragujevac events (both at Knežev Arsenal)
+        var arsenalFest = await EnsureEventAsync(
+            "Arsenal Fest 2026",
+            festivalType,
+            kragujevac,
+            kgCenter,
+            "Arsenal Fest is one of Serbia's most celebrated music festivals, held annually on the grounds of the historic Knežev Arsenal in Kragujevac. The festival features three stages and brings together acclaimed regional and international artists across rock, alternative, pop and electronic genres. Over three evenings, the Arsenal's courtyard transforms into a vibrant outdoor concert venue, with food stalls, an open-air bar area and a festival village atmosphere.",
+            new DateTime(2026, 6, 26, 18, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 6, 28, 23, 59, 0, DateTimeKind.Utc),
+            "From 1,500 RSD",
+            "3 days",
+            "Arsenal Fest",
+            place: knezevansenal,
+            externalTicketLink: "https://arsenalfest.rs/en/tickets/",
+            summary: "Three-day open-air music festival at the historic Knežev Arsenal, featuring local and international artists across multiple stages.",
+            venueDescription: "Knežev Arsenal (the Prince's Arsenal) is a 19th-century historic complex in central Kragujevac, used as the site of one of Serbia's most iconic outdoor music festivals. The open-air stage area within the arsenal grounds offers a unique backdrop of historic walls and spacious outdoor terraces.",
+            arrivalTips: "Kragujevac is easily reachable by bus from Belgrade (around 2 hours). The Arsenal venue is a 10-minute walk from the city centre. Tickets can be purchased online at arsenalfest.rs or at the venue box office on the day of the event.",
+            accessibility: "The festival grounds are largely flat and accessible. Check the official Arsenal Fest website for full accessibility information and assistance services before attending.");
+        await AddEventTagsIfMissingAsync(arsenalFest, "cultural-festival", "live-music-event", "ticketed-event", "summer-event");
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Event, arsenalFest.Name, eventId: arsenalFest.Id, urls: new[] { SeedWebp("arsenal") });
+
+        var vibeFest = await EnsureEventAsync(
+            "Vibe Festival 2026",
+            festivalType,
+            kragujevac,
+            kgCenter,
+            "Vibe Festival is a summer music festival held at the open-air grounds of Knežev Arsenal in Kragujevac. The festival showcases a diverse lineup of domestic and regional electronic, pop and urban artists across multiple stages. With a laid-back festival village atmosphere, food and drinks area and a welcoming crowd, Vibe Festival has quickly established itself as a highlight of Kragujevac's summer cultural calendar.",
+            new DateTime(2026, 7, 23, 18, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 7, 25, 23, 59, 0, DateTimeKind.Utc),
+            "4,500 RSD (3-day pass)",
+            "3 days",
+            "Vibe Festival",
+            place: knezevansenal,
+            externalTicketLink: "https://bilet.gigstix.com/rs/store/gigstix_v2/sectionGroup/index/8982",
+            summary: "Three-day summer music festival at Knežev Arsenal featuring electronic, pop and urban artists from the region.",
+            venueDescription: "Knežev Arsenal is a 19th-century historic complex in central Kragujevac that hosts some of the city's biggest summer events. The spacious outdoor grounds provide an atmospheric setting for the festival's multiple stages and artist village.",
+            arrivalTips: "The festival venue at Knežev Arsenal is centrally located and walkable from the city centre. Parking is available nearby. Plan your arrival early as queues can form before the main acts. Day tickets and 3-day passes are available online.",
+            accessibility: "The festival site is on largely flat ground. Check the official Vibe Festival information for details on accessible areas and assistance services before attending.");
+        await AddEventTagsIfMissingAsync(vibeFest, "cultural-festival", "live-music-event", "ticketed-event", "summer-event");
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Event, vibeFest.Name, eventId: vibeFest.Id, urls: new[] { SeedWebp("vibe") });
+
+        // Image assignments for new places
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelPresidentDeL.Name, placeId: hotelPresidentDeL.Id, urls: new[] { SeedWebp("garni-hotel") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelIndustrial.Name, placeId: hotelIndustrial.Id, urls: new[] { SeedWebp("industrial") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, hotelKragujevac.Name, placeId: hotelKragujevac.Id, urls: new[] { SeedWebp("hotel-kragujevac") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, peron.Name, placeId: peron.Id, urls: new[] { SeedWebp("peron") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, velikPark.Name, placeId: velikPark.Id, urls: new[] { SeedWebp("veliki-park") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, sumarickoJezero.Name, placeId: sumarickoJezero.Id, urls: new[] { SeedWebp("sumaricko-jezero") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, srce.Name, placeId: srce.Id, urls: new[] { SeedWebp("srce") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, nocciola.Name, placeId: nocciola.Id, urls: new[] { SeedWebp("nocciola") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, mademoiselle.Name, placeId: mademoiselle.Id, urls: new[] { SeedWebp("mademoiselle") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kafemat27.Name, placeId: kafemat27.Id, urls: new[] { SeedWebp("kafemat27") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, cafeteria.Name, placeId: cafeteria.Id, urls: new[] { SeedWebp("cafeteria") });
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, bigFashion.Name, placeId: bigFashion.Id, urls: new[] { SeedWebp("big-kg") });
     }
 
     private static async Task EnsureAdditionalExploreDemoDataAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)
@@ -3389,7 +3922,7 @@ public static class SeedData
             string description,
             double latitude,
             double longitude,
-            string openingHours,
+            string? openingHours,
             double rating,
             int reviewCount,
             string? contactEmail = null,
@@ -3409,6 +3942,13 @@ public static class SeedData
                 if (place.LocationId != location.Id)
                 {
                     place.LocationId = location.Id;
+                    changed = true;
+                }
+
+                if (Math.Abs(place.Latitude - latitude) > 1e-9 || Math.Abs(place.Longitude - longitude) > 1e-9)
+                {
+                    place.Latitude = latitude;
+                    place.Longitude = longitude;
                     changed = true;
                 }
 

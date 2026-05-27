@@ -15,7 +15,7 @@
     }
 
     @if (!isLoading && showNoDataModal) {
-      <div class="map-page__no-data-overlay absolute inset-0 flex items-center justify-center" style="z-index: 15;">
+      <div class="map-page__no-data-overlay absolute inset-0 flex items-center justify-center">
         <div class="map-page__no-data-card bg-white mx-4 p-6 max-w-sm w-full text-center"
           style="border-radius: 28px; border: 1px solid rgba(26,43,76,0.08); box-shadow: 0 18px 48px rgba(26,43,76,0.1);">
 
@@ -110,14 +110,8 @@
           (focus)="onSearchFocus()"
           (blur)="onSearchBlur()"
           [placeholder]="destinationName"
-          class="w-full pl-10 pr-10 py-3 bg-white rounded-2xl text-sm font-medium text-slate-700 outline-none shadow-md"
+          class="w-full pl-10 pr-4 py-3 bg-white rounded-2xl text-sm font-medium text-slate-700 outline-none shadow-md"
         />
-        <button (click)="goBack()" class="absolute inset-y-0 right-3 flex items-center text-[#e8570a]">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 19l-7-7 7-7M5 12h14"/>
-          </svg>
-        </button>
 
         @if (searchResults.length > 0 || (isSearchFocused && !searchQuery.trim() && allDestinations.length > 0)) {
           <div class="absolute left-0 right-0 bg-white rounded-2xl shadow-xl overflow-hidden" style="top: calc(100% + 6px); z-index: 20; max-height: 280px; overflow-y: auto;">
@@ -237,18 +231,20 @@
     </div>
 
     <!-- Legend toggle button -->
-    <button
-      (click)="showLegend = !showLegend"
-      [attr.aria-expanded]="showLegend"
-      aria-label="Map legend"
-      class="map-page__legend-button absolute right-3 w-10 h-10 bg-white rounded-full shadow-md border border-slate-100 flex items-center justify-center text-slate-500 active:bg-slate-50 transition-colors"
-      [class.text-[#1a2b4a]]="showLegend"
-      [class.border-[#1a2b4a]]="showLegend">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/>
-      </svg>
-    </button>
+    @if (!showNoDataModal) {
+      <button
+        (click)="showLegend = !showLegend"
+        [attr.aria-expanded]="showLegend"
+        aria-label="Map legend"
+        class="map-page__legend-button absolute right-3 w-10 h-10 bg-white rounded-full shadow-md border border-slate-100 flex items-center justify-center text-slate-500 active:bg-slate-50 transition-colors"
+        [class.text-[#1a2b4a]]="showLegend"
+        [class.border-[#1a2b4a]]="showLegend">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/>
+        </svg>
+      </button>
+    }
 
     <!-- Legend modal -->
     @if (showLegend) {
@@ -360,13 +356,18 @@
           </button>
         </div>
 
+        @if (routeInfoMessage) {
+          <div class="px-4 pb-2">
+            <p class="text-xs text-slate-500">{{ routeInfoMessage }}</p>
+          </div>
+        }
         @if (routeErrorMessage) {
           <div class="px-4 pb-2">
             <p class="text-xs text-red-500">{{ routeErrorMessage }}</p>
           </div>
         }
 
-        <div class="flex gap-2 px-4 pb-4">
+        <div class="flex gap-2 px-4 pb-2">
           @if (place.detailRoute) {
             <button
               (click)="openDetails()"
@@ -392,6 +393,42 @@
               </svg>
             }
             {{ isLoadingRoute ? 'Calculating…' : 'Directions' }}
+          </button>
+        </div>
+
+        <div class="px-4 pb-4">
+          <button
+            (click)="startPinToPinRoute()"
+            class="w-full py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 text-xs font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.8"/>
+              <circle cx="19" cy="18" r="2" stroke="currentColor" stroke-width="1.8"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                d="M5 8v3a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4"/>
+            </svg>
+            Route between pins
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (isPinToPinMode) {
+      <div class="map-page__pin-to-pin-banner absolute left-0 right-0 flex justify-center px-3">
+        <div class="w-full bg-[#1a2b4a] text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl">
+          <svg class="w-5 h-5 flex-none text-[#e8570a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="19" cy="18" r="2" stroke="currentColor" stroke-width="1.8"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+              d="M5 8v3a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4"/>
+          </svg>
+          <p class="text-sm font-medium flex-1">Tap a pin to set the destination</p>
+          <button
+            (click)="cancelPinToPinMode()"
+            class="flex-none w-7 h-7 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            aria-label="Cancel pin selection">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
           </button>
         </div>
       </div>

@@ -14,6 +14,12 @@ public interface IMapService
         double destinationLatitude,
         double destinationLongitude,
         CancellationToken cancellationToken = default);
+    Task<MapRouteResponseDto?> GetDrivingRouteAsync(
+        double originLatitude,
+        double originLongitude,
+        double destinationLatitude,
+        double destinationLongitude,
+        CancellationToken cancellationToken = default);
     Task<GetMapEntitiesResponseDto> GetEntitiesAsync(
         double latitude,
         double longitude,

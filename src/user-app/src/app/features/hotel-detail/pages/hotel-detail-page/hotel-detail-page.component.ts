@@ -12,6 +12,8 @@ import { ImageFallbackDirective } from '../../../../shared/directives/image-fall
 import { HttpClient } from '@angular/common/http';
 import { HotelDetailService } from '../../services/hotel-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
+import { ExploreService } from '../../../explore/services/explore.service';
+import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { HotelAmenityIcon, HotelBookingPartner, HotelDetail } from '../../models/hotel-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
@@ -32,6 +34,8 @@ export class HotelDetailPageComponent {
   private readonly locationSvc = inject(LocationService);
   private readonly analytics = inject(AnalyticsService);
   private readonly http     = inject(HttpClient);
+  private readonly exploreService = inject(ExploreService);
+  private readonly listingService = inject(ExploreSectionListingService);
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
@@ -133,6 +137,16 @@ export class HotelDetailPageComponent {
   protected toggleSaved(): void {
     const id = this.hotelId();
     if (id) this.service.toggleSaved(id);
+  }
+
+  protected share(): void {
+    const title = this.hotel()?.title ?? '';
+    const url = globalThis.location.href;
+    if (navigator.share) {
+      navigator.share({ title, text: title, url }).catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      });
+    }
   }
 
   protected navigateToSimilar(id: string): void {
@@ -270,6 +284,8 @@ export class HotelDetailPageComponent {
       this.analytics.track('review_created', { entityType: 'hotel', entityId: numId });
     }
     this.service.loadHotelDetail(id);
+    this.exploreService.invalidate();
+    this.listingService.invalidate();
   }
 
   protected onDirectionsClick(): void {

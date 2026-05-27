@@ -54,10 +54,13 @@ public class EventsController : ControllerBase
     public async Task<ActionResult> GetEventDetail(
         int id,
         [FromQuery] double? latitude = null,
-        [FromQuery] double? longitude = null)
+        [FromQuery] double? longitude = null,
+        [FromQuery] string? distanceOrigin = null)
     {
         var userId = GetUserId();
-        var detail = await _eventService.GetEventDetailAsync(id, userId, latitude, longitude);
+        var useCurrentLocation = string.Equals(distanceOrigin, "current-location", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(distanceOrigin, "user", StringComparison.OrdinalIgnoreCase);
+        var detail = await _eventService.GetEventDetailAsync(id, userId, latitude, longitude, useCurrentLocation);
         if (detail == null) return NotFound();
         return Ok(detail);
     }
