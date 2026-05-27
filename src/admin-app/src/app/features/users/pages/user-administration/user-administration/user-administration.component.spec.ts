@@ -138,6 +138,57 @@ describe('UserAdministrationComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('The user account will not be deleted.');
   });
 
+  it('shows multiple assigned regions in details and removes only the selected region', () => {
+    fixture.detectChanges();
+    flushTerritories();
+    const user = buildUser(1, 'Ana Manager', undefined, {
+      assignedRegions: [
+        {
+          regionId: 11,
+          regionName: 'Region One',
+          displayName: 'Region One',
+          territoryId: 10,
+          territoryName: 'Test Territory',
+          assignedAt: '2026-05-01T00:00:00Z',
+          isActive: true,
+          canRemove: true,
+        },
+        {
+          regionId: 22,
+          regionName: 'North',
+          displayName: 'North',
+          territoryId: 10,
+          territoryName: 'Test Territory',
+          assignedAt: '2026-05-02T00:00:00Z',
+          isActive: true,
+          canRemove: true,
+        },
+      ],
+      canRemoveRegion: true,
+    });
+    flushUsers([user], 1);
+
+    component.openViewModal(user);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Region One');
+    expect(fixture.nativeElement.textContent).toContain('North');
+
+    component.openRemoveRegionConfirm(user, user.assignedRegions[0]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Remove Region Assignment');
+    expect(fixture.nativeElement.textContent).toContain('Other assigned regions and unrelated roles will stay in place.');
+
+    component.confirmRemoveRegion();
+    const remove = http.expectOne(req =>
+      req.url === '/api/admin/territory/users/1/regions/11' &&
+      req.params.get('territoryId') === '10');
+    expect(remove.request.method).toBe('DELETE');
+    remove.flush({ ...user, assignedRegions: [user.assignedRegions[1]] });
+
+    expect(component.viewUser?.assignedRegions.map(region => region.regionId)).toEqual([22]);
+    expect(component.items[0].assignedRegions.map(region => region.regionId)).toEqual([22]);
+  });
+
   it('renders add buttons for territory managers', () => {
     fixture.detectChanges();
     flushTerritories();
@@ -558,6 +609,7 @@ describe('UserAdministrationComponent', () => {
       assignedRegions: [{ regionId: 22, regionName: 'North', displayName: 'North' }],
       canAddRegionalManagerRole: false,
       canAddRegion: true,
+      canRemoveRegion: true,
       canRemoveManagerRole: true,
       canRemoveRegionalManagerRole: true,
     });

@@ -19,12 +19,26 @@
 
   <!-- Country / Region picker — hidden for Administrator -->
   @if (!isAdministrator) {
-    <div class="px-4 mb-2">
+    <div class="px-4 mb-2 region-picker-shell">
       <span class="block text-white/40 text-[10px] font-semibold tracking-widest mb-1.5">
         {{ pickerLabel }}
       </span>
       @if (canSelectRegion) {
-        <label class="region-picker region-picker--selectable">
+        <button
+          type="button"
+          class="region-picker region-picker--selectable"
+          [class.region-picker--disabled]="isPickerLoading"
+          [class.region-picker--open]="regionPickerOpen"
+          [disabled]="isPickerLoading"
+          aria-haspopup="listbox"
+          [attr.aria-expanded]="regionPickerOpen"
+          [attr.aria-controls]="regionPickerMenuId"
+          [attr.aria-activedescendant]="highlightedOptionId"
+          [attr.aria-label]="pickerAriaLabel"
+          [attr.title]="pickerDisplayValue"
+          (click)="toggleRegionPicker($event)"
+          (keydown)="onRegionTriggerKeydown($event)"
+        >
           <svg
             class="region-picker__icon"
             viewBox="0 0 24 24"
@@ -35,18 +49,67 @@
             <circle cx="12" cy="10" r="3" />
             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
           </svg>
-          <select
-            class="region-picker__select"
-            [value]="resolvedActiveId ?? ''"
-            [disabled]="isPickerLoading"
-            (change)="onRegionSelectChange($event)"
-            [attr.aria-label]="isTerritory ? 'Active territory' : 'Active region'"
+          <span class="region-picker__value region-picker__value--selectable" aria-hidden="true">
+            {{ pickerDisplayValue }}
+          </span>
+          <svg
+            class="region-picker__chevron"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.25"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
           >
-            @for (item of pickerItems; track item.id) {
-              <option [value]="item.id">{{ item.displayName }}</option>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+        @if (regionPickerOpen) {
+          <div
+            class="region-picker__menu"
+            [id]="regionPickerMenuId"
+            role="listbox"
+            [attr.aria-label]="isTerritory ? 'Select active territory' : 'Select active region'"
+            (click)="$event.stopPropagation()"
+          >
+            @for (item of pickerItems; track item.id; let index = $index) {
+              <button
+                type="button"
+                class="region-picker__option"
+                role="option"
+                [id]="regionOptionId(item.id)"
+                [class.region-picker__option--selected]="item.id === resolvedActiveId"
+                [class.region-picker__option--active]="index === highlightedPickerIndex"
+                [attr.aria-selected]="item.id === resolvedActiveId"
+                [attr.title]="item.displayName"
+                (click)="selectPickerItem(item.id, $event)"
+                (keydown)="onRegionOptionKeydown($event, index)"
+              >
+                <span class="region-picker__option-copy">
+                  <span class="region-picker__option-label">{{ item.displayName }}</span>
+                  @if (item.statusLabel) {
+                    <span class="region-picker__option-meta">{{ item.statusLabel }}</span>
+                  }
+                </span>
+                @if (item.id === resolvedActiveId) {
+                  <svg
+                    class="region-picker__option-check"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                }
+              </button>
             }
-          </select>
-        </label>
+          </div>
+        }
       } @else {
         <div class="region-picker">
           <svg
