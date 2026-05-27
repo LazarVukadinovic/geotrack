@@ -28,7 +28,6 @@ type QueueTab =
   | 'locations'
   | 'places'
   | 'events'
-  | 'reviews'
   | 'approved'
   | 'rejected';
 
@@ -37,7 +36,6 @@ const EMPTY_COUNTS: RegionalRequestQueueCountsByType = {
   locations: 0,
   places: 0,
   events: 0,
-  reviews: 0,
 };
 
 const TAB_QUERY_MAP: Record<QueueTab, { type: RequestQueueTypeFilter; status: RequestQueueStatusFilter }> = {
@@ -46,7 +44,6 @@ const TAB_QUERY_MAP: Record<QueueTab, { type: RequestQueueTypeFilter; status: Re
   locations: { type: 'location', status: 'pending' },
   places: { type: 'place', status: 'pending' },
   events: { type: 'event', status: 'pending' },
-  reviews: { type: 'review', status: 'pending' },
   approved: { type: 'all', status: 'approved' },
   rejected: { type: 'all', status: 'rejected' },
 };
@@ -166,7 +163,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
       { key: 'locations', label: 'Locations', count: counts?.locations ?? 0 },
       { key: 'places', label: 'Places', count: counts?.places ?? 0 },
       { key: 'events', label: 'Events', count: counts?.events ?? 0 },
-      { key: 'reviews', label: 'Reviews', count: counts?.reviews ?? 0 },
       { key: 'approved', label: 'Approved', count: this.queue?.approvedCount ?? this.lastApprovedCount },
       { key: 'rejected', label: 'Rejected', count: this.queue?.rejectedCount ?? this.lastRejectedCount },
     ];
@@ -441,8 +437,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
 
   previewRequest(request: RegionalRequestQueueItem): void {
     if (!this.activeRegionId) return;
-    const routeSource = request.source === 'ReviewReport' ? 'review-report' : 'contribution';
-    this.router.navigate(['/request/detail', routeSource, request.requestId], {
+    this.router.navigate(['/request/detail', 'contribution', request.requestId], {
       queryParams: { regionId: this.activeRegionId },
     });
   }
@@ -484,7 +479,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
       Location: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
       Place: 'bg-blue-50 text-blue-700 border border-blue-200',
       Event: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
-      Review: 'bg-rose-50 text-rose-700 border border-rose-200',
     };
     return map[type] ?? 'bg-gray-100 text-gray-600';
   }
@@ -699,7 +693,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
       locations: this.toSafeCount(counts?.locations),
       places: this.toSafeCount(counts?.places),
       events: this.toSafeCount(counts?.events),
-      reviews: this.toSafeCount(counts?.reviews),
     };
   }
 

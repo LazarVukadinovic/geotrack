@@ -25,53 +25,40 @@ describe('ReviewRequestsService', () => {
     service
       .getQueue({
         regionId: 10,
-        type: 'review',
+        type: 'place',
         status: 'pending',
-        search: 'reported review',
+        search: 'backend place',
         sort: 'oldest',
         skip: 20,
         take: 10,
       })
       .subscribe(response => {
         expect(response.totalCount).toBe(1);
-        expect(response.items[0].requestKey).toBe('review-report:5');
+        expect(response.items[0].requestKey).toBe('contribution:12');
       });
 
     const request = http.expectOne(req => req.url === '/api/admin/regional/requests');
     expect(request.request.method).toBe('GET');
     expect(request.request.params.get('regionId')).toBe('10');
-    expect(request.request.params.get('type')).toBe('review');
+    expect(request.request.params.get('type')).toBe('place');
     expect(request.request.params.get('status')).toBe('pending');
-    expect(request.request.params.get('search')).toBe('reported review');
+    expect(request.request.params.get('search')).toBe('backend place');
     expect(request.request.params.get('sort')).toBe('oldest');
     expect(request.request.params.get('skip')).toBe('20');
     expect(request.request.params.get('take')).toBe('10');
     request.flush({
-      items: [reviewReportItem()],
+      items: [contributionItem()],
       totalCount: 1,
       pendingCount: 1,
       approvedCount: 0,
       rejectedCount: 0,
-      countsByType: { destinations: 0, locations: 0, places: 0, events: 0, reviews: 1 },
+      countsByType: { destinations: 0, locations: 0, places: 1, events: 0 },
       skip: 20,
       take: 10,
     });
   });
 
-  it('loads contribution and review-report detail routes without mock lookups', () => {
-    service.getDetail(10, 'ReviewReport', 5).subscribe(detail => {
-      expect(detail.source).toBe('ReviewReport');
-      expect(detail.images).toEqual([]);
-    });
-
-    const reportRequest = http.expectOne(
-      req =>
-        req.url === '/api/admin/regional/requests/review-report/5' &&
-        req.params.get('regionId') === '10',
-    );
-    expect(reportRequest.request.method).toBe('GET');
-    reportRequest.flush({ ...reviewReportItem(), description: 'Full detail', images: null });
-
+  it('loads contribution detail routes without mock lookups', () => {
     service.getDetail(10, 'Contribution', 12).subscribe(detail => {
       expect(detail.source).toBe('Contribution');
       expect(detail.requestKey).toBe('contribution:12');
@@ -94,6 +81,8 @@ describe('ReviewRequestsService', () => {
       ownershipProofContentType: 'application/pdf',
       ownershipProofUploadedAt: '2026-05-12T10:05:00Z',
     });
+
+    expect(() => service.getDetail(10, 'ReviewReport', 5)).toThrow('Invalid request source.');
   });
 
   it('rejects invalid detail sources instead of silently calling a contribution route', () => {
@@ -127,14 +116,14 @@ describe('ReviewRequestsService', () => {
   });
 
   it('posts bulk approve and reject request keys', () => {
-    service.bulkApprove(10, ['contribution:1', 'review-report:2']).subscribe(result => {
+    service.bulkApprove(10, ['contribution:1', 'contribution:2']).subscribe(result => {
       expect(result.succeededCount).toBe(2);
     });
 
     const approve = http.expectOne('/api/admin/regional/requests/bulk-approve');
     expect(approve.request.body).toEqual({
       regionId: 10,
-      requestKeys: ['contribution:1', 'review-report:2'],
+      requestKeys: ['contribution:1', 'contribution:2'],
       note: undefined,
     });
     approve.flush({ results: [], succeededCount: 2, failedCount: 0 });
@@ -158,10 +147,7 @@ describe('ReviewRequestsService', () => {
       source: 'Contribution',
       requestId: 12,
     });
-    expect(service.parseRequestKey('review-report:5')).toEqual({
-      source: 'ReviewReport',
-      requestId: 5,
-    });
+    expect(service.parseRequestKey('review-report:5')).toBeNull();
     expect(service.parseRequestKey('unknown:5')).toBeNull();
   });
 
@@ -183,21 +169,4 @@ describe('ReviewRequestsService', () => {
     };
   }
 
-  function reviewReportItem(): ReviewRequest {
-    return {
-      requestKey: 'review-report:5',
-      requestId: 5,
-      displayRequestId: 'REP-0005',
-      source: 'ReviewReport',
-      title: 'Reported review: Backend Place',
-      entityType: 'Review',
-      contributionType: 'PlaceReviewReport',
-      regionId: 10,
-      regionDisplayName: 'Backend Region',
-      submittedByUserId: 3,
-      submittedByDisplayName: 'Reporter',
-      submittedAt: '2026-05-12T10:00:00Z',
-      status: 'Pending',
-    };
-  }
 });

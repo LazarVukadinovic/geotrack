@@ -40,7 +40,6 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
   authRequired = false;
   reviewerNotes = '';
   processing = false;
-  pendingDecision: DecisionAction | null = null;
 
   private detailRequestSequence = 0;
   private regionSubscription: Subscription | null = null;
@@ -86,55 +85,20 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     return this.request?.status === 'Pending' && !this.processing && !!this.activeRegionId;
   }
 
-  get isReportRequest(): boolean {
-    return this.request?.source === 'ReviewReport' || this.request?.source === 'CommentReport';
-  }
-
-  get reportContentLabel(): string {
-    const entityType = this.request?.entityType?.toString().trim().toLowerCase();
-    const contributionType = this.request?.contributionType?.toString().trim().toLowerCase();
-    return entityType === 'comment' || contributionType?.includes('comment') ? 'Comment' : 'Review';
-  }
-
   get decisionCardTitle(): string {
-    return this.isReportRequest ? 'Report Decision' : 'Review Decision';
+    return 'Review Decision';
   }
 
   get decisionHelperText(): string {
-    if (!this.isReportRequest) {
-      return 'Approve applies the submitted contribution. Reject closes it without applying changes.';
-    }
-
-    const content = this.reportContentLabel.toLowerCase();
-    return `Removing the ${content} accepts this report and removes the content from public view. Keeping the ${content} rejects the report and leaves the content visible.`;
+    return 'Approve applies the submitted contribution. Reject closes it without applying changes.';
   }
 
   get approveButtonLabel(): string {
-    return this.isReportRequest ? `Remove ${this.reportContentLabel}` : 'Approve Contribution';
+    return 'Approve Contribution';
   }
 
   get rejectButtonLabel(): string {
-    return this.isReportRequest ? `Keep ${this.reportContentLabel}` : 'Reject Contribution';
-  }
-
-  get confirmationTitle(): string {
-    const content = this.reportContentLabel.toLowerCase();
-    return this.pendingDecision === 'approve'
-      ? `Remove reported ${content}?`
-      : `Keep reported ${content}?`;
-  }
-
-  get confirmationBody(): string {
-    const content = this.reportContentLabel.toLowerCase();
-    return this.pendingDecision === 'approve'
-      ? `This will accept the report and remove the reported ${content} from public view. This action should only be used when the report is valid.`
-      : `This will reject the report and keep the ${content} visible.`;
-  }
-
-  get confirmationButtonLabel(): string {
-    return this.pendingDecision === 'approve'
-      ? `Remove ${this.reportContentLabel}`
-      : `Keep ${this.reportContentLabel}`;
+    return 'Reject Contribution';
   }
 
   get primaryImageUrl(): string | null {
@@ -183,7 +147,6 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     this.setActiveRegion(regionId, true);
     this.request = null;
     this.reviewerNotes = '';
-    this.pendingDecision = null;
     this.loadRequest({ allowRegionFallback: false, attemptedRegionIds: [regionId] });
     this.notifyStateChanged();
   }
@@ -191,45 +154,13 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
   startApproveDecision(): void {
     if (!this.canModerate) return;
 
-    if (this.isReportRequest) {
-      this.pendingDecision = 'approve';
-      this.notifyStateChanged();
-      return;
-    }
-
     this.approveRequest();
   }
 
   startRejectDecision(): void {
     if (!this.canModerate) return;
 
-    if (this.isReportRequest) {
-      this.pendingDecision = 'reject';
-      this.notifyStateChanged();
-      return;
-    }
-
     this.rejectRequest();
-  }
-
-  confirmDecision(): void {
-    const decision = this.pendingDecision;
-    this.pendingDecision = null;
-    this.notifyStateChanged();
-
-    if (decision === 'approve') {
-      this.approveRequest();
-      return;
-    }
-
-    if (decision === 'reject') {
-      this.rejectRequest();
-    }
-  }
-
-  cancelDecisionConfirmation(): void {
-    this.pendingDecision = null;
-    this.notifyStateChanged();
   }
 
   approveRequest(): void {
@@ -238,7 +169,6 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     this.processing = true;
     this.errorMessage = null;
     this.notifyStateChanged();
-    // For report requests, backend approve accepts the report and removes the reported content.
     this.requestsService
       .approveBySource(this.activeRegionId, this.request.source, this.request.requestId, this.reviewerNotes)
       .pipe(
@@ -265,7 +195,6 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     this.processing = true;
     this.errorMessage = null;
     this.notifyStateChanged();
-    // For report requests, backend reject dismisses the report and keeps the reported content visible.
     this.requestsService
       .rejectBySource(
         this.activeRegionId,
@@ -311,8 +240,6 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
         return 'bg-indigo-50 text-indigo-700 border border-indigo-100';
       case 'Event':
         return 'bg-yellow-50 text-yellow-700 border border-yellow-100';
-      case 'Review':
-        return 'bg-rose-50 text-rose-700 border border-rose-100';
       default:
         return 'bg-blue-50 text-blue-700 border border-blue-100';
     }
@@ -419,7 +346,6 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
 
           this.request = detail;
           this.reviewerNotes = detail.decisionNote ?? '';
-          this.pendingDecision = null;
           this.setActiveRegion(detail.regionId, false);
           this.upsertAssignedRegion(detail);
         },
@@ -437,7 +363,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
       });
   }
 
-  private resolveRequestRoute(): { source: 'Contribution' | 'ReviewReport'; requestId: number } | null {
+  private resolveRequestRoute(): { source: 'Contribution'; requestId: number } | null {
     const source = this.normalizeRouteSource(this.route.snapshot.paramMap.get('source') ?? 'contribution');
     const idValue = this.route.snapshot.paramMap.get('id');
     const requestId = Number(idValue);
@@ -564,14 +490,10 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     ];
   }
 
-  private normalizeRouteSource(source: string): 'Contribution' | 'ReviewReport' | null {
+  private normalizeRouteSource(source: string): 'Contribution' | null {
     const normalized = source.trim().replace(/[\s_-]/g, '').toLowerCase();
     if (normalized === 'contribution' || normalized === 'contributions') {
       return 'Contribution';
-    }
-
-    if (normalized === 'review' || normalized === 'reviewreport' || normalized === 'reviewreports') {
-      return 'ReviewReport';
     }
 
     return null;
@@ -584,13 +506,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
   }
 
   private actionSuccessMessage(action: DecisionAction): string {
-    if (!this.isReportRequest) {
-      return action === 'approve' ? 'Contribution approved.' : 'Contribution rejected.';
-    }
-
-    return action === 'approve'
-      ? `Reported ${this.reportContentLabel.toLowerCase()} removed.`
-      : `${this.reportContentLabel} kept; report rejected.`;
+    return action === 'approve' ? 'Contribution approved.' : 'Contribution rejected.';
   }
 
   private notifyStateChanged(): void {

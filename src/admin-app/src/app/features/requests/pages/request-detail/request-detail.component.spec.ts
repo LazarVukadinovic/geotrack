@@ -26,7 +26,7 @@ describe('RequestDetailComponent', () => {
     sessionStorage.clear();
     activatedRoute = {
       snapshot: {
-        paramMap: convertToParamMap({ source: 'review-report', id: '5' }),
+        paramMap: convertToParamMap({ source: 'contribution', id: '12' }),
         queryParamMap: convertToParamMap({ regionId: '7' }),
       },
     };
@@ -51,48 +51,34 @@ describe('RequestDetailComponent', () => {
     sessionStorage.clear();
   });
 
-  it('loads and renders review-report preview detail for the active assigned region', () => {
+  it('loads and renders contribution preview detail for the active assigned region', () => {
     fixture.detectChanges();
     flushRegions();
-    flushDetail('review-report', 5, 7, reviewReportDetail());
+    flushDetail('contribution', 12, 7, contributionDetail());
     fixture.detectChanges();
 
     const text = normalizedText();
     expect(component.isLoading).toBe(false);
-    expect(component.request?.requestKey).toBe('review-report:5');
-    expect(text).toContain('Reported review: Backend Place');
+    expect(component.request?.requestKey).toBe('contribution:12');
+    expect(text).toContain('Request Details');
+    expect(text).toContain('Backend Place');
     expect(text).toContain('Pending');
     expect(text).toContain('Backend Region');
-    expect(text).toContain('Reporter');
-    expect(text).toContain('Report comment');
-    expect(text).toContain('Report Decision');
-    expect(text).toContain('Remove Review');
-    expect(text).toContain('Keep Review');
+    expect(text).toContain('Backend Contributor');
+    expect(text).toContain('Review Decision');
+    expect(text).toContain('Approve Contribution');
+    expect(text).toContain('Reject Contribution');
     expect(text).toContain('This note is visible only to admins/moderators.');
-    expect(text).not.toContain('Reject Reason');
+    expect(text).not.toContain('Report Decision');
+    expect(text).not.toContain('Remove Review');
+    expect(text).not.toContain('Keep Review');
     expect(text).not.toContain('Loading request details...');
-    expect(text).not.toContain('Loading...');
 
     const note = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement | null;
     expect(note?.placeholder).toBe('Optional internal moderation note');
   });
 
-  it('reads contribution route params and calls the contribution detail API', () => {
-    setRoute({ source: 'contribution', id: '12' }, { regionId: '7' });
-
-    component.ngOnInit();
-    flushRegions();
-    flushDetail('contribution', 12, 7, contributionDetail());
-
-    expect(component.isLoading).toBe(false);
-    expect(component.request?.requestKey).toBe('contribution:12');
-    expect(component.request?.title).toBe('Backend Place');
-    expect(component.request?.source).toBe('Contribution');
-  });
-
   it('renders ownership proof metadata for contribution details', () => {
-    setRoute({ source: 'contribution', id: '12' }, { regionId: '7' });
-
     fixture.detectChanges();
     flushRegions();
     flushDetail('contribution', 12, 7, contributionDetail({
@@ -113,34 +99,20 @@ describe('RequestDetailComponent', () => {
     expect(link?.rel).toContain('noopener');
   });
 
-  it('renders contribution decision labels without a reject reason field', () => {
-    setRoute({ source: 'contribution', id: '12' }, { regionId: '7' });
+  it('rejects review-report route params without calling the regional detail API', () => {
+    setRoute({ source: 'review-report', id: '5' }, { regionId: '7' });
 
-    fixture.detectChanges();
-    flushRegions();
-    flushDetail('contribution', 12, 7, contributionDetail());
-    fixture.detectChanges();
-
-    const text = normalizedText();
-    expect(text).toContain('Review Decision');
-    expect(text).toContain('Approve Contribution');
-    expect(text).toContain('Reject Contribution');
-    expect(text).toContain('Approve applies the submitted contribution.');
-    expect(text).not.toContain('Reject Reason');
-  });
-
-  it('reads review-report route params and calls the review-report detail API', () => {
     component.ngOnInit();
     flushRegions();
-    flushDetail('review-report', 5, 7, reviewReportDetail());
 
+    http.expectNone(req => req.url.startsWith('/api/admin/regional/requests/'));
     expect(component.isLoading).toBe(false);
-    expect(component.request?.requestKey).toBe('review-report:5');
-    expect(component.request?.source).toBe('ReviewReport');
+    expect(component.request).toBeNull();
+    expect(component.notFound).toBe(true);
   });
 
-  it('restores direct navigation without a region query by trying assigned regions safely', () => {
-    setRoute({ source: 'review-report', id: '5' }, {});
+  it('restores direct contribution navigation without a region query by trying assigned regions safely', () => {
+    setRoute({ source: 'contribution', id: '12' }, {});
 
     component.ngOnInit();
     flushRegions([
@@ -148,14 +120,14 @@ describe('RequestDetailComponent', () => {
       { id: 8, name: 'Backend Region', displayName: 'Backend Region' },
     ]);
 
-    const firstRegionRequest = expectDetailRequest('review-report', 5, 7);
+    const firstRegionRequest = expectDetailRequest('contribution', 12, 7);
     firstRegionRequest.flush({ message: 'Request not found.' }, { status: 404, statusText: 'Not Found' });
-    flushDetail('review-report', 5, 8, reviewReportDetail({ regionId: 8 }));
+    flushDetail('contribution', 12, 8, contributionDetail({ regionId: 8 }));
 
     expect(component.isLoading).toBe(false);
     expect(component.activeRegionId).toBe(8);
     expect(component.regionDisplayName).toBe('Backend Region');
-    expect(component.request?.requestKey).toBe('review-report:5');
+    expect(component.request?.requestKey).toBe('contribution:12');
   });
 
   it('clears loading and shows a no-active-region state when no assigned regions exist', () => {
@@ -171,7 +143,7 @@ describe('RequestDetailComponent', () => {
   it('clears loading after 404, 403, 401, and 500 detail errors', () => {
     component.ngOnInit();
     flushRegions();
-    expectDetailRequest('review-report', 5, 7).flush(
+    expectDetailRequest('contribution', 12, 7).flush(
       { message: 'Request not found.' },
       { status: 404, statusText: 'Not Found' },
     );
@@ -180,7 +152,7 @@ describe('RequestDetailComponent', () => {
 
     component.activeRegionId = 99;
     component.onRegionSelected(7);
-    expectDetailRequest('review-report', 5, 7).flush(
+    expectDetailRequest('contribution', 12, 7).flush(
       { message: 'Forbidden.' },
       { status: 403, statusText: 'Forbidden' },
     );
@@ -189,7 +161,7 @@ describe('RequestDetailComponent', () => {
 
     component.activeRegionId = 99;
     component.onRegionSelected(7);
-    expectDetailRequest('review-report', 5, 7).flush(
+    expectDetailRequest('contribution', 12, 7).flush(
       { message: 'Unauthorized.' },
       { status: 401, statusText: 'Unauthorized' },
     );
@@ -198,7 +170,7 @@ describe('RequestDetailComponent', () => {
 
     component.activeRegionId = 99;
     component.onRegionSelected(7);
-    expectDetailRequest('review-report', 5, 7).flush(
+    expectDetailRequest('contribution', 12, 7).flush(
       { message: 'Server error.' },
       { status: 500, statusText: 'Server Error' },
     );
@@ -212,46 +184,42 @@ describe('RequestDetailComponent', () => {
 
     component.ngOnInit();
     flushRegions();
-    flushDetail('review-report', 5, 7, reviewReportDetail());
+    flushDetail('contribution', 12, 7, contributionDetail());
 
     expect(markSpy).toHaveBeenCalled();
   });
 
-  it('removes or keeps reported reviews through the correct regional queue actions', () => {
+  it('approves or rejects contribution requests through regional queue actions', () => {
     component.ngOnInit();
     flushRegions();
-    flushDetail('review-report', 5, 7, reviewReportDetail());
+    flushDetail('contribution', 12, 7, contributionDetail());
 
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
     component.reviewerNotes = 'Reviewed.';
     component.startApproveDecision();
-    expect(component.pendingDecision).toBe('approve');
-    component.confirmDecision();
-    const approve = http.expectOne('/api/admin/regional/requests/review-report/5/approve');
+    const approve = http.expectOne('/api/admin/regional/requests/contribution/12/approve');
     expect(approve.request.body).toEqual({ regionId: 7, note: 'Reviewed.' });
-    approve.flush({ requestKey: 'review-report:5', success: true, status: 'Approved' });
+    approve.flush({ requestKey: 'contribution:12', success: true, status: 'Approved' });
     flushSidebarSummary(7, 0);
     expect(navigateSpy).toHaveBeenCalledWith(['/requests'], {
       queryParams: { regionId: 7 },
-      state: { feedbackMessage: 'Reported review removed.' },
+      state: { feedbackMessage: 'Contribution approved.' },
     });
 
-    component.request = { ...reviewReportDetail(), status: 'Pending' };
-    component.reviewerNotes = 'No violation.';
+    component.request = { ...contributionDetail(), status: 'Pending' };
+    component.reviewerNotes = 'Needs edits.';
     component.startRejectDecision();
-    expect(component.pendingDecision).toBe('reject');
-    component.confirmDecision();
-    const reject = http.expectOne('/api/admin/regional/requests/review-report/5/reject');
+    const reject = http.expectOne('/api/admin/regional/requests/contribution/12/reject');
     expect(reject.request.body.regionId).toBe(7);
     expect(reject.request.body.reason).toBeUndefined();
-    expect(reject.request.body.note).toBe('No violation.');
-    reject.flush({ requestKey: 'review-report:5', success: true, status: 'Rejected' });
+    expect(reject.request.body.note).toBe('Needs edits.');
+    reject.flush({ requestKey: 'contribution:12', success: true, status: 'Rejected' });
     flushSidebarSummary(7, 0);
     expect(navigateSpy).toHaveBeenCalledWith(['/requests'], {
       queryParams: { regionId: 7 },
-      state: { feedbackMessage: 'Review kept; report rejected.' },
+      state: { feedbackMessage: 'Contribution rejected.' },
     });
   });
 
@@ -303,37 +271,6 @@ describe('RequestDetailComponent', () => {
 
   function normalizedText(): string {
     return (fixture.nativeElement.textContent as string).replace(/\s+/g, ' ').trim();
-  }
-
-  function reviewReportDetail(overrides: Partial<ReviewRequestDetail> = {}): ReviewRequestDetail {
-    return {
-      requestKey: 'review-report:5',
-      requestId: 5,
-      displayRequestId: 'REP-0005',
-      source: 'ReviewReport',
-      title: 'Reported review: Backend Place',
-      entityType: 'Review',
-      contributionType: 'PlaceReviewReport',
-      regionId: 7,
-      regionDisplayName: 'Backend Region',
-      submittedByUserId: 3,
-      submittedByDisplayName: 'Reporter',
-      submittedByInitials: 'R',
-      submittedAt: '2026-05-12T10:00:00Z',
-      status: 'Pending',
-      previewText: 'Report comment',
-      reviewComment: 'Report comment',
-      reviewRating: 2,
-      reviewAuthorDisplayName: 'Review Author',
-      reportReason: 'Spam',
-      targetEntityName: 'Backend Place',
-      images: [],
-      tags: [],
-      amenities: [],
-      stayAmenities: [],
-      bookingPartners: [],
-      ...overrides,
-    };
   }
 
   function contributionDetail(overrides: Partial<ReviewRequestDetail> = {}): ReviewRequestDetail {
