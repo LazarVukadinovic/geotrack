@@ -84,6 +84,22 @@ describe('LoginPageComponent', () => {
     expect(component.errorMessage).toBe('');
   });
 
+  it('submits login when the form is submitted', () => {
+    component.email = 'marko.p@example.com';
+    component.password = 'password123';
+    fixture.detectChanges();
+
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+    const request = http.expectOne('/api/auth/login');
+    expect(request.request.method).toBe('POST');
+    request.flush({ accessToken: 'access-token', expiresIn: 900, sessionPersistent: false });
+
+    expect(authService.login).toHaveBeenCalledWith('access-token', false);
+    expect(router.navigate).toHaveBeenCalledWith(['/profile']);
+  });
+
   it('shows a safe error when user login returns 401', () => {
     component.email = 'marko.p@example.com';
     component.password = 'wrong-password';
