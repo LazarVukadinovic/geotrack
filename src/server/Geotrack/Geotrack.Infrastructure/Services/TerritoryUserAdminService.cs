@@ -102,6 +102,22 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
         };
     }
 
+    public async Task<TerritoryUserListItemDto> GetUserAsync(
+        int currentUserId,
+        int targetUserId,
+        int? territoryId)
+    {
+        if (targetUserId <= 0)
+            throw new InvalidOperationException("userId must be positive.");
+
+        var context = await GetAuthorizedTerritoryContextAsync(currentUserId, territoryId);
+        var row = await BuildSingleRowAsync(context, targetUserId);
+        if (!row.IsInTerritoryScope)
+            throw new UnauthorizedAccessException("User is not assigned to this territory.");
+
+        return row;
+    }
+
     public async Task<TerritoryUserListItemDto> UpdateUserAsync(
         int currentUserId,
         int targetUserId,
@@ -299,6 +315,64 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
             request.RegionId,
             targetUserId,
             now);
+        return await BuildSingleRowAsync(context, targetUserId);
+    }
+
+    public async Task<TerritoryUserListItemDto> RemoveRegionAsync(
+        int currentUserId,
+        int targetUserId,
+        int regionId,
+        int? territoryId)
+    {
+        if (targetUserId <= 0)
+            throw new InvalidOperationException("userId must be positive.");
+
+        if (regionId <= 0)
+            throw new InvalidOperationException("regionId must be positive.");
+
+        var context = await GetAuthorizedTerritoryContextAsync(currentUserId, territoryId);
+        var activeTerritory = context.ActiveTerritory
+            ?? throw new UnauthorizedAccessException("Territory is not assigned to the current territory administrator.");
+
+        EnsureCurrentUserIsTerritoryManager(context);
+        EnsureNotSelf(currentUserId, targetUserId, "You cannot change your own region assignments.");
+
+        var user = await GetTargetUserForMutationAsync(targetUserId);
+        EnsureTargetIsInTerritory(user, activeTerritory.Id);
+        EnsureTargetCanBeManaged(user);
+
+        var assignment = user.RegionalManagerRegions
+            .SingleOrDefault(existing => existing.RegionId == regionId && existing.IsActive)
+            ?? throw new KeyNotFoundException("Region assignment not found.");
+
+        if (assignment.Region.TerritoryId != activeTerritory.Id)
+            throw new UnauthorizedAccessException("Region is not in the current territory.");
+
+        var regionalRole = user.UserRoles
+            .SingleOrDefault(userRole => RoleNames.Normalize(userRole.Role.Name) == RoleNames.RegionalManager);
+
+        if (regionalRole is null)
+            throw new InvalidOperationException("User does not have the RegionalManager role.");
+
+        var now = DateTime.UtcNow;
+        assignment.IsActive = false;
+        assignment.UpdatedAt = now;
+
+        if (!user.RegionalManagerRegions.Any(existing =>
+                existing.IsActive &&
+                existing.RegionId != regionId))
+        {
+            _db.UserRoles.Remove(regionalRole);
+        }
+
+        user.UpdatedAt = now;
+        await _db.SaveChangesAsync();
+        await _adminNotificationService.CreateTerritoryRegionalManagerRemovedNotificationAsync(
+            activeTerritory.Id,
+            regionId,
+            targetUserId,
+            now);
+
         return await BuildSingleRowAsync(context, targetUserId);
     }
 
@@ -752,6 +826,7 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
         row.CanEditUser = false;
         row.CanAddRegionalManagerRole = false;
         row.CanAddRegion = false;
+        row.CanRemoveRegion = false;
         row.CanRemoveManagerRole = false;
         row.CanRemoveRegionalManagerRole = false;
         row.CanAddTerritoryAssociate = false;
@@ -800,7 +875,9 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
                 RegionId = assignment.RegionId,
                 RegionName = assignment.Region.Name,
                 IsActive = assignment.IsActive,
-                TerritoryId = assignment.Region.TerritoryId
+                TerritoryId = assignment.Region.TerritoryId,
+                TerritoryName = assignment.Region.Territory.Name,
+                CreatedAt = assignment.CreatedAt
             })
             .ToListAsync();
 
@@ -892,6 +969,7 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
                 isActive &&
                 hasRegionalRole &&
                 activeAssignments.Count > 0;
+            var canRemoveRegion = canRemoveRegionalManagerRole;
             var canAddTerritoryAssociateRole = canManage &&
                 !isSelf &&
                 context.IsTerritoryManager &&
@@ -914,7 +992,12 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
                     {
                         RegionId = assignment.RegionId,
                         RegionName = assignment.RegionName,
-                        DisplayName = assignment.RegionName
+                        DisplayName = assignment.RegionName,
+                        TerritoryId = assignment.TerritoryId,
+                        TerritoryName = assignment.TerritoryName,
+                        AssignedAt = assignment.CreatedAt,
+                        IsActive = assignment.IsActive,
+                        CanRemove = canRemoveRegion
                     })
                     .ToList(),
                 AssignedTerritories = userTerritoryAssignments
@@ -935,6 +1018,7 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
                 CanEditUser = canEditUser,
                 CanAddRegionalManagerRole = canAddRegionalManagerRole,
                 CanAddRegion = canAddRegion,
+                CanRemoveRegion = canRemoveRegion,
                 CanRemoveManagerRole = canRemoveRegionalManagerRole,
                 CanRemoveRegionalManagerRole = canRemoveRegionalManagerRole,
                 CanAddTerritoryAssociate = canAddTerritoryAssociateRole,
@@ -995,7 +1079,9 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
                 RegionId = assignment.RegionId,
                 RegionName = assignment.Region.Name,
                 IsActive = assignment.IsActive,
-                TerritoryId = assignment.Region.TerritoryId
+                TerritoryId = assignment.Region.TerritoryId,
+                TerritoryName = assignment.Region.Territory.Name,
+                CreatedAt = assignment.CreatedAt
             })
             .ToListAsync();
 
@@ -1037,7 +1123,12 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
                 {
                     RegionId = assignment.RegionId,
                     RegionName = assignment.RegionName,
-                    DisplayName = assignment.RegionName
+                    DisplayName = assignment.RegionName,
+                    TerritoryId = assignment.TerritoryId,
+                    TerritoryName = assignment.TerritoryName,
+                    AssignedAt = assignment.CreatedAt,
+                    IsActive = assignment.IsActive,
+                    CanRemove = false
                 })
                 .ToList();
             var assignedTerritories = territoryAssignmentsByUser
@@ -1269,6 +1360,8 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
         public string RegionName { get; set; } = string.Empty;
         public bool IsActive { get; set; }
         public int TerritoryId { get; set; }
+        public string TerritoryName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
     }
 
     private sealed class TerritoryAssignmentRow

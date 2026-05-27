@@ -363,6 +363,30 @@ public sealed class AdminTerritoryController : ControllerBase
         }
     }
 
+    [HttpGet("users/{userId:int}")]
+    public async Task<ActionResult<TerritoryUserListItemDto>> GetUser(
+        [FromRoute] int userId,
+        [FromQuery] int? territoryId = null)
+    {
+        if (userId <= 0)
+            return BadRequest(new { message = "userId must be positive." });
+
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryUsers.GetUserAsync(
+                GetCurrentUserId(),
+                userId,
+                territoryId));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpPut("users/{userId:int}")]
     public async Task<ActionResult<TerritoryUserListItemDto>> UpdateUser(
         [FromRoute] int userId,
@@ -465,6 +489,35 @@ public sealed class AdminTerritoryController : ControllerBase
                 GetCurrentUserId(),
                 userId,
                 request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpDelete("users/{userId:int}/regions/{regionId:int}")]
+    public async Task<ActionResult<TerritoryUserListItemDto>> RemoveRegion(
+        [FromRoute] int userId,
+        [FromRoute] int regionId,
+        [FromQuery] int? territoryId = null)
+    {
+        if (userId <= 0)
+            return BadRequest(new { message = "userId must be positive." });
+
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId must be positive." });
+
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _territoryUsers.RemoveRegionAsync(
+                GetCurrentUserId(),
+                userId,
+                regionId,
+                territoryId));
         }
         catch (Exception ex)
         {
