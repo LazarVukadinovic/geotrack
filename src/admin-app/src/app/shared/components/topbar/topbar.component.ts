@@ -129,6 +129,7 @@ export class TopbarComponent implements OnInit, OnDestroy {
   get canUseAdminNotifications(): boolean {
     const roleCode = this.currentRoleCode();
     return roleCode === 'Admin'
+      || roleCode === 'ContentModerator'
       || roleCode === 'TerritoryManager'
       || roleCode === 'TerritoryAssociate'
       || roleCode === 'RegionalManager';
@@ -136,7 +137,7 @@ export class TopbarComponent implements OnInit, OnDestroy {
 
   get notificationAudienceRole(): string | null {
     const roleCode = this.currentRoleCode();
-    return roleCode === 'TerritoryManager' || roleCode === 'TerritoryAssociate' || roleCode === 'RegionalManager'
+    return roleCode === 'ContentModerator' || roleCode === 'TerritoryManager' || roleCode === 'TerritoryAssociate' || roleCode === 'RegionalManager'
       ? roleCode
       : null;
   }
@@ -179,9 +180,13 @@ export class TopbarComponent implements OnInit, OnDestroy {
       return 'Regional requests for your selected region will appear here.';
     }
 
+    if (this.notificationAudienceRole === 'ContentModerator') {
+      return 'Review reports and moderation updates will appear here.';
+    }
+
     return this.notificationAudienceRole
       ? 'Territory requests and region updates will appear here.'
-      : 'New support reports, review reports, and system alerts will appear here.';
+      : 'New support reports and system alerts will appear here.';
   }
 
   get canMarkAllNotificationsRead(): boolean {
@@ -554,11 +559,15 @@ export class TopbarComponent implements OnInit, OnDestroy {
     }
 
     if (notification.targetType === 'ReviewReport' || notification.targetType === 'Review') {
+      if (this.notificationAudienceRole === 'ContentModerator') {
+        return '/content-moderator/review-management?status=reported';
+      }
+
       return this.notificationAudienceRole === 'RegionalManager'
         ? this.withRegionQuery('/dashboard', notification)
         : this.notificationAudienceRole
         ? '/territory/regions'
-        : '/admin-reviews?status=reported';
+        : '/admin-dashboard';
     }
 
     if (notification.targetType === 'Contribution') {
@@ -589,6 +598,10 @@ export class TopbarComponent implements OnInit, OnDestroy {
 
     if (this.notificationAudienceRole === 'RegionalManager') {
       return this.withRegionQuery('/dashboard', notification);
+    }
+
+    if (this.notificationAudienceRole === 'ContentModerator') {
+      return '/content-moderator/dashboard';
     }
 
     return this.notificationAudienceRole ? '/territory/overview' : '/admin-dashboard';

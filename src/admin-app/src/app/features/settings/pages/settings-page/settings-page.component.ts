@@ -9,6 +9,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminProfileService } from '../../../../core/services/admin-profile.service';
 import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
+import { ContentModeratorDashboardService } from '../../../../core/services/content-moderator/content-moderator-dashboard.service';
 import { buildAvatarDisplayUrl } from '../../../../core/utils/avatar-url';
 import {
   AdminProfile,
@@ -87,6 +88,7 @@ export class SettingsComponent implements OnInit {
     private readonly auth: AuthService,
     private readonly adminProfileService: AdminProfileService,
     private readonly adminDashboardService: AdminDashboardService,
+    private readonly contentModeratorDashboardService: ContentModeratorDashboardService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
@@ -94,7 +96,16 @@ export class SettingsComponent implements OnInit {
     return this.auth.isAdministrator() || this.isAdminProfile;
   }
 
+  get isContentModerator(): boolean {
+    return this.auth.isContentModerator() || this.isContentModeratorProfile;
+  }
+
+  get hasAssignmentAccessLevel(): boolean {
+    return this.assignmentAccessLevel.trim().length > 0;
+  }
+
   supportReportsCount = 0;
+  reportedReviewsCount = 0;
 
   ngOnInit(): void {
     this.loadPendingReportsBadge();
@@ -133,6 +144,10 @@ export class SettingsComponent implements OnInit {
       return 'Administrator';
     }
 
+    if (roles.some(role => this.normalizeRole(role) === 'contentmoderator')) {
+      return 'Content Moderator';
+    }
+
     if (roles.some(role => this.normalizeRole(role) === 'territorymanager')) {
       return 'Territory Manager';
     }
@@ -162,7 +177,43 @@ export class SettingsComponent implements OnInit {
   }
 
   get assignmentAccessLevel(): string {
-    return this.lastProfile?.assignment?.accessLevel?.trim() || (this.isAdmin ? 'Full access' : '');
+    return this.lastProfile?.assignment?.accessLevel?.trim() || (this.isAdmin ? 'Full access' : (this.isContentModerator ? 'Review moderation' : ''));
+  }
+
+  get notificationPrimaryLabel(): string {
+    if (this.isContentModerator) {
+      return 'Review reports';
+    }
+
+    return this.isAdmin ? 'Reports' : 'Requests';
+  }
+
+  get notificationPrimaryDescription(): string {
+    if (this.isContentModerator) {
+      return 'Receive an email when a review report needs moderation.';
+    }
+
+    return this.isAdmin
+      ? 'Receive an email when a new report needs administrator review.'
+      : 'Receive an email when someone submits a request.';
+  }
+
+  get notificationSecondaryLabel(): string {
+    if (this.isContentModerator) {
+      return 'Moderation updates';
+    }
+
+    return this.isAdmin ? 'Reviews' : 'New Review';
+  }
+
+  get notificationSecondaryDescription(): string {
+    if (this.isContentModerator) {
+      return 'Get notified about changes to review moderation work.';
+    }
+
+    return this.isAdmin
+      ? 'Get notified about reported reviews requiring moderation.'
+      : 'Get notified when someone leaves a review.';
   }
 
   get assignedRegion(): string {
@@ -221,8 +272,24 @@ export class SettingsComponent implements OnInit {
   }
 
   private loadPendingReportsBadge(): void {
+    if (this.isContentModerator) {
+      this.supportReportsCount = 0;
+      this.contentModeratorDashboardService.loadDashboard().subscribe({
+        next: dashboard => {
+          this.reportedReviewsCount = dashboard.badges.pendingReviewReportsCount;
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.reportedReviewsCount = 0;
+          this.notifyStateChanged();
+        },
+      });
+      return;
+    }
+
     if (!this.isAdmin) {
       this.supportReportsCount = 0;
+      this.reportedReviewsCount = 0;
       return;
     }
 
@@ -372,7 +439,7 @@ export class SettingsComponent implements OnInit {
     if (this.lastProfile) {
       this.applyProfile(this.lastProfile);
     } else {
-      this.router.navigate(['/dashboard']);
+      this.router.navigateByUrl(this.auth.getHomeRoute());
     }
 
     this.saveSuccess.set(false);
@@ -513,6 +580,18 @@ export class SettingsComponent implements OnInit {
       };
     }
 
+    if (this.isContentModeratorRoleSet(roles)) {
+      return {
+        assignmentType: 'ContentModeration',
+        sectionTitle: 'Content Moderation Access',
+        label: 'Scope',
+        displayValue: 'Content moderation',
+        accessLevel: 'Review moderation',
+        assignedItems: [],
+        memberSince: null,
+      };
+    }
+
     const isTerritoryManager = roles.some(role => this.normalizeRole(role) === 'territorymanager');
     if (isTerritoryManager) {
       return {
@@ -544,6 +623,7 @@ export class SettingsComponent implements OnInit {
 
   private buildFallbackRole(roles: string[]): AdminProfileRole {
     const roleCode = roles.find(role => this.normalizeRole(role) === 'admin')
+      ?? roles.find(role => this.normalizeRole(role) === 'contentmoderator')
       ?? roles.find(role => this.normalizeRole(role) === 'territorymanager')
       ?? roles.find(role => this.normalizeRole(role) === 'regionalmanager')
       ?? roles[0]
@@ -567,6 +647,10 @@ export class SettingsComponent implements OnInit {
       return 'System';
     }
 
+    if (this.isContentModeratorRoleSet(roles)) {
+      return 'ContentModeration';
+    }
+
     return roles.some(role => this.normalizeRole(role) === 'territorymanager')
       ? 'Territory'
       : 'Region';
@@ -575,6 +659,10 @@ export class SettingsComponent implements OnInit {
   private fallbackAssignmentTitle(roles: string[]): string {
     if (this.isAdminRoleSet(roles)) {
       return 'System Access';
+    }
+
+    if (this.isContentModeratorRoleSet(roles)) {
+      return 'Content Moderation Access';
     }
 
     return roles.some(role => this.normalizeRole(role) === 'territorymanager')
@@ -587,6 +675,10 @@ export class SettingsComponent implements OnInit {
       return 'Scope';
     }
 
+    if (this.isContentModeratorRoleSet(roles)) {
+      return 'Scope';
+    }
+
     return roles.some(role => this.normalizeRole(role) === 'territorymanager')
       ? 'Assigned Territory'
       : 'Assigned Region';
@@ -596,6 +688,10 @@ export class SettingsComponent implements OnInit {
     const normalizedType = (assignmentType ?? this.fallbackAssignmentType(roles)).trim().toLowerCase();
     if (normalizedType === 'system' || this.isAdminRoleSet(roles)) {
       return 'Platform-wide';
+    }
+
+    if (normalizedType === 'contentmoderation' || this.isContentModeratorRoleSet(roles)) {
+      return 'Content moderation';
     }
 
     if (normalizedType === 'country') {
@@ -659,6 +755,8 @@ export class SettingsComponent implements OnInit {
     switch (this.normalizeRole(role)) {
       case 'regionalmanager':
         return 'Regional Manager';
+      case 'contentmoderator':
+        return 'Content Moderator';
       case 'territorymanager':
       case 'nationalmanager':
         return 'Territory Manager';
@@ -679,6 +777,10 @@ export class SettingsComponent implements OnInit {
     return roles.some(role => this.normalizeRole(role) === 'admin');
   }
 
+  private isContentModeratorRoleSet(roles: readonly string[]): boolean {
+    return roles.some(role => this.normalizeRole(role) === 'contentmoderator');
+  }
+
   private get isAdminProfile(): boolean {
     const roles = [
       this.lastProfile?.role?.roleCode,
@@ -686,6 +788,15 @@ export class SettingsComponent implements OnInit {
     ].filter((role): role is string => typeof role === 'string');
 
     return this.isAdminRoleSet(roles);
+  }
+
+  private get isContentModeratorProfile(): boolean {
+    const roles = [
+      this.lastProfile?.role?.roleCode,
+      ...(this.lastProfile?.roles ?? []),
+    ].filter((role): role is string => typeof role === 'string');
+
+    return this.isContentModeratorRoleSet(roles);
   }
 
   private formatDate(value: string | null | undefined): string {

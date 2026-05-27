@@ -380,7 +380,7 @@ public sealed class AdminNotificationTests
     }
 
     [Fact]
-    public async Task Review_report_creation_creates_admin_notification()
+    public async Task Review_report_creation_creates_content_moderator_notification()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var token = $"review-notification-{Guid.NewGuid():N}";
@@ -404,14 +404,20 @@ public sealed class AdminNotificationTests
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var notification = await db.AdminNotifications.SingleAsync(item =>
-            item.AudienceRole == RoleNames.Admin &&
+            item.AudienceRole == RoleNames.ContentModerator &&
             item.Type == "ReviewReported" &&
             item.TargetType == "ReviewReport" &&
             item.TargetId == report.ReportId);
 
         Assert.Equal("New reported review", notification.Title);
         Assert.Contains("spam", notification.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal($"/admin-reviews?status=reported&highlight=Place%3A{reviewId}", notification.TargetRoute);
+        Assert.Equal($"/content-moderator/review-management?status=reported&highlight=Place%3A{reviewId}", notification.TargetRoute);
+
+        Assert.False(await db.AdminNotifications.AnyAsync(item =>
+            item.AudienceRole == RoleNames.Admin &&
+            item.Type == "ReviewReported" &&
+            item.TargetType == "ReviewReport" &&
+            item.TargetId == report.ReportId));
 
         Assert.False(await db.AdminNotifications.AnyAsync(item =>
             item.AudienceRole == RoleNames.TerritoryManager &&
@@ -423,6 +429,15 @@ public sealed class AdminNotificationTests
             item.Type == "ReviewReported" &&
             item.TargetType == "ReviewReport" &&
             item.TargetId == report.ReportId));
+
+        using var moderator = await LoginAdminAppAsync(app, "moderator@gmail.com", "Proba123!");
+        var page = await moderator.Client.GetFromJsonAsync<AdminNotificationListDto>(
+            "/api/admin/notifications?audienceRole=ContentModerator&includeRead=true&skip=0&take=25",
+            JsonOptions);
+
+        Assert.NotNull(page);
+        Assert.Contains(page!.Items, item => item.Id == notification.Id && !item.IsRead);
+        Assert.Equal(1, page.UnreadCount);
     }
 
     [Fact]

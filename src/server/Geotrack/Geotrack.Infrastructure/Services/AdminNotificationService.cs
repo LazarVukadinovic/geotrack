@@ -16,6 +16,7 @@ public sealed class AdminNotificationService : IAdminNotificationService
     private const int MessageSummaryLength = 120;
 
     private const string AdminAudienceRole = RoleNames.Admin;
+    private const string ContentModeratorAudienceRole = RoleNames.ContentModerator;
     private const string TerritoryAudienceRole = RoleNames.TerritoryManager;
     private const string RegionalAudienceRole = RoleNames.RegionalManager;
 
@@ -42,6 +43,7 @@ public sealed class AdminNotificationService : IAdminNotificationService
     private static readonly HashSet<string> SupportedAudienceRoles = new(StringComparer.Ordinal)
     {
         RoleNames.Admin,
+        RoleNames.ContentModerator,
         RoleNames.TerritoryManager,
         RoleNames.TerritoryAssociate,
         RoleNames.RegionalManager
@@ -236,14 +238,14 @@ public sealed class AdminNotificationService : IAdminNotificationService
             : $"{TitleCase(targetLabel)} review reported for {reason} on {entityName}.";
 
         await AddNotificationIfMissingAsync(
-            audienceRole: AdminAudienceRole,
+            audienceRole: ContentModeratorAudienceRole,
             type: ReviewReportedType,
             title: "New reported review",
             message: message,
             severity: WarningSeverity,
             targetType: ReviewReportNotificationTargetType,
             targetId: report.Id,
-            targetRoute: $"/admin-reviews?status=reported&highlight={Uri.EscapeDataString(reviewKey)}",
+            targetRoute: $"/content-moderator/review-management?status=reported&highlight={Uri.EscapeDataString(reviewKey)}",
             metadataSummary: reason,
             createdAt: report.CreatedAt == default ? DateTime.UtcNow : report.CreatedAt,
             scopeType: GlobalScopeType,
@@ -531,6 +533,15 @@ public sealed class AdminNotificationService : IAdminNotificationService
         if (context.RequestedRole == RoleNames.Admin)
             return query;
 
+        if (context.RequestedRole == RoleNames.ContentModerator)
+        {
+            return query.Where(row =>
+                row.Notification.ScopeType == GlobalScopeType &&
+                (row.Notification.Type == ReviewReportedType ||
+                 row.Notification.TargetType == ReviewReportNotificationTargetType ||
+                 row.Notification.TargetType == "Review"));
+        }
+
         if (context.RequestedRole == RoleNames.RegionalManager)
         {
             if (!context.RegionId.HasValue)
@@ -633,6 +644,9 @@ public sealed class AdminNotificationService : IAdminNotificationService
 
         if (normalizedRoles.Contains(RoleNames.Admin, StringComparer.Ordinal))
             return RoleNames.Admin;
+
+        if (normalizedRoles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal))
+            return RoleNames.ContentModerator;
 
         if (normalizedRoles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
             return RoleNames.TerritoryManager;

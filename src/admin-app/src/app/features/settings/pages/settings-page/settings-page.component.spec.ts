@@ -103,6 +103,35 @@ describe('SettingsComponent', () => {
     expect(assignmentText).not.toContain('No assigned regions');
   });
 
+  it('renders content moderator settings with moderation scope and notifications', () => {
+    flushProfile(contentModeratorProfileResponse());
+    fixture.detectChanges();
+
+    expect(component.currentRole).toBe('Content Moderator');
+    expect(component.assignmentSectionTitle).toBe('Content Moderation Access');
+    expect(component.assignmentLabel).toBe('Scope');
+    expect(component.assignmentDisplayValue).toBe('Content moderation');
+    expect(component.assignmentAccessLevel).toBe('Review moderation');
+    expect(component.memberSince).not.toBe('-');
+
+    const text = fixture.nativeElement.textContent as string;
+    const assignmentSection = fixture.nativeElement.querySelector('[data-testid="assignment-section"]') as HTMLElement;
+    const assignmentText = assignmentSection.textContent ?? '';
+    expect(text).not.toContain('Settings unavailable');
+    expect(assignmentText).toContain('Content Moderation Access');
+    expect(assignmentText).toContain('Content Moderator');
+    expect(assignmentText).toContain('Scope');
+    expect(assignmentText).toContain('Content moderation');
+    expect(assignmentText).toContain('Access Level');
+    expect(assignmentText).toContain('Review moderation');
+    expect(text).toContain('Review reports');
+    expect(text).toContain('Receive an email when a review report needs moderation.');
+    expect(text).toContain('Moderation updates');
+    expect(text).not.toContain('Assigned Region');
+    expect(text).not.toContain('Assigned Territory');
+  });
+
+
   it('submits editable fields only and includes notification preferences', () => {
     flushProfile();
 
@@ -360,6 +389,47 @@ describe('SettingsComponent', () => {
         label: 'Scope',
         displayValue: 'Platform-wide',
         accessLevel: 'Full access',
+        memberSince: '2023-11-20T10:15:00Z',
+        assignedItems: [],
+      },
+      regionalManager: {
+        memberSince: null,
+        assignedRegions: [],
+      },
+      preferences: {
+        interfaceLanguage: 'en-US',
+        timezone: 'UTC',
+        emailRequestsEnabled: true,
+        emailNewReviewEnabled: true,
+      },
+    };
+  }
+
+  function contentModeratorProfileResponse(): AdminProfile {
+    return {
+      user: {
+        id: 48,
+        firstName: 'Content',
+        lastName: 'Moderator',
+        displayName: 'Content Moderator',
+        email: 'moderator@gmail.com',
+        shortBio: 'Content moderator profile bio',
+        avatarUrl: null,
+        avatarVersion: null,
+        createdAt: '2023-11-20T10:15:00Z',
+        updatedAt: null,
+      },
+      roles: ['ContentModerator'],
+      role: {
+        roleCode: 'ContentModerator',
+        roleDisplayName: 'Content Moderator',
+      },
+      assignment: {
+        assignmentType: 'ContentModeration',
+        sectionTitle: 'Content Moderation Access',
+        label: 'Scope',
+        displayValue: 'Content moderation',
+        accessLevel: 'Review moderation',
         memberSince: '2023-11-20T10:15:00Z',
         assignedItems: [],
       },

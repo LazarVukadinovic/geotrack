@@ -36,6 +36,7 @@ describe('TopbarComponent', () => {
   };
 
   const administratorView = getAdminViewByCode('Admin')!;
+  const contentModeratorView = getAdminViewByCode('ContentModerator')!;
   const territoryManagerView = getAdminViewByCode('TerritoryManager')!;
   const regionalManagerView = getAdminViewByCode('RegionalManager')!;
 
@@ -300,6 +301,69 @@ describe('TopbarComponent', () => {
     });
   });
 
+  it('opens the Content Moderator notification drawer for review reports', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({
+        type: 'ReviewReported',
+        title: 'Reported review needs moderation',
+        message: 'A review was reported as spam.',
+        targetType: 'ReviewReport',
+        targetId: 88,
+        targetRoute: '/content-moderator/review-management?status=reported&highlight=Place%3A88',
+      }),
+    ], 1)));
+    createContentModeratorComponent();
+
+    notificationBell().click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#admin-notification-drawer')).toBeTruthy();
+    expect(drawerText()).toContain('Reported review needs moderation');
+    expect(notificationsService.getUnreadCount$).toHaveBeenCalledWith('ContentModerator', null);
+    expect(notificationsService.getNotifications$).toHaveBeenCalledWith({
+      audienceRole: 'ContentModerator',
+      includeRead: true,
+      skip: 0,
+      take: 25,
+    });
+  });
+
+  it('navigates Content Moderator review notifications to Review Management', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({
+        id: 88,
+        type: 'ReviewReported',
+        title: 'Reported review needs moderation',
+        message: 'A review was reported as spam.',
+        targetType: 'ReviewReport',
+        targetId: 88,
+        targetRoute: null,
+      }),
+    ], 1)));
+    createContentModeratorComponent();
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    notificationBell().click();
+    fixture.detectChanges();
+    notificationItemButton('Reported review needs moderation').click();
+    fixture.detectChanges();
+
+    expect(notificationsService.markRead$).toHaveBeenCalledWith(88, 'ContentModerator', null);
+    expect(navigateSpy).toHaveBeenCalledWith('/content-moderator/review-management?status=reported');
+  });
+
+  it('shows the Content Moderator empty notification copy', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([], 0)));
+    createContentModeratorComponent();
+
+    notificationBell().click();
+    fixture.detectChanges();
+
+    expect(drawerText()).toContain('No notifications yet');
+    expect(drawerText()).toContain('Review reports and moderation updates will appear here.');
+  });
+
   it('navigates Regional Manager request notifications to the regional request detail', () => {
     notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
       supportNotification({
@@ -369,7 +433,7 @@ describe('TopbarComponent', () => {
 
     expect(loadingSkeleton()).toBeNull();
     expect(drawerText()).toContain('No notifications yet');
-    expect(drawerText()).toContain('New support reports, review reports, and system alerts will appear here.');
+    expect(drawerText()).toContain('New support reports and system alerts will appear here.');
   });
 
   it('shows the unread empty state without reloading when no unread notifications exist', () => {
@@ -482,6 +546,16 @@ describe('TopbarComponent', () => {
     fixture.detectChanges();
   }
 
+  function createContentModeratorComponent(): void {
+    useContentModeratorUser();
+    notificationsService.getUnreadCount$.mockClear();
+    notificationsService.getNotifications$.mockClear();
+    fixture.destroy();
+    fixture = TestBed.createComponent(TopbarComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  }
+
   function notificationBell(): HTMLButtonElement {
     return fixture.nativeElement.querySelector('[aria-controls="admin-notification-drawer"]') as HTMLButtonElement;
   }
@@ -569,6 +643,20 @@ describe('TopbarComponent', () => {
       role: 'Administrator',
       activeRoleCode: 'Admin',
       roles: ['Admin'],
+    };
+  }
+
+  function useContentModeratorUser(): void {
+    activeView = contentModeratorView;
+    availableViews = [contentModeratorView];
+    currentUser = {
+      ...currentUser,
+      firstName: 'Content',
+      lastName: 'Moderator',
+      email: 'moderator@gmail.com',
+      role: 'Content Moderator',
+      activeRoleCode: 'ContentModerator',
+      roles: ['ContentModerator'],
     };
   }
 

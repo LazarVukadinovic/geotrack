@@ -4,6 +4,7 @@
     [region]="regionDisplayName"
     [activeRegionId]="activeRegionId"
     [regionLoading]="regionLoading"
+    [reportedReviewsCount]="reportedReviewsCount"
     [supportReportsCount]="supportReportsCount"
     (regionChange)="onRegionSelected($event)"
   />
@@ -169,7 +170,7 @@
             </div>
 
             <div class="px-6 py-5">
-              <div class="grid gap-3" [class.grid-cols-3]="!isAdmin" [class.grid-cols-4]="isAdmin">
+              <div class="grid gap-3" [class.grid-cols-3]="!hasAssignmentAccessLevel" [class.grid-cols-4]="hasAssignmentAccessLevel">
                 <div class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50 min-w-0">
                   <div class="flex items-center gap-1.5 mb-1.5">
                     <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -190,7 +191,7 @@
                   </div>
                   <p class="text-sm font-semibold text-gray-800 break-words">{{ assignmentDisplayValue }}</p>
                 </div>
-                <div *ngIf="isAdmin" class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50 min-w-0">
+                <div *ngIf="hasAssignmentAccessLevel" class="rounded-lg border border-gray-100 px-4 py-3 bg-gray-50 min-w-0">
                   <div class="flex items-center gap-1.5 mb-1.5">
                     <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -278,9 +279,9 @@
 
                 <div class="flex items-center justify-between py-3 border-b border-gray-50">
                   <div>
-                    <p class="text-sm font-medium text-gray-800">{{ isAdmin ? 'Reports' : 'Requests' }}</p>
+                    <p class="text-sm font-medium text-gray-800">{{ notificationPrimaryLabel }}</p>
                     <p class="text-xs text-gray-500 mt-0.5">
-                      {{ isAdmin ? 'Receive an email when a new report needs administrator review.' : 'Receive an email when someone submits a request.' }}
+                      {{ notificationPrimaryDescription }}
                     </p>
                   </div>
                   <button
@@ -298,9 +299,9 @@
 
                 <div class="flex items-center justify-between py-3">
                   <div>
-                    <p class="text-sm font-medium text-gray-800">{{ isAdmin ? 'Reviews' : 'New Review' }}</p>
+                    <p class="text-sm font-medium text-gray-800">{{ notificationSecondaryLabel }}</p>
                     <p class="text-xs text-gray-500 mt-0.5">
-                      {{ isAdmin ? 'Get notified about reported reviews requiring moderation.' : 'Get notified when someone leaves a review.' }}
+                      {{ notificationSecondaryDescription }}
                     </p>
                   </div>
                   <button

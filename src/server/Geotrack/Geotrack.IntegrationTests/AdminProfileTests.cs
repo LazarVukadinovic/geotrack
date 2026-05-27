@@ -149,6 +149,35 @@ public sealed class AdminProfileTests
     }
 
     [Fact]
+    public async Task Admin_profile_returns_content_moderator_content_moderation_scope()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var userId = await PrepareContentModeratorAsync(app);
+
+        using var client = app.CreateClient();
+        await LoginContentModeratorAsync(client);
+
+        var profile = await client.GetFromJsonAsync<AdminProfileResponseDto>("/api/admin/profile");
+
+        Assert.NotNull(profile);
+        Assert.Equal(userId, profile!.User.Id);
+        Assert.Equal("Content", profile.User.FirstName);
+        Assert.Equal("Moderator", profile.User.LastName);
+        Assert.Equal("moderator@gmail.com", profile.User.Email);
+        Assert.Contains(RoleNames.ContentModerator, profile.Roles);
+        Assert.Equal(RoleNames.ContentModerator, profile.Role.RoleCode);
+        Assert.Equal("Content Moderator", profile.Role.RoleDisplayName);
+        Assert.Equal("ContentModeration", profile.Assignment.AssignmentType);
+        Assert.Equal("Content Moderation Access", profile.Assignment.SectionTitle);
+        Assert.Equal("Scope", profile.Assignment.Label);
+        Assert.Equal("Content moderation", profile.Assignment.DisplayValue);
+        Assert.Equal("Review moderation", profile.Assignment.AccessLevel);
+        Assert.Equal(AdminCreatedAt, profile.Assignment.MemberSince);
+        Assert.Empty(profile.Assignment.AssignedItems);
+        Assert.Empty(profile.RegionalManager.AssignedRegions);
+    }
+
+    [Fact]
     public async Task Admin_profile_update_only_changes_editable_profile_and_preference_fields()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -495,6 +524,25 @@ public sealed class AdminProfileTests
         return session;
     }
 
+    private static async Task<AdminLoginResponseDto> LoginContentModeratorAsync(HttpClient client)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new LoginRequestDto
+            {
+                Email = "moderator@gmail.com",
+                Password = "Proba123!",
+            });
+        response.EnsureSuccessStatusCode();
+
+        var session = await response.Content.ReadFromJsonAsync<AdminLoginResponseDto>();
+        Assert.NotNull(session);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", session!.AccessToken);
+
+        return session;
+    }
+
     private static async Task<AdminLoginResponseDto> LoginTerritoryManagerAsync(HttpClient client)
     {
         var response = await client.PostAsJsonAsync(
@@ -649,6 +697,39 @@ public sealed class AdminProfileTests
         user.Timezone = "UTC";
         user.EmailRequestsEnabled = true;
         user.EmailNewReviewEnabled = false;
+        user.CreatedAt = AdminCreatedAt;
+
+        await db.SaveChangesAsync();
+
+        return user.Id;
+    }
+
+    private static async Task<int> PrepareContentModeratorAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var user = await db.Users
+            .Include(existing => existing.UserRoles)
+            .SingleAsync(existing => existing.Email == "moderator@gmail.com");
+        var role = await db.Roles.SingleAsync(existing => existing.Name == RoleNames.ContentModerator);
+
+        if (!user.UserRoles.Any(userRole => userRole.RoleId == role.Id))
+        {
+            user.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = role.Id,
+            });
+        }
+
+        user.FirstName = "Content";
+        user.LastName = "Moderator";
+        user.ShortBio = "Content moderator profile bio";
+        user.InterfaceLanguage = "en-US";
+        user.Timezone = "UTC";
+        user.EmailRequestsEnabled = true;
+        user.EmailNewReviewEnabled = true;
         user.CreatedAt = AdminCreatedAt;
 
         await db.SaveChangesAsync();
