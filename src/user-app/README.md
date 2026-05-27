@@ -6,7 +6,7 @@
 
 ```bash
 npm install
-npm run start
+npm run dev
 ```
 
 Aplikacija je podrazumevano dostupna na `http://localhost:4200/` i prosleđuje `/api/*` zahteve ka backend-u.
@@ -15,6 +15,7 @@ Aplikacija je podrazumevano dostupna na `http://localhost:4200/` i prosleđuje `
 
 ```bash
 npm run build
+npm run build:production
 npm test -- --watch=false
 ```
 
