@@ -398,7 +398,26 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       });
     }
 
-    this.map.flyTo({ center: [result.longitude, result.latitude], zoom: 14, duration: 900, essential: true });
+    const zoom = this.zoomForSearchResult(result);
+    const focusMarker = this.toMarkerFromSearchResult(result);
+    if (focusMarker) {
+      this.selectedPlace = focusMarker;
+    }
+
+    this.writeSearchResultMapViewState(result, zoom);
+
+    const flyOptions: Parameters<MapLibreMap['flyTo']>[0] = {
+      center: [result.longitude, result.latitude],
+      zoom,
+      duration: 900,
+      essential: true,
+    };
+
+    if (focusMarker) {
+      flyOptions.padding = { top: 80, bottom: 180, left: 0, right: 0 };
+    }
+
+    this.map.flyTo(flyOptions);
     this.analytics.track('search_performed', {
       metadata: {
         surface: 'map',
@@ -409,6 +428,86 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     });
     this.invalidateMarkerCache();
     this.scheduleViewportLoad(0);
+    this.cdr.detectChanges();
+  }
+
+  private toMarkerFromSearchResult(result: MapSearchResult): MapEntityMarker | null {
+    const entityType = this.entityTypeFromSearchResult(result);
+    if (!entityType || !result.id) {
+      return null;
+    }
+
+    return {
+      entityType,
+      entityId: result.id,
+      title: result.name,
+      subtitle: result.subtitle ?? result.parentName ?? null,
+      categoryLabel: result.type === 'stay' ? 'Stay' : entityType === 'event' ? 'Event' : 'Place',
+      imageUrl: null,
+      detailRoute: this.detailRouteForSearchResult(result, entityType),
+      latitude: result.latitude,
+      longitude: result.longitude,
+      isSaved: false,
+    };
+  }
+
+  private entityTypeFromSearchResult(result: MapSearchResult): MapEntityMarker['entityType'] | null {
+    switch (result.type) {
+      case 'place':
+        return 'place';
+      case 'stay':
+        return 'stay';
+      case 'event':
+        return 'event';
+      default:
+        return null;
+    }
+  }
+
+  private detailRouteForSearchResult(result: MapSearchResult, entityType: MapEntityMarker['entityType']): string {
+    if (!result.id) return '';
+    if (entityType === 'stay') return `/stays/${result.id}`;
+    if (entityType === 'event') return `/events/${result.id}`;
+    return `/places/${result.id}`;
+  }
+
+  private zoomForSearchResult(result: MapSearchResult): number {
+    if (result.type === 'place' || result.type === 'stay' || result.type === 'event') {
+      return 17;
+    }
+
+    if (result.type === 'location') {
+      return 15;
+    }
+
+    return 14;
+  }
+
+  protected searchResultTrackKey(result: MapSearchResult, index: number): string {
+    const typedId = result.type && result.id ? `${result.type}:${result.id}` : null;
+    if (typedId) return typedId;
+
+    return [
+      result.type ?? 'unknown',
+      result.name,
+      result.latitude,
+      result.longitude,
+      index,
+    ].join(':');
+  }
+
+  private writeSearchResultMapViewState(result: MapSearchResult, zoom: number): void {
+    try {
+      sessionStorage.setItem(MAP_VIEW_STATE_KEY, JSON.stringify({
+        center: [result.longitude, result.latitude],
+        zoom,
+        destinationId: result.id && (result.type === 'destination' || !result.type)
+          ? result.id
+          : null,
+      }));
+      sessionStorage.setItem(MAP_OPENED_THIS_SESSION_KEY, 'true');
+    } catch {
+    }
   }
 
   locateMe(): void {

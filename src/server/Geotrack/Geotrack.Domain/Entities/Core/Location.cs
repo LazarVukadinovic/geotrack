@@ -14,6 +14,7 @@ public class Location
 {
     public int Id { get; set; } // PRIMARY KEY
     public string Name { get; set; } = string.Empty;
+    public string SearchText { get; set; } = string.Empty;
     public string? Summary { get; set; }
     public string? InternalReferenceId { get; set; }
     public string Status { get; set; } = "Published";

@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Geotrack.Application.DTOs.Map;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Infrastructure.Search;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -140,14 +141,19 @@ public class MapService : IMapService
             requestedTypes = SearchTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
-        var loweredQuery = trimmed.ToLowerInvariant();
+        var searchTerm = SearchTextNormalizer.Normalize(trimmed);
+        if (searchTerm.Length < 2)
+        {
+            return new List<MapSearchResultDto>();
+        }
+
         var results = new List<MapSearchResultDto>();
 
         if (requestedTypes.Contains("destination"))
         {
             results.AddRange(await _db.Destinations
                 .AsNoTracking()
-                .Where(destination => destination.Name.ToLower().Contains(loweredQuery))
+                .Where(destination => destination.SearchText.Contains(searchTerm))
                 .OrderBy(destination => destination.Name)
                 .Take(10)
                 .Select(destination => new MapSearchResultDto
@@ -168,7 +174,7 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Locations
                 .AsNoTracking()
-                .Where(location => location.Name.ToLower().Contains(loweredQuery))
+                .Where(location => location.SearchText.Contains(searchTerm))
                 .OrderBy(location => location.Name)
                 .Take(10)
                 .Select(location => new MapSearchResultDto
@@ -189,7 +195,7 @@ public class MapService : IMapService
             results.AddRange(await _db.Places
                 .AsNoTracking()
                 .Where(place => place.Status == PublishedStatus)
-                .Where(place => place.Name.ToLower().Contains(loweredQuery))
+                .Where(place => place.SearchText.Contains(searchTerm))
                 .OrderBy(place => place.Name)
                 .Take(10)
                 .Select(place => new MapSearchResultDto
@@ -210,7 +216,7 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Events
                 .AsNoTracking()
-                .Where(@event => @event.Name.ToLower().Contains(loweredQuery))
+                .Where(@event => @event.SearchText.Contains(searchTerm))
                 .OrderBy(@event => @event.Name)
                 .Take(10)
                 .Select(@event => new MapSearchResultDto

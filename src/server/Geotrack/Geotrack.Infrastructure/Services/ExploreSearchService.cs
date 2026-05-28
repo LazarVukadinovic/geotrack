@@ -2,6 +2,7 @@ using Geotrack.Domain.Entities.Core;
 using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Infrastructure;
+using Geotrack.Infrastructure.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Services;
@@ -57,7 +58,12 @@ public class ExploreSearchService : IExploreSearchService
             throw new KeyNotFoundException("Destination not found.");
         }
 
-        var term = normalizedQuery.ToLowerInvariant();
+        var term = SearchTextNormalizer.Normalize(normalizedQuery);
+        if (term.Length < MinQueryLength)
+        {
+            return Empty(destinationId, normalizedQuery, normalizedSkip, normalizedTake);
+        }
+
         var candidateTake = normalizedSkip + normalizedTake + ExtraCandidateBuffer;
 
         var placeQuery = BuildPlaceQuery(destinationId, term);
@@ -111,11 +117,8 @@ public class ExploreSearchService : IExploreSearchService
                 place.Status == PublishedStatus &&
                 place.Location.DestinationId == destinationId)
             .Where(place =>
-                place.Name.ToLower().Contains(term) ||
-                (place.Subtitle != null && place.Subtitle.ToLower().Contains(term)) ||
-                (place.Address != null && place.Address.ToLower().Contains(term)) ||
-                place.Description.ToLower().Contains(term) ||
-                place.Location.Name.ToLower().Contains(term) ||
+                place.SearchText.Contains(term) ||
+                place.Location.SearchText.Contains(term) ||
                 place.PlaceType.Name.ToLower().Contains(term) ||
                 (place.Stay != null &&
                     (place.Stay.StayType.Name.ToLower().Contains(term) ||
@@ -165,17 +168,16 @@ public class ExploreSearchService : IExploreSearchService
                     .Select(placeTag => placeTag.Tag.Name)
                     .ToList(),
                 Score =
-                    place.Name.ToLower().Contains(term) ? 100 :
+                    place.SearchText.Contains(term) ? 100 :
                     place.PlaceTags.Any(placeTag =>
                         placeTag.Tag.ForPlace &&
-                        (placeTag.Tag.Name.ToLower().Contains(term) || placeTag.Tag.Slug.ToLower().Contains(term))) ? 85 :
+                        (placeTag.Tag.Name.ToLower().Contains(term) ||
+                         placeTag.Tag.Slug.ToLower().Contains(term))) ? 85 :
                     place.PlaceType.Name.ToLower().Contains(term) ? 75 :
                     (place.Stay != null &&
                         (place.Stay.StayType.Name.ToLower().Contains(term) ||
                          place.Stay.StayType.Slug.ToLower().Contains(term))) ? 75 :
-                    place.Location.Name.ToLower().Contains(term) ? 65 :
-                    (place.Subtitle != null && place.Subtitle.ToLower().Contains(term)) ? 55 :
-                    (place.Address != null && place.Address.ToLower().Contains(term)) ? 45 :
+                    place.Location.SearchText.Contains(term) ? 65 :
                     30
             });
     }
@@ -188,9 +190,7 @@ public class ExploreSearchService : IExploreSearchService
                 location.Status == PublishedStatus &&
                 location.DestinationId == destinationId)
             .Where(location =>
-                location.Name.ToLower().Contains(term) ||
-                (location.Summary != null && location.Summary.ToLower().Contains(term)) ||
-                location.Description.ToLower().Contains(term) ||
+                location.SearchText.Contains(term) ||
                 location.LocationType.Name.ToLower().Contains(term) ||
                 location.LocationTags.Any(locationTag =>
                     locationTag.Tag.ForLocation &&
@@ -224,12 +224,12 @@ public class ExploreSearchService : IExploreSearchService
                     .Select(locationTag => locationTag.Tag.Name)
                     .ToList(),
                 Score =
-                    location.Name.ToLower().Contains(term) ? 95 :
+                    location.SearchText.Contains(term) ? 95 :
                     location.LocationTags.Any(locationTag =>
                         locationTag.Tag.ForLocation &&
-                        (locationTag.Tag.Name.ToLower().Contains(term) || locationTag.Tag.Slug.ToLower().Contains(term))) ? 80 :
+                        (locationTag.Tag.Name.ToLower().Contains(term) ||
+                         locationTag.Tag.Slug.ToLower().Contains(term))) ? 80 :
                     location.LocationType.Name.ToLower().Contains(term) ? 70 :
-                    (location.Summary != null && location.Summary.ToLower().Contains(term)) ? 55 :
                     30
             });
     }
