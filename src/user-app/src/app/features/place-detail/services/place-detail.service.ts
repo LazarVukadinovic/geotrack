@@ -5,6 +5,7 @@ import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import { LocationService } from '../../../core/services/location.service';
 import { DestinationService } from '../../../core/services/destination.service';
+import { CollectionsService } from '../../profile/services/collections';
 import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { PlaceDetail, PlaceRelatedEvent } from '../../../core/models/place.model';
@@ -48,6 +49,7 @@ export class PlaceDetailService {
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly analytics = inject(AnalyticsService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly collectionsService = inject(CollectionsService);
   private readonly locationSvc = inject(LocationService);
   private readonly destinationSvc = inject(DestinationService);
   private readonly _cache = signal<Record<string, PlaceDetail>>({});
@@ -169,19 +171,30 @@ export class PlaceDetailService {
     this._loadState.update(current => ({ ...current, [id]: state }));
   }
 
-  toggleSaved(id: string): void {
+  toggleSaved(id: string, collectionId?: number | null): void {
     const current = this.getPlaceDetailPageData(id);
     if (!current) return;
 
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    this.saveToCollection.open({
+
+    const target = {
       entityType: 'place',
       entityId: numId,
       title: current.title,
       imageUrl: current.heroImage,
       surface: 'place_detail',
       analyticsEntityType: 'place',
-    });
+    } as const;
+
+    if (collectionId != null && collectionId > 0) {
+      this.collectionsService.addItem(collectionId, {
+        ...target,
+        image: target.imageUrl,
+      }).subscribe({ error: () => {} });
+      return;
+    }
+
+    this.saveToCollection.open(target);
   }
 }

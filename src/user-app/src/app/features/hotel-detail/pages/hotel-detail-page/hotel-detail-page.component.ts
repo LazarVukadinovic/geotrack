@@ -136,7 +136,7 @@ export class HotelDetailPageComponent {
 
   protected toggleSaved(): void {
     const id = this.hotelId();
-    if (id) this.service.toggleSaved(id);
+    if (id) this.service.toggleSaved(id, this.targetCollectionId());
   }
 
   protected share(): void {
@@ -150,7 +150,7 @@ export class HotelDetailPageComponent {
   }
 
   protected navigateToSimilar(id: string): void {
-    this.router.navigate(['/stays', id]);
+    void this.router.navigate(['/stays', id], { queryParams: this.collectionQueryParams() });
   }
 
   protected selectGalleryImage(url: string): void {
@@ -361,5 +361,15 @@ export class HotelDetailPageComponent {
       distance: hotel.distance || null,
       isSaved: hotel.isSaved,
     };
+  }
+
+  private targetCollectionId(): number | null {
+    const collectionId = Number(this.route.snapshot.queryParamMap.get('collectionId'));
+    return Number.isFinite(collectionId) && collectionId > 0 ? collectionId : null;
+  }
+
+  private collectionQueryParams(): { collectionId?: number } {
+    const collectionId = this.targetCollectionId();
+    return collectionId != null ? { collectionId } : {};
   }
 }

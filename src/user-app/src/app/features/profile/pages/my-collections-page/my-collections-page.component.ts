@@ -31,7 +31,7 @@ export class MyCollectionsPageComponent {
   }
 
   protected goBack(): void {
-    globalThis.history.back();
+    this.router.navigate(['/profile']);
   }
 
   protected onCollectionCreated(id: number): void {

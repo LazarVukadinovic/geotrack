@@ -10,6 +10,7 @@ import { LocationService } from '../../../core/services/location.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import { TagService } from '../../../core/services/tag.service';
 import { UserService, type UserProfile } from '../../../core/services/user.service';
+import { CollectionsService } from '../../profile/services/collections';
 import { ExploreService } from './explore.service';
 
 describe('ExploreService curation context', () => {
@@ -21,6 +22,7 @@ describe('ExploreService curation context', () => {
   let interestRevision: WritableSignal<number>;
   let mode: WritableSignal<'location' | 'destination'>;
   let destinationId: WritableSignal<number | null>;
+  let collectionsService: { addItem: ReturnType<typeof vi.fn> };
   let activeLocation: WritableSignal<{
     latitude: number;
     longitude: number;
@@ -38,6 +40,7 @@ describe('ExploreService curation context', () => {
       longitude: 20.4612,
       source: 'approximate',
     });
+    collectionsService = { addItem: vi.fn(() => of({})) };
 
     TestBed.configureTestingModule({
       providers: [
@@ -67,6 +70,7 @@ describe('ExploreService curation context', () => {
           useValue: { resolve: (_entityType: string, _id: string, fallback: boolean) => fallback },
         },
         { provide: SaveToCollectionService, useValue: { open: vi.fn() } },
+        { provide: CollectionsService, useValue: collectionsService },
       ],
     });
 
@@ -191,6 +195,27 @@ describe('ExploreService curation context', () => {
 
     http.expectOne('/api/explore?latitude=44.0128&longitude=20.9114')
       .flush(makeExploreResponse([]));
+  });
+
+  it('saves directly to the provided collection instead of opening the chooser', () => {
+    service.toggleSaved({
+      id: '42',
+      entityType: 'place',
+      detailRoute: '/places/42',
+      title: 'Kalemegdan',
+      image: '/media/kalemegdan.jpg',
+      isSaved: false,
+      tags: [],
+    }, 'curated-for-you', 9);
+
+    expect(collectionsService.addItem).toHaveBeenCalledWith(9, expect.objectContaining({
+      entityType: 'place',
+      entityId: 42,
+      title: 'Kalemegdan',
+      image: '/media/kalemegdan.jpg',
+      surface: 'explore_curated-for-you',
+      analyticsEntityType: 'place',
+    }));
   });
 });
 

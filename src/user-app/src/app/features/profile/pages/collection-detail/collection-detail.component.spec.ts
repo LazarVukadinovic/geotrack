@@ -15,6 +15,7 @@ describe('CollectionDetail', () => {
   };
 
   const router = {
+    navigate: vi.fn(),
     navigateByUrl: vi.fn(),
   };
 
@@ -92,5 +93,25 @@ describe('CollectionDetail', () => {
     openButton.click();
 
     expect(router.navigateByUrl).toHaveBeenCalledWith('/stays/20');
+  });
+
+  it('should navigate to explore from the add button', () => {
+    fixture.detectChanges();
+
+    const addButton = fixture.nativeElement.querySelector(
+      'button[aria-label="Explore and add saved items"]',
+    ) as HTMLButtonElement;
+    addButton.click();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/profile/collections', 1, 'add']);
+  });
+
+  it('should navigate back to the collections list', () => {
+    fixture.detectChanges();
+
+    const backButton = fixture.nativeElement.querySelector('button.collection-detail-page__back') as HTMLButtonElement;
+    backButton.click();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/profile/collections']);
   });
 });

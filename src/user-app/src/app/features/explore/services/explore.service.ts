@@ -5,9 +5,10 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { FavoriteEntityType, FavoriteStateService } from '../../../core/services/favorite-state.service';
 import { LocationService } from '../../../core/services/location.service';
-import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
+import { SaveToCollectionService, type SaveToCollectionTarget } from '../../../core/services/save-to-collection.service';
 import { TagService } from '../../../core/services/tag.service';
 import { UserService } from '../../../core/services/user.service';
+import { CollectionsService } from '../../profile/services/collections';
 import type { ExploreItem } from '../../../core/models/explore-item.model';
 import type {
   ExploreAttraction,
@@ -123,6 +124,7 @@ export class ExploreService {
   private readonly destinationSvc = inject(DestinationService);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly collectionsService = inject(CollectionsService);
   private readonly tagService = inject(TagService);
 
   private readonly _sections = signal<ExploreSection[]>([]);
@@ -327,33 +329,47 @@ export class ExploreService {
     this.loadFromApi(loc.latitude, loc.longitude, undefined, loc.source, curationContextKey);
   }
 
-  toggleSaved(item: ExploreSectionItem, sectionKey = 'section'): void {
+  toggleSaved(item: ExploreSectionItem, sectionKey = 'section', collectionId?: number | null): void {
+    const target = this.toSaveTarget(item, `explore_${sectionKey}`);
+    if (!target) return;
+
+    if (collectionId != null && collectionId > 0) {
+      this.collectionsService.addItem(collectionId, {
+        ...target,
+        image: target.imageUrl,
+      }).subscribe({ error: () => {} });
+      return;
+    }
+
+    this.saveToCollection.open(target);
+  }
+
+  private toSaveTarget(item: ExploreSectionItem, surface: string): SaveToCollectionTarget | null {
     const numericId = parseInt(item.id, 10);
-    if (isNaN(numericId)) return;
+    if (isNaN(numericId)) return null;
 
     if (item.entityType === 'event') {
-      this.saveToCollection.open({
+      return {
         entityType: 'event',
         entityId: numericId,
         title: item.title,
         imageUrl: item.image,
-        surface: `explore_${sectionKey}`,
+        surface,
         analyticsEntityType: 'event',
-      });
-      return;
+      };
     }
 
     const saveEntityType = item.entityType === 'stay' ? 'place' : item.entityType;
-    if (saveEntityType !== 'place') return;
+    if (saveEntityType !== 'place') return null;
 
-    this.saveToCollection.open({
+    return {
       entityType: 'place',
       entityId: numericId,
       title: item.title,
       imageUrl: item.image,
-      surface: `explore_${sectionKey}`,
+      surface,
       analyticsEntityType: item.entityType === 'stay' ? 'hotel' : 'place',
-    });
+    };
   }
 
 
@@ -710,11 +726,11 @@ export class ExploreService {
   }
 
   private resolveSavedState(item: ExploreSectionItem): ExploreSectionItem {
-    if (item.entityType !== 'place' && item.entityType !== 'stay') {
+    if (item.entityType !== 'place' && item.entityType !== 'stay' && item.entityType !== 'event') {
       return item;
     }
 
-    const favoriteType: FavoriteEntityType = 'place';
+    const favoriteType: FavoriteEntityType = item.entityType === 'event' ? 'event' : 'place';
     const isSaved = this.favoriteState.resolve(favoriteType, item.id, item.isSaved);
     return item.isSaved === isSaved ? item : { ...item, isSaved };
   }

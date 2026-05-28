@@ -1,5 +1,6 @@
-import { AfterViewInit, Component, computed, ElementRef, inject, OnDestroy, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { AfterViewInit, Component, computed, DestroyRef, ElementRef, inject, OnDestroy, signal } from '@angular/core';
+import { ActivatedRoute, ParamMap, Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
@@ -43,6 +44,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private readonly locationSvc = inject(LocationService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly elRef = inject(ElementRef<HTMLElement>);
   private readonly scrollState = inject(ExploreScrollStateService);
   private readonly analytics = inject(AnalyticsService);
@@ -61,6 +63,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   protected readonly searchLoading = signal(false);
   protected readonly searchError = signal<string | null>(null);
   protected readonly searchHasMore = signal(false);
+  protected readonly targetCollectionId = signal<number | null>(null);
   protected readonly exactLocationLoading = signal(false);
   protected readonly exactLocationError = signal<string | null>(null);
   protected readonly isDestinationMode = computed(() => this.destinationSvc.isDestinationMode());
@@ -161,6 +164,11 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   private searchRequestVersion = 0;
 
   constructor() {
+    this.targetCollectionId.set(this.readTargetCollectionId());
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => this.targetCollectionId.set(this.readTargetCollectionId(params)));
+
     const routeDestinationId = Number(this.route.snapshot.queryParamMap.get('destinationId'));
     if (
       Number.isFinite(routeDestinationId) &&
@@ -439,7 +447,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
   }
 
   protected onSectionSave(event: ExploreSectionSaveEvent): void {
-    this.explore.toggleSaved(event.item, event.section.key);
+    this.explore.toggleSaved(event.item, event.section.key, this.targetCollectionId());
   }
 
   protected onSectionItem(event: ExploreSectionItemEvent): void {
@@ -452,6 +460,14 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected onSectionMore(section: ExploreSection): void {
     if (!section.moreRoute) return;
+    const collectionId = this.targetCollectionId();
+    if (collectionId != null && collectionId > 0) {
+      void this.router.navigate([section.moreRoute], {
+        queryParams: { collectionId },
+      });
+      return;
+    }
+
     void this.router.navigateByUrl(section.moreRoute);
   }
 
@@ -512,6 +528,11 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     return this.explore.selectedDestination()?.id
       ?? this.destinationSvc.id()
       ?? null;
+  }
+
+  private readTargetCollectionId(params: ParamMap = this.route.snapshot.queryParamMap): number | null {
+    const collectionId = Number(params.get('collectionId'));
+    return Number.isFinite(collectionId) && collectionId > 0 ? collectionId : null;
   }
 
   private runExploreSearch(query: string, skip: number, append: boolean): void {

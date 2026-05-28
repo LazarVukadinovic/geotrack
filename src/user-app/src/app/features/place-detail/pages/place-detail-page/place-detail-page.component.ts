@@ -145,7 +145,7 @@ export class PlaceDetailPageComponent {
 
   protected toggleSaved(): void {
     const id = this.placeId();
-    if (id) this.service.toggleSaved(id);
+    if (id) this.service.toggleSaved(id, this.targetCollectionId());
   }
 
   protected share(): void {
@@ -159,11 +159,11 @@ export class PlaceDetailPageComponent {
   }
 
   protected navigateToSimilar(id: string): void {
-    this.router.navigate(['/places', id]);
+    void this.router.navigate(['/places', id], { queryParams: this.collectionQueryParams() });
   }
 
   protected navigateToEvent(id: string): void {
-    this.router.navigate(['/events', id]);
+    void this.router.navigate(['/events', id], { queryParams: this.collectionQueryParams() });
   }
 
   protected selectGalleryImage(url: string): void {
@@ -360,6 +360,16 @@ export class PlaceDetailPageComponent {
 
   private getReviewEntityType(place: PlaceDetail): 'place' | 'stay' {
     return place.contentType === 'hotel' ? 'stay' : 'place';
+  }
+
+  private targetCollectionId(): number | null {
+    const collectionId = Number(this.route.snapshot.queryParamMap.get('collectionId'));
+    return Number.isFinite(collectionId) && collectionId > 0 ? collectionId : null;
+  }
+
+  private collectionQueryParams(): { collectionId?: number } {
+    const collectionId = this.targetCollectionId();
+    return collectionId != null ? { collectionId } : {};
   }
 
   private calculateCurrentOpenStatus(schedule: { day: string; hours: string }[], fallback: string): string {

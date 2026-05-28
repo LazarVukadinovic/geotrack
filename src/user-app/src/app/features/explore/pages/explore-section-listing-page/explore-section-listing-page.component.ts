@@ -1,5 +1,5 @@
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import { DestinationService } from '../../../../core/services/destination.service';
@@ -47,6 +47,7 @@ export class ExploreSectionListingPageComponent {
   protected readonly hasActiveFilters = this.listing.hasActiveFilters;
   protected readonly activeFilterCount = computed(() => this.listing.selectedTagIds().length);
   protected readonly filtersExpanded = signal(false);
+  protected readonly targetCollectionId = signal<number | null>(null);
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
@@ -58,7 +59,10 @@ export class ExploreSectionListingPageComponent {
 
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.loadFromRoute());
+      .subscribe((params) => {
+        this.targetCollectionId.set(this.readTargetCollectionId(params));
+        this.loadFromRoute();
+      });
 
     effect(() => {
       this.locationRequestKey();
@@ -76,7 +80,7 @@ export class ExploreSectionListingPageComponent {
   }
 
   protected openItem(item: ExploreSectionItem): void {
-    void this.router.navigateByUrl(item.detailRoute || this.defaultDetailRoute(item));
+    void this.router.navigateByUrl(this.withCollectionContext(item.detailRoute || this.defaultDetailRoute(item)));
   }
 
   protected loadMore(): void {
@@ -100,7 +104,7 @@ export class ExploreSectionListingPageComponent {
   }
 
   protected saveItem(item: ExploreSectionItem): void {
-    this.listing.toggleSaved(item);
+    this.listing.toggleSaved(item, this.targetCollectionId());
   }
 
   protected canSave(item: ExploreSectionItem): boolean {
@@ -143,9 +147,24 @@ export class ExploreSectionListingPageComponent {
     return fromState != null && fromState > 0 ? fromState : null;
   }
 
+  private readTargetCollectionId(params: ParamMap = this.route.snapshot.queryParamMap): number | null {
+    const collectionId = Number(params.get('collectionId'));
+    return Number.isFinite(collectionId) && collectionId > 0 ? collectionId : null;
+  }
+
   private defaultDetailRoute(item: ExploreSectionItem): string {
     if (item.entityType === 'event') return `/events/${item.id}`;
     if (item.entityType === 'stay') return `/stays/${item.id}`;
     return `/places/${item.id}`;
+  }
+
+  private withCollectionContext(route: string): string {
+    const collectionId = this.targetCollectionId();
+    if (collectionId == null || collectionId <= 0) return route;
+
+    const [path, query = ''] = route.split('?');
+    const params = new URLSearchParams(query);
+    params.set('collectionId', String(collectionId));
+    return `${path}?${params.toString()}`;
   }
 }
