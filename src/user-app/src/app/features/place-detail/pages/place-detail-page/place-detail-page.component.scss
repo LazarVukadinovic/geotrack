@@ -467,7 +467,7 @@
   width: 100%;
   background: none;
   border: none;
-  padding: 0;
+  padding: 0 0 14px;
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -478,6 +478,30 @@
     outline-offset: 3px;
     border-radius: 6px;
   }
+}
+
+.pd__hours-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+
+  .pd__section-title {
+    margin: 0;
+  }
+}
+
+.pd__hours-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pd__hours-toggle-label {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1a2b4c;
+  line-height: 1.3;
 }
 
 .pd__hours-chevron {

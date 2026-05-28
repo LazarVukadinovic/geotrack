@@ -247,14 +247,15 @@
               <div class="pd__divider pd__divider--hours"></div>
 
               <section class="pd__section pd__section--hours">
-                <h2 class="pd__section-title">Opening Hours</h2>
-
                 @if (is24Hours()) {
-                  <div class="pd__hours-24h">
+                  <div class="pd__hours-title-row">
+                    <h2 class="pd__section-title">Opening Hours</h2>
                     <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
                       <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
                     </svg>
+                  </div>
+                  <div class="pd__hours-24h">
                     <span class="pd__hours-24h-text">Open 24 hours</span>
                   </div>
                 } @else {
@@ -265,10 +266,13 @@
                     (click)="hoursExpanded.set(!hoursExpanded())"
                     [attr.aria-expanded]="hoursExpanded()"
                   >
-                    <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
-                    </svg>
+                    <span class="pd__hours-toggle-left">
+                      <span class="pd__hours-toggle-label">Opening Hours</span>
+                      <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
+                      </svg>
+                    </span>
                     <svg class="pd__hours-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
                             stroke-linejoin="round" d="M6 9l6 6 6-6"/>
