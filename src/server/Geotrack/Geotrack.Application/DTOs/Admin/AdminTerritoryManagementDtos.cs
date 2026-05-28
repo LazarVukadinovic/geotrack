@@ -310,6 +310,7 @@ public class BoundaryImportSummaryDto
     public string AdmLevel { get; set; } = "ADM0";
     public string SourcePath { get; set; } = string.Empty;
     public int TotalFeatures { get; set; }
+    public int ProcessedCount { get; set; }
     public int ImportedCount { get; set; }
     public int UpdatedCount { get; set; }
     public int SkippedCount { get; set; }
@@ -324,6 +325,8 @@ public class BoundaryImportSummaryDto
     public int FailedDisputedCount { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime CompletedAt { get; set; }
+    public long DurationMs { get; set; }
+    public bool ItemsTruncated { get; set; }
     public List<BoundaryImportItemDto> Items { get; set; } = new();
 }
 

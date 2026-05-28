@@ -1401,6 +1401,147 @@ public sealed class AdminTerritoryManagementTests
     }
 
     [Fact]
+    public async Task Local_adm0_import_skips_existing_valid_boundary_before_parsing_invalid_source_geometry()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var existing = new Territory
+            {
+                Name = "Already Valid Skipland",
+                TerritoryKind = TerritoryKinds.Country,
+                CountryIso3 = "TSK",
+                CreatedAt = DateTime.UtcNow
+            };
+            db.Territories.Add(existing);
+            await db.SaveChangesAsync();
+            SetBoundary(db, existing, Polygon(
+                (10.0, 10.0),
+                (10.0, 11.0),
+                (11.0, 11.0),
+                (11.0, 10.0)));
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+
+            var adm0Path = Path.Combine(tempRoot, "skip-invalid-source.geojson");
+            await File.WriteAllTextAsync(adm0Path, """
+                {
+                  "type": "FeatureCollection",
+                  "features": [
+                    {
+                      "type": "Feature",
+                      "properties": { "shapeGroup": "TSK", "shapeType": "ADM0", "shapeName": "Already Valid Skipland", "shapeID": "TSK-ADM0" },
+                      "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[10.0,10.0],[10.0,10.0],[10.0,10.0]]]
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var service = CreateLocalBoundaryImportService(db, tempRoot, adm0Path: adm0Path);
+            var summary = await service.ImportLocalBoundariesAsync("ADM0", forceRefresh: false);
+
+            Assert.Equal(1, summary.TotalFeatures);
+            Assert.Equal(1, summary.ProcessedCount);
+            Assert.Equal(1, summary.SkippedCount);
+            Assert.Equal(0, summary.FailedCount);
+            var item = Assert.Single(summary.Items);
+            Assert.Equal("Skipped", item.Status);
+            Assert.Equal("TSK", item.Iso3);
+            Assert.Empty(db.ChangeTracker.Entries());
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Local_adm0_import_batches_saves_clears_tracker_and_bounds_summary_items()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm0Path = Path.Combine(tempRoot, "bounded-summary.geojson");
+            await File.WriteAllTextAsync(adm0Path, """
+                {
+                  "type": "FeatureCollection",
+                  "features": [
+                    {
+                      "type": "Feature",
+                      "properties": { "shapeGroup": "TBA", "shapeType": "ADM0", "shapeName": "Batch Alpha", "shapeID": "TBA-ADM0" },
+                      "geometry": { "type": "Polygon", "coordinates": [[[1.0,1.0],[2.0,1.0],[2.0,2.0],[1.0,2.0],[1.0,1.0]]] }
+                    },
+                    {
+                      "type": "Feature",
+                      "properties": { "shapeGroup": "TBB", "shapeType": "ADM0", "shapeName": "Batch Beta", "shapeID": "TBB-ADM0" },
+                      "geometry": { "type": "Polygon", "coordinates": [[[3.0,3.0],[4.0,3.0],[4.0,4.0],[3.0,4.0],[3.0,3.0]]] }
+                    },
+                    {
+                      "type": "Feature",
+                      "properties": { "shapeGroup": "TBC", "shapeType": "ADM0", "shapeName": "Batch Gamma", "shapeID": "TBC-ADM0" },
+                      "geometry": { "type": "Polygon", "coordinates": [[[5.0,5.0],[6.0,5.0],[6.0,6.0],[5.0,6.0],[5.0,5.0]]] }
+                    },
+                    {
+                      "type": "Feature",
+                      "properties": { "shapeGroup": "TBD", "shapeType": "ADM0", "shapeName": "Batch Broken", "shapeID": "TBD-ADM0" },
+                      "geometry": { "type": "Polygon", "coordinates": [[[7.0,7.0],[7.0,7.0],[7.0,7.0]]] }
+                    }
+                  ]
+                }
+                """);
+
+            var service = CreateLocalBoundaryImportService(
+                db,
+                tempRoot,
+                adm0Path: adm0Path,
+                maxSummaryItems: 2,
+                saveBatchSize: 2,
+                progressLogInterval: 1);
+            var summary = await service.ImportLocalBoundariesAsync("ADM0");
+
+            Assert.Equal(4, summary.TotalFeatures);
+            Assert.Equal(4, summary.ProcessedCount);
+            Assert.Equal(3, summary.ImportedCount);
+            Assert.Equal(1, summary.FailedCount);
+            Assert.True(summary.ItemsTruncated);
+            Assert.Equal(2, summary.Items.Count);
+            Assert.Contains(summary.Items, item => item.Status == "Failed" && item.Iso3 == "TBD");
+            Assert.True(summary.DurationMs >= 0);
+            Assert.Empty(db.ChangeTracker.Entries());
+            Assert.Equal(3, await db.Territories.CountAsync(item =>
+                item.CountryIso3 == "TBA" ||
+                item.CountryIso3 == "TBB" ||
+                item.CountryIso3 == "TBC"));
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Production_logging_config_keeps_ef_command_sql_at_warning()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync(Environments.Production);
+        var configuration = app.Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+
+        Assert.Equal(
+            "Warning",
+            configuration["Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command"]);
+    }
+
+    [Fact]
     public async Task Local_adm1_candidates_are_filtered_by_assigned_country_and_validated_inside_adm0()
     {
         var tempRoot = CreateTempBoundaryDirectory();
@@ -2325,7 +2466,10 @@ public sealed class AdminTerritoryManagementTests
         string contentRoot,
         string? adm0Path = null,
         string? adm1Path = null,
-        string? adm2Path = null) =>
+        string? adm2Path = null,
+        int maxSummaryItems = 100,
+        int saveBatchSize = 10,
+        int progressLogInterval = 25) =>
         new(
             db,
             Options.Create(new BoundaryImportOptions
@@ -2333,7 +2477,9 @@ public sealed class AdminTerritoryManagementTests
                 Adm0GeoJsonPath = adm0Path ?? Path.Combine(contentRoot, "adm0.geojson"),
                 Adm1GeoJsonPath = adm1Path ?? Path.Combine(contentRoot, "adm1.geojson"),
                 Adm2GeoJsonPath = adm2Path ?? Path.Combine(contentRoot, "adm2.geojson"),
-                MaxSummaryItems = 100
+                MaxSummaryItems = maxSummaryItems,
+                SaveBatchSize = saveBatchSize,
+                ProgressLogInterval = progressLogInterval
             }),
             new TestHostEnvironment(contentRoot),
             NullLogger<LocalBoundaryImportService>.Instance);
