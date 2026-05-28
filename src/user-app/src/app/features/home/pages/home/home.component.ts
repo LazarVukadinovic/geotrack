@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, { Map } from 'maplibre-gl';
+import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
 import { MapApiService, MapSearchResult } from '../../../../core/services/map-api.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
@@ -17,6 +18,7 @@ const MAP_STYLE_URL = '/map-style.json';
 })
 export class Home implements OnInit, OnDestroy {
   private readonly router = inject(Router);
+  private readonly destinationSvc = inject(DestinationService);
   private readonly locationSvc = inject(LocationService);
   private readonly mapApi = inject(MapApiService);
   private readonly analytics = inject(AnalyticsService);
@@ -123,7 +125,7 @@ export class Home implements OnInit, OnDestroy {
   }
 
   private geocode(query: string): void {
-    this.mapApi.search(query).subscribe({
+    this.mapApi.search(query, 'destination').subscribe({
       next: (results) => {
         this.searchResults = results;
       },
@@ -163,6 +165,25 @@ export class Home implements OnInit, OnDestroy {
         selectedIndex: selectedIndex >= 0 ? selectedIndex : null,
       },
     });
+
+    if (result.type === 'destination' && typeof result.id === 'number' && result.id > 0) {
+      this.destinationSvc.setDestinationOverride({
+        id: result.id,
+        name,
+        latitude: lat,
+        longitude: lon,
+      });
+
+      this.exploreSvc.loadForDestination(result.id).finally(() => {
+        this.isLocating = false;
+        this.locationSvc.markLocationEntryComplete();
+        void this.router.navigate(['/explore'], {
+          replaceUrl: true,
+          queryParams: { destinationId: result.id },
+        });
+      });
+      return;
+    }
 
     this.exploreSvc.loadForLocation(lat, lon).then(() => {
       this.isLocating = false;

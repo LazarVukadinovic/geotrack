@@ -75,11 +75,11 @@ export class MapApiService {
     return this.http.get<MapSearchResult[]>('/api/map/destinations');
   }
 
-  search(query: string): Observable<MapSearchResult[]> {
+  search(query: string, types = 'destination,location,place,event'): Observable<MapSearchResult[]> {
     return this.http.get<MapSearchResult[]>('/api/map/search', {
       params: new HttpParams()
         .set('query', query)
-        .set('types', 'destination,location,place,event'),
+        .set('types', types),
     });
   }
 
