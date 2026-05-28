@@ -15,7 +15,7 @@
         </svg>
       </button>
 
-      <span class="hd__top-bar-title" aria-hidden="true">Stay</span>
+      <span class="hd__top-bar-title" aria-hidden="true">Explore</span>
 
       <div class="hd__hero-actions">
         <button
@@ -173,7 +173,10 @@
             @if (h.isOwnedByCurrentUser) {
               <span class="hd__ownership-status hd__ownership-status--owned">You own this stay</span>
             } @else if (h.hasPendingOwnershipClaim || ownershipClaimSubmitted()) {
-              <span class="hd__ownership-status hd__ownership-status--pending">Ownership request pending</span>
+              <div class="hd__ownership-pending">
+                <span class="hd__ownership-pending-title">Ownership request submitted.</span>
+                <span class="hd__ownership-pending-sub">A regional manager will review it</span>
+              </div>
             } @else {
               <button type="button" class="hd__cta hd__cta--outline" (click)="openOwnershipClaim()">
                 Request ownership
@@ -182,9 +185,6 @@
           </div>
         }
 
-        @if (ownershipClaimMessage()) {
-          <p class="hd__ownership-message" role="status">{{ ownershipClaimMessage() }}</p>
-        }
 
         <!-- ── Booking partners ──────────────────────────────────────────── -->
         @if (h.images.length > 1) {

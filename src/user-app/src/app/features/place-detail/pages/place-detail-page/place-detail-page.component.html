@@ -210,7 +210,10 @@
             @if (p.isOwnedByCurrentUser) {
               <span class="pd__ownership-status pd__ownership-status--owned">You own this place</span>
             } @else if (p.hasPendingOwnershipClaim || ownershipClaimSubmitted()) {
-              <span class="pd__ownership-status pd__ownership-status--pending">Ownership request pending</span>
+              <div class="pd__ownership-pending">
+                <span class="pd__ownership-pending-title">Ownership request submitted.</span>
+                <span class="pd__ownership-pending-sub">A regional manager will review it</span>
+              </div>
             } @else {
               <button type="button" class="pd__cta pd__cta--outline" (click)="openOwnershipClaim()">
                 Request ownership
@@ -219,9 +222,6 @@
           </div>
         }
 
-        @if (ownershipClaimMessage()) {
-          <p class="pd__ownership-message" role="status">{{ ownershipClaimMessage() }}</p>
-        }
 
         <!-- ── About ──────────────────────────────────────────────────── -->
         @if (p.images.length > 0) {

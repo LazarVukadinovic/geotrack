@@ -53,6 +53,18 @@ export class EventDetailPageComponent {
 
   protected readonly ticketUrl = computed(() => this.event()?.ticketUrl ?? null);
 
+  protected readonly ticketMainText = computed(() => {
+    const ticket = this.event()?.info.ticket ?? '';
+    const idx = ticket.indexOf('(');
+    return idx !== -1 ? ticket.slice(0, idx).trim() : ticket;
+  });
+
+  protected readonly ticketNote = computed(() => {
+    const ticket = this.event()?.info.ticket ?? '';
+    const match = ticket.match(/\(.*\)/);
+    return match ? match[0] : null;
+  });
+
   private readonly locationRequestKey = computed(() => {
     const loc = this.locationSvc.location();
     if (!loc) return 'none';
