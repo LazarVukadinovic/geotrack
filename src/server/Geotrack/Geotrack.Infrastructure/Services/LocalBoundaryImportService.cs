@@ -7,6 +7,7 @@ using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Options;
 using Geotrack.Domain.Entities.Core;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Hosting;
@@ -26,7 +27,9 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     private const string ReleaseType = "gbOpen";
     private const string DefaultLicense = "CC BY 4.0";
     private const string DisputedAdmLevel = "DISP";
-    private const int DefaultMaxSummaryItems = 500;
+    private const int DefaultMaxSummaryItems = 100;
+    private const int DefaultSaveBatchSize = 10;
+    private const int DefaultProgressLogInterval = 25;
 
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
@@ -674,6 +677,12 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         var sourceReference = BuildSourceReference(path);
         var summary = CreateSummary("ADM0", sourceReference);
         var maxSummaryItems = GetMaxSummaryItems();
+        var saveBatchSize = GetSaveBatchSize();
+        var progressLogInterval = GetProgressLogInterval();
+        var batch = new BoundaryImportBatchState();
+
+        _db.ChangeTracker.Clear();
+        LogImportStarted("ADM0", path, forceRefresh, saveBatchSize, maxSummaryItems);
 
         await ScanFeatureElementsAsync(
             path,
@@ -684,22 +693,32 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
 
                 var stopwatch = Stopwatch.StartNew();
                 var metadata = TryReadBoundaryFeatureMetadata(featureElement);
+                var trackedBeforeFeature = CaptureTrackedEntities();
 
                 try
                 {
-                    var feature = ParseBoundaryFeature(featureElement, "ADM0");
-
-                    var item = await ImportAdm0FeatureAsync(
-                        feature,
-                        sourceReference,
+                    var result = await TryCreateAdm0SkipResultAsync(
+                        metadata,
                         forceRefresh,
                         stopwatch,
                         token);
-                    RecordSummaryItem(summary, item, maxSummaryItems);
+
+                    if (result is null)
+                    {
+                        var feature = ParseBoundaryFeature(featureElement, "ADM0");
+                        result = await ImportAdm0FeatureAsync(
+                            feature,
+                            sourceReference,
+                            stopwatch,
+                            token);
+                    }
+
+                    RecordSummaryItem(summary, result.Item, maxSummaryItems);
+                    TrackPendingChange(batch, result);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _db.ChangeTracker.Clear();
+                    DetachTrackedEntriesAddedAfter(trackedBeforeFeature);
                     var item = CreateFailedImportItem(metadata, ex.Message, stopwatch.ElapsedMilliseconds);
                     RecordSummaryItem(summary, item, maxSummaryItems);
                     LogBoundaryFeatureFailure(
@@ -712,12 +731,195 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                         featureElement);
                 }
 
+                await SaveImportBatchIfNeededAsync(batch, summary, saveBatchSize, token);
+                LogImportProgressIfNeeded(summary, progressLogInterval);
                 return true;
             },
             cancellationToken);
 
-        summary.CompletedAt = DateTime.UtcNow;
+        await SaveImportBatchAsync(batch, summary, cancellationToken);
+        CompleteSummary(summary);
+        LogImportCompleted(summary);
         return summary;
+    }
+
+    private async Task<BoundaryImportFeatureResult?> TryCreateAdm0SkipResultAsync(
+        BoundaryFeatureMetadata metadata,
+        bool forceRefresh,
+        Stopwatch stopwatch,
+        CancellationToken cancellationToken)
+    {
+        ValidateBoundaryAdmLevel(metadata, "ADM0");
+        if (forceRefresh)
+            return null;
+
+        if (IsDisputedShapeType(metadata))
+        {
+            var externalKey = BuildBoundaryExternalKey(metadata);
+            var disputedResolution = await ResolveDisputedTerritoryAsync(metadata, externalKey, cancellationToken);
+            if (disputedResolution.ConflictMessage is not null)
+            {
+                return new BoundaryImportFeatureResult(
+                    CreateSkippedImportItem(
+                        metadata,
+                        TerritoryKinds.DisputedTerritory,
+                        disputedResolution.ConflictMessage,
+                        stopwatch.ElapsedMilliseconds),
+                    Changed: false,
+                    InvalidatesMapCache: false);
+            }
+
+            if (disputedResolution.Territory?.HasValidBoundary == true &&
+                disputedResolution.Territory.HasValidDisplayBoundary)
+            {
+                return new BoundaryImportFeatureResult(
+                    CreateSkippedImportItem(
+                        metadata,
+                        TerritoryKinds.DisputedTerritory,
+                        "Existing disputed boundary geometry is already valid.",
+                        stopwatch.ElapsedMilliseconds),
+                    Changed: false,
+                    InvalidatesMapCache: false);
+            }
+
+            return null;
+        }
+
+        var countryIso3 = metadata.Iso3;
+        if (string.IsNullOrWhiteSpace(countryIso3))
+            return null;
+
+        var resolution = await ResolveTerritoryAsync(metadata, cancellationToken);
+        if (resolution.ConflictMessage is not null)
+        {
+            return new BoundaryImportFeatureResult(
+                CreateSkippedImportItem(
+                    metadata,
+                    TerritoryKinds.Country,
+                    resolution.ConflictMessage,
+                    stopwatch.ElapsedMilliseconds),
+                Changed: false,
+                InvalidatesMapCache: false);
+        }
+
+        if (resolution.Territory is null ||
+            !TerritoryMetadataMatchesFeature(resolution.Territory, metadata))
+        {
+            return null;
+        }
+
+        return resolution.Territory.HasValidBoundary &&
+            resolution.Territory.HasValidDisplayBoundary
+            ? new BoundaryImportFeatureResult(
+                CreateSkippedImportItem(
+                    metadata,
+                    TerritoryKinds.Country,
+                    "Existing ADM0 boundary geometry is already valid.",
+                    stopwatch.ElapsedMilliseconds),
+                Changed: false,
+                InvalidatesMapCache: false)
+            : null;
+    }
+
+    private async Task<BoundaryImportFeatureResult?> TryCreateBoundaryCandidateSkipResultAsync(
+        BoundaryFeatureMetadata metadata,
+        string admLevel,
+        bool forceRefresh,
+        Stopwatch stopwatch,
+        CancellationToken cancellationToken)
+    {
+        var normalizedLevel = NormalizeRegionAdmLevel(admLevel);
+        ValidateBoundaryAdmLevel(metadata, normalizedLevel);
+        if (forceRefresh)
+            return null;
+
+        var countryIso3 = CountryRegistry.NormalizeIso3ForBoundaryImport(metadata.Iso3);
+        if (string.IsNullOrWhiteSpace(countryIso3))
+            return null;
+
+        var shapeGroup = CountryRegistry.NormalizeIso3ForBoundaryImport(metadata.ShapeGroup)
+            ?? countryIso3;
+        if (string.IsNullOrWhiteSpace(metadata.ShapeId) ||
+            string.IsNullOrWhiteSpace(metadata.Name))
+        {
+            return null;
+        }
+
+        var shapeId = NormalizeRequiredBoundaryCandidateShapeId(metadata.ShapeId);
+        var shapeName = NormalizeRequiredBoundaryCandidateShapeName(metadata.Name);
+        var externalKey = BuildRegionCandidateExternalKey(normalizedLevel, countryIso3, shapeId, shapeName);
+        var countryTerritoryId = await ResolveCandidateCountryTerritoryIdAsync(countryIso3, cancellationToken);
+
+        var existing = await _db.AdministrativeBoundaryCandidates
+            .AsNoTracking()
+            .Where(candidate =>
+                candidate.ExternalKey == externalKey ||
+                (candidate.Source == GeoBoundariesSource &&
+                 candidate.AdmLevel == normalizedLevel &&
+                 candidate.ShapeGroup == shapeGroup &&
+                 candidate.ShapeId == shapeId))
+            .OrderBy(candidate => candidate.Id)
+            .Select(candidate => new BoundaryCandidateImportRow
+            {
+                Id = candidate.Id,
+                Source = candidate.Source,
+                ReleaseType = candidate.ReleaseType,
+                AdmLevel = candidate.AdmLevel,
+                ShapeGroup = candidate.ShapeGroup,
+                ShapeId = candidate.ShapeId,
+                ShapeName = candidate.ShapeName,
+                ShapeType = candidate.ShapeType,
+                ExternalKey = candidate.ExternalKey,
+                CountryIso3 = candidate.CountryIso3,
+                CountryTerritoryId = candidate.CountryTerritoryId,
+                CreatedAt = candidate.CreatedAt,
+                HasValidBoundary = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName) != null &&
+                    !EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName)!.IsEmpty &&
+                    EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName)!.IsValid,
+                HasValidDisplayBoundary = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName) != null &&
+                    !EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName)!.IsEmpty &&
+                    EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName)!.IsValid &&
+                    EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName) != null &&
+                    !EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)!.IsEmpty &&
+                    EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)!.IsValid &&
+                    (EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName)!.Area <= 0d ||
+                     EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)!.Area >=
+                     EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName)!.Area * 0.85d)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (existing is null ||
+            !BoundaryCandidateMetadataMatches(
+                existing,
+                normalizedLevel,
+                shapeGroup,
+                shapeId,
+                shapeName,
+                metadata.RawShapeType,
+                externalKey,
+                countryIso3,
+                countryTerritoryId) ||
+            !existing.HasValidBoundary ||
+            !existing.HasValidDisplayBoundary)
+        {
+            return null;
+        }
+
+        return new BoundaryImportFeatureResult(
+            new BoundaryImportItemDto
+            {
+                Kind = TerritoryKinds.Country,
+                Iso3 = countryIso3,
+                ShapeGroup = shapeGroup,
+                Name = shapeName,
+                ShapeId = shapeId,
+                ShapeType = metadata.RawShapeType,
+                Status = "Skipped",
+                Message = $"Existing {normalizedLevel} boundary candidate is already valid.",
+                DurationMs = stopwatch.ElapsedMilliseconds
+            },
+            Changed: false,
+            InvalidatesMapCache: false);
     }
 
     private async Task<BoundaryImportSummaryDto> ImportBoundaryCandidatesAsync(
@@ -728,6 +930,12 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         var path = ResolveBoundaryPath(admLevel);
         var summary = CreateSummary(admLevel, BuildSourceReference(path));
         var maxSummaryItems = GetMaxSummaryItems();
+        var saveBatchSize = GetSaveBatchSize();
+        var progressLogInterval = GetProgressLogInterval();
+        var batch = new BoundaryImportBatchState();
+
+        _db.ChangeTracker.Clear();
+        LogImportStarted(admLevel, path, forceRefresh, saveBatchSize, maxSummaryItems);
 
         await ScanFeatureElementsAsync(
             path,
@@ -738,21 +946,33 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
 
                 var stopwatch = Stopwatch.StartNew();
                 var metadata = TryReadBoundaryFeatureMetadata(featureElement);
+                var trackedBeforeFeature = CaptureTrackedEntities();
 
                 try
                 {
-                    var feature = ParseBoundaryFeature(featureElement, admLevel);
-                    var item = await ImportBoundaryCandidateFeatureAsync(
-                        feature,
+                    var result = await TryCreateBoundaryCandidateSkipResultAsync(
+                        metadata,
                         admLevel,
                         forceRefresh,
                         stopwatch,
                         token);
-                    RecordSummaryItem(summary, item, maxSummaryItems);
+
+                    if (result is null)
+                    {
+                        var feature = ParseBoundaryFeature(featureElement, admLevel);
+                        result = await ImportBoundaryCandidateFeatureAsync(
+                            feature,
+                            admLevel,
+                            stopwatch,
+                            token);
+                    }
+
+                    RecordSummaryItem(summary, result.Item, maxSummaryItems);
+                    TrackPendingChange(batch, result);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _db.ChangeTracker.Clear();
+                    DetachTrackedEntriesAddedAfter(trackedBeforeFeature);
                     RecordSummaryItem(
                         summary,
                         CreateFailedImportItem(metadata, ex.Message, stopwatch.ElapsedMilliseconds),
@@ -767,18 +987,21 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                         featureElement);
                 }
 
+                await SaveImportBatchIfNeededAsync(batch, summary, saveBatchSize, token);
+                LogImportProgressIfNeeded(summary, progressLogInterval);
                 return true;
             },
             cancellationToken);
 
-        summary.CompletedAt = DateTime.UtcNow;
+        await SaveImportBatchAsync(batch, summary, cancellationToken);
+        CompleteSummary(summary);
+        LogImportCompleted(summary);
         return summary;
     }
 
-    private async Task<BoundaryImportItemDto> ImportBoundaryCandidateFeatureAsync(
+    private async Task<BoundaryImportFeatureResult> ImportBoundaryCandidateFeatureAsync(
         BoundaryFeature feature,
         string admLevel,
-        bool forceRefresh,
         Stopwatch stopwatch,
         CancellationToken cancellationToken)
     {
@@ -792,7 +1015,8 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         var externalKey = BuildRegionCandidateExternalKey(normalizedLevel, countryIso3, shapeId, shapeName);
         var countryTerritoryId = await ResolveCandidateCountryTerritoryIdAsync(countryIso3, cancellationToken);
 
-        var existingRow = await _db.AdministrativeBoundaryCandidates
+        var existing = await _db.AdministrativeBoundaryCandidates
+            .AsNoTracking()
             .Where(candidate =>
                 candidate.ExternalKey == externalKey ||
                 (candidate.Source == GeoBoundariesSource &&
@@ -800,57 +1024,38 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                  candidate.ShapeGroup == shapeGroup &&
                  candidate.ShapeId == shapeId))
             .OrderBy(candidate => candidate.Id)
-            .Select(candidate => new
+            .Select(candidate => new BoundaryCandidateImportRow
             {
-                Candidate = candidate,
-                BoundaryGeometry = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName),
-                BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
+                Id = candidate.Id,
+                Source = candidate.Source,
+                ReleaseType = candidate.ReleaseType,
+                AdmLevel = candidate.AdmLevel,
+                ShapeGroup = candidate.ShapeGroup,
+                ShapeId = candidate.ShapeId,
+                ShapeName = candidate.ShapeName,
+                ShapeType = candidate.ShapeType,
+                ExternalKey = candidate.ExternalKey,
+                CountryIso3 = candidate.CountryIso3,
+                CountryTerritoryId = candidate.CountryTerritoryId,
+                CreatedAt = candidate.CreatedAt
             })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var existing = existingRow?.Candidate;
-        if (existing is not null &&
-            !forceRefresh &&
-            BoundaryCandidateMetadataMatches(
-                existing,
-                normalizedLevel,
-                shapeGroup,
-                shapeId,
-                shapeName,
-                feature.ShapeType,
-                externalKey,
-                countryIso3,
-                countryTerritoryId) &&
-            IsValidBoundary(existingRow!.BoundaryGeometry) &&
-            TerritoryBoundaryDisplayGeometry.IsValid(
-                existingRow.BoundaryGeometry,
-                existingRow.BoundaryDisplayGeometry))
-        {
-            _db.ChangeTracker.Clear();
-            return new BoundaryImportItemDto
-            {
-                Kind = feature.Kind,
-                Iso3 = countryIso3,
-                ShapeGroup = shapeGroup,
-                Name = shapeName,
-                ShapeId = shapeId,
-                ShapeType = feature.ShapeType,
-                Status = "Skipped",
-                Message = $"Existing {normalizedLevel} boundary candidate is already valid.",
-                DurationMs = stopwatch.ElapsedMilliseconds
-            };
-        }
-
         var now = DateTime.UtcNow;
         var isNew = existing is null;
-        var candidate = existing ?? new AdministrativeBoundaryCandidate
+        var candidate = new AdministrativeBoundaryCandidate
         {
-            CreatedAt = now
+            Id = existing?.Id ?? 0,
+            CreatedAt = existing?.CreatedAt ?? now
         };
 
         if (isNew)
         {
             _db.AdministrativeBoundaryCandidates.Add(candidate);
+        }
+        else
+        {
+            _db.AdministrativeBoundaryCandidates.Attach(candidate);
         }
 
         candidate.Source = GeoBoundariesSource;
@@ -866,40 +1071,43 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         candidate.ImportedAt = now;
         candidate.UpdatedAt = isNew ? null : now;
 
-        var displayGeometry = TerritoryBoundaryDisplayGeometry.Create(feature.Geometry);
-        _db.Entry(candidate)
-            .Property<Geometry?>(BoundaryGeometryPropertyName)
-            .CurrentValue = feature.Geometry;
-        _db.Entry(candidate)
-            .Property<Geometry?>(BoundaryDisplayGeometryPropertyName)
-            .CurrentValue = displayGeometry;
+        var entry = _db.Entry(candidate);
+        if (!isNew)
+        {
+            MarkBoundaryCandidateImportPropertiesModified(entry);
+        }
 
-        await _db.SaveChangesAsync(cancellationToken);
-        _db.ChangeTracker.Clear();
+        var displayGeometry = TerritoryBoundaryDisplayGeometry.Create(feature.Geometry);
+        entry.Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = feature.Geometry;
+        entry.Property<Geometry?>(BoundaryGeometryPropertyName).IsModified = !isNew;
+        entry.Property<Geometry?>(BoundaryDisplayGeometryPropertyName).CurrentValue = displayGeometry;
+        entry.Property<Geometry?>(BoundaryDisplayGeometryPropertyName).IsModified = !isNew;
 
         var status = ResolveImportStatus(isNew, displayGeometry is not null);
-        return new BoundaryImportItemDto
-        {
-            Kind = feature.Kind,
-            Iso3 = countryIso3,
-            ShapeGroup = shapeGroup,
-            Name = shapeName,
-            ShapeId = shapeId,
-            ShapeType = feature.ShapeType,
-            Status = status,
-            Message = displayGeometry is null
-                ? $"Stored {normalizedLevel} boundary candidate for validation, but display geometry could not be generated and must be rebuilt."
-                : isNew
-                    ? $"Stored {normalizedLevel} boundary candidate."
-                    : $"Updated {normalizedLevel} boundary candidate.",
-            DurationMs = stopwatch.ElapsedMilliseconds
-        };
+        return new BoundaryImportFeatureResult(
+            new BoundaryImportItemDto
+            {
+                Kind = feature.Kind,
+                Iso3 = countryIso3,
+                ShapeGroup = shapeGroup,
+                Name = shapeName,
+                ShapeId = shapeId,
+                ShapeType = feature.ShapeType,
+                Status = status,
+                Message = displayGeometry is null
+                    ? $"Stored {normalizedLevel} boundary candidate for validation, but display geometry could not be generated and must be rebuilt."
+                    : isNew
+                        ? $"Stored {normalizedLevel} boundary candidate."
+                        : $"Updated {normalizedLevel} boundary candidate.",
+                DurationMs = stopwatch.ElapsedMilliseconds
+            },
+            Changed: true,
+            InvalidatesMapCache: false);
     }
 
-    private async Task<BoundaryImportItemDto> ImportAdm0FeatureAsync(
+    private async Task<BoundaryImportFeatureResult> ImportAdm0FeatureAsync(
         BoundaryFeature feature,
         string sourceReference,
-        bool forceRefresh,
         Stopwatch stopwatch,
         CancellationToken cancellationToken)
     {
@@ -908,7 +1116,6 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             return await ImportDisputedFeatureAsync(
                 feature,
                 sourceReference,
-                forceRefresh,
                 stopwatch,
                 cancellationToken);
         }
@@ -916,58 +1123,36 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         var territoryResolution = await ResolveTerritoryAsync(feature, cancellationToken);
         if (territoryResolution.ConflictMessage is not null)
         {
-            _db.ChangeTracker.Clear();
-            return CreateSkippedImportItem(feature, territoryResolution.ConflictMessage, stopwatch.ElapsedMilliseconds);
+            return new BoundaryImportFeatureResult(
+                CreateSkippedImportItem(feature, territoryResolution.ConflictMessage, stopwatch.ElapsedMilliseconds),
+                Changed: false,
+                InvalidatesMapCache: false);
         }
 
-        var territory = territoryResolution.Territory;
-
-        if (territory is not null)
-        {
-            EnsureTerritoryMatchesFeature(territory, feature);
-            var existingGeometry = await _db.Territories
-                .Where(item => item.Id == territory.Id)
-                .Select(item => new
-                {
-                    BoundaryGeometry = EF.Property<Geometry?>(item, BoundaryGeometryPropertyName),
-                    BoundaryDisplayGeometry = EF.Property<Geometry?>(item, BoundaryDisplayGeometryPropertyName)
-                })
-                .SingleAsync(cancellationToken);
-
-            if (!forceRefresh &&
-                IsValidBoundary(existingGeometry.BoundaryGeometry) &&
-                TerritoryBoundaryDisplayGeometry.IsValid(
-                    existingGeometry.BoundaryGeometry,
-                    existingGeometry.BoundaryDisplayGeometry))
-            {
-                _db.ChangeTracker.Clear();
-                return new BoundaryImportItemDto
-                {
-                    Kind = TerritoryKinds.Country,
-                    Iso3 = feature.Iso3,
-                    ShapeGroup = feature.ShapeGroup,
-                    Name = feature.Name,
-                    ShapeId = feature.ShapeId,
-                    ShapeType = feature.ShapeType,
-                    Status = "Skipped",
-                    Message = "Existing ADM0 boundary geometry is already valid.",
-                    DurationMs = stopwatch.ElapsedMilliseconds
-                };
-            }
-        }
+        var existing = territoryResolution.Territory;
+        if (existing is not null)
+            EnsureTerritoryMatchesFeature(existing, feature);
 
         var now = DateTime.UtcNow;
-        var isNewTerritory = territory is null;
+        var isNewTerritory = existing is null;
 
-        if (territory is null)
+        var territory = new Territory
         {
-            territory = new Territory
-            {
-                Name = feature.Name,
-                TerritoryKind = TerritoryKinds.Country,
-                CreatedAt = now
-            };
+            Id = existing?.Id ?? 0,
+            Name = existing?.Name ?? feature.Name,
+            TerritoryKind = existing?.TerritoryKind ?? TerritoryKinds.Country,
+            CountryCode = existing?.CountryCode,
+            CountryIso3 = existing?.CountryIso3,
+            CreatedAt = existing?.CreatedAt ?? now
+        };
+
+        if (isNewTerritory)
+        {
             _db.Territories.Add(territory);
+        }
+        else
+        {
+            _db.Territories.Attach(territory);
         }
 
         territory.CountryCode = ResolveCountryIso2ForImport(territory, feature);
@@ -994,42 +1179,44 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             territory.Name = feature.Name;
         }
 
+        var entry = _db.Entry(territory);
+        if (!isNewTerritory)
+        {
+            MarkTerritoryImportPropertiesModified(entry);
+        }
+
         var displayGeometry = TerritoryBoundaryDisplayGeometry.Create(feature.Geometry);
 
-        _db.Entry(territory)
-            .Property<Geometry?>(BoundaryGeometryPropertyName)
-            .CurrentValue = feature.Geometry;
-        _db.Entry(territory)
-            .Property<Geometry?>(BoundaryDisplayGeometryPropertyName)
-            .CurrentValue = displayGeometry;
-
-        await _db.SaveChangesAsync(cancellationToken);
-        _db.ChangeTracker.Clear();
-        TerritoryMapBoundaryCache.Invalidate(_cache);
+        entry.Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = feature.Geometry;
+        entry.Property<Geometry?>(BoundaryGeometryPropertyName).IsModified = !isNewTerritory;
+        entry.Property<Geometry?>(BoundaryDisplayGeometryPropertyName).CurrentValue = displayGeometry;
+        entry.Property<Geometry?>(BoundaryDisplayGeometryPropertyName).IsModified = !isNewTerritory;
 
         var status = ResolveImportStatus(isNewTerritory, displayGeometry is not null);
-        return new BoundaryImportItemDto
-        {
-            Kind = TerritoryKinds.Country,
-            Iso3 = feature.Iso3,
-            ShapeGroup = feature.ShapeGroup,
-            Name = feature.Name,
-            ShapeId = feature.ShapeId,
-            ShapeType = feature.ShapeType,
-            Status = status,
-            Message = displayGeometry is null
-                ? "Stored ADM0 boundary geometry for validation, but display geometry could not be generated and must be rebuilt."
-                : isNewTerritory
-                    ? "Created territory and stored ADM0 boundary geometry."
-                    : "Updated territory ADM0 boundary geometry.",
-            DurationMs = stopwatch.ElapsedMilliseconds
-        };
+        return new BoundaryImportFeatureResult(
+            new BoundaryImportItemDto
+            {
+                Kind = TerritoryKinds.Country,
+                Iso3 = feature.Iso3,
+                ShapeGroup = feature.ShapeGroup,
+                Name = feature.Name,
+                ShapeId = feature.ShapeId,
+                ShapeType = feature.ShapeType,
+                Status = status,
+                Message = displayGeometry is null
+                    ? "Stored ADM0 boundary geometry for validation, but display geometry could not be generated and must be rebuilt."
+                    : isNewTerritory
+                        ? "Created territory and stored ADM0 boundary geometry."
+                        : "Updated territory ADM0 boundary geometry.",
+                DurationMs = stopwatch.ElapsedMilliseconds
+            },
+            Changed: true,
+            InvalidatesMapCache: true);
     }
 
-    private async Task<BoundaryImportItemDto> ImportDisputedFeatureAsync(
+    private async Task<BoundaryImportFeatureResult> ImportDisputedFeatureAsync(
         BoundaryFeature feature,
         string sourceReference,
-        bool forceRefresh,
         Stopwatch stopwatch,
         CancellationToken cancellationToken)
     {
@@ -1037,57 +1224,34 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         var territoryResolution = await ResolveDisputedTerritoryAsync(feature, externalKey, cancellationToken);
         if (territoryResolution.ConflictMessage is not null)
         {
-            _db.ChangeTracker.Clear();
-            return CreateSkippedImportItem(feature, territoryResolution.ConflictMessage, stopwatch.ElapsedMilliseconds);
+            return new BoundaryImportFeatureResult(
+                CreateSkippedImportItem(feature, territoryResolution.ConflictMessage, stopwatch.ElapsedMilliseconds),
+                Changed: false,
+                InvalidatesMapCache: false);
         }
 
-        var territory = territoryResolution.Territory;
-
-        if (territory is not null)
-        {
-            var existingGeometry = await _db.Territories
-                .Where(item => item.Id == territory.Id)
-                .Select(item => new
-                {
-                    BoundaryGeometry = EF.Property<Geometry?>(item, BoundaryGeometryPropertyName),
-                    BoundaryDisplayGeometry = EF.Property<Geometry?>(item, BoundaryDisplayGeometryPropertyName)
-                })
-                .SingleAsync(cancellationToken);
-
-            if (!forceRefresh &&
-                IsValidBoundary(existingGeometry.BoundaryGeometry) &&
-                TerritoryBoundaryDisplayGeometry.IsValid(
-                    existingGeometry.BoundaryGeometry,
-                    existingGeometry.BoundaryDisplayGeometry))
-            {
-                _db.ChangeTracker.Clear();
-                return new BoundaryImportItemDto
-                {
-                    Kind = TerritoryKinds.DisputedTerritory,
-                    Iso3 = null,
-                    ShapeGroup = feature.ShapeGroup,
-                    Name = feature.Name,
-                    ShapeId = feature.ShapeId,
-                    ShapeType = feature.ShapeType,
-                    Status = "Skipped",
-                    Message = "Existing disputed boundary geometry is already valid.",
-                    DurationMs = stopwatch.ElapsedMilliseconds
-                };
-            }
-        }
+        var existing = territoryResolution.Territory;
 
         var now = DateTime.UtcNow;
-        var isNewTerritory = territory is null;
+        var isNewTerritory = existing is null;
 
-        if (territory is null)
+        var territory = new Territory
         {
-            territory = new Territory
-            {
-                Name = feature.Name,
-                TerritoryKind = TerritoryKinds.DisputedTerritory,
-                CreatedAt = now
-            };
+            Id = existing?.Id ?? 0,
+            Name = existing?.Name ?? feature.Name,
+            TerritoryKind = existing?.TerritoryKind ?? TerritoryKinds.DisputedTerritory,
+            CountryCode = existing?.CountryCode,
+            CountryIso3 = existing?.CountryIso3,
+            CreatedAt = existing?.CreatedAt ?? now
+        };
+
+        if (isNewTerritory)
+        {
             _db.Territories.Add(territory);
+        }
+        else
+        {
+            _db.Territories.Attach(territory);
         }
 
         territory.TerritoryKind = TerritoryKinds.DisputedTerritory;
@@ -1114,36 +1278,116 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             territory.Name = feature.Name;
         }
 
+        var entry = _db.Entry(territory);
+        if (!isNewTerritory)
+        {
+            MarkTerritoryImportPropertiesModified(entry);
+        }
+
         var displayGeometry = TerritoryBoundaryDisplayGeometry.Create(feature.Geometry);
 
-        _db.Entry(territory)
-            .Property<Geometry?>(BoundaryGeometryPropertyName)
-            .CurrentValue = feature.Geometry;
-        _db.Entry(territory)
-            .Property<Geometry?>(BoundaryDisplayGeometryPropertyName)
-            .CurrentValue = displayGeometry;
-
-        await _db.SaveChangesAsync(cancellationToken);
-        _db.ChangeTracker.Clear();
-        TerritoryMapBoundaryCache.Invalidate(_cache);
+        entry.Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = feature.Geometry;
+        entry.Property<Geometry?>(BoundaryGeometryPropertyName).IsModified = !isNewTerritory;
+        entry.Property<Geometry?>(BoundaryDisplayGeometryPropertyName).CurrentValue = displayGeometry;
+        entry.Property<Geometry?>(BoundaryDisplayGeometryPropertyName).IsModified = !isNewTerritory;
 
         var status = ResolveImportStatus(isNewTerritory, displayGeometry is not null);
-        return new BoundaryImportItemDto
+        return new BoundaryImportFeatureResult(
+            new BoundaryImportItemDto
+            {
+                Kind = TerritoryKinds.DisputedTerritory,
+                Iso3 = null,
+                ShapeGroup = feature.ShapeGroup,
+                Name = feature.Name,
+                ShapeId = feature.ShapeId,
+                ShapeType = feature.ShapeType,
+                Status = status,
+                Message = displayGeometry is null
+                    ? "Stored disputed boundary geometry for validation, but display geometry could not be generated and must be rebuilt."
+                    : isNewTerritory
+                        ? "Created disputed territory and stored DISP boundary geometry."
+                        : "Updated disputed territory DISP boundary geometry.",
+                DurationMs = stopwatch.ElapsedMilliseconds
+            },
+            Changed: true,
+            InvalidatesMapCache: true);
+    }
+
+    private async Task<TerritoryResolution> ResolveTerritoryAsync(
+        BoundaryFeatureMetadata metadata,
+        CancellationToken cancellationToken)
+    {
+        var iso3 = metadata.Iso3;
+        var iso2 = CountryRegistry.ToIso2ForBoundaryImport(iso3);
+        var name = ResolveCountryNameForMetadata(metadata);
+        var normalizedName = name.ToLowerInvariant();
+
+        var territory = !string.IsNullOrWhiteSpace(iso3)
+            ? await SelectTerritoryImportRows(_db.Territories.AsNoTracking()
+                    .Where(item =>
+                        item.TerritoryKind == TerritoryKinds.Country &&
+                        item.CountryIso3 == iso3))
+                .OrderBy(item => item.Id)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
+        if (territory is not null)
+            return new TerritoryResolution(territory, null);
+
+        var aliasCandidates = CountryRegistry.BoundaryImportIsoAliases(iso3);
+        if (aliasCandidates.Count > 1)
         {
-            Kind = TerritoryKinds.DisputedTerritory,
-            Iso3 = null,
-            ShapeGroup = feature.ShapeGroup,
-            Name = feature.Name,
-            ShapeId = feature.ShapeId,
-            ShapeType = feature.ShapeType,
-            Status = status,
-            Message = displayGeometry is null
-                ? "Stored disputed boundary geometry for validation, but display geometry could not be generated and must be rebuilt."
-                : isNewTerritory
-                    ? "Created disputed territory and stored DISP boundary geometry."
-                    : "Updated disputed territory DISP boundary geometry.",
-            DurationMs = stopwatch.ElapsedMilliseconds
-        };
+            var candidates = await SelectTerritoryImportRows(_db.Territories.AsNoTracking()
+                    .Where(item =>
+                        item.TerritoryKind == TerritoryKinds.Country &&
+                        ((item.CountryIso3 != null && aliasCandidates.Contains(item.CountryIso3)) ||
+                         item.CountryCode == "XK" ||
+                         item.Name.ToLower().Contains("kosov"))))
+                .OrderBy(item => item.Id)
+                .ToListAsync(cancellationToken);
+
+            territory = candidates.FirstOrDefault(item => IsKnownKosovoTerritoryMetadataMatch(item, metadata));
+            if (territory is not null)
+                return new TerritoryResolution(territory, null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(iso2))
+        {
+            territory = await SelectTerritoryImportRows(_db.Territories.AsNoTracking()
+                    .Where(item =>
+                        item.TerritoryKind == TerritoryKinds.Country &&
+                        item.CountryCode == iso2))
+                .OrderBy(item => item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (territory is not null)
+                return new TerritoryResolution(territory, null);
+        }
+
+        territory = await SelectTerritoryImportRows(_db.Territories.AsNoTracking()
+                .Where(item =>
+                    item.TerritoryKind == TerritoryKinds.Country &&
+                    item.Name.ToLower() == normalizedName))
+            .OrderBy(item => item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (territory is not null)
+            return new TerritoryResolution(territory, null);
+
+        var sameName = await SelectTerritoryImportRows(_db.Territories.AsNoTracking()
+                .Where(item => item.Name.ToLower() == normalizedName))
+            .OrderBy(item => item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (sameName is null)
+            return new TerritoryResolution(null, null);
+
+        if (IsSafeNameFallback(sameName))
+            return new TerritoryResolution(sameName, null);
+
+        return new TerritoryResolution(
+            null,
+            $"Skipped because an existing {sameName.TerritoryKind} territory already uses the name '{sameName.Name}'.");
     }
 
     private async Task<TerritoryResolution> ResolveTerritoryAsync(
@@ -1154,12 +1398,21 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
 
         var territory = !string.IsNullOrWhiteSpace(feature.Iso3)
             ? await _db.Territories
+                .AsNoTracking()
+                .Where(item =>
+                    item.TerritoryKind == TerritoryKinds.Country &&
+                    item.CountryIso3 == feature.Iso3)
                 .OrderBy(item => item.Id)
-                .FirstOrDefaultAsync(
-                    item =>
-                        item.TerritoryKind == TerritoryKinds.Country &&
-                        item.CountryIso3 == feature.Iso3,
-                    cancellationToken)
+                .Select(item => new TerritoryImportRow
+                {
+                    Id = item.Id,
+                    Name = item.Name,
+                    TerritoryKind = item.TerritoryKind,
+                    CountryCode = item.CountryCode,
+                    CountryIso3 = item.CountryIso3,
+                    CreatedAt = item.CreatedAt
+                })
+                .FirstOrDefaultAsync(cancellationToken)
             : null;
 
         if (territory is not null)
@@ -1169,12 +1422,22 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         if (aliasCandidates.Count > 1)
         {
             var candidates = await _db.Territories
-                .OrderBy(item => item.Id)
+                .AsNoTracking()
                 .Where(item =>
                     item.TerritoryKind == TerritoryKinds.Country &&
                     ((item.CountryIso3 != null && aliasCandidates.Contains(item.CountryIso3)) ||
                      item.CountryCode == "XK" ||
                      item.Name.ToLower().Contains("kosov")))
+                .OrderBy(item => item.Id)
+                .Select(item => new TerritoryImportRow
+                {
+                    Id = item.Id,
+                    Name = item.Name,
+                    TerritoryKind = item.TerritoryKind,
+                    CountryCode = item.CountryCode,
+                    CountryIso3 = item.CountryIso3,
+                    CreatedAt = item.CreatedAt
+                })
                 .ToListAsync(cancellationToken);
 
             territory = candidates.FirstOrDefault(item => IsKnownKosovoTerritoryFeatureMatch(item, feature));
@@ -1185,33 +1448,62 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         if (!string.IsNullOrWhiteSpace(feature.Iso2))
         {
             territory = await _db.Territories
+                .AsNoTracking()
+                .Where(item =>
+                    item.TerritoryKind == TerritoryKinds.Country &&
+                    item.CountryCode == feature.Iso2)
                 .OrderBy(item => item.Id)
-                .FirstOrDefaultAsync(
-                    item =>
-                        item.TerritoryKind == TerritoryKinds.Country &&
-                        item.CountryCode == feature.Iso2,
-                    cancellationToken);
+                .Select(item => new TerritoryImportRow
+                {
+                    Id = item.Id,
+                    Name = item.Name,
+                    TerritoryKind = item.TerritoryKind,
+                    CountryCode = item.CountryCode,
+                    CountryIso3 = item.CountryIso3,
+                    CreatedAt = item.CreatedAt
+                })
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (territory is not null)
                 return new TerritoryResolution(territory, null);
         }
 
         territory = await _db.Territories
+            .AsNoTracking()
+            .Where(item =>
+                item.TerritoryKind == TerritoryKinds.Country &&
+                item.Name.ToLower() == normalizedName)
             .OrderBy(item => item.Id)
-            .FirstOrDefaultAsync(
-                item =>
-                    item.TerritoryKind == TerritoryKinds.Country &&
-                    item.Name.ToLower() == normalizedName,
-                cancellationToken);
+            .Select(item => new TerritoryImportRow
+            {
+                Id = item.Id,
+                Name = item.Name,
+                TerritoryKind = item.TerritoryKind,
+                CountryCode = item.CountryCode,
+                CountryIso3 = item.CountryIso3,
+                CreatedAt = item.CreatedAt
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (territory is not null)
             return new TerritoryResolution(territory, null);
 
         var sameName = await _db.Territories
-            .Include(item => item.Regions)
-            .Include(item => item.TerritoryManagerTerritories)
+            .AsNoTracking()
+            .Where(item => item.Name.ToLower() == normalizedName)
             .OrderBy(item => item.Id)
-            .FirstOrDefaultAsync(item => item.Name.ToLower() == normalizedName, cancellationToken);
+            .Select(item => new TerritoryImportRow
+            {
+                Id = item.Id,
+                Name = item.Name,
+                TerritoryKind = item.TerritoryKind,
+                CountryCode = item.CountryCode,
+                CountryIso3 = item.CountryIso3,
+                CreatedAt = item.CreatedAt,
+                RegionCount = item.Regions.Count,
+                TerritoryManagerAssignmentCount = item.TerritoryManagerTerritories.Count
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (sameName is null)
             return new TerritoryResolution(null, null);
@@ -1225,56 +1517,57 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     }
 
     private async Task<TerritoryResolution> ResolveDisputedTerritoryAsync(
-        BoundaryFeature feature,
+        BoundaryFeatureMetadata metadata,
         string externalKey,
         CancellationToken cancellationToken)
     {
-        var normalizedName = feature.Name.ToLowerInvariant();
-        var shapeGroup = feature.ShapeGroup;
-        var shapeType = NormalizeDisputedShapeType(feature.ShapeType);
+        var name = FirstNonEmpty(
+            metadata.Name,
+            metadata.ShapeGroup,
+            metadata.ShapeId,
+            "Disputed territory");
+        var normalizedName = name.ToLowerInvariant();
+        var shapeGroup = metadata.ShapeGroup;
+        var shapeType = NormalizeDisputedShapeType(metadata.RawShapeType);
 
-        var territory = await _db.Territories
-            .OrderBy(item => item.Id)
-            .FirstOrDefaultAsync(
-                item =>
+        var territory = await SelectTerritoryImportRows(_db.Territories.AsNoTracking()
+                .Where(item =>
                     item.TerritoryKind == TerritoryKinds.DisputedTerritory &&
-                    item.BoundaryExternalKey == externalKey,
-                cancellationToken);
+                    item.BoundaryExternalKey == externalKey))
+            .OrderBy(item => item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (territory is not null)
             return new TerritoryResolution(territory, null);
 
         if (!string.IsNullOrWhiteSpace(shapeGroup))
         {
-            territory = await _db.Territories
-                .OrderBy(item => item.Id)
-                .FirstOrDefaultAsync(
-                    item =>
+            territory = await SelectTerritoryImportRows(_db.Territories.AsNoTracking()
+                    .Where(item =>
                         item.TerritoryKind == TerritoryKinds.DisputedTerritory &&
                         item.BoundaryShapeGroup == shapeGroup &&
-                        (item.BoundaryShapeType == shapeType || item.BoundaryAdmLevel == DisputedAdmLevel),
-                    cancellationToken);
+                        (item.BoundaryShapeType == shapeType || item.BoundaryAdmLevel == DisputedAdmLevel)))
+                .OrderBy(item => item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (territory is not null)
                 return new TerritoryResolution(territory, null);
         }
 
-        territory = await _db.Territories
-            .OrderBy(item => item.Id)
-            .FirstOrDefaultAsync(
-                item =>
+        territory = await SelectTerritoryImportRows(_db.Territories.AsNoTracking()
+                .Where(item =>
                     item.TerritoryKind == TerritoryKinds.DisputedTerritory &&
-                    item.Name.ToLower() == normalizedName,
-                cancellationToken);
+                    item.Name.ToLower() == normalizedName))
+            .OrderBy(item => item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (territory is not null)
             return new TerritoryResolution(territory, null);
 
-        var sameName = await _db.Territories
-            .Include(item => item.Regions)
-            .Include(item => item.TerritoryManagerTerritories)
+        var sameName = await SelectTerritoryImportRows(_db.Territories.AsNoTracking()
+                .Where(item => item.Name.ToLower() == normalizedName))
             .OrderBy(item => item.Id)
-            .FirstOrDefaultAsync(item => item.Name.ToLower() == normalizedName, cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (sameName is null)
             return new TerritoryResolution(null, null);
@@ -1287,7 +1580,154 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             $"Skipped because an existing {sameName.TerritoryKind} territory already uses the name '{sameName.Name}'.");
     }
 
-    private static void EnsureTerritoryMatchesFeature(Territory territory, BoundaryFeature feature)
+    private IQueryable<TerritoryImportRow> SelectTerritoryImportRows(IQueryable<Territory> query) =>
+        query.Select(item => new TerritoryImportRow
+        {
+            Id = item.Id,
+            Name = item.Name,
+            TerritoryKind = item.TerritoryKind,
+            CountryCode = item.CountryCode,
+            CountryIso3 = item.CountryIso3,
+            BoundaryShapeType = item.BoundaryShapeType,
+            BoundaryShapeGroup = item.BoundaryShapeGroup,
+            BoundaryShapeId = item.BoundaryShapeId,
+            BoundaryExternalKey = item.BoundaryExternalKey,
+            BoundaryAdmLevel = item.BoundaryAdmLevel,
+            CreatedAt = item.CreatedAt,
+            RegionCount = item.Regions.Count,
+            TerritoryManagerAssignmentCount = item.TerritoryManagerTerritories.Count,
+            HasValidBoundary = EF.Property<Geometry?>(item, BoundaryGeometryPropertyName) != null &&
+                !EF.Property<Geometry?>(item, BoundaryGeometryPropertyName)!.IsEmpty &&
+                EF.Property<Geometry?>(item, BoundaryGeometryPropertyName)!.IsValid,
+            HasValidDisplayBoundary = EF.Property<Geometry?>(item, BoundaryGeometryPropertyName) != null &&
+                !EF.Property<Geometry?>(item, BoundaryGeometryPropertyName)!.IsEmpty &&
+                EF.Property<Geometry?>(item, BoundaryGeometryPropertyName)!.IsValid &&
+                EF.Property<Geometry?>(item, BoundaryDisplayGeometryPropertyName) != null &&
+                !EF.Property<Geometry?>(item, BoundaryDisplayGeometryPropertyName)!.IsEmpty &&
+                EF.Property<Geometry?>(item, BoundaryDisplayGeometryPropertyName)!.IsValid &&
+                (EF.Property<Geometry?>(item, BoundaryGeometryPropertyName)!.Area <= 0d ||
+                 EF.Property<Geometry?>(item, BoundaryDisplayGeometryPropertyName)!.Area >=
+                 EF.Property<Geometry?>(item, BoundaryGeometryPropertyName)!.Area * 0.85d)
+        });
+
+    private async Task<TerritoryResolution> ResolveDisputedTerritoryAsync(
+        BoundaryFeature feature,
+        string externalKey,
+        CancellationToken cancellationToken)
+    {
+        var normalizedName = feature.Name.ToLowerInvariant();
+        var shapeGroup = feature.ShapeGroup;
+        var shapeType = NormalizeDisputedShapeType(feature.ShapeType);
+
+        var territory = await _db.Territories
+            .AsNoTracking()
+            .Where(item =>
+                item.TerritoryKind == TerritoryKinds.DisputedTerritory &&
+                item.BoundaryExternalKey == externalKey)
+            .OrderBy(item => item.Id)
+            .Select(item => new TerritoryImportRow
+            {
+                Id = item.Id,
+                Name = item.Name,
+                TerritoryKind = item.TerritoryKind,
+                CountryCode = item.CountryCode,
+                CountryIso3 = item.CountryIso3,
+                CreatedAt = item.CreatedAt,
+                BoundaryShapeGroup = item.BoundaryShapeGroup,
+                BoundaryShapeType = item.BoundaryShapeType,
+                BoundaryAdmLevel = item.BoundaryAdmLevel,
+                BoundaryExternalKey = item.BoundaryExternalKey
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (territory is not null)
+            return new TerritoryResolution(territory, null);
+
+        if (!string.IsNullOrWhiteSpace(shapeGroup))
+        {
+            territory = await _db.Territories
+                .AsNoTracking()
+                .Where(item =>
+                    item.TerritoryKind == TerritoryKinds.DisputedTerritory &&
+                    item.BoundaryShapeGroup == shapeGroup &&
+                    (item.BoundaryShapeType == shapeType || item.BoundaryAdmLevel == DisputedAdmLevel))
+                .OrderBy(item => item.Id)
+                .Select(item => new TerritoryImportRow
+                {
+                    Id = item.Id,
+                    Name = item.Name,
+                    TerritoryKind = item.TerritoryKind,
+                    CountryCode = item.CountryCode,
+                    CountryIso3 = item.CountryIso3,
+                    CreatedAt = item.CreatedAt,
+                    BoundaryShapeGroup = item.BoundaryShapeGroup,
+                    BoundaryShapeType = item.BoundaryShapeType,
+                    BoundaryAdmLevel = item.BoundaryAdmLevel,
+                    BoundaryExternalKey = item.BoundaryExternalKey
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (territory is not null)
+                return new TerritoryResolution(territory, null);
+        }
+
+        territory = await _db.Territories
+            .AsNoTracking()
+            .Where(item =>
+                item.TerritoryKind == TerritoryKinds.DisputedTerritory &&
+                item.Name.ToLower() == normalizedName)
+            .OrderBy(item => item.Id)
+            .Select(item => new TerritoryImportRow
+            {
+                Id = item.Id,
+                Name = item.Name,
+                TerritoryKind = item.TerritoryKind,
+                CountryCode = item.CountryCode,
+                CountryIso3 = item.CountryIso3,
+                CreatedAt = item.CreatedAt,
+                BoundaryShapeGroup = item.BoundaryShapeGroup,
+                BoundaryShapeType = item.BoundaryShapeType,
+                BoundaryAdmLevel = item.BoundaryAdmLevel,
+                BoundaryExternalKey = item.BoundaryExternalKey
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (territory is not null)
+            return new TerritoryResolution(territory, null);
+
+        var sameName = await _db.Territories
+            .AsNoTracking()
+            .Where(item => item.Name.ToLower() == normalizedName)
+            .OrderBy(item => item.Id)
+            .Select(item => new TerritoryImportRow
+            {
+                Id = item.Id,
+                Name = item.Name,
+                TerritoryKind = item.TerritoryKind,
+                CountryCode = item.CountryCode,
+                CountryIso3 = item.CountryIso3,
+                CreatedAt = item.CreatedAt,
+                BoundaryShapeGroup = item.BoundaryShapeGroup,
+                BoundaryShapeType = item.BoundaryShapeType,
+                BoundaryAdmLevel = item.BoundaryAdmLevel,
+                BoundaryExternalKey = item.BoundaryExternalKey,
+                RegionCount = item.Regions.Count,
+                TerritoryManagerAssignmentCount = item.TerritoryManagerTerritories.Count
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (sameName is null)
+            return new TerritoryResolution(null, null);
+
+        if (IsSafeNameFallback(sameName))
+            return new TerritoryResolution(sameName, null);
+
+        return new TerritoryResolution(
+            null,
+            $"Skipped because an existing {sameName.TerritoryKind} territory already uses the name '{sameName.Name}'.");
+    }
+
+    private static void EnsureTerritoryMatchesFeature(TerritoryImportRow territory, BoundaryFeature feature)
     {
         if (!string.IsNullOrWhiteSpace(territory.CountryIso3) &&
             !BoundaryImportIsoCodesMatch(territory.CountryIso3, feature.Iso3) &&
@@ -1303,6 +1743,40 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         {
             throw new InvalidOperationException("Local boundary ISO2 code does not match the existing territory.");
         }
+    }
+
+    private static bool TerritoryMetadataMatchesFeature(
+        TerritoryImportRow territory,
+        BoundaryFeatureMetadata metadata)
+    {
+        var iso2 = CountryRegistry.ToIso2ForBoundaryImport(metadata.Iso3);
+
+        if (!string.IsNullOrWhiteSpace(territory.CountryIso3) &&
+            !BoundaryImportIsoCodesMatch(territory.CountryIso3, metadata.Iso3) &&
+            !IsKnownKosovoTerritoryMetadataMatch(territory, metadata))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(territory.CountryCode) &&
+            !string.IsNullOrWhiteSpace(iso2) &&
+            !BoundaryImportIsoCodesMatch(territory.CountryCode, iso2) &&
+            !IsKnownKosovoTerritoryMetadataMatch(territory, metadata))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string ResolveCountryNameForMetadata(BoundaryFeatureMetadata metadata)
+    {
+        var iso3 = metadata.Iso3;
+        return FirstNonEmpty(
+            metadata.Name,
+            CountryRegistry.IsKosovoIsoAlias(iso3) ? "Kosovo" : null,
+            CountryRegistry.FindByIso3(iso3)?.Name,
+            iso3);
     }
 
     private static string? ResolveCountryIso3ForImport(Territory territory, BoundaryFeature feature)
@@ -1343,9 +1817,39 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             CountryRegistry.IsKosovoName(territory.Name);
     }
 
-    private static bool IsSafeNameFallback(Territory territory) =>
-        territory.Regions.Count == 0 &&
-        territory.TerritoryManagerTerritories.Count == 0;
+    private static bool IsKnownKosovoTerritoryFeatureMatch(TerritoryImportRow territory, BoundaryFeature feature)
+    {
+        if (!CountryRegistry.IsKosovoIsoAlias(feature.Iso3) &&
+            !CountryRegistry.IsKosovoIsoAlias(feature.ShapeGroup) &&
+            !CountryRegistry.IsKosovoName(feature.Name))
+        {
+            return false;
+        }
+
+        return CountryRegistry.IsKosovoIsoAlias(territory.CountryIso3) ||
+            CountryRegistry.IsKosovoIsoAlias(territory.CountryCode) ||
+            CountryRegistry.IsKosovoName(territory.Name);
+    }
+
+    private static bool IsKnownKosovoTerritoryMetadataMatch(
+        TerritoryImportRow territory,
+        BoundaryFeatureMetadata metadata)
+    {
+        if (!CountryRegistry.IsKosovoIsoAlias(metadata.Iso3) &&
+            !CountryRegistry.IsKosovoIsoAlias(metadata.ShapeGroup) &&
+            !CountryRegistry.IsKosovoName(metadata.Name))
+        {
+            return false;
+        }
+
+        return CountryRegistry.IsKosovoIsoAlias(territory.CountryIso3) ||
+            CountryRegistry.IsKosovoIsoAlias(territory.CountryCode) ||
+            CountryRegistry.IsKosovoName(territory.Name);
+    }
+
+    private static bool IsSafeNameFallback(TerritoryImportRow territory) =>
+        territory.RegionCount == 0 &&
+        territory.TerritoryManagerAssignmentCount == 0;
 
     private static string ResolveImportStatus(bool isNewTerritory, bool hasDisplayGeometry) =>
         isNewTerritory
@@ -1364,6 +1868,26 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             Name = feature.Name,
             ShapeId = feature.ShapeId,
             ShapeType = feature.ShapeType,
+            Status = "Skipped",
+            Message = message,
+            DurationMs = durationMs
+        };
+
+    private static BoundaryImportItemDto CreateSkippedImportItem(
+        BoundaryFeatureMetadata metadata,
+        string kind,
+        string message,
+        long durationMs) =>
+        new()
+        {
+            Kind = kind,
+            Iso3 = IsDisputedKind(kind) ? null : metadata.Iso3,
+            ShapeGroup = metadata.ShapeGroup,
+            Name = IsDisputedKind(kind)
+                ? FirstNonEmpty(metadata.Name, metadata.ShapeGroup, metadata.ShapeId)
+                : ResolveCountryNameForMetadata(metadata),
+            ShapeId = metadata.ShapeId,
+            ShapeType = metadata.RawShapeType,
             Status = "Skipped",
             Message = message,
             DurationMs = durationMs
@@ -1497,7 +2021,7 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         }
 
         var geometry = ExtractGeometry(geometryElement);
-        geometry = ToValidPolygonalGeometry(geometry)
+        geometry = ToValidPolygonalGeometry(geometry, copyWhenAlreadyValid: false)
             ?? throw new InvalidOperationException("Boundary feature geometry is invalid.");
 
         if (normalizedExpectedAdmLevel == "ADM0" && IsDisputedShapeType(metadata))
@@ -1658,6 +2182,17 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         return key.Length > 300 ? key[..300] : key;
     }
 
+    private static string BuildBoundaryExternalKey(BoundaryFeatureMetadata metadata)
+    {
+        var sourceKey = IsDisputedShapeType(metadata)
+            ? FirstNonEmpty(metadata.ShapeGroup, metadata.ShapeId, metadata.Name)
+            : metadata.Iso3 ?? FirstNonEmpty(metadata.ShapeGroup, metadata.Name);
+        var level = IsDisputedShapeType(metadata) ? DisputedAdmLevel : "ADM0";
+        var key = $"{GeoBoundariesSource}:{level}:{sourceKey}";
+
+        return key.Length > 300 ? key[..300] : key;
+    }
+
     internal static string BuildRegionCandidateExternalKey(
         string admLevel,
         string iso3,
@@ -1695,7 +2230,7 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     }
 
     private static bool BoundaryCandidateMetadataMatches(
-        AdministrativeBoundaryCandidate candidate,
+        BoundaryCandidateImportRow candidate,
         string admLevel,
         string shapeGroup,
         string shapeId,
@@ -1944,10 +2479,16 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         return new Coordinate(longitude, latitude);
     }
 
-    private static Geometry? ToValidPolygonalGeometry(Geometry? geometry)
+    private static Geometry? ToValidPolygonalGeometry(
+        Geometry? geometry,
+        bool copyWhenAlreadyValid = true)
     {
         if (geometry is null || geometry.IsEmpty)
             return null;
+
+        SetSrid(geometry);
+        if (geometry.IsValid && geometry is Polygon or MultiPolygon)
+            return copyWhenAlreadyValid ? geometry.Copy() : geometry;
 
         var copy = geometry.Copy();
         SetSrid(copy);
@@ -2268,6 +2809,187 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             StartedAt = DateTime.UtcNow
         };
 
+    private void CompleteSummary(BoundaryImportSummaryDto summary)
+    {
+        summary.CompletedAt = DateTime.UtcNow;
+        summary.DurationMs = Math.Max(
+            0,
+            (long)(summary.CompletedAt - summary.StartedAt).TotalMilliseconds);
+    }
+
+    private void LogImportStarted(
+        string admLevel,
+        string path,
+        bool forceRefresh,
+        int saveBatchSize,
+        int maxSummaryItems)
+    {
+        var fileSize = TryGetBoundaryFileSize(path);
+        _logger.LogInformation(
+            "Local {AdmLevel} boundary import started. Source={Source}; bytes={Bytes}; force={Force}; saveBatchSize={SaveBatchSize}; maxSummaryItems={MaxSummaryItems}",
+            admLevel,
+            BuildSourceReference(path),
+            fileSize,
+            forceRefresh,
+            saveBatchSize,
+            maxSummaryItems);
+    }
+
+    private void LogImportProgressIfNeeded(
+        BoundaryImportSummaryDto summary,
+        int progressLogInterval)
+    {
+        if (progressLogInterval <= 0 ||
+            summary.ProcessedCount <= 0 ||
+            summary.ProcessedCount % progressLogInterval != 0)
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Local {AdmLevel} boundary import progress. processed={Processed}; imported={Imported}; updated={Updated}; skipped={Skipped}; failed={Failed}; elapsedMs={ElapsedMs}",
+            summary.AdmLevel,
+            summary.ProcessedCount,
+            summary.ImportedCount,
+            summary.UpdatedCount,
+            summary.SkippedCount,
+            summary.FailedCount,
+            (long)(DateTime.UtcNow - summary.StartedAt).TotalMilliseconds);
+    }
+
+    private void LogImportCompleted(BoundaryImportSummaryDto summary)
+    {
+        _logger.LogInformation(
+            "Local {AdmLevel} boundary import completed. total={Total}; processed={Processed}; imported={Imported}; updated={Updated}; skipped={Skipped}; failed={Failed}; durationMs={DurationMs}; itemsTruncated={ItemsTruncated}",
+            summary.AdmLevel,
+            summary.TotalFeatures,
+            summary.ProcessedCount,
+            summary.ImportedCount,
+            summary.UpdatedCount,
+            summary.SkippedCount,
+            summary.FailedCount,
+            summary.DurationMs,
+            summary.ItemsTruncated);
+    }
+
+    private async Task SaveImportBatchIfNeededAsync(
+        BoundaryImportBatchState batch,
+        BoundaryImportSummaryDto summary,
+        int saveBatchSize,
+        CancellationToken cancellationToken)
+    {
+        if (batch.PendingChanges < saveBatchSize)
+            return;
+
+        await SaveImportBatchAsync(batch, summary, cancellationToken);
+    }
+
+    private async Task SaveImportBatchAsync(
+        BoundaryImportBatchState batch,
+        BoundaryImportSummaryDto summary,
+        CancellationToken cancellationToken)
+    {
+        if (batch.PendingChanges <= 0)
+            return;
+
+        var changedRows = batch.PendingChanges;
+        await _db.SaveChangesAsync(cancellationToken);
+        _db.ChangeTracker.Clear();
+
+        if (batch.InvalidatesMapCache)
+        {
+            TerritoryMapBoundaryCache.Invalidate(_cache);
+        }
+
+        _logger.LogInformation(
+            "Local {AdmLevel} boundary import saved batch. changedRows={ChangedRows}; processed={Processed}; imported={Imported}; updated={Updated}; failed={Failed}",
+            summary.AdmLevel,
+            changedRows,
+            summary.ProcessedCount,
+            summary.ImportedCount,
+            summary.UpdatedCount,
+            summary.FailedCount);
+
+        batch.PendingChanges = 0;
+        batch.InvalidatesMapCache = false;
+    }
+
+    private static void TrackPendingChange(
+        BoundaryImportBatchState batch,
+        BoundaryImportFeatureResult result)
+    {
+        if (!result.Changed)
+            return;
+
+        batch.PendingChanges++;
+        batch.InvalidatesMapCache |= result.InvalidatesMapCache;
+    }
+
+    private HashSet<object> CaptureTrackedEntities() =>
+        _db.ChangeTracker
+            .Entries()
+            .Select(entry => entry.Entity)
+            .ToHashSet(ReferenceEqualityComparer.Instance);
+
+    private void DetachTrackedEntriesAddedAfter(HashSet<object> trackedBeforeFeature)
+    {
+        foreach (var entry in _db.ChangeTracker.Entries().ToList())
+        {
+            if (!trackedBeforeFeature.Contains(entry.Entity))
+            {
+                entry.State = EntityState.Detached;
+            }
+        }
+    }
+
+    private static void MarkTerritoryImportPropertiesModified(EntityEntry<Territory> entry)
+    {
+        entry.Property(item => item.Name).IsModified = true;
+        entry.Property(item => item.TerritoryKind).IsModified = true;
+        entry.Property(item => item.CountryCode).IsModified = true;
+        entry.Property(item => item.CountryIso3).IsModified = true;
+        entry.Property(item => item.BoundaryShapeType).IsModified = true;
+        entry.Property(item => item.BoundaryShapeGroup).IsModified = true;
+        entry.Property(item => item.BoundaryShapeId).IsModified = true;
+        entry.Property(item => item.BoundaryExternalKey).IsModified = true;
+        entry.Property(item => item.BoundarySource).IsModified = true;
+        entry.Property(item => item.BoundarySourceUrl).IsModified = true;
+        entry.Property(item => item.BoundaryAdmLevel).IsModified = true;
+        entry.Property(item => item.BoundaryReleaseType).IsModified = true;
+        entry.Property(item => item.BoundaryLicense).IsModified = true;
+        entry.Property(item => item.BoundaryImportedAt).IsModified = true;
+        entry.Property(item => item.UpdatedAt).IsModified = true;
+    }
+
+    private static void MarkBoundaryCandidateImportPropertiesModified(
+        EntityEntry<AdministrativeBoundaryCandidate> entry)
+    {
+        entry.Property(item => item.Source).IsModified = true;
+        entry.Property(item => item.ReleaseType).IsModified = true;
+        entry.Property(item => item.AdmLevel).IsModified = true;
+        entry.Property(item => item.ShapeGroup).IsModified = true;
+        entry.Property(item => item.ShapeId).IsModified = true;
+        entry.Property(item => item.ShapeName).IsModified = true;
+        entry.Property(item => item.ShapeType).IsModified = true;
+        entry.Property(item => item.ExternalKey).IsModified = true;
+        entry.Property(item => item.CountryIso3).IsModified = true;
+        entry.Property(item => item.CountryTerritoryId).IsModified = true;
+        entry.Property(item => item.ImportedAt).IsModified = true;
+        entry.Property(item => item.UpdatedAt).IsModified = true;
+    }
+
+    private static long? TryGetBoundaryFileSize(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? new FileInfo(path).Length : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
     private static BoundaryImportItemDto CreateFailedImportItem(
         BoundaryFeatureMetadata metadata,
         string message,
@@ -2329,6 +3051,8 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         BoundaryImportItemDto item,
         int maxSummaryItems)
     {
+        summary.ProcessedCount++;
+
         switch (item.Status)
         {
             case "Imported":
@@ -2351,9 +3075,27 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                 break;
         }
 
+        if (maxSummaryItems <= 0)
+        {
+            summary.ItemsTruncated = true;
+            return;
+        }
+
         if (summary.Items.Count < maxSummaryItems)
         {
             summary.Items.Add(item);
+            return;
+        }
+
+        summary.ItemsTruncated = true;
+        if (string.Equals(item.Status, "Failed", StringComparison.Ordinal))
+        {
+            var replaceIndex = summary.Items.FindLastIndex(existing =>
+                !string.Equals(existing.Status, "Failed", StringComparison.Ordinal));
+            if (replaceIndex >= 0)
+            {
+                summary.Items[replaceIndex] = item;
+            }
         }
     }
 
@@ -2394,6 +3136,17 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
 
     private int GetMaxSummaryItems() =>
         _options.MaxSummaryItems <= 0 ? DefaultMaxSummaryItems : _options.MaxSummaryItems;
+
+    private int GetSaveBatchSize() =>
+        Math.Clamp(
+            _options.SaveBatchSize <= 0 ? DefaultSaveBatchSize : _options.SaveBatchSize,
+            1,
+            100);
+
+    private int GetProgressLogInterval() =>
+        _options.ProgressLogInterval <= 0
+            ? DefaultProgressLogInterval
+            : _options.ProgressLogInterval;
 
     private static string NormalizeAdmLevel(string? admLevel)
     {
@@ -2508,6 +3261,54 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             new(null, null, null, null, null, string.Empty);
     }
 
+    private sealed record BoundaryImportFeatureResult(
+        BoundaryImportItemDto Item,
+        bool Changed,
+        bool InvalidatesMapCache);
+
+    private sealed class BoundaryImportBatchState
+    {
+        public int PendingChanges { get; set; }
+        public bool InvalidatesMapCache { get; set; }
+    }
+
+    private sealed class TerritoryImportRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string TerritoryKind { get; set; } = TerritoryKinds.Country;
+        public string? CountryCode { get; set; }
+        public string? CountryIso3 { get; set; }
+        public string? BoundaryShapeType { get; set; }
+        public string? BoundaryShapeGroup { get; set; }
+        public string? BoundaryShapeId { get; set; }
+        public string? BoundaryExternalKey { get; set; }
+        public string? BoundaryAdmLevel { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public int RegionCount { get; set; }
+        public int TerritoryManagerAssignmentCount { get; set; }
+        public bool HasValidBoundary { get; set; }
+        public bool HasValidDisplayBoundary { get; set; }
+    }
+
+    private sealed class BoundaryCandidateImportRow
+    {
+        public int Id { get; set; }
+        public string Source { get; set; } = string.Empty;
+        public string ReleaseType { get; set; } = string.Empty;
+        public string AdmLevel { get; set; } = string.Empty;
+        public string ShapeGroup { get; set; } = string.Empty;
+        public string ShapeId { get; set; } = string.Empty;
+        public string ShapeName { get; set; } = string.Empty;
+        public string? ShapeType { get; set; }
+        public string ExternalKey { get; set; } = string.Empty;
+        public string CountryIso3 { get; set; } = string.Empty;
+        public int? CountryTerritoryId { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public bool HasValidBoundary { get; set; }
+        public bool HasValidDisplayBoundary { get; set; }
+    }
+
     private sealed class BoundaryRegionCandidateDbRow
     {
         public int Id { get; set; }
@@ -2555,5 +3356,5 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         public Geometry? BoundaryDisplayGeometry { get; set; }
     }
 
-    private sealed record TerritoryResolution(Territory? Territory, string? ConflictMessage);
+    private sealed record TerritoryResolution(TerritoryImportRow? Territory, string? ConflictMessage);
 }
