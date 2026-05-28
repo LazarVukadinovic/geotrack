@@ -331,7 +331,8 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
           }
           return;
         });
-      });
+      })
+      .then(() => this.syncSelectedDestinationToMapState());
 
     void this.router.navigate(['/explore'], { replaceUrl: true });
   }
@@ -347,6 +348,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
         this.destinationSvc.useLocationMode();
         return this.explore.loadForLocation(latitude, longitude);
       })
+      .then(() => this.syncSelectedDestinationToMapState())
       .catch(() => {
         this.exactLocationError.set('Exact location is unavailable. GeoTrack will keep using approximate IP location.');
       })
@@ -400,6 +402,32 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     }
 
     void this.router.navigate(['/map']);
+  }
+
+  private syncSelectedDestinationToMapState(): void {
+    const destination = this.selectedDestination();
+    if (!destination?.name ||
+      typeof destination.latitude !== 'number' ||
+      typeof destination.longitude !== 'number') {
+      return;
+    }
+
+    try {
+      sessionStorage.setItem('mapLocation', JSON.stringify({
+        name: destination.name,
+        lat: destination.latitude,
+        lon: destination.longitude,
+        isUserLocation: false,
+      }));
+      sessionStorage.setItem('mapViewState', JSON.stringify({
+        center: [destination.longitude, destination.latitude],
+        zoom: 13,
+        destinationId: destination.id,
+      }));
+      sessionStorage.setItem('mapOpenedThisSession', 'true');
+    } catch {
+      // Session storage can be unavailable in private modes.
+    }
   }
 
   protected onPromoCta(): void {

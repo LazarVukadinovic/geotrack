@@ -1635,6 +1635,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.destinationLat = lat;
     this.destinationLon = lon;
     this.locationSvc.setGpsLocation(lat, lon);
+    this.destinationSvc.useLocationMode();
     this.isUserLocation = true;
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
@@ -1695,6 +1696,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.destinationName = loc.displayLabel || 'Approximate Location';
     this.destinationLat = loc.latitude;
     this.destinationLon = loc.longitude;
+    this.destinationSvc.useLocationMode();
     this.isUserLocation = false;
     this.loadErrorMessage = '';
     this.preserveSelectedPlaceFromNavigation = false;
