@@ -43,6 +43,7 @@ export class SubmitContributionComponent implements OnInit {
   protected readonly returnToDetail = signal(false);
   protected readonly detailBackUrl = signal<string | null>(null);
   protected readonly detailBackState = signal<Record<string, unknown> | undefined>(undefined);
+  protected readonly reviewNote = signal<string | null>(null);
   protected readonly currentStep = signal(1);
   protected readonly isLoading = signal(false);
   protected readonly loadError = signal<string | null>(null);
@@ -109,6 +110,7 @@ export class SubmitContributionComponent implements OnInit {
         this.editType.set(detail.type);
         this.editStatus.set(detail.status);
         this.editPlaceId.set(detail.publishedPlaceId);
+        this.reviewNote.set(detail.reviewNote ?? null);
         if (this.shouldLockLocationForEdit(detail.status, detail.publishedPlaceId)) {
           this.locationLocked.set(true);
         }
@@ -159,17 +161,25 @@ export class SubmitContributionComponent implements OnInit {
 
     const editId = this.editId();
     const shouldUpdatePublishedPlace = this.savesDirectly();
+    const editOptions = editId
+      ? {
+        type: shouldUpdatePublishedPlace ? 'UpdatePlace' as const : (this.editType() ?? 'CreatePlace'),
+        placeId: this.editPlaceId(),
+      }
+      : undefined;
     const request = editId
       ? this.contributions.updatePlace(
         editId,
         this.draft(),
-        shouldUpdatePublishedPlace ? { type: 'UpdatePlace', placeId: this.editPlaceId() } : undefined,
+        editOptions,
       )
       : this.contributions.createPlace(this.draft());
 
     request.subscribe({
       next: (detail) => {
         this.editId.set(detail.id);
+        this.editStatus.set(detail.status);
+        this.reviewNote.set(detail.reviewNote ?? null);
         this.isSubmitting.set(false);
         if (shouldUpdatePublishedPlace && detail.publishedPlaceId != null) {
           const detailId = String(detail.publishedPlaceId);
@@ -228,6 +238,7 @@ export class SubmitContributionComponent implements OnInit {
     });
     this.editId.set(null);
     this.entityType.set('Place');
+    this.reviewNote.set(null);
     this.currentStep.set(1);
   }
 
@@ -253,6 +264,7 @@ export class SubmitContributionComponent implements OnInit {
         this.editType.set(detail.type);
         this.editStatus.set(detail.status);
         this.editPlaceId.set(detail.publishedPlaceId);
+        this.reviewNote.set(detail.reviewNote ?? null);
         if (this.shouldLockLocationForEdit(detail.status, detail.publishedPlaceId)) {
           this.locationLocked.set(true);
         }

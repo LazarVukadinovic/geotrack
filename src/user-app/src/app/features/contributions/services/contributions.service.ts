@@ -206,7 +206,7 @@ export class ContributionsService {
     );
   }
 
-  updatePlace(id: number, draft: ContributionDraftData, options?: { type?: 'UpdatePlace'; placeId?: number | null }): Observable<ContributionDetail> {
+  updatePlace(id: number, draft: ContributionDraftData, options?: { type?: ContributionType; placeId?: number | null }): Observable<ContributionDetail> {
     return this.http.put<ContributionResponse>(`/api/contributions/places/${id}`, this.toFormData(draft, options)).pipe(
       map(res => mapDetail(res.contribution)),
       tap(detail => {
@@ -271,7 +271,7 @@ export class ContributionsService {
     };
   }
 
-  private toFormData(draft: ContributionDraftData, options?: { type?: 'UpdatePlace'; placeId?: number | null }): FormData {
+  private toFormData(draft: ContributionDraftData, options?: { type?: ContributionType; placeId?: number | null }): FormData {
     const basics = requireBasics(draft.basics);
     const features = normalizeFeatures(draft.features);
     const details = normalizeDetails(draft.details);

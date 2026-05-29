@@ -59,6 +59,12 @@
         </button>
       </div>
     } @else {
+      @if (reviewNote()) {
+        <div class="mx-5 mt-4 rounded-r-xl border-l-[3px] border-[#e8722a] bg-orange-50 px-3 py-2.5 text-xs leading-relaxed text-orange-900">
+          <span class="block font-bold">Manager note</span>
+          <span class="block mt-1">{{ reviewNote() }}</span>
+        </div>
+      }
       @switch (currentStep()) {
         @case (1) {
           <app-step-basics

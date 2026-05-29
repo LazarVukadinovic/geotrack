@@ -75,14 +75,16 @@ public class PlaceContributionService : IPlaceContributionService
         if (contribution is null)
             return null;
 
+        var includeReviewNote = HasCompletedReview(contribution.Status);
+
         if (contribution.Type == PlaceContributionType.ClaimOwnership &&
             contribution.Status == PlaceContributionStatus.Approved &&
             contribution.PlaceId.HasValue)
         {
-            return await MapApprovedOwnershipDetailAsync(contribution, includeReviewNote: false);
+            return await MapApprovedOwnershipDetailAsync(contribution, includeReviewNote);
         }
 
-        return MapDetail(contribution, includeReviewNote: false);
+        return MapDetail(contribution, includeReviewNote);
     }
 
     public async Task<GetPlaceContributionsResponseDto> GetPendingReviewAsync(int? reviewerUserId = null)
@@ -313,9 +315,14 @@ public class PlaceContributionService : IPlaceContributionService
             type == PlaceContributionType.UpdatePlace &&
             contribution.PlaceId.HasValue &&
             request.PlaceId == contribution.PlaceId;
+        var isRejectedResubmission = contribution.Status == PlaceContributionStatus.Rejected;
 
-        if (contribution.Status != PlaceContributionStatus.PendingReview && !isApprovedPublishedEdit)
-            throw new InvalidOperationException("Only pending contributions and owned approved places can be edited.");
+        if (contribution.Status != PlaceContributionStatus.PendingReview &&
+            !isApprovedPublishedEdit &&
+            !isRejectedResubmission)
+        {
+            throw new InvalidOperationException("Only pending, rejected, and owned approved places can be edited.");
+        }
 
         Place? targetPlace = null;
         ContributionReferenceResolution? references = null;
@@ -452,6 +459,15 @@ public class PlaceContributionService : IPlaceContributionService
         contribution.BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners));
         contribution.UpdatedAt = now;
 
+        if (isRejectedResubmission)
+        {
+            contribution.Status = PlaceContributionStatus.PendingReview;
+            contribution.ReviewedByUserId = null;
+            contribution.ReviewedAt = null;
+            contribution.ReviewNote = null;
+            contribution.SubmittedAt = now;
+        }
+
         var effectiveRequestImages = isApprovedPublishedEdit
             ? await EnsurePublishedPlaceImageFallbacksAsync(
                 contribution.PlaceId!.Value,
@@ -466,6 +482,12 @@ public class PlaceContributionService : IPlaceContributionService
             await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId!.Value, now);
 
         await _db.SaveChangesAsync();
+
+        if (isRejectedResubmission)
+        {
+            await _adminNotificationService.CreateTerritoryContributionPendingReviewNotificationAsync(contribution);
+            await _adminNotificationService.CreateRegionalContributionPendingReviewNotificationAsync(contribution);
+        }
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
         return MapDetail(saved, includeReviewNote: false);
@@ -1694,6 +1716,9 @@ public class PlaceContributionService : IPlaceContributionService
             .DistinctBy(partner => partner.BookingPartnerId)
             .ToList();
     }
+
+    private static bool HasCompletedReview(PlaceContributionStatus status) =>
+        status is PlaceContributionStatus.Approved or PlaceContributionStatus.Rejected;
 
     private static PlaceContributionListItemDto MapListItem(PlaceContribution contribution)
     {
