@@ -6,7 +6,7 @@ import { SaveToCollectionService } from '../../../core/services/save-to-collecti
 import { LocationService } from '../../../core/services/location.service';
 import { DestinationService } from '../../../core/services/destination.service';
 import { CollectionsService } from '../../profile/services/collections';
-import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
+import { getCoverImage, getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { PlaceDetail, PlaceRelatedEvent } from '../../../core/models/place.model';
 
@@ -121,6 +121,7 @@ export class PlaceDetailService {
         }
 
         const images = normalizeEntityImages(dto.images);
+        const coverImage = getCoverImage(images);
         const detail: PlaceDetail = {
           id: String(dto.id),
           title: dto.title,
@@ -130,6 +131,8 @@ export class PlaceDetailService {
           latitude: dto.latitude ?? null,
           longitude: dto.longitude ?? null,
           heroImage: getCoverImageUrl(images, dto.heroImage),
+          heroImagePosition: coverImage?.imagePosition ?? '50% 50%',
+          heroImageSize: coverImage?.imageSize ?? 'cover',
           images: getGalleryImages(images),
           tags: dto.tags,
           rating: dto.rating,
@@ -231,8 +234,13 @@ export class PlaceDetailService {
     this.http.put<ApiPlaceDetail>(`/api/places/${numId}/owner-update`, payload).subscribe({
       next: (dto) => {
         const images = normalizeEntityImages(dto.images);
+        const coverImage = getCoverImage(images);
         const updated: Partial<PlaceDetail> = {
           title: dto.title,
+          heroImage: getCoverImageUrl(images, dto.heroImage),
+          heroImagePosition: coverImage?.imagePosition ?? '50% 50%',
+          heroImageSize: coverImage?.imageSize ?? 'cover',
+          images: getGalleryImages(images),
           about: dto.about ?? '',
           openingHours: dto.openingHours ?? null,
           openingHoursSchedule: dto.openingHoursSchedule ?? null,
@@ -241,6 +249,7 @@ export class PlaceDetailService {
           phoneNumber: dto.phoneNumber ?? null,
           admissionPriceRange: dto.admissionPriceRange ?? null,
           bookingExternalLink: dto.bookingExternalLink ?? null,
+          amenities: dto.amenities ?? [],
           bestTimeToVisit: dto.bestTimeToVisit ?? null,
           visitorTips: dto.visitorTips ?? null,
           accessNotes: dto.accessNotes ?? null,

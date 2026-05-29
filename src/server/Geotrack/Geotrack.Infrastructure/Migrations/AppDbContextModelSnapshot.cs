@@ -495,6 +495,16 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("gallery");
 
+                    b.Property<string>("ImagePosition")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ImageSize")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<bool>("IsMain")
                         .HasColumnType("boolean");
 

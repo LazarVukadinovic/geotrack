@@ -2359,6 +2359,12 @@ public class AppDbContext : DbContext
                 .HasDefaultValue("gallery")
                 .IsRequired();
 
+            entity.Property(x => x.ImagePosition)
+                .HasMaxLength(40);
+
+            entity.Property(x => x.ImageSize)
+                .HasMaxLength(40);
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 

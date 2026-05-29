@@ -986,7 +986,9 @@ public class PlaceService : IPlaceService
                 Caption = DisplayTextSafety.CleanOptional(image.Caption),
                 IsMain = image.IsMain,
                 ImageRole = EntityImageRole.Normalize(image.ImageRole),
-                SortOrder = image.SortOrder
+                SortOrder = image.SortOrder,
+                ImagePosition = string.IsNullOrWhiteSpace(image.ImagePosition) ? "50% 50%" : image.ImagePosition,
+                ImageSize = string.IsNullOrWhiteSpace(image.ImageSize) ? "cover" : image.ImageSize
             })
             .ToList();
     }

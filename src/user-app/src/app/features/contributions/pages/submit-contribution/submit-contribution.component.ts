@@ -57,28 +57,16 @@ export class SubmitContributionComponent implements OnInit {
   protected readonly submitLabel = computed(() => this.savesDirectly() ? 'Save' : 'Submit');
   protected readonly submittingLabel = computed(() => this.savesDirectly() ? 'Saving...' : 'Submitting...');
   protected readonly isAccommodationDraft = computed(() => this.draft().basics?.placeType === 'Stay');
-  protected readonly totalVisibleSteps = computed(() => this.isAccommodationDraft() ? 4 : 3);
+  protected readonly totalVisibleSteps = computed(() => 4);
   protected readonly visibleStepNumber = computed(() => {
-    const step = this.currentStep();
-    if (this.isAccommodationDraft() || step <= 1 || step >= 5) return step;
-    if (step === 3) return 2;
-    if (step === 4) return 3;
-    return step;
+    return this.currentStep();
   });
   protected readonly desktopSteps = computed(() => {
-    if (this.isAccommodationDraft()) {
-      return [
-        { number: 1, actualStep: 1, label: 'Basic Info' },
-        { number: 2, actualStep: 2, label: 'Amenities' },
-        { number: 3, actualStep: 3, label: 'Details' },
-        { number: 4, actualStep: 4, label: 'Review' },
-      ];
-    }
-
     return [
       { number: 1, actualStep: 1, label: 'Basic Info' },
-      { number: 2, actualStep: 3, label: 'Details' },
-      { number: 3, actualStep: 4, label: 'Review' },
+      { number: 2, actualStep: 2, label: 'Amenities' },
+      { number: 3, actualStep: 3, label: 'Details' },
+      { number: 4, actualStep: 4, label: 'Review' },
     ];
   });
 
@@ -134,13 +122,12 @@ export class SubmitContributionComponent implements OnInit {
   }
 
   protected onBasicsSaved(data: BasicsData): void {
-    const isStay = data.placeType === 'Stay';
     this.draft.update(d => ({
       ...d,
       basics: data,
-      features: isStay ? (d.features ?? { tags: [], amenities: [] }) : { tags: d.features?.tags ?? [], amenities: [] },
+      features: d.features ?? { tags: [], amenities: [] },
     }));
-    this.currentStep.set(isStay ? 2 : 3);
+    this.currentStep.set(2);
   }
 
   protected onFeaturesSaved(data: FeaturesData): void {
@@ -214,15 +201,6 @@ export class SubmitContributionComponent implements OnInit {
   protected prevStep(): void {
     const step = this.currentStep();
     if (step <= 1) return;
-    if (!this.isAccommodationDraft() && step === 3) {
-      this.currentStep.set(1);
-      return;
-    }
-    if (!this.isAccommodationDraft() && step === 4) {
-      this.currentStep.set(3);
-      return;
-    }
-
     this.currentStep.update(s => s - 1);
   }
 

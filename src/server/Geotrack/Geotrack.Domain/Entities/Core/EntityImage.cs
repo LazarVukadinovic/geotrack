@@ -33,6 +33,8 @@ public class EntityImage
 
     public string ImageRole { get; set; } = EntityImageRole.Gallery;
     public int SortOrder { get; set; }
+    public string ImagePosition { get; set; } = "50% 50%";
+    public string ImageSize { get; set; } = "cover";
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

@@ -59,6 +59,8 @@
         appImageFallback
         class="pd__hero-img"
         [src]="heroImage()"
+        [style.object-position]="heroImagePosition()"
+        [style.transform]="heroImageTransform()"
         alt=""
         width="800"
         height="480"
@@ -563,6 +565,7 @@
                 <img
                   appImageFallback
                   [src]="image.url"
+                  [style.object-position]="image.imagePosition"
                   [alt]="image.altText || p.title"
                   loading="lazy"
                   decoding="async"

@@ -65,6 +65,29 @@ export class PlaceDetailPageComponent {
   protected readonly ownershipClaimSubmitted = signal(false);
 
   protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.place()?.heroImage ?? '');
+  protected readonly heroImagePosition = computed(() => {
+    const p = this.place();
+    const selected = this.selectedImageUrl();
+    if (!p) return '50% 50%';
+    if (!selected || selected === p.heroImage) return p.heroImagePosition || '50% 50%';
+    return p.images.find(image => image.url === selected)?.imagePosition || '50% 50%';
+  });
+  protected readonly heroImageSize = computed(() => {
+    const p = this.place();
+    const selected = this.selectedImageUrl();
+    if (!p) return 'cover';
+    if (!selected || selected === p.heroImage) return p.heroImageSize || 'cover';
+    return p.images.find(image => image.url === selected)?.imageSize || 'cover';
+  });
+  protected readonly heroImageTransform = computed(() => {
+    const size = this.heroImageSize();
+    if (size === 'cover') return 'none';
+
+    const numeric = Number.parseFloat(size);
+    if (!Number.isFinite(numeric) || numeric <= 100) return 'none';
+
+    return `scale(${Math.min(numeric, 200) / 100})`;
+  });
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.place()?.latitude ?? null,

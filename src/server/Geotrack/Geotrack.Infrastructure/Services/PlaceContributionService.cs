@@ -1210,7 +1210,7 @@ public class PlaceContributionService : IPlaceContributionService
             _db.PlaceTags.Add(new PlaceTag
             {
                 PlaceId = place.Id,
-                TagId = tag.Id
+                Tag = tag
             });
         }
 
@@ -1317,6 +1317,8 @@ public class PlaceContributionService : IPlaceContributionService
                 IsMain = image.ImageRole == EntityImageRole.Cover,
                 ImageRole = EntityImageRole.Normalize(image.ImageRole),
                 SortOrder = image.SortOrder,
+                ImagePosition = NormalizeImagePosition(image.ImagePosition),
+                ImageSize = NormalizeImageSize(image.ImageSize),
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -1398,8 +1400,8 @@ public class PlaceContributionService : IPlaceContributionService
             IsMain = imageRole == EntityImageRole.Cover,
             ImageRole = imageRole,
             SortOrder = sortOrder,
-            ImagePosition = "50% 50%",
-            ImageSize = "cover"
+            ImagePosition = NormalizeImagePosition(image.ImagePosition),
+            ImageSize = NormalizeImageSize(image.ImageSize)
         };
     }
 
@@ -1571,11 +1573,54 @@ public class PlaceContributionService : IPlaceContributionService
         if (tagNames.Count == 0)
             return new List<Tag>();
 
-        var normalized = tagNames.Select(NormalizeSlug).ToList();
+        var requested = tagNames
+            .Select(name => new
+            {
+                Name = NormalizeOptional(name, 80),
+                Slug = Slugify(name)
+            })
+            .Where(tag => !string.IsNullOrWhiteSpace(tag.Name) && !string.IsNullOrWhiteSpace(tag.Slug))
+            .DistinctBy(tag => tag.Slug, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        return await _db.Tags
-            .Where(tag => normalized.Contains(tag.Slug.ToLower()))
+        if (requested.Count == 0)
+            return new List<Tag>();
+
+        var slugs = requested.Select(tag => tag.Slug).ToList();
+        var names = requested.Select(tag => tag.Name!.ToLowerInvariant()).ToList();
+        var existing = await _db.Tags
+            .Where(tag =>
+                (slugs.Contains(tag.Slug.ToLower()) || names.Contains(tag.Name.ToLower())))
             .ToListAsync();
+
+        var existingSlugs = existing
+            .Select(tag => tag.Slug)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var now = DateTime.UtcNow;
+        foreach (var tag in existing.Where(tag => !tag.ForPlace))
+        {
+            tag.ForPlace = true;
+            tag.UpdatedAt = now;
+        }
+
+        foreach (var tag in requested.Where(tag => !existingSlugs.Contains(tag.Slug)))
+        {
+            var created = new Tag
+            {
+                Name = ToTitle(tag.Name!),
+                Slug = tag.Slug,
+                Description = $"{ToTitle(tag.Name!)} places",
+                ForPlace = true,
+                CreatedAt = now
+            };
+
+            _db.Tags.Add(created);
+            existing.Add(created);
+            existingSlugs.Add(created.Slug);
+        }
+
+        return existing;
     }
 
     private async Task<List<Amenity>> ResolveAmenitiesAsync(List<string> amenityNames)
@@ -1837,8 +1882,8 @@ public class PlaceContributionService : IPlaceContributionService
         detail.City = place.Location?.Name;
         detail.Region = place.Location?.Destination?.Region?.Name;
         detail.Country = place.Location?.Destination?.Name;
-        detail.ImagePosition = "50% 50%";
-        detail.ImageSize = "cover";
+        detail.ImagePosition = coverImage?.ImagePosition ?? "50% 50%";
+        detail.ImageSize = coverImage?.ImageSize ?? "cover";
         detail.Tags = place.PlaceTags
             .Select(placeTag => placeTag.Tag.Name)
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -1873,8 +1918,8 @@ public class PlaceContributionService : IPlaceContributionService
                 IsMain = image.IsMain,
                 ImageRole = EntityImageRole.Normalize(image.ImageRole),
                 SortOrder = image.SortOrder,
-                ImagePosition = "50% 50%",
-                ImageSize = "cover"
+                ImagePosition = string.IsNullOrWhiteSpace(image.ImagePosition) ? "50% 50%" : image.ImagePosition,
+                ImageSize = string.IsNullOrWhiteSpace(image.ImageSize) ? "cover" : image.ImageSize
             })
             .ToList();
 

@@ -68,6 +68,8 @@ export interface PlaceDetail {
   latitude?: number | null;
   longitude?: number | null;
   heroImage: string;
+  heroImagePosition: string;
+  heroImageSize: string;
   images: EntityImage[];
   tags: PlaceTag[];
   rating?: number;
