@@ -41,7 +41,8 @@ namespace Geotrack.Infrastructure.Repositories
                 .Include(r => r.Territory)
                 .Include(r => r.RegionalManagerRegions)
                     .ThenInclude(ror => ror.User)
-                    .Include(r => r.Destinations)
+                .Include(r => r.Destinations)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(r => r.Id == regionId);
         }
         public async Task<bool> ExistsInTerritoryAsync(int territoryId, string name)
