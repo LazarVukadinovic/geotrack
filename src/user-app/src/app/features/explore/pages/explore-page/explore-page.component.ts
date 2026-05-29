@@ -318,7 +318,9 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    void this.router.navigateByUrl(item.detailRoute);
+    void this.router.navigateByUrl(item.detailRoute, {
+      state: { detailBackUrl: this.router.url },
+    });
   }
 
   protected useCurrentLocation(): void {
@@ -455,7 +457,9 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     this.scrollState.markClickedItem(sliderId, event.item.id);
 
     const route = event.item.detailRoute?.trim() || this.defaultRoute(event.item.entityType, event.item.id);
-    void this.router.navigateByUrl(route);
+    void this.router.navigateByUrl(route, {
+      state: { detailBackUrl: this.router.url },
+    });
   }
 
   protected onSectionMore(section: ExploreSection): void {
@@ -464,11 +468,14 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     if (collectionId != null && collectionId > 0) {
       void this.router.navigate([section.moreRoute], {
         queryParams: { collectionId },
+        state: { listingBackUrl: this.router.url },
       });
       return;
     }
 
-    void this.router.navigateByUrl(section.moreRoute);
+    void this.router.navigateByUrl(section.moreRoute, {
+      state: { listingBackUrl: this.router.url },
+    });
   }
 
   protected sliderId(section: ExploreSection): string {

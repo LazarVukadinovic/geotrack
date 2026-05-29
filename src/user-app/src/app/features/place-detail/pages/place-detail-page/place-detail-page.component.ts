@@ -137,6 +137,15 @@ export class PlaceDetailPageComponent {
   }
 
   protected goBack(): void {
+    const detailBackUrl = this.detailBackUrl();
+    if (detailBackUrl) {
+      void this.router.navigateByUrl(detailBackUrl, {
+        replaceUrl: true,
+        state: this.detailBackState(),
+      });
+      return;
+    }
+
     globalThis.history.back();
   }
 
@@ -273,13 +282,12 @@ export class PlaceDetailPageComponent {
     const p = this.place();
     if (!p?.ownerContributionId) return;
     void this.router.navigate(['/contributions', p.ownerContributionId, 'edit'], {
+      replaceUrl: true,
       state: {
         locationLocked: true,
-        placeImages: {
-          coverUrl: p.heroImage,
-          cardUrl: p.images.find(i => i.imageRole === 'card')?.url ?? p.heroImage,
-          galleryUrls: p.images.filter(i => i.imageRole === 'gallery').map(i => i.url),
-        },
+        returnToDetail: true,
+        detailBackUrl: this.detailBackUrl(),
+        detailBackState: this.detailBackState(),
       },
     });
   }
@@ -409,6 +417,18 @@ export class PlaceDetailPageComponent {
   private collectionQueryParams(): { collectionId?: number } {
     const collectionId = this.targetCollectionId();
     return collectionId != null ? { collectionId } : {};
+  }
+
+  private detailBackUrl(): string | null {
+    const value = (globalThis.history?.state ?? {})['detailBackUrl'];
+    return typeof value === 'string' && value.trim() ? value : null;
+  }
+
+  private detailBackState(): Record<string, unknown> | undefined {
+    const value = (globalThis.history?.state ?? {})['detailBackState'];
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined;
   }
 
   private calculateCurrentOpenStatus(schedule: { day: string; hours: string }[], fallback: string): string {

@@ -127,6 +127,15 @@ export class HotelDetailPageComponent {
   }
 
   protected goBack(): void {
+    const detailBackUrl = this.detailBackUrl();
+    if (detailBackUrl) {
+      void this.router.navigateByUrl(detailBackUrl, {
+        replaceUrl: true,
+        state: this.detailBackState(),
+      });
+      return;
+    }
+
     globalThis.history.back();
   }
 
@@ -252,13 +261,12 @@ export class HotelDetailPageComponent {
     if (!hotel?.ownerContributionId) return;
 
     void this.router.navigate(['/contributions', hotel.ownerContributionId, 'edit'], {
+      replaceUrl: true,
       state: {
         locationLocked: true,
-        placeImages: {
-          coverUrl: hotel.heroImage,
-          cardUrl: hotel.images.find(image => image.imageRole === 'card')?.url ?? hotel.heroImage,
-          galleryUrls: hotel.images.filter(image => image.imageRole === 'gallery').map(image => image.url),
-        },
+        returnToDetail: true,
+        detailBackUrl: this.detailBackUrl(),
+        detailBackState: this.detailBackState(),
       },
     });
   }
@@ -387,5 +395,17 @@ export class HotelDetailPageComponent {
   private collectionQueryParams(): { collectionId?: number } {
     const collectionId = this.targetCollectionId();
     return collectionId != null ? { collectionId } : {};
+  }
+
+  private detailBackUrl(): string | null {
+    const value = (globalThis.history?.state ?? {})['detailBackUrl'];
+    return typeof value === 'string' && value.trim() ? value : null;
+  }
+
+  private detailBackState(): Record<string, unknown> | undefined {
+    const value = (globalThis.history?.state ?? {})['detailBackState'];
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined;
   }
 }

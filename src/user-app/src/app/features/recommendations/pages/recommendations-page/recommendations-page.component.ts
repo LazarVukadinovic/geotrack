@@ -149,7 +149,7 @@ export class RecommendationsPageComponent implements AfterViewInit {
       metadata: { surface: 'recommendations' },
     });
 
-    this.router.navigate(['/places', id]);
+    this.router.navigate(['/places', id], { state: { detailBackUrl: this.router.url } });
   }
 
   private scrollListToTop(): void {

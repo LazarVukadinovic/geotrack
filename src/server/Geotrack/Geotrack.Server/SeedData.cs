@@ -390,6 +390,8 @@ public static class SeedData
             await EnsureStayAmenityAsync("Breakfast Included", "breakfast-included", "breakfast", "Breakfast included in the stay"),
             await EnsureStayAmenityAsync("Parking", "parking", "parking", "Parking available"),
             await EnsureStayAmenityAsync("Spa", "spa", "spa", "Spa and wellness facilities"),
+            await EnsureStayAmenityAsync("Fitness Center", "fitness-center", "gym", "Fitness facilities available"),
+            await EnsureStayAmenityAsync("Restaurant", "restaurant", "restaurant", "On-site dining available"),
             await EnsureStayAmenityAsync("Air Conditioning", "air-conditioning", "ac", "Air-conditioned rooms")
         };
 
@@ -3226,6 +3228,8 @@ public static class SeedData
         var breakfast = await EnsureStayAmenityAsync("Breakfast Included", "breakfast-included", "breakfast", "Breakfast included in the stay");
         var parking = await EnsureStayAmenityAsync("Parking", "parking", "parking", "Parking available");
         var spa = await EnsureStayAmenityAsync("Spa", "spa", "spa", "Spa and wellness facilities");
+        var fitnessCenter = await EnsureStayAmenityAsync("Fitness Center", "fitness-center", "gym", "Fitness facilities available");
+        var restaurantAmenity = await EnsureStayAmenityAsync("Restaurant", "restaurant", "restaurant", "On-site dining available");
         var airConditioning = await EnsureStayAmenityAsync("Air Conditioning", "air-conditioning", "ac", "Air-conditioned rooms");
 
         var festivalType = await EnsureEventTypeAsync("Festival", "Music and cultural festivals");
@@ -4299,6 +4303,8 @@ public static class SeedData
         var parking = await EnsureStayAmenityAsync("Parking", "parking", "parking", "Parking available");
         var pool = await EnsureStayAmenityAsync("Swimming Pool", "swimming-pool", "pool", "Pool available for guests");
         var spa = await EnsureStayAmenityAsync("Spa", "spa", "spa", "Spa and wellness facilities");
+        var fitnessCenter = await EnsureStayAmenityAsync("Fitness Center", "fitness-center", "gym", "Fitness facilities available");
+        var restaurantAmenity = await EnsureStayAmenityAsync("Restaurant", "restaurant", "restaurant", "On-site dining available");
         var airConditioning = await EnsureStayAmenityAsync("Air Conditioning", "air-conditioning", "ac", "Air-conditioned rooms");
 
         var outdoor = await EnsureAmenityAsync("Outdoor Seating", "outdoor");

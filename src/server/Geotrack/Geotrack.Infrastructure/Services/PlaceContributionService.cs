@@ -453,7 +453,15 @@ public class PlaceContributionService : IPlaceContributionService
         contribution.BookingPartnersJson = Serialize(NormalizeBookingPartners(request.BookingPartners));
         contribution.UpdatedAt = now;
 
-        SyncContributionImages(contribution, request.Images, storedCardImageUrl, storedCoverImageUrl, storedGalleryImageUrls, now, type != PlaceContributionType.ClaimOwnership);
+        var effectiveRequestImages = isApprovedPublishedEdit
+            ? await EnsurePublishedPlaceImageFallbacksAsync(
+                contribution.PlaceId!.Value,
+                request.Images,
+                !string.IsNullOrWhiteSpace(storedCardImageUrl),
+                !string.IsNullOrWhiteSpace(storedCoverImageUrl))
+            : request.Images;
+
+        SyncContributionImages(contribution, effectiveRequestImages, storedCardImageUrl, storedCoverImageUrl, storedGalleryImageUrls, now, type != PlaceContributionType.ClaimOwnership);
 
         if (isApprovedPublishedEdit)
             await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId!.Value, now);
@@ -1315,6 +1323,86 @@ public class PlaceContributionService : IPlaceContributionService
         }
     }
 
+    private async Task<List<UpsertPlaceContributionImageDto>?> EnsurePublishedPlaceImageFallbacksAsync(
+        int placeId,
+        List<UpsertPlaceContributionImageDto>? requestImages,
+        bool hasStoredCardImage,
+        bool hasStoredCoverImage)
+    {
+        if ((hasStoredCardImage || HasImageRole(requestImages, EntityImageRole.Card)) &&
+            (hasStoredCoverImage || HasImageRole(requestImages, EntityImageRole.Cover)))
+            return requestImages;
+
+        var publishedImages = await _db.EntityImages
+            .AsNoTracking()
+            .Where(image => image.PlaceId == placeId)
+            .OrderBy(image => image.ImageRole == EntityImageRole.Cover ? 0 : image.ImageRole == EntityImageRole.Card ? 1 : 2)
+            .ThenBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .ToListAsync();
+
+        if (publishedImages.Count == 0)
+            return requestImages;
+
+        var merged = requestImages?.ToList() ?? new List<UpsertPlaceContributionImageDto>();
+        if (merged.All(image => string.IsNullOrWhiteSpace(image.Url)))
+            merged = publishedImages.Select(ToUpsertImageDto).ToList();
+
+        if (hasStoredCardImage)
+            merged.RemoveAll(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Card);
+
+        if (hasStoredCoverImage)
+            merged.RemoveAll(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Cover);
+
+        var hasCover = hasStoredCoverImage || HasImageRole(merged, EntityImageRole.Cover);
+        var hasCard = hasStoredCardImage || HasImageRole(merged, EntityImageRole.Card);
+
+        if (!hasCover)
+        {
+            var cover = publishedImages.FirstOrDefault(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Cover)
+                ?? publishedImages.FirstOrDefault();
+            if (cover is not null)
+                merged.Add(ToUpsertImageDto(cover, EntityImageRole.Cover, -10));
+        }
+
+        if (!hasCard)
+        {
+            var card = publishedImages.FirstOrDefault(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Card)
+                ?? publishedImages.FirstOrDefault(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Cover)
+                ?? publishedImages.FirstOrDefault();
+            if (card is not null)
+                merged.Add(ToUpsertImageDto(card, EntityImageRole.Card, -9));
+        }
+
+        return merged;
+    }
+
+    private static bool HasImageRole(IEnumerable<UpsertPlaceContributionImageDto>? images, string role)
+    {
+        return (images ?? Enumerable.Empty<UpsertPlaceContributionImageDto>())
+            .Any(image => EntityImageRole.Normalize(image.ImageRole) == role && !string.IsNullOrWhiteSpace(image.Url));
+    }
+
+    private static UpsertPlaceContributionImageDto ToUpsertImageDto(EntityImage image)
+    {
+        return ToUpsertImageDto(image, EntityImageRole.Normalize(image.ImageRole), image.SortOrder);
+    }
+
+    private static UpsertPlaceContributionImageDto ToUpsertImageDto(EntityImage image, string imageRole, int sortOrder)
+    {
+        return new UpsertPlaceContributionImageDto
+        {
+            Url = image.Url,
+            AltText = image.AltText,
+            Caption = image.Caption,
+            IsMain = imageRole == EntityImageRole.Cover,
+            ImageRole = imageRole,
+            SortOrder = sortOrder,
+            ImagePosition = "50% 50%",
+            ImageSize = "cover"
+        };
+    }
+
     private void SyncContributionImages(
         PlaceContribution contribution,
         List<UpsertPlaceContributionImageDto>? requestImages,
@@ -1340,6 +1428,7 @@ public class PlaceContributionService : IPlaceContributionService
 
         if (!string.IsNullOrWhiteSpace(storedCoverImageUrl))
         {
+            var coverMetadata = ImageMetadataForRole(requestImages, EntityImageRole.Cover);
             imageDtos.Add(new UpsertPlaceContributionImageDto
             {
                 Url = storedCoverImageUrl,
@@ -1347,13 +1436,14 @@ public class PlaceContributionService : IPlaceContributionService
                 IsMain = true,
                 ImageRole = EntityImageRole.Cover,
                 SortOrder = -10,
-                ImagePosition = "50% 50%",
-                ImageSize = "cover"
+                ImagePosition = coverMetadata.ImagePosition,
+                ImageSize = coverMetadata.ImageSize
             });
         }
 
         if (!string.IsNullOrWhiteSpace(storedCardImageUrl))
         {
+            var cardMetadata = ImageMetadataForRole(requestImages, EntityImageRole.Card);
             imageDtos.Add(new UpsertPlaceContributionImageDto
             {
                 Url = storedCardImageUrl,
@@ -1361,8 +1451,8 @@ public class PlaceContributionService : IPlaceContributionService
                 IsMain = false,
                 ImageRole = EntityImageRole.Card,
                 SortOrder = -9,
-                ImagePosition = "50% 50%",
-                ImageSize = "cover"
+                ImagePosition = cardMetadata.ImagePosition,
+                ImageSize = cardMetadata.ImageSize
             });
         }
 
@@ -1428,6 +1518,19 @@ public class PlaceContributionService : IPlaceContributionService
         }
     }
 
+    private static (string ImagePosition, string ImageSize) ImageMetadataForRole(
+        IEnumerable<UpsertPlaceContributionImageDto>? images,
+        string role)
+    {
+        var image = (images ?? Enumerable.Empty<UpsertPlaceContributionImageDto>())
+            .FirstOrDefault(item => EntityImageRole.Normalize(item.ImageRole) == role);
+
+        return (
+            NormalizeImagePosition(image?.ImagePosition),
+            NormalizeImageSize(image?.ImageSize)
+        );
+    }
+
 
     private static void RequireCardAndCoverImages(IEnumerable<UpsertPlaceContributionImageDto> images)
     {
@@ -1483,7 +1586,8 @@ public class PlaceContributionService : IPlaceContributionService
         var normalized = amenityNames.Select(NormalizeSlug).ToList();
 
         return await _db.Amenities
-            .Where(amenity => normalized.Contains(amenity.Name.ToLower()))
+            .Where(amenity => normalized.Contains(amenity.Name.ToLower()) ||
+                              normalized.Contains(amenity.Icon.ToLower()))
             .ToListAsync();
     }
 
@@ -1690,11 +1794,11 @@ public class PlaceContributionService : IPlaceContributionService
         var cardImage = place.Images
             .OrderBy(image => image.SortOrder)
             .ThenBy(image => image.Id)
-            .FirstOrDefault(image => image.ImageRole == EntityImageRole.Card);
+            .FirstOrDefault(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Card);
         var coverImage = place.Images
             .OrderBy(image => image.SortOrder)
             .ThenBy(image => image.Id)
-            .FirstOrDefault(image => image.ImageRole == EntityImageRole.Cover);
+            .FirstOrDefault(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Cover);
         var firstImage = place.Images
             .OrderBy(image => image.SortOrder)
             .ThenBy(image => image.Id)
@@ -1710,7 +1814,7 @@ public class PlaceContributionService : IPlaceContributionService
         detail.MainImageUrl = cardImageUrl;
         detail.CoverImageUrl = coverImageUrl;
         detail.GalleryImageUrls = place.Images
-            .Where(image => image.ImageRole == EntityImageRole.Gallery)
+            .Where(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Gallery)
             .OrderBy(image => image.SortOrder)
             .ThenBy(image => image.Id)
             .Select(image => image.Url)
@@ -2139,7 +2243,8 @@ public class PlaceContributionService : IPlaceContributionService
                 ImagePosition = image.ImagePosition,
                 ImageSize = image.ImageSize
             })
-            .DistinctBy(image => image.Url, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(image => $"{image.ImageRole}\n{image.Url}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
             .ToList();
 
         if (normalized.Count > MaxContributionImages)

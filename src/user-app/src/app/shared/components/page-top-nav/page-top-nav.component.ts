@@ -10,9 +10,16 @@ import { Router } from '@angular/router';
 export class PageTopNavComponent {
   readonly title = input.required<string>();
   readonly fallbackRoute = input('/explore');
+  readonly backRoute = input<string | null>(null);
   private readonly router = inject(Router);
 
   protected goBack(): void {
+    const backRoute = this.backRoute();
+    if (backRoute?.trim()) {
+      void this.router.navigateByUrl(backRoute, { replaceUrl: true });
+      return;
+    }
+
     const navigationId = Number(globalThis.history?.state?.navigationId ?? 0);
 
     if (navigationId > 1) {

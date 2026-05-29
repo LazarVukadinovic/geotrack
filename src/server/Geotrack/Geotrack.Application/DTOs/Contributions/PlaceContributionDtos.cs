@@ -121,6 +121,8 @@ public class UpsertPlaceContributionDto
     public string? Country { get; set; }
     public string? ImagePosition { get; set; }
     public string? ImageSize { get; set; }
+    public string? CardImagePosition { get; set; }
+    public string? CardImageSize { get; set; }
     public List<string> Tags { get; set; } = new();
     public List<string> Amenities { get; set; } = new();
     public List<string> StayAmenities { get; set; } = new();

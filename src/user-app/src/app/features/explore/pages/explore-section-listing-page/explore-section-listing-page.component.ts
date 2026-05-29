@@ -48,11 +48,14 @@ export class ExploreSectionListingPageComponent {
   protected readonly activeFilterCount = computed(() => this.listing.selectedTagIds().length);
   protected readonly filtersExpanded = signal(false);
   protected readonly targetCollectionId = signal<number | null>(null);
+  protected readonly listingBackUrl = signal<string | null>(null);
 
   protected readonly imgSrcById = signal<Record<string, string>>({});
   private readonly fallbackUsed = new Set<string>();
 
   constructor() {
+    this.listingBackUrl.set(this.readListingBackUrl());
+
     this.route.paramMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.loadFromRoute());
@@ -80,7 +83,12 @@ export class ExploreSectionListingPageComponent {
   }
 
   protected openItem(item: ExploreSectionItem): void {
-    void this.router.navigateByUrl(this.withCollectionContext(item.detailRoute || this.defaultDetailRoute(item)));
+    void this.router.navigateByUrl(this.withCollectionContext(item.detailRoute || this.defaultDetailRoute(item)), {
+      state: {
+        detailBackUrl: this.router.url,
+        detailBackState: this.detailBackState(),
+      },
+    });
   }
 
   protected loadMore(): void {
@@ -166,5 +174,15 @@ export class ExploreSectionListingPageComponent {
     const params = new URLSearchParams(query);
     params.set('collectionId', String(collectionId));
     return `${path}?${params.toString()}`;
+  }
+
+  private readListingBackUrl(): string | null {
+    const value = (globalThis.history?.state ?? {})['listingBackUrl'];
+    return typeof value === 'string' && value.trim() ? value : null;
+  }
+
+  private detailBackState(): Record<string, string> | null {
+    const listingBackUrl = this.listingBackUrl();
+    return listingBackUrl ? { listingBackUrl } : null;
   }
 }

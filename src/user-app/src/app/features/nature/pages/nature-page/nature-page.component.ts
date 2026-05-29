@@ -125,7 +125,7 @@ export class NaturePageComponent implements AfterViewInit {
     );
 
     // Nature items are place-type content.
-    this.router.navigate(['/places', id]);
+    this.router.navigate(['/places', id], { state: { detailBackUrl: this.router.url } });
   }
 
   protected loadMore(): void {

@@ -82,6 +82,26 @@ export class PlaceDetailService {
     return this._loadState()[id] ?? 'idle';
   }
 
+  invalidate(id?: string | number | null): void {
+    if (id == null) {
+      this._cache.set({});
+      this._loadState.set({});
+      this.lastRequestKeyById.clear();
+      return;
+    }
+
+    const key = String(id);
+    this._cache.update(current => {
+      const { [key]: _removed, ...rest } = current;
+      return rest;
+    });
+    this._loadState.update(current => {
+      const { [key]: _removed, ...rest } = current;
+      return rest;
+    });
+    this.lastRequestKeyById.delete(key);
+  }
+
   loadPlaceDetail(id: string): void {
     const numId = parseInt(id, 10);
     if (isNaN(numId)) {

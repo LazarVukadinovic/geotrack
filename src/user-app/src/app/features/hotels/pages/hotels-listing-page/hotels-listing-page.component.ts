@@ -132,7 +132,7 @@ export class HotelsListingPageComponent implements AfterViewInit {
       id,
     );
 
-    this.router.navigate(['/stays', id]);
+    this.router.navigate(['/stays', id], { state: { detailBackUrl: this.router.url } });
   }
 
   protected loadMore(): void {

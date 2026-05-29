@@ -7,6 +7,10 @@ import { StepDetailsComponent, DetailsData } from './steps/step-details/step-det
 import { StepPreviewComponent } from './steps/step-preview/step-preview.component';
 import { StepConfirmationComponent } from './steps/step-confirmation/step-confirmation.component';
 import { ContributionStatus, ContributionType, ContributionsService } from '../../services/contributions.service';
+import { ExploreService } from '../../../explore/services/explore.service';
+import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
+import { PlaceDetailService } from '../../../place-detail/services/place-detail.service';
+import { HotelDetailService } from '../../../hotel-detail/services/hotel-detail.service';
 
 export interface ContributionDraft {
   basics: BasicsData | null;
@@ -25,6 +29,10 @@ export class SubmitContributionComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly contributions = inject(ContributionsService);
+  private readonly exploreService = inject(ExploreService);
+  private readonly listingService = inject(ExploreSectionListingService);
+  private readonly placeDetailService = inject(PlaceDetailService);
+  private readonly hotelDetailService = inject(HotelDetailService);
 
   protected readonly entityType = signal('Place');
   protected readonly editId = signal<number | null>(null);
@@ -32,6 +40,9 @@ export class SubmitContributionComponent implements OnInit {
   protected readonly editStatus = signal<ContributionStatus | null>(null);
   protected readonly editPlaceId = signal<number | null>(null);
   protected readonly locationLocked = signal(false);
+  protected readonly returnToDetail = signal(false);
+  protected readonly detailBackUrl = signal<string | null>(null);
+  protected readonly detailBackState = signal<Record<string, unknown> | undefined>(undefined);
   protected readonly currentStep = signal(1);
   protected readonly isLoading = signal(false);
   protected readonly loadError = signal<string | null>(null);
@@ -82,6 +93,15 @@ export class SubmitContributionComponent implements OnInit {
     if (navState['locationLocked'] === true) {
       this.locationLocked.set(true);
     }
+    if (navState['returnToDetail'] === true) {
+      this.returnToDetail.set(true);
+    }
+    if (typeof navState['detailBackUrl'] === 'string' && navState['detailBackUrl'].trim()) {
+      this.detailBackUrl.set(navState['detailBackUrl']);
+    }
+    if (navState['detailBackState'] && typeof navState['detailBackState'] === 'object' && !Array.isArray(navState['detailBackState'])) {
+      this.detailBackState.set(navState['detailBackState'] as Record<string, unknown>);
+    }
 
     const rawId = this.route.snapshot.paramMap.get('id');
     const id = rawId ? Number(rawId) : null;
@@ -95,19 +115,6 @@ export class SubmitContributionComponent implements OnInit {
     this.contributions.getDetail(id).subscribe({
       next: (detail) => {
         const draft = this.contributions.detailToDraft(detail);
-
-        const placeImages = navState['placeImages'] as { coverUrl?: string; cardUrl?: string; galleryUrls?: string[] } | null | undefined;
-        if (placeImages && draft.basics) {
-          draft.basics = {
-            ...draft.basics,
-            imageUrl: placeImages.coverUrl ?? draft.basics.imageUrl,
-            cardImageUrl: placeImages.cardUrl ?? draft.basics.cardImageUrl,
-            galleryImageUrls: placeImages.galleryUrls ?? draft.basics.galleryImageUrls,
-            coverImageFile: null,
-            cardImageFile: null,
-            galleryImageFiles: [],
-          };
-        }
 
         this.draft.set(draft);
         this.entityType.set(detail.entityType);
@@ -178,7 +185,20 @@ export class SubmitContributionComponent implements OnInit {
         this.editId.set(detail.id);
         this.isSubmitting.set(false);
         if (shouldUpdatePublishedPlace && detail.publishedPlaceId != null) {
-          void this.router.navigate([this.isAccommodationDraft() ? '/stays' : '/places', detail.publishedPlaceId]);
+          const detailId = String(detail.publishedPlaceId);
+          this.exploreService.invalidate();
+          this.listingService.invalidate();
+          this.placeDetailService.invalidate(detailId);
+          this.hotelDetailService.invalidate(detailId);
+          if (this.returnToDetail()) {
+            void this.router.navigate(
+              [this.isAccommodationDraft() ? '/stays' : '/places', detailId],
+              { replaceUrl: true, state: { detailBackUrl: this.detailBackUrl(), detailBackState: this.detailBackState() } },
+            );
+            return;
+          }
+
+          void this.router.navigate(['/contributions']);
           return;
         }
 
@@ -207,7 +227,18 @@ export class SubmitContributionComponent implements OnInit {
   }
 
   protected handleBack(): void {
-    if (this.currentStep() === 1) this.router.navigate(['/contributions']);
+    if (this.currentStep() === 1) {
+      const detailId = this.editPlaceId();
+      if (this.returnToDetail() && detailId != null) {
+        this.router.navigate(
+          [this.isAccommodationDraft() ? '/stays' : '/places', String(detailId)],
+          { replaceUrl: true, state: { detailBackUrl: this.detailBackUrl(), detailBackState: this.detailBackState() } },
+        );
+        return;
+      }
+
+      this.router.navigate(['/contributions']);
+    }
     else this.prevStep();
   }
 

@@ -45,6 +45,8 @@ export interface ContributionDetail extends ContributionListItem {
   longitude: number | null;
   imagePosition: string;
   imageSize: string;
+  cardImagePosition: string;
+  cardImageSize: string;
   description: string;
   phone: string;
   contactEmail: string;
@@ -106,6 +108,8 @@ interface ApiContributionDetail extends ApiContributionListItem {
   longitude?: number | null;
   imagePosition: string;
   imageSize: string;
+  cardImagePosition?: string | null;
+  cardImageSize?: string | null;
   description: string;
   phone: string;
   contactEmail: string;
@@ -114,10 +118,19 @@ interface ApiContributionDetail extends ApiContributionListItem {
   amenities?: string[] | null;
   stayAmenities?: string[] | null;
   bookingPartners?: ContributionBookingPartner[] | null;
+  images?: ApiContributionImage[] | null;
   reviewNote?: string | null;
   reviewedAt?: string | null;
   ownershipProofDocumentUrl?: string | null;
   ownershipProofOriginalFileName?: string | null;
+}
+
+interface ApiContributionImage {
+  url?: string | null;
+  imageRole?: string | null;
+  sortOrder?: number | null;
+  imagePosition?: string | null;
+  imageSize?: string | null;
 }
 
 interface UpsertPlaceContributionPayload {
@@ -136,6 +149,8 @@ interface UpsertPlaceContributionPayload {
   longitude: number | null;
   imagePosition: string;
   imageSize: string;
+  cardImagePosition?: string;
+  cardImageSize?: string;
   description: string;
   phone: string;
   contactEmail: string;
@@ -212,7 +227,8 @@ export class ContributionsService {
 
   detailToDraft(detail: ContributionDetail): ContributionDraftData {
     const coverImageUrl = detail.coverImageUrl || detail.cardImageUrl || detail.galleryImageUrls[0] || '';
-    const cardImageUrl = detail.cardImageUrl || coverImageUrl;
+    const cardImageUrl = detail.cardImageUrl || detail.galleryImageUrls[0] || coverImageUrl;
+    const galleryImageUrls = withoutSelectedImages(detail.galleryImageUrls, cardImageUrl, coverImageUrl);
 
     return {
       basics: {
@@ -229,8 +245,8 @@ export class ContributionsService {
         cardImageUrl,
         cardImageFile: null,
         coverImageFile: null,
-        galleryImageUrls: detail.galleryImageUrls,
-        galleryImageFiles: [],
+        galleryImageUrls,
+        galleryImageFiles: galleryImageUrls.map(() => null as (File | null)),
         ownershipProofFile: null,
         ownershipProofDocumentUrl: detail.ownershipProofDocumentUrl ?? null,
         ownershipProofOriginalFileName: detail.ownershipProofOriginalFileName ?? null,
@@ -238,6 +254,8 @@ export class ContributionsService {
         lng: detail.longitude,
         imgBgPosition: detail.imagePosition || '50% 50%',
         imgBgSize: detail.imageSize || 'cover',
+        cardImgBgPosition: detail.cardImagePosition || '50% 50%',
+        cardImgBgSize: detail.cardImageSize || 'cover',
       },
       features: {
         tags: detail.tags ?? [],
@@ -275,6 +293,8 @@ export class ContributionsService {
       longitude: basics.lng,
       imagePosition: basics.imgBgPosition || '50% 50%',
       imageSize: basics.imgBgSize || 'cover',
+      cardImagePosition: basics.cardImgBgPosition || '50% 50%',
+      cardImageSize: basics.cardImgBgSize || 'cover',
       description: details.description,
       phone: details.phone,
       contactEmail: details.contactEmail,
@@ -284,15 +304,34 @@ export class ContributionsService {
       bookingPartners: isAccommodation ? details.bookingPartners : [],
     };
 
-    const images: { url: string; imageRole: 'card' | 'cover' | 'gallery'; sortOrder: number }[] = [];
-    if (!basics.cardImageFile && basics.cardImageUrl) {
-      images.push({ url: basics.cardImageUrl, imageRole: 'card', sortOrder: -9 });
+    const images: {
+      url: string;
+      imageRole: 'card' | 'cover' | 'gallery';
+      sortOrder: number;
+      imagePosition?: string;
+      imageSize?: string;
+    }[] = [];
+    if (basics.cardImageFile || basics.cardImageUrl) {
+      images.push({
+        url: basics.cardImageFile ? '' : basics.cardImageUrl,
+        imageRole: 'card',
+        sortOrder: -9,
+        imagePosition: basics.cardImgBgPosition || '50% 50%',
+        imageSize: basics.cardImgBgSize || 'cover',
+      });
     }
-    if (!basics.coverImageFile && basics.imageUrl) {
-      images.push({ url: basics.imageUrl, imageRole: 'cover', sortOrder: -10 });
+    if (basics.coverImageFile || basics.imageUrl) {
+      images.push({
+        url: basics.coverImageFile ? '' : basics.imageUrl,
+        imageRole: 'cover',
+        sortOrder: -10,
+        imagePosition: basics.imgBgPosition || '50% 50%',
+        imageSize: basics.imgBgSize || 'cover',
+      });
     }
     (basics.galleryImageUrls ?? []).forEach((url, index) => {
-      if (url && !(basics.galleryImageFiles ?? [])[index]) {
+      const file = (basics.galleryImageFiles ?? [])[index];
+      if (url && !file && !url.startsWith('data:')) {
         images.push({ url, imageRole: 'gallery', sortOrder: index });
       }
     });
@@ -313,7 +352,7 @@ export class ContributionsService {
     }
 
     for (const file of basics.galleryImageFiles ?? []) {
-      formData.append('galleryImages', file);
+      if (file) formData.append('galleryImages', file);
     }
 
     if (basics.ownershipProofFile) {
@@ -413,8 +452,31 @@ function isAccommodationPlaceType(placeType: string | null | undefined): boolean
 }
 
 function mapDetail(item: ApiContributionDetail): ContributionDetail {
+  const detailImages = normalizeDetailImages(item.images);
+  const cardImage = detailImages.find(image => image.imageRole === 'card') ?? null;
+  const coverImage = detailImages.find(image => image.imageRole === 'cover') ?? null;
+  const cardImageUrl = item.cardImageUrl?.trim() ||
+    item.mainImageUrl?.trim() ||
+    cardImage?.url ||
+    detailImages[0]?.url ||
+    coverImage?.url ||
+    '';
+  const coverImageUrl = item.coverImageUrl?.trim() ||
+    coverImage?.url ||
+    detailImages[0]?.url ||
+    cardImageUrl;
+  const rawGalleryImageUrls = (item.galleryImageUrls && item.galleryImageUrls.length > 0)
+    ? item.galleryImageUrls
+    : detailImages
+      .filter(image => image.imageRole === 'gallery')
+      .map(image => image.url);
+  const galleryImageUrls = withoutSelectedImages(rawGalleryImageUrls, cardImageUrl, coverImageUrl);
+
   return {
     ...mapListItem(item),
+    cardImageUrl,
+    coverImageUrl,
+    galleryImageUrls,
     placeTypeId: item.placeTypeId ?? null,
     locationId: item.locationId ?? null,
     address: item.address ?? '',
@@ -423,8 +485,10 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     country: item.country ?? '',
     latitude: item.latitude ?? null,
     longitude: item.longitude ?? null,
-    imagePosition: item.imagePosition || '50% 50%',
-    imageSize: item.imageSize || 'cover',
+    imagePosition: coverImage?.imagePosition || item.imagePosition || '50% 50%',
+    imageSize: coverImage?.imageSize || item.imageSize || 'cover',
+    cardImagePosition: cardImage?.imagePosition || item.cardImagePosition || '50% 50%',
+    cardImageSize: cardImage?.imageSize || item.cardImageSize || 'cover',
     description: item.description ?? '',
     phone: item.phone ?? '',
     contactEmail: item.contactEmail ?? '',
@@ -440,6 +504,55 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     ownershipProofDocumentUrl: item.ownershipProofDocumentUrl ?? null,
     ownershipProofOriginalFileName: item.ownershipProofOriginalFileName ?? null,
   };
+}
+
+function normalizeDetailImages(images: ApiContributionImage[] | null | undefined): {
+  url: string;
+  imageRole: 'card' | 'cover' | 'gallery';
+  sortOrder: number;
+  imagePosition: string;
+  imageSize: string;
+}[] {
+  return (images ?? [])
+    .map((image, index) => {
+      const url = image.url?.trim() ?? '';
+      if (!url) return null;
+      return {
+        url,
+        imageRole: normalizeImageRole(image.imageRole),
+        sortOrder: typeof image.sortOrder === 'number' && Number.isFinite(image.sortOrder) ? image.sortOrder : index,
+        imagePosition: image.imagePosition?.trim() || '50% 50%',
+        imageSize: image.imageSize?.trim() || 'cover',
+      };
+    })
+    .filter((image): image is {
+      url: string;
+      imageRole: 'card' | 'cover' | 'gallery';
+      sortOrder: number;
+      imagePosition: string;
+      imageSize: string;
+    } => image !== null)
+    .sort((a, b) => imageRoleSort(a.imageRole) - imageRoleSort(b.imageRole) || a.sortOrder - b.sortOrder);
+}
+
+function normalizeImageRole(value: string | null | undefined): 'card' | 'cover' | 'gallery' {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'card' || normalized === 'cover' || normalized === 'gallery' ? normalized : 'gallery';
+}
+
+function imageRoleSort(role: 'card' | 'cover' | 'gallery'): number {
+  switch (role) {
+    case 'card': return 0;
+    case 'cover': return 1;
+    case 'gallery': return 2;
+  }
+}
+
+function withoutSelectedImages(urls: string[], cardUrl: string, coverUrl: string): string[] {
+  const selected = new Set([cardUrl, coverUrl].filter(Boolean).map(url => url.trim()));
+  return urls
+    .map(url => url.trim())
+    .filter((url, index, all) => !!url && !selected.has(url) && all.indexOf(url) === index);
 }
 
 function statusLabel(status: ContributionStatus): string {
