@@ -49,6 +49,7 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   totalItems = 0;
   isLoading = false;
   isLoadingMore = false;
+  isSyncing = false;
   errorMessage: string | null = null;
   feedbackMessage: string | null = null;
 
@@ -71,6 +72,7 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   private listRequestSequence = 0;
   private listSubscription: Subscription | null = null;
   private territoriesSubscription: Subscription | null = null;
+  private syncSubscription: Subscription | null = null;
   private pendingScrollTop = 0;
   private initialTake = PAGE_SIZE;
   private failedImageIds = new Set<string>();
@@ -120,6 +122,7 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
     this.listRequestSequence++;
     this.listSubscription?.unsubscribe();
     this.territoriesSubscription?.unsubscribe();
+    this.syncSubscription?.unsubscribe();
 
     if (this.searchDebounceHandle) {
       clearTimeout(this.searchDebounceHandle);
@@ -146,7 +149,7 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
     return this.items.length < this.totalItems;
   }
 
-  get canAddRegion(): boolean {
+  get canManageRegions(): boolean {
     return this.auth.isTerritoryManager();
   }
 
@@ -163,7 +166,7 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
       return 'No regions match this search.';
     }
 
-    return 'No regions found in this territory.';
+    return 'No synced regions found in this territory.';
   }
 
   @HostListener('document:click')
@@ -232,13 +235,41 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  goToAddRegion(): void {
-    if (!this.activeTerritoryId || !this.canAddRegion) return;
+  syncRegions(): void {
+    if (!this.activeTerritoryId || !this.canManageRegions || this.isSyncing) return;
+
+    this.syncSubscription?.unsubscribe();
+    this.isSyncing = true;
+    this.errorMessage = null;
+    this.feedbackMessage = null;
+    this.svc.setActiveTerritoryId(this.activeTerritoryId);
+    this.notifyStateChanged();
+
+    this.syncSubscription = this.svc
+      .syncFromAdm1$(this.activeTerritoryId, { dryRun: false })
+      .pipe(
+        finalize(() => {
+          this.isSyncing = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: summary => {
+          this.feedbackMessage = this.buildSyncFeedback(summary);
+          this.initialTake = Math.max(PAGE_SIZE, this.items.length || PAGE_SIZE);
+          this.resetList();
+          this.loadRegions(true);
+        },
+        error: error => this.handleSyncError(error),
+      });
+  }
+
+  goToUserAdministration(): void {
+    if (!this.activeTerritoryId || !this.canManageRegions) return;
 
     this.saveListState();
     this.svc.setActiveTerritoryId(this.activeTerritoryId);
-    this.router.navigate(['/territory/regions/new'], {
-      queryParams: { territoryId: this.activeTerritoryId },
+    this.router.navigate(['/territory/users'], {
       state: { territoryId: this.activeTerritoryId },
     });
   }
@@ -410,6 +441,60 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
 
     this.errorMessage = fallback;
     this.notifyStateChanged();
+  }
+
+  private handleSyncError(error: unknown): void {
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 401) {
+        this.errorMessage = 'Sign in with a Territory Manager account to refresh regions.';
+        this.notifyStateChanged();
+        return;
+      }
+
+      if (error.status === 403) {
+        this.errorMessage = 'This account is not authorized to refresh regions for the selected territory.';
+        this.notifyStateChanged();
+        return;
+      }
+
+      const apiMessage = typeof error.error?.message === 'string' ? error.error.message.trim() : '';
+      if (apiMessage) {
+        this.errorMessage = apiMessage;
+        this.notifyStateChanged();
+        return;
+      }
+    }
+
+    this.errorMessage = 'Unable to refresh regions from ADM1 boundaries.';
+    this.notifyStateChanged();
+  }
+
+  private buildSyncFeedback(summary: {
+    totalCandidates: number;
+    createdCount: number;
+    linkedExistingCount: number;
+    updatedCount: number;
+    existingLinkedCount: number;
+    ambiguousCount: number;
+    failedCount: number;
+  }): string {
+    const parts = [
+      `${summary.totalCandidates} ADM1 candidates checked`,
+      `${summary.createdCount} created`,
+      `${summary.linkedExistingCount} linked`,
+      `${summary.updatedCount} updated`,
+      `${summary.existingLinkedCount} already current`,
+    ];
+
+    if (summary.ambiguousCount > 0) {
+      parts.push(`${summary.ambiguousCount} ambiguous`);
+    }
+
+    if (summary.failedCount > 0) {
+      parts.push(`${summary.failedCount} failed`);
+    }
+
+    return `ADM1 region refresh complete: ${parts.join(', ')}.`;
   }
 
   private saveListState(): void {

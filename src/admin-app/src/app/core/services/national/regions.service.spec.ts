@@ -13,6 +13,7 @@ describe('RegionsService', () => {
     getRegions: ReturnType<typeof vi.fn>;
     getRegionDetail: ReturnType<typeof vi.fn>;
     getRegionContent: ReturnType<typeof vi.fn>;
+    syncRegionsFromAdm1: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -75,6 +76,21 @@ describe('RegionsService', () => {
       })),
       getRegionDetail: vi.fn(),
       getRegionContent: vi.fn(),
+      syncRegionsFromAdm1: vi.fn(() => of({
+        territoryId: 10,
+        territoryName: 'Croatia',
+        countryIso3: 'HRV',
+        totalCandidates: 21,
+        existingLinkedCount: 1,
+        linkedExistingCount: 0,
+        createdCount: 20,
+        updatedCount: 0,
+        skippedCount: 0,
+        ambiguousCount: 0,
+        failedCount: 0,
+        dryRun: false,
+        items: [],
+      })),
     };
 
     TestBed.configureTestingModule({
@@ -124,5 +140,13 @@ describe('RegionsService', () => {
       skip: 0,
       take: 25,
     });
+  });
+
+  it('delegates ADM1 region sync to the territory dashboard service', () => {
+    service.syncFromAdm1$(10, { dryRun: false }).subscribe(summary => {
+      expect(summary.createdCount).toBe(20);
+    });
+
+    expect(territoryDashboard.syncRegionsFromAdm1).toHaveBeenCalledWith(10, false, false);
   });
 });

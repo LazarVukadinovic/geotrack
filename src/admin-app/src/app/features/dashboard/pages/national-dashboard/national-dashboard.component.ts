@@ -34,6 +34,8 @@ interface TerritoryStatCard {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class NationalDashboardComponent implements OnInit {
+  private static readonly maxRegionHealthCards = 4;
+
   private readonly auth = inject(AuthService);
   private readonly territoryDashboard = inject(TerritoryDashboardService);
   private readonly router = inject(Router);
@@ -53,7 +55,7 @@ export class NationalDashboardComponent implements OnInit {
   get userRole(): string { return this.auth.getUser()?.role ?? ''; }
 
   get regions(): TerritoryRegionHealth[] {
-    return this.dashboard?.regionsHealth ?? [];
+    return this.rankRegionsForOverview(this.dashboard?.regionsHealth ?? []);
   }
 
   get topRegions(): TerritoryTopPerformingRegion[] {
@@ -312,5 +314,29 @@ export class NationalDashboardComponent implements OnInit {
       .slice(0, 2)
       .map(part => part.charAt(0).toUpperCase())
       .join('');
+  }
+
+  private rankRegionsForOverview(regions: TerritoryRegionHealth[]): TerritoryRegionHealth[] {
+    return [...regions]
+      .sort((left, right) =>
+        right.healthScore - left.healthScore ||
+        this.hasAssignedManager(right) - this.hasAssignedManager(left) ||
+        this.totalContentCount(right) - this.totalContentCount(left) ||
+        left.pendingRequestsCount - right.pendingRequestsCount ||
+        left.regionName.localeCompare(right.regionName) ||
+        left.regionId - right.regionId)
+      .slice(0, NationalDashboardComponent.maxRegionHealthCards);
+  }
+
+  private hasAssignedManager(region: TerritoryRegionHealth): number {
+    return (region.assignedManagers?.length ?? 0) > 0 ? 1 : 0;
+  }
+
+  private totalContentCount(region: TerritoryRegionHealth): number {
+    return region.destinationsCount +
+      region.locationsCount +
+      region.placesCount +
+      region.staysCount +
+      region.eventsCount;
   }
 }

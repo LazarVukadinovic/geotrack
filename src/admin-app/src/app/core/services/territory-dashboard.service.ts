@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, shareReplay, tap } from 'rxjs';
 import {
   BoundaryRegionCandidateResponse,
+  RegionSyncSummary,
   TerritoryAssignedTerritory,
   TerritoryContentDirectoryResponse,
   TerritoryDashboardResponse,
@@ -13,6 +14,7 @@ import {
   TerritoryRegionContentType,
   TerritoryRegionDetail,
   TerritoryRegionDirectoryResponse,
+  TerritoryRegionMapResponse,
   TerritorySidebarSummary,
 } from '../models/dashboard.model';
 
@@ -87,6 +89,12 @@ export class TerritoryDashboardService {
     });
   }
 
+  getRegionMap(territoryId?: number | null): Observable<TerritoryRegionMapResponse> {
+    return this.http.get<TerritoryRegionMapResponse>('/api/admin/territory/regions/map', {
+      params: this.withTerritoryId(new HttpParams(), territoryId),
+    });
+  }
+
   getRegionCreateContext(territoryId?: number | null): Observable<TerritoryRegionCreateContext> {
     return this.http.get<TerritoryRegionCreateContext>('/api/admin/territory/regions/create-context', {
       params: this.withTerritoryId(new HttpParams(), territoryId),
@@ -107,6 +115,18 @@ export class TerritoryDashboardService {
 
   createRegion(request: TerritoryRegionCreateRequest): Observable<TerritoryRegionCreateResponse> {
     return this.http.post<TerritoryRegionCreateResponse>('/api/admin/territory/regions', request);
+  }
+
+  syncRegionsFromAdm1(
+    territoryId?: number | null,
+    dryRun = false,
+    forceUpdateGeometry = false,
+  ): Observable<RegionSyncSummary> {
+    const params = this.withTerritoryId(new HttpParams(), territoryId)
+      .set('dryRun', String(dryRun))
+      .set('forceUpdateGeometry', String(forceUpdateGeometry));
+
+    return this.http.post<RegionSyncSummary>('/api/admin/territory/regions/sync-from-adm1', {}, { params });
   }
 
   getRegionDetail(

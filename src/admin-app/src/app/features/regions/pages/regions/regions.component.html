@@ -91,18 +91,43 @@
         <div class="flex-1"></div>
 
         <button
-          *ngIf="canAddRegion"
+          *ngIf="canManageRegions"
           type="button"
-          (click)="goToAddRegion()"
-          [disabled]="!activeTerritoryId || territoryLoading"
+          (click)="goToUserAdministration()"
+          [disabled]="!activeTerritoryId || territoryLoading || isSyncing"
+          class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white text-gray-700 text-sm font-semibold
+                 border border-gray-200 cursor-pointer shadow-sm hover:bg-gray-50 transition-colors
+                 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <svg class="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Assign Manager
+        </button>
+
+        <button
+          *ngIf="canManageRegions"
+          type="button"
+          (click)="syncRegions()"
+          [disabled]="!activeTerritoryId || territoryLoading || isSyncing"
           class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold
                  border-none cursor-pointer shadow-sm hover:bg-blue-800 transition-colors
                  disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          <svg *ngIf="!isSyncing" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 0 1-15.5 6.2"/>
+            <path d="M3 12A9 9 0 0 1 18.5 5.8"/>
+            <path d="M3 19v-5h5"/>
+            <path d="M21 5v5h-5"/>
           </svg>
-          Add Region
+          <svg *ngIf="isSyncing" class="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+          {{ isSyncing ? 'Refreshing...' : 'Sync ADM1 Regions' }}
         </button>
 
         <span *ngIf="!isLoading && !territoryLoading" class="text-sm text-gray-500">

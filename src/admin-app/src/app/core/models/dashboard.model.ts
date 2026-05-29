@@ -204,6 +204,58 @@ export interface TerritoryRegionDirectoryResponse {
   hasMore: boolean;
 }
 
+export interface TerritoryRegionMapResponse {
+  territory?: TerritoryRegionMapTerritory | null;
+  viewport: TerritoryRegionMapViewport;
+  regions: TerritoryRegionMapRegion[];
+  emptyStateMessage?: string | null;
+  boundaryWarningMessage?: string | null;
+}
+
+export interface TerritoryRegionMapTerritory {
+  territoryId: number;
+  name: string;
+  displayName: string;
+  countryCode?: string | null;
+  countryIso3?: string | null;
+  hasBoundary: boolean;
+  geometrySource?: string | null;
+  boundaryMissingReason?: string | null;
+  geometryGeoJson?: TerritoryRegionGeometry | null;
+  viewport: TerritoryRegionMapViewport;
+}
+
+export interface TerritoryRegionMapRegion {
+  regionId: number;
+  name: string;
+  displayName: string;
+  territoryId: number;
+  territoryDisplayName: string;
+  status: 'Active' | 'Inactive' | string;
+  healthScore?: number | null;
+  health?: TerritoryHealth | null;
+  assignedManagers: TerritoryRegionManager[];
+  managerDisplayName?: string | null;
+  contentCounts: TerritoryRegionMapContentCounts;
+  hasBoundary: boolean;
+  geometrySource?: string | null;
+  boundaryMissingReason?: string | null;
+  geometryGeoJson?: TerritoryRegionGeometry | null;
+  viewport: TerritoryRegionMapViewport;
+  centerLatitude?: number | null;
+  centerLongitude?: number | null;
+  detailRoute?: string | null;
+}
+
+export interface TerritoryRegionMapContentCounts {
+  destinations: number;
+  locations: number;
+  places: number;
+  stays: number;
+  events: number;
+  pending: number;
+}
+
 export interface TerritoryRegionBoundaryCoordinate {
   latitude: number;
   longitude: number;
@@ -326,6 +378,40 @@ export interface BoundaryRegionCandidate {
   validationMessage?: string | null;
   viewport?: TerritoryRegionMapViewport | null;
   geometryGeoJson?: TerritoryRegionGeometry | null;
+}
+
+export interface RegionSyncSummary {
+  territoryId: number;
+  territoryName: string;
+  countryIso3: string;
+  totalCandidates: number;
+  existingLinkedCount: number;
+  linkedExistingCount: number;
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  ambiguousCount: number;
+  failedCount: number;
+  dryRun: boolean;
+  items: RegionSyncItem[];
+}
+
+export interface RegionSyncItem {
+  candidateId: number;
+  candidateName: string;
+  candidateExternalKey: string;
+  regionId?: number | null;
+  regionName?: string | null;
+  status:
+    | 'AlreadyLinked'
+    | 'LinkedExisting'
+    | 'Created'
+    | 'Updated'
+    | 'Skipped'
+    | 'Ambiguous'
+    | 'Failed'
+    | string;
+  message: string;
 }
 
 export interface TerritoryContentDirectoryItem {

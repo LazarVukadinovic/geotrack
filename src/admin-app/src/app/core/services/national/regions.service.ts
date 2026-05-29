@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, map, switchMap, throwError } from 'rxjs';
 import {
   TerritoryAssignedTerritory,
+  RegionSyncSummary,
   TerritoryRegionCreateContext,
   TerritoryRegionCreateRequest,
   TerritoryRegionCreateResponse,
@@ -136,6 +137,17 @@ export class RegionsService {
 
   create$(request: TerritoryRegionCreateRequest): Observable<TerritoryRegionCreateResponse> {
     return this.territoryDashboard.createRegion(request);
+  }
+
+  syncFromAdm1$(
+    territoryId?: number | null,
+    options: { dryRun?: boolean; forceUpdateGeometry?: boolean } = {},
+  ): Observable<RegionSyncSummary> {
+    return this.territoryDashboard.syncRegionsFromAdm1(
+      territoryId ?? this.getActiveTerritoryId(),
+      options.dryRun ?? false,
+      options.forceUpdateGeometry ?? false,
+    );
   }
 
   delete$(_id?: string): Observable<void> {

@@ -16,6 +16,7 @@ describe('AllRegionsComponent', () => {
   let component: AllRegionsComponent;
   let fixture: ComponentFixture<AllRegionsComponent>;
   let getPage$: ReturnType<typeof vi.fn>;
+  let syncFromAdm1$: ReturnType<typeof vi.fn>;
 
   const authService = {
     fullName: 'Mika Mikic',
@@ -85,6 +86,21 @@ describe('AllRegionsComponent', () => {
         territory: { id: 10, name: 'Croatia', displayName: 'Croatia' },
       });
     });
+    syncFromAdm1$ = vi.fn(() => of({
+      territoryId: 10,
+      territoryName: 'Croatia',
+      countryIso3: 'HRV',
+      totalCandidates: 21,
+      existingLinkedCount: 1,
+      linkedExistingCount: 0,
+      createdCount: 20,
+      updatedCount: 0,
+      skippedCount: 0,
+      ambiguousCount: 0,
+      failedCount: 0,
+      dryRun: false,
+      items: [],
+    }));
 
     const regionsService = {
       getListState: vi.fn(() => null),
@@ -93,6 +109,7 @@ describe('AllRegionsComponent', () => {
       setActiveTerritoryId: vi.fn(),
       getActiveTerritoryId: vi.fn(() => 10),
       getPage$,
+      syncFromAdm1$,
     };
 
     await TestBed.configureTestingModule({
@@ -176,19 +193,29 @@ describe('AllRegionsComponent', () => {
     });
   });
 
-  it('renders Add Region for Territory Managers and navigates with the active territory', () => {
+  it('renders sync and assignment actions for Territory Managers', () => {
     const router = TestBed.inject(Router);
     const navigate = vi.spyOn(router, 'navigate');
     const text = fixture.nativeElement.textContent;
 
-    expect(text).toContain('Add Region');
+    expect(text).toContain('Sync ADM1 Regions');
+    expect(text).toContain('Assign Manager');
+    expect(text).not.toContain('Add Region');
 
-    component.goToAddRegion();
+    component.goToUserAdministration();
 
-    expect(navigate).toHaveBeenCalledWith(['/territory/regions/new'], {
-      queryParams: { territoryId: 10 },
+    expect(navigate).toHaveBeenCalledWith(['/territory/users'], {
       state: { territoryId: 10 },
     });
+  });
+
+  it('syncs ADM1 regions and reloads the list', () => {
+    component.syncRegions();
+    fixture.detectChanges();
+
+    expect(syncFromAdm1$).toHaveBeenCalledWith(10, { dryRun: false });
+    expect(component.feedbackMessage).toContain('21 ADM1 candidates checked');
+    expect(getPage$).toHaveBeenCalledTimes(2);
   });
 
   it('renders read-only rows without edit or delete actions', () => {
