@@ -47,7 +47,7 @@
           <h2 class="my-contributions-page__section-title">{{ section.title }}</h2>
 
           @for (item of section.items; track item.id) {
-          <div role="button" tabindex="0"
+            <div role="button" tabindex="0"
             class="my-contributions-card bg-white rounded-2xl overflow-hidden shadow-sm text-left active:scale-[0.99] transition-transform"
             (click)="openDetail(item)"
             (keydown.enter)="openDetail(item)"
@@ -138,6 +138,23 @@
               </div>
             </div>
           </div>
+          }
+
+          @if (section.total > 2) {
+            <div class="flex gap-3">
+              @if (section.visible > 2) {
+                <button type="button" (click)="showLess(section.key)"
+                  class="flex-1 py-3 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-500 bg-white shadow-sm active:bg-slate-50 transition-colors">
+                  Show less
+                </button>
+              }
+              @if (section.visible < section.total) {
+                <button type="button" (click)="loadMore(section.key)"
+                  class="flex-1 py-3 border border-slate-200 rounded-2xl text-sm font-semibold text-[#e8722a] bg-white shadow-sm active:bg-orange-50 transition-colors">
+                  Load more ({{ section.total - section.visible }} more)
+                </button>
+              }
+            </div>
           }
         }
 

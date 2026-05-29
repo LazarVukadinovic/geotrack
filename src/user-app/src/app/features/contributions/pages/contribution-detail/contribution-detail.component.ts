@@ -86,11 +86,6 @@ export class ContributionDetailPageComponent implements OnInit {
 
     const isOwnership = !!detail.ownershipProofDocumentUrl;
 
-    if (!isOwnership && detail.status === 'Approved' && detail.publishedPlaceId != null) {
-      this.router.navigate(['/places', detail.publishedPlaceId]);
-      return;
-    }
-
     this.router.navigate(['/contributions', detail.id, 'edit'], {
       state: isOwnership ? { locationLocked: true } : undefined,
     });

@@ -15,13 +15,30 @@ export class MyContributionsPageComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly contributions = inject(ContributionsService);
 
+  private readonly PAGE_INITIAL = 2;
+  private readonly PAGE_STEP = 5;
+
   protected readonly items = this.contributions.items;
   protected readonly contributionItems = computed(() => this.items().filter(item => !item.isOwnership));
   protected readonly ownershipItems = computed(() => this.items().filter(item => item.isOwnership));
+  protected readonly ownershipsVisible = signal(this.PAGE_INITIAL);
+  protected readonly contributionsVisible = signal(this.PAGE_INITIAL);
   protected readonly sections = computed(() => [
-    { title: 'Ownerships', items: this.ownershipItems() },
-    { title: 'Contributions', items: this.contributionItems() },
-  ].filter(section => section.items.length > 0));
+    {
+      title: 'Ownerships',
+      items: this.ownershipItems().slice(0, this.ownershipsVisible()),
+      total: this.ownershipItems().length,
+      visible: this.ownershipsVisible(),
+      key: 'ownerships' as const,
+    },
+    {
+      title: 'Contributions',
+      items: this.contributionItems().slice(0, this.contributionsVisible()),
+      total: this.contributionItems().length,
+      visible: this.contributionsVisible(),
+      key: 'contributions' as const,
+    },
+  ].filter(section => section.total > 0));
   protected readonly isLoading = this.contributions.isLoading;
   protected readonly loadError = this.contributions.loadError;
   protected readonly pendingDelete = signal<ContributionListItem | null>(null);
@@ -82,5 +99,16 @@ export class MyContributionsPageComponent implements OnInit {
 
   protected reload(): void {
     this.contributions.loadMine();
+  }
+
+  protected loadMore(key: 'ownerships' | 'contributions'): void {
+    const sig = key === 'ownerships' ? this.ownershipsVisible : this.contributionsVisible;
+    const total = key === 'ownerships' ? this.ownershipItems().length : this.contributionItems().length;
+    sig.set(Math.min(sig() + this.PAGE_STEP, total));
+  }
+
+  protected showLess(key: 'ownerships' | 'contributions'): void {
+    const sig = key === 'ownerships' ? this.ownershipsVisible : this.contributionsVisible;
+    sig.set(Math.max(sig() - this.PAGE_STEP, this.PAGE_INITIAL));
   }
 }
