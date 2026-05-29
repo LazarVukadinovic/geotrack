@@ -7,6 +7,8 @@ public interface ILocalBoundaryImportService
     Task<BoundaryImportSummaryDto> ImportLocalBoundariesAsync(
         string admLevel,
         bool forceRefresh = false,
+        string? countryIso3 = null,
+        int? take = null,
         CancellationToken cancellationToken = default);
 
     Task<BoundaryReconciliationReportDto> GetAdm0ReconciliationAsync(

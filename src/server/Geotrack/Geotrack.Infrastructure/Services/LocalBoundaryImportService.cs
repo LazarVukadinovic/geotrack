@@ -29,7 +29,7 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     private const string DisputedAdmLevel = "DISP";
     private const int DefaultMaxSummaryItems = 100;
     private const int DefaultSaveBatchSize = 10;
-    private const int DefaultProgressLogInterval = 25;
+    private const int DefaultProgressLogInterval = 100;
 
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
@@ -38,6 +38,7 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     private readonly IHostEnvironment _environment;
     private readonly ILogger<LocalBoundaryImportService> _logger;
     private readonly IMemoryCache? _cache;
+    private readonly Dictionary<string, int?> _candidateCountryTerritoryIds = new(StringComparer.OrdinalIgnoreCase);
 
     public LocalBoundaryImportService(
         AppDbContext db,
@@ -56,13 +57,23 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     public async Task<BoundaryImportSummaryDto> ImportLocalBoundariesAsync(
         string admLevel,
         bool forceRefresh = false,
+        string? countryIso3 = null,
+        int? take = null,
         CancellationToken cancellationToken = default)
     {
         var normalizedLevel = NormalizeAdmLevel(admLevel);
+        var normalizedCountryIso3 = NormalizeOptionalCountryFilter(countryIso3);
+        var normalizedTake = NormalizeTakeLimit(take);
+
         return normalizedLevel switch
         {
             "ADM0" => await ImportAdm0Async(forceRefresh, cancellationToken),
-            "ADM1" or "ADM2" => await ImportBoundaryCandidatesAsync(normalizedLevel, forceRefresh, cancellationToken),
+            "ADM1" or "ADM2" => await ImportBoundaryCandidatesAsync(
+                normalizedLevel,
+                forceRefresh,
+                normalizedCountryIso3,
+                normalizedTake,
+                cancellationToken),
             _ => throw new InvalidOperationException("Boundary ADM level must be ADM0, ADM1, or ADM2.")
         };
     }
@@ -682,7 +693,15 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         var batch = new BoundaryImportBatchState();
 
         _db.ChangeTracker.Clear();
-        LogImportStarted("ADM0", path, forceRefresh, saveBatchSize, maxSummaryItems);
+        LogImportStarted(
+            "ADM0",
+            path,
+            forceRefresh,
+            saveBatchSize,
+            maxSummaryItems,
+            progressLogInterval,
+            countryIso3: null,
+            takeLimit: null);
 
         await ScanFeatureElementsAsync(
             path,
@@ -847,7 +866,7 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
 
         var shapeId = NormalizeRequiredBoundaryCandidateShapeId(metadata.ShapeId);
         var shapeName = NormalizeRequiredBoundaryCandidateShapeName(metadata.Name);
-        var externalKey = BuildRegionCandidateExternalKey(normalizedLevel, countryIso3, shapeId, shapeName);
+        var externalKey = BuildRegionCandidateExternalKey(normalizedLevel, shapeGroup, shapeId, shapeName);
         var countryTerritoryId = await ResolveCandidateCountryTerritoryIdAsync(countryIso3, cancellationToken);
 
         var existing = await _db.AdministrativeBoundaryCandidates
@@ -925,17 +944,27 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     private async Task<BoundaryImportSummaryDto> ImportBoundaryCandidatesAsync(
         string admLevel,
         bool forceRefresh,
+        string? countryIso3,
+        int? takeLimit,
         CancellationToken cancellationToken)
     {
         var path = ResolveBoundaryPath(admLevel);
-        var summary = CreateSummary(admLevel, BuildSourceReference(path));
+        var summary = CreateSummary(admLevel, BuildSourceReference(path), countryIso3, takeLimit);
         var maxSummaryItems = GetMaxSummaryItems();
         var saveBatchSize = GetSaveBatchSize();
         var progressLogInterval = GetProgressLogInterval();
         var batch = new BoundaryImportBatchState();
 
         _db.ChangeTracker.Clear();
-        LogImportStarted(admLevel, path, forceRefresh, saveBatchSize, maxSummaryItems);
+        LogImportStarted(
+            admLevel,
+            path,
+            forceRefresh,
+            saveBatchSize,
+            maxSummaryItems,
+            progressLogInterval,
+            countryIso3,
+            takeLimit);
 
         await ScanFeatureElementsAsync(
             path,
@@ -947,6 +976,31 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                 var stopwatch = Stopwatch.StartNew();
                 var metadata = TryReadBoundaryFeatureMetadata(featureElement);
                 var trackedBeforeFeature = CaptureTrackedEntities();
+
+                if (!BoundaryFeatureMatchesCountryFilter(metadata, countryIso3))
+                {
+                    summary.FilteredOutCount++;
+                    return true;
+                }
+
+                if (TryCreateIgnoredLevelMismatchImportItem(
+                    metadata,
+                    admLevel,
+                    stopwatch.ElapsedMilliseconds,
+                    out var ignoredLevelMismatch))
+                {
+                    RecordFilteredSourceItem(summary, ignoredLevelMismatch, maxSummaryItems);
+                    LogBoundaryFeatureLevelMismatchFiltered(admLevel, path, metadata, featureElement);
+                    return true;
+                }
+
+                summary.MatchedFilterCount++;
+                if (takeLimit.HasValue && ReachedTakeLimit(summary, takeLimit.Value))
+                {
+                    summary.HasMore = true;
+                    summary.CompletedSourceScan = false;
+                    return false;
+                }
 
                 try
                 {
@@ -978,7 +1032,7 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                         CreateFailedImportItem(metadata, ex.Message, stopwatch.ElapsedMilliseconds),
                         maxSummaryItems);
                     LogBoundaryFeatureFailure(
-                        LogLevel.Debug,
+                        LogLevel.Warning,
                         ex,
                         $"Local {admLevel} candidate source item failed validation",
                         admLevel,
@@ -1012,7 +1066,7 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             ?? countryIso3;
         var shapeId = NormalizeRequiredBoundaryCandidateShapeId(feature.ShapeId);
         var shapeName = NormalizeRequiredBoundaryCandidateShapeName(feature.Name);
-        var externalKey = BuildRegionCandidateExternalKey(normalizedLevel, countryIso3, shapeId, shapeName);
+        var externalKey = BuildRegionCandidateExternalKey(normalizedLevel, shapeGroup, shapeId, shapeName);
         var countryTerritoryId = await ResolveCandidateCountryTerritoryIdAsync(countryIso3, cancellationToken);
 
         var existing = await _db.AdministrativeBoundaryCandidates
@@ -2195,16 +2249,16 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
 
     internal static string BuildRegionCandidateExternalKey(
         string admLevel,
-        string iso3,
+        string shapeGroup,
         string? shapeId,
         string name)
     {
         var normalizedLevel = NormalizeRegionAdmLevel(admLevel);
-        var normalizedIso3 = CountryRegistry.NormalizeIso3ForBoundaryImport(iso3)
-            ?? throw new InvalidOperationException("ISO3 country code is required.");
-        var sourceKey = FirstNonEmpty(shapeId, name, normalizedIso3)
+        var normalizedShapeGroup = CountryRegistry.NormalizeIso3ForBoundaryImport(shapeGroup)
+            ?? throw new InvalidOperationException("Boundary candidate shapeGroup must be a valid ISO3 country code.");
+        var sourceKey = FirstNonEmpty(shapeId, name, normalizedShapeGroup)
             .Replace(':', '_');
-        var key = $"{GeoBoundariesSource}:{normalizedLevel}:{normalizedIso3}:{sourceKey}";
+        var key = $"{GeoBoundariesSource}:{normalizedLevel}:{normalizedShapeGroup}:{sourceKey}";
 
         return key.Length > 300 ? key[..300] : key;
     }
@@ -2215,10 +2269,13 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     {
         var normalizedIso3 = CountryRegistry.NormalizeIso3ForBoundaryImport(countryIso3)
             ?? throw new InvalidOperationException("Boundary candidate ISO3 country code is missing or invalid.");
+        if (_candidateCountryTerritoryIds.TryGetValue(normalizedIso3, out var cachedTerritoryId))
+            return cachedTerritoryId;
+
         var normalizedIso2 = CountryRegistry.ToIso2ForBoundaryImport(normalizedIso3);
         var isoAliases = CountryRegistry.BoundaryImportIsoAliases(normalizedIso3);
 
-        return await _db.Territories
+        var territoryId = await _db.Territories
             .AsNoTracking()
             .Where(territory => territory.TerritoryKind == TerritoryKinds.Country)
             .Where(territory =>
@@ -2227,6 +2284,9 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             .OrderBy(territory => territory.Id)
             .Select(territory => (int?)territory.Id)
             .FirstOrDefaultAsync(cancellationToken);
+
+        _candidateCountryTerritoryIds[normalizedIso3] = territoryId;
+        return territoryId;
     }
 
     private static bool BoundaryCandidateMetadataMatches(
@@ -2800,17 +2860,31 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             : $"local://{relative}";
     }
 
-    private BoundaryImportSummaryDto CreateSummary(string admLevel, string sourcePath) =>
+    private BoundaryImportSummaryDto CreateSummary(
+        string admLevel,
+        string sourcePath,
+        string? countryIso3 = null,
+        int? takeLimit = null) =>
         new()
         {
             Source = GeoBoundariesSource,
             AdmLevel = admLevel,
             SourcePath = sourcePath,
+            CountryIso3 = countryIso3,
+            TakeLimit = takeLimit,
+            CompletedSourceScan = true,
             StartedAt = DateTime.UtcNow
         };
 
     private void CompleteSummary(BoundaryImportSummaryDto summary)
     {
+        if (summary.MatchedFilterCount == 0 &&
+            summary.FilteredOutCount == 0 &&
+            summary.ProcessedCount > 0)
+        {
+            summary.MatchedFilterCount = summary.ProcessedCount;
+        }
+
         summary.CompletedAt = DateTime.UtcNow;
         summary.DurationMs = Math.Max(
             0,
@@ -2822,17 +2896,23 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         string path,
         bool forceRefresh,
         int saveBatchSize,
-        int maxSummaryItems)
+        int maxSummaryItems,
+        int progressLogInterval,
+        string? countryIso3,
+        int? takeLimit)
     {
         var fileSize = TryGetBoundaryFileSize(path);
         _logger.LogInformation(
-            "Local {AdmLevel} boundary import started. Source={Source}; bytes={Bytes}; force={Force}; saveBatchSize={SaveBatchSize}; maxSummaryItems={MaxSummaryItems}",
+            "Local {AdmLevel} boundary import started. Source={Source}; bytes={Bytes}; force={Force}; countryIso3={CountryIso3}; take={TakeLimit}; saveBatchSize={SaveBatchSize}; maxSummaryItems={MaxSummaryItems}; progressLogInterval={ProgressLogInterval}",
             admLevel,
             BuildSourceReference(path),
             fileSize,
             forceRefresh,
+            countryIso3 ?? "(all)",
+            takeLimit,
             saveBatchSize,
-            maxSummaryItems);
+            maxSummaryItems,
+            progressLogInterval);
     }
 
     private void LogImportProgressIfNeeded(
@@ -2847,8 +2927,12 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         }
 
         _logger.LogInformation(
-            "Local {AdmLevel} boundary import progress. processed={Processed}; imported={Imported}; updated={Updated}; skipped={Skipped}; failed={Failed}; elapsedMs={ElapsedMs}",
+            "Local {AdmLevel} boundary import progress. scanned={Scanned}; matched={Matched}; filteredOut={FilteredOut}; ignoredLevelMismatch={IgnoredLevelMismatch}; processed={Processed}; imported={Imported}; updated={Updated}; skipped={Skipped}; failed={Failed}; elapsedMs={ElapsedMs}",
             summary.AdmLevel,
+            summary.TotalFeatures,
+            summary.MatchedFilterCount,
+            summary.FilteredOutCount,
+            summary.IgnoredLevelMismatchCount,
             summary.ProcessedCount,
             summary.ImportedCount,
             summary.UpdatedCount,
@@ -2860,14 +2944,19 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     private void LogImportCompleted(BoundaryImportSummaryDto summary)
     {
         _logger.LogInformation(
-            "Local {AdmLevel} boundary import completed. total={Total}; processed={Processed}; imported={Imported}; updated={Updated}; skipped={Skipped}; failed={Failed}; durationMs={DurationMs}; itemsTruncated={ItemsTruncated}",
+            "Local {AdmLevel} boundary import completed. scanned={Scanned}; matched={Matched}; filteredOut={FilteredOut}; ignoredLevelMismatch={IgnoredLevelMismatch}; processed={Processed}; imported={Imported}; updated={Updated}; skipped={Skipped}; failed={Failed}; completedSourceScan={CompletedSourceScan}; hasMore={HasMore}; durationMs={DurationMs}; itemsTruncated={ItemsTruncated}",
             summary.AdmLevel,
             summary.TotalFeatures,
+            summary.MatchedFilterCount,
+            summary.FilteredOutCount,
+            summary.IgnoredLevelMismatchCount,
             summary.ProcessedCount,
             summary.ImportedCount,
             summary.UpdatedCount,
             summary.SkippedCount,
             summary.FailedCount,
+            summary.CompletedSourceScan,
+            summary.HasMore,
             summary.DurationMs,
             summary.ItemsTruncated);
     }
@@ -3009,6 +3098,39 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             DurationMs = durationMs
         };
 
+    private static bool TryCreateIgnoredLevelMismatchImportItem(
+        BoundaryFeatureMetadata metadata,
+        string expectedAdmLevel,
+        long durationMs,
+        out BoundaryImportItemDto item)
+    {
+        var normalizedExpectedAdmLevel = NormalizeRegionAdmLevel(expectedAdmLevel);
+        if (!IsExpectedSourceLevelMismatch(metadata, normalizedExpectedAdmLevel))
+        {
+            item = default!;
+            return false;
+        }
+
+        var shapeType = string.IsNullOrWhiteSpace(metadata.RawShapeType)
+            ? "(missing)"
+            : metadata.RawShapeType;
+
+        item = new BoundaryImportItemDto
+        {
+            Kind = TerritoryKinds.Country,
+            Iso3 = metadata.Iso3,
+            ShapeGroup = metadata.ShapeGroup,
+            Name = metadata.Name,
+            ShapeId = metadata.ShapeId,
+            ShapeType = metadata.RawShapeType,
+            Status = "IgnoredLevelMismatch",
+            Message = $"Source feature shapeType '{shapeType}' does not match expected {normalizedExpectedAdmLevel}; ignored as source level mismatch.",
+            DurationMs = durationMs
+        };
+
+        return true;
+    }
+
     private void LogBoundaryFeatureFailure(
         LogLevel logLevel,
         Exception exception,
@@ -3032,6 +3154,25 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             metadata.RawShapeType ?? "(missing)",
             GetFeatureGeometryType(featureElement) ?? "(unknown)",
             exception.Message);
+    }
+
+    private void LogBoundaryFeatureLevelMismatchFiltered(
+        string expectedAdmLevel,
+        string path,
+        BoundaryFeatureMetadata metadata,
+        JsonElement featureElement)
+    {
+        _logger.LogDebug(
+            "Local {AdmLevel} boundary import ignored source feature because shapeType does not match expected level. Source={Source}; expectedAdmLevel={ExpectedAdmLevel}; iso3={Iso3}; shapeGroup={ShapeGroup}; shapeName={ShapeName}; shapeID={ShapeId}; shapeType={ShapeType}; geometryType={GeometryType}",
+            expectedAdmLevel,
+            Path.GetFileName(path),
+            expectedAdmLevel,
+            metadata.Iso3 ?? "(unknown)",
+            metadata.ShapeGroup ?? "(unknown)",
+            metadata.Name ?? "(unknown)",
+            metadata.ShapeId ?? "(none)",
+            metadata.RawShapeType ?? "(missing)",
+            GetFeatureGeometryType(featureElement) ?? "(unknown)");
     }
 
     private static string? GetFeatureGeometryType(JsonElement featureElement)
@@ -3075,6 +3216,11 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                 break;
         }
 
+        if (string.Equals(item.Status, "Failed", StringComparison.Ordinal))
+        {
+            RecordFailedSummaryItem(summary, item, maxSummaryItems);
+        }
+
         if (maxSummaryItems <= 0)
         {
             summary.ItemsTruncated = true;
@@ -3099,9 +3245,54 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         }
     }
 
+    private static void RecordFilteredSourceItem(
+        BoundaryImportSummaryDto summary,
+        BoundaryImportItemDto item,
+        int maxSummaryItems)
+    {
+        summary.FilteredOutCount++;
+        if (string.Equals(item.Status, "IgnoredLevelMismatch", StringComparison.Ordinal))
+        {
+            summary.IgnoredLevelMismatchCount++;
+        }
+
+        if (maxSummaryItems <= 0)
+        {
+            summary.ItemsTruncated = true;
+            return;
+        }
+
+        if (summary.Items.Count < maxSummaryItems)
+        {
+            summary.Items.Add(item);
+            return;
+        }
+
+        summary.ItemsTruncated = true;
+    }
+
+    private static void RecordFailedSummaryItem(
+        BoundaryImportSummaryDto summary,
+        BoundaryImportItemDto item,
+        int maxSummaryItems)
+    {
+        if (maxSummaryItems <= 0)
+            return;
+
+        if (summary.FailedItems.Count < maxSummaryItems)
+        {
+            summary.FailedItems.Add(item);
+            return;
+        }
+
+        summary.ItemsTruncated = true;
+    }
+
     private static void IncrementImportedKind(BoundaryImportSummaryDto summary, string? kind)
     {
-        if (IsDisputedKind(kind))
+        if (IsBoundaryCandidateSummary(summary))
+            summary.ImportedCandidatesCount++;
+        else if (IsDisputedKind(kind))
             summary.ImportedDisputedCount++;
         else
             summary.ImportedCountriesCount++;
@@ -3109,7 +3300,9 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
 
     private static void IncrementUpdatedKind(BoundaryImportSummaryDto summary, string? kind)
     {
-        if (IsDisputedKind(kind))
+        if (IsBoundaryCandidateSummary(summary))
+            summary.UpdatedCandidatesCount++;
+        else if (IsDisputedKind(kind))
             summary.UpdatedDisputedCount++;
         else
             summary.UpdatedCountriesCount++;
@@ -3117,7 +3310,9 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
 
     private static void IncrementSkippedKind(BoundaryImportSummaryDto summary, string? kind)
     {
-        if (IsDisputedKind(kind))
+        if (IsBoundaryCandidateSummary(summary))
+            summary.SkippedCandidatesCount++;
+        else if (IsDisputedKind(kind))
             summary.SkippedDisputedCount++;
         else
             summary.SkippedCountriesCount++;
@@ -3125,11 +3320,17 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
 
     private static void IncrementFailedKind(BoundaryImportSummaryDto summary, string? kind)
     {
-        if (IsDisputedKind(kind))
+        if (IsBoundaryCandidateSummary(summary))
+            summary.FailedCandidatesCount++;
+        else if (IsDisputedKind(kind))
             summary.FailedDisputedCount++;
         else
             summary.FailedCountriesCount++;
     }
+
+    private static bool IsBoundaryCandidateSummary(BoundaryImportSummaryDto summary) =>
+        string.Equals(summary.AdmLevel, "ADM1", StringComparison.Ordinal) ||
+        string.Equals(summary.AdmLevel, "ADM2", StringComparison.Ordinal);
 
     private static bool IsDisputedKind(string? kind) =>
         string.Equals(kind, TerritoryKinds.DisputedTerritory, StringComparison.Ordinal);
@@ -3147,6 +3348,60 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         _options.ProgressLogInterval <= 0
             ? DefaultProgressLogInterval
             : _options.ProgressLogInterval;
+
+    private static string? NormalizeOptionalCountryFilter(string? countryIso3)
+    {
+        if (string.IsNullOrWhiteSpace(countryIso3))
+            return null;
+
+        return CountryRegistry.NormalizeIso3ForBoundaryImport(countryIso3)
+            ?? throw new InvalidOperationException("countryIso3 must be a valid ISO3 country code.");
+    }
+
+    private static int? NormalizeTakeLimit(int? take)
+    {
+        if (!take.HasValue)
+            return null;
+
+        if (take.Value <= 0)
+            throw new InvalidOperationException("take must be greater than zero.");
+
+        return take.Value;
+    }
+
+    private static bool BoundaryFeatureMatchesCountryFilter(
+        BoundaryFeatureMetadata metadata,
+        string? countryIso3)
+    {
+        if (string.IsNullOrWhiteSpace(countryIso3))
+            return true;
+
+        var shapeGroup = CountryRegistry.NormalizeIso3ForBoundaryImport(metadata.ShapeGroup);
+        var iso3 = CountryRegistry.NormalizeIso3ForBoundaryImport(metadata.Iso3);
+        return string.Equals(shapeGroup, countryIso3, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(iso3, countryIso3, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ReachedTakeLimit(BoundaryImportSummaryDto summary, int takeLimit) =>
+        summary.ImportedCount + summary.UpdatedCount + summary.FailedCount >= takeLimit;
+
+    private static bool IsExpectedSourceLevelMismatch(
+        BoundaryFeatureMetadata metadata,
+        string expectedAdmLevel)
+    {
+        if (metadata.NormalizedShapeType == expectedAdmLevel)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(metadata.RawShapeType))
+            return false;
+
+        if (IsDisputedShapeType(metadata))
+            return true;
+
+        var normalizedShapeType = NormalizeAdmLevel(metadata.RawShapeType);
+        return normalizedShapeType is "ADM0" or "ADM1" or "ADM2" &&
+            normalizedShapeType != expectedAdmLevel;
+    }
 
     private static string NormalizeAdmLevel(string? admLevel)
     {

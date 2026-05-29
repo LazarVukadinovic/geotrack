@@ -199,6 +199,8 @@ builder.Services.AddScoped<IRegionalDashboardService, RegionalDashboardService>(
 builder.Services.AddScoped<IHealthScoreService, HealthScoreService>();
 builder.Services.AddScoped<ITerritoryDashboardService, TerritoryDashboardService>();
 builder.Services.AddScoped<IRegionBoundaryBackfillService, RegionBoundaryBackfillService>();
+builder.Services.AddScoped<IAdmBoundaryRegionSyncService, AdmBoundaryRegionSyncService>();
+builder.Services.AddScoped<IRegionContentAssignmentService, RegionContentAssignmentService>();
 builder.Services.AddScoped<ITerritoryAnalyticsService, TerritoryAnalyticsService>();
 builder.Services.AddScoped<ITerritoryUserAdminService, TerritoryUserAdminService>();
 builder.Services.AddScoped<IRegionalRequestQueueService, RegionalRequestQueueService>();
@@ -530,6 +532,44 @@ if (shouldAutoMigrate || shouldSeedDatabase || shouldSeedDemoRegionalManager || 
             .CreateLogger(nameof(DemoTerritoryManagerSeeder));
         await DemoTerritoryManagerSeeder.EnsureAsync(db, app.Configuration, logger);
     }
+
+    if (shouldSeedDatabase &&
+        app.Configuration.GetValue("Seed:SyncAdm1Regions:Enabled", true))
+    {
+        foreach (var syncCountryIso3 in ResolveSeedAdm1SyncCountryIso3s(app.Configuration))
+        {
+            var syncTerritoryId = await db.Territories
+                .AsNoTracking()
+                .Where(territory => territory.CountryIso3 == syncCountryIso3)
+                .OrderBy(territory => territory.Id)
+                .Select(territory => (int?)territory.Id)
+                .FirstOrDefaultAsync();
+
+            if (syncTerritoryId.HasValue)
+            {
+                var regionSync = scope.ServiceProvider.GetRequiredService<IAdmBoundaryRegionSyncService>();
+                var syncSummary = await regionSync.SyncRegionsFromAdm1CandidatesAsync(
+                    syncTerritoryId.Value,
+                    dryRun: false,
+                    forceUpdateGeometry: false,
+                    createMissingRegions: true,
+                    linkExistingRegions: true);
+
+                var logger = scope.ServiceProvider
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("SeedAdm1RegionSync");
+                logger.LogInformation(
+                    "Seed ADM1 region sync for {CountryIso3}: {CreatedCount} created, {LinkedExistingCount} linked, {UpdatedCount} updated, {ExistingLinkedCount} already linked, {AmbiguousCount} ambiguous, {FailedCount} failed.",
+                    syncSummary.CountryIso3,
+                    syncSummary.CreatedCount,
+                    syncSummary.LinkedExistingCount,
+                    syncSummary.UpdatedCount,
+                    syncSummary.ExistingLinkedCount,
+                    syncSummary.AmbiguousCount,
+                    syncSummary.FailedCount);
+            }
+        }
+    }
 }
 
 if (!app.Environment.IsDevelopment())
@@ -803,6 +843,24 @@ static bool IsSeedEnabledForEnvironment(IHostEnvironment environment, IConfigura
 
     return environment.IsDevelopment()
         || configuration.GetValue<bool>("Seed:RunInProduction");
+}
+
+static IReadOnlyList<string> ResolveSeedAdm1SyncCountryIso3s(IConfiguration configuration)
+{
+    var configuredList = configuration
+        .GetSection("Seed:SyncAdm1Regions:CountryIso3s")
+        .Get<string[]>();
+
+    var values = configuredList is { Length: > 0 }
+        ? configuredList
+        : (configuration["Seed:SyncAdm1Regions:CountryIso3"] ?? "HRV,SRB")
+            .Split(',', ';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    return values
+        .Select(value => value.Trim().ToUpperInvariant())
+        .Where(value => value.Length == 3 && value.All(ch => ch is >= 'A' and <= 'Z'))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
 }
 
 static bool TryParseNetwork(string value, out Microsoft.AspNetCore.HttpOverrides.IPNetwork network)
