@@ -284,6 +284,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
             .Include(user => user.TerritoryManager!)
                 .ThenInclude(manager => manager.TerritoryManagerTerritories)
                     .ThenInclude(assignment => assignment.Territory)
+            .AsSplitQuery()
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(normalizedQuery))
@@ -413,6 +414,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
                     .ThenInclude(manager => manager.User)
                         .ThenInclude(user => user.UserRoles)
                             .ThenInclude(userRole => userRole.Role)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(item => item.Id == territoryId, cancellationToken)
             ?? throw new KeyNotFoundException("Territory not found.");
 
@@ -759,6 +761,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
         var territory = await _db.Territories
             .Include(item => item.Regions)
             .Include(item => item.TerritoryManagerTerritories)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(item => item.Id == territoryId, cancellationToken)
             ?? throw new KeyNotFoundException("Territory not found.");
 
@@ -832,6 +835,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
             .Include(item => item.TerritoryManager!)
                 .ThenInclude(manager => manager.TerritoryManagerTerritories)
                     .ThenInclude(assignment => assignment.Territory)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(item => item.Id == userId, cancellationToken)
             ?? throw new InvalidOperationException("Selected user was not found.");
 

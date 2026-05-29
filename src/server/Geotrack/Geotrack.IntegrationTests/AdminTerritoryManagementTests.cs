@@ -14,9 +14,11 @@ using Geotrack.Infrastructure;
 using Geotrack.Infrastructure.Services;
 using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -1186,7 +1188,7 @@ public sealed class AdminTerritoryManagementTests
     }
 
     [Fact]
-    public async Task Local_adm1_and_adm2_imports_still_reject_wrong_adm_levels()
+    public async Task Local_adm1_and_adm2_imports_filter_wrong_adm_levels_without_failures()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         await using var scope = app.Services.CreateAsyncScope();
@@ -1207,6 +1209,14 @@ public sealed class AdminTerritoryManagementTests
                       "geometry": {
                         "type": "Polygon",
                         "coordinates": [[[10.0,10.0],[11.0,10.0],[11.0,11.0],[10.0,11.0],[10.0,10.0]]]
+                      }
+                    },
+                    {
+                      "type": "Feature",
+                      "properties": { "shapeGroup": "TAA", "shapeType": "ADM1", "shapeName": "Region In ADM1", "shapeID": "ADM1-VALID" },
+                      "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[12.0,12.0],[13.0,12.0],[13.0,13.0],[12.0,13.0],[12.0,12.0]]]
                       }
                     }
                   ]
@@ -1231,6 +1241,14 @@ public sealed class AdminTerritoryManagementTests
                         "type": "Polygon",
                         "coordinates": [[[30.0,30.0],[31.0,30.0],[31.0,31.0],[30.0,31.0],[30.0,30.0]]]
                       }
+                    },
+                    {
+                      "type": "Feature",
+                      "properties": { "shapeGroup": "TAA", "shapeType": "ADM2", "shapeName": "District In ADM2", "shapeID": "ADM2-VALID" },
+                      "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[32.0,32.0],[33.0,32.0],[33.0,33.0],[32.0,33.0],[32.0,32.0]]]
+                      }
                     }
                   ]
                 }
@@ -1245,25 +1263,150 @@ public sealed class AdminTerritoryManagementTests
             var adm1Summary = await service.ImportLocalBoundariesAsync("ADM1");
             var adm2Summary = await service.ImportLocalBoundariesAsync("ADM2");
 
-            Assert.Equal(1, adm1Summary.TotalFeatures);
-            Assert.Equal(1, adm1Summary.FailedCount);
-            var adm1Failure = Assert.Single(adm1Summary.Items);
-            Assert.Equal("TAA", adm1Failure.ShapeGroup);
-            Assert.Equal("ADM0", adm1Failure.ShapeType);
-            Assert.Contains("expected ADM1", adm1Failure.Message);
+            Assert.Equal(2, adm1Summary.TotalFeatures);
+            Assert.Equal(1, adm1Summary.FilteredOutCount);
+            Assert.Equal(1, adm1Summary.IgnoredLevelMismatchCount);
+            Assert.Equal(1, adm1Summary.ProcessedCount);
+            Assert.Equal(1, adm1Summary.ImportedCount);
+            Assert.Equal(0, adm1Summary.FailedCount);
+            Assert.Contains(adm1Summary.Items, item =>
+                item.ShapeId == "ADM1-WRONG" &&
+                item.ShapeType == "ADM0" &&
+                item.Status == "IgnoredLevelMismatch");
 
-            Assert.Equal(2, adm2Summary.TotalFeatures);
-            Assert.Equal(2, adm2Summary.FailedCount);
+            Assert.Equal(3, adm2Summary.TotalFeatures);
+            Assert.Equal(2, adm2Summary.FilteredOutCount);
+            Assert.Equal(2, adm2Summary.IgnoredLevelMismatchCount);
+            Assert.Equal(1, adm2Summary.ProcessedCount);
+            Assert.Equal(1, adm2Summary.ImportedCount);
+            Assert.Equal(0, adm2Summary.FailedCount);
             Assert.Contains(adm2Summary.Items, item =>
                 item.ShapeId == "ADM2-ADM0" &&
                 item.ShapeType == "ADM0" &&
-                item.Message != null &&
-                item.Message.Contains("expected ADM2", StringComparison.OrdinalIgnoreCase));
+                item.Status == "IgnoredLevelMismatch");
             Assert.Contains(adm2Summary.Items, item =>
                 item.ShapeId == "ADM2-ADM1" &&
                 item.ShapeType == "ADM1" &&
-                item.Message != null &&
-                item.Message.Contains("expected ADM2", StringComparison.OrdinalIgnoreCase));
+                item.Status == "IgnoredLevelMismatch");
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Local_adm1_import_ignores_wrong_level_source_feature_without_warning_or_failure()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = Path.Combine(tempRoot, "local-adm1-with-adm0-noise.geojson");
+            await File.WriteAllTextAsync(adm1Path, """
+                {
+                  "type": "FeatureCollection",
+                  "features": [
+                    {
+                      "type": "Feature",
+                      "properties": { "shapeGroup": "ATA", "shapeType": "ADM0", "shapeName": "Antarctica", "shapeID": "ATA-ADM0" },
+                      "geometry": {
+                        "type": "MultiPolygon",
+                        "coordinates": [[[[10.0,10.0],[11.0,10.0],[11.0,11.0],[10.0,11.0],[10.0,10.0]]]]
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var logger = new ListLogger<LocalBoundaryImportService>();
+            var service = CreateLocalBoundaryImportService(
+                db,
+                tempRoot,
+                adm1Path: adm1Path,
+                logger: logger);
+
+            var summary = await service.ImportLocalBoundariesAsync("ADM1");
+
+            Assert.Equal(1, summary.TotalFeatures);
+            Assert.Equal(0, summary.MatchedFilterCount);
+            Assert.Equal(1, summary.FilteredOutCount);
+            Assert.Equal(1, summary.IgnoredLevelMismatchCount);
+            Assert.Equal(0, summary.ProcessedCount);
+            Assert.Equal(0, summary.ImportedCount);
+            Assert.Equal(0, summary.SkippedCount);
+            Assert.Equal(0, summary.FailedCount);
+            Assert.Empty(summary.FailedItems);
+
+            var item = Assert.Single(summary.Items);
+            Assert.Equal("ATA", item.Iso3);
+            Assert.Equal("ATA", item.ShapeGroup);
+            Assert.Equal("Antarctica", item.Name);
+            Assert.Equal("ADM0", item.ShapeType);
+            Assert.Equal("IgnoredLevelMismatch", item.Status);
+
+            Assert.DoesNotContain(logger.Entries, entry => entry.Level >= LogLevel.Warning);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Local_adm1_import_fails_and_warns_for_invalid_expected_adm1_geometry()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = Path.Combine(tempRoot, "local-adm1-invalid-geometry.geojson");
+            await File.WriteAllTextAsync(adm1Path, """
+                {
+                  "type": "FeatureCollection",
+                  "features": [
+                    {
+                      "type": "Feature",
+                      "properties": { "shapeGroup": "TAA", "shapeType": "ADM1", "shapeName": "Broken Region", "shapeID": "BROKEN-ADM1" },
+                      "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[10.0,10.0],[10.0,10.0],[10.0,10.0]]]
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var logger = new ListLogger<LocalBoundaryImportService>();
+            var service = CreateLocalBoundaryImportService(
+                db,
+                tempRoot,
+                adm1Path: adm1Path,
+                logger: logger);
+
+            var summary = await service.ImportLocalBoundariesAsync("ADM1");
+
+            Assert.Equal(1, summary.TotalFeatures);
+            Assert.Equal(1, summary.MatchedFilterCount);
+            Assert.Equal(0, summary.FilteredOutCount);
+            Assert.Equal(0, summary.IgnoredLevelMismatchCount);
+            Assert.Equal(1, summary.ProcessedCount);
+            Assert.Equal(0, summary.ImportedCount);
+            Assert.Equal(1, summary.FailedCount);
+            Assert.Single(summary.FailedItems);
+            Assert.Contains(summary.Items, item =>
+                item.ShapeId == "BROKEN-ADM1" &&
+                item.Status == "Failed");
+
+            Assert.Contains(logger.Entries, entry =>
+                entry.Level == LogLevel.Warning &&
+                entry.Message.Contains("Local ADM1 candidate source item failed validation", StringComparison.Ordinal));
         }
         finally
         {
@@ -1539,6 +1682,32 @@ public sealed class AdminTerritoryManagementTests
         Assert.Equal(
             "Warning",
             configuration["Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command"]);
+    }
+
+    [Fact]
+    public async Task Admin_profile_query_uses_split_query_for_multiple_assignment_collections()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        int adminId;
+        string connectionString;
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            adminId = await db.Users
+                .Where(user => user.Email == "zika@gmail.com")
+                .Select(user => user.Id)
+                .SingleAsync();
+            connectionString = db.Database.GetConnectionString()
+                ?? throw new InvalidOperationException("Test database connection string is missing.");
+        }
+
+        await using var strictDb = CreateDbContextThatThrowsOnMultipleCollectionIncludes(connectionString);
+        var service = new AdminProfileService(strictDb);
+
+        var profile = await service.GetProfileAsync(adminId);
+
+        Assert.Contains(RoleNames.Admin, profile.Roles);
     }
 
     [Fact]
@@ -2469,7 +2638,8 @@ public sealed class AdminTerritoryManagementTests
         string? adm2Path = null,
         int maxSummaryItems = 100,
         int saveBatchSize = 10,
-        int progressLogInterval = 25) =>
+        int progressLogInterval = 25,
+        ILogger<LocalBoundaryImportService>? logger = null) =>
         new(
             db,
             Options.Create(new BoundaryImportOptions
@@ -2482,7 +2652,17 @@ public sealed class AdminTerritoryManagementTests
                 ProgressLogInterval = progressLogInterval
             }),
             new TestHostEnvironment(contentRoot),
-            NullLogger<LocalBoundaryImportService>.Instance);
+            logger ?? NullLogger<LocalBoundaryImportService>.Instance);
+
+    private static AppDbContext CreateDbContextThatThrowsOnMultipleCollectionIncludes(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseNetTopologySuite())
+            .ConfigureWarnings(warnings => warnings.Throw(RelationalEventId.MultipleCollectionIncludeWarning))
+            .Options;
+
+        return new AppDbContext(options);
+    }
 
     private static async Task<int> CreateAssignedTerritoryForCandidateTestAsync(
         GeotrackApiFactory app,
@@ -2680,6 +2860,46 @@ public sealed class AdminTerritoryManagementTests
             HttpRequestMessage request,
             CancellationToken cancellationToken) =>
             Task.FromResult(_send(request));
+    }
+
+    private sealed class ListLogger<T> : ILogger<T>
+    {
+        public List<TestLogEntry> Entries { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull =>
+            NullLogScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add(new TestLogEntry(logLevel, eventId, formatter(state, exception), exception));
+        }
+    }
+
+    private sealed record TestLogEntry(
+        LogLevel Level,
+        EventId EventId,
+        string Message,
+        Exception? Exception);
+
+    private sealed class NullLogScope : IDisposable
+    {
+        public static readonly NullLogScope Instance = new();
+
+        private NullLogScope()
+        {
+        }
+
+        public void Dispose()
+        {
+        }
     }
 
     private sealed class TestHostEnvironment : IHostEnvironment

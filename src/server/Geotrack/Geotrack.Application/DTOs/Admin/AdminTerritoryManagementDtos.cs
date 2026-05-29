@@ -309,12 +309,21 @@ public class BoundaryImportSummaryDto
     public string Source { get; set; } = "geoBoundaries";
     public string AdmLevel { get; set; } = "ADM0";
     public string SourcePath { get; set; } = string.Empty;
+    public string? CountryIso3 { get; set; }
+    public int? TakeLimit { get; set; }
     public int TotalFeatures { get; set; }
+    public int MatchedFilterCount { get; set; }
+    public int FilteredOutCount { get; set; }
+    public int IgnoredLevelMismatchCount { get; set; }
     public int ProcessedCount { get; set; }
     public int ImportedCount { get; set; }
     public int UpdatedCount { get; set; }
     public int SkippedCount { get; set; }
     public int FailedCount { get; set; }
+    public int ImportedCandidatesCount { get; set; }
+    public int UpdatedCandidatesCount { get; set; }
+    public int SkippedCandidatesCount { get; set; }
+    public int FailedCandidatesCount { get; set; }
     public int ImportedCountriesCount { get; set; }
     public int UpdatedCountriesCount { get; set; }
     public int SkippedCountriesCount { get; set; }
@@ -327,7 +336,10 @@ public class BoundaryImportSummaryDto
     public DateTime CompletedAt { get; set; }
     public long DurationMs { get; set; }
     public bool ItemsTruncated { get; set; }
+    public bool CompletedSourceScan { get; set; } = true;
+    public bool HasMore { get; set; }
     public List<BoundaryImportItemDto> Items { get; set; } = new();
+    public List<BoundaryImportItemDto> FailedItems { get; set; } = new();
 }
 
 public class BoundaryImportItemDto
