@@ -38,7 +38,7 @@ describe('AnalyticsService', () => {
   it('queues a track call without flushing immediately', () => {
     service.track('page_view');
     expect(service.queueSize()).toBe(1);
-    httpMock.expectNone('/api/analytics/events');
+    httpMock.expectNone('/api/interests/events');
   });
 
   it('flushNow posts the queued events and empties the queue', () => {
@@ -47,7 +47,7 @@ describe('AnalyticsService', () => {
 
     service.flushNow();
 
-    const req = httpMock.expectOne('/api/analytics/events');
+    const req = httpMock.expectOne('/api/interests/events');
     expect(req.request.method).toBe('POST');
     const body = req.request.body as { events: { eventType: string }[]; anonymousSessionId: string };
     expect(body.events).toHaveLength(2);
@@ -70,9 +70,9 @@ describe('AnalyticsService', () => {
     document.dispatchEvent(new Event('visibilitychange'));
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
 
-    httpMock.expectNone('/api/analytics/events');
+    httpMock.expectNone('/api/interests/events');
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/analytics/events');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/interests/events');
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     const headers = init.headers as Record<string, string>;
@@ -92,7 +92,7 @@ describe('AnalyticsService', () => {
 
   it('flushNow is a no-op when the queue is empty', () => {
     service.flushNow();
-    httpMock.expectNone('/api/analytics/events');
+    httpMock.expectNone('/api/interests/events');
   });
 
   it('does not queue or post events when analytics is disabled', () => {
@@ -103,7 +103,7 @@ describe('AnalyticsService', () => {
     expect(service.queueSize()).toBe(0);
 
     service.flushNow();
-    httpMock.expectNone('/api/analytics/events');
+    httpMock.expectNone('/api/interests/events');
   });
 
   it('clears already queued events when analytics is disabled', () => {
@@ -115,7 +115,7 @@ describe('AnalyticsService', () => {
 
     expect(service.queueSize()).toBe(0);
     service.flushNow();
-    httpMock.expectNone('/api/analytics/events');
+    httpMock.expectNone('/api/interests/events');
   });
 
   it('threshold-flushes once the queue reaches 25 events', () => {
@@ -127,7 +127,7 @@ describe('AnalyticsService', () => {
     // by default, so a synchronous expectOne would race them.
     TestBed.inject(ApplicationRef).tick();
 
-    const req = httpMock.expectOne('/api/analytics/events');
+    const req = httpMock.expectOne('/api/interests/events');
     expect((req.request.body as { events: unknown[] }).events).toHaveLength(25);
     req.flush(null);
     expect(service.queueSize()).toBe(0);
@@ -140,13 +140,13 @@ describe('AnalyticsService', () => {
 
     service.track('login_completed');
     service.flushNow();
-    const req1 = httpMock.expectOne('/api/analytics/events');
+    const req1 = httpMock.expectOne('/api/interests/events');
     const sid1 = (req1.request.body as { anonymousSessionId: string }).anonymousSessionId;
     req1.flush(null);
 
     service.track('register_completed');
     service.flushNow();
-    const req2 = httpMock.expectOne('/api/analytics/events');
+    const req2 = httpMock.expectOne('/api/interests/events');
     const sid2 = (req2.request.body as { anonymousSessionId: string }).anonymousSessionId;
     req2.flush(null);
 
@@ -161,7 +161,7 @@ describe('AnalyticsService', () => {
     service.track('detail_view', { entityType: 'place', entityId: 42 });
     service.flushNow();
 
-    const req = httpMock.expectOne('/api/analytics/events');
+    const req = httpMock.expectOne('/api/interests/events');
     const body = req.request.body as { events: { route?: string }[] };
     expect(body.events[0].route).toBe('/places/:id');
     req.flush(null);
@@ -173,7 +173,7 @@ describe('AnalyticsService', () => {
       entityId: 7,
     });
 
-    const req = httpMock.expectOne('/api/analytics/events');
+    const req = httpMock.expectOne('/api/interests/events');
     const body = req.request.body as { events: { eventType: string; metadata?: Record<string, unknown> }[] };
     expect(body.events[0].eventType).toBe('outbound_link_clicked');
     expect(body.events[0].metadata).toEqual({
@@ -190,7 +190,7 @@ describe('AnalyticsService', () => {
       entityId: 7,
     });
 
-    const req = httpMock.expectOne('/api/analytics/events');
+    const req = httpMock.expectOne('/api/interests/events');
     const body = req.request.body as { events: { eventType: string; metadata?: Record<string, unknown> }[] };
     expect(body.events[0].metadata).toEqual({
       provider: 'direct-booking',
@@ -210,7 +210,7 @@ describe('AnalyticsService', () => {
     expect(service.queueSize()).toBe(1);
     service.flushNow();
 
-    const req = httpMock.expectOne('/api/analytics/events');
+    const req = httpMock.expectOne('/api/interests/events');
     const body = req.request.body as { events: { eventType: string; route?: string }[] };
     expect(body.events).toHaveLength(1);
     expect(body.events[0].eventType).toBe('page_view');
@@ -223,14 +223,14 @@ describe('AnalyticsService', () => {
       entityType: 'hotel',
       entityId: 7,
     });
-    let req = httpMock.expectOne('/api/analytics/events');
+    let req = httpMock.expectOne('/api/interests/events');
     req.flush(null);
 
     service.trackOutboundLink('Booking.com', 'https://www.booking.com/hotel/hr/example.html', {
       entityType: 'hotel',
       entityId: 7,
     });
-    req = httpMock.expectOne('/api/analytics/events');
+    req = httpMock.expectOne('/api/interests/events');
     const body = req.request.body as { events: { eventType: string }[] };
     expect(body.events).toHaveLength(1);
     expect(body.events[0].eventType).toBe('outbound_link_clicked');
@@ -248,7 +248,7 @@ describe('AnalyticsService', () => {
     service.endCurrentView('navigation');
     service.flushNow();
 
-    const req = httpMock.expectOne('/api/analytics/events');
+    const req = httpMock.expectOne('/api/interests/events');
     const body = req.request.body as {
       events: {
         eventType: string;
@@ -283,7 +283,7 @@ describe('AnalyticsService', () => {
     service.endCurrentView('navigation');
     service.flushNow();
 
-    const req = httpMock.expectOne('/api/analytics/events');
+    const req = httpMock.expectOne('/api/interests/events');
     const body = req.request.body as { events: { eventType: string; durationMs?: number }[] };
     expect(body.events.find(event => event.eventType === 'page_duration')?.durationMs).toBe(30 * 60 * 1000);
     req.flush(null);
@@ -292,7 +292,7 @@ describe('AnalyticsService', () => {
   it('swallows errors so tracking never breaks the caller', () => {
     service.track('page_view');
     service.flushNow();
-    const req = httpMock.expectOne('/api/analytics/events');
+    const req = httpMock.expectOne('/api/interests/events');
 
     // Simulating a 500 must not throw — the .pipe(catchError) inside the
     // service should turn it into a silent observable.

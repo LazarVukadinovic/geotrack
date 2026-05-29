@@ -56,7 +56,7 @@ export interface TrackPayload {
 }
 
 /**
- * Wire shape sent to POST /api/analytics/events. Server overrides UserId from
+ * Wire shape sent to POST /api/interests/events. Server overrides UserId from
  * the JWT (never trusted from client) and OccurredAt (server time).
  */
 export interface AnalyticsEventEnvelope {

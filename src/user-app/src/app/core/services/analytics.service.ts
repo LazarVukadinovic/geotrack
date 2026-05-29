@@ -13,7 +13,7 @@ import {
 } from './analytics.types';
 
 const SESSION_KEY = 'geotrack_anon_session_id';
-const ENDPOINT = resolveApiUrl('/api/analytics/events');
+const ENDPOINT = resolveApiUrl('/api/interests/events');
 
 const PERIODIC_FLUSH_INTERVAL_MS = 15_000;
 const NORMAL_FLUSH_DELAY_MS = 2_500;
@@ -72,7 +72,7 @@ const COLLECTION_RULES: Partial<Record<AnalyticsEventType, CollectionRule>> = {
 /**
  * First-party analytics tracker. Buffers events client-side, suppresses obvious
  * short-window duplicates, coalesces pending noisy events, and flushes to
- * POST /api/analytics/events when the queue is old enough, high-value events
+ * POST /api/interests/events when the queue is old enough, high-value events
  * arrive, the queue hits 25 events, or the page is hidden/unloaded. The auth
  * interceptor attaches the JWT automatically for authenticated users; anonymous
  * sessions carry a sessionStorage-bound UUID that dies with the tab.
