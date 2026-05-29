@@ -12,6 +12,7 @@ const DEFAULT_PICKER_LAT = 44.82;
 const DEFAULT_PICKER_LNG = 20.46;
 const MAX_OWNERSHIP_PROOF_BYTES = 10 * 1024 * 1024;
 const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe']);
+const HIDDEN_CONTRIBUTION_PLACE_TYPES = new Set(['beach', 'nature']);
 
 export interface ContributionPlaceTypeOption {
   id: number;
@@ -427,7 +428,8 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
             name: type.name.trim(),
             description: type.description ?? null,
             isOwnable: !!type.isOwnable,
-          }));
+          }))
+          .filter(type => !HIDDEN_CONTRIBUTION_PLACE_TYPES.has(normalizePlaceType(type.name)));
 
         if (normalized.length === 0) return;
 
@@ -715,8 +717,6 @@ function defaultPlaceTypes(): ContributionPlaceTypeOption[] {
     { id: 0, name: 'Landmark', description: null, isOwnable: false },
     { id: 0, name: 'Restaurant', description: null, isOwnable: true },
     { id: 0, name: 'Cafe', description: null, isOwnable: true },
-    { id: 0, name: 'Nature', description: null, isOwnable: false },
-    { id: 0, name: 'Beach', description: null, isOwnable: false },
     { id: 0, name: 'Stay', description: null, isOwnable: true },
   ];
 }

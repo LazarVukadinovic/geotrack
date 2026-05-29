@@ -207,18 +207,18 @@
           </div>
         }
 
-        @if (p.isOwnable) {
+        @if (p.ownerContributionId || p.isOwnable) {
           <div class="mt-[14px] mb-6 flex flex-wrap gap-2.5 justify-center">
-            @if (p.isOwnedByCurrentUser) {
+            @if (p.ownerContributionId) {
               <button type="button" class="pd__cta pd__cta--outline" (click)="navigateToOwnerEdit()">
                 Edit
               </button>
-            } @else if (p.hasPendingOwnershipClaim || ownershipClaimSubmitted()) {
+            } @else if (p.isOwnable && (p.hasPendingOwnershipClaim || ownershipClaimSubmitted())) {
               <div class="pd__ownership-pending">
                 <span class="pd__ownership-pending-title">Ownership request submitted.</span>
                 <span class="pd__ownership-pending-sub">A regional manager will review it</span>
               </div>
-            } @else {
+            } @else if (p.isOwnable) {
               <button type="button" class="pd__cta pd__cta--outline" (click)="openOwnershipClaim()">
                 Request ownership
               </button>

@@ -312,8 +312,7 @@ public class PlaceContributionService : IPlaceContributionService
             contribution.Status == PlaceContributionStatus.Approved &&
             type == PlaceContributionType.UpdatePlace &&
             contribution.PlaceId.HasValue &&
-            request.PlaceId == contribution.PlaceId &&
-            await UserCanManagePlaceAsync(userId, contribution.PlaceId.Value);
+            request.PlaceId == contribution.PlaceId;
 
         if (contribution.Status != PlaceContributionStatus.PendingReview && !isApprovedPublishedEdit)
             throw new InvalidOperationException("Only pending contributions and owned approved places can be edited.");

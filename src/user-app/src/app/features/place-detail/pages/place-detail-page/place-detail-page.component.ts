@@ -307,7 +307,7 @@ export class PlaceDetailPageComponent {
     void this.router.navigate(['/contributions', p.ownerContributionId, 'edit'], {
       replaceUrl: true,
       state: {
-        locationLocked: true,
+        ...(p.isOwnedByCurrentUser ? { locationLocked: true } : {}),
         returnToDetail: true,
         detailBackUrl: this.detailBackUrl(),
         detailBackState: this.detailBackState(),

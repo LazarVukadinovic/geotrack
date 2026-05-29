@@ -163,26 +163,15 @@ public class PlaceService : IPlaceService
             await _favoriteService.IsFavoriteAsync(userId.Value, "place", id);
         var isOwnedByCurrentUser = userId.HasValue &&
             await _db.UserPlaces.AsNoTracking().AnyAsync(item => item.PlaceId == id && item.UserId == userId.Value);
+        var approvedContributionId = userId.HasValue
+            ? await GetApprovedEditableContributionIdAsync(id, userId.Value)
+            : null;
         var hasPendingOwnershipClaim = userId.HasValue &&
             await _db.PlaceContributions.AsNoTracking().AnyAsync(item =>
                 item.PlaceId == id &&
                 item.UserId == userId.Value &&
                 item.Type == PlaceContributionType.ClaimOwnership &&
                 item.Status == PlaceContributionStatus.PendingReview);
-        int? ownerContributionId = null;
-        if (isOwnedByCurrentUser && userId.HasValue)
-        {
-            ownerContributionId = await _db.PlaceContributions.AsNoTracking()
-                .Where(item =>
-                    item.PlaceId == id &&
-                    item.UserId == userId.Value &&
-                    item.Type == PlaceContributionType.ClaimOwnership &&
-                    item.Status == PlaceContributionStatus.Approved)
-                .OrderByDescending(item => item.UpdatedAt ?? item.CreatedAt)
-                .Select(item => (int?)item.Id)
-                .FirstOrDefaultAsync();
-        }
-
         var similar = await _db.Places
             .AsNoTracking()
             .Include(p => p.PlaceReviews)
@@ -304,7 +293,7 @@ public class PlaceService : IPlaceService
             IsOwnable = place.PlaceType?.IsOwnable ?? false,
             IsOwnedByCurrentUser = isOwnedByCurrentUser,
             HasPendingOwnershipClaim = hasPendingOwnershipClaim,
-            OwnerContributionId = ownerContributionId,
+            OwnerContributionId = approvedContributionId,
             ContentType = "place",
             Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant(),
             ContactEmail = DisplayTextSafety.CleanOptional(place.ContactEmail),
@@ -359,26 +348,15 @@ public class PlaceService : IPlaceService
             await _favoriteService.IsFavoriteAsync(userId.Value, "place", id);
         var isOwnedByCurrentUser = userId.HasValue &&
             await _db.UserPlaces.AsNoTracking().AnyAsync(item => item.PlaceId == id && item.UserId == userId.Value);
+        var approvedContributionId = userId.HasValue
+            ? await GetApprovedEditableContributionIdAsync(id, userId.Value)
+            : null;
         var hasPendingOwnershipClaim = userId.HasValue &&
             await _db.PlaceContributions.AsNoTracking().AnyAsync(item =>
                 item.PlaceId == id &&
                 item.UserId == userId.Value &&
                 item.Type == PlaceContributionType.ClaimOwnership &&
                 item.Status == PlaceContributionStatus.PendingReview);
-        int? ownerContributionId = null;
-        if (isOwnedByCurrentUser && userId.HasValue)
-        {
-            ownerContributionId = await _db.PlaceContributions.AsNoTracking()
-                .Where(item =>
-                    item.PlaceId == id &&
-                    item.UserId == userId.Value &&
-                    item.Type == PlaceContributionType.ClaimOwnership &&
-                    item.Status == PlaceContributionStatus.Approved)
-                .OrderByDescending(item => item.UpdatedAt ?? item.CreatedAt)
-                .Select(item => (int?)item.Id)
-                .FirstOrDefaultAsync();
-        }
-
         var similar = await _db.Places
             .AsNoTracking()
             .Include(p => p.PlaceReviews)
@@ -492,7 +470,7 @@ public class PlaceService : IPlaceService
             IsOwnable = place.PlaceType?.IsOwnable ?? false,
             IsOwnedByCurrentUser = isOwnedByCurrentUser,
             HasPendingOwnershipClaim = hasPendingOwnershipClaim,
-            OwnerContributionId = ownerContributionId,
+            OwnerContributionId = approvedContributionId,
         };
     }
 
@@ -804,6 +782,20 @@ public class PlaceService : IPlaceService
             .ThenByDescending(r => r.Id)
             .Take(ReviewPaging.DefaultTake)
             .ToListAsync();
+    }
+
+    private async Task<int?> GetApprovedEditableContributionIdAsync(int placeId, int userId)
+    {
+        return await _db.PlaceContributions
+            .AsNoTracking()
+            .Where(item =>
+                item.PlaceId == placeId &&
+                item.UserId == userId &&
+                item.Status == PlaceContributionStatus.Approved)
+            .OrderByDescending(item => item.Type == PlaceContributionType.ClaimOwnership)
+            .ThenByDescending(item => item.UpdatedAt ?? item.CreatedAt)
+            .Select(item => (int?)item.Id)
+            .FirstOrDefaultAsync();
     }
 
     private async Task<PlaceListingResponseDto> BuildPlaceListItemsAsync(
