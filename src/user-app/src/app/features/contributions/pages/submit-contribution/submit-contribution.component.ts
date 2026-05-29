@@ -109,7 +109,7 @@ export class SubmitContributionComponent implements OnInit {
         this.editType.set(detail.type);
         this.editStatus.set(detail.status);
         this.editPlaceId.set(detail.publishedPlaceId);
-        if (detail.type === 'ClaimOwnership' && detail.status === 'Approved') {
+        if (this.shouldLockLocationForEdit(detail.status, detail.publishedPlaceId)) {
           this.locationLocked.set(true);
         }
         this.isLoading.set(false);
@@ -253,7 +253,7 @@ export class SubmitContributionComponent implements OnInit {
         this.editType.set(detail.type);
         this.editStatus.set(detail.status);
         this.editPlaceId.set(detail.publishedPlaceId);
-        if (detail.type === 'ClaimOwnership' && detail.status === 'Approved') {
+        if (this.shouldLockLocationForEdit(detail.status, detail.publishedPlaceId)) {
           this.locationLocked.set(true);
         }
         this.isLoading.set(false);
@@ -263,6 +263,10 @@ export class SubmitContributionComponent implements OnInit {
         this.isLoading.set(false);
       },
     });
+  }
+
+  private shouldLockLocationForEdit(status: ContributionStatus | null, publishedPlaceId: number | null): boolean {
+    return status === 'Approved' && publishedPlaceId != null;
   }
 }
 

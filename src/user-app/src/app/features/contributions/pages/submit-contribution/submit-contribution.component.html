@@ -70,6 +70,7 @@
         @case (2) {
           <app-step-features
             [data]="draft().features"
+            [placeType]="draft().basics?.placeType"
             (changed)="onFeaturesChanged($event)"
             (saved)="onFeaturesSaved($event)"
             (back)="prevStep()"

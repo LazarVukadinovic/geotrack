@@ -402,7 +402,14 @@ public static class SeedData
             await EnsureAmenityAsync("Free WiFi", "wifi"),
             await EnsureAmenityAsync("Outdoor Seating", "outdoor"),
             await EnsureAmenityAsync("Sea View", "sea"),
-            await EnsureAmenityAsync("Family Friendly", "family")
+            await EnsureAmenityAsync("Family Friendly", "family"),
+            await EnsureAmenityAsync("Swimming Pool", "pool"),
+            await EnsureAmenityAsync("Parking", "parking"),
+            await EnsureAmenityAsync("Spa", "spa"),
+            await EnsureAmenityAsync("Gym", "gym"),
+            await EnsureAmenityAsync("Breakfast", "breakfast"),
+            await EnsureAmenityAsync("Air Conditioning", "ac"),
+            await EnsureAmenityAsync("Restaurant", "restaurant"),
         };
 
         Amenity A(string icon) => amenities.First(x => x.Icon == icon);
@@ -4311,6 +4318,13 @@ public static class SeedData
         var seaView = await EnsureAmenityAsync("Sea View", "sea");
         var family = await EnsureAmenityAsync("Family Friendly", "family");
         var wifiAmenity = await EnsureAmenityAsync("Free WiFi", "wifi");
+        await EnsureAmenityAsync("Swimming Pool", "pool");
+        await EnsureAmenityAsync("Parking", "parking");
+        await EnsureAmenityAsync("Spa", "spa");
+        await EnsureAmenityAsync("Gym", "gym");
+        await EnsureAmenityAsync("Breakfast", "breakfast");
+        await EnsureAmenityAsync("Air Conditioning", "ac");
+        await EnsureAmenityAsync("Restaurant", "restaurant");
 
         var booking = await EnsureBookingPartnerAsync("Booking.com", "dark");
         var airbnb = await EnsureBookingPartnerAsync("Airbnb", "brand");

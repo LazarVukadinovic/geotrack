@@ -1,7 +1,7 @@
-import { Component, input, output, effect } from '@angular/core';
+import { Component, computed, input, output, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
-  CONTRIBUTION_AMENITY_OPTIONS,
+  getAmenitiesForPlaceType,
   normalizeContributionAmenityIds,
 } from '../../../../services/contribution-amenities';
 
@@ -18,6 +18,7 @@ export interface FeaturesData {
 })
 export class StepFeaturesComponent {
   data = input<FeaturesData | null>(null);
+  placeType = input<string | null | undefined>(null);
   saved = output<FeaturesData>();
   back = output<void>();
   changed = output<FeaturesData>();
@@ -30,18 +31,23 @@ export class StepFeaturesComponent {
     'Lakefront', 'Historic',
   ];
 
-  amenities = CONTRIBUTION_AMENITY_OPTIONS;
+  readonly availableAmenities = computed(() => getAmenitiesForPlaceType(this.placeType()));
 
   selectedTags: string[] = [];
   selectedAmenities: string[] = [];
 
-    constructor() {
+  constructor() {
     effect(() => {
       const d = this.data();
       if (d) {
         this.selectedTags = normalizeCharacteristicTags(d.tags, this.characteristicTags);
         this.selectedAmenities = normalizeContributionAmenityIds(d.amenities);
       }
+    });
+
+    effect(() => {
+      const available = this.availableAmenities().map(a => a.id);
+      this.selectedAmenities = this.selectedAmenities.filter(id => available.includes(id));
     });
   }
 
@@ -100,7 +106,7 @@ function characteristicKey(value: string): string {
   return value
     .trim()
     .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .replace(/&/g, ' and ')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')

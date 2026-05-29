@@ -3,16 +3,41 @@ export interface ContributionAmenityOption {
   label: string;
 }
 
-export const CONTRIBUTION_AMENITY_OPTIONS: ContributionAmenityOption[] = [
-  { id: 'pool', label: 'POOL' },
+const ALL_AMENITY_OPTIONS: ContributionAmenityOption[] = [
+  { id: 'outdoor', label: 'OUTDOOR SEATING' },
   { id: 'wifi', label: 'WIFI' },
-  { id: 'breakfast', label: 'BREAKFAST' },
   { id: 'parking', label: 'PARKING' },
+  { id: 'ac', label: 'A/C' },
+  { id: 'breakfast', label: 'BREAKFAST' },
+  { id: 'sea', label: 'SEA VIEW' },
+  { id: 'family', label: 'FAMILY FRIENDLY' },
+  { id: 'pool', label: 'POOL' },
   { id: 'spa', label: 'SPA' },
   { id: 'gym', label: 'GYM' },
   { id: 'dining', label: 'DINING' },
-  { id: 'ac', label: 'A/C' },
 ];
+
+const PLACE_TYPE_AMENITY_IDS: Record<string, string[]> = {
+  stay:       ['wifi', 'pool', 'breakfast', 'parking', 'spa', 'gym', 'dining', 'ac', 'outdoor', 'sea', 'family'],
+  restaurant: ['outdoor', 'wifi', 'parking', 'ac', 'sea'],
+  cafe:       ['outdoor', 'wifi', 'breakfast', 'parking', 'ac', 'sea'],
+  bar:        ['outdoor', 'wifi', 'parking', 'ac'],
+  beach:      ['parking', 'outdoor', 'family', 'wifi', 'sea'],
+  landmark:   ['parking', 'wifi', 'ac'],
+  nature:     ['parking', 'outdoor', 'family'],
+  museum:     ['parking', 'wifi', 'ac'],
+  gallery:    ['parking', 'wifi', 'ac'],
+};
+
+export function getAmenitiesForPlaceType(placeType: string | null | undefined): ContributionAmenityOption[] {
+  const key = (placeType ?? '').trim().toLowerCase();
+  const ids = PLACE_TYPE_AMENITY_IDS[key];
+  if (!ids) return ALL_AMENITY_OPTIONS;
+  return ids.map(id => ALL_AMENITY_OPTIONS.find(o => o.id === id)!).filter(Boolean);
+}
+
+/** @deprecated use getAmenitiesForPlaceType */
+export const CONTRIBUTION_AMENITY_OPTIONS = ALL_AMENITY_OPTIONS;
 
 const AMENITY_ID_ALIASES: Record<string, string> = {
   'free-wifi': 'wifi',
@@ -36,6 +61,9 @@ const AMENITY_ID_ALIASES: Record<string, string> = {
   'air-conditioning': 'ac',
   'air-conditioned': 'ac',
   'air-conditioner': 'ac',
+  'outdoor-seating': 'outdoor',
+  'sea-view': 'sea',
+  'family-friendly': 'family',
 };
 
 const STAY_AMENITY_API_VALUES: Record<string, string> = {
@@ -84,7 +112,7 @@ function amenityKey(value: string): string {
   return value
     .trim()
     .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .replace(/&/g, ' and ')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')

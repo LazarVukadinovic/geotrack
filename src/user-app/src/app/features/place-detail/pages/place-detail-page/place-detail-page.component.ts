@@ -307,7 +307,7 @@ export class PlaceDetailPageComponent {
     void this.router.navigate(['/contributions', p.ownerContributionId, 'edit'], {
       replaceUrl: true,
       state: {
-        ...(p.isOwnedByCurrentUser ? { locationLocked: true } : {}),
+        locationLocked: true,
         returnToDetail: true,
         detailBackUrl: this.detailBackUrl(),
         detailBackState: this.detailBackState(),
@@ -384,6 +384,12 @@ export class PlaceDetailPageComponent {
         return 'M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7';
       case 'ac':
         return 'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z';
+      case 'outdoor':
+        return 'M3 21h18M3 21l9-18 9 18M9 21v-6h6v6';
+      case 'sea':
+        return 'M2 17c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1M2 12c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1M12 4l3 4H9l3-4z';
+      case 'family':
+        return 'M9 5m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0M16 5m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0M6 21v-5H4l2-6h6l2 6h-2v5M13 21v-4h2l1-5h4l1 5h-2v4';
       default:
         return 'M5 12.5 9.5 17 19 7';
     }
