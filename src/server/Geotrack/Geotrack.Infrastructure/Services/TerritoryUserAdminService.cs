@@ -642,6 +642,7 @@ public sealed class TerritoryUserAdminService : ITerritoryUserAdminService
                 .ThenInclude(assignment => assignment.Region)
             .Include(user => user.TerritoryManager)
                 .ThenInclude(manager => manager!.TerritoryManagerTerritories)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(user => user.Id == targetUserId)
             ?? throw new KeyNotFoundException("User not found.");
     }

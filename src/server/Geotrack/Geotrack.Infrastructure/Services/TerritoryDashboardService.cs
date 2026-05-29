@@ -14,10 +14,14 @@ namespace Geotrack.Infrastructure.Services;
 public sealed class TerritoryDashboardService : ITerritoryDashboardService
 {
     private const int DefaultTopTake = 3;
+    private const int DashboardRegionsHealthTake = 4;
     private const int DetailPreviewTake = 5;
     private const int DirectoryMaxTake = 100;
     private const string PublishedStatus = "Published";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string BoundaryDisplayGeometryPropertyName = "BoundaryDisplayGeometry";
+    private const string TerritoryBoundaryGeometrySource = "Territory.BoundaryGeometry";
+    private const string RegionBoundaryGeometrySource = "Region.BoundaryGeometry";
     private const string ManualDrawBoundarySource = "ManualDraw";
     private const string OsmBoundarySource = "OsmBoundary";
     private const string GeoBoundariesBoundarySource = "geoBoundaries";
@@ -298,6 +302,81 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             Skip = skip,
             Take = take,
             HasMore = skip + take < ordered.Count
+        };
+    }
+
+    public async Task<TerritoryRegionMapDto> GetRegionMapAsync(
+        int userId,
+        int? territoryId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureTerritoryManagerRoleAsync(userId);
+
+        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, territoryId, cancellationToken);
+        if (activeTerritory is null)
+        {
+            return new TerritoryRegionMapDto
+            {
+                Viewport = new TerritoryRegionMapViewportDto { IsEmpty = true },
+                EmptyStateMessage = "No territory is assigned to this account.",
+                BoundaryWarningMessage = "No territory is assigned to this account."
+            };
+        }
+
+        var regionRows = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.TerritoryId == activeTerritory.Id)
+            .OrderBy(region => region.Name)
+            .ThenBy(region => region.Id)
+            .Select(region => new TerritoryRegionMapRow
+            {
+                Id = region.Id,
+                Name = region.Name,
+                TerritoryId = region.TerritoryId,
+                TerritoryName = region.Territory.Name,
+                BoundaryGeometry = EF.Property<Geometry?>(region, BoundaryGeometryPropertyName),
+                BoundaryDisplayGeometry = EF.Property<Geometry?>(region, BoundaryDisplayGeometryPropertyName)
+            })
+            .ToListAsync(cancellationToken);
+
+        var regionIds = regionRows.Select(region => region.Id).ToList();
+        var contentCounts = await GetRegionContentCountsAsync(regionIds);
+        var pendingCounts = await GetRegionPendingRequestCountsAsync(regionIds);
+        var managers = await GetRegionManagersAsync(regionIds);
+        var healthPeriod = _healthScores.ResolvePeriod("1m");
+        var healthScores = await _healthScores.GetRegionHealthScoresAsync(regionIds, healthPeriod);
+
+        var territoryDto = BuildMapTerritory(activeTerritory);
+        var regionDtos = regionRows
+            .Select(row => BuildMapRegion(
+                row,
+                contentCounts.GetValueOrDefault(row.Id, RegionContentCounts.Empty),
+                pendingCounts.GetValueOrDefault(row.Id),
+                managers.GetValueOrDefault(row.Id, new List<ManagerRow>()),
+                healthScores.GetValueOrDefault(row.Id)))
+            .ToList();
+
+        var viewportGeometries = new List<Geometry>();
+        var territoryGeometry = ToPolygonalGeometry(activeTerritory.BoundaryGeometry);
+        if (territoryGeometry is not null)
+        {
+            viewportGeometries.Add(territoryGeometry);
+        }
+
+        viewportGeometries.AddRange(regionRows
+            .Select(row => ToPolygonalGeometry(row.BoundaryGeometry))
+            .Where(geometry => geometry is not null)
+            .Select(geometry => geometry!));
+
+        return new TerritoryRegionMapDto
+        {
+            Territory = territoryDto,
+            Regions = regionDtos,
+            Viewport = BuildRegionMapViewport(viewportGeometries),
+            EmptyStateMessage = regionDtos.Count == 0
+                ? "No regions are available for this territory. Sync ADM1 regions first."
+                : null,
+            BoundaryWarningMessage = BuildRegionMapBoundaryWarning(territoryDto, regionDtos)
         };
     }
 
@@ -976,6 +1055,14 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                     ActivityScore = healthScore
                 };
             })
+            .OrderByDescending(region => region.HealthScore)
+            .ThenByDescending(region => region.AssignedManagers.Count > 0)
+            .ThenByDescending(TotalContentCount)
+            .ThenBy(region => region.PendingRequestsCount)
+            .ThenBy(region => region.RegionName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(region => region.RegionName, StringComparer.Ordinal)
+            .ThenBy(region => region.RegionId)
+            .Take(DashboardRegionsHealthTake)
             .ToList();
     }
 
@@ -2518,7 +2605,10 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         return map;
     }
 
-    private async Task<TerritoryBoundaryRow?> GetAuthorizedTerritoryBoundaryAsync(int userId, int? territoryId)
+    private async Task<TerritoryBoundaryRow?> GetAuthorizedTerritoryBoundaryAsync(
+        int userId,
+        int? territoryId,
+        CancellationToken cancellationToken = default)
     {
         if (territoryId.HasValue && territoryId.Value <= 0)
             throw new InvalidOperationException("territoryId must be positive.");
@@ -2547,9 +2637,12 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 BoundarySource = assignment.Territory.BoundarySource,
                 BoundaryGeometry = EF.Property<Geometry?>(
                     assignment.Territory,
-                    BoundaryGeometryPropertyName)
+                    BoundaryGeometryPropertyName),
+                BoundaryDisplayGeometry = EF.Property<Geometry?>(
+                    assignment.Territory,
+                    BoundaryDisplayGeometryPropertyName)
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (territoryId.HasValue && territory is null)
             throw new UnauthorizedAccessException("Territory is not assigned to the current territory manager.");
@@ -2572,6 +2665,102 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             CenterLatitude = centroid?.Y,
             CenterLongitude = centroid?.X
         };
+    }
+
+    private static TerritoryRegionMapTerritoryDto BuildMapTerritory(TerritoryBoundaryRow row)
+    {
+        var geometry = ToPolygonalGeometry(row.BoundaryGeometry);
+        var geoJson = ToGeoJson(geometry);
+
+        return new TerritoryRegionMapTerritoryDto
+        {
+            TerritoryId = row.Id,
+            Name = row.Name,
+            DisplayName = row.Name,
+            CountryCode = row.CountryCode,
+            CountryIso3 = row.CountryIso3,
+            HasBoundary = geoJson is not null,
+            GeometrySource = geoJson is not null ? TerritoryBoundaryGeometrySource : null,
+            BoundaryMissingReason = geoJson is null
+                ? BuildBoundaryMissingReason("Full territory boundary", row.BoundaryDisplayGeometry)
+                : null,
+            GeometryGeoJson = geoJson,
+            Viewport = BuildSingleGeometryViewport(geometry)
+        };
+    }
+
+    private static TerritoryRegionMapRegionDto BuildMapRegion(
+        TerritoryRegionMapRow row,
+        RegionContentCounts counts,
+        int pendingRequests,
+        List<ManagerRow> managers,
+        TerritoryHealthDto? health)
+    {
+        var geometry = ToPolygonalGeometry(row.BoundaryGeometry);
+        var geoJson = ToGeoJson(geometry);
+        var centroid = geometry?.Centroid;
+        var healthScore = health?.Score;
+
+        return new TerritoryRegionMapRegionDto
+        {
+            RegionId = row.Id,
+            Name = row.Name,
+            DisplayName = row.Name,
+            TerritoryId = row.TerritoryId,
+            TerritoryDisplayName = row.TerritoryName,
+            Status = managers.Count > 0 ? "Active" : "Inactive",
+            HealthScore = healthScore,
+            Health = health,
+            AssignedManagers = managers.Select(BuildManagerDto).ToList(),
+            ManagerDisplayName = BuildManagerDisplayName(managers),
+            ContentCounts = new TerritoryRegionMapContentCountsDto
+            {
+                Destinations = counts.Destinations,
+                Locations = counts.Locations,
+                Places = counts.Places,
+                Stays = counts.Stays,
+                Events = counts.Events,
+                Pending = pendingRequests
+            },
+            HasBoundary = geoJson is not null,
+            GeometrySource = geoJson is not null ? RegionBoundaryGeometrySource : null,
+            BoundaryMissingReason = geoJson is null
+                ? BuildBoundaryMissingReason("Full region boundary", row.BoundaryDisplayGeometry)
+                : null,
+            GeometryGeoJson = geoJson,
+            Viewport = BuildSingleGeometryViewport(geometry),
+            CenterLatitude = centroid?.Y,
+            CenterLongitude = centroid?.X,
+            DetailRoute = $"/territory/regions/{row.Id}"
+        };
+    }
+
+    private static string? BuildRegionMapBoundaryWarning(
+        TerritoryRegionMapTerritoryDto territory,
+        List<TerritoryRegionMapRegionDto> regions)
+    {
+        var territoryMissing = !territory.HasBoundary;
+        var regionsMissing = regions.Any(region => !region.HasBoundary);
+
+        return territoryMissing || regionsMissing
+            ? "Boundary data is missing for this territory or some regions."
+            : null;
+    }
+
+    private static TerritoryRegionMapViewportDto BuildSingleGeometryViewport(Geometry? geometry)
+    {
+        var polygonal = ToPolygonalGeometry(geometry);
+        return polygonal is null
+            ? new TerritoryRegionMapViewportDto { IsEmpty = true }
+            : BuildRegionMapViewport(new[] { polygonal });
+    }
+
+    private static string BuildBoundaryMissingReason(string boundaryLabel, Geometry? displayGeometry)
+    {
+        var hasDisplayGeometry = ToPolygonalGeometry(displayGeometry) is not null;
+        return hasDisplayGeometry
+            ? $"{boundaryLabel} is missing. Display geometry exists but is not used on this accuracy map."
+            : $"{boundaryLabel} is missing.";
     }
 
     private static void MarkExistingRegionCandidates(
@@ -3097,6 +3286,13 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             AssignedAt = manager.AssignedAt
         };
 
+    private static int TotalContentCount(TerritoryRegionHealthDto region) =>
+        region.DestinationsCount +
+        region.LocationsCount +
+        region.PlacesCount +
+        region.StaysCount +
+        region.EventsCount;
+
     private static string BuildDisplayName(string? displayName, string? firstName, string? lastName, string? username)
     {
         if (!string.IsNullOrWhiteSpace(displayName))
@@ -3303,6 +3499,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public string? BoundaryShapeType { get; set; }
         public string? BoundarySource { get; set; }
         public Geometry? BoundaryGeometry { get; set; }
+        public Geometry? BoundaryDisplayGeometry { get; set; }
     }
 
     private sealed class RegionBoundaryRow
@@ -3310,6 +3507,16 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public Geometry? BoundaryGeometry { get; set; }
+    }
+
+    private sealed class TerritoryRegionMapRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int TerritoryId { get; set; }
+        public string TerritoryName { get; set; } = string.Empty;
+        public Geometry? BoundaryGeometry { get; set; }
+        public Geometry? BoundaryDisplayGeometry { get; set; }
     }
 
     private sealed class RegionBoundaryMetadataRow
