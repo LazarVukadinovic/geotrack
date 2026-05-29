@@ -251,7 +251,17 @@ export const routes: Routes = [
         loadComponent: () => import('./features/regions/pages/regions/regions.component').then(m=>m.AllRegionsComponent),
       },
       {
+        path: 'territory/regions/map',
+        canActivate:[territoryManagerGuard],
+        loadComponent: () => import('./features/regions/pages/region-map/region-map.component').then(m=>m.TerritoryRegionMapComponent),
+      },
+      {
         path: 'territory/regions/new',
+        redirectTo: 'territory/regions',
+        pathMatch: 'full',
+      },
+      {
+        path: 'territory/regions/advanced/new',
         canActivate:[territoryManagerGuard],
         loadComponent: () => import('./features/regions/pages/add-region/add-region.component').then(m=>m.AddRegionComponent),
       },

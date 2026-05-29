@@ -1,0 +1,29 @@
+:host {
+  display: block;
+}
+
+.territory-region-map .leaflet-container {
+  height: 100%;
+  width: 100%;
+  font: inherit;
+  background: #eef2f7;
+}
+
+:host ::ng-deep .territory-region-map .leaflet-top.leaflet-left {
+  left: 12px;
+  top: 12px;
+}
+
+:host ::ng-deep .territory-region-map .leaflet-control-zoom {
+  margin: 0;
+}
+
+:host ::ng-deep .territory-region-map .leaflet-tooltip {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  color: #0f172a;
+  font: inherit;
+  line-height: 1.35;
+  padding: 8px 10px;
+}
