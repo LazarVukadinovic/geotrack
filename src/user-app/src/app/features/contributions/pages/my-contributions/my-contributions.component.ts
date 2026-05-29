@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ContributionListItem, ContributionsService } from '../../services/contributions.service';
@@ -16,6 +16,12 @@ export class MyContributionsPageComponent implements OnInit {
   private readonly contributions = inject(ContributionsService);
 
   protected readonly items = this.contributions.items;
+  protected readonly contributionItems = computed(() => this.items().filter(item => !item.isOwnership));
+  protected readonly ownershipItems = computed(() => this.items().filter(item => item.isOwnership));
+  protected readonly sections = computed(() => [
+    { title: 'Ownerships', items: this.ownershipItems() },
+    { title: 'Contributions', items: this.contributionItems() },
+  ].filter(section => section.items.length > 0));
   protected readonly isLoading = this.contributions.isLoading;
   protected readonly loadError = this.contributions.loadError;
   protected readonly pendingDelete = signal<ContributionListItem | null>(null);

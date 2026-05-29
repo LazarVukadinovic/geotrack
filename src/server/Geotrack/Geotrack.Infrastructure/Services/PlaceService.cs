@@ -142,6 +142,8 @@ public class PlaceService : IPlaceService
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
             .Include(p => p.Images)
+            .Include(p => p.PlaceAmenities)
+                .ThenInclude(pa => pa.Amenity)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
                     .ThenInclude(tag => tag.TagType)
@@ -167,6 +169,19 @@ public class PlaceService : IPlaceService
                 item.UserId == userId.Value &&
                 item.Type == PlaceContributionType.ClaimOwnership &&
                 item.Status == PlaceContributionStatus.PendingReview);
+        int? ownerContributionId = null;
+        if (isOwnedByCurrentUser && userId.HasValue)
+        {
+            ownerContributionId = await _db.PlaceContributions.AsNoTracking()
+                .Where(item =>
+                    item.PlaceId == id &&
+                    item.UserId == userId.Value &&
+                    item.Type == PlaceContributionType.ClaimOwnership &&
+                    item.Status == PlaceContributionStatus.Approved)
+                .OrderByDescending(item => item.UpdatedAt ?? item.CreatedAt)
+                .Select(item => (int?)item.Id)
+                .FirstOrDefaultAsync();
+        }
 
         var similar = await _db.Places
             .AsNoTracking()
@@ -214,6 +229,16 @@ public class PlaceService : IPlaceService
             place.Latitude, place.Longitude,
             useCurrentLocationDistance);
         var images = ToImageDtos(place.Images);
+        var amenities = place.PlaceAmenities
+            .Select(pa => new AmenityDto
+            {
+                Id = pa.Amenity.Id,
+                Label = pa.Amenity.Name,
+                Icon = pa.Amenity.Icon ?? string.Empty
+            })
+            .GroupBy(a => new { a.Label, a.Icon })
+            .Select(g => g.First())
+            .ToList();
 
         return new PlaceDetailDto
         {
@@ -279,8 +304,18 @@ public class PlaceService : IPlaceService
             IsOwnable = place.PlaceType?.IsOwnable ?? false,
             IsOwnedByCurrentUser = isOwnedByCurrentUser,
             HasPendingOwnershipClaim = hasPendingOwnershipClaim,
+            OwnerContributionId = ownerContributionId,
             ContentType = "place",
-            Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant()
+            Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant(),
+            ContactEmail = DisplayTextSafety.CleanOptional(place.ContactEmail),
+            PhoneNumber = DisplayTextSafety.CleanOptional(place.Number),
+            AdmissionPriceRange = DisplayTextSafety.CleanOptional(place.AdmissionPriceRange),
+            BookingExternalLink = DisplayTextSafety.CleanOptional(place.BookingExternalLink),
+            Amenities = amenities,
+            BestTimeToVisit = DisplayTextSafety.CleanOptional(place.BestTimeToVisit),
+            VisitorTips = DisplayTextSafety.CleanOptional(place.VisitorTips),
+            AccessNotes = DisplayTextSafety.CleanOptional(place.AccessNotes),
+            AccessibilityNotes = DisplayTextSafety.CleanOptional(place.AccessibilityNotes),
         };
     }
 
@@ -330,6 +365,19 @@ public class PlaceService : IPlaceService
                 item.UserId == userId.Value &&
                 item.Type == PlaceContributionType.ClaimOwnership &&
                 item.Status == PlaceContributionStatus.PendingReview);
+        int? ownerContributionId = null;
+        if (isOwnedByCurrentUser && userId.HasValue)
+        {
+            ownerContributionId = await _db.PlaceContributions.AsNoTracking()
+                .Where(item =>
+                    item.PlaceId == id &&
+                    item.UserId == userId.Value &&
+                    item.Type == PlaceContributionType.ClaimOwnership &&
+                    item.Status == PlaceContributionStatus.Approved)
+                .OrderByDescending(item => item.UpdatedAt ?? item.CreatedAt)
+                .Select(item => (int?)item.Id)
+                .FirstOrDefaultAsync();
+        }
 
         var similar = await _db.Places
             .AsNoTracking()
@@ -443,7 +491,8 @@ public class PlaceService : IPlaceService
             IsSaved = isSaved,
             IsOwnable = place.PlaceType?.IsOwnable ?? false,
             IsOwnedByCurrentUser = isOwnedByCurrentUser,
-            HasPendingOwnershipClaim = hasPendingOwnershipClaim
+            HasPendingOwnershipClaim = hasPendingOwnershipClaim,
+            OwnerContributionId = ownerContributionId,
         };
     }
 
@@ -1109,6 +1158,121 @@ public class PlaceService : IPlaceService
             .ToListAsync();
 
         return reportedIds.ToHashSet();
+    }
+
+    public async Task<PlaceDetailDto> OwnerUpdatePlaceAsync(int placeId, int userId, OwnerUpdatePlaceRequestDto request)
+    {
+        var isOwner = await _db.UserPlaces
+            .AnyAsync(up => up.PlaceId == placeId && up.UserId == userId);
+
+        if (!isOwner)
+            throw new UnauthorizedAccessException("You are not the owner of this place.");
+
+        var place = await _db.Places
+            .Include(p => p.PlaceType)
+            .Include(p => p.Location)
+                .ThenInclude(l => l.Destination)
+            .Include(p => p.Images)
+            .Include(p => p.PlaceTags)
+                .ThenInclude(pt => pt.Tag)
+                    .ThenInclude(tag => tag.TagType)
+                        .ThenInclude(tagType => tagType!.PlaceTypes)
+            .FirstOrDefaultAsync(p =>
+                p.Id == placeId &&
+                p.Status == PublishedStatus &&
+                p.Location.Status == PublishedStatus &&
+                p.Location.Destination.Status == PublishedStatus)
+            ?? throw new KeyNotFoundException("Place not found.");
+
+        if (!string.IsNullOrWhiteSpace(request.Name))
+            place.Name = request.Name.Trim();
+
+        if (request.Description != null)
+            place.Description = request.Description.Trim();
+
+        if (request.OpeningHours != null)
+            place.OpeningHours = string.IsNullOrWhiteSpace(request.OpeningHours) ? null : request.OpeningHours.Trim();
+
+        if (request.Website != null)
+            place.Website = string.IsNullOrWhiteSpace(request.Website) ? null : request.Website.Trim();
+
+        if (request.ContactEmail != null)
+            place.ContactEmail = string.IsNullOrWhiteSpace(request.ContactEmail) ? null : request.ContactEmail.Trim();
+
+        if (request.PhoneNumber != null)
+            place.Number = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
+
+        if (request.AdmissionPriceRange != null)
+            place.AdmissionPriceRange = string.IsNullOrWhiteSpace(request.AdmissionPriceRange) ? null : request.AdmissionPriceRange.Trim();
+
+        if (request.BookingExternalLink != null)
+            place.BookingExternalLink = string.IsNullOrWhiteSpace(request.BookingExternalLink) ? null : request.BookingExternalLink.Trim();
+
+        if (request.BestTimeToVisit != null)
+            place.BestTimeToVisit = string.IsNullOrWhiteSpace(request.BestTimeToVisit) ? null : request.BestTimeToVisit.Trim();
+
+        if (request.VisitorTips != null)
+            place.VisitorTips = string.IsNullOrWhiteSpace(request.VisitorTips) ? null : request.VisitorTips.Trim();
+
+        if (request.AccessNotes != null)
+            place.AccessNotes = string.IsNullOrWhiteSpace(request.AccessNotes) ? null : request.AccessNotes.Trim();
+
+        if (request.AccessibilityNotes != null)
+            place.AccessibilityNotes = string.IsNullOrWhiteSpace(request.AccessibilityNotes) ? null : request.AccessibilityNotes.Trim();
+
+        place.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        var reviewStats = await GetPlaceReviewStatsAsync(placeId);
+        var previewReviews = await GetPlaceReviewPreviewAsync(placeId);
+        var images = ToImageDtos(place.Images);
+
+        return new PlaceDetailDto
+        {
+            Id = place.Id,
+            Title = DisplayTextSafety.CleanRequired(place.Name, "Place"),
+            Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
+            LocationId = place.LocationId,
+            LocationName = DisplayTextSafety.CleanOptional(place.Location?.Name),
+            Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
+            Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
+            HeroImage = GetCoverImageUrl(place.Images) ?? images.FirstOrDefault()?.Url,
+            Images = images,
+            Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
+                .Select(label => new TagLabelDto { Label = label })
+                .ToList(),
+            Rating = reviewStats.AverageRating,
+            ReviewCount = FormatReviewCountLabel(reviewStats.Count),
+            OpenStatus = DeriveOpenStatus(place.OpeningHours),
+            OpeningHours = DisplayTextSafety.CleanOptional(place.OpeningHours),
+            OpeningHoursSchedule = ParseOpeningHoursSchedule(place.OperatingHoursJson),
+            Website = DisplayTextSafety.CleanOptional(place.Website),
+            About = DisplayTextSafety.CleanOptional(place.Description),
+            Reviews = previewReviews
+                .Select(r => new ReviewDto
+                {
+                    Id = r.Id,
+                    AuthorUserId = r.UserId,
+                    AuthorName = GetAuthorName(r.User),
+                    AvatarUrl = r.User.AvatarUrl,
+                    Rating = (int)r.Rating,
+                    TimeAgo = FormatTimeAgo(r.CreatedAt),
+                    Body = r.Comment,
+                    HelpfulCount = 0,
+                    ReportedByCurrentUser = false,
+                    IsOwnReview = r.UserId == userId
+                })
+                .ToList(),
+            RelatedEvents = new List<PlaceRelatedEventDto>(),
+            Similar = new List<SimilarPlaceDto>(),
+            IsSaved = false,
+            IsOwnable = place.PlaceType?.IsOwnable ?? false,
+            IsOwnedByCurrentUser = true,
+            HasPendingOwnershipClaim = false,
+            ContentType = "place",
+            Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant()
+        };
     }
 
     private sealed class PlaceListProjection

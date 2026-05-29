@@ -247,6 +247,22 @@ export class HotelDetailPageComponent {
     });
   }
 
+  protected navigateToOwnerEdit(): void {
+    const hotel = this.hotel();
+    if (!hotel?.ownerContributionId) return;
+
+    void this.router.navigate(['/contributions', hotel.ownerContributionId, 'edit'], {
+      state: {
+        locationLocked: true,
+        placeImages: {
+          coverUrl: hotel.heroImage,
+          cardUrl: hotel.images.find(image => image.imageRole === 'card')?.url ?? hotel.heroImage,
+          galleryUrls: hotel.images.filter(image => image.imageRole === 'gallery').map(image => image.url),
+        },
+      },
+    });
+  }
+
   protected openReviews(): void {
     const hotel = this.hotel();
     if (!hotel) return;

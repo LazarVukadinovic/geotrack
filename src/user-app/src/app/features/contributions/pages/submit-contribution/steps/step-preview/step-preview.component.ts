@@ -12,6 +12,7 @@ import { BackgroundImageFallbackDirective } from '../../../../../../shared/direc
 export class StepPreviewComponent {
   draft = input.required<ContributionDraft>();
   isAccommodation = input(false);
+  confirmLabel = input('Submit');
   confirmed = output<void>();
   back = output<void>();
 

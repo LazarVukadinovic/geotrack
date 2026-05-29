@@ -38,8 +38,18 @@ interface ApiPlaceDetail {
   isOwnable?: boolean;
   isOwnedByCurrentUser?: boolean;
   hasPendingOwnershipClaim?: boolean;
+  ownerContributionId?: number | null;
   contentType: string;
   category?: string;
+  contactEmail?: string | null;
+  phoneNumber?: string | null;
+  admissionPriceRange?: string | null;
+  bookingExternalLink?: string | null;
+  amenities?: { id: number; label: string; icon?: string | null }[] | null;
+  bestTimeToVisit?: string | null;
+  visitorTips?: string | null;
+  accessNotes?: string | null;
+  accessibilityNotes?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -140,8 +150,18 @@ export class PlaceDetailService {
           isOwnable: dto.isOwnable ?? false,
           isOwnedByCurrentUser: dto.isOwnedByCurrentUser ?? false,
           hasPendingOwnershipClaim: dto.hasPendingOwnershipClaim ?? false,
+          ownerContributionId: dto.ownerContributionId ?? null,
           contentType: (dto.contentType ?? 'place') as PlaceDetail['contentType'],
           category: (dto.category ?? 'attraction') as PlaceDetail['category'],
+          contactEmail: dto.contactEmail ?? null,
+          phoneNumber: dto.phoneNumber ?? null,
+          admissionPriceRange: dto.admissionPriceRange ?? null,
+          bookingExternalLink: dto.bookingExternalLink ?? null,
+          amenities: dto.amenities ?? [],
+          bestTimeToVisit: dto.bestTimeToVisit ?? null,
+          visitorTips: dto.visitorTips ?? null,
+          accessNotes: dto.accessNotes ?? null,
+          accessibilityNotes: dto.accessibilityNotes ?? null,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');
@@ -169,6 +189,50 @@ export class PlaceDetailService {
 
   private setLoadState(id: string, state: DetailLoadState): void {
     this._loadState.update(current => ({ ...current, [id]: state }));
+  }
+
+  ownerUpdatePlace(id: string, payload: {
+    name?: string;
+    description?: string;
+    openingHours?: string;
+    website?: string;
+    contactEmail?: string;
+    phoneNumber?: string;
+    admissionPriceRange?: string;
+    bookingExternalLink?: string;
+    bestTimeToVisit?: string;
+    visitorTips?: string;
+    accessNotes?: string;
+    accessibilityNotes?: string;
+  }): void {
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) return;
+
+    this.http.put<ApiPlaceDetail>(`/api/places/${numId}/owner-update`, payload).subscribe({
+      next: (dto) => {
+        const images = normalizeEntityImages(dto.images);
+        const updated: Partial<PlaceDetail> = {
+          title: dto.title,
+          about: dto.about ?? '',
+          openingHours: dto.openingHours ?? null,
+          openingHoursSchedule: dto.openingHoursSchedule ?? null,
+          website: dto.website ?? null,
+          contactEmail: dto.contactEmail ?? null,
+          phoneNumber: dto.phoneNumber ?? null,
+          admissionPriceRange: dto.admissionPriceRange ?? null,
+          bookingExternalLink: dto.bookingExternalLink ?? null,
+          bestTimeToVisit: dto.bestTimeToVisit ?? null,
+          visitorTips: dto.visitorTips ?? null,
+          accessNotes: dto.accessNotes ?? null,
+          accessibilityNotes: dto.accessibilityNotes ?? null,
+        };
+        this._cache.update(c => {
+          const existing = c[id];
+          return existing ? { ...c, [id]: { ...existing, ...updated } } : c;
+        });
+      },
+      error: () => {},
+    });
   }
 
   toggleSaved(id: string, collectionId?: number | null): void {

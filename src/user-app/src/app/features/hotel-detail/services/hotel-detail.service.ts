@@ -36,6 +36,7 @@ interface ApiHotelDetail {
   isOwnable?: boolean;
   isOwnedByCurrentUser?: boolean;
   hasPendingOwnershipClaim?: boolean;
+  ownerContributionId?: number | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -139,6 +140,7 @@ export class HotelDetailService {
           isOwnable: dto.isOwnable ?? true,
           isOwnedByCurrentUser: dto.isOwnedByCurrentUser ?? false,
           hasPendingOwnershipClaim: dto.hasPendingOwnershipClaim ?? false,
+          ownerContributionId: dto.ownerContributionId ?? null,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');

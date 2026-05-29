@@ -30,8 +30,18 @@ public class PlaceDetailDto
     public bool IsOwnable { get; set; }
     public bool IsOwnedByCurrentUser { get; set; }
     public bool HasPendingOwnershipClaim { get; set; }
+    public int? OwnerContributionId { get; set; }
     public string ContentType { get; set; } = "place";
     public string? Category { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? AdmissionPriceRange { get; set; }
+    public string? BookingExternalLink { get; set; }
+    public List<AmenityDto> Amenities { get; set; } = new();
+    public string? BestTimeToVisit { get; set; }
+    public string? VisitorTips { get; set; }
+    public string? AccessNotes { get; set; }
+    public string? AccessibilityNotes { get; set; }
 }
 
 public class OpeningHoursDayDto

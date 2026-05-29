@@ -12,9 +12,11 @@ import {
 
 export type ContributionStatus = 'PendingReview' | 'Approved' | 'Rejected';
 export type ContributionEntityType = 'Place';
+export type ContributionType = 'CreatePlace' | 'UpdatePlace' | 'ClaimOwnership';
 
 export interface ContributionListItem {
   id: number;
+  type: ContributionType;
   entityType: ContributionEntityType;
   name: string;
   placeType: string;
@@ -29,10 +31,12 @@ export interface ContributionListItem {
   updatedAt: string | null;
   updatedLabel: string;
   publishedPlaceId: number | null;
+  isOwnership: boolean;
 }
 
 export interface ContributionDetail extends ContributionListItem {
   placeTypeId: number | null;
+  locationId: number | null;
   address: string;
   city: string;
   region: string;
@@ -75,6 +79,7 @@ interface ContributionResponse {
 
 interface ApiContributionListItem {
   id: number;
+  type?: string | null;
   entityType?: string | null;
   name: string;
   placeType?: string | null;
@@ -92,6 +97,7 @@ interface ApiContributionListItem {
 
 interface ApiContributionDetail extends ApiContributionListItem {
   placeTypeId?: number | null;
+  locationId?: number | null;
   address: string;
   city: string;
   region: string;
@@ -115,9 +121,11 @@ interface ApiContributionDetail extends ApiContributionListItem {
 }
 
 interface UpsertPlaceContributionPayload {
-  type: 'CreatePlace';
+  type: 'CreatePlace' | 'UpdatePlace' | 'ClaimOwnership';
+  placeId?: number | null;
   name: string;
   placeTypeId?: number | null;
+  locationId?: number | null;
   placeType: string;
   stayType?: string;
   address: string;
@@ -183,8 +191,8 @@ export class ContributionsService {
     );
   }
 
-  updatePlace(id: number, draft: ContributionDraftData): Observable<ContributionDetail> {
-    return this.http.put<ContributionResponse>(`/api/contributions/places/${id}`, this.toFormData(draft)).pipe(
+  updatePlace(id: number, draft: ContributionDraftData, options?: { type?: 'UpdatePlace'; placeId?: number | null }): Observable<ContributionDetail> {
+    return this.http.put<ContributionResponse>(`/api/contributions/places/${id}`, this.toFormData(draft, options)).pipe(
       map(res => mapDetail(res.contribution)),
       tap(detail => {
         this.analytics.track('contribution_updated', { entityId: detail.id });
@@ -203,6 +211,9 @@ export class ContributionsService {
   }
 
   detailToDraft(detail: ContributionDetail): ContributionDraftData {
+    const coverImageUrl = detail.coverImageUrl || detail.cardImageUrl || detail.galleryImageUrls[0] || '';
+    const cardImageUrl = detail.cardImageUrl || coverImageUrl;
+
     return {
       basics: {
         name: detail.name,
@@ -213,8 +224,9 @@ export class ContributionsService {
         city: detail.city,
         region: detail.region,
         country: detail.country,
-        imageUrl: detail.coverImageUrl,
-        cardImageUrl: detail.cardImageUrl,
+        locationId: detail.locationId,
+        imageUrl: coverImageUrl,
+        cardImageUrl,
         cardImageFile: null,
         coverImageFile: null,
         galleryImageUrls: detail.galleryImageUrls,
@@ -241,18 +253,20 @@ export class ContributionsService {
     };
   }
 
-  private toFormData(draft: ContributionDraftData): FormData {
+  private toFormData(draft: ContributionDraftData, options?: { type?: 'UpdatePlace'; placeId?: number | null }): FormData {
     const basics = requireBasics(draft.basics);
     const features = normalizeFeatures(draft.features);
     const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
 
     const payload: UpsertPlaceContributionPayload = {
-      type: 'CreatePlace',
+      type: options?.type ?? 'CreatePlace',
+      ...(options?.placeId != null ? { placeId: options.placeId } : {}),
       name: basics.name,
       placeTypeId: basics.placeTypeId,
       placeType: basics.placeType || 'Place',
       ...(isAccommodation ? { stayType: basics.stayType || 'Hotel' } : {}),
+      locationId: basics.locationId ?? null,
       address: basics.address,
       city: basics.city,
       region: basics.region,
@@ -349,9 +363,11 @@ function normalizeDetails(details: DetailsData | null): NormalizedDetailsData {
 function mapListItem(item: ApiContributionListItem): ContributionListItem {
   const updatedAt = item.updatedAt ?? null;
   const isEdited = !!updatedAt && updatedAt !== item.submittedAt;
+  const type = normalizeContributionType(item.type);
 
   return {
     id: item.id,
+    type,
     entityType: normalizeContributionEntityType(item.entityType),
     name: item.name,
     placeType: item.placeType ?? '',
@@ -366,6 +382,7 @@ function mapListItem(item: ApiContributionListItem): ContributionListItem {
     updatedAt,
     updatedLabel: timeLabel(isEdited ? updatedAt : item.submittedAt, isEdited ? 'Updated' : 'Submitted'),
     publishedPlaceId: item.publishedPlaceId ?? null,
+    isOwnership: type === 'ClaimOwnership',
   };
 }
 
@@ -379,6 +396,18 @@ function normalizeContributionEntityType(entityType: string | null | undefined):
   return 'Place';
 }
 
+function normalizeContributionType(type: string | null | undefined): ContributionType {
+  switch ((type ?? '').trim().toLowerCase()) {
+    case 'updateplace':
+      return 'UpdatePlace';
+    case 'claimownership':
+      return 'ClaimOwnership';
+    case 'createplace':
+    default:
+      return 'CreatePlace';
+  }
+}
+
 function isAccommodationPlaceType(placeType: string | null | undefined): boolean {
   return (placeType ?? '').trim().toLowerCase() === 'stay';
 }
@@ -387,6 +416,7 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
   return {
     ...mapListItem(item),
     placeTypeId: item.placeTypeId ?? null,
+    locationId: item.locationId ?? null,
     address: item.address ?? '',
     city: item.city ?? '',
     region: item.region ?? '',

@@ -63,6 +63,7 @@ export class PlaceDetailPageComponent {
   protected readonly ownershipClaimMessage = signal('');
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly ownershipClaimSubmitted = signal(false);
+
   protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.place()?.heroImage ?? '');
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
@@ -268,6 +269,21 @@ export class PlaceDetailPageComponent {
     });
   }
 
+  protected navigateToOwnerEdit(): void {
+    const p = this.place();
+    if (!p?.ownerContributionId) return;
+    void this.router.navigate(['/contributions', p.ownerContributionId, 'edit'], {
+      state: {
+        locationLocked: true,
+        placeImages: {
+          coverUrl: p.heroImage,
+          cardUrl: p.images.find(i => i.imageRole === 'card')?.url ?? p.heroImage,
+          galleryUrls: p.images.filter(i => i.imageRole === 'gallery').map(i => i.url),
+        },
+      },
+    });
+  }
+
   protected openReviews(): void {
     const place = this.place();
     if (!place) return;
@@ -317,6 +333,29 @@ export class PlaceDetailPageComponent {
       entityId: numId,
       metadata: { provider: 'google_maps', context: 'place_detail' },
     });
+  }
+
+  protected amenityIconPath(icon: string | null | undefined): string {
+    switch ((icon ?? '').trim().toLowerCase()) {
+      case 'pool':
+        return 'M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2M2 16c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2M10 8.5a2.5 2.5 0 0 1 5 0V12H10V8.5zM14 3a2 2 0 1 1-4 0 2 2 0 0 1 4 0z';
+      case 'wifi':
+        return 'M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01';
+      case 'breakfast':
+        return 'M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3';
+      case 'parking':
+        return 'M13 5H9v14M9 5h4a4 4 0 0 1 0 8H9';
+      case 'spa':
+        return 'M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8zM12 2C6.5 2 2 6.5 2 12';
+      case 'gym':
+        return 'M6.5 6.5 17.5 17.5M6.5 17.5 17.5 6.5M3 12h3M18 12h3M12 3v3M12 18v3';
+      case 'restaurant':
+        return 'M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7';
+      case 'ac':
+        return 'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z';
+      default:
+        return 'M5 12.5 9.5 17 19 7';
+    }
   }
 
   private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {

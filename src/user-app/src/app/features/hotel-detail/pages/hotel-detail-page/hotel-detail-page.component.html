@@ -171,7 +171,9 @@
         @if (h.isOwnable) {
           <div class="hd__ownership-cta">
             @if (h.isOwnedByCurrentUser) {
-              <span class="hd__ownership-status hd__ownership-status--owned">You own this stay</span>
+              <button type="button" class="hd__cta hd__cta--outline" (click)="navigateToOwnerEdit()">
+                Edit
+              </button>
             } @else if (h.hasPendingOwnershipClaim || ownershipClaimSubmitted()) {
               <div class="hd__ownership-pending">
                 <span class="hd__ownership-pending-title">Ownership request submitted.</span>

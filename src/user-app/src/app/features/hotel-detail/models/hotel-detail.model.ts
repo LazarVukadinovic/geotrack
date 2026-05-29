@@ -76,4 +76,5 @@ export interface HotelDetail {
   isOwnable: boolean;
   isOwnedByCurrentUser: boolean;
   hasPendingOwnershipClaim: boolean;
+  ownerContributionId?: number | null;
 }

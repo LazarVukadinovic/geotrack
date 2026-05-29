@@ -52,6 +52,12 @@ export interface PlaceSimilar {
   isSaved: boolean;
 }
 
+export interface PlaceAmenity {
+  id: number;
+  label: string;
+  icon?: string | null;
+}
+
 /** Full place detail page data model. Aligns with future API payload. */
 export interface PlaceDetail {
   id: string;
@@ -79,6 +85,16 @@ export interface PlaceDetail {
   isOwnable: boolean;
   isOwnedByCurrentUser: boolean;
   hasPendingOwnershipClaim: boolean;
+  ownerContributionId?: number | null;
   contentType: PlaceContentType;
   category: PlaceCategory;
+  contactEmail?: string | null;
+  phoneNumber?: string | null;
+  admissionPriceRange?: string | null;
+  bookingExternalLink?: string | null;
+  amenities: PlaceAmenity[];
+  bestTimeToVisit?: string | null;
+  visitorTips?: string | null;
+  accessNotes?: string | null;
+  accessibilityNotes?: string | null;
 }

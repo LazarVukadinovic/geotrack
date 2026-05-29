@@ -206,9 +206,11 @@
         }
 
         @if (p.isOwnable) {
-          <div class="pd__ownership-cta">
+          <div class="mt-[14px] mb-6 flex flex-wrap gap-2.5 justify-center">
             @if (p.isOwnedByCurrentUser) {
-              <span class="pd__ownership-status pd__ownership-status--owned">You own this place</span>
+              <button type="button" class="pd__cta pd__cta--outline" (click)="navigateToOwnerEdit()">
+                Edit
+              </button>
             } @else if (p.hasPendingOwnershipClaim || ownershipClaimSubmitted()) {
               <div class="pd__ownership-pending">
                 <span class="pd__ownership-pending-title">Ownership request submitted.</span>
@@ -242,6 +244,31 @@
               <h2 class="pd__section-title">About this place</h2>
               <p class="pd__about">{{ p.about }}</p>
             </section>
+
+            @if (p.amenities.length > 0) {
+              <div class="pd__divider pd__divider--amenities"></div>
+
+              <section class="pd__section pd__section--amenities">
+                <h2 class="pd__section-title">Amenities</h2>
+                <div class="pd__amenities" role="list">
+                  @for (amenity of p.amenities; track amenity.id) {
+                    <div class="pd__amenity" role="listitem">
+                      <span class="pd__amenity-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                          <path
+                            [attr.d]="amenityIconPath(amenity.icon)"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"/>
+                        </svg>
+                      </span>
+                      <span>{{ amenity.label }}</span>
+                    </div>
+                  }
+                </div>
+              </section>
+            }
 
             @if (p.openingHours || (p.openingHoursSchedule && p.openingHoursSchedule.length > 0)) {
               <div class="pd__divider pd__divider--hours"></div>
@@ -583,6 +610,7 @@
     }
 
   </article>
+
 
 <!-- ── Report modal ─────────────────────────────────────────── -->
 @if (ri.reportingReview(); as review) {

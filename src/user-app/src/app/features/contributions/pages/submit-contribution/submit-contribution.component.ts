@@ -6,7 +6,7 @@ import { StepFeaturesComponent, FeaturesData } from './steps/step-features/step-
 import { StepDetailsComponent, DetailsData } from './steps/step-details/step-details.component';
 import { StepPreviewComponent } from './steps/step-preview/step-preview.component';
 import { StepConfirmationComponent } from './steps/step-confirmation/step-confirmation.component';
-import { ContributionsService } from '../../services/contributions.service';
+import { ContributionStatus, ContributionType, ContributionsService } from '../../services/contributions.service';
 
 export interface ContributionDraft {
   basics: BasicsData | null;
@@ -28,6 +28,10 @@ export class SubmitContributionComponent implements OnInit {
 
   protected readonly entityType = signal('Place');
   protected readonly editId = signal<number | null>(null);
+  protected readonly editType = signal<ContributionType | null>(null);
+  protected readonly editStatus = signal<ContributionStatus | null>(null);
+  protected readonly editPlaceId = signal<number | null>(null);
+  protected readonly locationLocked = signal(false);
   protected readonly currentStep = signal(1);
   protected readonly isLoading = signal(false);
   protected readonly loadError = signal<string | null>(null);
@@ -38,6 +42,9 @@ export class SubmitContributionComponent implements OnInit {
     if (this.currentStep() === 5) return 'Submitted for Review';
     return this.editId() ? 'Edit Place' : 'Add New Place';
   });
+  protected readonly savesDirectly = computed(() => this.editStatus() === 'Approved' && this.editPlaceId() != null);
+  protected readonly submitLabel = computed(() => this.savesDirectly() ? 'Save' : 'Submit');
+  protected readonly submittingLabel = computed(() => this.savesDirectly() ? 'Saving...' : 'Submitting...');
   protected readonly isAccommodationDraft = computed(() => this.draft().basics?.placeType === 'Stay');
   protected readonly totalVisibleSteps = computed(() => this.isAccommodationDraft() ? 4 : 3);
   protected readonly visibleStepNumber = computed(() => {
@@ -71,6 +78,11 @@ export class SubmitContributionComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    const navState = (globalThis.history?.state ?? {}) as Record<string, unknown>;
+    if (navState['locationLocked'] === true) {
+      this.locationLocked.set(true);
+    }
+
     const rawId = this.route.snapshot.paramMap.get('id');
     const id = rawId ? Number(rawId) : null;
 
@@ -82,8 +94,29 @@ export class SubmitContributionComponent implements OnInit {
 
     this.contributions.getDetail(id).subscribe({
       next: (detail) => {
-        this.draft.set(this.contributions.detailToDraft(detail));
+        const draft = this.contributions.detailToDraft(detail);
+
+        const placeImages = navState['placeImages'] as { coverUrl?: string; cardUrl?: string; galleryUrls?: string[] } | null | undefined;
+        if (placeImages && draft.basics) {
+          draft.basics = {
+            ...draft.basics,
+            imageUrl: placeImages.coverUrl ?? draft.basics.imageUrl,
+            cardImageUrl: placeImages.cardUrl ?? draft.basics.cardImageUrl,
+            galleryImageUrls: placeImages.galleryUrls ?? draft.basics.galleryImageUrls,
+            coverImageFile: null,
+            cardImageFile: null,
+            galleryImageFiles: [],
+          };
+        }
+
+        this.draft.set(draft);
         this.entityType.set(detail.entityType);
+        this.editType.set(detail.type);
+        this.editStatus.set(detail.status);
+        this.editPlaceId.set(detail.publishedPlaceId);
+        if (detail.type === 'ClaimOwnership' && detail.status === 'Approved') {
+          this.locationLocked.set(true);
+        }
         this.isLoading.set(false);
       },
       error: () => {
@@ -121,7 +154,7 @@ export class SubmitContributionComponent implements OnInit {
       return;
     }
 
-    if (!hasValidContributionLocation(basics)) {
+    if (!this.locationLocked() && !hasValidContributionLocation(basics)) {
       this.submitError.set('Please choose a valid location before submitting.');
       this.currentStep.set(1);
       return;
@@ -131,15 +164,25 @@ export class SubmitContributionComponent implements OnInit {
     this.submitError.set(null);
 
     const editId = this.editId();
+    const shouldUpdatePublishedPlace = this.savesDirectly();
     const request = editId
-      ? this.contributions.updatePlace(editId, this.draft())
+      ? this.contributions.updatePlace(
+        editId,
+        this.draft(),
+        shouldUpdatePublishedPlace ? { type: 'UpdatePlace', placeId: this.editPlaceId() } : undefined,
+      )
       : this.contributions.createPlace(this.draft());
 
     request.subscribe({
       next: (detail) => {
         this.editId.set(detail.id);
-        this.currentStep.set(5);
         this.isSubmitting.set(false);
+        if (shouldUpdatePublishedPlace && detail.publishedPlaceId != null) {
+          void this.router.navigate([this.isAccommodationDraft() ? '/stays' : '/places', detail.publishedPlaceId]);
+          return;
+        }
+
+        this.currentStep.set(5);
       },
       error: (err) => {
         this.submitError.set(err?.error?.message ?? 'Something went wrong. Please try again.');
@@ -198,6 +241,12 @@ export class SubmitContributionComponent implements OnInit {
       next: (detail) => {
         this.draft.set(this.contributions.detailToDraft(detail));
         this.entityType.set(detail.entityType);
+        this.editType.set(detail.type);
+        this.editStatus.set(detail.status);
+        this.editPlaceId.set(detail.publishedPlaceId);
+        if (detail.type === 'ClaimOwnership' && detail.status === 'Approved') {
+          this.locationLocked.set(true);
+        }
         this.isLoading.set(false);
       },
       error: () => {

@@ -41,4 +41,5 @@ public interface IPlaceService
     Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId);
     Task<GetPlaceReviewsResponseDto> GetPlaceReviewsAsync(int placeId, int skip = 0, int take = 10);
     Task<CreatePlaceReviewResponseDto> CreatePlaceReviewAsync(int placeId, int userId, CreatePlaceReviewRequestDto request);
+    Task<PlaceDetailDto> OwnerUpdatePlaceAsync(int placeId, int userId, OwnerUpdatePlaceRequestDto request);
 }

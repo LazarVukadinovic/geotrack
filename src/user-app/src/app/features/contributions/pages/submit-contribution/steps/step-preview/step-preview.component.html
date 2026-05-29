@@ -149,6 +149,6 @@
   </div>
     <div class="mt-auto pt-6 flex gap-3">
     <button (click)="back.emit()" class="flex-none px-6 py-4 border border-slate-200 rounded-3xl text-slate-700 font-bold text-base active:bg-slate-50 transition-colors">Back</button>
-    <button (click)="confirmed.emit()" class="flex-1 py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base active:scale-[0.98] transition-all">Submit</button>
+    <button (click)="confirmed.emit()" class="flex-1 py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base active:scale-[0.98] transition-all">{{ confirmLabel() }}</button>
   </div>
 </div>

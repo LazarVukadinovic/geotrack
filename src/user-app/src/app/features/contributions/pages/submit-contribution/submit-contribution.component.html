@@ -63,6 +63,7 @@
         @case (1) {
           <app-step-basics
             [data]="draft().basics"
+            [locationLocked]="locationLocked()"
             (saved)="onBasicsSaved($event)"
           />
         }
@@ -87,6 +88,7 @@
           <app-step-preview
             [draft]="draft()"
             [isAccommodation]="isAccommodationDraft()"
+            [confirmLabel]="submitLabel()"
             (confirmed)="onSubmit()"
             (back)="prevStep()"
           />
@@ -94,7 +96,7 @@
             <div class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
               <div class="bg-white rounded-2xl px-8 py-6 flex flex-col items-center gap-3">
                 <div class="w-8 h-8 border-2 border-[#e8722a] border-t-transparent rounded-full animate-spin"></div>
-                <p class="text-sm text-slate-500">Submitting...</p>
+                <p class="text-sm text-slate-500">{{ submittingLabel() }}</p>
               </div>
             </div>
           }

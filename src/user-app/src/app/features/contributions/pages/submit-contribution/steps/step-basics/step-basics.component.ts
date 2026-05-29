@@ -1,4 +1,4 @@
-import { Component, input, output, signal, OnDestroy, OnInit, effect, ElementRef, viewChild, inject } from '@angular/core';
+import { Component, input, output, signal, OnDestroy, OnInit, effect, ElementRef, viewChild, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -29,6 +29,7 @@ export interface BasicsData {
   city: string;
   region: string;
   country: string;
+  locationId?: number | null;
   imageUrl: string;
   cardImageUrl: string;
   cardImageFile?: File | null;
@@ -55,6 +56,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   private readonly mapApi = inject(MapApiService);
   private readonly http = inject(HttpClient);
   data = input<BasicsData | null>(null);
+  locationLocked = input<boolean>(false);
   saved = output<BasicsData>();
 
   placeTypes = signal<ContributionPlaceTypeOption[]>(defaultPlaceTypes());
@@ -331,11 +333,11 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     const baseValid = !!this.form.name.trim() &&
       !!this.form.city.trim() &&
       !!this.form.country.trim() &&
-      this.hasConfirmedLocation();
+      (this.locationLocked() || this.hasConfirmedLocation());
     if (!baseValid) return false;
     if (!this.form.cardImageFile && !this.form.cardImageUrl) return false;
     if (!this.form.coverImageFile && !this.form.imageUrl) return false;
-    if (this.requiresOwnershipProof() && !this.form.ownershipProofFile && !this.form.ownershipProofDocumentUrl) return false;
+    if (!this.locationLocked() && this.requiresOwnershipProof() && !this.form.ownershipProofFile && !this.form.ownershipProofDocumentUrl) return false;
     return true;
   }
 

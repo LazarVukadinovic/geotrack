@@ -33,6 +33,9 @@ public class PlaceContributionService : IPlaceContributionService
     private static readonly Regex ManagedContributionMediaFileNameRegex = new(
         @"^[a-z0-9][a-z0-9._-]{0,199}\.(png|jpe?g|gif|webp)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex LocalImagePathRegex = new(
+        @"^/(media|images)/[a-z0-9][a-z0-9._/-]{0,499}\.(png|jpe?g|gif|webp)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private readonly AppDbContext _db;
     private readonly IContributionMediaStorageService _mediaStorage;
@@ -69,7 +72,17 @@ public class PlaceContributionService : IPlaceContributionService
         var contribution = await BaseContributionQuery()
             .SingleOrDefaultAsync(c => c.Id == contributionId && c.UserId == userId);
 
-        return contribution is null ? null : MapDetail(contribution, includeReviewNote: false);
+        if (contribution is null)
+            return null;
+
+        if (contribution.Type == PlaceContributionType.ClaimOwnership &&
+            contribution.Status == PlaceContributionStatus.Approved &&
+            contribution.PlaceId.HasValue)
+        {
+            return await MapApprovedOwnershipDetailAsync(contribution, includeReviewNote: false);
+        }
+
+        return MapDetail(contribution, includeReviewNote: false);
     }
 
     public async Task<GetPlaceContributionsResponseDto> GetPendingReviewAsync(int? reviewerUserId = null)
@@ -293,11 +306,17 @@ public class PlaceContributionService : IPlaceContributionService
         if (contribution is null)
             throw new InvalidOperationException("Contribution was not found.");
 
-        if (contribution.Status != PlaceContributionStatus.PendingReview)
-            throw new InvalidOperationException("Only pending contributions can be edited.");
-
         var now = DateTime.UtcNow;
         var type = ParseType(request.Type);
+        var isApprovedPublishedEdit =
+            contribution.Status == PlaceContributionStatus.Approved &&
+            type == PlaceContributionType.UpdatePlace &&
+            contribution.PlaceId.HasValue &&
+            request.PlaceId == contribution.PlaceId &&
+            await UserCanManagePlaceAsync(userId, contribution.PlaceId.Value);
+
+        if (contribution.Status != PlaceContributionStatus.PendingReview && !isApprovedPublishedEdit)
+            throw new InvalidOperationException("Only pending contributions and owned approved places can be edited.");
 
         Place? targetPlace = null;
         ContributionReferenceResolution? references = null;
@@ -384,7 +403,7 @@ public class PlaceContributionService : IPlaceContributionService
             contribution.OwnershipProofUploadedAt = null;
         }
 
-        contribution.Type = type;
+        contribution.Type = isApprovedPublishedEdit ? contribution.Type : type;
         contribution.PlaceId = type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership
             ? request.PlaceId
             : null;
@@ -435,6 +454,9 @@ public class PlaceContributionService : IPlaceContributionService
         contribution.UpdatedAt = now;
 
         SyncContributionImages(contribution, request.Images, storedCardImageUrl, storedCoverImageUrl, storedGalleryImageUrls, now, type != PlaceContributionType.ClaimOwnership);
+
+        if (isApprovedPublishedEdit)
+            await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId!.Value, now);
 
         await _db.SaveChangesAsync();
 
@@ -1150,6 +1172,7 @@ public class PlaceContributionService : IPlaceContributionService
         place.Longitude = contribution.Longitude.Value;
         place.ContactEmail = contribution.ContactEmail;
         place.Number = contribution.PhoneNumber;
+        place.Website = contribution.Website;
         place.PlaceTypeId = contribution.PlaceTypeId.Value;
         place.LocationId = contribution.LocationId.Value;
         place.UpdatedAt = now;
@@ -1633,6 +1656,127 @@ public class PlaceContributionService : IPlaceContributionService
         };
     }
 
+    private async Task<PlaceContributionDetailDto> MapApprovedOwnershipDetailAsync(
+        PlaceContribution contribution,
+        bool includeReviewNote)
+    {
+        var detail = MapDetail(contribution, includeReviewNote);
+        if (!contribution.PlaceId.HasValue)
+            return detail;
+
+        var place = await _db.Places
+            .AsNoTracking()
+            .Include(p => p.PlaceType)
+            .Include(p => p.Location)
+                .ThenInclude(location => location.Destination)
+                    .ThenInclude(destination => destination.Region)
+            .Include(p => p.Images)
+            .Include(p => p.PlaceTags)
+                .ThenInclude(placeTag => placeTag.Tag)
+            .Include(p => p.PlaceAmenities)
+                .ThenInclude(placeAmenity => placeAmenity.Amenity)
+            .Include(p => p.PlaceBookingPartners)
+                .ThenInclude(placeBookingPartner => placeBookingPartner.BookingPartner)
+            .Include(p => p.Stay)
+                .ThenInclude(stay => stay!.StayType)
+            .Include(p => p.Stay)
+                .ThenInclude(stay => stay!.StayAmenities)
+                    .ThenInclude(stayStayAmenity => stayStayAmenity.StayAmenity)
+            .SingleOrDefaultAsync(p => p.Id == contribution.PlaceId.Value);
+
+        if (place is null)
+            return detail;
+
+        var cardImage = place.Images
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .FirstOrDefault(image => image.ImageRole == EntityImageRole.Card);
+        var coverImage = place.Images
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .FirstOrDefault(image => image.ImageRole == EntityImageRole.Cover);
+        var firstImage = place.Images
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .FirstOrDefault();
+        var cardImageUrl = cardImage?.Url ?? coverImage?.Url ?? firstImage?.Url;
+        var coverImageUrl = coverImage?.Url ?? firstImage?.Url ?? cardImage?.Url;
+
+        detail.Name = place.Name;
+        detail.PlaceType = place.PlaceType?.Name;
+        detail.StayType = place.Stay?.StayType?.Name;
+        detail.Location = BuildLocationLabelFromPlace(place);
+        detail.CardImageUrl = cardImageUrl;
+        detail.MainImageUrl = cardImageUrl;
+        detail.CoverImageUrl = coverImageUrl;
+        detail.GalleryImageUrls = place.Images
+            .Where(image => image.ImageRole == EntityImageRole.Gallery)
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .Select(image => image.Url)
+            .ToList();
+        detail.PlaceTypeId = place.PlaceTypeId;
+        detail.LocationId = place.LocationId;
+        detail.StayTypeId = place.Stay?.StayTypeId;
+        detail.Address = place.Address;
+        detail.OpeningHours = place.OpeningHours;
+        detail.Latitude = place.Latitude;
+        detail.Longitude = place.Longitude;
+        detail.Description = place.Description;
+        detail.ContactEmail = place.ContactEmail;
+        detail.PhoneNumber = place.Number;
+        detail.Phone = place.Number;
+        detail.Website = place.Website;
+        detail.PricePerNight = place.Stay?.PricePerNight;
+        detail.CheckInTime = place.Stay?.CheckInTime;
+        detail.CheckOutTime = place.Stay?.CheckOutTime;
+        detail.City = place.Location?.Name;
+        detail.Region = place.Location?.Destination?.Region?.Name;
+        detail.Country = place.Location?.Destination?.Name;
+        detail.ImagePosition = "50% 50%";
+        detail.ImageSize = "cover";
+        detail.Tags = place.PlaceTags
+            .Select(placeTag => placeTag.Tag.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        detail.Amenities = place.PlaceAmenities
+            .Select(placeAmenity => placeAmenity.Amenity.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        detail.StayAmenities = place.Stay?.StayAmenities
+            .Select(stayStayAmenity => stayStayAmenity.StayAmenity.Slug)
+            .Where(slug => !string.IsNullOrWhiteSpace(slug))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
+        detail.BookingPartners = place.PlaceBookingPartners
+            .Select(placeBookingPartner => new ContributionBookingPartnerDto
+            {
+                Id = BookingPartnerContributionId(placeBookingPartner.BookingPartner.Name),
+                Url = placeBookingPartner.Url ?? string.Empty
+            })
+            .ToList();
+        detail.Images = place.Images
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .Select(image => new PlaceContributionImageDto
+            {
+                Id = image.Id,
+                Url = image.Url,
+                AltText = image.AltText,
+                Caption = image.Caption,
+                IsMain = image.IsMain,
+                ImageRole = EntityImageRole.Normalize(image.ImageRole),
+                SortOrder = image.SortOrder,
+                ImagePosition = "50% 50%",
+                ImageSize = "cover"
+            })
+            .ToList();
+
+        return detail;
+    }
+
     private static PlaceContributionImage? GetCardImage(PlaceContribution contribution)
     {
         return contribution.Images
@@ -1659,6 +1803,21 @@ public class PlaceContributionService : IPlaceContributionService
             contribution.Location.Name,
             contribution.Location.Destination?.Name,
             contribution.Location.Destination?.Region?.Name
+        };
+
+        return string.Join(", ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
+    }
+
+    private static string? BuildLocationLabelFromPlace(Place place)
+    {
+        if (place.Location is null)
+            return null;
+
+        var parts = new[]
+        {
+            place.Location.Name,
+            place.Location.Destination?.Name,
+            place.Location.Destination?.Region?.Name
         };
 
         return string.Join(", ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
@@ -1882,7 +2041,7 @@ public class PlaceContributionService : IPlaceContributionService
         if (trimmed.Length > MaxImageUrlLength)
             throw new InvalidOperationException($"Image URL must be {MaxImageUrlLength} characters or fewer.");
 
-        if (IsManagedContributionMediaPath(trimmed))
+        if (IsManagedContributionMediaPath(trimmed) || IsSafeLocalImagePath(trimmed))
             return trimmed;
 
         return NormalizeExternalHttpsUrl(trimmed, MaxImageUrlLength, "Image URL");
@@ -1937,6 +2096,30 @@ public class PlaceContributionService : IPlaceContributionService
 
         if (!ManagedContributionMediaFileNameRegex.IsMatch(fileName))
             throw new InvalidOperationException("Image URL must be a valid https URL or managed media path.");
+
+        return true;
+    }
+
+    private static bool IsSafeLocalImagePath(string value)
+    {
+        if (!value.StartsWith("/media/", StringComparison.Ordinal) &&
+            !value.StartsWith("/images/", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (value.Contains('\\') ||
+            value.Contains("//", StringComparison.Ordinal) ||
+            value.Contains('%') ||
+            value.Contains('?') ||
+            value.Contains('#') ||
+            value.Contains("..", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Image URL must be a valid https URL or local image path.");
+        }
+
+        if (!LocalImagePathRegex.IsMatch(value))
+            throw new InvalidOperationException("Image URL must be a valid https URL or local image path.");
 
         return true;
     }
@@ -2108,6 +2291,17 @@ public class PlaceContributionService : IPlaceContributionService
         "expedia" => "muted",
         _ => "dark"
     };
+
+    private static string BookingPartnerContributionId(string name)
+    {
+        var slug = Slugify(name);
+        return slug switch
+        {
+            "booking-com" => "booking",
+            "hotel-website" => "hotel",
+            _ => slug
+        };
+    }
 
     private static string Slugify(string value)
     {

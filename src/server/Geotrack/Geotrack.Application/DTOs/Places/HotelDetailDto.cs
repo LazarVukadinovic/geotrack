@@ -30,6 +30,7 @@ public class HotelDetailDto
     public bool IsOwnable { get; set; }
     public bool IsOwnedByCurrentUser { get; set; }
     public bool HasPendingOwnershipClaim { get; set; }
+    public int? OwnerContributionId { get; set; }
 }
 
 public class BookingPartnerDto
