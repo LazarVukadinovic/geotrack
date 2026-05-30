@@ -1,12 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Component, computed, signal, type WritableSignal } from '@angular/core';
+import { Component, signal, type WritableSignal } from '@angular/core';
 import { provideRouter, Router } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXPLORE_IMAGE_FALLBACK } from '../../../../core/constants/explore-media.constants';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../../core/services/save-to-collection.service';
 import { AgentService } from '../../services/agent.service';
-import type { AgentKeyMode, AgentProvider, ChatMessage } from '../../models/agent.model';
+import type { ChatMessage } from '../../models/agent.model';
 import { AgentPageComponent } from './agent-page.component';
 
 @Component({ standalone: true, template: '' })
@@ -15,18 +15,9 @@ class RouteTargetComponent {}
 describe('AgentPageComponent', () => {
   let fixture: ComponentFixture<AgentPageComponent>;
   let messages: WritableSignal<ChatMessage[]>;
+  let isLoadingAgentInfo: WritableSignal<boolean>;
   let agentService: {
-    providers: WritableSignal<AgentProvider[]>;
-    selectedProviderId: WritableSignal<string | null>;
-    selectedModelId: WritableSignal<string | null>;
-    keyMode: WritableSignal<AgentKeyMode>;
-    sessionApiKey: WritableSignal<string>;
-    saveApiKey: ReturnType<typeof vi.fn>;
-    deleteSavedKey: ReturnType<typeof vi.fn>;
-    testKey: ReturnType<typeof vi.fn>;
     sendMessage: ReturnType<typeof vi.fn>;
-    setKeyMode: ReturnType<typeof vi.fn>;
-    setSessionApiKey: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -36,49 +27,21 @@ describe('AgentPageComponent', () => {
     });
     vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id));
 
-    const providers = signal<AgentProvider[]>([agentProvider({ hasSavedKey: true, keyLast4: 'abcd' })]);
-    const selectedProviderId = signal<string | null>('gemini');
-    const selectedModelId = signal<string | null>('gemini-2.5-flash');
-    const keyMode = signal<AgentKeyMode>('saved');
-    const sessionApiKey = signal('');
     messages = signal<ChatMessage[]>([
       {
         id: 'welcome',
         role: 'assistant',
         type: 'text',
-        text: 'Choose an AI provider, then ask GeoTrack about places, stays, or events.',
+        text: 'Ask GeoTrack about places, stays, or events.',
         suggestionPills: [
           { label: 'Top Attractions', prompt: 'Show me top attractions' },
         ],
         timestamp: new Date(),
       },
     ]);
-    const selectedProvider = computed(() =>
-      providers().find(provider => provider.id === selectedProviderId()) ?? null,
-    );
-    const selectedModels = computed(() => selectedProvider()?.models ?? []);
-    const availableKeyModes = computed<AgentKeyMode[]>(() => {
-      const provider = selectedProvider();
-      if (!provider?.enabled) return [];
-      const modes: AgentKeyMode[] = [];
-      if (provider.supportsSavedKey) modes.push('saved');
-      if (provider.supportsSessionKey) modes.push('session');
-      if (provider.projectDemoKeyEnabled) modes.push('project-demo');
-      return modes;
-    });
-
+    isLoadingAgentInfo = signal(false);
     agentService = {
-      providers,
-      selectedProviderId,
-      selectedModelId,
-      keyMode,
-      sessionApiKey,
-      saveApiKey: vi.fn(),
-      deleteSavedKey: vi.fn(),
-      testKey: vi.fn(),
       sendMessage: vi.fn(),
-      setKeyMode: vi.fn((mode: AgentKeyMode) => keyMode.set(mode)),
-      setSessionApiKey: vi.fn((value: string) => sessionApiKey.set(value)),
     };
 
     await TestBed.configureTestingModule({
@@ -97,35 +60,14 @@ describe('AgentPageComponent', () => {
             messages,
             isTyping: signal(false),
             hasSentMessage: signal(false),
-            providers,
             mcp: signal({
               enabled: true,
               url: '/api/mcp',
               transport: 'remote-http',
               privateToolsEnabled: false,
             }),
-            selectedProviderId,
-            selectedModelId,
-            keyMode,
-            sessionApiKey,
             statusMessage: signal<string | null>(null),
-            isSavingKey: signal(false),
-            isTestingKey: signal(false),
-            isLoadingProviders: signal(false),
-            selectedProvider,
-            selectedModels,
-            availableKeyModes,
-            selectProvider: vi.fn((providerId: string) => {
-              if (providers().some(provider => provider.id === providerId)) {
-                selectedProviderId.set(providerId);
-              }
-            }),
-            selectModel: vi.fn((modelId: string) => selectedModelId.set(modelId)),
-            setKeyMode: agentService.setKeyMode,
-            setSessionApiKey: agentService.setSessionApiKey,
-            saveApiKey: agentService.saveApiKey,
-            deleteSavedKey: agentService.deleteSavedKey,
-            testKey: agentService.testKey,
+            isLoadingAgentInfo,
             sendMessage: agentService.sendMessage,
           },
         },
@@ -142,105 +84,44 @@ describe('AgentPageComponent', () => {
     TestBed.resetTestingModule();
   });
 
-  it('keeps provider and key controls out of the inline chat layout by default', () => {
+  it('keeps settings out of the inline chat layout by default', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
 
     expect(nativeElement.querySelector('#agent-settings-dialog')).toBeNull();
-    expect(nativeElement.querySelector('.agent__field')).toBeNull();
     expect(nativeElement.querySelector('.agent__settings-button')?.getAttribute('aria-expanded')).toBe('false');
     expect(nativeElement.querySelector('.agent__settings-button')?.getAttribute('aria-label')).toBe('Agent settings');
   });
 
-  it('renders selected provider, model, and key mode in the header status', () => {
-    expect(headerStatusText()).toBe('Gemini / Gemini 2.5 Flash / Saved key');
-  });
+  it('renders backend-managed Ask Agent status in the header', () => {
+    expect(headerStatusText()).toBe('Powered by GeoTrack AI');
 
-  it('renders a safe header status when the selected provider is unavailable', () => {
-    agentService.providers.set([
-      agentProvider({ enabled: false }),
-    ]);
+    isLoadingAgentInfo.set(true);
     fixture.detectChanges();
 
-    expect(headerStatusText()).toBe('Gemini unavailable');
+    expect(headerStatusText()).toBe('Connecting to GeoTrack AI');
   });
 
-  it('opens and closes the settings popup from the header button', () => {
+  it('opens settings without provider, model, or key controls and keeps MCP accessible', () => {
     openSettings();
 
-    let nativeElement = fixture.nativeElement as HTMLElement;
+    const nativeElement = fixture.nativeElement as HTMLElement;
     const dialog = nativeElement.querySelector('#agent-settings-dialog') as HTMLElement | null;
+    const text = dialog?.textContent ?? '';
     expect(dialog).toBeTruthy();
     expect(dialog?.getAttribute('role')).toBe('dialog');
-    expect(dialog?.textContent).toContain('Provider');
-    expect(dialog?.textContent).toContain('Model');
-    expect(dialog?.textContent).toContain('Use GeoTrack in external AI apps');
+    expect(text).toContain('Ask Agent is powered by GeoTrack AI.');
+    expect(text).toContain('AI responses are generated through the GeoTrack backend.');
+    expect(text).toContain('Use GeoTrack in external AI apps');
+    expect(text).not.toContain('Provider');
+    expect(text).not.toContain('Model');
+    expect(text).not.toContain('Temporary key');
+    expect(text).not.toContain('Saved key');
+    expect(text).not.toContain('Test key');
+    expect(text).not.toContain('Claude');
 
     findButton('Close Agent settings').click();
     fixture.detectChanges();
-    nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('#agent-settings-dialog')).toBeNull();
-  });
-
-  it('keeps saved-key save, test, and delete controls working inside the popup', () => {
-    openSettings();
-
-    const input = queryInput('Paste key to save or replace');
-    input.value = 'new-provider-key';
-    input.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
-
-    findButton('Test key').click();
-    findButton('Save').click();
-    findButton('Delete').click();
-
-    expect(agentService.testKey).toHaveBeenCalledWith('new-provider-key', 'session');
-    expect(agentService.saveApiKey).toHaveBeenCalledWith('new-provider-key');
-    expect(agentService.deleteSavedKey).toHaveBeenCalledTimes(1);
-  });
-
-  it('tests an existing saved key without exposing the key in frontend state', () => {
-    openSettings();
-
-    findButton('Test key').click();
-
-    expect(agentService.testKey).toHaveBeenCalledWith('', 'saved');
-  });
-
-  it('keeps saved-key testing disabled when there is no saved key or draft key', () => {
-    agentService.providers.set([
-      agentProvider({ hasSavedKey: false, keyLast4: null }),
-    ]);
-    agentService.keyMode.set('project-demo');
-    fixture.detectChanges();
-    openSettings();
-
-    const testKey = findButton('Test key');
-    expect(testKey.disabled).toBe(true);
-
-    testKey.click();
-
-    expect(agentService.testKey).not.toHaveBeenCalled();
-  });
-
-  it('keeps temporary keys in component state and never writes them to browser storage', () => {
-    const storageSpy = vi.spyOn(Storage.prototype, 'setItem');
-    openSettings();
-
-    findButton('Temporary key').click();
-    fixture.detectChanges();
-
-    const input = queryInput('Used once, not saved');
-    input.value = 'temporary-agent-key';
-    input.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
-
-    findButton('Test').click();
-
-    expect(agentService.setKeyMode).toHaveBeenCalledWith('session');
-    expect(agentService.setSessionApiKey).toHaveBeenCalledWith('temporary-agent-key');
-    expect(agentService.testKey).toHaveBeenCalledWith('temporary-agent-key');
-    expect(storageSpy).not.toHaveBeenCalled();
-    storageSpy.mockRestore();
+    expect((fixture.nativeElement as HTMLElement).querySelector('#agent-settings-dialog')).toBeNull();
   });
 
   it('still sends chat messages from the composer', () => {
@@ -428,13 +309,6 @@ describe('AgentPageComponent', () => {
     return button as HTMLButtonElement;
   }
 
-  function queryInput(placeholder: string): HTMLInputElement {
-    const nativeElement = fixture.nativeElement as HTMLElement;
-    const input = nativeElement.querySelector(`input[placeholder="${placeholder}"]`) as HTMLInputElement | null;
-    expect(input).toBeTruthy();
-    return input as HTMLInputElement;
-  }
-
   function assistantMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
     return {
       id: 'assistant-message',
@@ -459,25 +333,6 @@ describe('AgentPageComponent', () => {
       dateText: null,
       stayType: null,
       placeType: null,
-      ...overrides,
-    };
-  }
-
-  function agentProvider(overrides: Partial<AgentProvider> = {}): AgentProvider {
-    return {
-      id: 'gemini',
-      displayName: 'Gemini',
-      enabled: true,
-      models: [
-        { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', isDefault: true },
-      ],
-      defaultModel: 'gemini-2.5-flash',
-      supportsSavedKey: true,
-      supportsSessionKey: true,
-      projectDemoKeyEnabled: true,
-      hasSavedKey: false,
-      keyLast4: null,
-      keyUpdatedAt: null,
       ...overrides,
     };
   }
