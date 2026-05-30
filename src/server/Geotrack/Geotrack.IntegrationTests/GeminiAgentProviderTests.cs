@@ -62,28 +62,11 @@ public class GeminiAgentProviderTests
     private static GeminiAgentProvider CreateProvider(HttpMessageHandler handler)
     {
         var client = new HttpClient(handler);
-        var options = Options.Create(new AgentOptions
+        var options = Options.Create(new GeminiOptions
         {
-            AllowProjectDemoProvider = true,
-            Providers = new Dictionary<string, AgentProviderOptions>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["gemini"] = new()
-                {
-                    Enabled = true,
-                    DisplayName = "Gemini",
-                    BaseUrl = "https://gemini.test",
-                    DefaultModel = "gemini-2.5-flash",
-                    Models = new List<AgentModelOptions>
-                    {
-                        new()
-                        {
-                            Id = "gemini-2.5-flash",
-                            DisplayName = "Gemini 2.5 Flash",
-                            IsDefault = true
-                        }
-                    }
-                }
-            }
+            BaseUrl = "https://gemini.test",
+            Model = "gemini-2.5-flash",
+            ApiKeys = ["test-gemini-key"]
         });
 
         return new GeminiAgentProvider(client, options, NullLogger<GeminiAgentProvider>.Instance);

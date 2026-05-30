@@ -401,10 +401,9 @@ public class AgentCatalogGroundingTests
     [Fact]
     public async Task Gemini_prompt_receives_structured_tool_context()
     {
-        var provider = new CapturingProvider();
+        var gemini = new FakeGeminiAskAgentService();
         var orchestrator = new AgentOrchestrator(
-            new SingleProviderRegistry(provider),
-            new FakeKeyService(),
+            gemini,
             new FakeToolService(),
             Options.Create(new AgentOptions { MaxPromptLength = 200, MaxContextItems = 5, RequestTimeoutSeconds = 10 }),
             Options.Create(new McpOptions { Enabled = true }),
@@ -413,19 +412,15 @@ public class AgentCatalogGroundingTests
         var response = await orchestrator.ChatAsync(
             new AgentChatRequestDto
             {
-                Message = "beaches in Testville",
-                Provider = "gemini",
-                Model = "gemini-test",
-                KeyMode = AgentKeyModes.Session,
-                SessionApiKey = "session-key-123"
+                Message = "beaches in Testville"
             },
             userId: 1);
 
-        Assert.NotNull(provider.LastRequest);
-        Assert.Contains("GeoTrack context JSON", provider.LastRequest!.SystemPrompt);
-        Assert.Contains("Fixture Beach", provider.LastRequest.SystemPrompt);
-        Assert.Contains("searchAttempted", provider.LastRequest.SystemPrompt);
-        Assert.Contains("geotrack_search_places", provider.LastRequest.SystemPrompt);
+        Assert.NotNull(gemini.LastRequest);
+        Assert.Contains("GeoTrack context JSON", gemini.LastRequest!.SystemPrompt);
+        Assert.Contains("Fixture Beach", gemini.LastRequest.SystemPrompt);
+        Assert.Contains("searchAttempted", gemini.LastRequest.SystemPrompt);
+        Assert.Contains("geotrack_search_places", gemini.LastRequest.SystemPrompt);
         var card = Assert.Single(response.Cards);
         Assert.Equal("Fixture Beach", card.Title);
         Assert.Equal("place", card.EntityType);
@@ -475,9 +470,7 @@ public class AgentCatalogGroundingTests
         };
         var orchestrator = BuildOrchestrator(new FakeToolService(context), maxToolResults: 10, maxContextItems: 10);
 
-        var response = await orchestrator.ChatAsync(
-            ChatRequest("places in Testville", sessionApiKey: "session-key-secret-123"),
-            userId: 1);
+        var response = await orchestrator.ChatAsync(ChatRequest("places in Testville"), userId: 1);
 
         Assert.True(response.Cards.Count <= 5);
         Assert.All(response.Cards, card =>
@@ -487,8 +480,6 @@ public class AgentCatalogGroundingTests
         });
 
         var cardsJson = JsonSerializer.Serialize(response.Cards);
-        Assert.DoesNotContain("session-key-secret-123", cardsJson, StringComparison.Ordinal);
-        Assert.DoesNotContain("saved-key-123", cardsJson, StringComparison.Ordinal);
         Assert.DoesNotContain("gemini-test", cardsJson, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -496,8 +487,7 @@ public class AgentCatalogGroundingTests
     public async Task Overlong_chat_prompt_is_rejected_safely()
     {
         var orchestrator = new AgentOrchestrator(
-            new SingleProviderRegistry(new CapturingProvider()),
-            new FakeKeyService(),
+            new FakeGeminiAskAgentService(),
             new FakeToolService(),
             Options.Create(new AgentOptions { MaxPromptLength = 20, MaxContextItems = 5, RequestTimeoutSeconds = 10 }),
             Options.Create(new McpOptions()),
@@ -507,26 +497,16 @@ public class AgentCatalogGroundingTests
             orchestrator.ChatAsync(
                 new AgentChatRequestDto
                 {
-                    Message = new string('x', 250),
-                    Provider = "gemini",
-                    Model = "gemini-test",
-                    KeyMode = AgentKeyModes.Session,
-                    SessionApiKey = "session-key-123"
+                    Message = new string('x', 250)
                 },
                 userId: 1));
 
         Assert.Equal("prompt_too_long", ex.Code);
     }
 
-    private static AgentChatRequestDto ChatRequest(
-        string message,
-        string sessionApiKey = "session-key-123") => new()
+    private static AgentChatRequestDto ChatRequest(string message) => new()
     {
-        Message = message,
-        Provider = "gemini",
-        Model = "gemini-test",
-        KeyMode = AgentKeyModes.Session,
-        SessionApiKey = sessionApiKey
+        Message = message
     };
 
     private static AgentOrchestrator BuildOrchestrator(
@@ -535,8 +515,7 @@ public class AgentCatalogGroundingTests
         int maxContextItems = 6)
     {
         return new AgentOrchestrator(
-            new SingleProviderRegistry(new CapturingProvider()),
-            new FakeKeyService(),
+            new FakeGeminiAskAgentService(),
             tools,
             Options.Create(new AgentOptions
             {
@@ -634,51 +613,19 @@ public class AgentCatalogGroundingTests
             Task.FromResult(new GeoTrackMapFiltersDto());
     }
 
-    private sealed class CapturingProvider : IAgentProvider
+    private sealed class FakeGeminiAskAgentService : IGeminiAskAgentService
     {
         public AgentProviderChatRequest? LastRequest { get; private set; }
-        public string Id => "gemini";
+        public string ProviderId => "gemini";
+        public string Model => "gemini-test";
+        public bool HasAvailableKey => true;
 
-        public AgentProviderMetadataDto GetMetadata(int? userId, AgentApiKeyMetadataDto? savedKey) => new()
-        {
-            Id = Id,
-            DisplayName = "Gemini",
-            Enabled = true,
-            DefaultModel = "gemini-test",
-            SupportsSavedKey = true,
-            SupportsSessionKey = true,
-            Models = [new AgentProviderModelDto { Id = "gemini-test", DisplayName = "Gemini Test", IsDefault = true }]
-        };
-
-        public Task<AgentProviderChatResult> GenerateAsync(AgentProviderChatRequest request, CancellationToken cancellationToken = default)
+        public Task<AgentProviderChatResult> GenerateAsync(
+            AgentProviderChatRequest request,
+            CancellationToken cancellationToken = default)
         {
             LastRequest = request;
             return Task.FromResult(new AgentProviderChatResult { Text = "Grounded answer" });
         }
-
-        public Task TestAsync(string apiKey, string model, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
-
-    private sealed class SingleProviderRegistry : IAgentProviderRegistry
-    {
-        private readonly IAgentProvider _provider;
-        public SingleProviderRegistry(IAgentProvider provider) => _provider = provider;
-        public IReadOnlyCollection<IAgentProvider> GetAll() => [_provider];
-        public IAgentProvider? Get(string providerId) =>
-            string.Equals(providerId, _provider.Id, StringComparison.OrdinalIgnoreCase) ? _provider : null;
-    }
-
-    private sealed class FakeKeyService : IAiProviderKeyService
-    {
-        public Task<IReadOnlyList<AgentApiKeyMetadataDto>> GetKeysAsync(int userId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<AgentApiKeyMetadataDto>>([]);
-        public Task<AgentApiKeyMetadataDto?> GetKeyMetadataAsync(int userId, string provider, CancellationToken cancellationToken = default) =>
-            Task.FromResult<AgentApiKeyMetadataDto?>(null);
-        public Task<string?> GetDecryptedKeyAsync(int userId, string provider, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>("saved-key-123");
-        public Task<AgentApiKeyMetadataDto> SaveOrReplaceKeyAsync(int userId, string provider, string apiKey, string? displayName, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new AgentApiKeyMetadataDto());
-        public Task DeleteKeyAsync(int userId, string provider, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task MarkKeyUsedAsync(int userId, string provider, bool success, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
