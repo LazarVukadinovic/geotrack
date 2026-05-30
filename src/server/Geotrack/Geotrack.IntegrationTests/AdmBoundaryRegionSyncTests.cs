@@ -12,13 +12,18 @@ using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
 using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.IntegrationTests;
 
 public sealed class AdmBoundaryRegionSyncTests
 {
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string BoundaryDisplayGeometryPropertyName = "BoundaryDisplayGeometry";
+    private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 4326);
 
     [Fact]
     public async Task Sync_service_creates_missing_regions_is_idempotent_and_dry_run_safe()
@@ -442,6 +447,307 @@ public sealed class AdmBoundaryRegionSyncTests
         }
     }
 
+    [Fact]
+    public async Task Territory_manager_setup_status_requires_initial_sync_then_reports_up_to_date_and_new_candidates()
+    {
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = await WriteSyncAdm1FileAsync(tempRoot);
+            await using var app = await GeotrackApiFactory.CreateAsync(
+                configurationOverrides: new Dictionary<string, string?>
+                {
+                    ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
+                });
+
+            var territoryId = await CreateTerritoryManagerFixtureAsync(app, "TAA");
+            await ImportAdm1CandidatesAsync(app);
+
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            var initial = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
+                $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
+
+            Assert.NotNull(initial);
+            Assert.Equal(territoryId, initial!.TerritoryId);
+            Assert.Equal("TAA", initial.CountryIso3);
+            Assert.True(initial.RequiresInitialSync);
+            Assert.False(initial.OnboardingCompleted);
+            Assert.False(initial.HasSyncedRegions);
+            Assert.Equal(0, initial.SyncedRegionCount);
+            Assert.Equal(2, initial.CandidateCount);
+            Assert.True(initial.HasCandidateData);
+            Assert.True(initial.CanSync);
+            Assert.False(initial.CanUpdate);
+            Assert.True(initial.UpdateAvailable);
+            Assert.False(initial.MissingCandidateData);
+            Assert.Null(initial.RegionSetupCompletedAt);
+            Assert.NotNull(initial.CandidateVersionHash);
+            Assert.Null(initial.SyncedVersionHash);
+
+            var syncResponse = await manager.PostAsJsonAsync(
+                $"/api/admin/territory/regions/sync-from-adm1?territoryId={territoryId}",
+                new { });
+            syncResponse.EnsureSuccessStatusCode();
+
+            var firstSync = await syncResponse.Content.ReadFromJsonAsync<RegionSyncSummaryDto>();
+            Assert.NotNull(firstSync);
+            Assert.False(firstSync!.DryRun);
+            Assert.Equal(2, firstSync.CreatedCount);
+            Assert.True(firstSync.CompletedAt > DateTime.MinValue);
+
+            var afterSync = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
+                $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
+            Assert.NotNull(afterSync);
+            Assert.False(afterSync!.RequiresInitialSync);
+            Assert.True(afterSync.OnboardingCompleted);
+            Assert.True(afterSync.HasSyncedRegions);
+            Assert.Equal(2, afterSync.SyncedRegionCount);
+            Assert.False(afterSync.UpdateAvailable);
+            Assert.False(afterSync.CanUpdate);
+            Assert.Equal("Regions are up to date.", afterSync.Message);
+            Assert.NotNull(afterSync.RegionSetupCompletedAt);
+            Assert.NotNull(afterSync.SyncedVersionHash);
+
+            await using (var completionScope = app.Services.CreateAsyncScope())
+            {
+                var db = completionScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var managerUser = await db.Users.SingleAsync(user => user.Email == "mika@gmail.com");
+                var assignment = await db.TerritoryManagerTerritories.SingleAsync(item =>
+                    item.UserId == managerUser.Id &&
+                    item.TerritoryId == territoryId);
+                Assert.NotNull(assignment.RegionSetupCompletedAt);
+            }
+
+            var idempotentResponse = await manager.PostAsJsonAsync(
+                $"/api/admin/territory/regions/sync-from-adm1?territoryId={territoryId}",
+                new { });
+            idempotentResponse.EnsureSuccessStatusCode();
+            var idempotent = await idempotentResponse.Content.ReadFromJsonAsync<RegionSyncSummaryDto>();
+            Assert.NotNull(idempotent);
+            Assert.Equal(0, idempotent!.CreatedCount);
+            Assert.Equal(2, idempotent.ExistingLinkedCount);
+
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                Assert.Equal(2, await db.Regions.CountAsync(region => region.TerritoryId == territoryId));
+                await AddAdm1CandidateAsync(db, "TAA", "New Interior Region", "NEW-1", 3.0, 0.2, 3.6, 0.8);
+            }
+
+            var afterCandidateChange = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
+                $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
+            Assert.NotNull(afterCandidateChange);
+            Assert.False(afterCandidateChange!.RequiresInitialSync);
+            Assert.True(afterCandidateChange.OnboardingCompleted);
+            Assert.True(afterCandidateChange.UpdateAvailable);
+            Assert.True(afterCandidateChange.CanUpdate);
+            Assert.Equal(3, afterCandidateChange.CandidateCount);
+            Assert.Equal(2, afterCandidateChange.SyncedRegionCount);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Territory_manager_setup_status_reports_missing_candidate_data()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var territoryId = await CreateTerritoryManagerFixtureAsync(app, "QAA");
+
+        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var status = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
+            $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
+
+        Assert.NotNull(status);
+        Assert.Equal(territoryId, status!.TerritoryId);
+        Assert.Equal("QAA", status.CountryIso3);
+        Assert.True(status.RequiresInitialSync);
+        Assert.False(status.OnboardingCompleted);
+        Assert.True(status.MissingCandidateData);
+        Assert.False(status.HasCandidateData);
+        Assert.False(status.CanSync);
+        Assert.False(status.CanUpdate);
+        Assert.False(status.UpdateAvailable);
+        Assert.Equal(0, status.CandidateCount);
+        Assert.Contains("ADM1 boundary data is missing", status.Message);
+    }
+
+    [Fact]
+    public async Task Territory_manager_setup_status_marks_completed_when_regions_were_already_synced()
+    {
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = await WriteSyncAdm1FileAsync(tempRoot);
+            await using var app = await GeotrackApiFactory.CreateAsync(
+                configurationOverrides: new Dictionary<string, string?>
+                {
+                    ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
+                });
+
+            var territoryId = await CreateTerritoryManagerFixtureAsync(app, "TAA");
+            await ImportAdm1CandidatesAsync(app);
+
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var sync = scope.ServiceProvider.GetRequiredService<IAdmBoundaryRegionSyncService>();
+                var summary = await sync.SyncRegionsFromAdm1CandidatesAsync(territoryId, dryRun: false);
+                Assert.Equal(2, summary.CreatedCount);
+            }
+
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            var status = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
+                $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
+
+            Assert.NotNull(status);
+            Assert.False(status!.RequiresInitialSync);
+            Assert.True(status.OnboardingCompleted);
+            Assert.True(status.HasSyncedRegions);
+            Assert.Equal(2, status.SyncedRegionCount);
+            Assert.NotNull(status.RegionSetupCompletedAt);
+
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var user = await db.Users.SingleAsync(item => item.Email == "mika@gmail.com");
+                var assignment = await db.TerritoryManagerTerritories.SingleAsync(item =>
+                    item.UserId == user.Id &&
+                    item.TerritoryId == territoryId);
+                Assert.NotNull(assignment.RegionSetupCompletedAt);
+            }
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Non_territory_manager_cannot_call_territory_setup_endpoints()
+    {
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = await WriteSyncAdm1FileAsync(tempRoot);
+            await using var app = await GeotrackApiFactory.CreateAsync(
+                configurationOverrides: new Dictionary<string, string?>
+                {
+                    ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
+                });
+
+            var territoryId = await CreateTerritoryManagerFixtureAsync(app, "TAA");
+            await ImportAdm1CandidatesAsync(app);
+
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+
+            var setupStatusResponse = await admin.GetAsync(
+                $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
+            Assert.Equal(HttpStatusCode.Forbidden, setupStatusResponse.StatusCode);
+
+            var syncResponse = await admin.PostAsJsonAsync(
+                $"/api/admin/territory/regions/sync-from-adm1?territoryId={territoryId}",
+                new { });
+            Assert.Equal(HttpStatusCode.Forbidden, syncResponse.StatusCode);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Territory_manager_sync_links_existing_regions_and_preserves_assignments_without_duplicates()
+    {
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = await WriteSyncAdm1FileAsync(tempRoot);
+            await using var app = await GeotrackApiFactory.CreateAsync(
+                configurationOverrides: new Dictionary<string, string?>
+                {
+                    ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
+                });
+
+            var territoryId = await CreateTerritoryManagerFixtureAsync(app, "TAA");
+            await ImportAdm1CandidatesAsync(app);
+
+            int existingRegionId;
+            int regionalManagerId;
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var regionalManager = await db.Users.SingleAsync(user => user.Email == "elena@example.com");
+                regionalManagerId = regionalManager.Id;
+                var now = DateTime.UtcNow;
+                var region = new Region
+                {
+                    Name = "Inside Region",
+                    TerritoryId = territoryId,
+                    CreatedAt = now
+                };
+
+                db.Regions.Add(region);
+                await db.SaveChangesAsync();
+                existingRegionId = region.Id;
+
+                db.RegionalManagerRegions.Add(new RegionalManagerRegion
+                {
+                    UserId = regionalManager.Id,
+                    RegionId = region.Id,
+                    IsActive = true,
+                    CreatedAt = now
+                });
+                await db.SaveChangesAsync();
+            }
+
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            var before = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
+                $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
+            Assert.NotNull(before);
+            Assert.True(before!.RequiresInitialSync);
+            Assert.True(before.UpdateAvailable);
+
+            var response = await manager.PostAsJsonAsync(
+                $"/api/admin/territory/regions/sync-from-adm1?territoryId={territoryId}",
+                new { });
+            response.EnsureSuccessStatusCode();
+
+            var summary = await response.Content.ReadFromJsonAsync<RegionSyncSummaryDto>();
+            Assert.NotNull(summary);
+            Assert.Equal(1, summary!.LinkedExistingCount);
+            Assert.Equal(1, summary.CreatedCount);
+            Assert.Equal(0, summary.FailedCount);
+
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                Assert.Equal(2, await db.Regions.CountAsync(region => region.TerritoryId == territoryId));
+                Assert.Equal(1, await db.Regions.CountAsync(region =>
+                    region.TerritoryId == territoryId &&
+                    region.Name == "Inside Region"));
+                Assert.True(await db.RegionalManagerRegions.AnyAsync(assignment =>
+                    assignment.UserId == regionalManagerId &&
+                    assignment.RegionId == existingRegionId &&
+                    assignment.IsActive));
+
+                var linked = await db.Regions.SingleAsync(region => region.Id == existingRegionId);
+                Assert.NotNull(linked.BoundaryCandidateId);
+                Assert.Equal("geoBoundaries:ADM1:TAA:INSIDE-1", linked.BoundaryExternalKey);
+                Assert.NotNull(db.Entry(linked).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue);
+            }
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
     private static async Task<int> CreateTerritoryManagerFixtureAsync(
         GeotrackApiFactory app,
         string iso3)
@@ -500,6 +806,41 @@ public sealed class AdmBoundaryRegionSyncTests
         return await import.ImportLocalBoundariesAsync("ADM1");
     }
 
+    private static async Task AddAdm1CandidateAsync(
+        AppDbContext db,
+        string iso3,
+        string name,
+        string shapeId,
+        double west,
+        double south,
+        double east,
+        double north)
+    {
+        var now = DateTime.UtcNow;
+        var candidate = new AdministrativeBoundaryCandidate
+        {
+            Source = "geoBoundaries",
+            ReleaseType = "gbOpen",
+            AdmLevel = "ADM1",
+            ShapeGroup = iso3,
+            ShapeId = shapeId,
+            ShapeName = name,
+            ShapeType = "ADM1",
+            ExternalKey = $"geoBoundaries:ADM1:{iso3}:{shapeId}",
+            CountryIso3 = iso3,
+            ImportedAt = now,
+            CreatedAt = now
+        };
+
+        db.AdministrativeBoundaryCandidates.Add(candidate);
+        db.Entry(candidate).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue =
+            Polygon(west, south, east, north);
+        db.Entry(candidate).Property<Geometry?>(BoundaryDisplayGeometryPropertyName).CurrentValue =
+            Polygon(west, south, east, north);
+
+        await db.SaveChangesAsync();
+    }
+
     private static async Task<HttpClient> LoginAdminAsync(
         GeotrackApiFactory app,
         string email,
@@ -537,6 +878,20 @@ public sealed class AdmBoundaryRegionSyncTests
         Assert.Equal(expectedRegionName, destination.Region.Name);
         Assert.Equal("SRB", destination.Region.BoundaryShapeGroup);
         Assert.Equal("ADM1", destination.Region.BoundaryAdmLevel);
+    }
+
+    private static Geometry Polygon(double west, double south, double east, double north)
+    {
+        var polygon = GeometryFactory.CreatePolygon(new[]
+        {
+            new Coordinate(west, south),
+            new Coordinate(east, south),
+            new Coordinate(east, north),
+            new Coordinate(west, north),
+            new Coordinate(west, south)
+        });
+        polygon.SRID = 4326;
+        return polygon;
     }
 
     private static string CreateTempBoundaryDirectory()

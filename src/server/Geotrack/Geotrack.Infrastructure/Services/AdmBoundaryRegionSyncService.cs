@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
@@ -29,6 +30,7 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
     private const string StatusSkipped = "Skipped";
     private const string StatusAmbiguous = "Ambiguous";
     private const string StatusFailed = "Failed";
+    private const int MaxSummaryItems = 100;
 
     private readonly AppDbContext _db;
     private readonly RegionBoundaryBackfillOptions _options;
@@ -42,6 +44,77 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
         _db = db;
         _options = options.Value;
         _logger = logger;
+    }
+
+    public async Task<TerritoryRegionSetupStatusDto> GetRegionSetupStatusForTerritoryManagerAsync(
+        int userId,
+        int? territoryId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var resolvedTerritoryId = await ResolveTerritoryManagerTerritoryAsync(userId, territoryId, cancellationToken);
+        var territory = await LoadTerritoryAsync(resolvedTerritoryId, cancellationToken)
+            ?? throw new KeyNotFoundException("Territory was not found.");
+        var countryIso3 = ResolveCountryIso3(territory)
+            ?? throw new InvalidOperationException("Territory must have an ISO3 country code before syncing ADM1 regions.");
+
+        var candidates = await LoadCandidatesAsync(countryIso3, cancellationToken);
+        var regions = await LoadRegionsAsync(territory.Id, cancellationToken);
+        var syncedRegions = regions
+            .Where(IsSyncedAdm1Region)
+            .ToList();
+
+        var hasCandidateData = candidates.Count > 0;
+        var missingCandidateData = !hasCandidateData;
+        var regionSetupCompletedAt = await GetRegionSetupCompletedAtAsync(userId, territory.Id, cancellationToken);
+        if (regionSetupCompletedAt is null && syncedRegions.Count > 0)
+        {
+            regionSetupCompletedAt = await MarkRegionSetupCompletedAsync(
+                userId,
+                territory.Id,
+                DateTime.UtcNow,
+                cancellationToken);
+        }
+
+        var onboardingCompleted = regionSetupCompletedAt.HasValue || syncedRegions.Count > 0;
+        var requiresInitialSync = !onboardingCompleted && syncedRegions.Count == 0;
+        RegionSyncSummaryDto? dryRunSummary = null;
+
+        if (hasCandidateData)
+        {
+            dryRunSummary = await SyncRegionsFromAdm1CandidatesAsync(
+                territory.Id,
+                dryRun: true,
+                forceUpdateGeometry: false,
+                createMissingRegions: true,
+                linkExistingRegions: true,
+                cancellationToken);
+        }
+
+        var updateAvailable = dryRunSummary is not null && HasSyncWork(dryRunSummary);
+        var canSync = hasCandidateData;
+        var canUpdate = hasCandidateData && !requiresInitialSync && updateAvailable;
+
+        return new TerritoryRegionSetupStatusDto
+        {
+            TerritoryId = territory.Id,
+            TerritoryName = territory.Name,
+            CountryIso3 = countryIso3,
+            RequiresInitialSync = requiresInitialSync,
+            OnboardingCompleted = onboardingCompleted,
+            HasSyncedRegions = syncedRegions.Count > 0,
+            SyncedRegionCount = syncedRegions.Count,
+            CandidateCount = candidates.Count,
+            HasCandidateData = hasCandidateData,
+            CanSync = canSync,
+            CanUpdate = canUpdate,
+            UpdateAvailable = updateAvailable,
+            MissingCandidateData = missingCandidateData,
+            RegionSetupCompletedAt = regionSetupCompletedAt,
+            LastSyncedAt = GetLastSyncedAt(syncedRegions),
+            CandidateVersionHash = BuildCandidateVersionHash(candidates),
+            SyncedVersionHash = BuildSyncedRegionVersionHash(syncedRegions),
+            Message = BuildSetupStatusMessage(missingCandidateData, requiresInitialSync, updateAvailable, dryRunSummary)
+        };
     }
 
     public async Task<RegionSyncSummaryDto> SyncRegionsFromAdm1CandidatesAsync(
@@ -70,150 +143,186 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var plannedRegionIds = new HashSet<int>();
         var items = new List<RegionSyncItemDto>();
+        var transaction = dryRun
+            ? null
+            : await _db.Database.BeginTransactionAsync(cancellationToken);
 
-        foreach (var candidate in candidates)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var item = BuildBaseItem(candidate);
-            items.Add(item);
-
-            var boundaryGeometry = ToValidPolygonalGeometry(candidate.BoundaryGeometry);
-            if (boundaryGeometry is null)
+            foreach (var candidate in candidates)
             {
-                item.Status = StatusFailed;
-                item.Message = "ADM1 candidate boundary geometry is missing or invalid.";
-                continue;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            var displayGeometry = ToValidPolygonalGeometry(candidate.BoundaryDisplayGeometry);
-            var match = ResolveRegion(candidate, lookup, countryIso3);
-            if (match.Status == StatusAmbiguous)
-            {
-                item.Status = StatusAmbiguous;
-                item.Message = match.Message;
-                continue;
-            }
+                var item = BuildBaseItem(candidate);
+                items.Add(item);
 
-            if (match.Region is not null)
-            {
-                item.RegionId = match.Region.Id;
-                item.RegionName = match.Region.Name;
+                var boundaryGeometry = ToValidPolygonalGeometry(candidate.BoundaryGeometry);
+                if (boundaryGeometry is null)
+                {
+                    item.Status = StatusFailed;
+                    item.Message = "ADM1 candidate boundary geometry is missing or invalid.";
+                    continue;
+                }
 
-                if (!plannedRegionIds.Add(match.Region.Id))
+                var displayGeometry = ToValidPolygonalGeometry(candidate.BoundaryDisplayGeometry);
+                var match = ResolveRegion(candidate, lookup, countryIso3);
+                if (match.Status == StatusAmbiguous)
                 {
                     item.Status = StatusAmbiguous;
-                    item.Message = "This existing region was already matched to another ADM1 candidate in the same sync run.";
+                    item.Message = match.Message;
                     continue;
                 }
 
-                if (!linkExistingRegions)
+                if (match.Region is not null)
+                {
+                    item.RegionId = match.Region.Id;
+                    item.RegionName = match.Region.Name;
+
+                    if (!plannedRegionIds.Add(match.Region.Id))
+                    {
+                        item.Status = StatusAmbiguous;
+                        item.Message = "This existing region was already matched to another ADM1 candidate in the same sync run.";
+                        continue;
+                    }
+
+                    if (!linkExistingRegions)
+                    {
+                        item.Status = StatusSkipped;
+                        item.Message = "Existing region linking is disabled for this sync run.";
+                        continue;
+                    }
+
+                    var plan = BuildUpdatePlan(match.Region, candidate, boundaryGeometry, displayGeometry, forceUpdateGeometry);
+                    if (!plan.HasChanges)
+                    {
+                        item.Status = StatusAlreadyLinked;
+                        item.Message = "Region is already linked to this ADM1 boundary candidate.";
+                        continue;
+                    }
+
+                    var status = match.Region.BoundaryCandidateId == candidate.Id
+                        ? StatusUpdated
+                        : StatusLinkedExisting;
+                    item.Status = status;
+                    item.Message = status == StatusLinkedExisting
+                        ? $"{match.Message} Boundary metadata will be linked to the existing region."
+                        : "Existing region boundary metadata or geometry will be refreshed from the ADM1 candidate.";
+
+                    if (dryRun)
+                        continue;
+
+                    try
+                    {
+                        await ApplyUpdateAsync(
+                            match.Region.Id,
+                            candidate,
+                            boundaryGeometry,
+                            displayGeometry,
+                            plan,
+                            cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Failed to sync ADM1 candidate {CandidateId} to existing region {RegionId}.",
+                            candidate.Id,
+                            match.Region.Id);
+
+                        _db.ChangeTracker.Clear();
+                        item.Status = StatusFailed;
+                        item.Message = "Failed to update the existing region from the ADM1 candidate.";
+                    }
+
+                    continue;
+                }
+
+                if (!createMissingRegions)
                 {
                     item.Status = StatusSkipped;
-                    item.Message = "Existing region linking is disabled for this sync run.";
+                    item.Message = "No existing region matched this ADM1 candidate and creation is disabled.";
                     continue;
                 }
 
-                var plan = BuildUpdatePlan(match.Region, candidate, boundaryGeometry, displayGeometry, forceUpdateGeometry);
-                if (!plan.HasChanges)
+                var regionName = candidate.ShapeName.Trim();
+                if (string.IsNullOrWhiteSpace(regionName))
                 {
-                    item.Status = StatusAlreadyLinked;
-                    item.Message = "Region is already linked to this ADM1 boundary candidate.";
+                    item.Status = StatusFailed;
+                    item.Message = "ADM1 candidate has no shape name to use as a region name.";
                     continue;
                 }
 
-                var status = match.Region.BoundaryCandidateId == candidate.Id
-                    ? StatusUpdated
-                    : StatusLinkedExisting;
-                item.Status = status;
-                item.Message = status == StatusLinkedExisting
-                    ? $"{match.Message} Boundary metadata will be linked to the existing region."
-                    : "Existing region boundary metadata or geometry will be refreshed from the ADM1 candidate.";
+                if (ambiguousCandidateNames.Contains(NormalizeName(regionName)))
+                {
+                    item.Status = StatusAmbiguous;
+                    item.Message = "Multiple ADM1 candidates share this name, so a unique region cannot be created safely.";
+                    continue;
+                }
+
+                item.RegionName = regionName;
+                item.Status = StatusCreated;
+                item.Message = "A new unassigned region will be created from this ADM1 candidate.";
 
                 if (dryRun)
                     continue;
 
                 try
                 {
-                    await ApplyUpdateAsync(
-                        match.Region.Id,
+                    var created = await CreateRegionAsync(
+                        territory.Id,
+                        regionName,
                         candidate,
                         boundaryGeometry,
                         displayGeometry,
-                        plan,
                         cancellationToken);
+
+                    item.RegionId = created.Id;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(
                         ex,
-                        "Failed to sync ADM1 candidate {CandidateId} to existing region {RegionId}.",
-                        candidate.Id,
-                        match.Region.Id);
+                        "Failed to create region from ADM1 candidate {CandidateId}.",
+                        candidate.Id);
 
                     _db.ChangeTracker.Clear();
                     item.Status = StatusFailed;
-                    item.Message = "Failed to update the existing region from the ADM1 candidate.";
+                    item.Message = "Failed to create a region from this ADM1 candidate.";
                 }
-
-                continue;
             }
 
-            if (!createMissingRegions)
+            var summary = BuildSummary(territory, countryIso3, dryRun, candidates.Count, items);
+
+            if (transaction is not null)
             {
-                item.Status = StatusSkipped;
-                item.Message = "No existing region matched this ADM1 candidate and creation is disabled.";
-                continue;
+                if (summary.FailedCount > 0 || summary.AmbiguousCount > 0)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
+                else
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                }
             }
 
-            var regionName = candidate.ShapeName.Trim();
-            if (string.IsNullOrWhiteSpace(regionName))
+            return summary;
+        }
+        catch
+        {
+            if (transaction is not null)
             {
-                item.Status = StatusFailed;
-                item.Message = "ADM1 candidate has no shape name to use as a region name.";
-                continue;
+                await transaction.RollbackAsync(cancellationToken);
             }
 
-            if (ambiguousCandidateNames.Contains(NormalizeName(regionName)))
+            throw;
+        }
+        finally
+        {
+            if (transaction is not null)
             {
-                item.Status = StatusAmbiguous;
-                item.Message = "Multiple ADM1 candidates share this name, so a unique region cannot be created safely.";
-                continue;
-            }
-
-            item.RegionName = regionName;
-            item.Status = StatusCreated;
-            item.Message = "A new unassigned region will be created from this ADM1 candidate.";
-
-            if (dryRun)
-                continue;
-
-            try
-            {
-                var created = await CreateRegionAsync(
-                    territory.Id,
-                    regionName,
-                    candidate,
-                    boundaryGeometry,
-                    displayGeometry,
-                    cancellationToken);
-
-                item.RegionId = created.Id;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to create region from ADM1 candidate {CandidateId}.",
-                    candidate.Id);
-
-                _db.ChangeTracker.Clear();
-                item.Status = StatusFailed;
-                item.Message = "Failed to create a region from this ADM1 candidate.";
+                await transaction.DisposeAsync();
             }
         }
-
-        return BuildSummary(territory, countryIso3, dryRun, candidates.Count, items);
     }
 
     public async Task<RegionSyncSummaryDto> SyncRegionsFromAdm1CandidatesForTerritoryManagerAsync(
@@ -226,13 +335,20 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
         CancellationToken cancellationToken = default)
     {
         var resolvedTerritoryId = await ResolveTerritoryManagerTerritoryAsync(userId, territoryId, cancellationToken);
-        return await SyncRegionsFromAdm1CandidatesAsync(
+        var summary = await SyncRegionsFromAdm1CandidatesAsync(
             resolvedTerritoryId,
             dryRun,
             forceUpdateGeometry,
             createMissingRegions,
             linkExistingRegions,
             cancellationToken);
+
+        if (!dryRun && summary.FailedCount == 0 && summary.AmbiguousCount == 0)
+        {
+            await MarkRegionSetupCompletedAsync(userId, resolvedTerritoryId, summary.CompletedAt, cancellationToken);
+        }
+
+        return summary;
     }
 
     private async Task<TerritorySyncRow?> LoadTerritoryAsync(
@@ -277,6 +393,7 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
                 ExternalKey = candidate.ExternalKey,
                 CountryIso3 = candidate.CountryIso3,
                 ImportedAt = candidate.ImportedAt,
+                UpdatedAt = candidate.UpdatedAt,
                 BoundaryGeometry = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName),
                 BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
             })
@@ -579,9 +696,10 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
             .ToListAsync(cancellationToken);
 
         var normalizedRoles = roles.Select(RoleNames.Normalize).ToList();
-        if (!normalizedRoles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
+        if (!normalizedRoles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal) &&
+            !normalizedRoles.Contains(RoleNames.TerritoryAssociate, StringComparer.Ordinal))
         {
-            throw new UnauthorizedAccessException("Territory Manager role is required.");
+            throw new UnauthorizedAccessException("Territory Manager or Territory Associate role is required.");
         }
 
         var assignedTerritoryIds = await _db.TerritoryManagerTerritories
@@ -607,6 +725,43 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
         }
 
         return assignedTerritoryIds[0];
+    }
+
+    private async Task<DateTime?> GetRegionSetupCompletedAtAsync(
+        int userId,
+        int territoryId,
+        CancellationToken cancellationToken)
+    {
+        return await _db.TerritoryManagerTerritories
+            .AsNoTracking()
+            .Where(assignment =>
+                assignment.UserId == userId &&
+                assignment.TerritoryId == territoryId)
+            .Select(assignment => assignment.RegionSetupCompletedAt)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    private async Task<DateTime> MarkRegionSetupCompletedAsync(
+        int userId,
+        int territoryId,
+        DateTime completedAt,
+        CancellationToken cancellationToken)
+    {
+        var assignment = await _db.TerritoryManagerTerritories
+            .SingleOrDefaultAsync(item =>
+                item.UserId == userId &&
+                item.TerritoryId == territoryId,
+                cancellationToken)
+            ?? throw new UnauthorizedAccessException("Territory is not assigned to the current territory manager.");
+
+        if (assignment.RegionSetupCompletedAt.HasValue)
+            return NormalizeDateTime(assignment.RegionSetupCompletedAt.Value);
+
+        var normalizedCompletedAt = NormalizeDateTime(completedAt);
+        assignment.RegionSetupCompletedAt = normalizedCompletedAt;
+        assignment.UpdatedAt = normalizedCompletedAt;
+        await _db.SaveChangesAsync(cancellationToken);
+        return normalizedCompletedAt;
     }
 
     private bool RegionHasDisplayGeometryProperty() =>
@@ -646,8 +801,107 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
             AmbiguousCount = items.Count(item => item.Status == StatusAmbiguous),
             FailedCount = items.Count(item => item.Status == StatusFailed),
             DryRun = dryRun,
-            Items = items
+            CompletedAt = DateTime.UtcNow,
+            Items = items.Take(MaxSummaryItems).ToList()
         };
+    }
+
+    private static bool HasSyncWork(RegionSyncSummaryDto summary) =>
+        summary.CreatedCount > 0 ||
+        summary.LinkedExistingCount > 0 ||
+        summary.UpdatedCount > 0 ||
+        summary.AmbiguousCount > 0 ||
+        summary.FailedCount > 0;
+
+    private static bool IsSyncedAdm1Region(RegionSyncRow region) =>
+        region.BoundaryCandidateId.HasValue ||
+        (!string.IsNullOrWhiteSpace(region.BoundaryExternalKey) &&
+         string.Equals(region.BoundaryAdmLevel, Adm1Level, StringComparison.OrdinalIgnoreCase)) ||
+        (string.Equals(region.BoundarySource, GeoBoundariesSource, StringComparison.OrdinalIgnoreCase) &&
+         string.Equals(region.BoundaryAdmLevel, Adm1Level, StringComparison.OrdinalIgnoreCase));
+
+    private static DateTime? GetLastSyncedAt(List<RegionSyncRow> syncedRegions)
+    {
+        var values = syncedRegions
+            .Where(region => region.BoundaryImportedAt.HasValue)
+            .Select(region => NormalizeDateTime(region.BoundaryImportedAt!.Value))
+            .ToList();
+
+        return values.Count == 0 ? null : values.Max();
+    }
+
+    private static string BuildSetupStatusMessage(
+        bool missingCandidateData,
+        bool requiresInitialSync,
+        bool updateAvailable,
+        RegionSyncSummaryDto? dryRunSummary)
+    {
+        if (missingCandidateData)
+            return "ADM1 boundary data is missing for this territory. Ask an administrator to import boundary data.";
+
+        if (requiresInitialSync)
+            return "Initialize official ADM1 regions before managing assignments for this territory.";
+
+        if (dryRunSummary is { FailedCount: > 0 } or { AmbiguousCount: > 0 })
+            return "ADM1 boundary data needs attention before all regions can be synchronized safely.";
+
+        if (updateAvailable)
+            return "ADM1 boundary data has changed. Update regions to apply the latest boundaries.";
+
+        return "Regions are up to date.";
+    }
+
+    private static string? BuildCandidateVersionHash(List<CandidateSyncRow> candidates)
+    {
+        if (candidates.Count == 0)
+            return null;
+
+        return ComputeVersionHash(candidates
+            .OrderBy(candidate => candidate.ExternalKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(candidate => candidate.Id)
+            .Select(candidate => string.Join('|',
+                candidate.Id,
+                candidate.ExternalKey,
+                candidate.ShapeGroup,
+                candidate.ShapeId,
+                candidate.ShapeName,
+                candidate.ShapeType,
+                candidate.AdmLevel,
+                NormalizeDateTime(candidate.UpdatedAt ?? candidate.ImportedAt).ToString("O"),
+                candidate.BoundaryGeometry is null ? "no-boundary" : "has-boundary",
+                candidate.BoundaryDisplayGeometry is null ? "no-display" : "has-display")));
+    }
+
+    private static string? BuildSyncedRegionVersionHash(List<RegionSyncRow> regions)
+    {
+        if (regions.Count == 0)
+            return null;
+
+        return ComputeVersionHash(regions
+            .OrderBy(region => region.BoundaryExternalKey ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(region => region.Id)
+            .Select(region => string.Join('|',
+                region.Id,
+                region.BoundaryCandidateId,
+                region.BoundaryExternalKey,
+                region.BoundaryShapeGroup,
+                region.BoundaryShapeId,
+                region.BoundaryShapeType,
+                region.BoundaryAdmLevel,
+                region.BoundarySource,
+                region.BoundaryReleaseType,
+                region.BoundaryImportedAt.HasValue
+                    ? NormalizeDateTime(region.BoundaryImportedAt.Value).ToString("O")
+                    : string.Empty,
+                region.BoundaryGeometry is null ? "no-boundary" : "has-boundary",
+                region.BoundaryDisplayGeometry is null ? "no-display" : "has-display")));
+    }
+
+    private static string ComputeVersionHash(IEnumerable<string> rows)
+    {
+        var payload = string.Join("\n", rows);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private static string? ResolveCountryIso3(TerritorySyncRow territory)
@@ -835,6 +1089,7 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
         public string ExternalKey { get; set; } = string.Empty;
         public string CountryIso3 { get; set; } = string.Empty;
         public DateTime ImportedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
         public Geometry? BoundaryGeometry { get; set; }
         public Geometry? BoundaryDisplayGeometry { get; set; }
     }
