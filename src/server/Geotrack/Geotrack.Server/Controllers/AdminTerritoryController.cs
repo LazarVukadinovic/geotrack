@@ -176,6 +176,27 @@ public sealed class AdminTerritoryController : ControllerBase
         }
     }
 
+    [HttpGet("regions/setup-status")]
+    public async Task<ActionResult<TerritoryRegionSetupStatusDto>> GetRegionSetupStatus(
+        [FromQuery] int? territoryId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId is <= 0)
+            return BadRequest(new { message = "territoryId must be positive." });
+
+        try
+        {
+            return Ok(await _regionSync.GetRegionSetupStatusForTerritoryManagerAsync(
+                GetCurrentUserId(),
+                territoryId,
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("regions/map")]
     public async Task<ActionResult<TerritoryRegionMapDto>> GetRegionMap(
         [FromQuery] int? territoryId = null,
@@ -250,7 +271,8 @@ public sealed class AdminTerritoryController : ControllerBase
     [HttpPost("regions/sync-from-adm1")]
     public async Task<ActionResult<RegionSyncSummaryDto>> SyncRegionsFromAdm1(
         [FromQuery] int? territoryId = null,
-        [FromQuery] bool dryRun = true,
+        [FromQuery] bool dryRun = false,
+        [FromQuery] bool force = false,
         [FromQuery] bool forceUpdateGeometry = false,
         CancellationToken cancellationToken = default)
     {
@@ -263,7 +285,7 @@ public sealed class AdminTerritoryController : ControllerBase
                 GetCurrentUserId(),
                 territoryId,
                 dryRun,
-                forceUpdateGeometry,
+                force || forceUpdateGeometry,
                 createMissingRegions: true,
                 linkExistingRegions: true,
                 cancellationToken));

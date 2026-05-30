@@ -243,6 +243,136 @@ public sealed class TerritoryDashboardTests
     }
 
     [Fact]
+    public async Task Territory_region_list_returns_destination_representative_image_from_content()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Destination,
+            fixture.AssignedDestinationId,
+            "/media/test/region-destination-gallery.svg",
+            isMain: false,
+            imageRole: EntityImageRole.Gallery,
+            sortOrder: 0);
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Destination,
+            fixture.AssignedDestinationId,
+            "/media/test/region-destination-main.svg",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 10,
+            altText: "Destination main image");
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var regions = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}");
+
+        Assert.NotNull(regions);
+        var region = Assert.Single(regions!.Items);
+        Assert.NotNull(region.RepresentativeImage);
+        Assert.Equal("/media/test/region-destination-main.svg", region.RepresentativeImage!.Url);
+        Assert.Equal("Destination main image", region.RepresentativeImage.AltText);
+        Assert.Equal("Destination", region.RepresentativeImage.SourceType);
+        Assert.Equal(fixture.AssignedDestinationId, region.RepresentativeImage.SourceId);
+        Assert.Equal(region.RepresentativeImage.Url, region.ImageUrl);
+        Assert.Equal(2, region.DestinationsCount);
+        Assert.Equal(1, region.StaysCount);
+        Assert.NotNull(region.Health);
+    }
+
+    [Fact]
+    public async Task Territory_region_list_uses_place_image_when_no_destination_image_exists()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Place,
+            fixture.AssignedPlaceId,
+            "/media/test/region-place-main.svg",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 0,
+            altText: "Place main image");
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var regions = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}");
+
+        Assert.NotNull(regions);
+        var region = Assert.Single(regions!.Items);
+        Assert.NotNull(region.RepresentativeImage);
+        Assert.Equal("/media/test/region-place-main.svg", region.RepresentativeImage!.Url);
+        Assert.Equal("Place", region.RepresentativeImage.SourceType);
+        Assert.Equal(fixture.AssignedPlaceId, region.RepresentativeImage.SourceId);
+    }
+
+    [Fact]
+    public async Task Territory_region_list_returns_null_representative_image_when_no_entity_images_exist()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var (territoryId, regionId) = await CreateEmptyAssignedRegionAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var regions = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={territoryId}");
+
+        Assert.NotNull(regions);
+        var region = Assert.Single(regions!.Items);
+        Assert.Equal(regionId, region.RegionId);
+        Assert.Null(region.RepresentativeImage);
+        Assert.Null(region.ImageUrl);
+    }
+
+    [Fact]
+    public async Task Territory_region_list_ignores_invalid_or_suspended_source_images()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+
+        await SetDestinationStatusAsync(app, fixture.AssignedDestinationId, "Suspended");
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Destination,
+            fixture.AssignedDestinationId,
+            "/media/test/region-suspended-destination.svg",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 0);
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Location,
+            fixture.AssignedLocationId,
+            " ",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 0);
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Place,
+            fixture.AssignedPlaceId,
+            "/media/test/region-valid-place.svg",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 0);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var regions = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}");
+
+        Assert.NotNull(regions);
+        var region = Assert.Single(regions!.Items);
+        Assert.NotNull(region.RepresentativeImage);
+        Assert.Equal("/media/test/region-valid-place.svg", region.RepresentativeImage!.Url);
+        Assert.Equal("Place", region.RepresentativeImage.SourceType);
+        Assert.Equal(fixture.AssignedPlaceId, region.RepresentativeImage.SourceId);
+    }
+
+    [Fact]
     public async Task Territory_region_map_returns_real_region_boundaries_assignments_and_counts()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -620,6 +750,60 @@ public sealed class TerritoryDashboardTests
             new AuthenticationHeaderValue("Bearer", session!.AccessToken);
 
         return client;
+    }
+
+    private static async Task SetDestinationStatusAsync(GeotrackApiFactory app, int destinationId, string status)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var destination = await db.Destinations.SingleAsync(item => item.Id == destinationId);
+        destination.Status = status;
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task AddEntityImageAsync(
+        GeotrackApiFactory app,
+        EntityImageTargetType targetType,
+        int entityId,
+        string url,
+        bool isMain,
+        string imageRole,
+        int sortOrder,
+        string? altText = null)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var image = new EntityImage
+        {
+            TargetType = targetType,
+            Url = url,
+            AltText = altText,
+            IsMain = isMain,
+            ImageRole = imageRole,
+            SortOrder = sortOrder,
+            CreatedAt = DateTime.UtcNow.AddMilliseconds(sortOrder)
+        };
+
+        switch (targetType)
+        {
+            case EntityImageTargetType.Destination:
+                image.DestinationId = entityId;
+                break;
+            case EntityImageTargetType.Location:
+                image.LocationId = entityId;
+                break;
+            case EntityImageTargetType.Place:
+                image.PlaceId = entityId;
+                break;
+            case EntityImageTargetType.Event:
+                image.EventId = entityId;
+                break;
+            default:
+                throw new InvalidOperationException("Unsupported representative image test target.");
+        }
+
+        db.EntityImages.Add(image);
+        await db.SaveChangesAsync();
     }
 
     private static async Task<TerritoryRegionMapFixture> CreateTerritoryRegionMapFixtureAsync(GeotrackApiFactory app)

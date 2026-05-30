@@ -50,6 +50,7 @@ public class AdminProfileService : IAdminProfileService
             .Include(existingUser => existingUser.TerritoryManager)
                 .ThenInclude(territoryManager => territoryManager!.TerritoryManagerTerritories)
                     .ThenInclude(assignment => assignment.Territory)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(existingUser => existingUser.Id == userId)
             ?? throw new KeyNotFoundException("User not found.");
 

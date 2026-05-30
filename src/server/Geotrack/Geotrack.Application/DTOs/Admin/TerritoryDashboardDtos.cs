@@ -113,9 +113,19 @@ public class TerritoryRegionDirectoryItemDto
     public int? HealthScore { get; set; }
     public TerritoryHealthDto? Health { get; set; }
     public int ActivityScore { get; set; }
+    public TerritoryRegionRepresentativeImageDto? RepresentativeImage { get; set; }
     public string? ImageUrl { get; set; }
     public string? DetailRoute { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class TerritoryRegionRepresentativeImageDto
+{
+    public string Url { get; set; } = string.Empty;
+    public string? AltText { get; set; }
+    public string SourceType { get; set; } = string.Empty;
+    public int SourceId { get; set; }
+    public string SourceName { get; set; } = string.Empty;
 }
 
 public class TerritoryRegionDirectoryResponseDto
