@@ -195,6 +195,47 @@ describe('ContributionsService', () => {
     req.flush({ contribution: makeApiContribution({ entityType: 'Place', placeType: 'Stay', stayType: 'Villa' }) });
     httpMock.expectOne('/api/contributions').flush({ contributions: [] });
   });
+
+  it('maps ownership contribution images amenities and characteristics into the edit draft', () => {
+    let actual: ContributionDetail | undefined;
+
+    service.getDetail(7).subscribe(detail => {
+      actual = detail;
+    });
+
+    const req = httpMock.expectOne('/api/contributions/7');
+    req.flush(makeApiContribution({
+      id: 7,
+      type: 'ClaimOwnership',
+      placeType: 'Stay',
+      stayType: 'Villa',
+      cardImageUrl: null,
+      coverImageUrl: null,
+      galleryImageUrls: [],
+      tags: ['Family Friendly', 'Historic'],
+      amenities: ['Outdoor Seating'],
+      stayAmenities: ['free-wifi', 'spa'],
+      images: [
+        { url: '/media/test/cover.svg', imageRole: 'cover', sortOrder: 0, imagePosition: '45% 40%', imageSize: 'cover' },
+        { url: '/media/test/card.webp', imageRole: 'card', sortOrder: 1, imagePosition: '50% 45%', imageSize: 'cover' },
+        { url: '/media/test/gallery.webp', imageRole: 'gallery', sortOrder: 2 },
+      ],
+    }));
+
+    expect(actual?.isOwnership).toBe(true);
+    expect(actual?.coverImageUrl).toBe('/media/test/cover.svg');
+    expect(actual?.cardImageUrl).toBe('/media/test/card.webp');
+    expect(actual?.galleryImageUrls).toEqual(['/media/test/gallery.webp']);
+    expect(actual?.tags).toEqual(['Family Friendly', 'Historic']);
+    expect(actual?.amenities).toEqual(['outdoor', 'wifi', 'spa']);
+
+    const draft = service.detailToDraft(actual!);
+    expect(draft.basics?.imageUrl).toBe('/media/test/cover.svg');
+    expect(draft.basics?.cardImageUrl).toBe('/media/test/card.webp');
+    expect(draft.basics?.galleryImageUrls).toEqual(['/media/test/gallery.webp']);
+    expect(draft.features?.tags).toEqual(['Family Friendly', 'Historic']);
+    expect(draft.features?.amenities).toEqual(['outdoor', 'wifi', 'spa']);
+  });
 });
 
 function makePlaceDraft(): ContributionDraftData {

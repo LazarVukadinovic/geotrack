@@ -51,7 +51,10 @@ public class ExploreSearchService : IExploreSearchService
 
         var destinationExists = await _db.Destinations
             .AsNoTracking()
-            .AnyAsync(destination => destination.Id == destinationId, cancellationToken);
+            .AnyAsync(destination =>
+                destination.Id == destinationId &&
+                destination.Status == PublishedStatus,
+                cancellationToken);
 
         if (!destinationExists)
         {
@@ -115,6 +118,8 @@ public class ExploreSearchService : IExploreSearchService
             .AsNoTracking()
             .Where(place =>
                 place.Status == PublishedStatus &&
+                place.Location.Status == PublishedStatus &&
+                place.Location.Destination.Status == PublishedStatus &&
                 place.Location.DestinationId == destinationId)
             .Where(place =>
                 place.SearchText.Contains(term) ||
@@ -188,6 +193,7 @@ public class ExploreSearchService : IExploreSearchService
             .AsNoTracking()
             .Where(location =>
                 location.Status == PublishedStatus &&
+                location.Destination.Status == PublishedStatus &&
                 location.DestinationId == destinationId)
             .Where(location =>
                 location.SearchText.Contains(term) ||

@@ -1,6 +1,6 @@
 import {
   Component, OnInit, AfterViewInit, OnDestroy,
-  ElementRef, ViewChild, NgZone, ChangeDetectorRef,
+  ElementRef, ViewChild, NgZone, ChangeDetectorRef, inject,
 } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -9,6 +9,7 @@ import { SidebarComponent } from '../../../../../shared/components/sidebar/sideb
 import { TopbarComponent }  from '../../../../../shared/components/topbar/topbar.component';
 import { LocationsListService, LocationListItem } from '../../../../../core/services/locations-list.service';
 import { LightboxService } from '../../../../../core/services/lightbox.service';
+import { MapTileLayerService } from '../../../../../core/services/map-tile-layer.service';
 declare const L: any;
 
 @Component({
@@ -18,6 +19,7 @@ declare const L: any;
   templateUrl: './location-detail.component.html',
 })
 export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy {
+  private readonly mapTileLayer = inject(MapTileLayerService);
 
   constructor(
     private router: Router,
@@ -141,9 +143,7 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
       doubleClickZoom: false, touchZoom: false, attributionControl: false,
     }).setView([lat, lng], hasCoords ? 13 : 8);
 
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-    }).addTo(this.miniMap);
+    this.mapTileLayer.addTo(L, this.miniMap);
 
     if (zone && zone.length > 0) {
       this.miniMarker = L.polygon(zone, {
@@ -167,9 +167,7 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
     this.modalMap = L.map(el, { zoomControl: true, attributionControl: false })
       .setView([lat, lng], hasCoords ? 14 : 9);
 
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-    }).addTo(this.modalMap);
+    this.mapTileLayer.addTo(L, this.modalMap);
 
     if (zone && zone.length > 0) {
       this.modalMarker = L.polygon(zone, {

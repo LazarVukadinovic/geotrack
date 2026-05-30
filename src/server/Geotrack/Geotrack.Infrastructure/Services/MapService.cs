@@ -153,6 +153,7 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Destinations
                 .AsNoTracking()
+                .Where(destination => destination.Status == PublishedStatus)
                 .Where(destination => destination.SearchText.Contains(searchTerm))
                 .OrderBy(destination => destination.Name)
                 .Take(10)
@@ -174,6 +175,9 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Locations
                 .AsNoTracking()
+                .Where(location =>
+                    location.Status == PublishedStatus &&
+                    location.Destination.Status == PublishedStatus)
                 .Where(location => location.SearchText.Contains(searchTerm))
                 .OrderBy(location => location.Name)
                 .Take(10)
@@ -194,7 +198,10 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Places
                 .AsNoTracking()
-                .Where(place => place.Status == PublishedStatus)
+                .Where(place =>
+                    place.Status == PublishedStatus &&
+                    place.Location.Status == PublishedStatus &&
+                    place.Location.Destination.Status == PublishedStatus)
                 .Where(place => place.SearchText.Contains(searchTerm))
                 .OrderBy(place => place.Name)
                 .Take(10)
@@ -216,6 +223,14 @@ public class MapService : IMapService
         {
             results.AddRange(await _db.Events
                 .AsNoTracking()
+                .Where(@event =>
+                    @event.Status == PublishedStatus &&
+                    @event.Destination.Status == PublishedStatus &&
+                    (@event.Location == null || @event.Location.Status == PublishedStatus) &&
+                    (@event.Place == null ||
+                        (@event.Place.Status == PublishedStatus &&
+                         @event.Place.Location.Status == PublishedStatus &&
+                         @event.Place.Location.Destination.Status == PublishedStatus)))
                 .Where(@event => @event.SearchText.Contains(searchTerm))
                 .OrderBy(@event => @event.Name)
                 .Take(10)
@@ -258,12 +273,13 @@ public class MapService : IMapService
 
     public async Task<List<MapSearchResultDto>> GetAllDestinationsAsync(CancellationToken cancellationToken = default)
     {
-        const string cacheKey = "map:destinations:v1";
+        const string cacheKey = "map:destinations:v2";
         if (_cache.TryGetValue<List<MapSearchResultDto>>(cacheKey, out var cached))
             return cached ?? new List<MapSearchResultDto>();
 
         var destinations = await _db.Destinations
             .AsNoTracking()
+            .Where(d => d.Status == PublishedStatus)
             .OrderBy(d => d.Name)
             .Select(d => new MapSearchResultDto
             {
@@ -550,7 +566,10 @@ public class MapService : IMapService
         {
             var places = await _db.Places
                 .AsNoTracking()
-                .Where(place => place.Status == PublishedStatus)
+                .Where(place =>
+                    place.Status == PublishedStatus &&
+                    place.Location.Status == PublishedStatus &&
+                    place.Location.Destination.Status == PublishedStatus)
                 .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Select(place => new PlaceMarkerProjection
                 {
@@ -599,6 +618,14 @@ public class MapService : IMapService
         {
             var events = await _db.Events
                 .AsNoTracking()
+                .Where(@event =>
+                    @event.Status == PublishedStatus &&
+                    @event.Destination.Status == PublishedStatus &&
+                    (@event.Location == null || @event.Location.Status == PublishedStatus) &&
+                    (@event.Place == null ||
+                        (@event.Place.Status == PublishedStatus &&
+                         @event.Place.Location.Status == PublishedStatus &&
+                         @event.Place.Location.Destination.Status == PublishedStatus)))
                 .Where(@event => EF.Property<Point?>(@event, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Select(@event => new EventMarkerProjection
                 {
@@ -652,6 +679,7 @@ public class MapService : IMapService
 
         var focusLabel = await _db.Destinations
             .AsNoTracking()
+            .Where(destination => destination.Status == PublishedStatus)
             .Where(destination => EF.Property<Point?>(destination, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(destination => new
             {
@@ -701,6 +729,7 @@ public class MapService : IMapService
         {
             var destinations = await _db.Destinations
                 .AsNoTracking()
+                .Where(destination => destination.Status == PublishedStatus)
                 .Where(destination => EF.Property<Point?>(destination, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Where(destination => EF.Property<Point>(destination, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
                 .OrderBy(destination => destination.Name)
@@ -750,7 +779,10 @@ public class MapService : IMapService
         {
             var places = await _db.Places
                 .AsNoTracking()
-                .Where(place => place.Status == PublishedStatus)
+                .Where(place =>
+                    place.Status == PublishedStatus &&
+                    place.Location.Status == PublishedStatus &&
+                    place.Location.Destination.Status == PublishedStatus)
                 .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Where(place => EF.Property<Point>(place, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
                 .Select(place => new PlaceMarkerProjection
@@ -799,6 +831,14 @@ public class MapService : IMapService
         {
             var events = await _db.Events
                 .AsNoTracking()
+                .Where(@event =>
+                    @event.Status == PublishedStatus &&
+                    @event.Destination.Status == PublishedStatus &&
+                    (@event.Location == null || @event.Location.Status == PublishedStatus) &&
+                    (@event.Place == null ||
+                        (@event.Place.Status == PublishedStatus &&
+                         @event.Place.Location.Status == PublishedStatus &&
+                         @event.Place.Location.Destination.Status == PublishedStatus)))
                 .Where(@event => EF.Property<Point?>(@event, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Where(@event => EF.Property<Point>(@event, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
                 .Select(@event => new EventMarkerProjection

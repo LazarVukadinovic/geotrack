@@ -33,9 +33,9 @@
           <p class="text-[#e8570a] font-extrabold uppercase mb-1"
             style="font-size: 0.75rem; letter-spacing: 0.08em;">No destination nearby yet</p>
           <h2 class="font-extrabold text-[#1a2b4a] leading-tight mb-2"
-            style="font-size: 1.35rem;">GeoTrack doesn't have content for this area yet.</h2>
+            style="font-size: 1.35rem;">{{ noDataHeading }}</h2>
           <p class="text-slate-500 text-sm leading-relaxed mb-5">
-            Try searching for another destination where GeoTrack has places, stays, and events mapped.
+            {{ noDataBody }}
           </p>
 
           <div class="relative mb-2 text-left">
@@ -75,8 +75,20 @@
                 </li>
               }
             </ul>
-          } @else if (allDestinations.length === 0) {
+          } @else if (isLoadingDestinations) {
             <p class="text-xs text-slate-400 text-center mb-4">Loading destinations…</p>
+          } @else if (destinationLoadError) {
+            <div class="mb-4 text-center">
+              <p class="text-xs text-red-500 mb-2">{{ destinationLoadError }}</p>
+              <button
+                type="button"
+                (click)="retryLoadDestinations()"
+                class="text-xs font-bold text-[#1a2b4a] underline underline-offset-2">
+                Retry
+              </button>
+            </div>
+          } @else if (allDestinations.length === 0) {
+            <p class="text-xs text-slate-400 text-center mb-4">No public destinations are available yet.</p>
           } @else {
             <p class="text-xs text-slate-400 text-center mb-4">No destinations match your search.</p>
           }

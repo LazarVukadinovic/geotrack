@@ -4,6 +4,7 @@ import {
   ChangeDetectorRef,
   Component,
   ElementRef,
+  inject,
   NgZone,
   OnDestroy,
   OnInit,
@@ -18,6 +19,7 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { TerritoryDashboardService } from '../../../../core/services/territory-dashboard.service';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import {
   BoundaryRegionCandidate,
   BoundaryRegionCandidateResponse,
@@ -66,6 +68,7 @@ export class AddRegionComponent implements OnInit, AfterViewInit, OnDestroy {
   private contextSubscription: Subscription | null = null;
   private candidateSubscription: Subscription | null = null;
   private createSubscription: Subscription | null = null;
+  private readonly mapTileLayer = inject(MapTileLayerService);
 
   constructor(
     private readonly zone: NgZone,
@@ -406,9 +409,7 @@ export class AddRegionComponent implements OnInit, AfterViewInit, OnDestroy {
         attributionControl: false,
         preferCanvas: true,
       });
-      L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
-        maxZoom: 19,
-      }).addTo(this.map);
+      this.mapTileLayer.addTo(L, this.map);
     });
 
     setTimeout(() => {

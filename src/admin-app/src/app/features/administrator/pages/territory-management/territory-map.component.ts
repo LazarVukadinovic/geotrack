@@ -4,6 +4,7 @@ import {
   ChangeDetectionStrategy, ChangeDetectorRef, inject,
 } from '@angular/core';
 import { GeoJsonFeature } from '../../../../core/models/administrator/territory.model';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 
 declare const L: any;
 
@@ -55,6 +56,7 @@ export class TerritoryMapComponent implements AfterViewInit, OnDestroy {
   @Output() zoneChange = new EventEmitter<GeoJsonFeature | null>();
 
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly mapTileLayer = inject(MapTileLayerService);
 
   private map: any;
   private drawnItems: any;
@@ -86,9 +88,7 @@ export class TerritoryMapComponent implements AfterViewInit, OnDestroy {
       zoomControl: true,
     });
 
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-    }).addTo(this.map);
+    this.mapTileLayer.addTo(L, this.map);
 
     this.drawnItems = new L.FeatureGroup();
     this.map.addLayer(this.drawnItems);

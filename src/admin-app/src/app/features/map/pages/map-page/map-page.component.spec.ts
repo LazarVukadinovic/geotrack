@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter, Router } from '@angular/router';
 import { vi } from 'vitest';
 import { MapPageComponent } from './map-page.component';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import { AdminMapResponse } from '../../../../core/models/admin-map.model';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 
@@ -11,13 +12,23 @@ describe('MapPageComponent', () => {
   let component: MapPageComponent;
   let fixture: ComponentFixture<MapPageComponent>;
   let http: HttpTestingController;
+  let mapTileLayer: { addTo: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     sessionStorage.clear();
+    mapTileLayer = {
+      addTo: vi.fn((leaflet: any, map: any, options: any = {}) =>
+        leaflet.tileLayer('shared://tiles', options).addTo(map)),
+    };
 
     await TestBed.configureTestingModule({
       imports: [MapPageComponent],
-      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: MapTileLayerService, useValue: mapTileLayer },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(MapPageComponent);
@@ -103,6 +114,7 @@ describe('MapPageComponent', () => {
     expect(regionLayer?.options.pane).toBe('admin-region-zone-pane');
     expect(regionLayer?.options.interactive).toBe(false);
     expect(leaflet.marker).toHaveBeenCalled();
+    expect(mapTileLayer.addTo).toHaveBeenCalledWith((globalThis as any).L, leaflet.map);
     expect(leaflet.map.fitBounds).toHaveBeenCalledWith(
       [
         [45, 16],

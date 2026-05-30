@@ -4,6 +4,7 @@ import {
   ChangeDetectorRef,
   Component,
   ElementRef,
+  inject,
   NgZone,
   OnDestroy,
   OnInit,
@@ -20,6 +21,7 @@ import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import {
@@ -73,6 +75,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly initialVisibleClassificationTags = 5;
   private static readonly expandedVisibleClassificationTags = 10;
+  private readonly mapTileLayer = inject(MapTileLayerService);
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer') miniMapContainer!: ElementRef<HTMLDivElement>;
@@ -936,7 +939,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       touchZoom: false,
       attributionControl: false,
     });
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(this.miniMap);
+    this.mapTileLayer.addTo(L, this.miniMap);
     this.refreshMiniRegionBoundaryLayer();
     this.updateMiniMapFromSelection();
   }

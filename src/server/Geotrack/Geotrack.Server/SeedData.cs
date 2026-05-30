@@ -23,6 +23,7 @@ public static class SeedData
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private const string BoundaryDisplayGeometryPropertyName = "BoundaryDisplayGeometry";
     private const string GeoBoundariesBoundarySource = "geoBoundaries";
+    private const string SeedExplicitBoundarySource = "seed-explicit";
     private const string GeoBoundariesReleaseType = "gbOpen";
     private const string GeoBoundariesLicense = "CC BY 4.0";
     private const string Adm1BoundaryLevel = "ADM1";
@@ -54,6 +55,20 @@ public static class SeedData
         "Vojvodina",
         "Western Serbia"
     };
+
+    private sealed record SerbiaSeedRegionFallbackDefinition(
+        string Key,
+        string RegionName,
+        string[] Aliases);
+
+    private static readonly SerbiaSeedRegionFallbackDefinition[] SerbiaSeedRegionFallbacks =
+    [
+        new("belgrade", "Belgrade", ["Beograd"]),
+        new("south-backa", "South Backa District", ["South Bačka District", "Juzna Backa District", "Južna Bačka District"]),
+        new("zlatibor", "Zlatibor District", ["Zlatibor"]),
+        new("raska", "Raska District", ["Raška District", "Raska"]),
+        new("sumadija", "Sumadija District", ["Šumadija District", "Sumadija", "Šumadija"])
+    ];
 
     private static readonly Dictionary<string, Dictionary<string, string>> SeedRegionBoundaryAliases =
         new(StringComparer.OrdinalIgnoreCase)
@@ -137,6 +152,37 @@ public static class SeedData
         }
     }
 
+    public static async Task EnsureRequiredPublicContentAsync(AppDbContext db)
+    {
+        await InitializationLock.WaitAsync();
+
+        try
+        {
+            await EnsureRequiredPublicContentCoreAsync(db);
+        }
+        finally
+        {
+            InitializationLock.Release();
+        }
+    }
+
+    private static async Task EnsureRequiredPublicContentCoreAsync(AppDbContext db)
+    {
+        await db.Database.MigrateAsync();
+
+        var tagLookup = await EnsureSmartTagTaxonomyAsync(db);
+        await EnsureInterestTopicsAsync(db, tagLookup);
+        await EnsureExploreDemoPlaceTagsAsync(db, tagLookup);
+        await EnsureDubrovnikRequiredPublicContentAsync(db);
+        await EnsureAdditionalExploreDemoDataAsync(db, tagLookup);
+        await EnsureSerbiaDemoDataAsync(db, tagLookup);
+        await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup);
+        await EnsureCoreEntityImagesAsync(db);
+        await PruneDubrovnikDemoCatalogAsync(db);
+        await EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(db);
+        await EnsureDefaultModerationTermsAsync(db);
+    }
+
     private static async Task InitializeCoreAsync(AppDbContext db)
     {
         await db.Database.MigrateAsync();
@@ -149,6 +195,7 @@ public static class SeedData
             var tagLookup1 = await EnsureSmartTagTaxonomyAsync(db);
             await EnsureInterestTopicsAsync(db, tagLookup1);
             await EnsureExploreDemoPlaceTagsAsync(db, tagLookup1);
+            await EnsureDubrovnikRequiredPublicContentAsync(db);
             await EnsureAdditionalExploreDemoDataAsync(db, tagLookup1);
             await EnsureSerbiaDemoDataAsync(db, tagLookup1);
             await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup1);
@@ -1488,32 +1535,155 @@ public static class SeedData
         return territory;
     }
 
+    private static async Task EnsureDubrovnikRequiredPublicContentAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+        var croatia = await EnsureCroatiaTerritoryAsync(db, now);
+        await db.SaveChangesAsync();
+
+        var region = await EnsureCroatiaSeedRegionAsync(db, croatia, now);
+        var cityType = await EnsureDestinationTypeAsync(db, "City", "Urban destination", now);
+
+        var destination = await db.Destinations
+            .FirstOrDefaultAsync(item => item.Name == "Dubrovnik");
+
+        if (destination is null)
+        {
+            destination = new Destination
+            {
+                Name = "Dubrovnik",
+                DestinationTypeId = cityType.Id,
+                RegionId = region.Id,
+                Description = "A compact Adriatic heritage city known for stone walls, coastal views and island escapes.",
+                Latitude = 42.6507,
+                Longitude = 18.0944,
+                Status = "Published",
+                CreatedAt = now,
+                PublishedAt = now
+            };
+
+            db.Destinations.Add(destination);
+            await db.SaveChangesAsync();
+            return;
+        }
+
+        var changed = false;
+        if (destination.RegionId != region.Id)
+        {
+            destination.RegionId = region.Id;
+            changed = true;
+        }
+
+        if (destination.DestinationTypeId != cityType.Id)
+        {
+            destination.DestinationTypeId = cityType.Id;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(destination.Description))
+        {
+            destination.Description = "A compact Adriatic heritage city known for stone walls, coastal views and island escapes.";
+            changed = true;
+        }
+
+        if (Math.Abs(destination.Latitude - 42.6507) > 1e-9 ||
+            Math.Abs(destination.Longitude - 18.0944) > 1e-9)
+        {
+            destination.Latitude = 42.6507;
+            destination.Longitude = 18.0944;
+            changed = true;
+        }
+
+        if (!string.Equals(destination.Status, "Published", StringComparison.Ordinal))
+        {
+            destination.Status = "Published";
+            changed = true;
+        }
+
+        if (destination.PublishedAt is null)
+        {
+            destination.PublishedAt = now;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            destination.UpdatedAt = now;
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task<DestinationType> EnsureDestinationTypeAsync(
+        AppDbContext db,
+        string name,
+        string description,
+        DateTime now)
+    {
+        var destinationType = await db.DestinationTypes.FirstOrDefaultAsync(x => x.Name == name);
+        if (destinationType is not null)
+        {
+            return destinationType;
+        }
+
+        destinationType = new DestinationType
+        {
+            Name = name,
+            Description = description,
+            CreatedAt = now
+        };
+
+        db.DestinationTypes.Add(destinationType);
+        await db.SaveChangesAsync();
+        return destinationType;
+    }
+
     private static async Task<Region> EnsureCroatiaSeedRegionAsync(
         AppDbContext db,
         Territory croatia,
         DateTime now)
     {
-        var region = await db.Regions
-            .FirstOrDefaultAsync(item =>
-                item.TerritoryId == croatia.Id &&
-                item.Name == CroatiaSeedRegionName);
-
-        if (region is null)
-        {
-            var legacySeedRegion = await db.Regions
-                .FirstOrDefaultAsync(item =>
-                    item.TerritoryId == croatia.Id &&
-                    item.Name == LegacyCroatiaSeedRegionName);
-
-            if (legacySeedRegion is not null &&
-                !await db.Regions.AnyAsync(item =>
-                    item.TerritoryId == croatia.Id &&
-                    item.Name == CroatiaSeedRegionName))
+        var acceptedNames = new[]
             {
-                region = legacySeedRegion;
+                CroatiaSeedRegionName,
+                LegacyCroatiaSeedRegionName,
+                "Dubrovnik"
+            }
+            .Select(NormalizeSeedBoundaryName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var matches = await db.Regions
+            .Where(item => item.TerritoryId == croatia.Id)
+            .OrderBy(item => item.Id)
+            .ToListAsync();
+
+        matches = matches
+            .Where(item => acceptedNames.Contains(NormalizeSeedBoundaryName(item.Name)))
+            .ToList();
+
+        var exactMatches = matches
+            .Where(item => NormalizeSeedBoundaryName(item.Name) == NormalizeSeedBoundaryName(CroatiaSeedRegionName))
+            .Take(2)
+            .ToList();
+
+        Region? region = null;
+        if (exactMatches.Count == 1)
+        {
+            region = exactMatches[0];
+        }
+        else if (matches.Count == 1)
+        {
+            region = matches[0];
+
+            if (!string.Equals(region.Name, CroatiaSeedRegionName, StringComparison.Ordinal))
+            {
                 region.Name = CroatiaSeedRegionName;
                 region.UpdatedAt = now;
             }
+        }
+        else if (matches.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"Croatia seed cannot choose between multiple fallback ADM1 regions for {CroatiaSeedRegionName}.");
         }
 
         if (region is null)
@@ -1522,6 +1692,9 @@ public static class SeedData
             {
                 Name = CroatiaSeedRegionName,
                 TerritoryId = croatia.Id,
+                BoundaryShapeGroup = CroatiaIso3,
+                BoundaryAdmLevel = Adm1BoundaryLevel,
+                BoundarySource = SeedExplicitBoundarySource,
                 CreatedAt = now
             };
 
@@ -1532,6 +1705,23 @@ public static class SeedData
         if (candidate is not null)
         {
             ApplySeedBoundaryCandidate(db, region, candidate, now);
+        }
+        else if (region.BoundaryCandidateId is null)
+        {
+            if (string.IsNullOrWhiteSpace(region.BoundaryShapeGroup))
+            {
+                region.BoundaryShapeGroup = CroatiaIso3;
+            }
+
+            if (string.IsNullOrWhiteSpace(region.BoundaryAdmLevel))
+            {
+                region.BoundaryAdmLevel = Adm1BoundaryLevel;
+            }
+
+            if (string.IsNullOrWhiteSpace(region.BoundarySource))
+            {
+                region.BoundarySource = SeedExplicitBoundarySource;
+            }
         }
 
         await db.SaveChangesAsync();
@@ -1898,6 +2088,104 @@ public static class SeedData
             .ToList();
     }
 
+    private static async Task<Dictionary<string, Region>> EnsureSerbiaFallbackAdm1RegionsAsync(
+        AppDbContext db,
+        Territory serbia,
+        DateTime now)
+    {
+        var regions = await db.Regions
+            .Where(region => region.TerritoryId == serbia.Id)
+            .OrderBy(region => region.Id)
+            .ToListAsync();
+
+        var resolved = new Dictionary<string, Region>(StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+
+        foreach (var definition in SerbiaSeedRegionFallbacks)
+        {
+            var acceptedNames = definition.Aliases
+                .Prepend(definition.RegionName)
+                .Select(NormalizeSeedBoundaryName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var matches = regions
+                .Where(region => acceptedNames.Contains(NormalizeSeedBoundaryName(region.Name)))
+                .ToList();
+
+            var exactMatch = matches
+                .Where(region => NormalizeSeedBoundaryName(region.Name) == NormalizeSeedBoundaryName(definition.RegionName))
+                .Take(2)
+                .ToList();
+
+            Region region;
+            if (exactMatch.Count == 1)
+            {
+                region = exactMatch[0];
+            }
+            else if (matches.Count == 1)
+            {
+                region = matches[0];
+                if (!string.Equals(region.Name, definition.RegionName, StringComparison.Ordinal))
+                {
+                    region.Name = definition.RegionName;
+                    region.UpdatedAt = now;
+                    changed = true;
+                }
+            }
+            else if (matches.Count == 0)
+            {
+                region = new Region
+                {
+                    Name = definition.RegionName,
+                    TerritoryId = serbia.Id,
+                    BoundaryShapeGroup = SerbiaIso3,
+                    BoundaryAdmLevel = Adm1BoundaryLevel,
+                    BoundarySource = SeedExplicitBoundarySource,
+                    CreatedAt = now
+                };
+
+                db.Regions.Add(region);
+                regions.Add(region);
+                changed = true;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Serbia seed cannot choose between multiple fallback ADM1 regions for {definition.RegionName}.");
+            }
+
+            if (region.BoundaryCandidateId is null)
+            {
+                if (string.IsNullOrWhiteSpace(region.BoundaryShapeGroup))
+                {
+                    region.BoundaryShapeGroup = SerbiaIso3;
+                    changed = true;
+                }
+
+                if (string.IsNullOrWhiteSpace(region.BoundaryAdmLevel))
+                {
+                    region.BoundaryAdmLevel = Adm1BoundaryLevel;
+                    changed = true;
+                }
+
+                if (string.IsNullOrWhiteSpace(region.BoundarySource))
+                {
+                    region.BoundarySource = SeedExplicitBoundarySource;
+                    changed = true;
+                }
+            }
+
+            resolved[definition.Key] = region;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
+
+        return resolved;
+    }
+
     private static SeedRegionSpatialRow? FindSeedRegionByPoint(
         IReadOnlyList<SeedRegionSpatialRow> regions,
         double latitude,
@@ -1932,12 +2220,15 @@ public static class SeedData
         foreach (var region in legacyRegions)
         {
             var hasDestinations = await db.Destinations.AnyAsync(destination => destination.RegionId == region.Id);
-            var hasManagerAssignments = await db.RegionalManagerRegions.AnyAsync(assignment => assignment.RegionId == region.Id);
-            if (hasDestinations || hasManagerAssignments)
+            if (hasDestinations)
             {
                 continue;
             }
 
+            var managerAssignments = await db.RegionalManagerRegions
+                .Where(assignment => assignment.RegionId == region.Id)
+                .ToListAsync();
+            db.RegionalManagerRegions.RemoveRange(managerAssignments);
             db.Regions.Remove(region);
         }
 
@@ -4088,29 +4379,18 @@ public static class SeedData
         await EnsureSerbiaTerritoryManagerAsync(db, serbia);
 
         var serbiaRegions = await EnsureSerbiaAdm1RegionsFromCandidatesAsync(db, serbia, now);
-        if (serbiaRegions.Count == 0)
-        {
-            return;
-        }
+        var fallbackRegions = await EnsureSerbiaFallbackAdm1RegionsAsync(db, serbia, now);
 
-        Region? TryResolveSerbiaRegion(double latitude, double longitude) =>
-            FindSeedRegionByPoint(serbiaRegions, latitude, longitude)?.Region;
+        Region ResolveSerbiaRegion(double latitude, double longitude, string fallbackKey) =>
+            FindSeedRegionByPoint(serbiaRegions, latitude, longitude)?.Region
+            ?? fallbackRegions[fallbackKey];
 
-        var beogradRegion = TryResolveSerbiaRegion(44.8125, 20.4612);
-        var noviSadRegion = TryResolveSerbiaRegion(45.2671, 19.8335);
-        var zlatiborRegion = TryResolveSerbiaRegion(43.7297, 19.7003);
-        var kopaonikRegion = TryResolveSerbiaRegion(43.2856, 20.8095);
-        var taraRegion = TryResolveSerbiaRegion(43.9450, 19.4340);
-        var kragujevacRegion = TryResolveSerbiaRegion(44.010590360886276, 20.915278268657637);
-        if (beogradRegion is null ||
-            noviSadRegion is null ||
-            zlatiborRegion is null ||
-            kopaonikRegion is null ||
-            taraRegion is null ||
-            kragujevacRegion is null)
-        {
-            return;
-        }
+        var beogradRegion = ResolveSerbiaRegion(44.8125, 20.4612, "belgrade");
+        var noviSadRegion = ResolveSerbiaRegion(45.2671, 19.8335, "south-backa");
+        var zlatiborRegion = ResolveSerbiaRegion(43.7297, 19.7003, "zlatibor");
+        var kopaonikRegion = ResolveSerbiaRegion(43.2856, 20.8095, "raska");
+        var taraRegion = ResolveSerbiaRegion(43.9450, 19.4340, "zlatibor");
+        var kragujevacRegion = ResolveSerbiaRegion(44.010590360886276, 20.915278268657637, "sumadija");
 
         var cityType = await EnsureDestinationTypeAsync("City", "Urban destination");
         var mountainType = await EnsureDestinationTypeAsync("Mountain", "Mountain and outdoor destination");

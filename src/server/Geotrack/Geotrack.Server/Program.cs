@@ -449,20 +449,22 @@ await PostgisStartup.EnsureReadyAsync(app.Services, app.Environment.IsDevelopmen
 
 var shouldSeedOperationalUsers = OperationalUserSeeder.IsEnabled(app.Environment, app.Configuration);
 var shouldSeedDemoContent = IsDemoContentSeedEnabledForEnvironment(app.Environment, app.Configuration);
+var shouldSeedPublicContent = IsPublicContentSeedEnabledForEnvironment(app.Environment, app.Configuration);
 var shouldAutoMigrate =
     app.Environment.IsDevelopment()
     || app.Configuration.GetValue<bool>("Database:AutoMigrate")
     || shouldSeedOperationalUsers
-    || shouldSeedDemoContent;
+    || shouldSeedDemoContent
+    || shouldSeedPublicContent;
 
-if (shouldAutoMigrate || shouldSeedOperationalUsers || shouldSeedDemoContent)
+if (shouldAutoMigrate || shouldSeedOperationalUsers || shouldSeedDemoContent || shouldSeedPublicContent)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
     await db.Database.MigrateAsync();
 
-    if (shouldSeedDemoContent &&
+    if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
         app.Configuration.GetValue<bool>("Seed:ImportLocalBoundaries:Enabled"))
     {
         var localBoundaryImport = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
@@ -490,8 +492,12 @@ if (shouldAutoMigrate || shouldSeedOperationalUsers || shouldSeedDemoContent)
     {
         await SeedData.InitializeAsync(db);
     }
+    else if (shouldSeedPublicContent)
+    {
+        await SeedData.EnsureRequiredPublicContentAsync(db);
+    }
 
-    if (shouldSeedDemoContent &&
+    if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
         app.Configuration.GetValue("Seed:SyncAdm1Regions:Enabled", true))
     {
         foreach (var syncCountryIso3 in ResolveSeedAdm1SyncCountryIso3s(app.Configuration))
@@ -801,6 +807,19 @@ static bool IsDemoContentSeedEnabledForEnvironment(IHostEnvironment environment,
     }
 
     return environment.IsDevelopment()
+        || configuration.GetValue<bool>("Seed:RunInProduction");
+}
+
+static bool IsPublicContentSeedEnabledForEnvironment(IHostEnvironment environment, IConfiguration configuration)
+{
+    var enabled = configuration.GetValue<bool>("Seed:EnablePublicContentSeed");
+    if (!enabled)
+    {
+        return false;
+    }
+
+    return environment.IsDevelopment()
+        || configuration.GetValue<bool>("Seed:RunPublicContentInProduction")
         || configuration.GetValue<bool>("Seed:RunInProduction");
 }
 

@@ -4,6 +4,7 @@ import {
   ChangeDetectorRef,
   Component,
   ElementRef,
+  inject,
   NgZone,
   OnDestroy,
   OnInit,
@@ -19,6 +20,7 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { AuthService } from '../../../../core/services/auth.service';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import {
   AdminMapAssignedRegionBoundary,
@@ -99,6 +101,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private searchHandle: ReturnType<typeof setTimeout> | null = null;
   private mapRequestSequence = 0;
   private pendingRender = false;
+  private readonly mapTileLayer = inject(MapTileLayerService);
 
   constructor(
     private readonly zone: NgZone,
@@ -439,9 +442,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     });
     this.map.fitWorld({ animate: false });
 
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-    }).addTo(this.map);
+    this.mapTileLayer.addTo(L, this.map);
 
     this.createMapPanes();
     this.regionZoneGroup = L.layerGroup().addTo(this.map);
