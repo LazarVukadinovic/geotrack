@@ -132,6 +132,7 @@ public static class SeedData
             await EnsureSerbiaDemoDataAsync(db, tagLookup1);
             await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup1);
             await EnsureCoreEntityImagesAsync(db);
+            await PruneDubrovnikDemoCatalogAsync(db);
             await EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(db);
             await EnsureDefaultModerationTermsAsync(db);
             return;
@@ -961,8 +962,392 @@ public static class SeedData
         await EnsureAdditionalExploreDemoDataAsync(db, tagLookup);
         await EnsureSerbiaDemoDataAsync(db, tagLookup);
         await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup);
+        await PruneDubrovnikDemoCatalogAsync(db);
         await EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(db);
         await EnsureDefaultModerationTermsAsync(db);
+    }
+
+    private static async Task PruneDubrovnikDemoCatalogAsync(AppDbContext db)
+    {
+        var dubrovnik = await db.Destinations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(destination => destination.Name == "Dubrovnik");
+
+        if (dubrovnik is null)
+        {
+            return;
+        }
+
+        var keptPlaceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Beaches
+            "Banje Beach",
+            "Copacabana Beach Dubrovnik",
+            "Bellevue Beach",
+
+            // Restaurants, cafes and bars
+            "Nautika Restaurant",
+            "Proto Fish Restaurant",
+            "Pantarul",
+            "Cogito Coffee",
+            "Gradska Kavana Arsenal",
+            "Peppino's Gelato",
+            "D'vino Wine Bar",
+
+            // Culture, landmarks and nature
+            "Dubrovnik City Walls",
+            "Lovrijenac Fortress",
+            "Sponza Palace",
+            "Dubrovnik Cable Car",
+            "Rector's Palace",
+            "Franciscan Monastery Museum",
+            "War Photo Limited",
+            "Lokrum Island",
+            "Mount Srd Viewpoint",
+            "Trsteno Arboretum",
+            "Lapad Bay Promenade",
+
+            // Stays
+            "Hotel Excelsior",
+            "Boutique Hotel Stari Grad"
+        };
+
+        var keptEventNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Dubrovnik Summer Festival",
+            "Gundulic Square Farmers Market",
+            "City Walls Sunset Tour"
+        };
+
+        var placeImages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Banje Beach"] = SeedWebp("banje-beach"),
+            ["Copacabana Beach Dubrovnik"] = SeedWebp("copacabana"),
+            ["Bellevue Beach"] = SeedWebp("bellevue"),
+            ["Nautika Restaurant"] = SeedWebp("nautika-restaurant"),
+            ["Proto Fish Restaurant"] = SeedWebp("fish-restaurant-proto"),
+            ["Pantarul"] = SeedWebp("pantarul"),
+            ["Cogito Coffee"] = SeedWebp("cogito-coffee"),
+            ["Gradska Kavana Arsenal"] = SeedWebp("kavana-arsenal"),
+            ["Peppino's Gelato"] = SeedWebp("peppinos-gelato"),
+            ["D'vino Wine Bar"] = SeedWebp("dvino-wine-bar"),
+            ["Dubrovnik City Walls"] = SeedWebp("city-walls-dubrovnik"),
+            ["Lovrijenac Fortress"] = SeedWebp("fort-lovrijenac"),
+            ["Sponza Palace"] = SeedWebp("spozna"),
+            ["Dubrovnik Cable Car"] = SeedWebp("dubrovnik-cable-car"),
+            ["Rector's Palace"] = SeedWebp("rectors-palace-dubrovnik"),
+            ["Franciscan Monastery Museum"] = SeedWebp("the-franciscan-monastery"),
+            ["War Photo Limited"] = SeedWebp("warphoto"),
+            ["Lokrum Island"] = SeedWebp("Lokrum-Island"),
+            ["Mount Srd Viewpoint"] = SeedWebp("mount-srd"),
+            ["Trsteno Arboretum"] = SeedWebp("trsteno-arboretum"),
+            ["Lapad Bay Promenade"] = SeedWebp("lapad"),
+            ["Hotel Excelsior"] = SeedWebp("EXCELSIOR"),
+            ["Boutique Hotel Stari Grad"] = SeedWebp("boutique-stari-grad")
+        };
+
+        var eventImages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Dubrovnik Summer Festival"] = SeedWebp("dubrovnik-summer-festival"),
+            ["Gundulic Square Farmers Market"] = SeedWebp("gundulic-square-farmers-market"),
+            ["City Walls Sunset Tour"] = SeedWebp("sunset-tour")
+        };
+
+        var placeWebsites = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Banje Beach"] = "https://banjebeach.com/",
+            ["Nautika Restaurant"] = "https://www.nautikarestaurants.com/restaurant-nautika/",
+            ["Proto Fish Restaurant"] = "https://www.esculaprestaurants.com/",
+            ["Pantarul"] = "https://www.pantarul.com/",
+            ["Cogito Coffee"] = "https://www.cogitocoffee.com/locations/",
+            ["Gradska Kavana Arsenal"] = "https://www.nautikarestaurants.com/",
+            ["Peppino's Gelato"] = "https://peppinosgelato.com/",
+            ["D'vino Wine Bar"] = "https://dvino.net/",
+            ["Dubrovnik Cable Car"] = "https://www.dubrovnikcablecar.com/",
+            ["Lokrum Island"] = "https://www.lokrum.hr/en",
+            ["War Photo Limited"] = "https://warphotoltd.com/",
+            ["Hotel Excelsior"] = "https://www.adriaticluxuryhotels.com/hotel-excelsior-dubrovnik/",
+            ["Boutique Hotel Stari Grad"] = "https://www.hotelstarigrad.com/"
+        };
+
+        var placeContacts = new Dictionary<string, (string? Email, string? Number)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Banje Beach"] = ("info@banjebeach.eu", null),
+            ["Nautika Restaurant"] = (null, "+385 20 442 526"),
+            ["Proto Fish Restaurant"] = ("sales@esculap-teo.hr", "+385 20 323 234"),
+            ["Pantarul"] = (null, "+385 20 333 486"),
+            ["Peppino's Gelato"] = ("hello@peppinosgelato.com", "+385 91 459 0002"),
+            ["Gradska Kavana Arsenal"] = (null, "+385 20 321 202"),
+            ["Dubrovnik Cable Car"] = ("info@dubrovnikcablecar.com", "+385 20 414 355"),
+            ["Lokrum Island"] = ("prodaja@lokrum.hr", "+385 99 161 1144"),
+            ["War Photo Limited"] = ("info@warphotoltd.com", "+385 20 322 166"),
+            ["Hotel Excelsior"] = (null, "+385 20 353 353"),
+            ["Boutique Hotel Stari Grad"] = (null, "+385 20 322 244")
+        };
+
+        var hotelBookingLinks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Hotel Excelsior"] = "https://www.booking.com/hotel/hr/hotelexcelsiordubrovnik.html",
+            ["Boutique Hotel Stari Grad"] = "https://www.booking.com/hotel/hr/stari-grad.html"
+        };
+
+        var dubrovnikLocationIds = await db.Locations
+            .Where(location => location.DestinationId == dubrovnik.Id)
+            .Select(location => location.Id)
+            .ToListAsync();
+
+        var eventsToRemove = await db.Events
+            .Where(eventEntity =>
+                eventEntity.DestinationId == dubrovnik.Id &&
+                !keptEventNames.Contains(eventEntity.Name))
+            .ToListAsync();
+
+        if (eventsToRemove.Count > 0)
+        {
+            db.Events.RemoveRange(eventsToRemove);
+            await db.SaveChangesAsync();
+        }
+
+        var placesToRemove = await db.Places
+            .Where(place =>
+                dubrovnikLocationIds.Contains(place.LocationId) &&
+                !keptPlaceNames.Contains(place.Name))
+            .ToListAsync();
+
+        if (placesToRemove.Count > 0)
+        {
+            db.Places.RemoveRange(placesToRemove);
+            await db.SaveChangesAsync();
+        }
+
+        await ForceSetDestinationImageAsync(dubrovnik.Id, dubrovnik.Name, SeedWebp("dubrovnik"));
+
+        var keptPlaces = await db.Places
+            .Where(place => dubrovnikLocationIds.Contains(place.LocationId) && keptPlaceNames.Contains(place.Name))
+            .ToListAsync();
+
+        foreach (var place in keptPlaces)
+        {
+            if (placeImages.TryGetValue(place.Name, out var imageUrl))
+            {
+                await ForceSetPlaceImageAsync(place, imageUrl);
+            }
+
+            var changed = false;
+            if (placeWebsites.TryGetValue(place.Name, out var website) && place.Website != website)
+            {
+                place.Website = website;
+                changed = true;
+            }
+
+            if (placeContacts.TryGetValue(place.Name, out var contact))
+            {
+                if (contact.Email is not null && place.ContactEmail != contact.Email)
+                {
+                    place.ContactEmail = contact.Email;
+                    changed = true;
+                }
+
+                if (contact.Number is not null && place.Number != contact.Number)
+                {
+                    place.Number = contact.Number;
+                    changed = true;
+                }
+            }
+
+            if (hotelBookingLinks.TryGetValue(place.Name, out var bookingUrl) && place.BookingExternalLink != bookingUrl)
+            {
+                place.BookingExternalLink = bookingUrl;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                place.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        await db.SaveChangesAsync();
+
+        var bookingPartner = await EnsureBookingPartnerAsync("Booking.com", "dark");
+        var officialPartner = await EnsureBookingPartnerAsync("Official Website", "muted");
+
+        foreach (var place in keptPlaces)
+        {
+            await RemovePlaceholderBookingPartnersAsync(place);
+
+            if (hotelBookingLinks.TryGetValue(place.Name, out var bookingUrl))
+            {
+                await UpsertBookingPartnerAsync(place, bookingPartner, bookingUrl);
+            }
+
+            if (placeWebsites.TryGetValue(place.Name, out var website) &&
+                place.Name is "Hotel Excelsior" or "Boutique Hotel Stari Grad")
+            {
+                await UpsertBookingPartnerAsync(place, officialPartner, website);
+            }
+        }
+
+        var keptEvents = await db.Events
+            .Where(eventEntity => eventEntity.DestinationId == dubrovnik.Id && keptEventNames.Contains(eventEntity.Name))
+            .ToListAsync();
+
+        foreach (var eventEntity in keptEvents)
+        {
+            if (eventImages.TryGetValue(eventEntity.Name, out var imageUrl))
+            {
+                await ForceSetEventImageAsync(eventEntity, imageUrl);
+            }
+
+            if (eventEntity.Name == "Dubrovnik Summer Festival")
+            {
+                eventEntity.ExternalTicketLink = "https://www.dubrovnik-festival.hr/en";
+                eventEntity.UpdatedAt = DateTime.UtcNow;
+            }
+            else if (eventEntity.Name == "City Walls Sunset Tour")
+            {
+                eventEntity.ExternalTicketLink = "https://www.getyourguide.com/dubrovnik-l513/dubrovnik-city-walls-sunset-walking-tour-t146235/";
+                eventEntity.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        await db.SaveChangesAsync();
+
+        async Task<BookingPartner> EnsureBookingPartnerAsync(string name, string variant)
+        {
+            var partner = await db.BookingPartners.FirstOrDefaultAsync(x => x.Name == name);
+            if (partner is not null)
+            {
+                return partner;
+            }
+
+            partner = new BookingPartner { Name = name, Variant = variant };
+            db.BookingPartners.Add(partner);
+            await db.SaveChangesAsync();
+            return partner;
+        }
+
+        async Task RemovePlaceholderBookingPartnersAsync(Place place)
+        {
+            var placeholders = await db.PlaceBookingPartners
+                .Where(x => x.PlaceId == place.Id && x.Url != null && x.Url.Contains("example.com"))
+                .ToListAsync();
+
+            if (placeholders.Count == 0)
+            {
+                return;
+            }
+
+            db.PlaceBookingPartners.RemoveRange(placeholders);
+            await db.SaveChangesAsync();
+        }
+
+        async Task UpsertBookingPartnerAsync(Place place, BookingPartner partner, string url)
+        {
+            var existing = await db.PlaceBookingPartners.FirstOrDefaultAsync(x =>
+                x.PlaceId == place.Id &&
+                x.BookingPartnerId == partner.Id);
+
+            if (existing is null)
+            {
+                db.PlaceBookingPartners.Add(new PlaceBookingPartner
+                {
+                    PlaceId = place.Id,
+                    BookingPartnerId = partner.Id,
+                    Url = url
+                });
+            }
+            else
+            {
+                existing.Url = url;
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task ForceSetDestinationImageAsync(int destinationId, string destinationName, string url)
+        {
+            var existing = await db.EntityImages
+                .Where(x => x.TargetType == EntityImageTargetType.Destination && x.DestinationId == destinationId)
+                .ToListAsync();
+
+            if (existing.Count == 1 && existing[0].Url == url)
+            {
+                return;
+            }
+
+            db.EntityImages.RemoveRange(existing);
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = destinationId,
+                Url = url,
+                Caption = destinationName,
+                AltText = destinationName,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 0,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task ForceSetPlaceImageAsync(Place place, string url)
+        {
+            var existing = await db.EntityImages
+                .Where(x => x.TargetType == EntityImageTargetType.Place && x.PlaceId == place.Id)
+                .ToListAsync();
+
+            if (existing.Count == 1 && existing[0].Url == url)
+            {
+                return;
+            }
+
+            db.EntityImages.RemoveRange(existing);
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = place.Id,
+                Url = url,
+                Caption = place.Name,
+                AltText = place.Name,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 0,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task ForceSetEventImageAsync(Event eventEntity, string url)
+        {
+            var existing = await db.EntityImages
+                .Where(x => x.TargetType == EntityImageTargetType.Event && x.EventId == eventEntity.Id)
+                .ToListAsync();
+
+            if (existing.Count == 1 && existing[0].Url == url)
+            {
+                return;
+            }
+
+            db.EntityImages.RemoveRange(existing);
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Event,
+                EventId = eventEntity.Id,
+                Url = url,
+                Caption = eventEntity.Name,
+                AltText = eventEntity.Name,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 0,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(AppDbContext db)
