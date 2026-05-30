@@ -51,7 +51,9 @@ describe('LoginComponent', () => {
       rememberMe: true,
     });
 
-    request.flush(adminLoginResponse());
+    const response = adminLoginResponse();
+    request.flush(response);
+    flushCurrentUser(response.user);
 
     expect(component.isLoading()).toBe(false);
     expect(component.authError()).toBeNull();
@@ -66,7 +68,7 @@ describe('LoginComponent', () => {
     component.password.set('Proba123!');
     component.onSubmit();
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'territory-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -79,7 +81,11 @@ describe('LoginComponent', () => {
         canAccessRegionalAdmin: false,
         canAccessTerritoryAdmin: true,
       },
-    });
+    };
+
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
+    flushAssignedTerritories([{ id: 10, name: 'Croatia', displayName: 'Croatia', statusLabel: 'Assigned' }]);
 
     expect(navigateSpy).toHaveBeenCalledWith('/territory/overview');
   });
@@ -92,7 +98,7 @@ describe('LoginComponent', () => {
     component.password.set('Proba123!');
     component.onSubmit();
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'admin-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -105,7 +111,10 @@ describe('LoginComponent', () => {
         canAccessRegionalAdmin: false,
         canAccessTerritoryAdmin: false,
       },
-    });
+    };
+
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
 
     expect(navigateSpy).toHaveBeenCalledWith('/admin-dashboard');
     expect(navigateSpy).not.toHaveBeenCalledWith('/admin/overview');
@@ -138,5 +147,17 @@ describe('LoginComponent', () => {
         canAccessTerritoryAdmin: false,
       },
     };
+  }
+
+  function flushCurrentUser(user: object): void {
+    const request = http.expectOne('/api/admin/auth/me');
+    expect(request.request.method).toBe('GET');
+    request.flush(user);
+  }
+
+  function flushAssignedTerritories(territories: unknown[]): void {
+    const request = http.expectOne('/api/admin/territory/territories');
+    expect(request.request.method).toBe('GET');
+    request.flush(territories);
   }
 });

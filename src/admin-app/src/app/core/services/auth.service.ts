@@ -1,6 +1,6 @@
 import { Injectable, Optional, computed, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Observable, catchError, finalize, map, of, shareReplay, tap, throwError } from 'rxjs';
+import { Observable, Subject, catchError, defer, finalize, map, of, shareReplay, switchMap, take, tap, throwError } from 'rxjs';
 import { AdminRoleCode, User } from '../models/user.model';
 import {
   AdminView,
@@ -9,6 +9,11 @@ import {
   normalizeAdminRoleCode,
   resolveAdminViewForRoles,
 } from '../models/admin-view.model';
+import { AdminNotificationsService } from './administrator/admin-notifications.service';
+import { RegionalManagerSidebarStateService } from './regional-manager-sidebar-state.service';
+import { TerritoryDashboardService } from './territory-dashboard.service';
+
+export type AdminAuthSessionEvent = 'login-start' | 'login-success' | 'session-cleared';
 
 interface AdminAuthUserResponse {
   id: number;
@@ -43,6 +48,7 @@ export class AuthService {
   private accessTokenExpiresAtMs: number | null = null;
   private refreshRequest$: Observable<User | null> | null = null;
   private readonly _currentUser = signal<User | null>(null);
+  private readonly sessionEventsSubject = new Subject<AdminAuthSessionEvent>();
 
   readonly currentUser = computed(() => this._currentUser());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
@@ -57,8 +63,14 @@ export class AuthService {
   readonly isRegionalManager = computed(() => this._currentUser()?.activeRoleCode === 'RegionalManager');
   readonly availableAdminViews = computed(() => getAdminViewsForRoles(this._currentUser()?.roles ?? []));
   readonly activeAdminView = computed(() => getAdminViewByCode(this._currentUser()?.activeRoleCode));
+  readonly sessionEvents$ = this.sessionEventsSubject.asObservable();
 
-  constructor(@Optional() private readonly http: HttpClient | null) {}
+  constructor(
+    @Optional() private readonly http: HttpClient | null,
+    @Optional() private readonly territoryDashboard: TerritoryDashboardService | null,
+    @Optional() private readonly regionalSidebarState: RegionalManagerSidebarStateService | null,
+    @Optional() private readonly notifications: AdminNotificationsService | null,
+  ) {}
 
   getUser(): User | null {
     return this._currentUser();
@@ -88,24 +100,31 @@ export class AuthService {
   }
 
   login(email: string, password: string, rememberMe = false): Observable<User> {
-    return this.httpClient
-      .post<LoginResponse>(
-        '/api/admin/auth/login',
-        { email, password, rememberMe },
-        { withCredentials: true },
-      )
-      .pipe(
-        tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
-        map(response => this.mapAdminUser(response.user, false)),
-        tap(user => {
-          this._currentUser.set(user);
-          this.setSessionHint();
-        }),
-        catchError(error => {
-          this.clearLocalSession();
-          return throwError(() => this.toSafeAuthError(error));
-        }),
-      );
+    return defer(() => {
+      this.beginLoginSession();
+
+      return this.httpClient
+        .post<LoginResponse>(
+          '/api/admin/auth/login',
+          { email, password, rememberMe },
+          { withCredentials: true },
+        )
+        .pipe(
+          tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
+          switchMap(() => this.httpClient.get<AdminAuthUserResponse>('/api/admin/auth/me')),
+          map(response => this.mapAdminUser(response, false)),
+          switchMap(user => this.primeAdminContext(user).pipe(map(() => user))),
+          tap(user => {
+            this._currentUser.set(user);
+            this.setSessionHint();
+            this.sessionEventsSubject.next('login-success');
+          }),
+          catchError(error => {
+            this.clearLocalSession();
+            return throwError(() => this.toSafeAuthError(error));
+          }),
+        );
+    });
   }
 
   restoreSession(): Observable<User | null> {
@@ -252,6 +271,31 @@ export class AuthService {
     this.accessTokenExpiresAtMs = this.resolveExpiryMs(expiresAt, expiresIn);
   }
 
+  private beginLoginSession(): void {
+    this.accessToken = null;
+    this.accessTokenExpiresAtMs = null;
+    this._currentUser.set(null);
+    this.refreshRequest$ = null;
+    this.clearSessionStorage();
+    this.resetSessionScopedServices();
+    this.sessionEventsSubject.next('login-start');
+  }
+
+  private primeAdminContext(user: User): Observable<unknown> {
+    if (!this.territoryDashboard || !this.canUseTerritoryContext(user)) {
+      return of(null);
+    }
+
+    return this.territoryDashboard.getAssignedTerritories().pipe(
+      take(1),
+      tap(territories => {
+        const activeTerritoryId = territories[0]?.id ?? null;
+        this.territoryDashboard?.setActiveTerritoryId(activeTerritoryId);
+      }),
+      map(() => null),
+    );
+  }
+
   private resolveExpiryMs(expiresAt?: string | null, expiresIn?: number | null): number | null {
     const parsed = expiresAt ? Date.parse(expiresAt) : NaN;
     if (Number.isFinite(parsed)) {
@@ -301,6 +345,13 @@ export class AuthService {
     this.accessToken = null;
     this.accessTokenExpiresAtMs = null;
     this._currentUser.set(null);
+    this.refreshRequest$ = null;
+    this.clearSessionStorage();
+    this.resetSessionScopedServices();
+    this.sessionEventsSubject.next('session-cleared');
+  }
+
+  private clearSessionStorage(): void {
     try {
       sessionStorage.removeItem(AuthService.sessionHintKey);
       sessionStorage.removeItem(AuthService.activeRegionStorageKey);
@@ -309,6 +360,16 @@ export class AuthService {
     } catch {
       // Session restore is a convenience only.
     }
+  }
+
+  private resetSessionScopedServices(): void {
+    this.territoryDashboard?.clearSessionState();
+    this.regionalSidebarState?.clear();
+    this.notifications?.reset();
+  }
+
+  private canUseTerritoryContext(user: User): boolean {
+    return user.activeRoleCode === 'TerritoryManager' || user.activeRoleCode === 'TerritoryAssociate';
   }
 
   private readActiveViewCode(): AdminRoleCode | null {
