@@ -4,6 +4,7 @@ import {
   ChangeDetectionStrategy, ChangeDetectorRef, NgZone, inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import {
   GeoJsonGeometry,
   TerritoryMapFeature,
@@ -98,6 +99,7 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
   private renderFrame: number | null = null;
   private geometrySignature = '';
   private unavailableSet = new Set<string>();
+  private readonly mapTileLayer = inject(MapTileLayerService);
   private readonly cdr  = inject(ChangeDetectorRef);
   private readonly zone = inject(NgZone);
 
@@ -142,11 +144,10 @@ export class TerritoryWorldMapComponent implements AfterViewInit, OnDestroy, OnC
         preferCanvas: true,
       });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
+      this.mapTileLayer.addTo(L, this.map, {
         opacity: 0.35,
         noWrap: false,
-      }).addTo(this.map);
+      });
 
       this.renderLayer();
     });

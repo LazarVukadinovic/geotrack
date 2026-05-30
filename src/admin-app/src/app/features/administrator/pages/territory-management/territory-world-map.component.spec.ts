@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import {
   GeoJsonGeometry,
   TerritoryMapFeatureCollection,
@@ -18,6 +19,7 @@ describe('TerritoryWorldMapComponent', () => {
   let mapInstance: { removeLayer: ReturnType<typeof vi.fn>; fitBounds: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> };
   let layerGroup: any;
   let featureLayers: any[];
+  let mapTileLayer: { addTo: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     mapInstance = {
@@ -60,9 +62,16 @@ describe('TerritoryWorldMapComponent', () => {
         return layerGroup;
       }),
     });
+    mapTileLayer = {
+      addTo: vi.fn((leaflet: any, map: any, options: any = {}) =>
+        leaflet.tileLayer('shared://tiles', options).addTo(map)),
+    };
 
     await TestBed.configureTestingModule({
       imports: [TerritoryWorldMapComponent],
+      providers: [
+        { provide: MapTileLayerService, useValue: mapTileLayer },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(TerritoryWorldMapComponent);
@@ -116,6 +125,10 @@ describe('TerritoryWorldMapComponent', () => {
 
     expect(mapOptions.worldCopyJump).toBe(false);
     expect(mapOptions.maxBounds).toEqual([[-85, -220], [85, 220]]);
+    expect(mapTileLayer.addTo).toHaveBeenCalledWith((globalThis as any).L, mapInstance, {
+      opacity: 0.35,
+      noWrap: false,
+    });
     expect(tileLayerOptions.noWrap).toBe(false);
   });
 

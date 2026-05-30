@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import { TerritoryRegionMapComponent } from './region-map.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { TerritoryDashboardService } from '../../../../core/services/territory-dashboard.service';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import {
   TerritoryAssignedTerritory,
   TerritoryRegionGeometry,
@@ -21,6 +22,7 @@ describe('TerritoryRegionMapComponent', () => {
     getRegionMap: ReturnType<typeof vi.fn>;
     regionSetupChanged$: ReturnType<Subject<void>['asObservable']>;
   };
+  let mapTileLayer: { addTo: ReturnType<typeof vi.fn> };
 
   const assignedTerritories: TerritoryAssignedTerritory[] = [
     { id: 10, name: 'Croatia', displayName: 'Croatia', countryCode: 'HRV' },
@@ -33,6 +35,10 @@ describe('TerritoryRegionMapComponent', () => {
       setActiveTerritoryId: vi.fn(),
       getRegionMap: vi.fn(() => of(mapResponse())),
       regionSetupChanged$: new Subject<void>().asObservable(),
+    };
+    mapTileLayer = {
+      addTo: vi.fn((leaflet: any, map: any, options: any = {}) =>
+        leaflet.tileLayer('shared://tiles', options).addTo(map)),
     };
 
     await TestBed.configureTestingModule({
@@ -56,6 +62,7 @@ describe('TerritoryRegionMapComponent', () => {
           },
         },
         { provide: TerritoryDashboardService, useValue: territoryDashboard },
+        { provide: MapTileLayerService, useValue: mapTileLayer },
       ],
     }).compileComponents();
 
@@ -89,6 +96,7 @@ describe('TerritoryRegionMapComponent', () => {
     expect(drawnGeometries).not.toContain(component.mapData?.regions[2].geometryGeoJson);
     expect(leaflet.controlZoom).toHaveBeenCalledWith({ position: 'topleft' });
     expect(leaflet.zoomControl.addTo).toHaveBeenCalledWith(leaflet.map);
+    expect(mapTileLayer.addTo).toHaveBeenCalledWith((globalThis as any).L, leaflet.map);
   });
 
   it('does not draw unmarked display geometries as precise boundaries', async () => {

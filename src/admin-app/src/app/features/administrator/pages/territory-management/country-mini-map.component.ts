@@ -3,6 +3,7 @@ import {
   Input, ViewChild, ElementRef, ChangeDetectionStrategy, ChangeDetectorRef, inject,
 } from '@angular/core';
 import { GeoJsonGeometry } from '../../../../core/models/administrator/territory.model';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 
 declare const L: any;
 
@@ -21,6 +22,7 @@ export class CountryMiniMapComponent implements AfterViewInit, OnDestroy, OnChan
 
   private map: any;
   private countryLayer: any;
+  private readonly mapTileLayer = inject(MapTileLayerService);
   private readonly cdr = inject(ChangeDetectorRef);
   private destroyed = false;
 
@@ -53,9 +55,9 @@ export class CountryMiniMapComponent implements AfterViewInit, OnDestroy, OnChan
       keyboard: false,
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    this.mapTileLayer.addTo(L, this.map, {
       opacity: 0.3,
-    }).addTo(this.map);
+    });
 
     this.renderCountry();
   }
