@@ -15,6 +15,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
     public async Task<Destination?> GetWithDetailsAsync(int destinationId)
     {
         return await _context.Destinations
+            .AsNoTracking()
             .Include(d => d.DestinationType)
             .Include(d => d.Region)
             .Include(d => d.DestinationTags)
@@ -32,6 +33,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
                 .ThenInclude(pt => pt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(d => d.Id == destinationId);
     }
     public async Task<bool> IsDestinationSavedByUserAsync(int destinationId, int userId)

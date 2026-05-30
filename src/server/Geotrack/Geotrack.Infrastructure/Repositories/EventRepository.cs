@@ -17,6 +17,7 @@ public class EventRepository : Repository<Event>, IEventRepository
     public async Task<Event?> GetWithDetailsAsync(int eventId)
     {
         return await _context.Events
+            .AsNoTracking()
             .Include(e => e.EventType)
             .Include(e => e.Destination)
             .Include(e => e.Location)
@@ -26,6 +27,7 @@ public class EventRepository : Repository<Event>, IEventRepository
                 .ThenInclude(et => et.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(e => e.Id == eventId);
     }
 
