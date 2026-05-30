@@ -6,6 +6,129 @@ Backend je ASP.NET Core API koji čuva katalog, korisnike, recenzije, kolekcije,
 
 Ask Agent je backend-managed AI funkcionalnost za pitanja nad GeoTrack katalogom. Angular ne prikazuje provider/model/key opcije i ne šalje korisničke API ključeve; chat se izvršava preko server-side Gemini key pool-a. GeoTrack MCP je zaseban remote HTTP JSON-RPC tool endpoint za spoljne AI alate koji podržavaju MCP.
 
+## Korisnici za testiranje
+- Korisnička aplikacija: `https://softeng.pmf.kg.ac.rs:10131`
+- Administrativna aplikacija: `https://softeng.pmf.kg.ac.rs:10132`
+- Backend: `https://softeng.pmf.kg.ac.rs:10133`
+
+## Korisnici za testiranje
+
+Svi korisnici koriste istu lozinku:
+
+`Proba123!`
+
+### Administrator
+
+- Email: `zika@gmail.com`
+
+### Hrvatska / HRV
+
+- Teritorijalni menadžer: `mika@gmail.com`
+- Regionalni menadžer za Dubrovnik-Neretva: `pera@gmail.com`
+
+### Srbija / SRB
+
+- Teritorijalni menadžer: `nikola@gmail.com`
+- Regionalni menadžer za Šumadiju (`Sumadija District` u seed podacima): `serbia.regional@gmail.com`
+
+### Content Moderator
+
+- Email: `moderator@gmail.com`
+
+## Lokalno pokretanje ukratko
+
+Za lokalni rad obično treba:
+
+- PostgreSQL baza sa PostGIS ekstenzijom;
+- backend na `http://localhost:5003`;
+- `user-app` na `http://localhost:4200`;
+- `admin-app` na `http://localhost:4300`;
+- lokalni geoBoundaries fajlovi ako testirate teritorijalne i regionalne granice.
+
+U Development modu backend automatski primenjuje migracije i pokreće operational/demo seed ako je konfiguracija ostavljena kao u `appsettings.Development.json`.
+
+## Lokalni boundary / GeoJSON fajlovi
+
+Granice se lokalno učitavaju iz geoBoundaries CGAZ fajlova preuzetih sa:
+
+https://www.geoboundaries.org/globalDownloads.html
+
+Ovi fajlovi su potrebni za import granica država/teritorija (`ADM0`) i administrativnih regiona (`ADM1`). Trenutni backend podržava i `ADM2` kandidate, ali trenutni region sync koristi `ADM1`.
+
+Podrazumevana putanja iz backend konfiguracije je:
+
+- iz root-a repozitorijuma: `src/server/Geotrack/Geotrack.Server/Data/Boundaries`
+- relativno od `Geotrack.Server` projekta: `Data/Boundaries`
+
+Očekivani fajlovi:
+
+- `geoBoundariesCGAZ_ADM0.geojson`
+- `geoBoundariesCGAZ_ADM1.geojson`
+- `geoBoundariesCGAZ_ADM2.geojson` ako koristite ADM2 import
+
+Direktorijum `src/server/Geotrack/Geotrack.Server/Data/Boundaries` ima lokalni `.gitignore` koji ignoriše sve osim samog `.gitignore` fajla. GeoJSON fajlovi su veliki i namerno se ne commit-uju u Git.
+
+Attribution/licenca za boundary podatke: geoBoundaries / gbOpen / CC BY 4.0.
+
+## Import boundary podataka
+
+Ako u bazi fale boundary podaci, prvo pokrenite backend na `http://localhost:5003`, zatim se prijavite kao Administrator i uzmite JWT/access token iz aplikacije/dev tools-a ili iz trenutnog admin auth toka (`POST /api/admin/auth/login`). U komandama koristite placeholder, ne realan token:
+
+`<ADMIN_BEARER_TOKEN>`
+
+Import `ADM0` granica država/teritorija:
+
+```powershell
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "http://localhost:5003/api/admin/territories/boundaries/import-local-adm0?force=false" `
+  -Headers @{ Authorization = "Bearer <ADMIN_BEARER_TOKEN>" } `
+  -TimeoutSec 180
+```
+
+Import `ADM1` administrativnih granica:
+
+```powershell
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "http://localhost:5003/api/admin/territories/boundaries/import-local-adm1?force=false" `
+  -Headers @{ Authorization = "Bearer <ADMIN_BEARER_TOKEN>" } `
+  -TimeoutSec 1800
+```
+
+Za filtrirani ili batch import `ADM1` podataka možete koristiti query parametre koje backend podržava:
+
+```powershell
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "http://localhost:5003/api/admin/territories/boundaries/import-local-adm1?force=false&countryIso3=HRV&take=500" `
+  -Headers @{ Authorization = "Bearer <ADMIN_BEARER_TOKEN>" } `
+  -TimeoutSec 1800
+```
+
+Preporuka:
+
+- `force=false` koristite za normalan import/resume.
+- `force=true` koristite samo kada namerno osvežavate ili rebuild-ujete postojeće boundary podatke.
+- `ADM1` import traje duže jer obrađuje mnogo više feature-a od `ADM0`.
+- Na serverima sa malo RAM-a koristite filtriranje/batch import preko `countryIso3` i `take`.
+
+## ADM1 sync regiona
+
+Tok za region management je trenutno:
+
+- `ADM0` import kreira ili ažurira granice država/teritorija.
+- `ADM1` import čuva administrativne granice u `AdministrativeBoundaryCandidates`.
+- Territory Manager sync inicijalizuje stvarne app `Regions` iz `ADM1` kandidata.
+- Territory Manager zatim dodeljuje Regional Manager-e postojećim regionima.
+- Territory Manager u normalnom toku ne treba ručno da kreira regione jedan po jedan.
+
+Trenutno ponašanje UI-ja:
+
+- prvi setup za Territory Manager-a prikazuje modal sa dugmetom `Get Started`;
+- `Regional Management` prikazuje `Update Regions` kada se `ADM1` podaci promene;
+- `Region Map` prikazuje sinhronizovane regione za aktivnu teritoriju.
+
 ## Tehnologije
 
 **Frontend**
@@ -94,12 +217,6 @@ dotnet run --project server/Geotrack/Geotrack.Server
 
 Backend u razvojnom profilu sluša na `http://localhost:5003`. U Development modu pri startu proverava PostGIS, automatski primenjuje EF migracije i pokreće seed podataka.
 
-Demo regional manager korisnik iz seed podataka:
-
-- regional manager
-- email: `pera@gmail.com`
-- lozinka: `Proba123!`
-
 Ako migracije želite da primenite ručno preko `dotnet-ef`, iz `src` foldera koristite:
 
 ```bash
@@ -141,22 +258,22 @@ Za lokalno testiranje možete napraviti Gemini API key u Google AI Studio-u. Nem
 Podešavanje preko user-secrets:
 
 ```bash
-dotnet user-secrets set "Gemini:ApiKeys:0" "<gemini-api-key-1>" --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "Gemini:ApiKeys:1" "<gemini-api-key-2>" --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "Gemini:Model" "gemini-3.5-flash" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:ApiKeys:0" "<GEMINI_API_KEY_1>" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:ApiKeys:1" "<GEMINI_API_KEY_2>" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:Model" "gemini-3.5-flash-lite" --project server/Geotrack/Geotrack.Server
 dotnet user-secrets set "Gemini:KeyCooldownSeconds" "300" --project server/Geotrack/Geotrack.Server
 ```
 
 Ista podešavanja kao environment variable imena:
 
 ```text
-Gemini__ApiKeys__0=<gemini-api-key-1>
-Gemini__ApiKeys__1=<gemini-api-key-2>
-Gemini__Model=gemini-3.5-flash
+Gemini__ApiKeys__0=<GEMINI_API_KEY_1>
+Gemini__ApiKeys__1=<GEMINI_API_KEY_2>
+Gemini__Model=gemini-3.5-flash-lite
 Gemini__KeyCooldownSeconds=300
 ```
 
-Podrazumevani model je `gemini-3.5-flash`. Free quota i uslovi korišćenja zavise od Google AI Studio/Gemini pravila. Za produkciju moraju da se kontrolišu kvote, rate-limit-i i monitoring backend key pool-a.
+Podrazumevani model je `gemini-3.5-flash-lite`. Free quota i uslovi korišćenja zavise od Google AI Studio/Gemini pravila. Za produkciju moraju da se kontrolišu kvote, rate-limit-i i monitoring backend key pool-a.
 
 ## MCP konektor
 
