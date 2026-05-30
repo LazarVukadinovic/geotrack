@@ -15,6 +15,7 @@ export interface FeaturesData {
   standalone: true,
   imports: [CommonModule],
   templateUrl: './step-features.component.html',
+  styleUrl: './step-features.component.css',
 })
 export class StepFeaturesComponent {
   data = input<FeaturesData | null>(null);

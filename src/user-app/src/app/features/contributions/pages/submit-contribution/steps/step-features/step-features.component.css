@@ -1,0 +1,32 @@
+.step-features__amenity-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.step-features__amenity-button {
+  width: 76px;
+  min-height: 70px;
+  padding: 0.625rem 0.25rem;
+  text-align: center;
+}
+
+.step-features__amenity-button svg {
+  flex: none;
+}
+
+.step-features__amenity-label {
+  display: block;
+  max-width: 100%;
+  line-height: 1.15;
+  text-align: center;
+  overflow-wrap: anywhere;
+  letter-spacing: 0;
+}
+
+@media (min-width: 640px) {
+  .step-features__amenity-button {
+    width: 84px;
+  }
+}

@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { ContributionDetail, ContributionsService, contributionCanEdit, contributionCanRequestOwnership } from '../../services/contributions.service';
 import { BackgroundImageFallbackDirective } from '../../../../shared/directives/background-image-fallback.directive';
+import { getContributionAmenityLabel } from '../../services/contribution-amenities';
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 
@@ -40,6 +41,9 @@ export class ContributionDetailPageComponent implements OnInit {
     dining: 'On-site Dining',
     restaurant: 'On-site Dining',
     ac: 'Air Conditioning',
+    outdoor: 'Outdoor Seating',
+    sea: 'Sea View',
+    family: 'Family Friendly',
   };
 
   protected readonly partnerMap: Record<string, string> = {
@@ -93,7 +97,7 @@ export class ContributionDetailPageComponent implements OnInit {
   }
 
   protected getAmenityLabel(id: string): string {
-    return this.amenityMap[id] ?? id;
+    return this.amenityMap[id] ?? getContributionAmenityLabel(id);
   }
 
   protected getPartnerLabel(id: string): string {

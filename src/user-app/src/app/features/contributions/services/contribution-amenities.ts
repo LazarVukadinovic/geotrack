@@ -17,6 +17,8 @@ const ALL_AMENITY_OPTIONS: ContributionAmenityOption[] = [
   { id: 'dining', label: 'DINING' },
 ];
 
+const AMENITY_LABELS = new Map(ALL_AMENITY_OPTIONS.map(option => [option.id, option.label]));
+
 const PLACE_TYPE_AMENITY_IDS: Record<string, string[]> = {
   stay:       ['wifi', 'pool', 'breakfast', 'parking', 'spa', 'gym', 'dining', 'ac', 'outdoor', 'sea', 'family'],
   restaurant: ['outdoor', 'wifi', 'parking', 'ac', 'sea'],
@@ -75,6 +77,9 @@ const STAY_AMENITY_API_VALUES: Record<string, string> = {
   gym: 'fitness-center',
   dining: 'restaurant',
   ac: 'air-conditioning',
+  outdoor: 'outdoor-seating',
+  sea: 'sea-view',
+  family: 'family-friendly',
 };
 
 const PLACE_AMENITY_API_VALUES: Record<string, string> = {
@@ -106,6 +111,10 @@ export function toContributionAmenityApiValues(
   const apiMap = isAccommodation ? STAY_AMENITY_API_VALUES : PLACE_AMENITY_API_VALUES;
   const normalized = normalizeContributionAmenityIds(values).map(value => apiMap[value] ?? value);
   return normalized.filter((value, index) => normalized.indexOf(value) === index);
+}
+
+export function getContributionAmenityLabel(id: string): string {
+  return AMENITY_LABELS.get(normalizeContributionAmenityIds([id])[0] ?? id) ?? id;
 }
 
 function amenityKey(value: string): string {

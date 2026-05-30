@@ -21,10 +21,10 @@
   <div class="bg-white rounded-2xl p-5">
     <h3 class="text-base font-bold text-slate-800 mb-1">Available Amenities</h3>
     <p class="text-xs text-slate-500 mb-4">Selected amenities will appear prominently on the place detail page.</p>
-    <div class="grid grid-cols-4 gap-2">
+    <div class="step-features__amenity-grid">
       <button *ngFor="let amenity of availableAmenities()"
         (click)="toggleAmenity(amenity.id)"
-        class="flex flex-col items-center gap-1 py-3 px-1 rounded-2xl border-2 transition-all duration-200"
+        class="step-features__amenity-button flex flex-col items-center justify-center gap-1 rounded-2xl border-2 transition-all duration-200"
         [class.border-[#e8722a]]="isAmenitySelected(amenity.id)"
         [class.bg-orange-50]="isAmenitySelected(amenity.id)"
         [class.border-slate-100]="!isAmenitySelected(amenity.id)"
@@ -113,7 +113,7 @@
           </svg>
         </ng-container>
 
-        <span class="text-[9px] font-bold tracking-wide"
+        <span class="step-features__amenity-label text-[10px] font-bold"
           [class.text-[#e8722a]]="isAmenitySelected(amenity.id)"
           [class.text-slate-500]="!isAmenitySelected(amenity.id)">
           {{ amenity.label }}

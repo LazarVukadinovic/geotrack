@@ -510,8 +510,8 @@ public class PlaceContributionService : IPlaceContributionService
         if (contribution is null)
             throw new InvalidOperationException("Contribution was not found.");
 
-        if (contribution.Status != PlaceContributionStatus.PendingReview)
-            throw new InvalidOperationException("Only pending contributions can be deleted.");
+        if (contribution.Status is not (PlaceContributionStatus.PendingReview or PlaceContributionStatus.Rejected))
+            throw new InvalidOperationException("Only pending or rejected contributions can be deleted.");
 
         foreach (var image in contribution.Images)
         {
@@ -630,7 +630,9 @@ public class PlaceContributionService : IPlaceContributionService
             .Include(c => c.Images)
             .Include(c => c.Place)
                 .ThenInclude(p => p!.Location)
-                    .ThenInclude(l => l.Destination);
+                    .ThenInclude(l => l.Destination)
+            .Include(c => c.Place)
+                .ThenInclude(p => p!.Images);
     }
 
     private async Task<IQueryable<PlaceContribution>> ApplyReviewerScopeAsync(
@@ -1687,11 +1689,39 @@ public class PlaceContributionService : IPlaceContributionService
             return new List<StayAmenity>();
 
         var normalized = stayAmenityNames.Select(NormalizeSlug).ToList();
+        var knownDefinitions = new Dictionary<string, (string Name, string Icon, string Description)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["outdoor-seating"] = ("Outdoor Seating", "outdoor", "Outdoor seating or open-air areas"),
+            ["sea-view"] = ("Sea View", "sea", "Sea view available"),
+            ["family-friendly"] = ("Family Friendly", "family", "Family-friendly facilities or setting")
+        };
 
-        return await _db.StayAmenities
+        var existing = await _db.StayAmenities
             .Where(amenity => normalized.Contains(amenity.Slug.ToLower()) ||
                               normalized.Contains(amenity.Name.ToLower()))
             .ToListAsync();
+
+        var existingSlugs = existing.Select(amenity => amenity.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var slug in normalized.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (existingSlugs.Contains(slug) || !knownDefinitions.TryGetValue(slug, out var definition))
+                continue;
+
+            var amenity = new StayAmenity
+            {
+                Name = definition.Name,
+                Slug = slug,
+                IconKey = definition.Icon,
+                Description = definition.Description
+            };
+            _db.StayAmenities.Add(amenity);
+            existing.Add(amenity);
+        }
+
+        if (existing.Any(amenity => amenity.Id == 0))
+            await _db.SaveChangesAsync();
+
+        return existing;
     }
 
     private async Task<List<ResolvedBookingPartner>> ResolveBookingPartnersAsync(
@@ -1746,8 +1776,39 @@ public class PlaceContributionService : IPlaceContributionService
 
     private static PlaceContributionListItemDto MapListItem(PlaceContribution contribution)
     {
-        var cardImage = GetCardImage(contribution);
-        var coverImage = GetCoverImage(contribution);
+        var cardImageUrl = GetCardImage(contribution)?.Url;
+        var coverImageUrl = GetCoverImage(contribution)?.Url;
+        var galleryImageUrls = contribution.Images
+            .Where(image => image.ImageRole == EntityImageRole.Gallery)
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .Select(image => image.Url)
+            .ToList();
+
+        if (contribution.Type == PlaceContributionType.ClaimOwnership &&
+            contribution.Status == PlaceContributionStatus.Approved &&
+            contribution.Place is not null)
+        {
+            var publishedCardImage = GetPublishedCardImage(contribution.Place);
+            var publishedCoverImage = GetPublishedCoverImage(contribution.Place);
+            var publishedFirstImage = contribution.Place.Images
+                .OrderBy(image => image.SortOrder)
+                .ThenBy(image => image.Id)
+                .FirstOrDefault();
+
+            cardImageUrl = cardImageUrl ?? publishedCardImage?.Url ?? publishedCoverImage?.Url ?? publishedFirstImage?.Url;
+            coverImageUrl = coverImageUrl ?? publishedCoverImage?.Url ?? publishedFirstImage?.Url ?? publishedCardImage?.Url;
+
+            if (galleryImageUrls.Count == 0)
+            {
+                galleryImageUrls = contribution.Place.Images
+                    .Where(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Gallery)
+                    .OrderBy(image => image.SortOrder)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .ToList();
+            }
+        }
 
         return new PlaceContributionListItemDto
         {
@@ -1759,15 +1820,10 @@ public class PlaceContributionService : IPlaceContributionService
             PlaceType = contribution.PlaceType?.Name,
             StayType = contribution.StayType?.Name,
             Location = BuildLocationLabel(contribution),
-            CardImageUrl = cardImage?.Url,
-            MainImageUrl = cardImage?.Url,
-            CoverImageUrl = coverImage?.Url,
-            GalleryImageUrls = contribution.Images
-                .Where(image => image.ImageRole == EntityImageRole.Gallery)
-                .OrderBy(image => image.SortOrder)
-                .ThenBy(image => image.Id)
-                .Select(image => image.Url)
-                .ToList(),
+            CardImageUrl = cardImageUrl,
+            MainImageUrl = cardImageUrl,
+            CoverImageUrl = coverImageUrl,
+            GalleryImageUrls = galleryImageUrls,
             Status = contribution.Status.ToString(),
             SubmittedAt = contribution.SubmittedAt,
             UpdatedAt = contribution.UpdatedAt,
@@ -1775,6 +1831,22 @@ public class PlaceContributionService : IPlaceContributionService
             PublishedPlaceId = contribution.PlaceId,
             HasOwnershipProofDocument = !string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl)
         };
+    }
+
+    private static EntityImage? GetPublishedCardImage(Place place)
+    {
+        return place.Images
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .FirstOrDefault(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Card);
+    }
+
+    private static EntityImage? GetPublishedCoverImage(Place place)
+    {
+        return place.Images
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .FirstOrDefault(image => EntityImageRole.Normalize(image.ImageRole) == EntityImageRole.Cover);
     }
 
     private static PlaceContributionDetailDto MapDetail(

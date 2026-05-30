@@ -55,6 +55,10 @@ export function contributionCanRequestOwnership(
     item.publishedPlaceId != null;
 }
 
+export function contributionCanDelete(item: Pick<ContributionListItem, 'status'>): boolean {
+  return item.status === 'PendingReview' || item.status === 'Rejected';
+}
+
 export interface ContributionDetail extends ContributionListItem {
   placeTypeId: number | null;
   locationId: number | null;

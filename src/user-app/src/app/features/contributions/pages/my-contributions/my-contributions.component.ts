@@ -2,7 +2,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { ContributionListItem, ContributionsService, contributionCanEdit, contributionCanRequestOwnership } from '../../services/contributions.service';
+import { ContributionListItem, ContributionsService, contributionCanDelete, contributionCanEdit, contributionCanRequestOwnership } from '../../services/contributions.service';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024;
@@ -101,6 +101,10 @@ export class MyContributionsPageComponent implements OnInit {
     return item.publishedPlaceId == null || !this.claimedPlaceIds().has(item.publishedPlaceId);
   }
 
+  protected canDelete(item: ContributionListItem): boolean {
+    return contributionCanDelete(item);
+  }
+
   // ── Edit ──────────────────────────────────────────────────────────────────
 
   protected editItem(event: Event, item: ContributionListItem): void {
@@ -193,6 +197,7 @@ export class MyContributionsPageComponent implements OnInit {
 
   protected requestDelete(event: Event, item: ContributionListItem): void {
     event.stopPropagation();
+    if (!this.canDelete(item)) return;
     this.deleteError.set(null);
     this.pendingDelete.set(item);
   }
@@ -206,6 +211,10 @@ export class MyContributionsPageComponent implements OnInit {
   protected confirmDelete(): void {
     const item = this.pendingDelete();
     if (!item || this.isDeleting()) return;
+    if (!this.canDelete(item)) {
+      this.pendingDelete.set(null);
+      return;
+    }
 
     this.isDeleting.set(true);
     this.deleteError.set(null);

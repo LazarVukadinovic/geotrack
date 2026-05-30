@@ -34,7 +34,10 @@ export type HotelAmenityIcon =
   | 'spa'
   | 'gym'
   | 'restaurant'
-  | 'ac';
+  | 'ac'
+  | 'outdoor'
+  | 'sea'
+  | 'family';
 
 export interface HotelAmenity {
   id: string;

@@ -1173,6 +1173,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
             .Include(p => p.Images)
+            .Include(p => p.Stay)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
                     .ThenInclude(tag => tag.TagType)
@@ -1224,7 +1225,12 @@ public class PlaceService : IPlaceService
             await SyncOwnerUpdateTagsAsync(place.Id, request.Tags, now: DateTime.UtcNow);
 
         if (request.Amenities is not null)
-            await SyncOwnerUpdateAmenitiesAsync(place.Id, request.Amenities);
+        {
+            if (place.Stay is not null)
+                await SyncOwnerUpdateStayAmenitiesAsync(place.Id, request.Amenities);
+            else
+                await SyncOwnerUpdateAmenitiesAsync(place.Id, request.Amenities);
+        }
 
         if (request.BookingPartners is not null)
             await SyncOwnerUpdateBookingPartnersAsync(place.Id, request.BookingPartners);
@@ -1370,6 +1376,78 @@ public class PlaceService : IPlaceService
                 AmenityId = amenity.Id
             });
         }
+    }
+
+    private async Task SyncOwnerUpdateStayAmenitiesAsync(int placeId, IEnumerable<string> amenityNames)
+    {
+        var normalized = NormalizeOwnerUpdateLabels(amenityNames, maxItems: 30)
+            .Select(SlugifyOwnerUpdateValue)
+            .ToList();
+
+        var existing = await _db.StayStayAmenities
+            .Where(stayAmenity => stayAmenity.StayPlaceId == placeId)
+            .ToListAsync();
+        _db.StayStayAmenities.RemoveRange(existing);
+
+        if (normalized.Count == 0)
+            return;
+
+        var amenities = await ResolveOwnerUpdateStayAmenitiesAsync(normalized);
+        foreach (var amenity in amenities.DistinctBy(amenity => amenity.Id))
+        {
+            _db.StayStayAmenities.Add(new StayStayAmenity
+            {
+                StayPlaceId = placeId,
+                StayAmenityId = amenity.Id
+            });
+        }
+    }
+
+    private async Task<List<StayAmenity>> ResolveOwnerUpdateStayAmenitiesAsync(List<string> normalized)
+    {
+        var alias = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["wifi"] = "free-wifi",
+            ["pool"] = "swimming-pool",
+            ["breakfast"] = "breakfast-included",
+            ["gym"] = "fitness-center",
+            ["ac"] = "air-conditioning",
+            ["dining"] = "restaurant"
+        };
+        var slugs = normalized.Select(value => alias.GetValueOrDefault(value, value)).ToList();
+        var knownDefinitions = new Dictionary<string, (string Name, string Icon, string Description)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["outdoor-seating"] = ("Outdoor Seating", "outdoor", "Outdoor seating or open-air areas"),
+            ["sea-view"] = ("Sea View", "sea", "Sea view available"),
+            ["family-friendly"] = ("Family Friendly", "family", "Family-friendly facilities or setting")
+        };
+
+        var amenities = await _db.StayAmenities
+            .Where(amenity => slugs.Contains(amenity.Slug.ToLower()) ||
+                              slugs.Contains(amenity.Name.ToLower()))
+            .ToListAsync();
+
+        var existingSlugs = amenities.Select(amenity => amenity.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var slug in slugs.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (existingSlugs.Contains(slug) || !knownDefinitions.TryGetValue(slug, out var definition))
+                continue;
+
+            var amenity = new StayAmenity
+            {
+                Name = definition.Name,
+                Slug = slug,
+                IconKey = definition.Icon,
+                Description = definition.Description
+            };
+            _db.StayAmenities.Add(amenity);
+            amenities.Add(amenity);
+        }
+
+        if (amenities.Any(amenity => amenity.Id == 0))
+            await _db.SaveChangesAsync();
+
+        return amenities;
     }
 
     private async Task SyncOwnerUpdateBookingPartnersAsync(

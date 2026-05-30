@@ -2,6 +2,7 @@ import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ContributionDraft } from '../../submit-contribution.component';
 import { BackgroundImageFallbackDirective } from '../../../../../../shared/directives/background-image-fallback.directive';
+import { getContributionAmenityLabel } from '../../../../services/contribution-amenities';
 
 @Component({
   selector: 'app-step-preview',
@@ -25,6 +26,9 @@ export class StepPreviewComponent {
     gym:       { label: 'Fitness Center' },
     dining:    { label: 'On-site Dining' },
     ac:        { label: 'Air Conditioning' },
+    outdoor:   { label: 'Outdoor Seating' },
+    sea:       { label: 'Sea View' },
+    family:    { label: 'Family Friendly' },
   };
 
   partnerMap: Record<string, { label: string }> = {
@@ -33,7 +37,7 @@ export class StepPreviewComponent {
     hotel:   { label: 'Hotel Website' },
   };
 
-getAmenityLabel(id: string): string { return this.amenityMap[id]?.label ?? id; }
+getAmenityLabel(id: string): string { return this.amenityMap[id]?.label ?? getContributionAmenityLabel(id); }
 getPartnerLabel(id: string): string { return this.partnerMap[id]?.label ?? id; }
 
 }
