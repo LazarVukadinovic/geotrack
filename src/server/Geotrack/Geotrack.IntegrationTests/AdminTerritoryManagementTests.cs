@@ -1703,7 +1703,9 @@ public sealed class AdminTerritoryManagementTests
         }
 
         await using var strictDb = CreateDbContextThatThrowsOnMultipleCollectionIncludes(connectionString);
-        var service = new AdminProfileService(strictDb);
+        var service = new AdminProfileService(
+            strictDb,
+            Options.Create(new NotificationOptions { EmailEnabled = false }));
 
         var profile = await service.GetProfileAsync(adminId);
 
