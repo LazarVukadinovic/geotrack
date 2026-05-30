@@ -12,9 +12,11 @@ import {
 
 export type ContributionStatus = 'PendingReview' | 'Approved' | 'Rejected';
 export type ContributionEntityType = 'Place';
+export type ContributionType = 'CreatePlace' | 'UpdatePlace' | 'ClaimOwnership';
 
 export interface ContributionListItem {
   id: number;
+  type: ContributionType;
   entityType: ContributionEntityType;
   name: string;
   placeType: string;
@@ -29,10 +31,37 @@ export interface ContributionListItem {
   updatedAt: string | null;
   updatedLabel: string;
   publishedPlaceId: number | null;
+  isOwnership: boolean;
+  hasOwnershipProof: boolean;
+}
+
+const OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe', 'bar']);
+
+export function contributionCanEdit(item: Pick<ContributionListItem, 'status' | 'hasOwnershipProof'>): boolean {
+  // Under review or rejected → always editable
+  if (item.status !== 'Approved') return true;
+  // Approved → editable only if ownership proof was provided
+  return item.hasOwnershipProof;
+}
+
+export function contributionCanRequestOwnership(
+  item: Pick<ContributionListItem, 'status' | 'hasOwnershipProof' | 'isOwnership' | 'placeType' | 'publishedPlaceId'> & { hasPendingOwnershipClaim?: boolean },
+): boolean {
+  return item.status === 'Approved' &&
+    !item.hasOwnershipProof &&
+    !item.isOwnership &&
+    !item.hasPendingOwnershipClaim &&
+    OWNABLE_PLACE_TYPES.has((item.placeType ?? '').toLowerCase().trim()) &&
+    item.publishedPlaceId != null;
+}
+
+export function contributionCanDelete(item: Pick<ContributionListItem, 'status'>): boolean {
+  return item.status === 'PendingReview' || item.status === 'Rejected';
 }
 
 export interface ContributionDetail extends ContributionListItem {
   placeTypeId: number | null;
+  locationId: number | null;
   address: string;
   city: string;
   region: string;
@@ -41,6 +70,8 @@ export interface ContributionDetail extends ContributionListItem {
   longitude: number | null;
   imagePosition: string;
   imageSize: string;
+  cardImagePosition: string;
+  cardImageSize: string;
   description: string;
   phone: string;
   contactEmail: string;
@@ -52,6 +83,7 @@ export interface ContributionDetail extends ContributionListItem {
   reviewedAt?: string | null;
   ownershipProofDocumentUrl?: string | null;
   ownershipProofOriginalFileName?: string | null;
+  hasPendingOwnershipClaim?: boolean;
 }
 
 export interface ContributionBookingPartner {
@@ -75,6 +107,7 @@ interface ContributionResponse {
 
 interface ApiContributionListItem {
   id: number;
+  type?: string | null;
   entityType?: string | null;
   name: string;
   placeType?: string | null;
@@ -88,10 +121,12 @@ interface ApiContributionListItem {
   submittedAt: string;
   updatedAt?: string | null;
   publishedPlaceId?: number | null;
+  hasOwnershipProofDocument?: boolean | null;
 }
 
 interface ApiContributionDetail extends ApiContributionListItem {
   placeTypeId?: number | null;
+  locationId?: number | null;
   address: string;
   city: string;
   region: string;
@@ -100,6 +135,8 @@ interface ApiContributionDetail extends ApiContributionListItem {
   longitude?: number | null;
   imagePosition: string;
   imageSize: string;
+  cardImagePosition?: string | null;
+  cardImageSize?: string | null;
   description: string;
   phone: string;
   contactEmail: string;
@@ -108,16 +145,28 @@ interface ApiContributionDetail extends ApiContributionListItem {
   amenities?: string[] | null;
   stayAmenities?: string[] | null;
   bookingPartners?: ContributionBookingPartner[] | null;
+  images?: ApiContributionImage[] | null;
   reviewNote?: string | null;
   reviewedAt?: string | null;
   ownershipProofDocumentUrl?: string | null;
   ownershipProofOriginalFileName?: string | null;
+  hasPendingOwnershipClaim?: boolean | null;
+}
+
+interface ApiContributionImage {
+  url?: string | null;
+  imageRole?: string | null;
+  sortOrder?: number | null;
+  imagePosition?: string | null;
+  imageSize?: string | null;
 }
 
 interface UpsertPlaceContributionPayload {
-  type: 'CreatePlace';
+  type: 'CreatePlace' | 'UpdatePlace' | 'ClaimOwnership';
+  placeId?: number | null;
   name: string;
   placeTypeId?: number | null;
+  locationId?: number | null;
   placeType: string;
   stayType?: string;
   address: string;
@@ -128,6 +177,8 @@ interface UpsertPlaceContributionPayload {
   longitude: number | null;
   imagePosition: string;
   imageSize: string;
+  cardImagePosition?: string;
+  cardImageSize?: string;
   description: string;
   phone: string;
   contactEmail: string;
@@ -173,8 +224,8 @@ export class ContributionsService {
     );
   }
 
-  createPlace(draft: ContributionDraftData): Observable<ContributionDetail> {
-    return this.http.post<ContributionResponse>('/api/contributions/places', this.toFormData(draft)).pipe(
+  createPlace(draft: ContributionDraftData, options?: { type?: ContributionType; placeId?: number | null }): Observable<ContributionDetail> {
+    return this.http.post<ContributionResponse>('/api/contributions/places', this.toFormData(draft, options)).pipe(
       map(res => mapDetail(res.contribution)),
       tap(detail => {
         this.analytics.track('contribution_created', { entityId: detail.id });
@@ -183,11 +234,35 @@ export class ContributionsService {
     );
   }
 
-  updatePlace(id: number, draft: ContributionDraftData): Observable<ContributionDetail> {
-    return this.http.put<ContributionResponse>(`/api/contributions/places/${id}`, this.toFormData(draft)).pipe(
+  updatePlace(id: number, draft: ContributionDraftData, options?: { type?: ContributionType; placeId?: number | null }): Observable<ContributionDetail> {
+    return this.http.put<ContributionResponse>(`/api/contributions/places/${id}`, this.toFormData(draft, options)).pipe(
       map(res => mapDetail(res.contribution)),
       tap(detail => {
         this.analytics.track('contribution_updated', { entityId: detail.id });
+        this.loadMine();
+      }),
+    );
+  }
+
+  ownerUpdatePlace(placeId: number, draft: ContributionDraftData): Observable<unknown> {
+    const basics = requireBasics(draft.basics);
+    const features = normalizeFeatures(draft.features);
+    const details = normalizeDetails(draft.details);
+    const isAccommodation = isAccommodationPlaceType(basics.placeType);
+
+    return this.http.put(`/api/places/${placeId}/owner-update`, {
+      name: basics.name,
+      description: details.description,
+      website: details.website,
+      contactEmail: details.contactEmail,
+      phoneNumber: details.phone,
+      bookingExternalLink: details.bookingPartners[0]?.url ?? null,
+      tags: features.tags,
+      amenities: toContributionAmenityApiValues(features.amenities, isAccommodation),
+      bookingPartners: details.bookingPartners,
+    }).pipe(
+      tap(() => {
+        this.analytics.track('contribution_updated', { entityId: placeId });
         this.loadMine();
       }),
     );
@@ -203,6 +278,10 @@ export class ContributionsService {
   }
 
   detailToDraft(detail: ContributionDetail): ContributionDraftData {
+    const coverImageUrl = detail.coverImageUrl || detail.cardImageUrl || detail.galleryImageUrls[0] || '';
+    const cardImageUrl = detail.cardImageUrl || detail.galleryImageUrls[0] || coverImageUrl;
+    const galleryImageUrls = withoutSelectedImages(detail.galleryImageUrls, cardImageUrl, coverImageUrl);
+
     return {
       basics: {
         name: detail.name,
@@ -213,12 +292,13 @@ export class ContributionsService {
         city: detail.city,
         region: detail.region,
         country: detail.country,
-        imageUrl: detail.coverImageUrl,
-        cardImageUrl: detail.cardImageUrl,
+        locationId: detail.locationId,
+        imageUrl: coverImageUrl,
+        cardImageUrl,
         cardImageFile: null,
         coverImageFile: null,
-        galleryImageUrls: detail.galleryImageUrls,
-        galleryImageFiles: [],
+        galleryImageUrls,
+        galleryImageFiles: galleryImageUrls.map(() => null as (File | null)),
         ownershipProofFile: null,
         ownershipProofDocumentUrl: detail.ownershipProofDocumentUrl ?? null,
         ownershipProofOriginalFileName: detail.ownershipProofOriginalFileName ?? null,
@@ -226,6 +306,8 @@ export class ContributionsService {
         lng: detail.longitude,
         imgBgPosition: detail.imagePosition || '50% 50%',
         imgBgSize: detail.imageSize || 'cover',
+        cardImgBgPosition: detail.cardImagePosition || '50% 50%',
+        cardImgBgSize: detail.cardImageSize || 'cover',
       },
       features: {
         tags: detail.tags ?? [],
@@ -241,18 +323,20 @@ export class ContributionsService {
     };
   }
 
-  private toFormData(draft: ContributionDraftData): FormData {
+  private toFormData(draft: ContributionDraftData, options?: { type?: ContributionType; placeId?: number | null }): FormData {
     const basics = requireBasics(draft.basics);
     const features = normalizeFeatures(draft.features);
     const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
 
     const payload: UpsertPlaceContributionPayload = {
-      type: 'CreatePlace',
+      type: options?.type ?? 'CreatePlace',
+      ...(options?.placeId != null ? { placeId: options.placeId } : {}),
       name: basics.name,
       placeTypeId: basics.placeTypeId,
       placeType: basics.placeType || 'Place',
       ...(isAccommodation ? { stayType: basics.stayType || 'Hotel' } : {}),
+      locationId: basics.locationId ?? null,
       address: basics.address,
       city: basics.city,
       region: basics.region,
@@ -261,6 +345,8 @@ export class ContributionsService {
       longitude: basics.lng,
       imagePosition: basics.imgBgPosition || '50% 50%',
       imageSize: basics.imgBgSize || 'cover',
+      cardImagePosition: basics.cardImgBgPosition || '50% 50%',
+      cardImageSize: basics.cardImgBgSize || 'cover',
       description: details.description,
       phone: details.phone,
       contactEmail: details.contactEmail,
@@ -270,15 +356,34 @@ export class ContributionsService {
       bookingPartners: isAccommodation ? details.bookingPartners : [],
     };
 
-    const images: { url: string; imageRole: 'card' | 'cover' | 'gallery'; sortOrder: number }[] = [];
-    if (!basics.cardImageFile && basics.cardImageUrl) {
-      images.push({ url: basics.cardImageUrl, imageRole: 'card', sortOrder: -9 });
+    const images: {
+      url: string;
+      imageRole: 'card' | 'cover' | 'gallery';
+      sortOrder: number;
+      imagePosition?: string;
+      imageSize?: string;
+    }[] = [];
+    if (basics.cardImageFile || basics.cardImageUrl) {
+      images.push({
+        url: basics.cardImageFile ? '' : basics.cardImageUrl,
+        imageRole: 'card',
+        sortOrder: -9,
+        imagePosition: basics.cardImgBgPosition || '50% 50%',
+        imageSize: basics.cardImgBgSize || 'cover',
+      });
     }
-    if (!basics.coverImageFile && basics.imageUrl) {
-      images.push({ url: basics.imageUrl, imageRole: 'cover', sortOrder: -10 });
+    if (basics.coverImageFile || basics.imageUrl) {
+      images.push({
+        url: basics.coverImageFile ? '' : basics.imageUrl,
+        imageRole: 'cover',
+        sortOrder: -10,
+        imagePosition: basics.imgBgPosition || '50% 50%',
+        imageSize: basics.imgBgSize || 'cover',
+      });
     }
     (basics.galleryImageUrls ?? []).forEach((url, index) => {
-      if (url && !(basics.galleryImageFiles ?? [])[index]) {
+      const file = (basics.galleryImageFiles ?? [])[index];
+      if (url && !file && !url.startsWith('data:')) {
         images.push({ url, imageRole: 'gallery', sortOrder: index });
       }
     });
@@ -299,7 +404,7 @@ export class ContributionsService {
     }
 
     for (const file of basics.galleryImageFiles ?? []) {
-      formData.append('galleryImages', file);
+      if (file) formData.append('galleryImages', file);
     }
 
     if (basics.ownershipProofFile) {
@@ -349,9 +454,11 @@ function normalizeDetails(details: DetailsData | null): NormalizedDetailsData {
 function mapListItem(item: ApiContributionListItem): ContributionListItem {
   const updatedAt = item.updatedAt ?? null;
   const isEdited = !!updatedAt && updatedAt !== item.submittedAt;
+  const type = normalizeContributionType(item.type);
 
   return {
     id: item.id,
+    type,
     entityType: normalizeContributionEntityType(item.entityType),
     name: item.name,
     placeType: item.placeType ?? '',
@@ -366,6 +473,8 @@ function mapListItem(item: ApiContributionListItem): ContributionListItem {
     updatedAt,
     updatedLabel: timeLabel(isEdited ? updatedAt : item.submittedAt, isEdited ? 'Updated' : 'Submitted'),
     publishedPlaceId: item.publishedPlaceId ?? null,
+    isOwnership: type === 'ClaimOwnership',
+    hasOwnershipProof: item.hasOwnershipProofDocument ?? false,
   };
 }
 
@@ -379,22 +488,60 @@ function normalizeContributionEntityType(entityType: string | null | undefined):
   return 'Place';
 }
 
+function normalizeContributionType(type: string | null | undefined): ContributionType {
+  switch ((type ?? '').trim().toLowerCase()) {
+    case 'updateplace':
+      return 'UpdatePlace';
+    case 'claimownership':
+      return 'ClaimOwnership';
+    case 'createplace':
+    default:
+      return 'CreatePlace';
+  }
+}
+
 function isAccommodationPlaceType(placeType: string | null | undefined): boolean {
   return (placeType ?? '').trim().toLowerCase() === 'stay';
 }
 
 function mapDetail(item: ApiContributionDetail): ContributionDetail {
+  const detailImages = normalizeDetailImages(item.images);
+  const cardImage = detailImages.find(image => image.imageRole === 'card') ?? null;
+  const coverImage = detailImages.find(image => image.imageRole === 'cover') ?? null;
+  const cardImageUrl = item.cardImageUrl?.trim() ||
+    item.mainImageUrl?.trim() ||
+    cardImage?.url ||
+    detailImages[0]?.url ||
+    coverImage?.url ||
+    '';
+  const coverImageUrl = item.coverImageUrl?.trim() ||
+    coverImage?.url ||
+    detailImages[0]?.url ||
+    cardImageUrl;
+  const rawGalleryImageUrls = (item.galleryImageUrls && item.galleryImageUrls.length > 0)
+    ? item.galleryImageUrls
+    : detailImages
+      .filter(image => image.imageRole === 'gallery')
+      .map(image => image.url);
+  const galleryImageUrls = withoutSelectedImages(rawGalleryImageUrls, cardImageUrl, coverImageUrl);
+
   return {
     ...mapListItem(item),
+    cardImageUrl,
+    coverImageUrl,
+    galleryImageUrls,
     placeTypeId: item.placeTypeId ?? null,
+    locationId: item.locationId ?? null,
     address: item.address ?? '',
     city: item.city ?? '',
     region: item.region ?? '',
     country: item.country ?? '',
     latitude: item.latitude ?? null,
     longitude: item.longitude ?? null,
-    imagePosition: item.imagePosition || '50% 50%',
-    imageSize: item.imageSize || 'cover',
+    imagePosition: coverImage?.imagePosition || item.imagePosition || '50% 50%',
+    imageSize: coverImage?.imageSize || item.imageSize || 'cover',
+    cardImagePosition: cardImage?.imagePosition || item.cardImagePosition || '50% 50%',
+    cardImageSize: cardImage?.imageSize || item.cardImageSize || 'cover',
     description: item.description ?? '',
     phone: item.phone ?? '',
     contactEmail: item.contactEmail ?? '',
@@ -409,7 +556,57 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     reviewedAt: item.reviewedAt ?? null,
     ownershipProofDocumentUrl: item.ownershipProofDocumentUrl ?? null,
     ownershipProofOriginalFileName: item.ownershipProofOriginalFileName ?? null,
+    hasPendingOwnershipClaim: item.hasPendingOwnershipClaim ?? false,
   };
+}
+
+function normalizeDetailImages(images: ApiContributionImage[] | null | undefined): {
+  url: string;
+  imageRole: 'card' | 'cover' | 'gallery';
+  sortOrder: number;
+  imagePosition: string;
+  imageSize: string;
+}[] {
+  return (images ?? [])
+    .map((image, index) => {
+      const url = image.url?.trim() ?? '';
+      if (!url) return null;
+      return {
+        url,
+        imageRole: normalizeImageRole(image.imageRole),
+        sortOrder: typeof image.sortOrder === 'number' && Number.isFinite(image.sortOrder) ? image.sortOrder : index,
+        imagePosition: image.imagePosition?.trim() || '50% 50%',
+        imageSize: image.imageSize?.trim() || 'cover',
+      };
+    })
+    .filter((image): image is {
+      url: string;
+      imageRole: 'card' | 'cover' | 'gallery';
+      sortOrder: number;
+      imagePosition: string;
+      imageSize: string;
+    } => image !== null)
+    .sort((a, b) => imageRoleSort(a.imageRole) - imageRoleSort(b.imageRole) || a.sortOrder - b.sortOrder);
+}
+
+function normalizeImageRole(value: string | null | undefined): 'card' | 'cover' | 'gallery' {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'card' || normalized === 'cover' || normalized === 'gallery' ? normalized : 'gallery';
+}
+
+function imageRoleSort(role: 'card' | 'cover' | 'gallery'): number {
+  switch (role) {
+    case 'card': return 0;
+    case 'cover': return 1;
+    case 'gallery': return 2;
+  }
+}
+
+function withoutSelectedImages(urls: string[], cardUrl: string, coverUrl: string): string[] {
+  const selected = new Set([cardUrl, coverUrl].filter(Boolean).map(url => url.trim()));
+  return urls
+    .map(url => url.trim())
+    .filter((url, index, all) => !!url && !selected.has(url) && all.indexOf(url) === index);
 }
 
 function statusLabel(status: ContributionStatus): string {

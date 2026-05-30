@@ -5,6 +5,7 @@ import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import { LocationService } from '../../../core/services/location.service';
 import { DestinationService } from '../../../core/services/destination.service';
+import { CollectionsService } from '../../profile/services/collections';
 import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { HotelDetail } from '../models/hotel-detail.model';
@@ -35,6 +36,7 @@ interface ApiHotelDetail {
   isOwnable?: boolean;
   isOwnedByCurrentUser?: boolean;
   hasPendingOwnershipClaim?: boolean;
+  ownerContributionId?: number | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -44,6 +46,7 @@ export class HotelDetailService {
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly analytics = inject(AnalyticsService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly collectionsService = inject(CollectionsService);
   private readonly locationSvc = inject(LocationService);
   private readonly destinationSvc = inject(DestinationService);
   private readonly _cache = signal<Record<string, HotelDetail>>({});
@@ -64,6 +67,26 @@ export class HotelDetailService {
 
   getLoadState(id: string): DetailLoadState {
     return this._loadState()[id] ?? 'idle';
+  }
+
+  invalidate(id?: string | number | null): void {
+    if (id == null) {
+      this._cache.set({});
+      this._loadState.set({});
+      this.lastRequestKeyById.clear();
+      return;
+    }
+
+    const key = String(id);
+    this._cache.update(current => {
+      const { [key]: _removed, ...rest } = current;
+      return rest;
+    });
+    this._loadState.update(current => {
+      const { [key]: _removed, ...rest } = current;
+      return rest;
+    });
+    this.lastRequestKeyById.delete(key);
   }
 
   loadHotelDetail(id: string): void {
@@ -137,6 +160,7 @@ export class HotelDetailService {
           isOwnable: dto.isOwnable ?? true,
           isOwnedByCurrentUser: dto.isOwnedByCurrentUser ?? false,
           hasPendingOwnershipClaim: dto.hasPendingOwnershipClaim ?? false,
+          ownerContributionId: dto.ownerContributionId ?? null,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');
@@ -166,19 +190,30 @@ export class HotelDetailService {
     this._loadState.update(current => ({ ...current, [id]: state }));
   }
 
-  toggleSaved(id: string): void {
+  toggleSaved(id: string, collectionId?: number | null): void {
     const current = this.getHotelDetailPageData(id);
     if (!current) return;
 
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    this.saveToCollection.open({
+
+    const target = {
       entityType: 'place',
       entityId: numId,
       title: current.title,
       imageUrl: current.heroImage,
       surface: 'hotel_detail',
       analyticsEntityType: 'hotel',
-    });
+    } as const;
+
+    if (collectionId != null && collectionId > 0) {
+      this.collectionsService.addItem(collectionId, {
+        ...target,
+        image: target.imageUrl,
+      }).subscribe({ error: () => {} });
+      return;
+    }
+
+    this.saveToCollection.open(target);
   }
 }

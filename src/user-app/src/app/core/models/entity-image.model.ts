@@ -8,6 +8,8 @@ export interface EntityImage {
   isMain: boolean;
   imageRole: EntityImageRole;
   sortOrder: number;
+  imagePosition: string;
+  imageSize: string;
 }
 
 export interface ApiEntityImage {
@@ -18,6 +20,8 @@ export interface ApiEntityImage {
   isMain?: boolean | null;
   imageRole?: string | null;
   sortOrder?: number | null;
+  imagePosition?: string | null;
+  imageSize?: string | null;
 }
 
 export function normalizeEntityImages(images: ApiEntityImage[] | null | undefined): EntityImage[] {
@@ -38,6 +42,12 @@ export function normalizeEntityImages(images: ApiEntityImage[] | null | undefine
         isMain: image.isMain === true,
         imageRole: normalizeImageRole(image.imageRole, image.isMain === true),
         sortOrder,
+        imagePosition: typeof image.imagePosition === 'string' && image.imagePosition.trim()
+          ? image.imagePosition.trim()
+          : '50% 50%',
+        imageSize: typeof image.imageSize === 'string' && image.imageSize.trim()
+          ? image.imageSize.trim()
+          : 'cover',
       };
     })
     .filter((image): image is EntityImage => image !== null)
@@ -54,6 +64,10 @@ export function getCardImageUrl(images: EntityImage[], fallback?: string | null)
 
 export function getCoverImageUrl(images: EntityImage[], fallback?: string | null): string {
   return images.find(image => image.imageRole === 'cover')?.url ?? fallback?.trim() ?? '';
+}
+
+export function getCoverImage(images: EntityImage[]): EntityImage | undefined {
+  return images.find(image => image.imageRole === 'cover');
 }
 
 export function getGalleryImages(images: EntityImage[]): EntityImage[] {

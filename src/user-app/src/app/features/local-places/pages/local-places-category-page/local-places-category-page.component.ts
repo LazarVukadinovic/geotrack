@@ -106,7 +106,7 @@ export class LocalPlacesCategoryPageComponent implements AfterViewInit {
     const scrollEl = host.querySelector<HTMLElement>('.lpc-page__scroll');
 
     this.scrollState.save(scrollEl?.scrollTop ?? 0, id);
-    this.router.navigate(['/places', id]);
+    this.router.navigate(['/places', id], { state: { detailBackUrl: this.router.url } });
   }
 
   protected loadMore(): void {

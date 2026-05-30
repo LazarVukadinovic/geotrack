@@ -63,7 +63,31 @@ export class PlaceDetailPageComponent {
   protected readonly ownershipClaimMessage = signal('');
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly ownershipClaimSubmitted = signal(false);
+
   protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.place()?.heroImage ?? '');
+  protected readonly heroImagePosition = computed(() => {
+    const p = this.place();
+    const selected = this.selectedImageUrl();
+    if (!p) return '50% 50%';
+    if (!selected || selected === p.heroImage) return p.heroImagePosition || '50% 50%';
+    return p.images.find(image => image.url === selected)?.imagePosition || '50% 50%';
+  });
+  protected readonly heroImageSize = computed(() => {
+    const p = this.place();
+    const selected = this.selectedImageUrl();
+    if (!p) return 'cover';
+    if (!selected || selected === p.heroImage) return p.heroImageSize || 'cover';
+    return p.images.find(image => image.url === selected)?.imageSize || 'cover';
+  });
+  protected readonly heroImageTransform = computed(() => {
+    const size = this.heroImageSize();
+    if (size === 'cover') return 'none';
+
+    const numeric = Number.parseFloat(size);
+    if (!Number.isFinite(numeric) || numeric <= 100) return 'none';
+
+    return `scale(${Math.min(numeric, 200) / 100})`;
+  });
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.place()?.latitude ?? null,
@@ -136,6 +160,15 @@ export class PlaceDetailPageComponent {
   }
 
   protected goBack(): void {
+    const detailBackUrl = this.detailBackUrl();
+    if (detailBackUrl) {
+      void this.router.navigateByUrl(detailBackUrl, {
+        replaceUrl: true,
+        state: this.detailBackState(),
+      });
+      return;
+    }
+
     globalThis.history.back();
   }
 
@@ -145,7 +178,7 @@ export class PlaceDetailPageComponent {
 
   protected toggleSaved(): void {
     const id = this.placeId();
-    if (id) this.service.toggleSaved(id);
+    if (id) this.service.toggleSaved(id, this.targetCollectionId());
   }
 
   protected share(): void {
@@ -159,11 +192,11 @@ export class PlaceDetailPageComponent {
   }
 
   protected navigateToSimilar(id: string): void {
-    this.router.navigate(['/places', id]);
+    void this.router.navigate(['/places', id], { queryParams: this.collectionQueryParams() });
   }
 
   protected navigateToEvent(id: string): void {
-    this.router.navigate(['/events', id]);
+    void this.router.navigate(['/events', id], { queryParams: this.collectionQueryParams() });
   }
 
   protected selectGalleryImage(url: string): void {
@@ -268,6 +301,42 @@ export class PlaceDetailPageComponent {
     });
   }
 
+  protected navigateToOwnerEdit(): void {
+    const p = this.place();
+    if (!p) return;
+
+    const sharedState = {
+      locationLocked: true,
+      returnToDetail: true,
+      detailBackUrl: this.detailBackUrl(),
+      detailBackState: this.detailBackState(),
+    };
+
+    if (p.ownerContributionId) {
+      void this.router.navigate(['/contributions', p.ownerContributionId, 'edit'], {
+        replaceUrl: true,
+        state: sharedState,
+      });
+      return;
+    }
+
+    if (p.isOwnedByCurrentUser) {
+      const numericId = parseInt(p.id, 10);
+      void this.router.navigate(['/contributions/submit'], {
+        replaceUrl: true,
+        state: {
+          ...sharedState,
+          updateForPlaceId: numericId,
+          placeTitle: p.title,
+          placeCoverImageUrl: p.heroImage ?? '',
+          placeAbout: p.about ?? '',
+          placeLat: p.latitude ?? null,
+          placeLng: p.longitude ?? null,
+        },
+      });
+    }
+  }
+
   protected openReviews(): void {
     const place = this.place();
     if (!place) return;
@@ -319,6 +388,35 @@ export class PlaceDetailPageComponent {
     });
   }
 
+  protected amenityIconPath(icon: string | null | undefined): string {
+    switch ((icon ?? '').trim().toLowerCase()) {
+      case 'pool':
+        return 'M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2M2 16c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2M10 8.5a2.5 2.5 0 0 1 5 0V12H10V8.5zM14 3a2 2 0 1 1-4 0 2 2 0 0 1 4 0z';
+      case 'wifi':
+        return 'M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01';
+      case 'breakfast':
+        return 'M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3';
+      case 'parking':
+        return 'M13 5H9v14M9 5h4a4 4 0 0 1 0 8H9';
+      case 'spa':
+        return 'M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8zM12 2C6.5 2 2 6.5 2 12';
+      case 'gym':
+        return 'M6.5 6.5 17.5 17.5M6.5 17.5 17.5 6.5M3 12h3M18 12h3M12 3v3M12 18v3';
+      case 'restaurant':
+        return 'M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7';
+      case 'ac':
+        return 'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z';
+      case 'outdoor':
+        return 'M3 21h18M3 21l9-18 9 18M9 21v-6h6v6';
+      case 'sea':
+        return 'M2 17c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1M2 12c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1M12 4l3 4H9l3-4z';
+      case 'family':
+        return 'M9 5m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0M16 5m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0M6 21v-5H4l2-6h6l2 6h-2v5M13 21v-4h2l1-5h4l1 5h-2v4';
+      default:
+        return 'M5 12.5 9.5 17 19 7';
+    }
+  }
+
   private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {
     if (!this.hasUsableCoordinates(latitude, longitude)) return null;
     return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
@@ -360,6 +458,28 @@ export class PlaceDetailPageComponent {
 
   private getReviewEntityType(place: PlaceDetail): 'place' | 'stay' {
     return place.contentType === 'hotel' ? 'stay' : 'place';
+  }
+
+  private targetCollectionId(): number | null {
+    const collectionId = Number(this.route.snapshot.queryParamMap.get('collectionId'));
+    return Number.isFinite(collectionId) && collectionId > 0 ? collectionId : null;
+  }
+
+  private collectionQueryParams(): { collectionId?: number } {
+    const collectionId = this.targetCollectionId();
+    return collectionId != null ? { collectionId } : {};
+  }
+
+  private detailBackUrl(): string | null {
+    const value = (globalThis.history?.state ?? {})['detailBackUrl'];
+    return typeof value === 'string' && value.trim() ? value : null;
+  }
+
+  private detailBackState(): Record<string, unknown> | undefined {
+    const value = (globalThis.history?.state ?? {})['detailBackState'];
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined;
   }
 
   private calculateCurrentOpenStatus(schedule: { day: string; hours: string }[], fallback: string): string {

@@ -66,18 +66,40 @@
     </div>
   </div>
 
-  <label class="relative block h-36 rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-slate-300 cursor-pointer" [class.border-0]="cardPreviewUrl()">
-    @if (cardPreviewUrl()) {
-      <img class="w-full h-full object-cover" [src]="cardPreviewUrl()" alt="" />
-      <span class="change-label absolute top-2 right-2 bg-white/90 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">Change</span>
-    } @else {
-      <div class="absolute inset-0 flex flex-col items-center justify-center gap-2">
-        <span class="text-sm font-bold text-slate-500">Upload card image</span>
-        <span class="text-sm text-slate-400">Required</span>
-      </div>
-    }
-    <input type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer" (change)="onCardImageSelected($event)"/>
-  </label>
+  <div #cardImgContainer
+    class="relative h-36 rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-slate-300"
+    [class.border-0]="cardPreviewUrl()">
+
+    <div *ngIf="cardPreviewUrl()"
+      class="absolute inset-0"
+      [appBackgroundImageFallback]="cardPreviewUrl()"
+      [backgroundImageFallbackSize]="cardBgSize()"
+      [backgroundImageFallbackPosition]="cardBgPosition()">
+    </div>
+
+    <div *ngIf="!cardPreviewUrl()" class="absolute inset-0 flex flex-col items-center justify-center gap-2">
+      <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      <span class="text-sm font-bold text-slate-500">Upload card image</span>
+      <span class="text-sm text-slate-400">Required</span>
+    </div>
+
+    <label *ngIf="cardPreviewUrl()"
+      class="change-label absolute top-2 right-2 bg-white/90 rounded-xl px-3 py-1.5 flex items-center gap-1.5 z-10 cursor-pointer">
+      <svg class="w-3.5 h-3.5 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      <span class="text-xs font-semibold text-slate-700">Change</span>
+      <input type="file" accept="image/*" class="hidden" (change)="onCardImageSelected($event)"/>
+    </label>
+    <div *ngIf="cardPreviewUrl()" class="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/40 rounded-full px-3 py-1 flex justify-center pointer-events-none">
+      <span class="text-[10px] text-white font-medium">Drag or pinch to adjust</span>
+    </div>
+
+    <input *ngIf="!cardPreviewUrl()" type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-20"
+      (change)="onCardImageSelected($event)"/>
+  </div>
   <p *ngIf="submitAttempted() && !form.cardImageFile && !form.cardImageUrl" class="mt-1.5 ml-1 text-xs font-semibold text-red-500">Card image is required.</p>
 </div>
 
@@ -89,25 +111,104 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5h16v14H4zM8 9h.01M4 15l4-4 4 4 2-2 6 6"/>
       </svg>
     </span>
-    <div>
-      <p class="step-basics__section-title ml-1 text-sm font-bold text-slate-700 mb-3">Gallery Images</p>
-      <p class="step-basics__section-help">Optional extra images for the gallery layout.</p>
+    <div class="flex-1 flex items-start justify-between">
+      <div>
+        <p class="step-basics__section-title ml-1 text-sm font-bold text-slate-700 mb-1">Gallery Images</p>
+        <p class="step-basics__section-help">Optional extra images for the gallery layout.</p>
+      </div>
+      @if (galleryPreviewUrls().length > 0) {
+        <label class="flex-none ml-2 flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 cursor-pointer active:bg-slate-50">
+          <svg class="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14M5 12h14"/>
+          </svg>
+          <span class="text-xs font-semibold text-slate-700">Add</span>
+          <input type="file" accept="image/*" multiple class="hidden" (change)="onGalleryImagesSelected($event)"/>
+        </label>
+      }
     </div>
   </div>
 
-  <label class="block rounded-2xl border-2 border-dashed border-slate-300 bg-white p-4 cursor-pointer text-center">
-    <span class="text-sm font-bold text-slate-600">Add gallery images</span>
-    <input type="file" accept="image/*" multiple class="hidden" (change)="onGalleryImagesSelected($event)"/>
-  </label>
+  @if (galleryPreviewUrls().length === 0) {
+    <label class="block rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 cursor-pointer text-center active:bg-slate-50">
+      <div class="flex flex-col items-center gap-2">
+        <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14M5 12h14"/>
+          </svg>
+        </div>
+        <span class="text-sm font-bold text-slate-600">Add gallery images</span>
+        <span class="text-xs text-slate-400">Optional, multiple allowed</span>
+      </div>
+      <input type="file" accept="image/*" multiple class="hidden" (change)="onGalleryImagesSelected($event)"/>
+    </label>
+  }
 
-  @if (galleryPreviewUrls().length) {
-    <div class="mt-3 grid grid-cols-3 gap-2">
-      @for (url of galleryPreviewUrls(); track url) {
-        <img class="h-24 w-full rounded-xl object-cover" [src]="url" alt="" />
+  @if (galleryPreviewUrls().length > 0) {
+    <div class="mt-2 grid grid-cols-3 gap-2">
+      @for (url of galleryPreviewUrls(); track url; let i = $index) {
+        <div class="relative rounded-xl overflow-hidden aspect-square bg-slate-100">
+          <img class="w-full h-full object-cover cursor-pointer" [src]="url" alt="" (click)="openGalleryLightbox(i)"/>
+          <!-- Remove button -->
+          <button type="button"
+            class="absolute top-1.5 right-1.5 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center z-10"
+            (click)="removeGalleryImage(i)">
+            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+          <!-- Change button -->
+          <label class="absolute bottom-1.5 right-1.5 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center z-10 cursor-pointer">
+            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <input type="file" accept="image/*" class="hidden" (change)="changeGalleryImage(i, $event)"/>
+          </label>
+        </div>
       }
     </div>
   }
 </div>
+
+<!-- Gallery Lightbox -->
+@if (galleryLightboxIndex() !== null) {
+  <div class="fixed inset-0 z-[70] bg-black/90 flex flex-col items-center justify-center"
+    (click)="closeGalleryLightbox()">
+    <button type="button"
+      class="absolute top-4 right-4 w-9 h-9 bg-white/20 rounded-full flex items-center justify-center z-10"
+      (click)="closeGalleryLightbox()">
+      <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+
+    <img class="max-w-full max-h-[80dvh] rounded-xl object-contain"
+      [src]="galleryPreviewUrls()[galleryLightboxIndex()!]"
+      alt=""
+      (click)="$event.stopPropagation()"/>
+
+    @if (galleryPreviewUrls().length > 1) {
+      <div class="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-4 px-6">
+        <button type="button"
+          class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center disabled:opacity-30"
+          [disabled]="galleryLightboxIndex()! <= 0"
+          (click)="$event.stopPropagation(); galleryLightboxPrev()">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <span class="text-white text-sm font-medium">{{ (galleryLightboxIndex() ?? 0) + 1 }} / {{ galleryPreviewUrls().length }}</span>
+        <button type="button"
+          class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center disabled:opacity-30"
+          [disabled]="galleryLightboxIndex()! >= galleryPreviewUrls().length - 1"
+          (click)="$event.stopPropagation(); galleryLightboxNext()">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    }
+  </div>
+}
 
   <div class="step-basics__form-grid flex flex-col gap-6">
     <section class="step-basics__card step-basics__info-card flex flex-col gap-6">
@@ -173,7 +274,7 @@
         <div class="step-basics__field">
           <label class="ml-1 text-sm font-bold text-slate-700 mb-1 block">
             Proof of Ownership
-            <span class="text-red-500 ml-0.5">*</span>
+            <span class="text-slate-400 font-normal ml-1 text-xs">(optional)</span>
           </label>
           <p class="ml-1 text-xs text-slate-400 mb-2">{{ ownershipProofHelpText() }}</p>
 
@@ -210,8 +311,7 @@
 
           <!-- No file yet -->
           @if (!form.ownershipProofFile && !form.ownershipProofDocumentUrl) {
-            <label class="step-basics__input-shell bg-white border border-slate-200 rounded-2xl flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors"
-              [class.border-red-400]="submitAttempted() && !ownershipProofError()">
+            <label class="step-basics__input-shell bg-white border border-slate-200 rounded-2xl flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors">
               <svg class="w-4 h-4 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
               </svg>
@@ -226,9 +326,18 @@
           <p *ngIf="ownershipProofError()" class="mt-1.5 ml-1 text-xs font-semibold text-red-500">
             {{ ownershipProofError() }}
           </p>
-          <p *ngIf="submitAttempted() && !form.ownershipProofFile && !form.ownershipProofDocumentUrl && !ownershipProofError()" class="mt-1.5 ml-1 text-xs font-semibold text-red-500">
-            Proof of ownership document is required.
-          </p>
+
+          <!-- Warning: no doc = no edit rights after approval -->
+          @if (showOwnershipWarning()) {
+            <div class="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
+              <svg class="w-4 h-4 text-amber-500 flex-none mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              </svg>
+              <p class="text-xs text-amber-700 leading-relaxed">
+                Without a proof of ownership document, you won't be able to edit this place after it's approved.
+              </p>
+            </div>
+          }
         </div>
       }
     </section>
@@ -253,16 +362,19 @@
       <div class="step-basics__location-fields bg-white border border-slate-200 rounded-2xl overflow-hidden">
         <div class="step-basics__address-row px-4 py-3.5 border-b border-slate-100">
           <input type="text" [(ngModel)]="form.address" placeholder="Street address"
-            class="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent"/>
+            [disabled]="locationLocked()"
+            class="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent disabled:text-slate-400"/>
         </div>
         <div class="step-basics__city-region-row flex border-b border-slate-100 divide-x divide-slate-100">
           <div class="flex-1 px-4 py-3.5">
             <input type="text" [(ngModel)]="form.city" placeholder="City"
-              class="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent"/>
+              [disabled]="locationLocked()"
+              class="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent disabled:text-slate-400"/>
           </div>
           <div class="flex-1 px-4 py-3.5">
             <input type="text" [(ngModel)]="form.region" placeholder="Region"
-              class="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent"/>
+              [disabled]="locationLocked()"
+              class="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent disabled:text-slate-400"/>
           </div>
         </div>
 
@@ -273,29 +385,47 @@
               d="M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9m0-18c2.5 3 4 5.5 4 9s-1.5 6-4 9M3.6 9h16.8M3.6 15h16.8"/>
           </svg>
           <input type="text" [(ngModel)]="form.country" placeholder="Country"
-            class="flex-1 text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent"/>
+            [disabled]="locationLocked()"
+            class="flex-1 text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent disabled:text-slate-400"/>
         </div>
       </div>
 
       <!-- Pin Coordinates -->
-      <button (click)="openMapPicker()"
-        class="step-basics__pin-card--mobile mt-3 w-full py-6 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:bg-slate-50 transition-colors">
-        <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-            d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
-        </svg>
-        <span class="text-sm font-semibold text-slate-600">Pin Coordinates</span>
-        <span *ngIf="hasConfirmedLocation()" class="text-xs text-[#e8722a] font-medium">
-          {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
-        </span>
-        <span *ngIf="!hasConfirmedLocation()" class="text-xs text-slate-400">Tap to set exact location on map</span>
-      </button>
-      <p *ngIf="showLocationError()" class="step-basics__location-error mt-2 ml-1 text-xs font-semibold text-red-500">
-        Please choose a valid location before submitting.
-      </p>
+      @if (locationLocked()) {
+        <div class="mt-3 w-full py-4 px-4 border border-slate-200 rounded-2xl flex items-center gap-3 bg-slate-50">
+          <svg class="w-4 h-4 text-slate-400 flex-none" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+          <span class="text-sm text-slate-500">
+            @if (hasConfirmedLocation()) {
+              {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
+            } @else {
+              Location locked
+            }
+          </span>
+          <span class="ml-auto text-xs text-slate-400 font-medium">Locked</span>
+        </div>
+      } @else {
+        <button (click)="openMapPicker()"
+          class="step-basics__pin-card--mobile mt-3 w-full py-6 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:bg-slate-50 transition-colors">
+          <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+          </svg>
+          <span class="text-sm font-semibold text-slate-600">Pin Coordinates</span>
+          <span *ngIf="hasConfirmedLocation()" class="text-xs text-[#e8722a] font-medium">
+            {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
+          </span>
+          <span *ngIf="!hasConfirmedLocation()" class="text-xs text-slate-400">Tap to set exact location on map</span>
+        </button>
+        <p *ngIf="showLocationError()" class="step-basics__location-error mt-2 ml-1 text-xs font-semibold text-red-500">
+          Please choose a valid location before submitting.
+        </p>
+      }
     </section>
   </div>
 
+  @if (!locationLocked()) {
   <div class="step-basics__pin-card step-basics__pin-card--desktop">
     <div class="step-basics__section-copy">
       <span class="step-basics__section-icon step-basics__section-icon--pin" aria-hidden="true">
@@ -311,22 +441,23 @@
     </div>
 
     <div>
-      <button type="button" (click)="openMapPicker()"
-        class="step-basics__pin-button-desktop w-full py-6 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:bg-slate-50 transition-colors">
-        <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-            d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
-        </svg>
-        <span *ngIf="hasConfirmedLocation()" class="text-xs text-[#e8722a] font-medium">
-          {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
-        </span>
-        <span *ngIf="!hasConfirmedLocation()" class="text-xs text-slate-400">Tap to set exact location on map</span>
-      </button>
-      <p *ngIf="showLocationError()" class="step-basics__location-error step-basics__location-error--desktop mt-2 ml-1 text-xs font-semibold text-red-500">
-        Please choose a valid location before submitting.
-      </p>
+        <button type="button" (click)="openMapPicker()"
+          class="step-basics__pin-button-desktop w-full py-6 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:bg-slate-50 transition-colors">
+          <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+          </svg>
+          <span *ngIf="hasConfirmedLocation()" class="text-xs text-[#e8722a] font-medium">
+            {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
+          </span>
+          <span *ngIf="!hasConfirmedLocation()" class="text-xs text-slate-400">Tap to set exact location on map</span>
+        </button>
+        <p *ngIf="showLocationError()" class="step-basics__location-error step-basics__location-error--desktop mt-2 ml-1 text-xs font-semibold text-red-500">
+          Please choose a valid location before submitting.
+        </p>
     </div>
   </div>
+  }
 
   <div class="step-basics__actions mt-auto">
     <button (click)="onContinue()" [disabled]="!isValid()"

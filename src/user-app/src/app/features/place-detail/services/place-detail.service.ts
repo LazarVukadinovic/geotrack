@@ -5,7 +5,8 @@ import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
 import { LocationService } from '../../../core/services/location.service';
 import { DestinationService } from '../../../core/services/destination.service';
-import { getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
+import { CollectionsService } from '../../profile/services/collections';
+import { getCoverImage, getCoverImageUrl, getGalleryImages, normalizeEntityImages } from '../../../core/models/entity-image.model';
 import type { ApiEntityImage } from '../../../core/models/entity-image.model';
 import type { PlaceDetail, PlaceRelatedEvent } from '../../../core/models/place.model';
 
@@ -37,8 +38,18 @@ interface ApiPlaceDetail {
   isOwnable?: boolean;
   isOwnedByCurrentUser?: boolean;
   hasPendingOwnershipClaim?: boolean;
+  ownerContributionId?: number | null;
   contentType: string;
   category?: string;
+  contactEmail?: string | null;
+  phoneNumber?: string | null;
+  admissionPriceRange?: string | null;
+  bookingExternalLink?: string | null;
+  amenities?: { id: number; label: string; icon?: string | null }[] | null;
+  bestTimeToVisit?: string | null;
+  visitorTips?: string | null;
+  accessNotes?: string | null;
+  accessibilityNotes?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -48,6 +59,7 @@ export class PlaceDetailService {
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly analytics = inject(AnalyticsService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly collectionsService = inject(CollectionsService);
   private readonly locationSvc = inject(LocationService);
   private readonly destinationSvc = inject(DestinationService);
   private readonly _cache = signal<Record<string, PlaceDetail>>({});
@@ -70,6 +82,26 @@ export class PlaceDetailService {
     return this._loadState()[id] ?? 'idle';
   }
 
+  invalidate(id?: string | number | null): void {
+    if (id == null) {
+      this._cache.set({});
+      this._loadState.set({});
+      this.lastRequestKeyById.clear();
+      return;
+    }
+
+    const key = String(id);
+    this._cache.update(current => {
+      const { [key]: _removed, ...rest } = current;
+      return rest;
+    });
+    this._loadState.update(current => {
+      const { [key]: _removed, ...rest } = current;
+      return rest;
+    });
+    this.lastRequestKeyById.delete(key);
+  }
+
   loadPlaceDetail(id: string): void {
     const numId = parseInt(id, 10);
     if (isNaN(numId)) {
@@ -89,6 +121,7 @@ export class PlaceDetailService {
         }
 
         const images = normalizeEntityImages(dto.images);
+        const coverImage = getCoverImage(images);
         const detail: PlaceDetail = {
           id: String(dto.id),
           title: dto.title,
@@ -98,6 +131,8 @@ export class PlaceDetailService {
           latitude: dto.latitude ?? null,
           longitude: dto.longitude ?? null,
           heroImage: getCoverImageUrl(images, dto.heroImage),
+          heroImagePosition: coverImage?.imagePosition ?? '50% 50%',
+          heroImageSize: coverImage?.imageSize ?? 'cover',
           images: getGalleryImages(images),
           tags: dto.tags,
           rating: dto.rating,
@@ -138,8 +173,18 @@ export class PlaceDetailService {
           isOwnable: dto.isOwnable ?? false,
           isOwnedByCurrentUser: dto.isOwnedByCurrentUser ?? false,
           hasPendingOwnershipClaim: dto.hasPendingOwnershipClaim ?? false,
+          ownerContributionId: dto.ownerContributionId ?? null,
           contentType: (dto.contentType ?? 'place') as PlaceDetail['contentType'],
           category: (dto.category ?? 'attraction') as PlaceDetail['category'],
+          contactEmail: dto.contactEmail ?? null,
+          phoneNumber: dto.phoneNumber ?? null,
+          admissionPriceRange: dto.admissionPriceRange ?? null,
+          bookingExternalLink: dto.bookingExternalLink ?? null,
+          amenities: dto.amenities ?? [],
+          bestTimeToVisit: dto.bestTimeToVisit ?? null,
+          visitorTips: dto.visitorTips ?? null,
+          accessNotes: dto.accessNotes ?? null,
+          accessibilityNotes: dto.accessibilityNotes ?? null,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');
@@ -169,19 +214,80 @@ export class PlaceDetailService {
     this._loadState.update(current => ({ ...current, [id]: state }));
   }
 
-  toggleSaved(id: string): void {
+  ownerUpdatePlace(id: string, payload: {
+    name?: string;
+    description?: string;
+    openingHours?: string;
+    website?: string;
+    contactEmail?: string;
+    phoneNumber?: string;
+    admissionPriceRange?: string;
+    bookingExternalLink?: string;
+    bestTimeToVisit?: string;
+    visitorTips?: string;
+    accessNotes?: string;
+    accessibilityNotes?: string;
+  }): void {
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) return;
+
+    this.http.put<ApiPlaceDetail>(`/api/places/${numId}/owner-update`, payload).subscribe({
+      next: (dto) => {
+        const images = normalizeEntityImages(dto.images);
+        const coverImage = getCoverImage(images);
+        const updated: Partial<PlaceDetail> = {
+          title: dto.title,
+          heroImage: getCoverImageUrl(images, dto.heroImage),
+          heroImagePosition: coverImage?.imagePosition ?? '50% 50%',
+          heroImageSize: coverImage?.imageSize ?? 'cover',
+          images: getGalleryImages(images),
+          about: dto.about ?? '',
+          openingHours: dto.openingHours ?? null,
+          openingHoursSchedule: dto.openingHoursSchedule ?? null,
+          website: dto.website ?? null,
+          contactEmail: dto.contactEmail ?? null,
+          phoneNumber: dto.phoneNumber ?? null,
+          admissionPriceRange: dto.admissionPriceRange ?? null,
+          bookingExternalLink: dto.bookingExternalLink ?? null,
+          amenities: dto.amenities ?? [],
+          bestTimeToVisit: dto.bestTimeToVisit ?? null,
+          visitorTips: dto.visitorTips ?? null,
+          accessNotes: dto.accessNotes ?? null,
+          accessibilityNotes: dto.accessibilityNotes ?? null,
+        };
+        this._cache.update(c => {
+          const existing = c[id];
+          return existing ? { ...c, [id]: { ...existing, ...updated } } : c;
+        });
+      },
+      error: () => {},
+    });
+  }
+
+  toggleSaved(id: string, collectionId?: number | null): void {
     const current = this.getPlaceDetailPageData(id);
     if (!current) return;
 
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return;
-    this.saveToCollection.open({
+
+    const target = {
       entityType: 'place',
       entityId: numId,
       title: current.title,
       imageUrl: current.heroImage,
       surface: 'place_detail',
       analyticsEntityType: 'place',
-    });
+    } as const;
+
+    if (collectionId != null && collectionId > 0) {
+      this.collectionsService.addItem(collectionId, {
+        ...target,
+        image: target.imageUrl,
+      }).subscribe({ error: () => {} });
+      return;
+    }
+
+    this.saveToCollection.open(target);
   }
 }

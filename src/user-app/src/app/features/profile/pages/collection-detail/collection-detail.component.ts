@@ -61,7 +61,9 @@ export class CollectionDetailComponent {
   ngOnDestroy(): void {
     this.detachDocListeners();
   }
-  protected goBack(): void { globalThis.history.back(); }
+  protected goBack(): void {
+    void this.router.navigate(['/profile/collections']);
+  }
 
   protected onRemovePlace(itemId: number): void {
     this.collService.removePlace(this.id, itemId);
@@ -120,6 +122,11 @@ export class CollectionDetailComponent {
       this.collService.loadDetails(this.id);
     }
   }
+
+  protected goToExplore(): void {
+    void this.router.navigate(['/profile/collections', this.id, 'add']);
+  }
+
   protected onMenuTouchStart(e: TouchEvent): void {
     this.activeDrag = 'menu';
     this.touchStartY = e.touches[0].clientY;

@@ -153,6 +153,7 @@ public static class SeedData
             await EnsureSerbiaDemoDataAsync(db, tagLookup1);
             await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup1);
             await EnsureCoreEntityImagesAsync(db);
+            await PruneDubrovnikDemoCatalogAsync(db);
             await EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(db);
             await EnsureDefaultModerationTermsAsync(db);
             return;
@@ -393,7 +394,7 @@ public static class SeedData
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
         var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation", isOwnable: true);
-        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
+        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues", isOwnable: true);
         var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
         var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
 
@@ -411,6 +412,8 @@ public static class SeedData
             await EnsureStayAmenityAsync("Breakfast Included", "breakfast-included", "breakfast", "Breakfast included in the stay"),
             await EnsureStayAmenityAsync("Parking", "parking", "parking", "Parking available"),
             await EnsureStayAmenityAsync("Spa", "spa", "spa", "Spa and wellness facilities"),
+            await EnsureStayAmenityAsync("Fitness Center", "fitness-center", "gym", "Fitness facilities available"),
+            await EnsureStayAmenityAsync("Restaurant", "restaurant", "restaurant", "On-site dining available"),
             await EnsureStayAmenityAsync("Air Conditioning", "air-conditioning", "ac", "Air-conditioned rooms")
         };
 
@@ -421,7 +424,14 @@ public static class SeedData
             await EnsureAmenityAsync("Free WiFi", "wifi"),
             await EnsureAmenityAsync("Outdoor Seating", "outdoor"),
             await EnsureAmenityAsync("Sea View", "sea"),
-            await EnsureAmenityAsync("Family Friendly", "family")
+            await EnsureAmenityAsync("Family Friendly", "family"),
+            await EnsureAmenityAsync("Swimming Pool", "pool"),
+            await EnsureAmenityAsync("Parking", "parking"),
+            await EnsureAmenityAsync("Spa", "spa"),
+            await EnsureAmenityAsync("Gym", "gym"),
+            await EnsureAmenityAsync("Breakfast", "breakfast"),
+            await EnsureAmenityAsync("Air Conditioning", "ac"),
+            await EnsureAmenityAsync("Restaurant", "restaurant"),
         };
 
         Amenity A(string icon) => amenities.First(x => x.Icon == icon);
@@ -973,8 +983,392 @@ public static class SeedData
         await EnsureAdditionalExploreDemoDataAsync(db, tagLookup);
         await EnsureSerbiaDemoDataAsync(db, tagLookup);
         await EnsureDestinationDiscoveryTagAssignmentsAsync(db, tagLookup);
+        await PruneDubrovnikDemoCatalogAsync(db);
         await EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(db);
         await EnsureDefaultModerationTermsAsync(db);
+    }
+
+    private static async Task PruneDubrovnikDemoCatalogAsync(AppDbContext db)
+    {
+        var dubrovnik = await db.Destinations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(destination => destination.Name == "Dubrovnik");
+
+        if (dubrovnik is null)
+        {
+            return;
+        }
+
+        var keptPlaceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Beaches
+            "Banje Beach",
+            "Copacabana Beach Dubrovnik",
+            "Bellevue Beach",
+
+            // Restaurants, cafes and bars
+            "Nautika Restaurant",
+            "Proto Fish Restaurant",
+            "Pantarul",
+            "Cogito Coffee",
+            "Gradska Kavana Arsenal",
+            "Peppino's Gelato",
+            "D'vino Wine Bar",
+
+            // Culture, landmarks and nature
+            "Dubrovnik City Walls",
+            "Lovrijenac Fortress",
+            "Sponza Palace",
+            "Dubrovnik Cable Car",
+            "Rector's Palace",
+            "Franciscan Monastery Museum",
+            "War Photo Limited",
+            "Lokrum Island",
+            "Mount Srd Viewpoint",
+            "Trsteno Arboretum",
+            "Lapad Bay Promenade",
+
+            // Stays
+            "Hotel Excelsior",
+            "Boutique Hotel Stari Grad"
+        };
+
+        var keptEventNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Dubrovnik Summer Festival",
+            "Gundulic Square Farmers Market",
+            "City Walls Sunset Tour"
+        };
+
+        var placeImages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Banje Beach"] = SeedWebp("banje-beach"),
+            ["Copacabana Beach Dubrovnik"] = SeedWebp("copacabana"),
+            ["Bellevue Beach"] = SeedWebp("bellevue"),
+            ["Nautika Restaurant"] = SeedWebp("nautika-restaurant"),
+            ["Proto Fish Restaurant"] = SeedWebp("fish-restaurant-proto"),
+            ["Pantarul"] = SeedWebp("pantarul"),
+            ["Cogito Coffee"] = SeedWebp("cogito-coffee"),
+            ["Gradska Kavana Arsenal"] = SeedWebp("kavana-arsenal"),
+            ["Peppino's Gelato"] = SeedWebp("peppinos-gelato"),
+            ["D'vino Wine Bar"] = SeedWebp("dvino-wine-bar"),
+            ["Dubrovnik City Walls"] = SeedWebp("city-walls-dubrovnik"),
+            ["Lovrijenac Fortress"] = SeedWebp("fort-lovrijenac"),
+            ["Sponza Palace"] = SeedWebp("spozna"),
+            ["Dubrovnik Cable Car"] = SeedWebp("dubrovnik-cable-car"),
+            ["Rector's Palace"] = SeedWebp("rectors-palace-dubrovnik"),
+            ["Franciscan Monastery Museum"] = SeedWebp("the-franciscan-monastery"),
+            ["War Photo Limited"] = SeedWebp("warphoto"),
+            ["Lokrum Island"] = SeedWebp("Lokrum-Island"),
+            ["Mount Srd Viewpoint"] = SeedWebp("mount-srd"),
+            ["Trsteno Arboretum"] = SeedWebp("trsteno-arboretum"),
+            ["Lapad Bay Promenade"] = SeedWebp("lapad"),
+            ["Hotel Excelsior"] = SeedWebp("EXCELSIOR"),
+            ["Boutique Hotel Stari Grad"] = SeedWebp("boutique-stari-grad")
+        };
+
+        var eventImages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Dubrovnik Summer Festival"] = SeedWebp("dubrovnik-summer-festival"),
+            ["Gundulic Square Farmers Market"] = SeedWebp("gundulic-square-farmers-market"),
+            ["City Walls Sunset Tour"] = SeedWebp("sunset-tour")
+        };
+
+        var placeWebsites = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Banje Beach"] = "https://banjebeach.com/",
+            ["Nautika Restaurant"] = "https://www.nautikarestaurants.com/restaurant-nautika/",
+            ["Proto Fish Restaurant"] = "https://www.esculaprestaurants.com/",
+            ["Pantarul"] = "https://www.pantarul.com/",
+            ["Cogito Coffee"] = "https://www.cogitocoffee.com/locations/",
+            ["Gradska Kavana Arsenal"] = "https://www.nautikarestaurants.com/",
+            ["Peppino's Gelato"] = "https://peppinosgelato.com/",
+            ["D'vino Wine Bar"] = "https://dvino.net/",
+            ["Dubrovnik Cable Car"] = "https://www.dubrovnikcablecar.com/",
+            ["Lokrum Island"] = "https://www.lokrum.hr/en",
+            ["War Photo Limited"] = "https://warphotoltd.com/",
+            ["Hotel Excelsior"] = "https://www.adriaticluxuryhotels.com/hotel-excelsior-dubrovnik/",
+            ["Boutique Hotel Stari Grad"] = "https://www.hotelstarigrad.com/"
+        };
+
+        var placeContacts = new Dictionary<string, (string? Email, string? Number)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Banje Beach"] = ("info@banjebeach.eu", null),
+            ["Nautika Restaurant"] = (null, "+385 20 442 526"),
+            ["Proto Fish Restaurant"] = ("sales@esculap-teo.hr", "+385 20 323 234"),
+            ["Pantarul"] = (null, "+385 20 333 486"),
+            ["Peppino's Gelato"] = ("hello@peppinosgelato.com", "+385 91 459 0002"),
+            ["Gradska Kavana Arsenal"] = (null, "+385 20 321 202"),
+            ["Dubrovnik Cable Car"] = ("info@dubrovnikcablecar.com", "+385 20 414 355"),
+            ["Lokrum Island"] = ("prodaja@lokrum.hr", "+385 99 161 1144"),
+            ["War Photo Limited"] = ("info@warphotoltd.com", "+385 20 322 166"),
+            ["Hotel Excelsior"] = (null, "+385 20 353 353"),
+            ["Boutique Hotel Stari Grad"] = (null, "+385 20 322 244")
+        };
+
+        var hotelBookingLinks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Hotel Excelsior"] = "https://www.booking.com/hotel/hr/hotelexcelsiordubrovnik.html",
+            ["Boutique Hotel Stari Grad"] = "https://www.booking.com/hotel/hr/stari-grad.html"
+        };
+
+        var dubrovnikLocationIds = await db.Locations
+            .Where(location => location.DestinationId == dubrovnik.Id)
+            .Select(location => location.Id)
+            .ToListAsync();
+
+        var eventsToRemove = await db.Events
+            .Where(eventEntity =>
+                eventEntity.DestinationId == dubrovnik.Id &&
+                !keptEventNames.Contains(eventEntity.Name))
+            .ToListAsync();
+
+        if (eventsToRemove.Count > 0)
+        {
+            db.Events.RemoveRange(eventsToRemove);
+            await db.SaveChangesAsync();
+        }
+
+        var placesToRemove = await db.Places
+            .Where(place =>
+                dubrovnikLocationIds.Contains(place.LocationId) &&
+                !keptPlaceNames.Contains(place.Name))
+            .ToListAsync();
+
+        if (placesToRemove.Count > 0)
+        {
+            db.Places.RemoveRange(placesToRemove);
+            await db.SaveChangesAsync();
+        }
+
+        await ForceSetDestinationImageAsync(dubrovnik.Id, dubrovnik.Name, SeedWebp("dubrovnik"));
+
+        var keptPlaces = await db.Places
+            .Where(place => dubrovnikLocationIds.Contains(place.LocationId) && keptPlaceNames.Contains(place.Name))
+            .ToListAsync();
+
+        foreach (var place in keptPlaces)
+        {
+            if (placeImages.TryGetValue(place.Name, out var imageUrl))
+            {
+                await ForceSetPlaceImageAsync(place, imageUrl);
+            }
+
+            var changed = false;
+            if (placeWebsites.TryGetValue(place.Name, out var website) && place.Website != website)
+            {
+                place.Website = website;
+                changed = true;
+            }
+
+            if (placeContacts.TryGetValue(place.Name, out var contact))
+            {
+                if (contact.Email is not null && place.ContactEmail != contact.Email)
+                {
+                    place.ContactEmail = contact.Email;
+                    changed = true;
+                }
+
+                if (contact.Number is not null && place.Number != contact.Number)
+                {
+                    place.Number = contact.Number;
+                    changed = true;
+                }
+            }
+
+            if (hotelBookingLinks.TryGetValue(place.Name, out var bookingUrl) && place.BookingExternalLink != bookingUrl)
+            {
+                place.BookingExternalLink = bookingUrl;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                place.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        await db.SaveChangesAsync();
+
+        var bookingPartner = await EnsureBookingPartnerAsync("Booking.com", "dark");
+        var officialPartner = await EnsureBookingPartnerAsync("Official Website", "muted");
+
+        foreach (var place in keptPlaces)
+        {
+            await RemovePlaceholderBookingPartnersAsync(place);
+
+            if (hotelBookingLinks.TryGetValue(place.Name, out var bookingUrl))
+            {
+                await UpsertBookingPartnerAsync(place, bookingPartner, bookingUrl);
+            }
+
+            if (placeWebsites.TryGetValue(place.Name, out var website) &&
+                place.Name is "Hotel Excelsior" or "Boutique Hotel Stari Grad")
+            {
+                await UpsertBookingPartnerAsync(place, officialPartner, website);
+            }
+        }
+
+        var keptEvents = await db.Events
+            .Where(eventEntity => eventEntity.DestinationId == dubrovnik.Id && keptEventNames.Contains(eventEntity.Name))
+            .ToListAsync();
+
+        foreach (var eventEntity in keptEvents)
+        {
+            if (eventImages.TryGetValue(eventEntity.Name, out var imageUrl))
+            {
+                await ForceSetEventImageAsync(eventEntity, imageUrl);
+            }
+
+            if (eventEntity.Name == "Dubrovnik Summer Festival")
+            {
+                eventEntity.ExternalTicketLink = "https://www.dubrovnik-festival.hr/en";
+                eventEntity.UpdatedAt = DateTime.UtcNow;
+            }
+            else if (eventEntity.Name == "City Walls Sunset Tour")
+            {
+                eventEntity.ExternalTicketLink = "https://www.getyourguide.com/dubrovnik-l513/dubrovnik-city-walls-sunset-walking-tour-t146235/";
+                eventEntity.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        await db.SaveChangesAsync();
+
+        async Task<BookingPartner> EnsureBookingPartnerAsync(string name, string variant)
+        {
+            var partner = await db.BookingPartners.FirstOrDefaultAsync(x => x.Name == name);
+            if (partner is not null)
+            {
+                return partner;
+            }
+
+            partner = new BookingPartner { Name = name, Variant = variant };
+            db.BookingPartners.Add(partner);
+            await db.SaveChangesAsync();
+            return partner;
+        }
+
+        async Task RemovePlaceholderBookingPartnersAsync(Place place)
+        {
+            var placeholders = await db.PlaceBookingPartners
+                .Where(x => x.PlaceId == place.Id && x.Url != null && x.Url.Contains("example.com"))
+                .ToListAsync();
+
+            if (placeholders.Count == 0)
+            {
+                return;
+            }
+
+            db.PlaceBookingPartners.RemoveRange(placeholders);
+            await db.SaveChangesAsync();
+        }
+
+        async Task UpsertBookingPartnerAsync(Place place, BookingPartner partner, string url)
+        {
+            var existing = await db.PlaceBookingPartners.FirstOrDefaultAsync(x =>
+                x.PlaceId == place.Id &&
+                x.BookingPartnerId == partner.Id);
+
+            if (existing is null)
+            {
+                db.PlaceBookingPartners.Add(new PlaceBookingPartner
+                {
+                    PlaceId = place.Id,
+                    BookingPartnerId = partner.Id,
+                    Url = url
+                });
+            }
+            else
+            {
+                existing.Url = url;
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task ForceSetDestinationImageAsync(int destinationId, string destinationName, string url)
+        {
+            var existing = await db.EntityImages
+                .Where(x => x.TargetType == EntityImageTargetType.Destination && x.DestinationId == destinationId)
+                .ToListAsync();
+
+            if (existing.Count == 1 && existing[0].Url == url)
+            {
+                return;
+            }
+
+            db.EntityImages.RemoveRange(existing);
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = destinationId,
+                Url = url,
+                Caption = destinationName,
+                AltText = destinationName,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 0,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task ForceSetPlaceImageAsync(Place place, string url)
+        {
+            var existing = await db.EntityImages
+                .Where(x => x.TargetType == EntityImageTargetType.Place && x.PlaceId == place.Id)
+                .ToListAsync();
+
+            if (existing.Count == 1 && existing[0].Url == url)
+            {
+                return;
+            }
+
+            db.EntityImages.RemoveRange(existing);
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = place.Id,
+                Url = url,
+                Caption = place.Name,
+                AltText = place.Name,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 0,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task ForceSetEventImageAsync(Event eventEntity, string url)
+        {
+            var existing = await db.EntityImages
+                .Where(x => x.TargetType == EntityImageTargetType.Event && x.EventId == eventEntity.Id)
+                .ToListAsync();
+
+            if (existing.Count == 1 && existing[0].Url == url)
+            {
+                return;
+            }
+
+            db.EntityImages.RemoveRange(existing);
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Event,
+                EventId = eventEntity.Id,
+                Url = url,
+                Caption = eventEntity.Name,
+                AltText = eventEntity.Name,
+                IsMain = true,
+                ImageRole = EntityImageRole.Cover,
+                SortOrder = 0,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task EnsureSeedRegionsLinkedToBoundaryCandidatesAsync(AppDbContext db)
@@ -3618,6 +4012,35 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
+        async Task RemovePlaceIfExistsAsync(string name)
+        {
+            var place = await db.Places.FirstOrDefaultAsync(x => x.Name == name);
+            if (place is null) return;
+
+            var stay = await db.Stays.FirstOrDefaultAsync(x => x.PlaceId == place.Id);
+            if (stay is not null)
+            {
+                var amenities = await db.StayStayAmenities.Where(x => x.StayPlaceId == place.Id).ToListAsync();
+                db.StayStayAmenities.RemoveRange(amenities);
+                db.Stays.Remove(stay);
+            }
+
+            var tags = await db.PlaceTags.Where(x => x.PlaceId == place.Id).ToListAsync();
+            db.PlaceTags.RemoveRange(tags);
+
+            var images = await db.EntityImages.Where(x => x.PlaceId == place.Id).ToListAsync();
+            db.EntityImages.RemoveRange(images);
+
+            var reviews = await db.PlaceReviews.Where(x => x.PlaceId == place.Id).ToListAsync();
+            db.PlaceReviews.RemoveRange(reviews);
+
+            var bookingPartners = await db.PlaceBookingPartners.Where(x => x.PlaceId == place.Id).ToListAsync();
+            db.PlaceBookingPartners.RemoveRange(bookingPartners);
+
+            db.Places.Remove(place);
+            await db.SaveChangesAsync();
+        }
+
         static string BuildHoursJson(params (string days, string hours)[] schedule)
         {
             var entries = schedule.Select(s => $"{{\"day\":\"{s.days}\",\"hours\":\"{s.hours}\"}}");
@@ -3701,7 +4124,7 @@ public static class SeedData
 
         var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments", isOwnable: true);
         var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops", isOwnable: true);
-        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
+        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues", isOwnable: true);
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
         var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation", isOwnable: true);
@@ -3720,6 +4143,8 @@ public static class SeedData
         var breakfast = await EnsureStayAmenityAsync("Breakfast Included", "breakfast-included", "breakfast", "Breakfast included in the stay");
         var parking = await EnsureStayAmenityAsync("Parking", "parking", "parking", "Parking available");
         var spa = await EnsureStayAmenityAsync("Spa", "spa", "spa", "Spa and wellness facilities");
+        var fitnessCenter = await EnsureStayAmenityAsync("Fitness Center", "fitness-center", "gym", "Fitness facilities available");
+        var restaurantAmenity = await EnsureStayAmenityAsync("Restaurant", "restaurant", "restaurant", "On-site dining available");
         var airConditioning = await EnsureStayAmenityAsync("Air Conditioning", "air-conditioning", "ac", "Air-conditioned rooms");
 
         var festivalType = await EnsureEventTypeAsync("Festival", "Music and cultural festivals");
@@ -3821,12 +4246,9 @@ public static class SeedData
         await AddLocationTagsIfMissingAsync(tornik, "panoramic-view", "hiking", "nature");
         var goldGondola = await EnsurePlaceAsync("Gold Gondola Zlatibor", "Long panoramic gondola ride", "Zlatibor Center", ptLandmark, zlatiborCenter, "Panoramic gondola route toward Tornik with mountain and lake views.", 43.7304, 19.6971, "09:00 - 17:00", 4.7, 500);
         var tornikViewpoint = await EnsurePlaceAsync("Tornik Viewpoint", "Mountain viewpoint and outdoor area", "Tornik, Zlatibor", ptNature, tornik, "High viewpoint area for mountain scenery, hiking and seasonal outdoor activities.", 43.6862, 19.6545, "Open 24h", 4.7, 260);
-        var zlatiborLodge = await EnsurePlaceAsync("Zlatibor Mountain Lodge", "Cozy mountain stay", "Zlatibor Center", ptStay, zlatiborCenter, "A simple mountain stay near the center for weekend trips and family visits.", 43.7289, 19.7008, "Open 24h", 4.4, 96);
-        var zlatiborStay = await EnsureStayAsync(zlatiborLodge, guesthouseStayType, 72m, "14:00", "10:00");
-        await AddStayAmenitiesIfMissingAsync(zlatiborStay, wifi, parking, breakfast);
+        await RemovePlaceIfExistsAsync("Zlatibor Mountain Lodge");
         await AddPlaceTagsIfMissingAsync(goldGondola, "cable-car", "panoramic-view", "family-friendly", "nature");
         await AddPlaceTagsIfMissingAsync(tornikViewpoint, "hiking", "panoramic-view", "nature", "walking-route");
-        await AddPlaceTagsIfMissingAsync(zlatiborLodge, "family-stay", "budget", "nature");
 
         var kopaonik = await EnsureDestinationAsync("Kopaonik", "Mountain and ski destination with trails, viewpoints, hotels and winter activities.", mountainType, kopaonikRegion, 43.2856, 20.8095);
         await AddDestinationTagsIfMissingAsync(kopaonik,
@@ -3966,13 +4388,85 @@ public static class SeedData
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, banjskaStena.Name, placeId: banjskaStena.Id, urls: new[] { SeedWebp("banjska-stena") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, zaovineLake.Name, placeId: zaovineLake.Id, urls: new[] { SeedWebp("lake-zaovine") });
 
-        var belgradeSummer = await EnsureEventAsync("Belgrade Summer Nights", festivalType, beograd, savamala, "Open-air summer program with music, food and riverfront evening walks.", now.Date.AddDays(14).AddHours(19), now.Date.AddDays(14).AddHours(23), "Free", "4h", "City cultural venues");
-        var taraNatureWalk = await EnsureEventAsync("Tara Nature Walk", outdoorType, tara, mitrovac, "Guided forest walk for viewpoints and nature stories inside the national park.", now.Date.AddDays(21).AddHours(10), now.Date.AddDays(21).AddHours(13), "1200 RSD", "3h", "Tara local guides", banjskaStena);
-        var noviSadMarket = await EnsureEventAsync("Novi Sad Local Food Market", marketType, noviSad, nsCenter, "Weekend food and craft market with local producers and casual tastings.", now.Date.AddDays(10).AddHours(9), now.Date.AddDays(10).AddHours(15), "Free", "6h", "Novi Sad tourism board", fishZelenish);
+        await RemoveEventIfExistsAsync("Belgrade Summer Nights");
+        await RemoveEventIfExistsAsync("Tara Nature Walk");
+        await RemoveEventIfExistsAsync("Novi Sad Local Food Market");
         await RemoveEventIfExistsAsync("Šumarice Park Guided Walk");
-        await AddEventTagsIfMissingAsync(belgradeSummer, "summer-event", "live-music-event", "local-event", "free-entry-event");
-        await AddEventTagsIfMissingAsync(taraNatureWalk, "nature-walk-event", "guided-event", "outdoor-tour-event");
-        await AddEventTagsIfMissingAsync(noviSadMarket, "food-market-event", "local-event", "free-entry-event");
+
+        var belgradeMusicWeek = await EnsureEventAsync(
+            "Belgrade Music Week 2026",
+            festivalType,
+            beograd,
+            savamala,
+            "Belgrade Music Week is an international music festival and conference held across multiple venues in Belgrade. The festival features live performances across genres including pop, rock, electronic and alternative, alongside music industry panels and showcases connecting regional and international artists and professionals.",
+            new DateTime(2026, 6, 5, 18, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 6, 7, 23, 59, 0, DateTimeKind.Utc),
+            "From 2,000 RSD",
+            "3 days",
+            "Belgrade Music Week",
+            externalTicketLink: "https://efinity.rs/event-details/belgrade_mw_26_32222",
+            summary: "Multi-venue international music festival and industry showcase held across Belgrade.",
+            venueDescription: "The festival takes place across multiple venues in central Belgrade, including clubs, galleries and open-air stages in the Savamala and Stari Grad districts.",
+            arrivalTips: "Belgrade is easily accessible by air, bus and rail. Venues are concentrated in the city centre and Savamala district. Check the official Belgrade Music Week website for the full programme and venue map.",
+            accessibility: "Accessibility varies by venue. Check the official programme for specific venue details before attending.");
+        await AddEventTagsIfMissingAsync(belgradeMusicWeek, "live-music-event", "cultural-festival", "ticketed-event", "summer-event");
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Event, belgradeMusicWeek.Name, eventId: belgradeMusicWeek.Id, urls: new[] { SeedWebp("music-week") });
+
+        var taraUltraFest = await EnsureEventAsync(
+            "Tara Ultra Outdoor Fest",
+            outdoorType,
+            tara,
+            mitrovac,
+            "Tara Ultra Outdoor Fest is an outdoor adventure festival centered in Bajina Bašta with trails through Tara National Park. The event features trail running across three distances — TUT62 (62 km ITRA certified), TUT28 (28 km ITRA certified) and TUT12 (13 km) — alongside rafting on the Drina River, SUP training, hiking, ecological workshops and a children's playground.",
+            new DateTime(2026, 7, 4, 8, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 7, 5, 18, 0, 0, DateTimeKind.Utc),
+            "Varies by category",
+            "2 days",
+            "Turistička organizacija Tara-Drina",
+            place: banjskaStena,
+            externalTicketLink: "http://taraultratrail.rs/",
+            summary: "Adventure trail running festival with three route distances through Tara National Park, plus rafting, SUP and outdoor workshops.",
+            venueDescription: "The festival is centred in Bajina Bašta at the foot of Tara National Park. Trails pass through some of the most scenic parts of the park, including canyon viewpoints and riverside paths along the Drina.",
+            arrivalTips: "Bajina Bašta is reachable by bus from Belgrade (around 3 hours). Register in advance at taraultratrail.rs. Accommodation in Bajina Bašta and on Tara fills up quickly for festival weekend — book early.",
+            accessibility: "Trail distances vary in difficulty. The TUT12 is suitable for recreational runners. The festival also offers non-competitive activities including hiking and workshops for all fitness levels.");
+        await AddEventTagsIfMissingAsync(taraUltraFest, "outdoor-tour-event", "nature-walk-event", "adventure-event", "ticketed-event");
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Event, taraUltraFest.Name, eventId: taraUltraFest.Id, urls: new[] { SeedWebp("Tara-Ultra") });
+
+        var noviSadNocniBazar = await EnsureEventAsync(
+            "Novosadski Noćni Bazar",
+            marketType,
+            noviSad,
+            nsCenter,
+            "Novosadski Noćni Bazar is a monthly evening bazaar held at the Riblja pijaca (Fish Market) in Novi Sad. Small producers, artists and creatives gather to offer handmade products, gastronomic specialties and good entertainment in a relaxed open-air setting.",
+            new DateTime(2026, 6, 5, 18, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 6, 5, 23, 0, 0, DateTimeKind.Utc),
+            "Free",
+            "5h",
+            "nocnibazar.rs",
+            summary: "Monthly evening open-air bazaar at Novi Sad's Fish Market, featuring local producers, artisans and live entertainment.",
+            venueDescription: "The bazaar takes place at Riblja pijaca (Fish Market), a well-known outdoor market space in central Novi Sad, easily reachable on foot from the main square and the Danube waterfront.",
+            arrivalTips: "The bazar is free to enter and runs on the first Friday of each month. The event may be rescheduled in case of bad weather — check the official website nocnibazar.rs before attending.",
+            accessibility: "The event is held in an open outdoor market space. Check the official website for any specific accessibility information.");
+        await AddEventTagsIfMissingAsync(noviSadNocniBazar, "food-market-event", "local-event", "free-entry-event", "cultural-festival");
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Event, noviSadNocniBazar.Name, eventId: noviSadNocniBazar.Id, urls: new[] { SeedWebp("novosadski-nocni-bazar") });
+
+        var zlatiborFolkFest = await EnsureEventAsync(
+            "Zlatibor Folk Fest 2026",
+            festivalType,
+            zlatibor,
+            zlatiborCenter,
+            "Zlatibor Folk Fest is the first international folklore festival on Zlatibor, bringing together folk ensembles from Serbia, Turkey and North Macedonia for two concert performances. Organised by the Cultural-Artistic Society 'Zlatibor' from Čajetina, the festival takes place at King's Square and the summer stage in Tripkova.",
+            new DateTime(2026, 5, 28, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 6, 1, 22, 0, 0, DateTimeKind.Utc),
+            "Free",
+            "5 days",
+            "KUD Zlatibor, Čajetina",
+            summary: "First international folklore festival on Zlatibor, featuring ensembles from Serbia, Turkey and North Macedonia across two outdoor concert evenings.",
+            venueDescription: "Concerts take place at King's Square (Kraljev trg) in the heart of Zlatibor resort, and at the summer stage in the nearby settlement of Tripkova.",
+            arrivalTips: "Zlatibor is reachable from Belgrade by bus in around 3 hours. Accommodation on the mountain is widely available. The concert venues are easily accessible on foot from the main resort area.",
+            accessibility: "Concerts are held at open-air venues. Check local information for specific accessibility arrangements.");
+        await AddEventTagsIfMissingAsync(zlatiborFolkFest, "cultural-festival", "local-event", "free-entry-event");
+        await AddEntityImagesIfMissingAsync(EntityImageTargetType.Event, zlatiborFolkFest.Name, eventId: zlatiborFolkFest.Id, urls: new[] { SeedWebp("zlatibor-folklor") });
 
         // ─── New Kragujevac places, hotels and events ──────────────────────────────
 
@@ -4775,7 +5269,7 @@ public static class SeedData
         var ptBeach = await EnsurePlaceTypeAsync("Beach", "Beaches and coastal swimming areas");
         var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments", isOwnable: true);
         var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops", isOwnable: true);
-        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
+        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues", isOwnable: true);
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
         var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation", isOwnable: true);
@@ -4796,12 +5290,21 @@ public static class SeedData
         var parking = await EnsureStayAmenityAsync("Parking", "parking", "parking", "Parking available");
         var pool = await EnsureStayAmenityAsync("Swimming Pool", "swimming-pool", "pool", "Pool available for guests");
         var spa = await EnsureStayAmenityAsync("Spa", "spa", "spa", "Spa and wellness facilities");
+        var fitnessCenter = await EnsureStayAmenityAsync("Fitness Center", "fitness-center", "gym", "Fitness facilities available");
+        var restaurantAmenity = await EnsureStayAmenityAsync("Restaurant", "restaurant", "restaurant", "On-site dining available");
         var airConditioning = await EnsureStayAmenityAsync("Air Conditioning", "air-conditioning", "ac", "Air-conditioned rooms");
 
         var outdoor = await EnsureAmenityAsync("Outdoor Seating", "outdoor");
         var seaView = await EnsureAmenityAsync("Sea View", "sea");
         var family = await EnsureAmenityAsync("Family Friendly", "family");
         var wifiAmenity = await EnsureAmenityAsync("Free WiFi", "wifi");
+        await EnsureAmenityAsync("Swimming Pool", "pool");
+        await EnsureAmenityAsync("Parking", "parking");
+        await EnsureAmenityAsync("Spa", "spa");
+        await EnsureAmenityAsync("Gym", "gym");
+        await EnsureAmenityAsync("Breakfast", "breakfast");
+        await EnsureAmenityAsync("Air Conditioning", "ac");
+        await EnsureAmenityAsync("Restaurant", "restaurant");
 
         var booking = await EnsureBookingPartnerAsync("Booking.com", "dark");
         var airbnb = await EnsureBookingPartnerAsync("Airbnb", "brand");

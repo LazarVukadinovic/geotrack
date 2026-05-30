@@ -43,8 +43,11 @@
     <!-- Cards -->
     @if (!isLoading() && !loadError()) {
       <div class="my-contributions-page__grid px-5 mt-6 flex flex-col gap-4">
-        @for (item of items(); track item.id) {
-          <div role="button" tabindex="0"
+        @for (section of sections(); track section.title) {
+          <h2 class="my-contributions-page__section-title">{{ section.title }}</h2>
+
+          @for (item of section.items; track item.id) {
+            <div role="button" tabindex="0"
             class="my-contributions-card bg-white rounded-2xl overflow-hidden shadow-sm text-left active:scale-[0.99] transition-transform"
             (click)="openDetail(item)"
             (keydown.enter)="openDetail(item)"
@@ -52,8 +55,8 @@
 
             <!-- Image -->
             <div class="my-contributions-card__media relative h-44 overflow-hidden">
-              @if (item.coverImageUrl) {
-                <img appImageFallback [src]="item.coverImageUrl" [alt]="item.name" class="my-contributions-card__image w-full h-full object-cover"/>
+              @if (cardImage(item)) {
+                <img appImageFallback [src]="cardImage(item)" [alt]="item.name" class="my-contributions-card__image w-full h-full object-cover"/>
               } @else {
                 <div class="my-contributions-card__fallback w-full h-full bg-slate-100 flex items-center justify-center">
                   <svg class="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,7 +70,7 @@
                 <svg class="w-3.5 h-3.5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
                 </svg>
-                <span class="text-[11px] font-bold text-slate-800">{{ item.entityType }}</span>
+                <span class="text-[11px] font-bold text-slate-800">{{ item.isOwnership ? 'Ownership' : item.entityType }}</span>
               </div>
 
               <!-- Status badge -->
@@ -118,23 +121,53 @@
               </div>
 
               <div class="my-contributions-card__actions flex gap-3">
-                <button type="button" (click)="editItem($event, item)"
-                  class="my-contributions-card__action my-contributions-card__action--edit flex-1 flex items-center justify-center gap-2 py-2.5 border-2 border-[#e8722a] rounded-xl text-[#e8722a] text-sm font-bold active:bg-orange-50 transition-colors">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                  </svg>
-                  Edit
-                </button>
-                <button type="button" (click)="requestDelete($event, item)"
-                  class="my-contributions-card__action my-contributions-card__action--delete flex-1 flex items-center justify-center gap-2 py-2.5 border border-slate-200 rounded-xl text-slate-500 text-sm font-semibold active:bg-slate-50 transition-colors">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                  </svg>
-                  Delete
-                </button>
+                @if (canEdit(item)) {
+                  <button type="button" (click)="editItem($event, item)"
+                    class="my-contributions-card__action my-contributions-card__action--edit flex-1 flex items-center justify-center gap-2 py-2.5 border-2 border-[#e8722a] rounded-xl text-[#e8722a] text-sm font-bold active:bg-orange-50 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                    </svg>
+                    Edit
+                  </button>
+                } @else if (canRequestOwnership(item)) {
+                  <button type="button" (click)="openOwnershipModal($event, item)"
+                    class="my-contributions-card__action flex-1 flex items-center justify-center gap-2 py-2.5 border-2 border-slate-300 rounded-xl text-slate-600 text-sm font-bold active:bg-slate-50 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                    Request Ownership
+                  </button>
+                }
+                @if (canDelete(item)) {
+                  <button type="button" (click)="requestDelete($event, item)"
+                    class="my-contributions-card__action my-contributions-card__action--delete flex-1 flex items-center justify-center gap-2 py-2.5 border border-slate-200 rounded-xl text-slate-500 text-sm font-semibold active:bg-slate-50 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                    Delete
+                  </button>
+                }
               </div>
             </div>
           </div>
+          }
+
+          @if (section.total > 2) {
+            <div class="flex gap-3">
+              @if (section.visible > 2) {
+                <button type="button" (click)="showLess(section.key)"
+                  class="flex-1 py-3 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-500 bg-white shadow-sm active:bg-slate-50 transition-colors">
+                  Show less
+                </button>
+              }
+              @if (section.visible < section.total) {
+                <button type="button" (click)="loadMore(section.key)"
+                  class="flex-1 py-3 border border-slate-200 rounded-2xl text-sm font-semibold text-[#e8722a] bg-white shadow-sm active:bg-orange-50 transition-colors">
+                  Load more ({{ section.total - section.visible }} more)
+                </button>
+              }
+            </div>
+          }
         }
 
         <!-- Empty state -->
@@ -161,12 +194,82 @@
     </svg>
   </button>
 
+  <!-- Ownership claim modal -->
+  @if (ownershipClaimItem(); as item) {
+    <div class="fixed inset-0 bg-black/40 z-[60]" (click)="closeOwnershipModal()"></div>
+    <div class="fixed left-5 right-5 bottom-6 z-[70] bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <header class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100">
+        <h2 class="text-base font-bold text-slate-800">Request Ownership</h2>
+        <button type="button" (click)="closeOwnershipModal()" [disabled]="ownershipClaimSubmitting()"
+          class="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </header>
+
+      <div class="px-5 pt-4 pb-5 flex flex-col gap-4">
+        <p class="text-sm text-slate-500 leading-relaxed">
+          Upload a PDF document proving you own or manage <strong class="text-slate-700">{{ item.name }}</strong>. A regional manager will review your request.
+        </p>
+
+        <!-- File picker -->
+        @if (ownershipProofFile()) {
+          <div class="bg-white border border-[#e8722a] rounded-2xl overflow-hidden">
+            <div class="flex items-center gap-3 px-4 py-3.5">
+              <svg class="w-4 h-4 text-[#e8722a] flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              <span class="flex-1 text-sm text-slate-700 truncate">{{ ownershipProofFileName() }}</span>
+              <svg class="w-4 h-4 text-green-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <label class="flex items-center gap-2 px-4 py-2.5 border-t border-slate-100 cursor-pointer bg-slate-50 active:bg-slate-100 transition-colors">
+              <svg class="w-3.5 h-3.5 text-slate-500 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              <span class="text-xs font-semibold text-slate-600">Change document</span>
+              <input type="file" accept="application/pdf" class="hidden" (change)="onOwnershipProofSelected($event)"/>
+            </label>
+          </div>
+        } @else {
+          <label class="flex items-center gap-3 px-4 py-3.5 bg-white border border-slate-200 rounded-2xl cursor-pointer transition-colors active:bg-slate-50">
+            <svg class="w-4 h-4 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <span class="flex-1 text-sm text-slate-400">Upload PDF document</span>
+            <svg class="w-4 h-4 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            <input type="file" accept="application/pdf" class="hidden" (change)="onOwnershipProofSelected($event)"/>
+          </label>
+        }
+
+        @if (ownershipClaimError()) {
+          <p class="text-xs font-semibold text-red-500">{{ ownershipClaimError() }}</p>
+        }
+
+        <div class="flex gap-3">
+          <button type="button" (click)="closeOwnershipModal()" [disabled]="ownershipClaimSubmitting()"
+            class="flex-1 py-3.5 border border-slate-200 rounded-xl text-slate-600 text-sm font-bold disabled:opacity-50 transition-colors active:bg-slate-50">
+            Cancel
+          </button>
+          <button type="button" (click)="submitOwnershipClaim()" [disabled]="ownershipClaimSubmitting() || !ownershipProofFile()"
+            class="flex-1 py-3.5 bg-[#e8722a] rounded-xl text-white text-sm font-bold disabled:opacity-50 transition-all active:scale-[0.98]">
+            {{ ownershipClaimSubmitting() ? 'Submitting...' : 'Submit Request' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
   @if (pendingDelete(); as item) {
     <div class="my-contributions-page__delete-overlay fixed inset-0 bg-black/40 z-[60]" (click)="cancelDelete()"></div>
     <div class="my-contributions-page__delete-sheet fixed left-5 right-5 bottom-6 z-[70] bg-white rounded-2xl px-5 py-5 shadow-2xl">
       <h2 class="text-base font-bold text-slate-800 mb-1">Delete contribution?</h2>
       <p class="text-sm text-slate-500 leading-relaxed mb-4">
-        This removes "{{ item.name }}" from your contributions. Approved public listings are not removed by this action.
+        This removes "{{ item.name }}" from your contributions. Only under review and rejected items can be deleted.
       </p>
       @if (deleteError()) {
         <p class="text-sm text-red-500 mb-3">{{ deleteError() }}</p>

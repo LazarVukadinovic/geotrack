@@ -8,6 +8,7 @@ using Geotrack.Domain.Entities.Interests;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
+using Geotrack.Infrastructure.Search;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using Geometry = NetTopologySuite.Geometries.Geometry;
@@ -97,25 +98,25 @@ public class AppDbContext : DbContext
 
     public override int SaveChanges()
     {
-        SyncSpatialColumns();
+        SyncDerivedColumns();
         return base.SaveChanges();
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        SyncSpatialColumns();
+        SyncDerivedColumns();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        SyncSpatialColumns();
+        SyncDerivedColumns();
         return base.SaveChangesAsync(cancellationToken);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        SyncSpatialColumns();
+        SyncDerivedColumns();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
@@ -124,6 +125,7 @@ public class AppDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.HasPostgresExtension("postgis");
+        modelBuilder.HasPostgresExtension("pg_trgm");
 
         ConfigureTerritories(modelBuilder);
         ConfigureAdministrativeBoundaryCandidates(modelBuilder);
@@ -463,6 +465,11 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.SearchText)
+                .IsRequired()
+                .HasMaxLength(12000)
+                .HasDefaultValue(string.Empty);
+
             entity.Property(x => x.Description)
                 .HasMaxLength(8000);
 
@@ -530,6 +537,11 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.SearchText)
+                .IsRequired()
+                .HasMaxLength(12000)
+                .HasDefaultValue(string.Empty);
+
             entity.Property(x => x.Description)
                 .HasMaxLength(8000);
 
@@ -596,6 +608,11 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(200);
+
+            entity.Property(x => x.SearchText)
+                .IsRequired()
+                .HasMaxLength(12000)
+                .HasDefaultValue(string.Empty);
 
             entity.Property(x => x.Subtitle)
                 .HasMaxLength(500);
@@ -827,6 +844,11 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            entity.Property(x => x.SearchText)
+                .IsRequired()
+                .HasMaxLength(12000)
+                .HasDefaultValue(string.Empty);
+
             entity.Property(x => x.Summary)
                 .HasMaxLength(160);
 
@@ -902,7 +924,6 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.LocationId);
             entity.HasIndex(x => x.PlaceId);
             entity.HasIndex(x => x.Status);
-
             entity.HasIndex(x => x.InternalReferenceId)
                 .IsUnique()
                 .HasFilter("\"InternalReferenceId\" IS NOT NULL");
@@ -2340,6 +2361,12 @@ public class AppDbContext : DbContext
                 .HasDefaultValue("gallery")
                 .IsRequired();
 
+            entity.Property(x => x.ImagePosition)
+                .HasMaxLength(40);
+
+            entity.Property(x => x.ImageSize)
+                .HasMaxLength(40);
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -2530,12 +2557,17 @@ public class AppDbContext : DbContext
 
     }
 
-    private void SyncSpatialColumns()
+    private void SyncDerivedColumns()
     {
         foreach (var entry in ChangeTracker.Entries<Destination>())
         {
             if (entry.State is EntityState.Added or EntityState.Modified)
             {
+                entry.Entity.SearchText = SearchTextNormalizer.Normalize(
+                    entry.Entity.Name,
+                    entry.Entity.Summary,
+                    entry.Entity.Description,
+                    entry.Entity.InternalReferenceId);
                 entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
                     SpatialPointFactory.Create(entry.Entity.Latitude, entry.Entity.Longitude);
             }
@@ -2545,6 +2577,11 @@ public class AppDbContext : DbContext
         {
             if (entry.State is EntityState.Added or EntityState.Modified)
             {
+                entry.Entity.SearchText = SearchTextNormalizer.Normalize(
+                    entry.Entity.Name,
+                    entry.Entity.Summary,
+                    entry.Entity.Description,
+                    entry.Entity.InternalReferenceId);
                 entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
                     SpatialPointFactory.Create(entry.Entity.Latitude, entry.Entity.Longitude);
             }
@@ -2554,6 +2591,12 @@ public class AppDbContext : DbContext
         {
             if (entry.State is EntityState.Added or EntityState.Modified)
             {
+                entry.Entity.SearchText = SearchTextNormalizer.Normalize(
+                    entry.Entity.Name,
+                    entry.Entity.Subtitle,
+                    entry.Entity.Address,
+                    entry.Entity.Description,
+                    entry.Entity.InternalReferenceId);
                 entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
                     SpatialPointFactory.Create(entry.Entity.Latitude, entry.Entity.Longitude);
             }
@@ -2566,6 +2609,12 @@ public class AppDbContext : DbContext
                 continue;
             }
 
+            entry.Entity.SearchText = SearchTextNormalizer.Normalize(
+                entry.Entity.Name,
+                entry.Entity.Summary,
+                entry.Entity.Description,
+                entry.Entity.VenueName,
+                entry.Entity.InternalReferenceId);
             entry.Property<Point?>(SpatialPointFactory.CoordinatesPropertyName).CurrentValue =
                 ResolveEventCoordinates(entry.Entity);
         }

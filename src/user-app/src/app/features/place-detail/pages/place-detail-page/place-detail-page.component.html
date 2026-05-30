@@ -59,6 +59,8 @@
         appImageFallback
         class="pd__hero-img"
         [src]="heroImage()"
+        [style.object-position]="heroImagePosition()"
+        [style.transform]="heroImageTransform()"
         alt=""
         width="800"
         height="480"
@@ -146,7 +148,7 @@
         </div>
 
         <!-- CTA buttons -->
-        @if (directionsUrl() || hasMapCoordinates() || p.website) {
+        @if (directionsUrl() || hasMapCoordinates()) {
           <div class="pd__ctas">
             @if (directionsUrl(); as directionsHref) {
               <a
@@ -182,36 +184,21 @@
                 View on Map
               </button>
             }
-            @if (p.website) {
-              <a
-                class="pd__cta pd__cta--outline"
-                [href]="p.website"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                </svg>
-                Website
-                <svg class="pd__cta-external-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
-                </svg>
-              </a>
-            }
           </div>
         }
 
-        @if (p.isOwnable) {
-          <div class="pd__ownership-cta">
-            @if (p.isOwnedByCurrentUser) {
-              <span class="pd__ownership-status pd__ownership-status--owned">You own this place</span>
-            } @else if (p.hasPendingOwnershipClaim || ownershipClaimSubmitted()) {
-              <span class="pd__ownership-status pd__ownership-status--pending">Ownership request pending</span>
-            } @else {
+        @if (p.isOwnable || p.ownerContributionId) {
+          <div class="mt-[14px] mb-6 flex flex-wrap gap-2.5 justify-center">
+            @if (p.isOwnedByCurrentUser || p.ownerContributionId) {
+              <button type="button" class="pd__cta pd__cta--outline" (click)="navigateToOwnerEdit()">
+                Edit
+              </button>
+            } @else if (p.isOwnable && (p.hasPendingOwnershipClaim || ownershipClaimSubmitted())) {
+              <div class="pd__ownership-pending">
+                <span class="pd__ownership-pending-title">Ownership request submitted.</span>
+                <span class="pd__ownership-pending-sub">A regional manager will review it</span>
+              </div>
+            } @else if (p.isOwnable) {
               <button type="button" class="pd__cta pd__cta--outline" (click)="openOwnershipClaim()">
                 Request ownership
               </button>
@@ -219,9 +206,6 @@
           </div>
         }
 
-        @if (ownershipClaimMessage()) {
-          <p class="pd__ownership-message" role="status">{{ ownershipClaimMessage() }}</p>
-        }
 
         <!-- ── About ──────────────────────────────────────────────────── -->
         @if (p.images.length > 0) {
@@ -243,18 +227,44 @@
               <p class="pd__about">{{ p.about }}</p>
             </section>
 
+            @if (p.amenities.length > 0) {
+              <div class="pd__divider pd__divider--amenities"></div>
+
+              <section class="pd__section pd__section--amenities">
+                <h2 class="pd__section-title">Amenities</h2>
+                <div class="pd__amenities" role="list">
+                  @for (amenity of p.amenities; track amenity.id) {
+                    <div class="pd__amenity" role="listitem">
+                      <span class="pd__amenity-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                          <path
+                            [attr.d]="amenityIconPath(amenity.icon)"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"/>
+                        </svg>
+                      </span>
+                      <span>{{ amenity.label }}</span>
+                    </div>
+                  }
+                </div>
+              </section>
+            }
+
             @if (p.openingHours || (p.openingHoursSchedule && p.openingHoursSchedule.length > 0)) {
               <div class="pd__divider pd__divider--hours"></div>
 
               <section class="pd__section pd__section--hours">
-                <h2 class="pd__section-title">Opening Hours</h2>
-
                 @if (is24Hours()) {
-                  <div class="pd__hours-24h">
+                  <div class="pd__hours-title-row">
+                    <h2 class="pd__section-title">Opening Hours</h2>
                     <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
                       <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
                     </svg>
+                  </div>
+                  <div class="pd__hours-24h">
                     <span class="pd__hours-24h-text">Open 24 hours</span>
                   </div>
                 } @else {
@@ -265,10 +275,13 @@
                     (click)="hoursExpanded.set(!hoursExpanded())"
                     [attr.aria-expanded]="hoursExpanded()"
                   >
-                    <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
-                    </svg>
+                    <span class="pd__hours-toggle-left">
+                      <span class="pd__hours-toggle-label">Opening Hours</span>
+                      <svg class="pd__hours-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/>
+                      </svg>
+                    </span>
                     <svg class="pd__hours-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
                             stroke-linejoin="round" d="M6 9l6 6 6-6"/>
@@ -292,6 +305,46 @@
                     </div>
                   }
                 }
+              </section>
+            }
+
+            @if (p.admissionPriceRange || p.bestTimeToVisit || p.visitorTips || p.accessNotes || p.accessibilityNotes) {
+              <div class="pd__divider pd__divider--visit"></div>
+
+              <section class="pd__section pd__section--visit">
+                <h2 class="pd__section-title">Good to know</h2>
+                <div class="flex flex-col gap-2.5">
+                  @if (p.admissionPriceRange) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Price</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.admissionPriceRange }}</span>
+                    </div>
+                  }
+                  @if (p.bestTimeToVisit) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Best time to visit</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.bestTimeToVisit }}</span>
+                    </div>
+                  }
+                  @if (p.visitorTips) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Visitor tips</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.visitorTips }}</span>
+                    </div>
+                  }
+                  @if (p.accessNotes) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Access</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.accessNotes }}</span>
+                    </div>
+                  }
+                  @if (p.accessibilityNotes) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Accessibility</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.accessibilityNotes }}</span>
+                    </div>
+                  }
+                </div>
               </section>
             }
 
@@ -500,6 +553,54 @@
           </div>
         </section>
 
+        @if (p.website || p.contactEmail || p.phoneNumber) {
+          <div class="pd__divider pd__divider--contact"></div>
+
+          <section class="pd__section pd__section--contact">
+            <h2 class="pd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Contact</h2>
+            <div class="flex flex-col gap-2.5">
+              @if (p.website) {
+                <div class="flex items-center gap-3 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                  <a class="min-w-0 flex-1 flex flex-col gap-1 no-underline" [href]="p.website" target="_blank" rel="noopener noreferrer">
+                    <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Official site</span>
+                  </a>
+                  <a
+                    class="pd__cta pd__cta--outline"
+                    style="flex: 0 0 auto; padding: 11px 16px; white-space: nowrap;"
+                    [href]="p.website"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                    </svg>
+                    Website
+                    <svg class="pd__cta-external-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                    </svg>
+                  </a>
+                </div>
+              }
+              @if (p.contactEmail) {
+                <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'mailto:' + p.contactEmail">
+                  <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Email</span>
+                  <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ p.contactEmail }}</span>
+                </a>
+              }
+              @if (p.phoneNumber) {
+                <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'tel:' + p.phoneNumber">
+                  <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Phone</span>
+                  <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ p.phoneNumber }}</span>
+                </a>
+              }
+            </div>
+          </section>
+        }
+
           </div><!-- /.pd__detail-side -->
         </div><!-- /.pd__detail-grid -->
 
@@ -532,6 +633,7 @@
                 <img
                   appImageFallback
                   [src]="image.url"
+                  [style.object-position]="image.imagePosition"
                   [alt]="image.altText || p.title"
                   loading="lazy"
                   decoding="async"
@@ -579,6 +681,7 @@
     }
 
   </article>
+
 
 <!-- ── Report modal ─────────────────────────────────────────── -->
 @if (ri.reportingReview(); as review) {

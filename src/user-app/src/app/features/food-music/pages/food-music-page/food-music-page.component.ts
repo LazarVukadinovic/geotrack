@@ -125,7 +125,7 @@ export class FoodMusicPageComponent implements AfterViewInit {
     );
 
     // Food & Music items are place-type content — same route as Explore card clicks.
-    this.router.navigate(['/places', id]);
+    this.router.navigate(['/places', id], { state: { detailBackUrl: this.router.url } });
   }
 
   protected loadMore(): void {

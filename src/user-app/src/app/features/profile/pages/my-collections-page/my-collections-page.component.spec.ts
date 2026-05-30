@@ -43,4 +43,13 @@ describe('MyCollectionsPage', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('should navigate back to the profile page', () => {
+    fixture.detectChanges();
+
+    const backButton = fixture.nativeElement.querySelector('button.collections-page__back') as HTMLButtonElement;
+    backButton.click();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/profile']);
+  });
 });

@@ -77,6 +77,13 @@ export const routes: Routes = [
         data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
+        path: 'profile/collections/:id/add',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/profile/pages/collection-add/collection-add.component').then(m => m.CollectionAddComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
         path: 'profile/collections/:id',
         canActivate: [authGuard],
         loadComponent: () =>

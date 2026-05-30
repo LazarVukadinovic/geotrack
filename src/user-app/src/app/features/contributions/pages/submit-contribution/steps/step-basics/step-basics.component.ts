@@ -1,4 +1,4 @@
-import { Component, input, output, signal, OnDestroy, OnInit, effect, ElementRef, viewChild, inject } from '@angular/core';
+import { Component, input, output, signal, OnDestroy, OnInit, effect, ElementRef, viewChild, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -11,7 +11,8 @@ const MAP_STYLE_URL = '/map-style.json';
 const DEFAULT_PICKER_LAT = 44.82;
 const DEFAULT_PICKER_LNG = 20.46;
 const MAX_OWNERSHIP_PROOF_BYTES = 10 * 1024 * 1024;
-const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe']);
+const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe', 'bar']);
+const HIDDEN_CONTRIBUTION_PLACE_TYPES = new Set(['beach', 'nature']);
 
 export interface ContributionPlaceTypeOption {
   id: number;
@@ -29,12 +30,13 @@ export interface BasicsData {
   city: string;
   region: string;
   country: string;
+  locationId?: number | null;
   imageUrl: string;
   cardImageUrl: string;
   cardImageFile?: File | null;
   coverImageFile?: File | null;
   galleryImageUrls: string[];
-  galleryImageFiles?: File[];
+  galleryImageFiles?: (File | null)[];
   ownershipProofFile?: File | null;
   ownershipProofDocumentUrl?: string | null;
   ownershipProofOriginalFileName?: string | null;
@@ -42,6 +44,8 @@ export interface BasicsData {
   lng: number | null;
   imgBgPosition: string;
   imgBgSize: string;
+  cardImgBgPosition?: string;
+  cardImgBgSize?: string;
 }
 
 @Component({
@@ -55,6 +59,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   private readonly mapApi = inject(MapApiService);
   private readonly http = inject(HttpClient);
   data = input<BasicsData | null>(null);
+  locationLocked = input<boolean>(false);
   saved = output<BasicsData>();
 
   placeTypes = signal<ContributionPlaceTypeOption[]>(defaultPlaceTypes());
@@ -78,7 +83,8 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     name: '', placeType: 'Landmark', placeTypeId: null, stayType: 'Hotel', address: '', city: '',
     region: '', country: '', imageUrl: '', cardImageUrl: '', cardImageFile: null, coverImageFile: null, galleryImageUrls: [], galleryImageFiles: [], ownershipProofFile: null,
     ownershipProofDocumentUrl: null, ownershipProofOriginalFileName: null,
-    lat: null, lng: null, imgBgPosition: '50% 50%', imgBgSize: 'cover'
+    lat: null, lng: null, imgBgPosition: '50% 50%', imgBgSize: 'cover',
+    cardImgBgPosition: '50% 50%', cardImgBgSize: 'cover',
   };
 
   ngOnInit(): void {
@@ -151,17 +157,68 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     (e.target as HTMLInputElement).value = '';
     if (files.length === 0) return;
 
-    this.form.galleryImageFiles = [...(this.form.galleryImageFiles ?? []), ...files];
-
     for (const file of files) {
       const reader = new FileReader();
       reader.onload = () => {
         const url = reader.result as string;
         this.galleryPreviewUrls.update(urls => [...urls, url]);
         this.form.galleryImageUrls = [...this.form.galleryImageUrls, url];
+        this.form.galleryImageFiles = [...(this.form.galleryImageFiles ?? []), file];
       };
       reader.readAsDataURL(file);
     }
+  }
+
+  removeGalleryImage(index: number): void {
+    this.galleryPreviewUrls.update(urls => urls.filter((_, i) => i !== index));
+    this.form.galleryImageUrls = this.form.galleryImageUrls.filter((_, i) => i !== index);
+    const files = [...(this.form.galleryImageFiles ?? [])];
+    files.splice(index, 1);
+    this.form.galleryImageFiles = files;
+  }
+
+  changeGalleryImage(index: number, e: Event): void {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    (e.target as HTMLInputElement).value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = reader.result as string;
+      this.galleryPreviewUrls.update(urls => {
+        const copy = [...urls];
+        copy[index] = url;
+        return copy;
+      });
+      this.form.galleryImageUrls = this.form.galleryImageUrls.map((u, i) => i === index ? url : u);
+      const files = [...(this.form.galleryImageFiles ?? [])];
+      while (files.length <= index) files.push(null);
+      files[index] = file;
+      this.form.galleryImageFiles = files;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  galleryLightboxIndex = signal<number | null>(null);
+
+  openGalleryLightbox(index: number): void {
+    this.galleryLightboxIndex.set(index);
+  }
+
+  closeGalleryLightbox(): void {
+    this.galleryLightboxIndex.set(null);
+  }
+
+  galleryLightboxPrev(): void {
+    const idx = this.galleryLightboxIndex();
+    if (idx === null || idx <= 0) return;
+    this.galleryLightboxIndex.set(idx - 1);
+  }
+
+  galleryLightboxNext(): void {
+    const idx = this.galleryLightboxIndex();
+    const total = this.galleryPreviewUrls().length;
+    if (idx === null || idx >= total - 1) return;
+    this.galleryLightboxIndex.set(idx + 1);
   }
 
   openMapPicker(): void {
@@ -331,11 +388,10 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     const baseValid = !!this.form.name.trim() &&
       !!this.form.city.trim() &&
       !!this.form.country.trim() &&
-      this.hasConfirmedLocation();
+      (this.locationLocked() || this.hasConfirmedLocation());
     if (!baseValid) return false;
     if (!this.form.cardImageFile && !this.form.cardImageUrl) return false;
     if (!this.form.coverImageFile && !this.form.imageUrl) return false;
-    if (this.requiresOwnershipProof() && !this.form.ownershipProofFile && !this.form.ownershipProofDocumentUrl) return false;
     return true;
   }
 
@@ -347,9 +403,17 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     return this.form.placeType === 'Stay';
   }
 
+  /** True for types where ownership doc section is shown (Bar, Cafe, Restaurant, Stay). */
   requiresOwnershipProof(): boolean {
     const selectedType = this.selectedPlaceType();
     return selectedType?.isOwnable ?? FALLBACK_OWNABLE_PLACE_TYPES.has(normalizePlaceType(this.form.placeType));
+  }
+
+  /** True when ownable type selected but no proof attached — user should see warning. */
+  showOwnershipWarning(): boolean {
+    return this.requiresOwnershipProof() &&
+      !this.form.ownershipProofFile &&
+      !this.form.ownershipProofDocumentUrl;
   }
 
   private selectedPlaceType(): ContributionPlaceTypeOption | undefined {
@@ -371,7 +435,8 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
             name: type.name.trim(),
             description: type.description ?? null,
             isOwnable: !!type.isOwnable,
-          }));
+          }))
+          .filter(type => !HIDDEN_CONTRIBUTION_PLACE_TYPES.has(normalizePlaceType(type.name)));
 
         if (normalized.length === 0) return;
 
@@ -419,14 +484,25 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
     this.form.imgBgPosition = this.bgPosition();
     this.form.imgBgSize = this.bgSize();
+    this.form.cardImgBgPosition = this.cardBgPosition();
+    this.form.cardImgBgSize = this.cardBgSize();
     this.saved.emit({ ...this.form });
   }
   imgContainer = viewChild<ElementRef<HTMLDivElement>>('imgContainer');
+  cardImgContainer = viewChild<ElementRef<HTMLDivElement>>('cardImgContainer');
   private readonly pickerMapContainer = viewChild<ElementRef<HTMLDivElement>>('coordMap');
   bgPosition = signal('50% 50%');
   bgSize = signal('cover');
+  cardBgPosition = signal('50% 50%');
+  cardBgSize = signal('cover');
 
   private touchState: {
+    startX: number; startY: number;
+    startPosX: number; startPosY: number;
+    startDist: number; startSize: number;
+  } | null = null;
+
+  private cardTouchState: {
     startX: number; startY: number;
     startPosX: number; startPosY: number;
     startDist: number; startSize: number;
@@ -435,6 +511,9 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   private boundTouchStart!: (e: TouchEvent) => void;
   private boundTouchMove!: (e: TouchEvent) => void;
   private boundTouchEnd!: () => void;
+  private boundCardTouchStart!: (e: TouchEvent) => void;
+  private boundCardTouchMove!: (e: TouchEvent) => void;
+  private boundCardTouchEnd!: () => void;
 
   constructor() {
     effect(() => {
@@ -482,6 +561,8 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
         }
         if (d.imgBgPosition) this.bgPosition.set(d.imgBgPosition);
         if (d.imgBgSize) this.bgSize.set(d.imgBgSize);
+        if (d.cardImgBgPosition) this.cardBgPosition.set(d.cardImgBgPosition);
+        if (d.cardImgBgSize) this.cardBgSize.set(d.cardImgBgSize);
       }
     });
 
@@ -494,6 +575,17 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
         el.removeEventListener('touchend', this.boundTouchEnd);
       }
       this.registerTouchListeners();
+    });
+
+    effect(() => {
+      const el = this.cardImgContainer()?.nativeElement;
+      if (!el) return;
+      if (this.boundCardTouchStart) {
+        el.removeEventListener('touchstart', this.boundCardTouchStart);
+        el.removeEventListener('touchmove', this.boundCardTouchMove);
+        el.removeEventListener('touchend', this.boundCardTouchEnd);
+      }
+      this.registerCardTouchListeners();
     });
   }
 
@@ -567,6 +659,49 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     el.addEventListener('touchend', this.boundTouchEnd);
   }
 
+  private registerCardTouchListeners(): void {
+    const el = this.cardImgContainer()?.nativeElement;
+    if (!el) return;
+
+    this.boundCardTouchStart = (e: TouchEvent) => {
+      if (!this.cardPreviewUrl()) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('.change-label')) return;
+      e.preventDefault();
+      const posX = this.parsePct(this.cardBgPosition().split(' ')[0]);
+      const posY = this.parsePct(this.cardBgPosition().split(' ')[1]);
+      const size = this.parseSize(this.cardBgSize());
+      if (e.touches.length === 1) {
+        this.cardTouchState = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, startPosX: posX, startPosY: posY, startDist: 0, startSize: size };
+      } else if (e.touches.length === 2) {
+        this.cardTouchState = { startX: (e.touches[0].clientX + e.touches[1].clientX) / 2, startY: (e.touches[0].clientY + e.touches[1].clientY) / 2, startPosX: posX, startPosY: posY, startDist: this.getDist(e.touches), startSize: size };
+      }
+    };
+
+    this.boundCardTouchMove = (e: TouchEvent) => {
+      if (!this.cardTouchState || !this.cardPreviewUrl()) return;
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        const dx = (e.touches[0].clientX - this.cardTouchState.startX) / 2;
+        const dy = (e.touches[0].clientY - this.cardTouchState.startY) / 2;
+        const newX = Math.min(100, Math.max(0, this.cardTouchState.startPosX - dx));
+        const newY = Math.min(100, Math.max(0, this.cardTouchState.startPosY - dy));
+        this.cardBgPosition.set(`${newX}% ${newY}%`);
+      } else if (e.touches.length === 2) {
+        const newDist = this.getDist(e.touches);
+        const scale = newDist / this.cardTouchState.startDist;
+        const newSize = Math.min(200, Math.max(50, this.cardTouchState.startSize * scale));
+        this.cardBgSize.set(`${newSize}%`);
+      }
+    };
+
+    this.boundCardTouchEnd = () => { this.cardTouchState = null; };
+
+    el.addEventListener('touchstart', this.boundCardTouchStart, { passive: false });
+    el.addEventListener('touchmove', this.boundCardTouchMove, { passive: false });
+    el.addEventListener('touchend', this.boundCardTouchEnd);
+  }
+
   ngOnDestroy() {
     this.destroyPickerMap();
     const el = this.imgContainer()?.nativeElement;
@@ -574,6 +709,12 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
       el.removeEventListener('touchstart', this.boundTouchStart);
       el.removeEventListener('touchmove', this.boundTouchMove);
       el.removeEventListener('touchend', this.boundTouchEnd);
+    }
+    const cardEl = this.cardImgContainer()?.nativeElement;
+    if (cardEl && this.boundCardTouchStart) {
+      cardEl.removeEventListener('touchstart', this.boundCardTouchStart);
+      cardEl.removeEventListener('touchmove', this.boundCardTouchMove);
+      cardEl.removeEventListener('touchend', this.boundCardTouchEnd);
     }
   }
 }
@@ -583,8 +724,7 @@ function defaultPlaceTypes(): ContributionPlaceTypeOption[] {
     { id: 0, name: 'Landmark', description: null, isOwnable: false },
     { id: 0, name: 'Restaurant', description: null, isOwnable: true },
     { id: 0, name: 'Cafe', description: null, isOwnable: true },
-    { id: 0, name: 'Nature', description: null, isOwnable: false },
-    { id: 0, name: 'Beach', description: null, isOwnable: false },
+    { id: 0, name: 'Bar', description: null, isOwnable: true },
     { id: 0, name: 'Stay', description: null, isOwnable: true },
   ];
 }

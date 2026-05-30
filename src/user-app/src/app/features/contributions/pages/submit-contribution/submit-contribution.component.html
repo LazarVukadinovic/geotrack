@@ -59,16 +59,23 @@
         </button>
       </div>
     } @else {
+      @if (reviewNote()) {
+        <div class="mx-5 mt-4 rounded-r-xl border-l-[3px] border-[#e8722a] bg-orange-50 px-3 py-2.5 text-xs leading-relaxed text-orange-900">
+          <span class="block font-bold">Manager note: "{{ reviewNote() }}"</span>
+        </div>
+      }
       @switch (currentStep()) {
         @case (1) {
           <app-step-basics
             [data]="draft().basics"
+            [locationLocked]="locationLocked()"
             (saved)="onBasicsSaved($event)"
           />
         }
         @case (2) {
           <app-step-features
             [data]="draft().features"
+            [placeType]="draft().basics?.placeType"
             (changed)="onFeaturesChanged($event)"
             (saved)="onFeaturesSaved($event)"
             (back)="prevStep()"
@@ -87,6 +94,7 @@
           <app-step-preview
             [draft]="draft()"
             [isAccommodation]="isAccommodationDraft()"
+            [confirmLabel]="submitLabel()"
             (confirmed)="onSubmit()"
             (back)="prevStep()"
           />
@@ -94,7 +102,7 @@
             <div class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
               <div class="bg-white rounded-2xl px-8 py-6 flex flex-col items-center gap-3">
                 <div class="w-8 h-8 border-2 border-[#e8722a] border-t-transparent rounded-full animate-spin"></div>
-                <p class="text-sm text-slate-500">Submitting...</p>
+                <p class="text-sm text-slate-500">{{ submittingLabel() }}</p>
               </div>
             </div>
           }

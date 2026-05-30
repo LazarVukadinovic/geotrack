@@ -17,7 +17,7 @@ interface DesktopNavItem {
 export class DesktopSidebarComponent {
   protected readonly navItems: DesktopNavItem[] = [
     { label: 'Explore', path: '/explore', exact: true },
-    { label: 'Map', path: '/map', exact: true },
+    { label: 'Map', path: '/map', exact: false },
     { label: 'Ask Agent', path: '/agent', exact: true },
     { label: 'Profile', path: '/profile', exact: false },
   ];

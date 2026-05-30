@@ -53,6 +53,18 @@ export class EventDetailPageComponent {
 
   protected readonly ticketUrl = computed(() => this.event()?.ticketUrl ?? null);
 
+  protected readonly ticketMainText = computed(() => {
+    const ticket = this.event()?.info.ticket ?? '';
+    const idx = ticket.indexOf('(');
+    return idx !== -1 ? ticket.slice(0, idx).trim() : ticket;
+  });
+
+  protected readonly ticketNote = computed(() => {
+    const ticket = this.event()?.info.ticket ?? '';
+    const match = ticket.match(/\(.*\)/);
+    return match ? match[0] : null;
+  });
+
   private readonly locationRequestKey = computed(() => {
     const loc = this.locationSvc.location();
     if (!loc) return 'none';
@@ -88,7 +100,7 @@ export class EventDetailPageComponent {
 
   protected toggleSaved(): void {
     const id = this.eventId();
-    if (id) this.service.toggleSaved(id);
+    if (id) this.service.toggleSaved(id, this.targetCollectionId());
   }
 
   protected share(): void {
@@ -102,7 +114,7 @@ export class EventDetailPageComponent {
   }
 
   protected navigateToSimilar(id: string): void {
-    this.router.navigate(['/events', id]);
+    void this.router.navigate(['/events', id], { queryParams: this.collectionQueryParams() });
   }
 
   protected openGallery(): void {
@@ -167,5 +179,15 @@ export class EventDetailPageComponent {
       distance: event.distance || null,
       isSaved: event.isSaved,
     };
+  }
+
+  private targetCollectionId(): number | null {
+    const collectionId = Number(this.route.snapshot.queryParamMap.get('collectionId'));
+    return Number.isFinite(collectionId) && collectionId > 0 ? collectionId : null;
+  }
+
+  private collectionQueryParams(): { collectionId?: number } {
+    const collectionId = this.targetCollectionId();
+    return collectionId != null ? { collectionId } : {};
   }
 }

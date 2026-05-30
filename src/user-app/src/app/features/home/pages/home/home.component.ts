@@ -1,7 +1,8 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, { Map } from 'maplibre-gl';
+import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
 import { MapApiService, MapSearchResult } from '../../../../core/services/map-api.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
@@ -17,10 +18,12 @@ const MAP_STYLE_URL = '/map-style.json';
 })
 export class Home implements OnInit, OnDestroy {
   private readonly router = inject(Router);
+  private readonly destinationSvc = inject(DestinationService);
   private readonly locationSvc = inject(LocationService);
   private readonly mapApi = inject(MapApiService);
   private readonly analytics = inject(AnalyticsService);
   private readonly exploreSvc = inject(ExploreService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   private bgMap?: Map;
   private searchTimeout?: ReturnType<typeof setTimeout>;
@@ -33,12 +36,7 @@ export class Home implements OnInit, OnDestroy {
   isLocating = false;
 
   ngOnInit(): void {
-    // Returning users who already completed location entry → skip to Explore.
-    if (this.locationSvc.hasCompletedLocationEntry()) {
-      void this.router.navigate(['/explore'], { replaceUrl: true });
-      return;
-    }
-
+    this.preloadMapExperience();
     this.initBgMap();
   }
 
@@ -79,7 +77,9 @@ export class Home implements OnInit, OnDestroy {
     });
     this.resizeObserver.observe(container);
 
-    this.bgMap.on('load', () => {
+    this.startCinematicLoop();
+
+    this.bgMap.on('style.load', () => {
       this.bgMap?.resize();
       requestAnimationFrame(() => this.bgMap?.resize());
 
@@ -88,9 +88,12 @@ export class Home implements OnInit, OnDestroy {
           this.bgMap?.setLayoutProperty(layer.id, 'visibility', 'none');
         }
       });
-
-      this.startCinematicLoop();
     });
+  }
+
+  private preloadMapExperience(): void {
+    void import('../../../map/pages/map-page/map-page.component');
+    void fetch(MAP_STYLE_URL, { cache: 'force-cache' }).catch(() => {});
   }
 
   private startCinematicLoop(): void {
@@ -123,7 +126,7 @@ export class Home implements OnInit, OnDestroy {
   }
 
   private geocode(query: string): void {
-    this.mapApi.search(query).subscribe({
+    this.mapApi.search(query, 'destination').subscribe({
       next: (results) => {
         this.searchResults = results;
       },
@@ -135,7 +138,7 @@ export class Home implements OnInit, OnDestroy {
 
   /**
    * Manual destination flow — no GPS permission needed.
-   * Sets the destination in LocationService, preloads Explore data, then navigates.
+   * Sets the destination in LocationService, preloads Explore data, then opens the map.
    */
   selectResult(result: MapSearchResult): void {
     const committedQuery = this.searchQuery.trim();
@@ -164,10 +167,38 @@ export class Home implements OnInit, OnDestroy {
       },
     });
 
+    if (result.type === 'destination' && typeof result.id === 'number' && result.id > 0) {
+      this.destinationSvc.setDestinationOverride({
+        id: result.id,
+        name,
+        latitude: lat,
+        longitude: lon,
+      });
+
+      this.exploreSvc.loadForDestination(result.id).finally(() => {
+        this.finishLocationFlow(() => this.router.navigate(['/map'], {
+          replaceUrl: true,
+          queryParams: { destinationId: result.id },
+          state: {
+            name,
+            lat,
+            lon,
+            fromExplore: true,
+          },
+        }));
+      });
+      return;
+    }
+
     this.exploreSvc.loadForLocation(lat, lon).then(() => {
-      this.isLocating = false;
-      this.locationSvc.markLocationEntryComplete();
-      void this.router.navigate(['/explore'], { replaceUrl: true });
+      this.finishLocationFlow(() => this.router.navigate(['/map'], {
+        replaceUrl: true,
+        state: {
+          name,
+          lat,
+          lon,
+        },
+      }));
     });
   }
 
@@ -199,35 +230,21 @@ export class Home implements OnInit, OnDestroy {
       const coords = await this.locationSvc.requestGps();
       await this.exploreSvc.loadForLocation(coords.latitude, coords.longitude);
 
-      this.isLocating = false;
-      this.locationSvc.markLocationEntryComplete();
-
-      if (this.exploreSvc.selectedDestination() === null) {
-        void this.router.navigate(['/map'], {
-          replaceUrl: true,
-          state: {
-            name: 'Current Location',
-            lat: coords.latitude,
-            lon: coords.longitude,
-            isUserLocation: true,
-          },
-        });
-      } else {
-        void this.router.navigate(['/explore'], { replaceUrl: true });
-      }
+      this.finishLocationFlow(() => this.router.navigate(['/map'], {
+        replaceUrl: true,
+        state: {
+          name: 'Current Location',
+          lat: coords.latitude,
+          lon: coords.longitude,
+          isUserLocation: true,
+        },
+      }));
     } catch {
       const approximateLoc = await this.locationSvc.ensureIpFallback();
 
-      this.isLocating = false;
-      this.locationSvc.markLocationEntryComplete();
-
       if (approximateLoc) {
         await this.exploreSvc.loadForLocation(approximateLoc.latitude, approximateLoc.longitude);
-      }
-
-      const hasDestination = this.exploreSvc.selectedDestination() !== null;
-      if (!hasDestination && approximateLoc) {
-        void this.router.navigate(['/map'], {
+        this.finishLocationFlow(() => this.router.navigate(['/map'], {
           replaceUrl: true,
           state: {
             name: 'Current Location',
@@ -235,10 +252,21 @@ export class Home implements OnInit, OnDestroy {
             lon: approximateLoc.longitude,
             isUserLocation: true,
           },
-        });
-      } else {
-        void this.router.navigate(['/explore'], { replaceUrl: true });
+        }));
+        return;
       }
+
+      this.finishLocationFlow();
     }
+  }
+
+  private finishLocationFlow(navigate?: () => Promise<boolean>): void {
+    setTimeout(() => {
+      if (this.isDestroyed) return;
+      this.isLocating = false;
+      this.locationSvc.markLocationEntryComplete();
+      this.cdr.detectChanges();
+      void navigate?.();
+    }, 0);
   }
 }

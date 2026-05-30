@@ -125,7 +125,7 @@ export class CultureHistoryPageComponent implements AfterViewInit {
     );
 
     // Culture & History items are place-type content.
-    this.router.navigate(['/places', id]);
+    this.router.navigate(['/places', id], { state: { detailBackUrl: this.router.url } });
   }
 
   protected loadMore(): void {

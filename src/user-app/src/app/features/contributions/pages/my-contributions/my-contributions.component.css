@@ -9,6 +9,14 @@
   display: none;
 }
 
+.my-contributions-page__section-title {
+  margin: 4px 0 -4px;
+  color: #1f2f46;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 @media (min-width: 1024px) {
   :host {
     height: 100dvh;
@@ -111,6 +119,13 @@
     min-width: 0;
     margin-top: 0;
     padding: 0;
+  }
+
+  .my-contributions-page__section-title {
+    grid-column: 1 / -1;
+    margin: var(--space-2) 0 calc(var(--space-2) * -0.5);
+    color: var(--color-primary-navy);
+    font-size: var(--text-sm);
   }
 
   .my-contributions-card {

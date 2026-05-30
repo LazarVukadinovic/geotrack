@@ -121,16 +121,22 @@
         </div>
       }
 
-      <div class="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-        <p class="text-sm font-semibold text-slate-700">Collection actions</p>
-        <p class="text-xs text-slate-500 mt-1">Adding places directly from this screen is intentionally unavailable in this build because there is no trustworthy backend-backed picker here yet.</p>
-      </div>
     </div>
 
   } @else {
     <div class="flex-1 flex items-center justify-center">
       <p class="text-sm text-slate-400">Collection not found.</p>
     </div>
+  }
+
+  @if (collection()) {
+    <button type="button" (click)="goToExplore()"
+      class="collection-detail-page__fab fixed bottom-8 right-6 w-14 h-14 bg-[#e8722a] rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform z-20"
+      aria-label="Explore and add saved items">
+      <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/>
+      </svg>
+    </button>
   }
 </div>
 <!-- ── Menu sheet ──────────────────────────────────────────────────────────── -->

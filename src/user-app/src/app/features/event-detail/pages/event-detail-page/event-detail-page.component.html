@@ -15,7 +15,7 @@
         </svg>
       </button>
 
-      <span class="ed__top-bar-title" aria-hidden="true">Event</span>
+      <span class="ed__top-bar-title" aria-hidden="true">Explore</span>
 
       <div class="ed__hero-actions">
         <button
@@ -284,21 +284,26 @@
                   </span>
                   <div class="ed__info-text">
                     <span class="ed__info-label">Ticket</span>
-                    <span class="ed__info-value">{{ ev.info.ticket }}</span>
-                    @if (ticketUrl()) {
-                      <a
-                        class="ed__buy-tickets-inline"
-                        [href]="ticketUrl()"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Buy Tickets
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
-                        </svg>
-                      </a>
+                    <div class="ed__ticket-row">
+                      <span class="ed__info-value">{{ ticketMainText() }}</span>
+                      @if (ticketUrl()) {
+                        <a
+                          class="ed__buy-tickets-inline"
+                          [href]="ticketUrl()"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Buy Tickets
+                          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                          </svg>
+                        </a>
+                      }
+                    </div>
+                    @if (ticketNote()) {
+                      <span class="ed__ticket-note">{{ ticketNote() }}</span>
                     }
                   </div>
                 </div>

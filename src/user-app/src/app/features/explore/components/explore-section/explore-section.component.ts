@@ -24,6 +24,7 @@ export interface ExploreSectionItemEvent {
 export class ExploreSectionComponent {
   readonly section = input.required<ExploreSection>();
   readonly showFavoriteButton = input(false);
+  readonly forceHorizontal = input(false);
 
   readonly save = output<ExploreSectionSaveEvent>();
   readonly itemActivated = output<ExploreSectionItemEvent>();

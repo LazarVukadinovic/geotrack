@@ -9,7 +9,7 @@
   <div class="explore-section__viewport">
     <div
       class="explore-section__track"
-      [class.explore-section__track--grid]="section().layout === 'grid'"
+      [class.explore-section__track--grid]="section().layout === 'grid' && !forceHorizontal()"
       [attr.data-slider-id]="sliderId()"
       role="list"
     >

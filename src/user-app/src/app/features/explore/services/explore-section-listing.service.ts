@@ -1,9 +1,10 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { FavoriteEntityType, FavoriteStateService } from '../../../core/services/favorite-state.service';
-import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
+import { SaveToCollectionService, type SaveToCollectionTarget } from '../../../core/services/save-to-collection.service';
 import { LocationService } from '../../../core/services/location.service';
 import { DestinationService } from '../../../core/services/destination.service';
+import { CollectionsService } from '../../profile/services/collections';
 import type { ExploreSectionItem } from '../models/explore-extras.model';
 import type { ExploreSectionFilterGroup, ExploreSectionListingResponse } from '../models/explore-section-listing.model';
 
@@ -75,6 +76,7 @@ export class ExploreSectionListingService {
   private readonly http = inject(HttpClient);
   private readonly favoriteState = inject(FavoriteStateService);
   private readonly saveToCollection = inject(SaveToCollectionService);
+  private readonly collectionsService = inject(CollectionsService);
   private readonly locationSvc = inject(LocationService);
   private readonly destinationSvc = inject(DestinationService);
 
@@ -191,33 +193,47 @@ export class ExploreSectionListingService {
     return this._selectedTagIds().includes(tagId);
   }
 
-  toggleSaved(item: ExploreSectionItem): void {
+  toggleSaved(item: ExploreSectionItem, collectionId?: number | null): void {
+    const target = this.toSaveTarget(item);
+    if (!target) return;
+
+    if (collectionId != null && collectionId > 0) {
+      this.collectionsService.addItem(collectionId, {
+        ...target,
+        image: target.imageUrl,
+      }).subscribe({ error: () => {} });
+      return;
+    }
+
+    this.saveToCollection.open(target);
+  }
+
+  private toSaveTarget(item: ExploreSectionItem): SaveToCollectionTarget | null {
     const numericId = parseInt(item.id, 10);
-    if (isNaN(numericId)) return;
+    if (isNaN(numericId)) return null;
 
     if (item.entityType === 'event') {
-      this.saveToCollection.open({
+      return {
         entityType: 'event',
         entityId: numericId,
         title: item.title,
         imageUrl: item.image,
         surface: `explore_section_${this.currentSectionKey ?? 'unknown'}`,
         analyticsEntityType: 'event',
-      });
-      return;
+      };
     }
 
     const saveEntityType = item.entityType === 'stay' ? 'place' : item.entityType;
-    if (saveEntityType !== 'place') return;
+    if (saveEntityType !== 'place') return null;
 
-    this.saveToCollection.open({
+    return {
       entityType: 'place',
       entityId: numericId,
       title: item.title,
       imageUrl: item.image,
       surface: `explore_section_${this.currentSectionKey ?? 'unknown'}`,
       analyticsEntityType: item.entityType === 'stay' ? 'hotel' : 'place',
-    });
+    };
   }
 
   private loadPage(sectionKey: string, destinationId: number, skip: number, take: number, append: boolean): void {

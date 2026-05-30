@@ -438,6 +438,8 @@
   flex-direction: column;
   gap: 2px;
   padding-top: 2px;
+  flex: 1;
+  min-width: 0;
 }
 
 .ed__info-label {
@@ -455,12 +457,31 @@
   line-height: 1.4;
 }
 
+.ed__ticket-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
+}
+
+.ed__ticket-row .ed__info-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.ed__ticket-note {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  margin-top: 3px;
+}
+
 .ed__buy-tickets-inline {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 5px;
-  margin-top: 8px;
-  padding: 8px 14px;
+  padding: 8px 20px;
   border-radius: 50px;
   background: #e8570a;
   color: #ffffff;

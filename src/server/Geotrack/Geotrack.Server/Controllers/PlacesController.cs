@@ -148,6 +148,27 @@ public class PlacesController : ControllerBase
         }
     }
 
+    [HttpPut("{id:int}/owner-update")]
+    [Authorize]
+    public async Task<IActionResult> OwnerUpdatePlace([FromRoute] int id, [FromBody] OwnerUpdatePlaceRequestDto request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized();
+
+        try
+        {
+            var result = await _placeService.OwnerUpdatePlaceAsync(id, userId.Value, request);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return ex is UnauthorizedAccessException
+                ? StatusCode(403, new { message = "Forbidden." })
+                : MapException(ex);
+        }
+    }
+
     [HttpPost("{id:int}/reviews")]
     [Authorize]
     public async Task<IActionResult> CreatePlaceReview([FromRoute] int id, [FromBody] CreatePlaceReviewRequestDto request)

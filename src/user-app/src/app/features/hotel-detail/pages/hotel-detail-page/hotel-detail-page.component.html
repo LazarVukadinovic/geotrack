@@ -15,7 +15,7 @@
         </svg>
       </button>
 
-      <span class="hd__top-bar-title" aria-hidden="true">Stay</span>
+      <span class="hd__top-bar-title" aria-hidden="true">Explore</span>
 
       <div class="hd__hero-actions">
         <button
@@ -171,9 +171,14 @@
         @if (h.isOwnable) {
           <div class="hd__ownership-cta">
             @if (h.isOwnedByCurrentUser) {
-              <span class="hd__ownership-status hd__ownership-status--owned">You own this stay</span>
+              <button type="button" class="hd__cta hd__cta--outline" (click)="navigateToOwnerEdit()">
+                Edit
+              </button>
             } @else if (h.hasPendingOwnershipClaim || ownershipClaimSubmitted()) {
-              <span class="hd__ownership-status hd__ownership-status--pending">Ownership request pending</span>
+              <div class="hd__ownership-pending">
+                <span class="hd__ownership-pending-title">Ownership request submitted.</span>
+                <span class="hd__ownership-pending-sub">A regional manager will review it</span>
+              </div>
             } @else {
               <button type="button" class="hd__cta hd__cta--outline" (click)="openOwnershipClaim()">
                 Request ownership
@@ -182,9 +187,6 @@
           </div>
         }
 
-        @if (ownershipClaimMessage()) {
-          <p class="hd__ownership-message" role="status">{{ ownershipClaimMessage() }}</p>
-        }
 
         <!-- ── Booking partners ──────────────────────────────────────────── -->
         @if (h.images.length > 1) {
@@ -270,13 +272,19 @@
               <div class="hd__divider hd__divider--contact"></div>
 
               <section class="hd__section hd__section--contact">
-                <h2 class="hd__section-title">Contact</h2>
-                <div class="flex flex-col gap-2 text-sm">
+                <h2 class="hd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Contact</h2>
+                <div class="flex flex-col gap-2.5">
                   @if (h.contactEmail) {
-                    <a [href]="'mailto:' + h.contactEmail" class="text-[#e8570a] break-all">{{ h.contactEmail }}</a>
+                    <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'mailto:' + h.contactEmail">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Email</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ h.contactEmail }}</span>
+                    </a>
                   }
                   @if (h.phoneNumber) {
-                    <p class="text-slate-600">{{ h.phoneNumber }}</p>
+                    <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'tel:' + h.phoneNumber">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Phone</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ h.phoneNumber }}</span>
+                    </a>
                   }
                 </div>
               </section>
@@ -403,6 +411,7 @@
         <div class="hd__divider hd__divider--amenities"></div>
 
         <section class="hd__section hd__section--amenities">
+          <h2 class="hd__section-title">Amenities</h2>
           <div class="hd__amenities" role="list" aria-label="Amenities">
             @for (amenity of h.amenities; track amenity.id) {
               <div class="hd__amenity" role="listitem">

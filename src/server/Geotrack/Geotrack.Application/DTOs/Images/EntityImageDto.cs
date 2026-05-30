@@ -9,4 +9,6 @@ public class EntityImageDto
     public bool IsMain { get; set; }
     public string ImageRole { get; set; } = "gallery";
     public int SortOrder { get; set; }
+    public string ImagePosition { get; set; } = "50% 50%";
+    public string ImageSize { get; set; } = "cover";
 }

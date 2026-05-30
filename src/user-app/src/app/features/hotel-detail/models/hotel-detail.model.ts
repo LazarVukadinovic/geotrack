@@ -34,7 +34,10 @@ export type HotelAmenityIcon =
   | 'spa'
   | 'gym'
   | 'restaurant'
-  | 'ac';
+  | 'ac'
+  | 'outdoor'
+  | 'sea'
+  | 'family';
 
 export interface HotelAmenity {
   id: string;
@@ -76,4 +79,5 @@ export interface HotelDetail {
   isOwnable: boolean;
   isOwnedByCurrentUser: boolean;
   hasPendingOwnershipClaim: boolean;
+  ownerContributionId?: number | null;
 }

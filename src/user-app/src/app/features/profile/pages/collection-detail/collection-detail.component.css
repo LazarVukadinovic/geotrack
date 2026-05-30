@@ -117,4 +117,9 @@
   :host .collection-detail-page__rename-handle {
     display: none;
   }
+
+  :host .collection-detail-page__fab {
+    right: var(--desktop-page-gutter);
+    bottom: var(--space-6);
+  }
 }
