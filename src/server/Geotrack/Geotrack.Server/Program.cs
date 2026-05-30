@@ -458,29 +458,22 @@ var app = builder.Build();
 
 await PostgisStartup.EnsureReadyAsync(app.Services, app.Environment.IsDevelopment());
 
-var seedEnabledForEnvironment = IsSeedEnabledForEnvironment(app.Environment, app.Configuration);
-var shouldSeedDatabase = seedEnabledForEnvironment;
+var shouldSeedOperationalUsers = OperationalUserSeeder.IsEnabled(app.Environment, app.Configuration);
+var shouldSeedDemoContent = IsDemoContentSeedEnabledForEnvironment(app.Environment, app.Configuration);
 var shouldAutoMigrate =
     app.Environment.IsDevelopment()
     || app.Configuration.GetValue<bool>("Database:AutoMigrate")
-    || shouldSeedDatabase;
-var shouldSeedDemoRegionalManager =
-    seedEnabledForEnvironment && DemoRegionalManagerSeeder.IsEnabled(app.Environment, app.Configuration);
-var shouldSeedDemoTerritoryManager =
-    seedEnabledForEnvironment && DemoTerritoryManagerSeeder.IsEnabled(app.Environment, app.Configuration);
-var shouldSeedDemoAdmin =
-    seedEnabledForEnvironment && DemoAdminSeeder.IsEnabled(app.Environment, app.Configuration);
-var shouldSeedDemoContentModerator =
-    seedEnabledForEnvironment && DemoContentModeratorSeeder.IsEnabled(app.Environment, app.Configuration);
+    || shouldSeedOperationalUsers
+    || shouldSeedDemoContent;
 
-if (shouldAutoMigrate || shouldSeedDatabase || shouldSeedDemoRegionalManager || shouldSeedDemoTerritoryManager || shouldSeedDemoAdmin || shouldSeedDemoContentModerator)
+if (shouldAutoMigrate || shouldSeedOperationalUsers || shouldSeedDemoContent)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
     await db.Database.MigrateAsync();
 
-    if (shouldSeedDatabase &&
+    if (shouldSeedDemoContent &&
         app.Configuration.GetValue<bool>("Seed:ImportLocalBoundaries:Enabled"))
     {
         var localBoundaryImport = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
@@ -496,44 +489,20 @@ if (shouldAutoMigrate || shouldSeedDatabase || shouldSeedDemoRegionalManager || 
         }
     }
 
-    if (shouldSeedDatabase)
+    if (shouldSeedOperationalUsers)
+    {
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(nameof(OperationalUserSeeder));
+        await OperationalUserSeeder.EnsureAsync(db, app.Configuration, logger);
+    }
+
+    if (shouldSeedDemoContent)
     {
         await SeedData.InitializeAsync(db);
     }
 
-    if (shouldSeedDemoAdmin)
-    {
-        var logger = scope.ServiceProvider
-            .GetRequiredService<ILoggerFactory>()
-            .CreateLogger(nameof(DemoAdminSeeder));
-        await DemoAdminSeeder.EnsureAsync(db, app.Configuration, logger);
-    }
-
-    if (shouldSeedDemoContentModerator)
-    {
-        var logger = scope.ServiceProvider
-            .GetRequiredService<ILoggerFactory>()
-            .CreateLogger(nameof(DemoContentModeratorSeeder));
-        await DemoContentModeratorSeeder.EnsureAsync(db, app.Configuration, logger);
-    }
-
-    if (shouldSeedDemoRegionalManager)
-    {
-        var logger = scope.ServiceProvider
-            .GetRequiredService<ILoggerFactory>()
-            .CreateLogger(nameof(DemoRegionalManagerSeeder));
-        await DemoRegionalManagerSeeder.EnsureAsync(db, app.Configuration, logger);
-    }
-
-    if (shouldSeedDemoTerritoryManager)
-    {
-        var logger = scope.ServiceProvider
-            .GetRequiredService<ILoggerFactory>()
-            .CreateLogger(nameof(DemoTerritoryManagerSeeder));
-        await DemoTerritoryManagerSeeder.EnsureAsync(db, app.Configuration, logger);
-    }
-
-    if (shouldSeedDatabase &&
+    if (shouldSeedDemoContent &&
         app.Configuration.GetValue("Seed:SyncAdm1Regions:Enabled", true))
     {
         foreach (var syncCountryIso3 in ResolveSeedAdm1SyncCountryIso3s(app.Configuration))
@@ -829,10 +798,11 @@ static string GetUserOrIpRateLimitPartition(HttpContext httpContext)
     return $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
 }
 
-static bool IsSeedEnabledForEnvironment(IHostEnvironment environment, IConfiguration configuration)
+static bool IsDemoContentSeedEnabledForEnvironment(IHostEnvironment environment, IConfiguration configuration)
 {
     var configuredEnabled =
-        configuration.GetValue<bool?>("Seed:Enabled")
+        configuration.GetValue<bool?>("Seed:EnableDemoContentSeed")
+        ?? configuration.GetValue<bool?>("Seed:Enabled")
         ?? configuration.GetValue<bool?>("SeedData:Enabled");
 
     var enabled = configuredEnabled ?? environment.IsDevelopment();
