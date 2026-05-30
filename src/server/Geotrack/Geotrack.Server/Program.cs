@@ -83,6 +83,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("Mcp"));
+builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notifications"));
 builder.Services.Configure<BoundaryImportOptions>(builder.Configuration.GetSection("BoundaryImport"));
 builder.Services.Configure<RegionBoundaryBackfillOptions>(builder.Configuration.GetSection("RegionBoundaryBackfill"));
 builder.Services.Configure<RegionalScopeValidationOptions>(builder.Configuration.GetSection("RegionalScopeValidation"));
@@ -278,12 +279,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("RequireTerritoryManager", policy =>
         policy.RequireRole(RoleNames.TerritoryManager, RoleNames.TerritoryAssociate));
     options.AddPolicy("RequireAdminAppUser", policy =>
-        policy.RequireRole(
-            RoleNames.Admin,
-            RoleNames.ContentModerator,
-            RoleNames.TerritoryManager,
-            RoleNames.TerritoryAssociate,
-            RoleNames.RegionalManager));
+        policy.RequireRole(RoleNames.AdminAppRoles));
 });
 
 builder.Services.AddRateLimiter(options =>
