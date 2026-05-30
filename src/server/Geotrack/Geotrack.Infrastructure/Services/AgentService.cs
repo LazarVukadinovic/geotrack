@@ -101,6 +101,9 @@ public class AgentService : IAgentService
             .AsNoTracking()
             .Where(p => p.PlaceTags.Any(pt => pt.Tag.Slug.ToLower().Contains(category) || pt.Tag.Name.ToLower().Contains(category))
                         || p.PlaceType.Name.ToLower().Contains(category))
+            .OrderByDescending(p => p.AverageRating)
+            .ThenBy(p => p.Name)
+            .ThenBy(p => p.Id)
             .Select(p => new
             {
                 p.Id,
@@ -141,6 +144,9 @@ public class AgentService : IAgentService
         var hotels = await _db.Places
             .AsNoTracking()
             .Where(p => p.Stay != null)
+            .OrderByDescending(p => p.AverageRating)
+            .ThenBy(p => p.Name)
+            .ThenBy(p => p.Id)
             .Select(p => new
             {
                 p.Id,
@@ -181,6 +187,9 @@ public class AgentService : IAgentService
         var events = await _db.Events
             .AsNoTracking()
             .Where(e => e.EndDate >= DateTime.UtcNow)
+            .OrderBy(e => e.StartDate)
+            .ThenBy(e => e.Name)
+            .ThenBy(e => e.Id)
             .Select(e => new
             {
                 e.Id,
@@ -222,6 +231,8 @@ public class AgentService : IAgentService
         var places = await _db.Places
             .AsNoTracking()
             .OrderByDescending(p => p.AverageRating)
+            .ThenBy(p => p.Name)
+            .ThenBy(p => p.Id)
             .Select(p => new
             {
                 p.Id,

@@ -409,6 +409,9 @@ public class SearchService : ISearchService
                     })
                     .ToList()
             })
+            .OrderBy(destination => destinationId.HasValue && destination.Id == destinationId.Value ? 0 : 1)
+            .ThenBy(destination => destination.Name)
+            .ThenBy(destination => destination.Id)
             .Take(50)
             .ToListAsync(cancellationToken);
 
@@ -466,6 +469,7 @@ public class SearchService : ISearchService
         if (activePoint is null)
         {
             places = await query
+                .AsSplitQuery()
                 .Select(place => new PlaceSearchProjection
                 {
                     Id = place.Id,
@@ -509,12 +513,18 @@ public class SearchService : ISearchService
                             })
                             .ToList()
                 })
+                .OrderBy(place => destinationId.HasValue && place.DestinationId == destinationId.Value ? 0 : 1)
+                .ThenByDescending(place => place.AverageRating ?? 0d)
+                .ThenByDescending(place => place.ReviewCount)
+                .ThenBy(place => place.Name)
+                .ThenBy(place => place.Id)
                 .Take(120)
                 .ToListAsync(cancellationToken);
         }
         else
         {
             places = await query
+                .AsSplitQuery()
                 .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null)
                 .Select(place => new PlaceSearchProjection
                 {
@@ -562,6 +572,8 @@ public class SearchService : ISearchService
                 })
                 .OrderBy(place => destinationId.HasValue && place.DestinationId == destinationId.Value ? 0 : 1)
                 .ThenBy(place => place.DistanceMeters)
+                .ThenBy(place => place.Name)
+                .ThenBy(place => place.Id)
                 .Take(120)
                 .ToListAsync(cancellationToken);
         }
@@ -643,9 +655,13 @@ public class SearchService : ISearchService
                             Id = eventTag.TagId,
                             Name = eventTag.Tag.Name,
                             Slug = eventTag.Tag.Slug
-                        })
-                        .ToList()
+                    })
+                    .ToList()
                 })
+                .OrderBy(@event => destinationId.HasValue && @event.DestinationId == destinationId.Value ? 0 : 1)
+                .ThenBy(@event => @event.StartDate)
+                .ThenBy(@event => @event.Name)
+                .ThenBy(@event => @event.Id)
                 .Take(120)
                 .ToListAsync(cancellationToken);
         }
@@ -691,6 +707,8 @@ public class SearchService : ISearchService
                 .OrderBy(@event => destinationId.HasValue && @event.DestinationId == destinationId.Value ? 0 : 1)
                 .ThenBy(@event => @event.DistanceMeters)
                 .ThenBy(@event => @event.StartDate)
+                .ThenBy(@event => @event.Name)
+                .ThenBy(@event => @event.Id)
                 .Take(120)
                 .ToListAsync(cancellationToken);
         }

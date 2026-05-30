@@ -233,7 +233,7 @@ public class UserService : IUserService
         user.TravelRecommendationsEnabled = request.TravelRecommendations;
         user.NearbyEventsEnabled = request.NearbyEvents;
         user.CollectionUpdatesEnabled = request.CollectionUpdates;
-        user.EmailNotificationsEnabled = request.EmailNotifications;
+        user.EmailNotificationsEnabled = false;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _userRepository.SaveChangesAsync();
@@ -708,7 +708,7 @@ public class UserService : IUserService
             TravelRecommendations = user.TravelRecommendationsEnabled,
             NearbyEvents = user.NearbyEventsEnabled,
             CollectionUpdates = user.CollectionUpdatesEnabled,
-            EmailNotifications = user.EmailNotificationsEnabled
+            EmailNotifications = false
         };
     }
 
@@ -720,7 +720,7 @@ public class UserService : IUserService
             TravelRecommendations = user.TravelRecommendationsEnabled,
             NearbyEvents = user.NearbyEventsEnabled,
             CollectionUpdates = user.CollectionUpdatesEnabled,
-            EmailNotifications = user.EmailNotificationsEnabled
+            EmailNotifications = false
         };
     }
 
