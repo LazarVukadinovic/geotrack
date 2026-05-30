@@ -435,6 +435,8 @@ public class AppDbContext : DbContext
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
+            entity.Property(x => x.RegionSetupCompletedAt);
+
             entity.HasOne(x => x.TerritoryManager)
                 .WithMany(x => x.TerritoryManagerTerritories)
                 .HasForeignKey(x => x.UserId)
