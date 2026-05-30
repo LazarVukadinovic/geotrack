@@ -20,7 +20,7 @@ public class NotificationsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<GetUserNotificationsResponseDto>> GetMine(
         [FromQuery] int skip = 0,
-        [FromQuery] int take = 30)
+        [FromQuery] int take = 25)
     {
         try
         {
@@ -46,6 +46,7 @@ public class NotificationsController : ControllerBase
     }
 
     [HttpPut("{id:int}/read")]
+    [HttpPost("{id:int}/read")]
     public async Task<IActionResult> MarkRead([FromRoute] int id)
     {
         try
@@ -60,6 +61,7 @@ public class NotificationsController : ControllerBase
     }
 
     [HttpPut("read-all")]
+    [HttpPost("mark-all-read")]
     public async Task<IActionResult> MarkAllRead()
     {
         try
