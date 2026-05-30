@@ -1073,14 +1073,18 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
 
         return field switch
         {
-            "name" => desc ? query.OrderByDescending(item => item.Name) : query.OrderBy(item => item.Name),
+            "name" => desc
+                ? query.OrderByDescending(item => item.Name).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.Name).ThenBy(item => item.Id),
             "status" => desc
-                ? query.OrderBy(item => item.TerritoryManagerTerritories.Any())
-                : query.OrderByDescending(item => item.TerritoryManagerTerritories.Any()),
+                ? query.OrderBy(item => item.TerritoryManagerTerritories.Any()).ThenBy(item => item.Name).ThenBy(item => item.Id)
+                : query.OrderByDescending(item => item.TerritoryManagerTerritories.Any()).ThenBy(item => item.Name).ThenBy(item => item.Id),
             "countries" => desc
-                ? query.OrderByDescending(item => item.CountryCode ?? item.Name)
-                : query.OrderBy(item => item.CountryCode ?? item.Name),
-            _ => desc ? query.OrderByDescending(item => item.CreatedAt) : query.OrderBy(item => item.CreatedAt)
+                ? query.OrderByDescending(item => item.CountryCode ?? item.Name).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.CountryCode ?? item.Name).ThenBy(item => item.Id),
+            _ => desc
+                ? query.OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.CreatedAt).ThenBy(item => item.Id)
         };
     }
 
