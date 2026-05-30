@@ -81,6 +81,7 @@ builder.Services.Configure<GzipCompressionProviderOptions>(options =>
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
+builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("Mcp"));
 builder.Services.Configure<BoundaryImportOptions>(builder.Configuration.GetSection("BoundaryImport"));
 builder.Services.Configure<RegionBoundaryBackfillOptions>(builder.Configuration.GetSection("RegionBoundaryBackfill"));
@@ -154,21 +155,13 @@ builder.Services.AddScoped<IAiProviderKeyService, AiProviderKeyService>();
 builder.Services.AddScoped<IAgentQueryPlanner, AgentQueryPlanner>();
 builder.Services.AddScoped<IGeoTrackToolService, GeoTrackToolService>();
 builder.Services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
-builder.Services.AddScoped<IAgentProviderRegistry, AgentProviderRegistry>();
+builder.Services.AddSingleton<IGeminiKeyPool, GeminiKeyPool>();
+builder.Services.AddScoped<IGeminiAskAgentService, GeminiAskAgentService>();
 builder.Services.AddHttpClient<GeminiAgentProvider>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("GeoTrack/1.0");
 });
-builder.Services.AddScoped<IAgentProvider>(serviceProvider => serviceProvider.GetRequiredService<GeminiAgentProvider>());
-builder.Services.AddScoped<IAgentProvider>(serviceProvider =>
-    new ConfiguredUnavailableAgentProvider(
-        "openai",
-        serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentOptions>>()));
-builder.Services.AddScoped<IAgentProvider>(serviceProvider =>
-    new ConfiguredUnavailableAgentProvider(
-        "claude",
-        serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentOptions>>()));
 builder.Services.AddScoped<IExploreService, ExploreService>();
 builder.Services.AddScoped<IExploreSearchService, ExploreSearchService>();
 builder.Services.AddScoped<ISearchService, SearchService>();

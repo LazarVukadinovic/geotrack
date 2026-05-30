@@ -13,45 +13,42 @@ namespace Geotrack.Infrastructure.Services.Agent;
 public class GeminiAgentProvider : IAgentProvider
 {
     private const string ProviderId = "gemini";
-    private const string DefaultBaseUrl = "https://generativelanguage.googleapis.com";
     private const int MaxTransientAttempts = 3;
     private readonly HttpClient _httpClient;
-    private readonly AgentOptions _agentOptions;
+    private readonly GeminiOptions _geminiOptions;
     private readonly ILogger<GeminiAgentProvider> _logger;
 
     public GeminiAgentProvider(
         HttpClient httpClient,
-        IOptions<AgentOptions> agentOptions,
+        IOptions<GeminiOptions> geminiOptions,
         ILogger<GeminiAgentProvider> logger)
     {
         _httpClient = httpClient;
-        _agentOptions = agentOptions.Value;
+        _geminiOptions = geminiOptions.Value;
         _logger = logger;
     }
 
     public string Id => ProviderId;
 
-    public AgentProviderMetadataDto GetMetadata(int? userId, AgentApiKeyMetadataDto? savedKey)
+    public AgentProviderMetadataDto GetMetadata(int? userId)
     {
-        var options = GetOptions();
-        var enabled = options.Enabled && BuildModels(options).Count > 0;
+        var model = NormalizeModel(_geminiOptions.Model);
+        var hasConfiguredKey = _geminiOptions.ApiKeys.Any(key => !string.IsNullOrWhiteSpace(key));
         return new AgentProviderMetadataDto
         {
             Id = ProviderId,
-            DisplayName = string.IsNullOrWhiteSpace(options.DisplayName) ? "Gemini" : options.DisplayName,
-            Enabled = enabled,
-            Models = BuildModels(options),
-            DefaultModel = options.DefaultModel,
-            SupportsSavedKey = enabled && options.SupportsSavedKey,
-            SupportsSessionKey = enabled && options.SupportsSessionKey,
-            ProjectDemoKeyEnabled =
-                enabled &&
-                options.SupportsProjectDemoKey &&
-                _agentOptions.AllowProjectDemoProvider &&
-                !string.IsNullOrWhiteSpace(options.ApiKey),
-            HasSavedKey = savedKey is not null,
-            KeyLast4 = savedKey?.KeyLast4,
-            KeyUpdatedAt = savedKey?.UpdatedAt
+            DisplayName = "GeoTrack AI",
+            Enabled = hasConfiguredKey,
+            Models = new List<AgentProviderModelDto>
+            {
+                new()
+                {
+                    Id = model,
+                    DisplayName = model,
+                    IsDefault = true
+                }
+            },
+            DefaultModel = model
         };
     }
 
@@ -174,95 +171,25 @@ public class GeminiAgentProvider : IAgentProvider
             503);
     }
 
-    public async Task TestAsync(string apiKey, string model, CancellationToken cancellationToken = default)
-    {
-        var result = await GenerateAsync(
-            new AgentProviderChatRequest
-            {
-                ApiKey = apiKey,
-                Model = model,
-                SystemPrompt = "Reply with exactly: OK",
-                UserMessage = "Connectivity check.",
-                Timeout = TimeSpan.FromSeconds(Math.Min(10, Math.Max(3, _agentOptions.RequestTimeoutSeconds)))
-            },
-            cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(result.Text))
-        {
-            throw new AgentException("provider_unavailable", "Gemini did not return an answer.", 503);
-        }
-    }
-
-    private AgentProviderOptions GetOptions()
-    {
-        if (_agentOptions.Providers.TryGetValue(ProviderId, out var providerOptions))
-        {
-            return providerOptions;
-        }
-
-        return new AgentProviderOptions
-        {
-            Enabled = false,
-            DisplayName = "Gemini",
-            BaseUrl = DefaultBaseUrl
-        };
-    }
-
     private Uri BuildGenerateContentUrl(string model)
     {
-        var options = GetOptions();
-        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? DefaultBaseUrl : options.BaseUrl.TrimEnd('/');
+        var baseUrl = string.IsNullOrWhiteSpace(_geminiOptions.BaseUrl)
+            ? GeminiOptions.DefaultBaseUrl
+            : _geminiOptions.BaseUrl.TrimEnd('/');
         return new Uri($"{baseUrl}/v1beta/models/{Uri.EscapeDataString(model)}:generateContent");
     }
 
     private string NormalizeModel(string model)
     {
-        var options = GetOptions();
-        var models = BuildModels(options);
-        var allowed = models
-            .Select(item => item.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        if (allowed.Count == 0)
-        {
-            throw new AgentException("provider_not_configured", "Gemini is not configured.", 400);
-        }
-
-        var candidate = string.IsNullOrWhiteSpace(model) ? options.DefaultModel : model.Trim();
-        if (!allowed.Contains(candidate))
+        var candidate = string.IsNullOrWhiteSpace(model)
+            ? GeminiOptions.DefaultModel
+            : model.Trim();
+        if (candidate.Length > 200 || candidate.Any(char.IsControl))
         {
             throw new AgentException("unsupported_model", "The selected model is not available for this provider.", 400);
         }
 
-        return models.First(item => string.Equals(item.Id, candidate, StringComparison.OrdinalIgnoreCase)).Id;
-    }
-
-    private static List<AgentProviderModelDto> BuildModels(AgentProviderOptions options)
-    {
-        if (options.Models.Count > 0)
-        {
-            return options.Models
-                .Where(model => !string.IsNullOrWhiteSpace(model.Id))
-                .Select(model => new AgentProviderModelDto
-                {
-                    Id = model.Id.Trim(),
-                    DisplayName = string.IsNullOrWhiteSpace(model.DisplayName) ? model.Id.Trim() : model.DisplayName.Trim(),
-                    IsDefault = model.IsDefault || string.Equals(model.Id, options.DefaultModel, StringComparison.OrdinalIgnoreCase)
-                })
-                .ToList();
-        }
-
-        return string.IsNullOrWhiteSpace(options.DefaultModel)
-            ? new List<AgentProviderModelDto>()
-            : new List<AgentProviderModelDto>
-            {
-                new()
-                {
-                    Id = options.DefaultModel.Trim(),
-                    DisplayName = options.DefaultModel.Trim(),
-                    IsDefault = true
-                }
-            };
+        return candidate;
     }
 
     private static HttpRequestMessage CreateGenerateContentRequest(Uri url, AgentProviderChatRequest request)
@@ -329,8 +256,7 @@ public class GeminiAgentProvider : IAgentProvider
                 400);
         }
 
-        if (statusCode == HttpStatusCode.TooManyRequests ||
-            string.Equals(providerStatus, "RESOURCE_EXHAUSTED", StringComparison.OrdinalIgnoreCase))
+        if (IsQuotaOrRateLimitError(statusCode, providerStatus, providerMessage))
         {
             return new AgentException(
                 "quota_exceeded",
@@ -348,6 +274,14 @@ public class GeminiAgentProvider : IAgentProvider
             return new AgentException(
                 "unsupported_model",
                 "The selected model is not available for Gemini.",
+                400);
+        }
+
+        if (statusCode == HttpStatusCode.BadRequest)
+        {
+            return new AgentException(
+                "provider_bad_request",
+                "Ask Agent could not process that request.",
                 400);
         }
 
@@ -420,6 +354,28 @@ public class GeminiAgentProvider : IAgentProvider
             (providerMessage.Contains("invalid", StringComparison.OrdinalIgnoreCase) ||
              providerMessage.Contains("not valid", StringComparison.OrdinalIgnoreCase) ||
              providerMessage.Contains("rejected", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsQuotaOrRateLimitError(
+        HttpStatusCode statusCode,
+        string? providerStatus,
+        string? providerMessage)
+    {
+        if (statusCode == HttpStatusCode.TooManyRequests ||
+            string.Equals(providerStatus, "RESOURCE_EXHAUSTED", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(providerMessage))
+        {
+            return false;
+        }
+
+        return providerMessage.Contains("quota", StringComparison.OrdinalIgnoreCase) ||
+            providerMessage.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
+            providerMessage.Contains("resource exhausted", StringComparison.OrdinalIgnoreCase) ||
+            providerMessage.Contains("daily limit", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class GeminiGenerateContentRequest
