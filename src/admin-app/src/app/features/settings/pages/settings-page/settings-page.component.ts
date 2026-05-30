@@ -70,8 +70,8 @@ export class SettingsComponent implements OnInit {
 
   readonly language = signal('en-US');
   readonly timezone = signal('UTC');
-  readonly notifyRequests = signal(true);
-  readonly notifyNewReview = signal(true);
+  readonly notifyRequests = signal(false);
+  readonly notifyNewReview = signal(false);
 
   readonly isLoading = signal(true);
   readonly isSaving = signal(false);
@@ -189,6 +189,16 @@ export class SettingsComponent implements OnInit {
   }
 
   get notificationPrimaryDescription(): string {
+    if (!this.emailNotificationsAvailable) {
+      if (this.isContentModerator) {
+        return 'Email delivery for review reports is not available yet.';
+      }
+
+      return this.isAdmin
+        ? 'Email delivery for administrator reports is not available yet.'
+        : 'Email delivery for requests is not available yet.';
+    }
+
     if (this.isContentModerator) {
       return 'Receive an email when a review report needs moderation.';
     }
@@ -207,6 +217,16 @@ export class SettingsComponent implements OnInit {
   }
 
   get notificationSecondaryDescription(): string {
+    if (!this.emailNotificationsAvailable) {
+      if (this.isContentModerator) {
+        return 'Email delivery for moderation updates is not available yet.';
+      }
+
+      return this.isAdmin
+        ? 'Email delivery for review moderation is not available yet.'
+        : 'Email delivery for new reviews is not available yet.';
+    }
+
     if (this.isContentModerator) {
       return 'Get notified about changes to review moderation work.';
     }
@@ -214,6 +234,18 @@ export class SettingsComponent implements OnInit {
     return this.isAdmin
       ? 'Get notified about reported reviews requiring moderation.'
       : 'Get notified when someone leaves a review.';
+  }
+
+  get emailNotificationsAvailable(): boolean {
+    return this.lastProfile?.preferences.emailNotificationsAvailable === true;
+  }
+
+  get canEditEmailNotifications(): boolean {
+    return this.emailNotificationsAvailable && !this.isSaving();
+  }
+
+  get emailNotificationUnavailableMessage(): string {
+    return 'Email notifications are not available yet. In-app notifications are currently supported.';
   }
 
   get assignedRegion(): string {
@@ -232,13 +264,18 @@ export class SettingsComponent implements OnInit {
       return false;
     }
 
-    return this.firstName().trim() !== (profile.user.firstName ?? '').trim()
+    const profileFieldsChanged = this.firstName().trim() !== (profile.user.firstName ?? '').trim()
       || this.lastName().trim() !== (profile.user.lastName ?? '').trim()
-      || this.normalizeOptionalString(this.bio()) !== this.normalizeOptionalString(profile.user.shortBio)
-      || this.language() !== profile.preferences.interfaceLanguage
-      || this.timezone() !== profile.preferences.timezone
-      || this.notifyRequests() !== profile.preferences.emailRequestsEnabled
-      || this.notifyNewReview() !== profile.preferences.emailNewReviewEnabled;
+      || this.normalizeOptionalString(this.bio()) !== this.normalizeOptionalString(profile.user.shortBio);
+
+    const interfacePreferencesChanged = this.language() !== profile.preferences.interfaceLanguage
+      || this.timezone() !== profile.preferences.timezone;
+
+    const emailPreferencesChanged = this.emailNotificationsAvailable &&
+      (this.notifyRequests() !== profile.preferences.emailRequestsEnabled
+        || this.notifyNewReview() !== profile.preferences.emailNewReviewEnabled);
+
+    return profileFieldsChanged || interfacePreferencesChanged || emailPreferencesChanged;
   }
 
   loadProfile(): void {
@@ -401,6 +438,9 @@ export class SettingsComponent implements OnInit {
       return;
     }
 
+    const emailRequestsEnabled = this.emailNotificationsAvailable ? this.notifyRequests() : false;
+    const emailNewReviewEnabled = this.emailNotificationsAvailable ? this.notifyNewReview() : false;
+
     this.isSaving.set(true);
     this.saveSuccess.set(false);
     this.saveError.set(null);
@@ -413,8 +453,8 @@ export class SettingsComponent implements OnInit {
         shortBio: this.bio().trim() || null,
         interfaceLanguage: this.language(),
         timezone: this.timezone(),
-        emailRequestsEnabled: this.notifyRequests(),
-        emailNewReviewEnabled: this.notifyNewReview(),
+        emailRequestsEnabled,
+        emailNewReviewEnabled,
       })
       .pipe(
         finalize(() => {
@@ -446,6 +486,22 @@ export class SettingsComponent implements OnInit {
     this.saveError.set(null);
     this.avatarError.set(null);
     this.notifyStateChanged();
+  }
+
+  toggleEmailRequests(): void {
+    if (!this.canEditEmailNotifications) {
+      return;
+    }
+
+    this.notifyRequests.update(value => !value);
+  }
+
+  toggleEmailNewReview(): void {
+    if (!this.canEditEmailNotifications) {
+      return;
+    }
+
+    this.notifyNewReview.update(value => !value);
   }
 
   onRegionSelected(regionId: number): void {
@@ -514,8 +570,9 @@ export class SettingsComponent implements OnInit {
     const preferences = profile.preferences ?? {
       interfaceLanguage: 'en-US',
       timezone: 'UTC',
-      emailRequestsEnabled: true,
-      emailNewReviewEnabled: true,
+      emailNotificationsAvailable: false,
+      emailRequestsEnabled: false,
+      emailNewReviewEnabled: false,
     };
     const language = this.isAllowedOption(this.languageOptions, preferences.interfaceLanguage)
       ? preferences.interfaceLanguage
@@ -523,6 +580,7 @@ export class SettingsComponent implements OnInit {
     const timezone = this.isAllowedOption(this.timezoneOptions, preferences.timezone)
       ? preferences.timezone
       : 'UTC';
+    const emailNotificationsAvailable = preferences.emailNotificationsAvailable === true;
 
     return {
       ...profile,
@@ -533,8 +591,9 @@ export class SettingsComponent implements OnInit {
       preferences: {
         interfaceLanguage: language,
         timezone,
-        emailRequestsEnabled: preferences.emailRequestsEnabled ?? true,
-        emailNewReviewEnabled: preferences.emailNewReviewEnabled ?? true,
+        emailNotificationsAvailable,
+        emailRequestsEnabled: emailNotificationsAvailable && (preferences.emailRequestsEnabled ?? false),
+        emailNewReviewEnabled: emailNotificationsAvailable && (preferences.emailNewReviewEnabled ?? false),
       },
     };
   }

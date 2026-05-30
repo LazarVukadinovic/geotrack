@@ -1,9 +1,11 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Options;
 using Geotrack.Application.Security;
 using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -32,10 +34,14 @@ public class AdminProfileService : IAdminProfileService
     };
 
     private readonly AppDbContext _db;
+    private readonly NotificationOptions _notificationOptions;
 
-    public AdminProfileService(AppDbContext db)
+    public AdminProfileService(
+        AppDbContext db,
+        IOptions<NotificationOptions> notificationOptions)
     {
         _db = db;
+        _notificationOptions = notificationOptions.Value;
     }
 
     public async Task<AdminProfileResponseDto> GetProfileAsync(int userId)
@@ -118,8 +124,9 @@ public class AdminProfileService : IAdminProfileService
             {
                 InterfaceLanguage = NormalizeLanguageOrDefault(user.InterfaceLanguage),
                 Timezone = NormalizeTimezoneOrDefault(user.Timezone),
-                EmailRequestsEnabled = user.EmailRequestsEnabled,
-                EmailNewReviewEnabled = user.EmailNewReviewEnabled,
+                EmailNotificationsAvailable = _notificationOptions.EmailEnabled,
+                EmailRequestsEnabled = _notificationOptions.EmailEnabled && user.EmailRequestsEnabled,
+                EmailNewReviewEnabled = _notificationOptions.EmailEnabled && user.EmailNewReviewEnabled,
             },
         };
     }
@@ -144,8 +151,18 @@ public class AdminProfileService : IAdminProfileService
         user.ShortBio = NormalizeOptionalString(request.ShortBio);
         user.InterfaceLanguage = NormalizeLanguageOrDefault(request.InterfaceLanguage);
         user.Timezone = NormalizeTimezoneOrDefault(request.Timezone);
-        user.EmailRequestsEnabled = request.EmailRequestsEnabled;
-        user.EmailNewReviewEnabled = request.EmailNewReviewEnabled;
+        if (_notificationOptions.EmailEnabled)
+        {
+            user.EmailRequestsEnabled = request.EmailRequestsEnabled;
+            user.EmailNewReviewEnabled = request.EmailNewReviewEnabled;
+        }
+        else
+        {
+            user.EmailNotificationsEnabled = false;
+            user.EmailRequestsEnabled = false;
+            user.EmailNewReviewEnabled = false;
+        }
+
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
