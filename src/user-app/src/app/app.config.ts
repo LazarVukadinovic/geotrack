@@ -12,7 +12,6 @@ import { routes } from './app.routes';
 import { apiUrlInterceptor } from './core/services/api-url.interceptor';
 import { authInterceptor } from './core/services/auth.interceptor';
 import { authErrorInterceptor } from './core/services/auth-error.interceptor';
-import { TokenStorageService } from './core/services/token-storage.service';
 import { TokenRefreshService } from './core/services/token-refresh.service';
 import { AuthService } from './core/services/auth.service';
 import { UserService } from './core/services/user.service';
@@ -33,22 +32,20 @@ export const appConfig: ApplicationConfig = {
 
     // ── Startup session restore ─────────────────────────────────────────────
     // On every cold start:
-    //  1. If a refresh token is present in storage (Remember Me or session),
-    //     exchange it for a new access token via POST /api/auth/refresh.
+    //  1. Attempt a silent refresh via the shared HttpOnly cookie. This also
+    //     picks up sessions created by admin-app, where browser storage is a
+    //     different origin because the ports differ.
     //  2. On success, load the user profile so every page has fullName/email
     //     ready on first render without an additional round-trip.
     //  3. On refresh failure (token expired / revoked), clear all local state
     //     so isLoggedIn() is false before the router begins navigation.
     provideAppInitializer(() => {
-      const tokenStorage    = inject(TokenStorageService);
       const tokenRefreshSvc = inject(TokenRefreshService);
       const authService     = inject(AuthService);
       const userService     = inject(UserService);
 
-      if (!tokenStorage.hasSession()) return;
-
       return firstValueFrom(
-        tokenRefreshSvc.refresh().pipe(
+        tokenRefreshSvc.refresh({ allowMissingSessionHint: true }).pipe(
           catchError(() => {
             authService.clearSession();
             return of(null);

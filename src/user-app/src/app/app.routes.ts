@@ -160,8 +160,10 @@ export const routes: Routes = [
       },
       {
         path: 'settings/notifications',
-        pathMatch: 'full',
-        redirectTo: 'settings',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/settings/pages/notifications-page/notifications-page.component').then(m => m.NotificationsPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
         path: 'settings/privacy-settings',
