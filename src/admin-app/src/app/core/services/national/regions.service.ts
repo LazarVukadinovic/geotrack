@@ -42,6 +42,7 @@ export interface RegionListItem {
   managerDisplayName?: string | null;
   assignedManagers: TerritoryRegionDirectoryItem['assignedManagers'];
   status: 'Active' | 'Inactive';
+  representativeImage?: TerritoryRegionDirectoryItem['representativeImage'];
   imageUrl?: string | null;
   imageBg: string;
   pendingRequests: number;
@@ -196,6 +197,7 @@ export class RegionsService {
     const status = (item.status || (assignedPersons > 0 ? 'Active' : 'Inactive')).toLowerCase() === 'active'
       ? 'Active'
       : 'Inactive';
+    const representativeImage = item.representativeImage ?? null;
 
     return {
       id: String(item.regionId ?? item.id),
@@ -214,7 +216,8 @@ export class RegionsService {
       managerDisplayName: item.managerDisplayName,
       assignedManagers: item.assignedManagers ?? [],
       status,
-      imageUrl: item.imageUrl,
+      representativeImage,
+      imageUrl: representativeImage?.url ?? null,
       imageBg: this.imageBackground(item.regionId ?? item.id),
       pendingRequests: item.pendingRequestsCount,
       healthScore: item.healthScore ?? item.health?.score ?? null,

@@ -190,9 +190,18 @@ export interface TerritoryRegionDirectoryItem {
   healthScore?: number | null;
   health?: TerritoryHealth | null;
   activityScore: number;
+  representativeImage?: TerritoryRegionRepresentativeImage | null;
   imageUrl?: string | null;
   detailRoute?: string | null;
   createdAt: string;
+}
+
+export interface TerritoryRegionRepresentativeImage {
+  url: string;
+  altText?: string | null;
+  sourceType: string;
+  sourceId: number;
+  sourceName: string;
 }
 
 export interface TerritoryRegionDirectoryResponse {
@@ -393,7 +402,29 @@ export interface RegionSyncSummary {
   ambiguousCount: number;
   failedCount: number;
   dryRun: boolean;
+  completedAt?: string | null;
   items: RegionSyncItem[];
+}
+
+export interface TerritoryRegionSetupStatus {
+  territoryId: number;
+  territoryName: string;
+  countryIso3: string;
+  requiresInitialSync: boolean;
+  onboardingCompleted: boolean;
+  hasSyncedRegions: boolean;
+  syncedRegionCount: number;
+  candidateCount: number;
+  hasCandidateData: boolean;
+  canSync: boolean;
+  canUpdate: boolean;
+  updateAvailable: boolean;
+  missingCandidateData: boolean;
+  regionSetupCompletedAt?: string | null;
+  lastSyncedAt?: string | null;
+  candidateVersionHash?: string | null;
+  syncedVersionHash?: string | null;
+  message: string;
 }
 
 export interface RegionSyncItem {
