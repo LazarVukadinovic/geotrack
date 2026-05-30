@@ -3,7 +3,86 @@
   height: 100%;
 }
 
-.notif-page__switch {
+.notif-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.notif-settings__group,
+.notif-settings__card,
+.notif-settings__message {
+  border: 1px solid rgba(26, 43, 76, 0.08);
+  border-radius: var(--radius-lg);
+  background: var(--color-card-bg);
+  box-shadow: var(--shadow-subtle);
+}
+
+.notif-settings__group {
+  overflow: hidden;
+}
+
+.notif-settings__group-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid rgba(26, 43, 76, 0.08);
+}
+
+.notif-settings__group-header h2,
+.notif-settings__preference-copy h3 {
+  margin: 0;
+  color: var(--color-primary-navy);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.notif-settings__group-header p,
+.notif-settings__preference-copy p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.notif-settings__badge {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(26, 43, 76, 0.08);
+  color: var(--color-primary-navy);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.notif-settings__preference {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border: 0;
+  background: #ffffff;
+  padding: var(--space-4);
+  text-align: left;
+}
+
+.notif-settings__preference--disabled {
+  color: inherit;
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.notif-settings__preference-copy {
+  min-width: 0;
+}
+
+.notif-settings__switch {
   position: relative;
   display: inline-flex;
   width: 3rem;
@@ -11,25 +90,105 @@
   flex: none;
   align-items: center;
   padding: 0.1875rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: #dbe2ea;
   transition: background-color 160ms ease;
 }
 
-.notif-page__switch--on {
-  background: #1a2b4a;
+.notif-settings__switch--on {
+  background: var(--color-primary-navy);
 }
 
-.notif-page__switch-knob {
+.notif-settings__switch-knob {
   width: 1.375rem;
   height: 1.375rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
   transform: translateX(0);
   transition: transform 160ms ease;
 }
 
-.notif-page__switch--on .notif-page__switch-knob {
+.notif-settings__switch--on .notif-settings__switch-knob {
   transform: translateX(1.25rem);
+}
+
+.notif-settings__message {
+  padding: var(--space-4);
+}
+
+.notif-settings__message--error {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: #fef2f2;
+}
+
+.notif-settings__message p {
+  margin: 0;
+  color: #b91c1c;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.notif-settings__retry {
+  margin-top: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: #e8570a;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  padding: 9px 16px;
+}
+
+.notif-settings__retry:focus-visible {
+  outline: 2px solid #e8570a;
+  outline-offset: 2px;
+}
+
+.notif-settings__card {
+  padding: var(--space-4);
+}
+
+.notif-settings__skeleton {
+  height: 13px;
+  margin-top: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, #e7eaf0 0%, #f7f8fa 50%, #e7eaf0 100%);
+  background-size: 200% 100%;
+  animation: notif-settings-shimmer 1.2s ease-in-out infinite;
+}
+
+.notif-settings__skeleton--title {
+  width: 46%;
+  height: 15px;
+  margin-top: 0;
+}
+
+.notif-settings__skeleton--short {
+  width: 34%;
+}
+
+@keyframes notif-settings-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: -200% 50%;
+  }
+}
+
+@media (min-width: 1024px) {
+  .notif-settings {
+    gap: var(--space-5);
+  }
+
+  .notif-settings__group-header,
+  .notif-settings__preference,
+  .notif-settings__card,
+  .notif-settings__message {
+    padding: var(--space-5);
+  }
 }

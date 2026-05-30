@@ -26,6 +26,7 @@ export class SettingsComponent {
   changePassword():    void { this.router.navigate(['/settings/change-password']); }
   openPrivacy():       void { this.router.navigate(['/settings/privacy-settings']); }
   openAnalytics():     void { this.router.navigate(['/settings/analytics']); }
+  openNotifications(): void { this.router.navigate(['/settings/notifications']); }
   openInterests():     void { this.router.navigate(['/settings/interests'], { queryParams: { from: 'settings' } }); }
   openHelp():          void { this.router.navigate(['/settings/help-center']); }
   contactSupport():    void { this.router.navigate(['/settings/contact-support']); }
