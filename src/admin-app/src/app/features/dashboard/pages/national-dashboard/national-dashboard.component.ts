@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
@@ -33,7 +34,7 @@ interface TerritoryStatCard {
   styleUrl: './national-dashboard.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class NationalDashboardComponent implements OnInit {
+export class NationalDashboardComponent implements OnInit, OnDestroy {
   private static readonly maxRegionHealthCards = 4;
 
   private readonly auth = inject(AuthService);
@@ -50,6 +51,7 @@ export class NationalDashboardComponent implements OnInit {
   isTerritoryLoading = false;
   errorMessage = '';
   private failedManagerAvatarKeys = new Set<string>();
+  private setupChangedSubscription: Subscription | null = null;
 
   get userName(): string { return this.auth.fullName; }
   get userRole(): string { return this.auth.getUser()?.role ?? ''; }
@@ -79,7 +81,19 @@ export class NationalDashboardComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.setupChangedSubscription = this.territoryDashboard.regionSetupChanged$
+      .subscribe(() => {
+        if (this.activeTerritoryId) {
+          this.loadDashboard(this.activeTerritoryId);
+        } else {
+          this.loadTerritories();
+        }
+      });
     this.loadTerritories();
+  }
+
+  ngOnDestroy(): void {
+    this.setupChangedSubscription?.unsubscribe();
   }
 
   onTerritoryChange(territoryId: number): void {

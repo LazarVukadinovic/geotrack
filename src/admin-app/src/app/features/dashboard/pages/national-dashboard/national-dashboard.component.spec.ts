@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { NationalDashboardComponent } from './national-dashboard.component';
@@ -158,6 +158,7 @@ describe('NationalDashboardComponent', () => {
     getActiveTerritoryId: vi.fn(() => 10),
     setActiveTerritoryId: vi.fn(),
     getDashboard: vi.fn(() => of(dashboard)),
+    regionSetupChanged$: new Subject<void>().asObservable(),
   };
 
   beforeEach(async () => {

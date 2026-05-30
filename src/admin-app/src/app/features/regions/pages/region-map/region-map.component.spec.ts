@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { vi } from 'vitest';
 import { TerritoryRegionMapComponent } from './region-map.component';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -19,6 +19,7 @@ describe('TerritoryRegionMapComponent', () => {
     getActiveTerritoryId: ReturnType<typeof vi.fn>;
     setActiveTerritoryId: ReturnType<typeof vi.fn>;
     getRegionMap: ReturnType<typeof vi.fn>;
+    regionSetupChanged$: ReturnType<Subject<void>['asObservable']>;
   };
 
   const assignedTerritories: TerritoryAssignedTerritory[] = [
@@ -31,6 +32,7 @@ describe('TerritoryRegionMapComponent', () => {
       getActiveTerritoryId: vi.fn(() => 10),
       setActiveTerritoryId: vi.fn(),
       getRegionMap: vi.fn(() => of(mapResponse())),
+      regionSetupChanged$: new Subject<void>().asObservable(),
     };
 
     await TestBed.configureTestingModule({

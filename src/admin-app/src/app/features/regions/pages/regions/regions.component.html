@@ -112,7 +112,8 @@
           *ngIf="canManageRegions"
           type="button"
           (click)="syncRegions()"
-          [disabled]="!activeTerritoryId || territoryLoading || isSyncing"
+          [disabled]="!activeTerritoryId || territoryLoading || isSyncing || setupStatusLoading || !canUpdateRegions"
+          [attr.title]="updateRegionsHelpText"
           class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold
                  border-none cursor-pointer shadow-sm hover:bg-blue-800 transition-colors
                  disabled:bg-gray-300 disabled:cursor-not-allowed"
@@ -127,8 +128,12 @@
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
           </svg>
-          {{ isSyncing ? 'Refreshing...' : 'Sync ADM1 Regions' }}
+          {{ isSyncing ? 'Updating...' : 'Update Regions' }}
         </button>
+
+        <span *ngIf="canManageRegions" class="text-xs font-medium text-gray-500">
+          {{ updateRegionsHelpText }}
+        </span>
 
         <span *ngIf="!isLoading && !territoryLoading" class="text-sm text-gray-500">
           Showing <span class="font-semibold text-gray-700">{{ items.length }}</span>
@@ -185,8 +190,8 @@
               [style.background]="hasImage(item) ? null : item.imageBg"
             >
               <img *ngIf="hasImage(item)"
-                   [src]="item.imageUrl!"
-                   [alt]="item.name"
+                   [src]="thumbnailImageUrl(item) ?? ''"
+                   [alt]="imageAlt(item)"
                    class="w-full h-full object-cover"
                    (error)="onImageError(item)" />
               <svg *ngIf="!hasImage(item)" class="w-6 h-6 text-blue-500 opacity-60" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

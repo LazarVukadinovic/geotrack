@@ -80,6 +80,7 @@ export class TerritoryRegionMapComponent implements OnInit, AfterViewInit, OnDes
   private regionLayers = new Map<number, any>();
   private territoriesSubscription: Subscription | null = null;
   private mapSubscription: Subscription | null = null;
+  private setupChangedSubscription: Subscription | null = null;
   private mapRequestSequence = 0;
   private pendingRender = false;
   private pendingFitViewport = true;
@@ -94,6 +95,8 @@ export class TerritoryRegionMapComponent implements OnInit, AfterViewInit, OnDes
   ) {}
 
   ngOnInit(): void {
+    this.setupChangedSubscription = this.territoryDashboard.regionSetupChanged$
+      .subscribe(() => this.refresh());
     this.loadAssignedTerritories();
   }
 
@@ -105,6 +108,7 @@ export class TerritoryRegionMapComponent implements OnInit, AfterViewInit, OnDes
     this.mapRequestSequence++;
     this.territoriesSubscription?.unsubscribe();
     this.mapSubscription?.unsubscribe();
+    this.setupChangedSubscription?.unsubscribe();
 
     if (this.map) {
       this.map.remove();

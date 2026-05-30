@@ -22,7 +22,8 @@ import {
 } from '../../../../core/services/national/regions.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { TerritoryDashboardService } from '../../../../core/services/territory-dashboard.service';
-import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
+import { TerritoryRegionSetupService } from '../../../../core/services/territory-region-setup.service';
+import { RegionalAssignedRegion, TerritoryRegionSetupStatus } from '../../../../core/models/dashboard.model';
 
 const PAGE_SIZE = 25;
 
@@ -50,8 +51,10 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   isLoading = false;
   isLoadingMore = false;
   isSyncing = false;
+  setupStatusLoading = false;
   errorMessage: string | null = null;
   feedbackMessage: string | null = null;
+  setupStatus: TerritoryRegionSetupStatus | null = null;
 
   searchQuery = '';
   currentSort: RegionSortValue = 'status';
@@ -72,7 +75,10 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   private listRequestSequence = 0;
   private listSubscription: Subscription | null = null;
   private territoriesSubscription: Subscription | null = null;
+  private setupStateSubscription: Subscription | null = null;
+  private setupRefreshSubscription: Subscription | null = null;
   private syncSubscription: Subscription | null = null;
+  private setupChangedSubscription: Subscription | null = null;
   private pendingScrollTop = 0;
   private initialTake = PAGE_SIZE;
   private failedImageIds = new Set<string>();
@@ -81,6 +87,7 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
     private readonly router: Router,
     private readonly svc: RegionsService,
     private readonly territoryDashboard: TerritoryDashboardService,
+    private readonly territorySetup: TerritoryRegionSetupService,
     private readonly cdr: ChangeDetectorRef,
     private readonly auth: AuthService,
   ) {}
@@ -115,6 +122,22 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
       this.svc.setActiveTerritoryId(navigationState.territoryId);
     }
 
+    this.setupStateSubscription = this.territorySetup.state$
+      .subscribe(state => {
+        this.setupStatusLoading = state.setupCheckInProgress;
+        this.setupStatus = !this.activeTerritoryId || state.setupStatus?.territoryId === this.activeTerritoryId
+          ? state.setupStatus
+          : null;
+        this.notifyStateChanged();
+      });
+
+    this.setupChangedSubscription = this.territoryDashboard.regionSetupChanged$
+      .subscribe(() => {
+        this.initialTake = Math.max(PAGE_SIZE, this.items.length || PAGE_SIZE);
+        this.resetList();
+        this.loadRegions(true);
+      });
+
     this.loadAssignedTerritories();
   }
 
@@ -122,7 +145,10 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
     this.listRequestSequence++;
     this.listSubscription?.unsubscribe();
     this.territoriesSubscription?.unsubscribe();
+    this.setupStateSubscription?.unsubscribe();
+    this.setupRefreshSubscription?.unsubscribe();
     this.syncSubscription?.unsubscribe();
+    this.setupChangedSubscription?.unsubscribe();
 
     if (this.searchDebounceHandle) {
       clearTimeout(this.searchDebounceHandle);
@@ -151,6 +177,35 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
 
   get canManageRegions(): boolean {
     return this.auth.isTerritoryManager();
+  }
+
+  get canUpdateRegions(): boolean {
+    return Boolean(
+      this.setupStatus?.updateAvailable &&
+      this.setupStatus.canUpdate &&
+      !this.setupStatus.requiresInitialSync &&
+      !this.setupStatus.missingCandidateData,
+    );
+  }
+
+  get updateRegionsHelpText(): string {
+    if (this.setupStatusLoading) {
+      return 'Checking region boundary status...';
+    }
+
+    if (this.setupStatus?.missingCandidateData) {
+      return 'ADM1 boundary data is missing for this territory.';
+    }
+
+    if (this.setupStatus?.requiresInitialSync) {
+      return 'Complete first setup to initialize regions.';
+    }
+
+    if (this.canUpdateRegions) {
+      return 'ADM1 boundary data has changed. Update regions to apply the latest boundaries.';
+    }
+
+    return 'Regions are up to date.';
   }
 
   get nextPageCount(): number {
@@ -186,6 +241,8 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
     this.currentSort = 'status';
     this.initialTake = PAGE_SIZE;
     this.resetList();
+    this.setupStatus = null;
+    this.refreshSetupStatus();
     this.loadRegions(true);
     this.notifyStateChanged();
   }
@@ -236,7 +293,7 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   }
 
   syncRegions(): void {
-    if (!this.activeTerritoryId || !this.canManageRegions || this.isSyncing) return;
+    if (!this.activeTerritoryId || !this.canManageRegions || this.isSyncing || !this.canUpdateRegions) return;
 
     this.syncSubscription?.unsubscribe();
     this.isSyncing = true;
@@ -255,10 +312,17 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: summary => {
+          if (summary.failedCount > 0 || summary.ambiguousCount > 0) {
+            this.errorMessage = 'Region update could not complete safely. Please retry or contact an administrator.';
+            this.refreshSetupStatus();
+            return;
+          }
+
           this.feedbackMessage = this.buildSyncFeedback(summary);
           this.initialTake = Math.max(PAGE_SIZE, this.items.length || PAGE_SIZE);
           this.resetList();
           this.loadRegions(true);
+          this.refreshSetupStatus();
         },
         error: error => this.handleSyncError(error),
       });
@@ -279,7 +343,20 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
   }
 
   hasImage(item: RegionListItem): boolean {
-    return Boolean(item.imageUrl) && !this.failedImageIds.has(item.id);
+    return Boolean(this.thumbnailImageUrl(item)) && !this.failedImageIds.has(item.id);
+  }
+
+  thumbnailImageUrl(item: RegionListItem): string | null {
+    const url = item.representativeImage?.url?.trim();
+    return url || null;
+  }
+
+  imageAlt(item: RegionListItem): string {
+    return (
+      item.representativeImage?.altText?.trim() ||
+      item.representativeImage?.sourceName?.trim() ||
+      item.name
+    );
   }
 
   onImageError(item: RegionListItem): void {
@@ -349,6 +426,36 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
           this.loadRegions(true);
         },
         error: error => this.handleLoadError(error, 'Unable to load assigned territories.'),
+      });
+  }
+
+  private refreshSetupStatus(): void {
+    if (!this.activeTerritoryId || !this.canManageRegions) {
+      this.setupStatus = null;
+      this.setupStatusLoading = false;
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.setupRefreshSubscription?.unsubscribe();
+    this.setupStatusLoading = true;
+    this.notifyStateChanged();
+
+    this.setupRefreshSubscription = this.territorySetup
+      .refreshSetupStatus(this.activeTerritoryId)
+      .pipe(
+        finalize(() => {
+          this.setupStatusLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: status => {
+          this.setupStatus = status;
+        },
+        error: () => {
+          this.setupStatus = null;
+        },
       });
   }
 
@@ -494,7 +601,7 @@ export class AllRegionsComponent implements OnInit, OnDestroy {
       parts.push(`${summary.failedCount} failed`);
     }
 
-    return `ADM1 region refresh complete: ${parts.join(', ')}.`;
+    return `Region update complete: ${parts.join(', ')}.`;
   }
 
   private saveListState(): void {
