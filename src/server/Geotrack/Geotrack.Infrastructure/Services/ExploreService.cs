@@ -25,6 +25,7 @@ public class ExploreService : IExploreService
     private const int SectionPageMaxTake = 50;
     private const int SectionPageCandidateLimit = 500;
     private const double NearbyDestinationMaxDistanceMeters = 75_000d;
+    private const string PublishedStatus = "Published";
 
     private static readonly string[] WhereToEatTagSlugs =
     [
@@ -85,7 +86,7 @@ public class ExploreService : IExploreService
 
         var destination = await _db.Destinations
             .AsNoTracking()
-            .Where(d => d.Id == destinationId)
+            .Where(d => d.Id == destinationId && d.Status == PublishedStatus)
             .Select(d => new { d.Latitude, d.Longitude })
             .SingleOrDefaultAsync();
 
@@ -236,8 +237,7 @@ public class ExploreService : IExploreService
 
         var nowUtc = DateTime.UtcNow;
 
-        var events = await _db.Events
-            .AsNoTracking()
+        var events = await PublicEvents(_db.Events.AsNoTracking())
             .Where(e =>
                 e.DestinationId == resolvedDestination.Id &&
                 EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
@@ -261,8 +261,7 @@ public class ExploreService : IExploreService
             .Take(ExploreSectionItemLimit)
             .ToListAsync();
 
-        var topStays = await _db.Places
-            .AsNoTracking()
+        var topStays = await PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay != null &&
                 p.Location.DestinationId == resolvedDestination.Id &&
@@ -501,8 +500,7 @@ public class ExploreService : IExploreService
         int take,
         bool useCurrentLocationDistance)
     {
-        var query = _db.Places
-            .AsNoTracking()
+        var query = PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay != null &&
                 p.Location.DestinationId == destination.Id &&
@@ -570,8 +568,7 @@ public class ExploreService : IExploreService
         int take,
         bool useCurrentLocationDistance)
     {
-        var query = _db.Places
-            .AsNoTracking()
+        var query = PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destination.Id &&
@@ -650,8 +647,7 @@ public class ExploreService : IExploreService
         int take,
         bool useCurrentLocationDistance)
     {
-        var query = _db.Places
-            .AsNoTracking()
+        var query = PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destination.Id &&
@@ -727,8 +723,7 @@ public class ExploreService : IExploreService
     {
         var nowUtc = DateTime.UtcNow;
 
-        var query = _db.Events
-            .AsNoTracking()
+        var query = PublicEvents(_db.Events.AsNoTracking())
             .Where(e =>
                 e.DestinationId == destination.Id &&
                 EF.Property<Point?>(e, SpatialPointFactory.CoordinatesPropertyName) != null)
@@ -829,8 +824,7 @@ public class ExploreService : IExploreService
         var tagIds = matchedTags.Select(tag => tag.Id).ToList();
         var title = DisplayTextSafety.CleanRequired(matchedTags.First().Name, HumanizeSectionKey(sectionKey));
 
-        var query = _db.Places
-            .AsNoTracking()
+        var query = PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destination.Id &&
@@ -1060,8 +1054,7 @@ public class ExploreService : IExploreService
 
     private async Task<ResolvedDestinationCandidate?> ResolveDestinationForSectionPageAsync(int destinationId)
     {
-        return await _db.Destinations
-            .AsNoTracking()
+        return await PublicDestinations(_db.Destinations.AsNoTracking())
             .Where(d => d.Id == destinationId)
             .Select(d => new ResolvedDestinationCandidate
             {
@@ -1365,8 +1358,7 @@ public class ExploreService : IExploreService
       ISet<int> placeFavoriteIds,
       bool useCurrentLocationDistance)
     {
-        var items = await _db.Places
-            .AsNoTracking()
+        var items = await PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destinationId &&
@@ -1456,8 +1448,7 @@ public class ExploreService : IExploreService
         ISet<int> placeFavoriteIds,
         bool useCurrentLocationDistance)
     {
-        var items = await _db.Places
-            .AsNoTracking()
+        var items = await PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destinationId &&
@@ -1549,8 +1540,7 @@ public class ExploreService : IExploreService
                 group => group.Key,
                 group => group.OrderByDescending(signal => signal.Weight).First());
 
-        var candidates = await _db.Places
-            .AsNoTracking()
+        var candidates = await PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destinationId &&
@@ -1833,8 +1823,7 @@ public class ExploreService : IExploreService
 
     private async Task<List<ExploreLandmarkCategoryDto>> BuildLandmarkCategoriesAsync(Point userPoint, int destinationId)
     {
-        var categories = await _db.Places
-            .AsNoTracking()
+        var categories = await PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destinationId &&
@@ -1967,8 +1956,7 @@ public class ExploreService : IExploreService
             .Select(signal => signal.TagId)
             .ToList();
 
-        var candidates = await _db.Places
-            .AsNoTracking()
+        var candidates = await PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destinationId &&
@@ -2095,10 +2083,28 @@ public class ExploreService : IExploreService
         };
     }
 
+    private static IQueryable<Destination> PublicDestinations(IQueryable<Destination> query) =>
+        query.Where(destination => destination.Status == PublishedStatus);
+
+    private static IQueryable<Place> PublicPlaces(IQueryable<Place> query) =>
+        query.Where(place =>
+            place.Status == PublishedStatus &&
+            place.Location.Status == PublishedStatus &&
+            place.Location.Destination.Status == PublishedStatus);
+
+    private static IQueryable<Event> PublicEvents(IQueryable<Event> query) =>
+        query.Where(@event =>
+            @event.Status == PublishedStatus &&
+            @event.Destination.Status == PublishedStatus &&
+            (@event.Location == null || @event.Location.Status == PublishedStatus) &&
+            (@event.Place == null ||
+                (@event.Place.Status == PublishedStatus &&
+                 @event.Place.Location.Status == PublishedStatus &&
+                 @event.Place.Location.Destination.Status == PublishedStatus)));
+
     private async Task<ResolvedDestinationCandidate?> ResolveDestinationAsync(Point userPoint)
     {
-        var nearestDestination = await _db.Destinations
-            .AsNoTracking()
+        var nearestDestination = await PublicDestinations(_db.Destinations.AsNoTracking())
             .Where(d => EF.Property<Point?>(d, SpatialPointFactory.CoordinatesPropertyName) != null)
             .Select(d => new ResolvedDestinationCandidate
             {
@@ -2131,8 +2137,7 @@ public class ExploreService : IExploreService
 
     private async Task<ResolvedDestinationCandidate?> ResolveDestinationByIdAsync(int destinationId, Point userPoint)
     {
-        return await _db.Destinations
-            .AsNoTracking()
+        return await PublicDestinations(_db.Destinations.AsNoTracking())
             .Where(d => d.Id == destinationId)
             .Select(d => new ResolvedDestinationCandidate
             {
@@ -2199,8 +2204,7 @@ public class ExploreService : IExploreService
 
     private async Task<Point?> ResolveDestinationPointAsync(int destinationId)
     {
-        var destination = await _db.Destinations
-            .AsNoTracking()
+        var destination = await PublicDestinations(_db.Destinations.AsNoTracking())
             .Where(d => d.Id == destinationId)
             .Select(d => new { d.Latitude, d.Longitude })
             .SingleOrDefaultAsync();
