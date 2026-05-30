@@ -28,7 +28,8 @@ public class PlaceContributionService : IPlaceContributionService
     {
         "stay",
         "restaurant",
-        "cafe"
+        "cafe",
+        "bar"
     };
     private static readonly Regex ManagedContributionMediaFileNameRegex = new(
         @"^[a-z0-9][a-z0-9._-]{0,199}\.(png|jpe?g|gif|webp)$",
@@ -84,7 +85,14 @@ public class PlaceContributionService : IPlaceContributionService
             return await MapApprovedOwnershipDetailAsync(contribution, includeReviewNote);
         }
 
-        return MapDetail(contribution, includeReviewNote);
+        var hasPendingOwnershipClaim = contribution.PlaceId.HasValue &&
+            await _db.PlaceContributions.AsNoTracking().AnyAsync(c =>
+                c.PlaceId == contribution.PlaceId &&
+                c.UserId == contribution.UserId &&
+                c.Type == PlaceContributionType.ClaimOwnership &&
+                (c.Status == PlaceContributionStatus.PendingReview || c.Status == PlaceContributionStatus.Approved));
+
+        return MapDetail(contribution, includeReviewNote, hasPendingOwnershipClaim);
     }
 
     public async Task<GetPlaceContributionsResponseDto> GetPendingReviewAsync(int? reviewerUserId = null)
@@ -172,7 +180,7 @@ public class PlaceContributionService : IPlaceContributionService
             if (targetPlace.PlaceType is null || !targetPlace.PlaceType.IsOwnable)
                 throw new InvalidOperationException("Ownership can only be requested for ownable place types.");
 
-            var alreadyOwner = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            var alreadyOwner = await HasProofBackedOwnershipAsync(userId, request.PlaceId.Value);
             if (alreadyOwner)
                 throw new InvalidOperationException("You already own this place.");
         }
@@ -352,7 +360,7 @@ public class PlaceContributionService : IPlaceContributionService
             if (targetPlace.PlaceType is null || !targetPlace.PlaceType.IsOwnable)
                 throw new InvalidOperationException("Ownership can only be requested for ownable place types.");
 
-            var alreadyOwner = await UserCanManagePlaceAsync(userId, request.PlaceId.Value);
+            var alreadyOwner = await HasProofBackedOwnershipAsync(userId, request.PlaceId.Value);
             if (alreadyOwner)
                 throw new InvalidOperationException("You already own this place.");
         }
@@ -539,7 +547,10 @@ public class PlaceContributionService : IPlaceContributionService
             var publishedPlace = await PublishNewPlaceAsync(contribution, now);
             contribution.PlaceId = publishedPlace.Id;
 
-            await EnsureUserPlaceAsync(contribution.UserId, publishedPlace.Id, now);
+            // Only grant ownership if an ownership proof document was provided.
+            // Without a proof doc the user submitted the place but did not claim ownership.
+            if (!string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl))
+                await EnsureUserPlaceAsync(contribution.UserId, publishedPlace.Id, now);
         }
         else if (contribution.Type == PlaceContributionType.UpdatePlace)
         {
@@ -735,13 +746,10 @@ public class PlaceContributionService : IPlaceContributionService
         PlaceContributionType contributionType,
         UpsertPlaceContributionDto request)
     {
-        if (contributionType == PlaceContributionType.ClaimOwnership)
-            return true;
-
-        if (request.StayTypeId.HasValue || !string.IsNullOrWhiteSpace(request.StayType))
-            return true;
-
-        return await ResolveRequestedPlaceTypeOwnableAsync(request);
+        // Only ClaimOwnership contributions strictly require an ownership proof document.
+        // For CreatePlace / UpdatePlace, the document is optional — ownable types can be
+        // submitted without it, but the user won't receive edit rights after approval.
+        return contributionType == PlaceContributionType.ClaimOwnership;
     }
 
     private async Task<string?> ResolveRequestedPlaceTypeNameAsync(UpsertPlaceContributionDto request)
@@ -792,6 +800,22 @@ public class PlaceContributionService : IPlaceContributionService
         return await _db.UserPlaces
             .AsNoTracking()
             .AnyAsync(userPlace => userPlace.UserId == userId && userPlace.PlaceId == placeId);
+    }
+
+    /// <summary>
+    /// Returns true only when the user has an approved contribution with an ownership proof
+    /// document for this place. A contribution approved without a proof doc does NOT count
+    /// as real ownership — the user may still submit a ClaimOwnership request.
+    /// </summary>
+    private async Task<bool> HasProofBackedOwnershipAsync(int userId, int placeId)
+    {
+        return await _db.PlaceContributions
+            .AsNoTracking()
+            .AnyAsync(c =>
+                c.PlaceId == placeId &&
+                c.UserId == userId &&
+                c.Status == PlaceContributionStatus.Approved &&
+                c.OwnershipProofDocumentUrl != null);
     }
 
     private async Task EnsureUserPlaceAsync(int userId, int placeId, DateTime now)
@@ -1755,7 +1779,8 @@ public class PlaceContributionService : IPlaceContributionService
 
     private static PlaceContributionDetailDto MapDetail(
         PlaceContribution contribution,
-        bool includeReviewNote)
+        bool includeReviewNote,
+        bool hasPendingOwnershipClaim = false)
     {
         var listItem = MapListItem(contribution);
 
@@ -1825,7 +1850,8 @@ public class PlaceContributionService : IPlaceContributionService
             OwnershipProofDocumentUrl = contribution.OwnershipProofDocumentUrl,
             OwnershipProofOriginalFileName = contribution.OwnershipProofOriginalFileName,
             OwnershipProofContentType = contribution.OwnershipProofContentType,
-            OwnershipProofUploadedAt = contribution.OwnershipProofUploadedAt
+            OwnershipProofUploadedAt = contribution.OwnershipProofUploadedAt,
+            HasPendingOwnershipClaim = hasPendingOwnershipClaim
         };
     }
 

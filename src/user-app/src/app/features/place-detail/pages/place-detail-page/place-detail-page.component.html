@@ -207,9 +207,9 @@
           </div>
         }
 
-        @if (p.ownerContributionId || p.isOwnable) {
+        @if (p.isOwnable || p.ownerContributionId) {
           <div class="mt-[14px] mb-6 flex flex-wrap gap-2.5 justify-center">
-            @if (p.ownerContributionId) {
+            @if (p.isOwnedByCurrentUser || p.ownerContributionId) {
               <button type="button" class="pd__cta pd__cta--outline" (click)="navigateToOwnerEdit()">
                 Edit
               </button>
@@ -325,6 +325,46 @@
                     </div>
                   }
                 }
+              </section>
+            }
+
+            @if (p.admissionPriceRange || p.bestTimeToVisit || p.visitorTips || p.accessNotes || p.accessibilityNotes) {
+              <div class="pd__divider pd__divider--visit"></div>
+
+              <section class="pd__section pd__section--visit">
+                <h2 class="pd__section-title">Good to know</h2>
+                <div class="flex flex-col gap-2.5">
+                  @if (p.admissionPriceRange) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Price</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.admissionPriceRange }}</span>
+                    </div>
+                  }
+                  @if (p.bestTimeToVisit) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Best time to visit</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.bestTimeToVisit }}</span>
+                    </div>
+                  }
+                  @if (p.visitorTips) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Visitor tips</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.visitorTips }}</span>
+                    </div>
+                  }
+                  @if (p.accessNotes) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Access</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.accessNotes }}</span>
+                    </div>
+                  }
+                  @if (p.accessibilityNotes) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Accessibility</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ p.accessibilityNotes }}</span>
+                    </div>
+                  }
+                </div>
               </section>
             }
 
@@ -532,6 +572,34 @@
             }
           </div>
         </section>
+
+        @if (p.website || p.contactEmail || p.phoneNumber) {
+          <div class="pd__divider pd__divider--contact"></div>
+
+          <section class="pd__section pd__section--contact">
+            <h2 class="pd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Contact</h2>
+            <div class="flex flex-col gap-2.5">
+              @if (p.website) {
+                <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="p.website" target="_blank" rel="noopener noreferrer">
+                  <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Official site</span>
+                  <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ p.website }}</span>
+                </a>
+              }
+              @if (p.contactEmail) {
+                <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'mailto:' + p.contactEmail">
+                  <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Email</span>
+                  <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ p.contactEmail }}</span>
+                </a>
+              }
+              @if (p.phoneNumber) {
+                <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'tel:' + p.phoneNumber">
+                  <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Phone</span>
+                  <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ p.phoneNumber }}</span>
+                </a>
+              }
+            </div>
+          </section>
+        }
 
           </div><!-- /.pd__detail-side -->
         </div><!-- /.pd__detail-grid -->

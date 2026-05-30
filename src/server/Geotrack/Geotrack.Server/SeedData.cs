@@ -372,7 +372,7 @@ public static class SeedData
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
         var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation", isOwnable: true);
-        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
+        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues", isOwnable: true);
         var ptMuseum = await EnsurePlaceTypeAsync("Museum", "Museums and cultural institutions");
         var ptGallery = await EnsurePlaceTypeAsync("Gallery", "Art galleries and exhibition spaces");
 
@@ -3216,7 +3216,7 @@ public static class SeedData
 
         var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments", isOwnable: true);
         var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops", isOwnable: true);
-        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
+        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues", isOwnable: true);
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
         var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation", isOwnable: true);
@@ -4289,7 +4289,7 @@ public static class SeedData
         var ptBeach = await EnsurePlaceTypeAsync("Beach", "Beaches and coastal swimming areas");
         var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments", isOwnable: true);
         var ptCafe = await EnsurePlaceTypeAsync("Cafe", "Cafes and coffee shops", isOwnable: true);
-        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues");
+        var ptBar = await EnsurePlaceTypeAsync("Bar", "Bars, wine bars and nightlife venues", isOwnable: true);
         var ptLandmark = await EnsurePlaceTypeAsync("Landmark", "Landmarks, monuments and historical places");
         var ptNature = await EnsurePlaceTypeAsync("Nature", "Nature spots and island escapes");
         var ptStay = await EnsurePlaceTypeAsync("Stay", "Hotels, apartments, villas and other accommodation", isOwnable: true);

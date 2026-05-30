@@ -32,6 +32,27 @@ export interface ContributionListItem {
   updatedLabel: string;
   publishedPlaceId: number | null;
   isOwnership: boolean;
+  hasOwnershipProof: boolean;
+}
+
+const OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe', 'bar']);
+
+export function contributionCanEdit(item: Pick<ContributionListItem, 'status' | 'hasOwnershipProof'>): boolean {
+  // Under review or rejected → always editable
+  if (item.status !== 'Approved') return true;
+  // Approved → editable only if ownership proof was provided
+  return item.hasOwnershipProof;
+}
+
+export function contributionCanRequestOwnership(
+  item: Pick<ContributionListItem, 'status' | 'hasOwnershipProof' | 'isOwnership' | 'placeType' | 'publishedPlaceId'> & { hasPendingOwnershipClaim?: boolean },
+): boolean {
+  return item.status === 'Approved' &&
+    !item.hasOwnershipProof &&
+    !item.isOwnership &&
+    !item.hasPendingOwnershipClaim &&
+    OWNABLE_PLACE_TYPES.has((item.placeType ?? '').toLowerCase().trim()) &&
+    item.publishedPlaceId != null;
 }
 
 export interface ContributionDetail extends ContributionListItem {
@@ -58,6 +79,7 @@ export interface ContributionDetail extends ContributionListItem {
   reviewedAt?: string | null;
   ownershipProofDocumentUrl?: string | null;
   ownershipProofOriginalFileName?: string | null;
+  hasPendingOwnershipClaim?: boolean;
 }
 
 export interface ContributionBookingPartner {
@@ -95,6 +117,7 @@ interface ApiContributionListItem {
   submittedAt: string;
   updatedAt?: string | null;
   publishedPlaceId?: number | null;
+  hasOwnershipProofDocument?: boolean | null;
 }
 
 interface ApiContributionDetail extends ApiContributionListItem {
@@ -123,6 +146,7 @@ interface ApiContributionDetail extends ApiContributionListItem {
   reviewedAt?: string | null;
   ownershipProofDocumentUrl?: string | null;
   ownershipProofOriginalFileName?: string | null;
+  hasPendingOwnershipClaim?: boolean | null;
 }
 
 interface ApiContributionImage {
@@ -196,8 +220,8 @@ export class ContributionsService {
     );
   }
 
-  createPlace(draft: ContributionDraftData): Observable<ContributionDetail> {
-    return this.http.post<ContributionResponse>('/api/contributions/places', this.toFormData(draft)).pipe(
+  createPlace(draft: ContributionDraftData, options?: { type?: ContributionType; placeId?: number | null }): Observable<ContributionDetail> {
+    return this.http.post<ContributionResponse>('/api/contributions/places', this.toFormData(draft, options)).pipe(
       map(res => mapDetail(res.contribution)),
       tap(detail => {
         this.analytics.track('contribution_created', { entityId: detail.id });
@@ -211,6 +235,30 @@ export class ContributionsService {
       map(res => mapDetail(res.contribution)),
       tap(detail => {
         this.analytics.track('contribution_updated', { entityId: detail.id });
+        this.loadMine();
+      }),
+    );
+  }
+
+  ownerUpdatePlace(placeId: number, draft: ContributionDraftData): Observable<unknown> {
+    const basics = requireBasics(draft.basics);
+    const features = normalizeFeatures(draft.features);
+    const details = normalizeDetails(draft.details);
+    const isAccommodation = isAccommodationPlaceType(basics.placeType);
+
+    return this.http.put(`/api/places/${placeId}/owner-update`, {
+      name: basics.name,
+      description: details.description,
+      website: details.website,
+      contactEmail: details.contactEmail,
+      phoneNumber: details.phone,
+      bookingExternalLink: details.bookingPartners[0]?.url ?? null,
+      tags: features.tags,
+      amenities: toContributionAmenityApiValues(features.amenities, isAccommodation),
+      bookingPartners: details.bookingPartners,
+    }).pipe(
+      tap(() => {
+        this.analytics.track('contribution_updated', { entityId: placeId });
         this.loadMine();
       }),
     );
@@ -422,6 +470,7 @@ function mapListItem(item: ApiContributionListItem): ContributionListItem {
     updatedLabel: timeLabel(isEdited ? updatedAt : item.submittedAt, isEdited ? 'Updated' : 'Submitted'),
     publishedPlaceId: item.publishedPlaceId ?? null,
     isOwnership: type === 'ClaimOwnership',
+    hasOwnershipProof: item.hasOwnershipProofDocument ?? false,
   };
 }
 
@@ -503,6 +552,7 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     reviewedAt: item.reviewedAt ?? null,
     ownershipProofDocumentUrl: item.ownershipProofDocumentUrl ?? null,
     ownershipProofOriginalFileName: item.ownershipProofOriginalFileName ?? null,
+    hasPendingOwnershipClaim: item.hasPendingOwnershipClaim ?? false,
   };
 }
 

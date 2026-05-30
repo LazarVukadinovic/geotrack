@@ -303,16 +303,38 @@ export class PlaceDetailPageComponent {
 
   protected navigateToOwnerEdit(): void {
     const p = this.place();
-    if (!p?.ownerContributionId) return;
-    void this.router.navigate(['/contributions', p.ownerContributionId, 'edit'], {
-      replaceUrl: true,
-      state: {
-        locationLocked: true,
-        returnToDetail: true,
-        detailBackUrl: this.detailBackUrl(),
-        detailBackState: this.detailBackState(),
-      },
-    });
+    if (!p) return;
+
+    const sharedState = {
+      locationLocked: true,
+      returnToDetail: true,
+      detailBackUrl: this.detailBackUrl(),
+      detailBackState: this.detailBackState(),
+    };
+
+    if (p.ownerContributionId) {
+      void this.router.navigate(['/contributions', p.ownerContributionId, 'edit'], {
+        replaceUrl: true,
+        state: sharedState,
+      });
+      return;
+    }
+
+    if (p.isOwnedByCurrentUser) {
+      const numericId = parseInt(p.id, 10);
+      void this.router.navigate(['/contributions/submit'], {
+        replaceUrl: true,
+        state: {
+          ...sharedState,
+          updateForPlaceId: numericId,
+          placeTitle: p.title,
+          placeCoverImageUrl: p.heroImage ?? '',
+          placeAbout: p.about ?? '',
+          placeLat: p.latitude ?? null,
+          placeLng: p.longitude ?? null,
+        },
+      });
+    }
   }
 
   protected openReviews(): void {

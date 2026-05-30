@@ -6,6 +6,7 @@ using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
+using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
@@ -148,6 +149,10 @@ public class PlaceService : IPlaceService
                 .ThenInclude(pt => pt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
+            .Include(p => p.PlaceAmenities)
+                .ThenInclude(placeAmenity => placeAmenity.Amenity)
+            .Include(p => p.PlaceBookingPartners)
+                .ThenInclude(placeBookingPartner => placeBookingPartner.BookingPartner)
             .FirstOrDefaultAsync(p =>
                 p.Id == id &&
                 p.Status == PublishedStatus &&
@@ -791,7 +796,8 @@ public class PlaceService : IPlaceService
             .Where(item =>
                 item.PlaceId == placeId &&
                 item.UserId == userId &&
-                item.Status == PlaceContributionStatus.Approved)
+                item.Status == PlaceContributionStatus.Approved &&
+                item.OwnershipProofDocumentUrl != null)
             .OrderByDescending(item => item.Type == PlaceContributionType.ClaimOwnership)
             .ThenByDescending(item => item.UpdatedAt ?? item.CreatedAt)
             .Select(item => (int?)item.Id)
@@ -1214,6 +1220,15 @@ public class PlaceService : IPlaceService
         if (request.AccessibilityNotes != null)
             place.AccessibilityNotes = string.IsNullOrWhiteSpace(request.AccessibilityNotes) ? null : request.AccessibilityNotes.Trim();
 
+        if (request.Tags is not null)
+            await SyncOwnerUpdateTagsAsync(place.Id, request.Tags, now: DateTime.UtcNow);
+
+        if (request.Amenities is not null)
+            await SyncOwnerUpdateAmenitiesAsync(place.Id, request.Amenities);
+
+        if (request.BookingPartners is not null)
+            await SyncOwnerUpdateBookingPartnersAsync(place.Id, request.BookingPartners);
+
         place.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -1265,9 +1280,185 @@ public class PlaceService : IPlaceService
             IsOwnedByCurrentUser = true,
             HasPendingOwnershipClaim = false,
             ContentType = "place",
-            Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant()
+            Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant(),
+            ContactEmail = DisplayTextSafety.CleanOptional(place.ContactEmail),
+            PhoneNumber = DisplayTextSafety.CleanOptional(place.Number),
+            AdmissionPriceRange = DisplayTextSafety.CleanOptional(place.AdmissionPriceRange),
+            BookingExternalLink = DisplayTextSafety.CleanOptional(place.BookingExternalLink),
+            Amenities = place.PlaceAmenities
+                .Select(placeAmenity => new AmenityDto
+                {
+                    Id = placeAmenity.AmenityId,
+                    Label = DisplayTextSafety.CleanRequired(placeAmenity.Amenity.Name, "Amenity"),
+                    Icon = DisplayTextSafety.CleanOptional(placeAmenity.Amenity.Icon) ?? string.Empty
+                })
+                .ToList(),
+            BestTimeToVisit = DisplayTextSafety.CleanOptional(place.BestTimeToVisit),
+            VisitorTips = DisplayTextSafety.CleanOptional(place.VisitorTips),
+            AccessNotes = DisplayTextSafety.CleanOptional(place.AccessNotes),
+            AccessibilityNotes = DisplayTextSafety.CleanOptional(place.AccessibilityNotes)
         };
     }
+
+    private async Task SyncOwnerUpdateTagsAsync(int placeId, IEnumerable<string> tagNames, DateTime now)
+    {
+        var normalized = NormalizeOwnerUpdateLabels(tagNames, maxItems: 30);
+
+        var existing = await _db.PlaceTags
+            .Where(placeTag => placeTag.PlaceId == placeId)
+            .ToListAsync();
+        _db.PlaceTags.RemoveRange(existing);
+
+        if (normalized.Count == 0)
+            return;
+
+        var keys = normalized.Select(SlugifyOwnerUpdateValue).ToList();
+        var tags = await _db.Tags
+            .Where(tag => tag.ForPlace &&
+                (keys.Contains(tag.Slug.ToLower()) || normalized.Select(value => value.ToLower()).Contains(tag.Name.ToLower())))
+            .ToListAsync();
+
+        foreach (var label in normalized)
+        {
+            var slug = SlugifyOwnerUpdateValue(label);
+            var tag = tags.FirstOrDefault(existingTag =>
+                string.Equals(existingTag.Slug, slug, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(existingTag.Name, label, StringComparison.OrdinalIgnoreCase));
+
+            if (tag is null)
+            {
+                tag = new Tag
+                {
+                    Name = label,
+                    Slug = slug,
+                    Description = string.Empty,
+                    ForPlace = true,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                _db.Tags.Add(tag);
+            }
+
+            _db.PlaceTags.Add(new PlaceTag { PlaceId = placeId, Tag = tag });
+        }
+    }
+
+    private async Task SyncOwnerUpdateAmenitiesAsync(int placeId, IEnumerable<string> amenityNames)
+    {
+        var normalized = NormalizeOwnerUpdateLabels(amenityNames, maxItems: 30);
+
+        var existing = await _db.PlaceAmenities
+            .Where(placeAmenity => placeAmenity.PlaceId == placeId)
+            .ToListAsync();
+        _db.PlaceAmenities.RemoveRange(existing);
+
+        if (normalized.Count == 0)
+            return;
+
+        var keys = normalized.Select(SlugifyOwnerUpdateValue).ToList();
+        var amenities = await _db.Amenities
+            .Where(amenity =>
+                keys.Contains(amenity.Icon.ToLower()) ||
+                normalized.Select(value => value.ToLower()).Contains(amenity.Name.ToLower()))
+            .ToListAsync();
+
+        foreach (var amenity in amenities.DistinctBy(amenity => amenity.Id))
+        {
+            _db.PlaceAmenities.Add(new PlaceAmenity
+            {
+                PlaceId = placeId,
+                AmenityId = amenity.Id
+            });
+        }
+    }
+
+    private async Task SyncOwnerUpdateBookingPartnersAsync(
+        int placeId,
+        IEnumerable<OwnerUpdateBookingPartnerDto> bookingPartners)
+    {
+        var existing = await _db.PlaceBookingPartners
+            .Where(placeBookingPartner => placeBookingPartner.PlaceId == placeId)
+            .ToListAsync();
+        _db.PlaceBookingPartners.RemoveRange(existing);
+
+        var normalized = bookingPartners
+            .Select(partner => new
+            {
+                Id = NormalizeOwnerUpdateOptional(partner.Id)?.ToLowerInvariant(),
+                Url = NormalizeOwnerUpdateOptional(partner.Url)
+            })
+            .Where(partner => partner.Id is not null)
+            .DistinctBy(partner => partner.Id)
+            .Take(10)
+            .ToList();
+
+        foreach (var partner in normalized)
+        {
+            var name = OwnerUpdatePartnerName(partner.Id!);
+            var bookingPartner = await _db.BookingPartners.FirstOrDefaultAsync(existingPartner =>
+                existingPartner.Name.ToLower() == name.ToLower() ||
+                existingPartner.Name.ToLower() == partner.Id);
+
+            if (bookingPartner is null)
+            {
+                bookingPartner = new BookingPartner
+                {
+                    Name = name,
+                    Variant = partner.Id == "airbnb" ? "brand" : "muted"
+                };
+                _db.BookingPartners.Add(bookingPartner);
+                await _db.SaveChangesAsync();
+            }
+
+            _db.PlaceBookingPartners.Add(new PlaceBookingPartner
+            {
+                PlaceId = placeId,
+                BookingPartnerId = bookingPartner.Id,
+                Url = partner.Url
+            });
+        }
+    }
+
+    private static List<string> NormalizeOwnerUpdateLabels(IEnumerable<string> values, int maxItems)
+    {
+        return values
+            .Select(NormalizeOwnerUpdateOptional)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(maxItems)
+            .ToList();
+    }
+
+    private static string? NormalizeOwnerUpdateOptional(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static string SlugifyOwnerUpdateValue(string value)
+    {
+        var chars = value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '-')
+            .ToArray();
+
+        var slug = string.Join(string.Empty, chars)
+            .Split('-', StringSplitOptions.RemoveEmptyEntries);
+
+        return string.Join("-", slug);
+    }
+
+    private static string OwnerUpdatePartnerName(string id) => id switch
+    {
+        "booking" => "Booking.com",
+        "airbnb" => "Airbnb",
+        "hotel" => "Hotel Website",
+        "expedia" => "Expedia",
+        _ => string.Join(" ", id.Split('-', '_', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => char.ToUpperInvariant(part[0]) + part[1..]))
+    };
 
     private sealed class PlaceListProjection
     {

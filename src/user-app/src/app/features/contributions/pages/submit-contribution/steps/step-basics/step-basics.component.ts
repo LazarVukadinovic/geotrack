@@ -11,7 +11,7 @@ const MAP_STYLE_URL = '/map-style.json';
 const DEFAULT_PICKER_LAT = 44.82;
 const DEFAULT_PICKER_LNG = 20.46;
 const MAX_OWNERSHIP_PROOF_BYTES = 10 * 1024 * 1024;
-const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe']);
+const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe', 'bar']);
 const HIDDEN_CONTRIBUTION_PLACE_TYPES = new Set(['beach', 'nature']);
 
 export interface ContributionPlaceTypeOption {
@@ -392,7 +392,6 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     if (!baseValid) return false;
     if (!this.form.cardImageFile && !this.form.cardImageUrl) return false;
     if (!this.form.coverImageFile && !this.form.imageUrl) return false;
-    if (!this.locationLocked() && this.requiresOwnershipProof() && !this.form.ownershipProofFile && !this.form.ownershipProofDocumentUrl) return false;
     return true;
   }
 
@@ -404,9 +403,17 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     return this.form.placeType === 'Stay';
   }
 
+  /** True for types where ownership doc section is shown (Bar, Cafe, Restaurant, Stay). */
   requiresOwnershipProof(): boolean {
     const selectedType = this.selectedPlaceType();
     return selectedType?.isOwnable ?? FALLBACK_OWNABLE_PLACE_TYPES.has(normalizePlaceType(this.form.placeType));
+  }
+
+  /** True when ownable type selected but no proof attached — user should see warning. */
+  showOwnershipWarning(): boolean {
+    return this.requiresOwnershipProof() &&
+      !this.form.ownershipProofFile &&
+      !this.form.ownershipProofDocumentUrl;
   }
 
   private selectedPlaceType(): ContributionPlaceTypeOption | undefined {
@@ -717,6 +724,7 @@ function defaultPlaceTypes(): ContributionPlaceTypeOption[] {
     { id: 0, name: 'Landmark', description: null, isOwnable: false },
     { id: 0, name: 'Restaurant', description: null, isOwnable: true },
     { id: 0, name: 'Cafe', description: null, isOwnable: true },
+    { id: 0, name: 'Bar', description: null, isOwnable: true },
     { id: 0, name: 'Stay', description: null, isOwnable: true },
   ];
 }
